@@ -1,0 +1,11 @@
+parseandtest~=0.0.1
+dacite~=1.6.0
+attrs~=21.4.0
+PyYAML~=6.0
+datefinder~=0.7.1
+Jinja2~=3.0.3
+reproldfauto~=0.0.1
+setuptools~=57.0.0
+cattrs~=22.1.0
+pandas~=1.4.1
+python-dateutil~=2.8.2

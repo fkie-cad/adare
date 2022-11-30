@@ -1,0 +1,28 @@
+- name: contenttrashbinfiles
+  description: "check content of Trash Bin"
+  type: dir_content
+  params:
+    files: [testfile]
+    dst: /home/vagrant/.local/share/Trash/files
+- name: existencefilemetadata
+  description: "check if deletion metadata for file is existing"
+  type: is_file
+  params:
+    dst: /home/vagrant/.local/share/Trash/info/testfile.trashinfo
+- name: checkcontentmetadata
+  description: "check if deletion metadata match predicted format"
+  type: regex_match
+  params:
+    regex: \[Trash Info\]\nPath=/home/vagrant/testfile\nDeletionDate=2022-[0-3][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-5][0-9]\n
+    dst: /home/vagrant/.local/share/Trash/info/testfile.trashinfo
+- name: checkdeletiontimestamp
+  description: "check if deletion timestamp matches the time"
+  type: check_timestamp
+  params:
+    tolerance: 30
+    dst: /home/vagrant/.local/share/Trash/info/testfile.trashinfo
+- name: checkforrandomfile
+  description: "check if the file with path /home/vagrant/randomfile is existing"
+  type: is_file
+  params:
+    dst: /home/vagrant/randomfile

@@ -1,0 +1,19 @@
+name: "testenv"
+vagrantbox: "win10"
+resolution: "1920x1080"
+os: "windows"
+postsetupinstallations:
+  - name: "jinja2"
+    command: "pip3 install jinja2"
+    description: "tool to use templating in python"
+  - name: "datefinder"
+    command: "pip3 install datefinder"
+  - name: "guibot"
+    command: "pip3 install guibot"
+  - name: "pyautogui"
+    command: "pip3 install pyautogui"
+    description: "tool to change resolution"
+  - name: "opencv"
+    command: "pip3 install opencv-python"
+
+

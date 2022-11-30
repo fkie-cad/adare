@@ -1,0 +1,4 @@
+recursive-include src/adare/data *
+recursive-include src/adare/vagrantapi/VagrantfileCreator/VagrantfileTemplate *
+recursive-include src/adare/networkdrive/templates *
+prune **/build

@@ -1,0 +1,14 @@
+name: "testenv_linuxmint"
+vagrantbox: "linuxmint203_cinnamon"
+resolution: "1920x1080"
+postsetupinstallations:
+  - name: "jinja2"
+    command: "pip3 install jinja2"
+    description: "tool to use templating in python"
+  - name: "datefinder"
+    command: "pip3 install datefinder"
+  - name: "python3tk"
+    command: "apt-get --yes install python3-tk"
+  - name: "python3dev"
+    command: "apt-get --yes install python3-dev"
+scenarios: []

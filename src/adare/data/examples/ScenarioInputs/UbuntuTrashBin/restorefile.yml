@@ -1,0 +1,19 @@
+- name: checkiffilsisrestored
+  description: "check if file (testfile) is restored"
+  type: is_file
+  params:
+    dst: /home/vagrant/testfile
+- name: contenttrashbinfiles
+  description: "check content of Trash Bin files"
+  type: dir_content
+  params:
+    files: []
+    strict: true
+    dst: /home/vagrant/.local/share/Trash/files
+- name: contenttrashbininfo
+  description: "check content of Trash Bin files"
+  type: dir_content
+  params:
+    files: []
+    strict: true
+    dst: /home/vagrant/.local/share/Trash/info

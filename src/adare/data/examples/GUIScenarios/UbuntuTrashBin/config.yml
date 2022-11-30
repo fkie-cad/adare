@@ -1,0 +1,16 @@
+networkdrives:
+- name: exampledrivesmb
+  type: smb
+  local_path: /mnt/smb
+  remote_path: /mnt/smb_0
+  user:
+    name: test
+    password: test123
+  scenarios:
+  - deletefileSMB
+- name: exampledrivenfs
+  type: nfs
+  local_path: /mnt/nfs
+  remote_path: /mnt/nfs_0
+  scenarios:
+  - deletefileNFS
