@@ -1,0 +1,1 @@
+This the directory to add the image files

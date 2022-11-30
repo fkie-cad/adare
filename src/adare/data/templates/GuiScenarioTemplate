@@ -1,0 +1,40 @@
+from guiautomation.Scenario.Scenario import Scenario
+from guibot.guibot import GuiBot
+from pathlib import Path
+
+import guiautomation.config as config
+import logging
+
+log = logging.getLogger(__name__)
+
+class {{ name }}(Scenario):
+    description = 'place the description of your scenario here '
+    guibot = None
+
+    def __init__(self):
+        """
+            initialization function which in most cases should not be changed (except there is a need to use a different display controller or computer vision backend for guibot)
+        """
+        super().__init__()
+        self.guibot = GuiBot()
+        log.info(f'GuiBot Object created with display controller(dc) backend {str(type(self.guibot.dc_backend).__name__)} and  computer vision (cv) backend  {str(type(self.guibot.cv_backend).__name__)}')
+        self.guibot.add_path(self.img_folder)
+    pass
+
+    def prepare(self):
+        """
+            this function can be used to execute some commands before the mouse and keyboard input happen (e.g. creating a file)
+        """
+        pass
+
+    def run(self):
+        """
+            this function should be used to execute the gui automation steps
+        """
+        guibot = self.guibot
+        log.info(f'scenario {type(self).__name__} started')
+
+        # place the code to execute the mouse and keyboard input here
+        # for further explanation visit: https://guibot.readthedocs.io/en/latest/README.html
+
+        log.info(f'scenario {type(self).__name__} done')

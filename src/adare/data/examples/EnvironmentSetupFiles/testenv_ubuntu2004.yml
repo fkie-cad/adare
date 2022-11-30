@@ -1,0 +1,40 @@
+name: "testenv"
+vagrantbox: "ubuntu20043_gnome"
+resolution: "1920x1080"
+os: "linux"
+postsetupinstallations:
+  - name: "jinja2"
+    command: "pip3 install jinja2"
+    description: "tool to use templating in python"
+  - name: "datefinder"
+    command: "pip3 install datefinder"
+  - name: "update"
+    command: "apt-get update"
+    description: ''
+  - name: "nfs client"
+    command: "apt-get -y install nfs-common"
+  - name: "smb"
+    command: "apt-get -y install cifs-utils"
+    description: ''
+settings:
+  - "gsettings set org.gnome.desktop.lockdown disable-lock-screen 'true'"
+usbdevices:
+  - name: "testusb"
+    scenarios:
+      - "deletefileUSB"
+    VendorId: "0x0781"
+    ProductId: "0x5567"
+    Manufacturer: "SanDisk"
+    Product: "Cruzer Blade"
+    SerialNumber: "4C530000171114113444"
+networkdrives:
+  - name: "testdrive"
+    scenarios:
+      - "deletefileSMB"
+    type: "smb"
+    user: "test"
+    password: "123"
+
+
+
+
