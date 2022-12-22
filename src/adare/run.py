@@ -8,11 +8,12 @@ import time
 from adare.cli.environment import env_create, env_list, env_run, env_remove, env_create_scenario, \
     env_remove_scenario, env_addusb, env_addnetworkdrive
 from adare.cli.project import project_create, project_remove
-from adare.cli.vagrant import vgbox_add, vgbox_list, vgbox_remove
+from adare.cli.webapp import webapp
+# from adare.cli.vagrant import vgbox_add, vgbox_list, vgbox_remove
 from adare.setup_logging import setup_logging
 
-
 def run():
+    # function()
     start_time = time.time()
 
     parser = argparse.ArgumentParser()
@@ -45,19 +46,25 @@ def run():
     vgbox = subparsers.add_parser('vgbox')
     vgbox.set_defaults(func=lambda args: vgbox.print_help())
 
-    vgbox_subparsers = vgbox.add_subparsers(help='wrapper for needed vagrant commands')
+    sp_webapi = subparsers.add_parser('webapp')
+    sp_webapi.add_argument('-p', '--port', type=int, required=False)
+    # sp_webapi.add_argument('--host', type=str, required=False)
+    sp_webapi.set_defaults(func=webapp)
 
-    sp_vgbox_add = vgbox_subparsers.add_parser('add', help='add a .box image to vagrant')
-    sp_vgbox_add.add_argument('target')
-    sp_vgbox_add.add_argument('name')
-    sp_vgbox_add.set_defaults(func=vgbox_add)
-
-    sp_vgbox_remove = vgbox_subparsers.add_parser('remove', help='remove a box from vagrant by chosen name')
-    sp_vgbox_remove.add_argument('name')
-    sp_vgbox_remove.set_defaults(func=vgbox_remove)
-
-    sp_vgbox_list = vgbox_subparsers.add_parser('list', help='list all vagrant boxes available')
-    sp_vgbox_list.set_defaults(func=vgbox_list)
+    # probably not needed
+    # vgbox_subparsers = vgbox.add_subparsers(help='wrapper for needed vagrant commands')
+    #
+    # sp_vgbox_add = vgbox_subparsers.add_parser('add', help='add a .box image to vagrant')
+    # sp_vgbox_add.add_argument('target')
+    # sp_vgbox_add.add_argument('name')
+    # sp_vgbox_add.set_defaults(func=vgbox_add)
+    #
+    # sp_vgbox_remove = vgbox_subparsers.add_parser('remove', help='remove a box from vagrant by chosen name')
+    # sp_vgbox_remove.add_argument('name')
+    # sp_vgbox_remove.set_defaults(func=vgbox_remove)
+    #
+    # sp_vgbox_list = vgbox_subparsers.add_parser('list', help='list all vagrant boxes available')
+    # sp_vgbox_list.set_defaults(func=vgbox_list)
 
     env = subparsers.add_parser('env')
     env.add_argument('--project')

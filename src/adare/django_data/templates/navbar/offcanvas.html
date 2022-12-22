@@ -1,0 +1,32 @@
+<button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
+  <span class="navbar-toggler-icon"></span>
+</button>
+<div class="offcanvas offcanvas-start bg-primary h5" tabindex="-1" id="offcanvasNavbar" aria-labelledby="offcanvasNavbarLabel">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="offcanvasNavbarLabel"></h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body inline">
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-boxes me-3"></i>experiments
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="/index"><i class="bi bi-clock me-3"></i>recent</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="#"><i class="bi bi-windows me-3"></i>Windows</a></li>
+            <li><a class="dropdown-item" href="#"><i class="bi customicon-linux me-3"></i>Linux</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+                <a class="dropdown-item" href="/search"><i class="bi bi-search me-3"></i>Search</a>
+{#                <form class="d-flex" role="search">#}
+{#                    <input class="form-control me-2 ms-2" type="search" placeholder="Search" aria-label="Search">#}
+{#                    <button class="btn btn-outline-success me-2" type="submit">Search</button>#}
+{#                </form>#}
+            </li>
+          </ul>
+        </li>
+      </ul>
+  </div>
+</div>

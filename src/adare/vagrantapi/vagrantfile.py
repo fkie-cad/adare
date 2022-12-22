@@ -14,6 +14,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
+# Todo: add multi machine setup https://developer.hashicorp.com/vagrant/docs/multi-machine
 class VagrantFile:
     """
     This class can be used to create a Vagrantfile successively.

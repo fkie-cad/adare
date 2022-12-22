@@ -54,5 +54,9 @@ clean_install:
 flake:
 	${PYTHON} -m flake8 || exit 0
 
+django-migrate:
+	${PYTHON} .\src\adare\django_manage.py makemigrations django_adareGUI
+	${PYTHON} .\src\adare\django_manage.py migrate
+
 #executable:
-#	pyinstaller .\src\reproldfauto\run.py
+#	pyinstaller .\src\adare\run.py
