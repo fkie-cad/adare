@@ -110,9 +110,9 @@ class NetworkDriveContainer:
                 'local_path': share.local_path
             }
             if guest_os == 'windows':
-                share_info['command'] = share.get_windows_mount_command(self.VM.vmconfiguration.ip)
+                share_info['command'] = share.get_windows_mount_command(self.VM.get_vm_ip())
             elif guest_os == 'linux':
-                share_info['fstab'] = share.get_fstab_entry(self.VM.vmconfiguration.ip)
+                share_info['fstab'] = share.get_fstab_entry(self.VM.get_vm_ip())
             share_information_list.append(share_info)
         script = MountNetworkDriveScript(destination, template, share_information_list, logfolder, jinja_environment=jinja_environment)
         script.write()

@@ -1,0 +1,3 @@
+.customicon-linux::before {
+  content: url('/static/icons/linux-icon.svg');
+}

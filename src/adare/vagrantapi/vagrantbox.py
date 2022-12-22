@@ -14,7 +14,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class VagrantBox:
+class VagrantBoxVM:
     """
     class that provides an api controlling a vagrant box (and multi machine feature). therefore commands like run and destroy are supported
     """
@@ -85,10 +85,13 @@ class VagrantBox:
             for output_line in self.vagrant.up(stream_output=True):
                 log.debug(output_line)
 
-    @retry((subprocess.CalledProcessError, VagrantBoxDestroyError), tries=5, delay=1, backoff=2)
+    @retry(subprocess.CalledProcessError, tries=5, delay=1, backoff=2)
+    def __destroy_box(self):
+        self.vagrant.destroy()
+
     def destroy(self):
         try:
-            self.vagrant.destroy()
+            self.__destroy_box()
         except subprocess.CalledProcessError as e:
             log.error(e, exc_info=True)
             log.fatal('destroy failed due to the exception above -> try to delete the VM manually!')

@@ -1,0 +1,10 @@
+- Status:
+    - id: 0
+      name: Success
+    - id: 1
+      name: Failed
+    - id: 2
+      name: Warning
+- TestParameter:
+    files:
+      - ./src/adare/data/programs/ParseAndTest/src/parseandtest/testfunctions/standard.py

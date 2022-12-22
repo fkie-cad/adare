@@ -1,7 +1,10 @@
+import pkg_resources
+from pathlib import Path
+
 # set program details
-NAME = "AutoArtParser"
+NAME = "Adare"
 VERSION = "0.0.1"
-PACKAGE = 'reproldfauto'
+PACKAGE = 'adare'
 
 # timestamp format
 TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
@@ -41,6 +44,7 @@ GUIAUTOMATIONPROG = 'GUIAutomation'
 SCENARIOBASEDIR_IN_GUIAUTOMATION = 'src/guiautomation/Scenario/'
 
 # default values for data located in package
+PCK = Path(pkg_resources.resource_filename('adare', ''))
 PCK_TEMPLATES = 'data/templates/'
 PCK_EXAMPLES = 'data/examples/'
 PCK_EXAMPLES_SETUPFILES = PCK_EXAMPLES+'EnvironmentSetupFiles'
@@ -49,6 +53,9 @@ PCK_EXAMPLES_INPUTFILES = PCK_EXAMPLES+'ScenarioInputs'
 PCK_PROGRAMS = 'data/programs/'
 PCK_PROGRAMS_GUIAUTOMATION = PCK_PROGRAMS+GUIAUTOMATIONPROG
 PCK_PROGRAMS_PARSEANDTEST = PCK_PROGRAMS+PARSEANDTESTPROG
+PCK_PARSEANDTEST_TESTFUNCTION_DIRS = [
+    PCK/'data/programs/ParseAndTest/src/parseandtest/testfunctions'
+]
 
 # default values for VM and VM scripts
 DEFAULT_RESOLUTION = "1920x1080"
@@ -106,3 +113,7 @@ SCRIPTS_SUFFIX = {
     'linux': '.sh',
     'windows': '.ps1'
 }
+
+
+# WEBAPP
+PORT_WEBAPP = 8000

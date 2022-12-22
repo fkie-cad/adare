@@ -18,13 +18,13 @@ from adare.backend.attrs_classes import Scenario, UsbDevice, ExamplesConfig, Net
 from adare.backend.networkdrive import NetworkDriveContainer
 from adare.helperFunctions.yaml import yaml_to_dict, dict_to_yaml
 from adare.helperFunctions.jinja.jinjafeatures import init_jinja_environment
-import adare.vagrantapi as vagrantapi
 from adare.backend.script_creation import PostsetupInstallationsScript, RunExperimentScript,  \
     RunExperimentTemplateScript, SaveInstalledPackagesScript
 from adare.backend.exceptions import EnvironmentInitializationFailed, EnvironmentSetupFileMissing, \
     EnvironmentConfigurationMissing, EnvironmentSetupSyntaxError, EnvironmentAlreadyExists, \
     PackageTemplateFolderMissing, ScenarioAlreadyExists, ScenarioDoesNotExistInEnvironment
-
+from adare.vagrantapi.vagrantbox import VagrantBoxVM
+from adare.vagrantapi.vagrantfile import VagrantFile
 
 # configure logging
 import logging
@@ -728,7 +728,7 @@ class Environment:
 
     def create_Vagrantfile(self, scenario_name: str, hostonly: bool = False, networkdrive_active=False):
         conf = self.configuration
-        Vagrant_creator = vagrantapi.VagrantFile()
+        Vagrant_creator = VagrantFile()
 
         vgbox = conf.vagrantbox
         Vagrant_creator.set_box(vgbox)
@@ -901,7 +901,7 @@ class Environment:
         log.debug(f'log path for vagrant log: {log_file_path.absolute()}')
 
         vagrantfile = self.create_Vagrantfile(scenario, hostonly=publicnetwork, networkdrive_active=networkdrive_active)
-        box = vagrantapi.VagrantBox.fromVagrantFileObject(self.base_directory, vagrantfile, log_file=log_file_path)
+        box = VagrantBoxVM.fromVagrantFileObject(self.base_directory, vagrantfile, log_file=log_file_path)
         vg_success = box.run(debug=debug)
 
         # remove temporary created scripts todo: create a safe delete function that catches cases where exception occur
