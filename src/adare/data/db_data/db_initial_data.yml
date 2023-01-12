@@ -4,7 +4,12 @@
     - id: 1
       name: Failed
     - id: 2
-      name: Warning
+      name: Error
+    - id: 3
+      name: Input Error
+    - id: 4
+      name: Missing Key
+
 - TestParameter:
     files:
       - ./src/adare/data/programs/ParseAndTest/src/parseandtest/testfunctions/standard.py

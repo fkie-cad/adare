@@ -9,6 +9,13 @@ class Status(models.Model):
         return self.name
 
 
+class Result(models.Model):
+    status = models.ForeignKey(Status, on_delete=models.PROTECT)
+    details = models.CharField(max_length=2000, blank=True)
+
+    def __str__(self):
+        return str(self.status)
+
 class TestParameter(models.Model):
     name = models.CharField(max_length=100, unique=True)
     dtype = models.CharField(max_length=50)
@@ -19,8 +26,7 @@ class TestParameter(models.Model):
 
 class TestParameterEntries(models.Model):
     parameter = models.ForeignKey(TestParameter, on_delete=models.PROTECT)
-    value = models.CharField(max_length=1000)
-    dtype = models.CharField(max_length=50)
+    value = models.CharField(max_length=2000)
 
     def __str__(self):
         return self.parameter
@@ -32,12 +38,25 @@ class TestFunction(models.Model):
     test_description = models.CharField(max_length=1000)
     possible_parameters = models.ManyToManyField(TestParameter)
 
+    def __str__(self):
+        return self.name
+
+class Tool(models.Model):
+    name = models.CharField(max_length=50)
+    command = models.CharField(max_length=200)
+
+    def __str__(self):
+        return self.name
+
 
 class Test(models.Model):
+    uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     testfunction = models.ForeignKey(TestFunction, on_delete=models.PROTECT)
+    result = models.ForeignKey(Result, on_delete=models.PROTECT)
     description = models.CharField(max_length=500)
     parameters = models.ManyToManyField(TestParameterEntries)
+    tool = models.ForeignKey(Tool, on_delete=models.PROTECT, null=True)
 
     def __str__(self):
         return self.name
@@ -46,9 +65,10 @@ class Test(models.Model):
 class OsInfo(models.Model):
     os = models.CharField(max_length=50)
     distribution = models.CharField(max_length=50)
-    version = models.CharField(max_length=50)
-    language = models.CharField(max_length=50)
-    architecture = models.CharField(max_length=50)
+    version = models.CharField(max_length=50, blank=True)
+    language = models.CharField(max_length=50, blank=True)
+    architecture = models.CharField(max_length=50, blank=True)
+    details = models.CharField(max_length=200, blank=True)
 
     def __str__(self):
         return f'{self.os} - {self.distribution} {self.version} ({self.language, self.architecture})'
@@ -56,6 +76,7 @@ class OsInfo(models.Model):
 
 class Experiment(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
     timestamp_start = models.DateTimeField()
     timestamp_end = models.DateTimeField()
     tests = models.ManyToManyField(Test)
