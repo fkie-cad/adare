@@ -827,21 +827,24 @@ class Environment:
             return
         if not scenario_class.input_is_valid():
             log.error(
-                f'scenario {scenario} can\'t be started because the input file has an error in format (as shown in the exception above)')
+                f'scenario {scenario} can NOT be started because the input file has an error in format (as shown in the exception above)')
             return
+
         # not implemented so far
         if not scenario_class.guiscenario_is_valid():
             log.error(
-                f'scenario {scenario} can\'t be started because the gui scenario file has an error in format (as shown in the exception above)')
+                f'scenario {scenario} can NOT be started because the gui scenario file has an error in format (as shown in the exception above)')
             return
-        timestamp = datetime.now().strftime(config.TIMESTAMP_FORMAT).replace(':', '.')
 
-        scenario_log_directory = self.log_directory / f'{scenario}_{timestamp}'
+        timestamp_start = datetime.now()
+        timestamp_start_filename_format = timestamp_start.strftime(config.TIMESTAMP_FORMAT).replace(':', '.')
+
+        scenario_log_directory = self.log_directory / f'{scenario}_{timestamp_start_filename_format}'
         scenario_log_directory.mkdir()
         scenario_log_directory_vm_view = (Path('/vagrant') / scenario_log_directory.relative_to(self.base_directory)).as_posix()
 
         resultfile_name = 'result.yml'
-        scenario_result_directory = self.result_directory / f'{scenario}_{timestamp}'
+        scenario_result_directory = self.result_directory / f'{scenario}_{timestamp_start_filename_format}'
         scenario_result_directory.mkdir()
         scenario_resultfile = scenario_result_directory / resultfile_name
         scenario_result_directory_vm_view = Path('/vagrant') / scenario_result_directory.relative_to(self.base_directory)
@@ -908,8 +911,7 @@ class Environment:
         script_postinstall.remove()
         script_run.remove()
         script_saveinstalledpackages.remove()
-        if networkdrive_active and (
-                self.programs_directory / f'mount_networkdrives{self.__script_suffix}').is_file():
+        if networkdrive_active and (self.programs_directory / f'mount_networkdrives{self.__script_suffix}').is_file():
             os.remove((self.programs_directory / f'mount_networkdrives{self.__script_suffix}').as_posix())
 
         # delete Vagrantfile
@@ -923,6 +925,10 @@ class Environment:
                 else:
                     log.error("network drive was shutdown early")
 
+        # timestamp of the end of the experiment
+        timestamp_end = datetime.now()
+
+        # provide user output
         if vg_success == 0:
             print('\n\ntest result can be found in the following path:')
             print(scenario_resultfile.as_posix())

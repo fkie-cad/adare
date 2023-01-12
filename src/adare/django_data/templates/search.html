@@ -12,10 +12,21 @@
 
     {% bootstrap_messages %}
 
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.2/font/bootstrap-icons.css">
+
+
+    <link rel="stylesheet" href="https://unpkg.com/bootstrap-table@1.21.2/dist/bootstrap-table.min.css">
+    <script src="https://unpkg.com/bootstrap-table@1.21.2/dist/bootstrap-table.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/jquery-resizable-columns@0.2.3/dist/jquery.resizableColumns.css">
+    <script src="https://unpkg.com/jquery-resizable-columns@0.2.3/dist/jquery.resizableColumns.min.js"></script>
+
 
     {% load static %}
     <link rel="stylesheet" href="{% static "css/custom_icons.css" %}">
+
+    <script src="{% static '/js/filter.js' %}"></script>
 
     <title>search</title>
 </head>
@@ -25,7 +36,43 @@
 <body>
     {% block content %}
         <div class="container-fluid">
-
+            <div class="row p-3">
+                <div class="col-8" id="table">
+                    <table id="experiment_table" class="table table-hover" data-show-columns="true" data-search="true" data-show-toggle="true" data-pagination="true" data-resizable="true">
+{#                      <thead>#}
+{#                        <tr>#}
+{#                            <th scope="col">uuid</th>#}
+{#                            <th scope="col">name</th>#}
+{#                            <th scope="col">time start</th>#}
+{#                            <th scope="col">time end </th>#}
+{#                        </tr>#}
+{#                      </thead>#}
+{#                      <tbody>#}
+{#                      </tbody>#}
+                    </table>
+                </div>
+                <div class="col" id="filter">
+                    <form name="experiment_filter_form" id="id_experiment_filter_form" action="" method="get">
+                        <select name="os" id="id_os" form="experiment_filter_form" class="form-select w-75 m-3" aria-label="os select">
+                            <option class="default_option" value="" selected>select an os</option>
+                            {% for os in os_list %}
+                            <option value="{{ os }}">{{ os }}</option>
+                            {% endfor %}
+                        </select>
+                        <select name="distribution" id="id_distribution" form="experiment_filter_form" class="form-select w-75 m-3" aria-label="distribution select" disabled>
+                            <option class="default_option" value="" selected>select an distribution</option>
+                        </select>
+                        <select name="version" id="id_version" form="experiment_filter_form" class="form-select w-75 m-3" aria-label="version select" disabled>
+                            <option class="default_option" selected>select an version</option>
+                        </select>
+                    </form>
+                </div>
+                <div class="col-auto">
+                    <div class="d-flex justify-content-end">
+                        <button type="button" class="btn btn-primary btn-sm" id="table_settings"><span class="bi-gear" id="table_settings_icon" style="font-size: 1.25rem"></span>&nbsp;</button>
+                    </div>
+                </div>
+            </div>
         </div>
     {% endblock content %}
 </body>

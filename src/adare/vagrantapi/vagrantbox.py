@@ -56,12 +56,14 @@ class VagrantBoxVM:
         """
         return cls(vagrantdirectory_path, log_file)
 
-    def run(self, debug: bool = False):
+    def run(self, debug: bool = False) -> int:
+        return_code = 0
         try:
             self.up()
         except subprocess.CalledProcessError as e:
             log.debug(e, exc_info=True)
-            log.error(f'vagrant up exited with returncode {e.returncode}')
+            return_code = e.returncode
+            log.error(f'vagrant up exited with returncode {return_code}')
         except KeyboardInterrupt as e:
             log.debug(e, exc_info=True)
             log.error(f'vagrant up interrupted by KeyboardInterrupt')
@@ -74,6 +76,7 @@ class VagrantBoxVM:
             log.info('debugmode - execution continued')
 
         self.destroy()
+        return return_code
 
     def up(self):
         if self.log_file:

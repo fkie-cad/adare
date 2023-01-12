@@ -20,7 +20,7 @@ def get_database_location():
 
 
 DB_STATUS_LIST = [
-    'Success',
-    'Failed',
+    'success',
+    'failed',
 ]
 

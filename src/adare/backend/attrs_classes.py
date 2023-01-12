@@ -78,6 +78,7 @@ class Scenario:
     description: str = ''
     inputfile: Union[str, None] = None
     guiscenariofile: Union[str, None] = None
+    tags: list[str] = attr.Factory(list)
 
     # todo: maybe not only check if valid yaml also check if the custom syntax used by the project is correct
     def input_is_valid(self) -> bool:
@@ -149,7 +150,12 @@ class EnvironmentConfiguration:
     """
     name: Optional[str]
     vagrantbox: str
-    os: Literal['windows', 'linux']
+    os: str
+    os_distribution: str
+    os_version: str = ''
+    os_language: str = ''
+    os_architecture: str = ''
+    os_details: str = attr.Factory(str)
     resolution: str = config.DEFAULT_RESOLUTION
     pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
     idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
