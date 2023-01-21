@@ -23,8 +23,8 @@ urlpatterns = [
     path('', lambda req: redirect('index/')),
     path('admin/', admin.site.urls),
     path('index/', gui.index),
-    path('search/', gui.search),
     path('get-distributions/', gui.getDistributions, name='GetDistributions'),
     path('get-versions/', gui.getVersions, name='GetVersions'),
-    path('get-experiments/', gui.getExperiments, name='GetExperiments')
+    path('get-experiments/', gui.getExperiments, name='GetExperiments'),
+    path('experiment/', gui.experiment)
 ]

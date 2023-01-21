@@ -1,0 +1,14 @@
+<form name="experiment_filter_form" id="id_experiment_filter_form" action="" method="get">
+    <select name="os" id="id_os" form="experiment_filter_form" class="form-select w-75 m-3" aria-label="os select">
+        <option class="default_option" value="" selected>select an os</option>
+        {% for os in os_list %}
+        <option value="{{ os }}">{{ os }}</option>
+        {% endfor %}
+    </select>
+    <select name="distribution" id="id_distribution" form="experiment_filter_form" class="form-select w-75 m-3" aria-label="distribution select" disabled>
+        <option class="default_option" value="" selected>select an distribution</option>
+    </select>
+    <select name="version" id="id_version" form="experiment_filter_form" class="form-select w-75 m-3" aria-label="version select" disabled>
+        <option class="default_option" selected>select an version</option>
+    </select>
+</form>

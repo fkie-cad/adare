@@ -167,6 +167,8 @@ class DjangoDbApi:
             logfile_vagrant=get_value_if_missing_key(logfiledata, 'logfile_vagrant', dtype=str),
             logfile_gui_automation=get_value_if_missing_key(logfiledata, 'logfile_gui_automation', dtype=str),
             logfile_parse_and_test=get_value_if_missing_key(logfiledata, 'logfile_parse_and_test', dtype=str),
+            logfile_postsetup_installations=get_value_if_missing_key(logfiledata, 'logfile_postsetup_installations', dtype=str),
+            logfile_installed_packages=get_value_if_missing_key(logfiledata, 'logfile_installed_packages', dtype=str),
         )
         exp.save()
 

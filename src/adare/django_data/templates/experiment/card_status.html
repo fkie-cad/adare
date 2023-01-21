@@ -1,0 +1,47 @@
+<div class="card h-100 rounded">
+    <table class="table table-striped h-100 m-0 align-middle">
+        <thead>
+            <tr>
+                <th scope="col" colspan="3" class="text-white text-center bg-primary">status information</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th scope="row" class="col-md-5">total</th>
+                <td><i class="bi bi-{{ status_symbol }} text-{{ status_color }}" style="font-size: 1.5rem"></i></td>
+                <td class="text-center">
+{#                    <div class="form-check form-switch d-flex justify-content-center">#}
+{#                        <input class="form-check-input" type="checkbox" data-bs-toggle="collapse" data-bs-target="#logparseandtest">#}
+{#                    </div>#}
+                </td>
+            </tr>
+            <tr>
+                <th scope="row" class="col-md-5">vagrant</th>
+                <td><i class="bi bi-{{ status_vg_symbol }} text-{{ status_vg_color }}" style="font-size: 1.5rem"></i></td>
+                <td class="text-center">
+                    <div class="form-check form-switch d-flex justify-content-center">
+                        <input class="form-check-input" type="checkbox" data-bs-toggle="collapse" data-bs-target="#logvagrant">
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row" class="col-md-5">gui automation</th>
+                <td><i class="bi bi-{{ status_gui_symbol }} text-{{ status_gui_color }}" style="font-size: 1.5rem"></i></td>
+                <td class="text-center">
+                    <div class="form-check form-switch d-flex justify-content-center">
+                        <input class="form-check-input" type="checkbox" data-bs-toggle="collapse" data-bs-target="#loggui">
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row" class="col-md-5">parse and test</th>
+                <td><i class="bi bi-{{ status_parseandtest_symbol }} text-{{ status_parseandtest_color }}" style="font-size: 1.5rem"></i></td>
+                <td class="text-center">
+                    <div class="form-check form-switch d-flex justify-content-center">
+                        <input class="form-check-input" type="checkbox" data-bs-toggle="collapse" data-bs-target="#logparseandtest">
+                    </div>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>

@@ -6,7 +6,8 @@ class Status(models.Model):
     name = models.CharField(max_length=20, unique=True)
 
     def __str__(self):
-        return self.name
+        return str(self.name)
+
 
 
 class Result(models.Model):
@@ -16,12 +17,15 @@ class Result(models.Model):
     def __str__(self):
         return str(self.status)
 
+
+
 class TestParameter(models.Model):
     name = models.CharField(max_length=100, unique=True)
     dtype = models.CharField(max_length=50)
 
     def __str__(self):
-        return self.name
+        return str(self.name)
+
 
 
 class TestParameterEntries(models.Model):
@@ -29,7 +33,7 @@ class TestParameterEntries(models.Model):
     value = models.CharField(max_length=2000)
 
     def __str__(self):
-        return self.parameter
+        return str(self.parameter)
 
 
 class TestFunction(models.Model):
@@ -39,14 +43,15 @@ class TestFunction(models.Model):
     possible_parameters = models.ManyToManyField(TestParameter)
 
     def __str__(self):
-        return self.name
+        return str(self.name)
+
 
 class Tool(models.Model):
     name = models.CharField(max_length=50)
     command = models.CharField(max_length=200)
 
     def __str__(self):
-        return self.name
+        return str(self.name)
 
 
 class Test(models.Model):
@@ -59,7 +64,7 @@ class Test(models.Model):
     tool = models.ForeignKey(Tool, on_delete=models.PROTECT, null=True)
 
     def __str__(self):
-        return self.name
+        return str(self.name)
 
 
 class OsInfo(models.Model):
@@ -93,6 +98,8 @@ class Experiment(models.Model):
     logfile_gui_automation = models.CharField(max_length=200)
     logfile_parse_and_test = models.CharField(max_length=200)
     logfile_vagrant = models.CharField(max_length=200)
+    logfile_installed_packages = models.CharField(max_length=200)
+    logfile_postsetup_installations = models.CharField(max_length=200)
 
     def __str__(self):
         return f'{self.uuid}'

@@ -1,0 +1,14 @@
+.icon-extend {
+    color: #3D7B7B;
+}
+.icon-container-rotate {
+    animation:rotate 1s linear 1;
+}
+.icon-container-rotated {
+    transform:rotate(180deg);
+}
+
+@keyframes rotate {
+  0%   {}
+  100% {transform:rotate(180deg);}
+}

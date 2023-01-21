@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {% include "imports.html" %}
+
+    <title>experiment</title>
+</head>
+<header>
+    {% include "navbar/navbar.html" %}
+</header>
+<body class="bg-light">
+    {% block content %}
+        <div class="container-fluid">
+            <div class="row p-3">
+                <div class="col" id="id_experimentdetails_container">
+                    {% include "experiment/container_experiment.html" %}
+                </div>
+            </div>
+        </div>
+    {% endblock content %}
+</body>
+</html>
