@@ -3,6 +3,8 @@ $(document).ready(function () {
     let distribution_select = $("#id_distribution");
     let version_select = $("#id_version");
     let experiment_table = $("#experiment_table");
+    let classes = ['table-bordered', 'table-hover', 'table-striped']
+
     let columns = [{
         field: 'name',
         title: 'name',
@@ -37,6 +39,12 @@ $(document).ready(function () {
         title: 'os version',
         sortable: true,
             visible: false,
+    },{
+        field: 'experiment_link',
+        title: 'details',
+        sortable: false,
+        visible: true,
+        formatter: btn_formatter,
     }]
     display_rows();
 
@@ -132,13 +140,19 @@ $(document).ready(function () {
             },
             dataType: 'json',
             success: function (response) {
-                console.log(response['data']);
-                experiment_table.bootstrapTable({"columns": columns, data: response['data']});
+                experiment_table.bootstrapTable({"columns": columns, data: response['data'], classes: classes.join(' ')});
             }
         })
     }
     function dateSorter(a, b){
         return(new Date(a).getTime() - new Date(b).getTime());
     }
+
+    function btn_formatter(value, row, index, field) {
+        return [
+            '<a class="" href="/experiment?uuid=' + row['uuid'] + '">click here</a>'
+        ].join('');
+    }
+
 });
 
