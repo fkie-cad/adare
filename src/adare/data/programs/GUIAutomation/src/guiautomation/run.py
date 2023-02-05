@@ -5,6 +5,7 @@ import sys
 from pkgutil import iter_modules
 from inspect import isclass
 import pkg_resources
+from pathlib import Path
 
 # internal imports
 import guiautomation.config as config
@@ -46,8 +47,11 @@ def run_scenario(arguments):
         return
     ScenarioObj = scenarioclass()
     ScenarioObj.prepare()
-    ScenarioObj.run()
+    status = ScenarioObj.run()
     log.info(f'scenario {arguments.scenarioname} is run successfully')
+    log.error((Path(arguments.logfile).parent/'status.csv').as_posix())
+    with open((Path(arguments.logfile).parent/'status.csv').as_posix(), mode='a', encoding='ascii') as f:
+        f.write(f'gui,{status}\n')
 
 
 def run():

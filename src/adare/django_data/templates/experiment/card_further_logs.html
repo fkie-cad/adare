@@ -10,7 +10,7 @@
                 <th scope="row" class="col-md-5">post setup installations</th>
                 <td class="text-center">
                     <div class="form-check form-switch d-flex justify-content-center">
-                        <input class="form-check-input" type="checkbox" data-bs-toggle="collapse" data-bs-target="#logparseandtest">
+                        <input class="form-check-input" type="checkbox" data-bs-toggle="collapse" data-bs-target="#logfile_postsetup_installations" {% if logfile_postsetup_installations == None %}disabled{% endif %}>
                     </div>
                 </td>
             </tr>
@@ -18,7 +18,15 @@
                 <th scope="row" class="col-md-5">mount network drives</th>
                 <td class="text-center">
                     <div class="form-check form-switch d-flex justify-content-center">
-                        <input class="form-check-input" type="checkbox" data-bs-toggle="collapse" data-bs-target="#logparseandtest">
+                        <input class="form-check-input" type="checkbox" data-bs-toggle="collapse" data-bs-target="#logfile_mount_networkdrives"  {% if logfile_mount_networkdrives == None %}disabled{% endif %}>
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row" class="col-md-5">installed packages</th>
+                <td class="text-center">
+                    <div class="form-check form-switch d-flex justify-content-center">
+                        <input class="form-check-input" type="checkbox" data-bs-toggle="collapse" data-bs-target="#logfile_installed_packages" {% if logfile_installed_packages == None %}disabled{% endif %}>
                     </div>
                 </td>
             </tr>

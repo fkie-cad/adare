@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LOG_FILE="{{logfolder}}/postsetup_installations.log"
+LOG_FILE="{{ log_directory }}/postsetup_installations.log"
 TIMESTAMP=`date --rfc-3339=seconds`
 
 exec 1> >(tee -a $LOG_FILE) 2>&1

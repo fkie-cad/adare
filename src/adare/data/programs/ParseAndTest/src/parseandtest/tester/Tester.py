@@ -48,13 +48,15 @@ class Tester:
         self.input = input
 
     def test(self):
+        status = 'success'
         if not self.input:
             log.error('no input for parser set')
-            return -1
+            return 'failed'
         testoutcome = TestOutcome()
         unsupported_types = []
-        # list of dicts with input data
-        inputlist = self.input
+
+        # list of tests (dict)
+        tests = self.input['tests']
 
         vars_tmp_file = config.VARIABLES_FILE
         try:
@@ -62,7 +64,11 @@ class Tester:
         except FileNotFoundError:
             variables = {}
 
-        for test in inputlist:
+        for test in tests:
+            if type(test) != dict:
+                log.error(f'test {test} was not of type dict and will be therefore ignored')
+                status = 'warning'
+                continue
             keys_test = test.keys()
 
             test_container = None
@@ -83,3 +89,4 @@ class Tester:
 
         self.unsupported_types = unsupported_types
         self.outcome = testoutcome
+        return status

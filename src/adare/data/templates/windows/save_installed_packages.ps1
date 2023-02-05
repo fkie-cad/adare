@@ -1,19 +1,6 @@
-Start-Transcript {{logfolder}}/save_installed_packages.log
+. "{{ scripts_directory }}\helperfunctions.ps1"
 
-function WriteLog
-{
-    Param ([string]$LogString)
-    if($MyInvocation.ExpectingInput){
-        $LogContent = $input
-    }else{
-        $LogContent = $LogString
-    }
-    $LogContent -Split "`r`n" | ForEach-Object {
-        $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
-        $LogMessage = "[$Stamp]: $_"
-        Write-host "$LogMessage"
-    }
-}
+Start-Transcript {{ log_directory }}/save_installed_packages.log
 
 $InstalledSoftware = Get-ChildItem "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
 foreach($obj in $InstalledSoftware){

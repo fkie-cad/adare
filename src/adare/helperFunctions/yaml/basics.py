@@ -1,6 +1,8 @@
+# external imports
 import yaml
 from pathlib import Path
 
+# setup logging
 import logging
 log = logging.getLogger(__name__)
 

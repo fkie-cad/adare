@@ -118,18 +118,16 @@ class DjangoDbApi:
         return test_obj
 
     def __get_result_entry_by_name(self, data: list, name: str) -> dict:
+        if not data:
+            return {}
         for result_entry in data:
             if result_entry['name'] == name:
                 return result_entry
-        return dict()
+        return {}
 
     def add_experiment(self, name: str, inputdata: dict, resultdata: list, logfiledata: dict, statusdata: dict, timestamps: dict, os_info: dict):
         """
         add experiment outcome to database
-        :param inputdata: dict containing the data provided as an input for the test
-        :param resultdata:
-        :param details:
-        :param os_info: dict containing information about the os the experiment was run on
         """
         if 'tests' not in inputdata.keys():
             log.error(f'input file does not contain a tests section')
@@ -143,15 +141,29 @@ class DjangoDbApi:
             os_info_obj.save()
 
         # get status
+        status_list = [
+            'TOTAL',
+            'INSTALL_gui',
+            'INSTALL_parseandtest',
+            'RUN_gui',
+            'RUN_parseandtest',
+            'VAGRANT',
+            'gui',
+            'parseandtest',
+        ]
+        status_obj_dict = dict()
         try:
-            status = Status.objects.get(name=statusdata['status'])
-            status_gui_automation = Status.objects.get(name=statusdata['status_gui_automation'])
-            status_parse_and_test = Status.objects.get(name=statusdata['status_parse_and_test'])
-            status_vagrant = Status.objects.get(name=statusdata['status_vagrant'])
+            for status in statusdata.keys():
+                status_obj_dict[status] = Status.objects.get(name=statusdata[status])
         except Status.DoesNotExist as e:
             log.error(e, exc_info=True)
             log.fatal(f'status not found in database!')
             return
+
+        not_reached_status = Status.objects.get(name='not reached')
+        for status_name in status_list:
+            if status_name not in status_obj_dict.keys():
+                status_obj_dict[status_name] = not_reached_status
 
         # create experiment entry
         exp = Experiment(
@@ -160,29 +172,31 @@ class DjangoDbApi:
             timestamp_end=make_aware(timestamps['timestamp_end']),
             description=get_value_if_missing_key(inputdata, 'description', dtype=str),
             os_info=os_info_obj,
-            status=status,
-            status_gui_automation=status_gui_automation,
-            status_parse_and_test=status_parse_and_test,
-            status_vagrant=status_vagrant,
-            logfile_vagrant=get_value_if_missing_key(logfiledata, 'logfile_vagrant', dtype=str),
-            logfile_gui_automation=get_value_if_missing_key(logfiledata, 'logfile_gui_automation', dtype=str),
-            logfile_parse_and_test=get_value_if_missing_key(logfiledata, 'logfile_parse_and_test', dtype=str),
-            logfile_postsetup_installations=get_value_if_missing_key(logfiledata, 'logfile_postsetup_installations', dtype=str),
-            logfile_installed_packages=get_value_if_missing_key(logfiledata, 'logfile_installed_packages', dtype=str),
+            status=status_obj_dict['TOTAL'],
+            status_gui_automation=status_obj_dict['RUN_gui'],
+            status_parse_and_test=status_obj_dict['RUN_parseandtest'],
+            status_vagrant=status_obj_dict['VAGRANT'],
+            logfile_vagrant=logfiledata['logfile_vagrant'],
+            logfile_gui_automation=logfiledata['logfile_gui_automation'],
+            logfile_parse_and_test=logfiledata['logfile_parse_and_test'],
+            logfile_postsetup_installations=logfiledata['logfile_postsetup_installations'],
+            logfile_installed_packages=logfiledata['logfile_installed_packages'],
+            logfile_run_experiment=logfiledata['logfile_run_experiment'],
         )
         exp.save()
 
         # add tests to the experiment
         tests = inputdata['tests']
-        for test in tests:
-            if 'tests' in test.keys():
-                for inner_test in test['tests']:
-                    tool = get_or_none(Tool, name=test['tool'], command=test['command'])
-                    if not tool:
-                        tool = Tool(name=test['tool'], command=test['command'])
-                        tool.save()
-                    test_obj = self.__add_test(inner_test, self.__get_result_entry_by_name(resultdata, inner_test['name']), tool=tool)
+        if resultdata:
+            for test in tests:
+                if 'tests' in test.keys():
+                    for inner_test in test['tests']:
+                        tool = get_or_none(Tool, name=test['tool'], command=test['command'])
+                        if not tool:
+                            tool = Tool(name=test['tool'], command=test['command'])
+                            tool.save()
+                        test_obj = self.__add_test(inner_test, self.__get_result_entry_by_name(resultdata, inner_test['name']), tool=tool)
+                        exp.tests.add(test_obj)
+                else:
+                    test_obj = self.__add_test(test, self.__get_result_entry_by_name(resultdata, test['name']))
                     exp.tests.add(test_obj)
-            else:
-                test_obj = self.__add_test(test, self.__get_result_entry_by_name(resultdata, test['name']))
-                exp.tests.add(test_obj)

@@ -32,13 +32,16 @@ class ParseAndTest:
         self.InputParser = inputparser
         self.Resultdisplay = resultdisplay
 
-    def parseandtest(self):
+    def parseandtest(self, logfolder: Path):
         self.InputParser.parse()
         self.Tester.set_input(self.InputParser.parsed_input)
-        self.Tester.test()
+        status = self.Tester.test()
         self.Resultdisplay.set_outcome(self.Tester.outcome)
         self.Resultdisplay.set_unsupported_types(self.Tester.unsupported_types)
         self.Resultdisplay.format_result()
+        log.error((logfolder/'status.csv').as_posix())
+        with open((logfolder/'status.csv').as_posix(), mode='a', encoding='ascii') as f:
+            f.write(f'parseandtest,{status}\n')
 
 
 def run():
@@ -67,4 +70,4 @@ def run():
     resultdisplay = YamlResultFormatter.YamlResultFormatter(Path(path_outputdata).as_posix())
 
     parseandtest = ParseAndTest(inputparser, resultdisplay)
-    parseandtest.parseandtest()
+    parseandtest.parseandtest(Path(args.logfile).parent)

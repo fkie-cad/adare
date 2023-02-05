@@ -22,5 +22,7 @@ def get_database_location():
 DB_STATUS_LIST = [
     'success',
     'failed',
+    'warning',
+    'not reached'
 ]
 

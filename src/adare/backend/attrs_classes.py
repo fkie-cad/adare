@@ -5,7 +5,7 @@ from typing import Union, Literal, Optional
 import attrs as attr
 
 # internal imports
-import adare.helperFunctions.yaml as yml
+from adare.inputparser.YAMLInputParser import YAMLInputParser
 from adare.networkdrive.attrs_classes import SMBShare, SMBUser, NFSShare
 import adare.config as config
 
@@ -90,8 +90,8 @@ class Scenario:
         if not self.inputfile:
             return False
         try:
-            loader, dumper = yml.create_yaml_loader_dumper_inputfiles()
-            log.debug(f'input file check - parsed input file: {yml.yaml_to_dict(self.inputfile, loader=loader)}')
+            data = YAMLInputParser(self.inputfile).parse()
+            log.debug(f'input file check - parsed input file: {data}')
         except (yaml.constructor.ConstructorError, ValueError, yaml.YAMLError, FileNotFoundError) as e:
             log.error(f'input file {self.inputfile} couldn\'t be read because of the following exception')
             log.error(e, exc_info=True)
@@ -150,6 +150,7 @@ class EnvironmentConfiguration:
     """
     name: Optional[str]
     vagrantbox: str
+    os_platform: Literal['windows', 'linux']
     os: str
     os_distribution: str
     os_version: str = ''
@@ -174,7 +175,13 @@ class EnvironmentSetup:
     """
     name: Optional[str]
     vagrantbox: str
-    os: Literal['windows', 'linux']
+    os_platform: Literal['windows', 'linux']
+    os: str
+    os_distribution: str
+    os_version: str = ''
+    os_language: str = ''
+    os_architecture: str = ''
+    os_details: str = attr.Factory(str)
     resolution: str = config.DEFAULT_RESOLUTION
     pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
     idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
