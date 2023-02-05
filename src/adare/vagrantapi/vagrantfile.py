@@ -226,7 +226,7 @@ class VagrantFile:
             })
         self.provisioners.append(provisioner)
 
-    def add_shell_provisioner_path(self, path: str, privileged: bool = False, powershell_elevated_interactive: bool = False):
+    def add_shell_provisioner_path(self, path: Path, privileged: bool = False, powershell_elevated_interactive: bool = False):
         """
         add a provisioner which executes a script
 
@@ -240,7 +240,7 @@ class VagrantFile:
             'provisioner_option': [
                 {
                     'key': "path",
-                    'value': path
+                    'value': path.as_posix()
                 }
             ]
         }
@@ -256,7 +256,7 @@ class VagrantFile:
             })
         self.provisioners.append(provisioner)
 
-    def add_file_provisioner(self, localpath: str, remotepath: str):
+    def add_file_provisioner(self, localpath: Path, remotepath: Path):
         """
         add a provisioner to provide files to the vm
 
@@ -269,11 +269,11 @@ class VagrantFile:
             'provisioner_option': [
                 {
                     'key': "source",
-                    'value': localpath
+                    'value': localpath.as_posix()
                 },
                 {
                     'key': "destination",
-                    'value': remotepath
+                    'value': remotepath.as_posix()
                 }
             ]
         }

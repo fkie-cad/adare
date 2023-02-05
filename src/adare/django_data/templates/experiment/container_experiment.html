@@ -36,36 +36,7 @@
             </div>
         </div>
         <div class="row">
-            <div class="col collapse my-3" id="logvagrant">
-                <div class="card">
-                    <div class="card-header">
-                        vagrant log
-                    </div>
-                    <div class="card-body scroll">
-                        <code>{{ log_vg|linebreaks }}</code>
-                    </div>
-                </div>
-            </div>
-            <div class="col collapse my-3" id="loggui">
-                <div class="card">
-                    <div class="card-header">
-                        gui log
-                    </div>
-                    <div class="card-body scroll">
-                        <code>{{ log_vg|linebreaks }}</code>
-                    </div>
-                </div>
-            </div>
-            <div class="col collapse my-3" id="logparseandtest">
-                <div class="card">
-                    <div class="card-header">
-                        parse and test log
-                    </div>
-                    <div class="card-body scroll">
-                        <code>{{ log_vg|linebreaks }}</code>
-                    </div>
-                </div>
-            </div>
+            {% include "experiment/logs.html" %}
         </div>
         <div class="row">
             <div class="col">

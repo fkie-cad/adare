@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LOG_FILE="{{logfolder}}/mount_networkdrives.log"
+LOG_FILE="{{ log_directory }}/mount_networkdrives.log"
 TIMESTAMP=`date --rfc-3339=seconds`
 
 exec 1> >(tee -a $LOG_FILE) 2>&1

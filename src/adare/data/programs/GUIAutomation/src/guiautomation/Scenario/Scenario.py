@@ -21,6 +21,7 @@ class Scenario:
     vars_tmp_file = config.VARIABLES_FILE
     img_folder: Path = None
     vars: dict
+    status: str = 'success'
 
     def __init__(self):
         self.img_folder = Path(pkg_resources.resource_filename('guiautomation.Scenario', 'data/img'))
@@ -45,8 +46,6 @@ class Scenario:
             if matches > 0:
                 return True
         return False
-
-
 
     def __load_vars(self):
         try:

@@ -1,19 +1,6 @@
-Start-Transcript {{logfolder}}/mount_networkdrives.log
+. "{{ scripts_directory }}\helperfunctions.ps1"
 
-function WriteLog
-{
-    Param ([string]$LogString)
-    if($MyInvocation.ExpectingInput){
-        $LogContent = $input
-    }else{
-        $LogContent = $LogString
-    }
-    $LogContent -Split "`r`n" | ForEach-Object {
-        $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
-        $LogMessage = "[$Stamp]: $_"
-        Write-host "$LogMessage"
-    }
-}
+Start-Transcript {{ log_directory }}/mount_networkdrives.log
 
 {% if share %}
 New-ItemProperty HKLM:\SOFTWARE\Microsoft\ClientForNFS\CurrentVersion\Default -Name AnonymousUID -Value 1000 -PropertyType "DWord" 2>&1 | WriteLog

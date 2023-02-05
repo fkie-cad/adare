@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LOG_FILE="{{ logfolder }}/save_installed_packages.log"
+LOG_FILE="{{ log_directory }}/save_installed_packages.log"
 TIMESTAMP=`date --rfc-3339=seconds`
 
 exec 1> >(tee -a $LOG_FILE) 2>&1
@@ -19,7 +19,7 @@ WriteLog(){
   done
 }
 
-PROGRAMLIST_FILE='{{ logfolder }}/installed_packages'
+PROGRAMLIST_FILE='{{ log_directory }}/installed_packages'
 
 # dpkg for debian systems (like Ubuntu, Debian, Linux Mint)
 if type dpkg >/dev/null; then

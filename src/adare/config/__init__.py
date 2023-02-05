@@ -73,6 +73,8 @@ DEFAULT_NETWORKSHARES_VM = {
     'ip': "192.168.142.100"
 }
 
+DEFAULT_NETWORKSHARE_BOX = "networkshares"
+
 DEFAULT_SMB_CONF = {
     'name': 'SMB share',
     'workgroup': 'WORKGROUP',

@@ -31,18 +31,19 @@ class deletefile(Scenario):
             guibot.click('files.png').idle(5)
         else:
             log.error('files.png button does not exist')
-            return -1
+            return 'failed'
         if guibot.exists('documents.png'):
             guibot.click('documents.png').idle(5)
         else:
             log.error('documents.png button does not exist')
-            return -1
+            return 'failed'
         if guibot.exists('testfile.png'):
             guibot.click('testfile.png').idle(5)
             guibot.press_keys(guibot.dc_backend.keymap.DELETE)
             self.save_time("DELETIONDATE")
         else:
             log.error('testfile.png icon cant be found')
-            return -1
+            return 'failed'
 
         log.info(f'scenario {type(self).__name__} done')
+        return self.status

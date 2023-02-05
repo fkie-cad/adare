@@ -95,11 +95,12 @@ class Experiment(models.Model):
                                               related_name='status_parse_and_test')
     status_vagrant = models.ForeignKey(Status, null=True, on_delete=models.SET_NULL, related_name='status_vagrant')
 
-    logfile_gui_automation = models.CharField(max_length=200)
-    logfile_parse_and_test = models.CharField(max_length=200)
-    logfile_vagrant = models.CharField(max_length=200)
-    logfile_installed_packages = models.CharField(max_length=200)
-    logfile_postsetup_installations = models.CharField(max_length=200)
+    logfile_gui_automation = models.CharField(max_length=200, blank=True, null=True)
+    logfile_parse_and_test = models.CharField(max_length=200, blank=True, null=True)
+    logfile_vagrant = models.CharField(max_length=200, blank=True, null=True)
+    logfile_installed_packages = models.CharField(max_length=200, blank=True, null=True)
+    logfile_postsetup_installations = models.CharField(max_length=200, blank=True, null=True)
+    logfile_run_experiment = models.CharField(max_length=200, blank=True, null=True)
 
     def __str__(self):
         return f'{self.uuid}'

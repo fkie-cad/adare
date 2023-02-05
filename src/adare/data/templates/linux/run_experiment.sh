@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LOG_FILE="{{ logfolder }}/run_experiment.log"
+LOG_FILE="{{ log_directory }}/run_experiment.log"
 TIMESTAMP=`date --rfc-3339=seconds`
 
 exec 1> >(tee -a $LOG_FILE) 2>&1
@@ -32,14 +32,14 @@ echo "set resolution to {{ resolution }} done" | tail -n +1 | WriteLog
 sleep 30
 
 su -c "pip3 install /vagrant/scripts/GUIAutomation/" vagrant | tail -n +1 | WriteLog
-su -c "DISPLAY=:0 /home/vagrant/.local/bin/guiautomation --logfile {{ logfolder }}/gui.log run '{{ gui_scenario }}'" vagrant | tail -n +1 | WriteLog
+su -c "DISPLAY=:0 /home/vagrant/.local/bin/guiautomation --logfile {{ log_directory }}/gui.log run '{{ gui_scenario }}'" vagrant | tail -n +1 | WriteLog
 echo "automation for scenario {{ gui_scenario }} done" | tail -n +1| WriteLog
 
 mkdir -p /vagrant/result/ | tail -n +1 | WriteLog
 
 sleep 30
 su -c "pip3 install /vagrant/scripts/ParseAndTest/" vagrant | tail -n +1 | WriteLog
-su -c "DISPLAY=:0 /home/vagrant/.local/bin/parseandtest {{ inputfile }} {{ outputfile }} --logfile {{ logfolder }}/parseandtest.log" vagrant | tail -n +1 | WriteLog
+su -c "DISPLAY=:0 /home/vagrant/.local/bin/parseandtest {{ inputfile }} {{ outputfile }} --logfile {{ log_directory }}/parseandtest.log" vagrant | tail -n +1 | WriteLog
 
 {% else %}
 
@@ -48,14 +48,14 @@ su -c "{{ setting }}" vagrant | tail -n +1 | WriteLog
 {% endfor %}
 
 su -c "pip3 install /vagrant/scripts/GUIAutomation/" vagrant | tail -n +1 | WriteLog
-su -c "/home/vagrant/.local/bin/guiautomation --logfile {{ logfolder }}/gui.log run '{{ gui_scenario }}'" vagrant | tail -n +1 | WriteLog
+su -c "/home/vagrant/.local/bin/guiautomation --logfile {{ log_directory }}/gui.log run '{{ gui_scenario }}'" vagrant | tail -n +1 | WriteLog
 echo "automation for scenario {{ gui_scenario }} done" | tail -n +1| WriteLog
 
 mkdir -p /vagrant/result/ | tail -n +1 | WriteLog
 
 sleep 30
 su -c "pip3 install /vagrant/scripts/ParseAndTest/" vagrant | tail -n +1 | WriteLog
-su -c "DISPLAY=:0 /home/vagrant/.local/bin/parseandtest {{ inputfile }} {{ outputfile }} --logfile {{ logfolder }}/parseandtest.log" vagrant | tail -n +1 | WriteLog
+su -c "DISPLAY=:0 /home/vagrant/.local/bin/parseandtest {{ inputfile }} {{ outputfile }} --logfile {{ log_directory }}/parseandtest.log" vagrant | tail -n +1 | WriteLog
 
 {% endif %}
 

@@ -73,7 +73,9 @@ def getExperiments(request):
     return JsonResponse(response_data)
 
 
-def get_logfile_content(logfile_path: str):
+def get_logfile_content(logfile_path: str or None):
+    if not logfile_path:
+        return None
     if Path(logfile_path).is_file():
         with open(logfile_path, mode='r') as f:
             return f.read()
@@ -88,10 +90,14 @@ def experiment(request):
     STATUSNAME_COLOR_MAPPING = {
         'success': 'success',
         'failed': 'danger',
+        'warning': 'warning',
+        'not reached': 'warning'
     }
     STATUSNAME_SYMBOL_MAPPING = {
         'success': 'check-square',
-        'failed': 'x-square'
+        'failed': 'x-square',
+        'warning': 'exclamation-square',
+        'not reached': 'question-square',
     }
 
     log_vg = get_logfile_content(exp.logfile_vagrant)
@@ -145,11 +151,12 @@ def experiment(request):
         'status_gui_symbol': STATUSNAME_SYMBOL_MAPPING[exp.status_gui_automation.name],
         'status_parseandtest_color': STATUSNAME_COLOR_MAPPING[exp.status_parse_and_test.name],
         'status_parseandtest_symbol': STATUSNAME_SYMBOL_MAPPING[exp.status_parse_and_test.name],
-        'log_vg': log_vg,
-        'log_parse_and_test': log_parse_and_test,
-        'log_gui': log_gui,
-        'log_postsetup_installations': log_postsetup_installations,
-        'log_installed_packages': log_installed_packages,
+        'logfile_vagrant': log_vg,
+        'logfile_parse_and_test': log_parse_and_test,
+        'logfile_gui_automation': log_gui,
+        'logfile_postsetup_installations': log_postsetup_installations,
+        'logfile_installed_packages': log_installed_packages,
+        'logfile_mount_networkdrives': None,
         'tests': tests
     }
     return HttpResponse(template.render(context, request))

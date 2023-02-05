@@ -17,14 +17,18 @@ from adare.backend.attrs_classes import Scenario, UsbDevice, ExamplesConfig, Net
     EnvironmentConfiguration, EnvironmentSetup
 from adare.backend.networkdrive import NetworkDriveContainer
 from adare.helperFunctions.yaml import yaml_to_dict, dict_to_yaml
+from adare.helperFunctions.csv import csv_to_dict
 from adare.helperFunctions.jinja.jinjafeatures import init_jinja_environment
-from adare.backend.script_creation import PostsetupInstallationsScript, RunExperimentScript,  \
-    RunExperimentTemplateScript, SaveInstalledPackagesScript
+from adare.backend.script_creation.scripts import PostsetupInstallationsScript, RunExperimentScript, SaveInstalledPackagesScript, MountNetworkDriveScript, RunExperimentTemplateScript
+from adare.backend.script_creation.Scriptmanager import ScriptManager
+from adare.backend.script_creation.Script import Script
 from adare.backend.exceptions import EnvironmentInitializationFailed, EnvironmentSetupFileMissing, \
     EnvironmentConfigurationMissing, EnvironmentSetupSyntaxError, EnvironmentAlreadyExists, \
     PackageTemplateFolderMissing, ScenarioAlreadyExists, ScenarioDoesNotExistInEnvironment
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
 from adare.vagrantapi.vagrantfile import VagrantFile
+from adare.database.django_db_api import DjangoDbApi
+from adare.inputparser.YAMLInputParser import YAMLInputParser
 
 # configure logging
 import logging
@@ -58,6 +62,13 @@ class Environment:
     # used only for environment creation (in order to create basics scripts like run_experiment, ...)
     __jinja_project: jinja2.Environment = None
 
+    # scripts directory from VM view
+    script_directory_vm_view: Path
+    log_directory_vm_view = Path
+
+    # script manager
+    __script_manager: ScriptManager = None
+
     def __init__(self, name: str, project_directory: Path, create=False, setupfile: str = None):
         self.name = name
 
@@ -65,11 +76,12 @@ class Environment:
 
         self.base_directory = (self.project_directory/config.ENVDIR_RELPROJ / name)
         self.log_directory = self.base_directory / config.LOGDIR_RELENV
-        self.programs_directory = self.base_directory / config.PROGRAMS_RELENV
+        self.script_directory = self.base_directory / config.PROGRAMS_RELENV
+        self.script_templates_directory = self.script_directory / 'templates'
         self.result_directory = self.base_directory / config.RESULT_RELENV
         self.input_directory = self.base_directory / config.INPUT_RELENV
 
-        self.guiscenario_directory = self.programs_directory / config.GUIAUTOMATIONPROG / config.SCENARIOBASEDIR_IN_GUIAUTOMATION
+        self.guiscenario_directory = self.script_directory/ config.GUIAUTOMATIONPROG / config.SCENARIOBASEDIR_IN_GUIAUTOMATION
 
         self.configuration_file = (self.base_directory / config.ENVCONFIGURATIONFILENAME).as_posix()
         self.configuration = None
@@ -86,6 +98,21 @@ class Environment:
         if not self.configuration:
             raise EnvironmentInitializationFailed(self.name)
 
+        vm_synced_directory_path = Path('/')
+        if self.configuration.os_platform == 'windows':
+            vm_synced_directory_path = Path(r'C:/vagrant/')
+        if self.configuration.os_platform == 'linux':
+            vm_synced_directory_path = Path(r'/vagrant/')
+
+        self.vm_synced_directory_path = vm_synced_directory_path
+        self.script_directory_vm_view = vm_synced_directory_path/'scripts'
+        self.log_directory_vm_view = vm_synced_directory_path/'logs'
+
+        self.__script_manager = ScriptManager(
+            script_directory_vm_view=self.script_directory_vm_view,
+            wrapper_template=self.script_templates_directory/f'run_script_wrapper{self.__script_suffix}'
+        )
+
     def __find_setup_file(self, setupfile: str or None):
         """
         try to find a setup file in the setup folder of the project
@@ -94,8 +121,8 @@ class Environment:
         :return: path of the setupfile
         """
         if not setupfile:
-            P_setup_files_storage_in_project = self.project_directory / config.SETUPDIR_RELPROJ
-            for file in P_setup_files_storage_in_project.iterdir():
+            setup_files_storage_in_project = self.project_directory / config.SETUPDIR_RELPROJ
+            for file in setup_files_storage_in_project.iterdir():
                 if file.stem == self.name:
                     setupfile = file.as_posix()
         if not setupfile:
@@ -143,15 +170,15 @@ class Environment:
         """
         create a jinja environment for the templates directory which is located in the project programs directory
         """
-        P_programs_in_project = self.project_directory / config.PROGRAMS_RELPROJ
-        template_folder = (P_programs_in_project / 'templates' / self.setup.os).as_posix()
+        programs_in_project = self.project_directory / config.PROGRAMS_RELPROJ
+        template_folder = (programs_in_project / 'templates' / self.setup.os_platform).as_posix()
         self.__jinja_project = init_jinja_environment(template_folder)
 
     def __create_jinja_environment(self):
         """
         create a jinja environment for the templates directory which is located in the environment programs directory
         """
-        template_folder = self.programs_directory.as_posix()
+        template_folder = self.script_directory.as_posix()
         self.__jinja_environment = init_jinja_environment(template_folder)
 
     def __create(self):
@@ -161,44 +188,50 @@ class Environment:
         if self.base_directory.exists():
             raise EnvironmentAlreadyExists(self.name)
         self.__load_setup()
-        self.__script_suffix = config.SCRIPTS_SUFFIX[self.setup.os]
+        self.__script_suffix = config.SCRIPTS_SUFFIX[self.setup.os_platform]
 
         self.__create_jinja_project()
         if not self.__jinja_project:
             raise EnvironmentInitializationFailed(self.name)
 
-        P_programs_in_project = self.project_directory / config.PROGRAMS_RELPROJ
-        P_scripts_in_environment = self.base_directory / config.PROGRAMS_RELENV
+        scripts_in_project = self.project_directory / config.PROGRAMS_RELPROJ
+        template_scripts_in_project = scripts_in_project / 'templates' / str(self.setup.os_platform)
+        scripts_in_environment = self.base_directory / config.PROGRAMS_RELENV
+        scripts_templates_in_environment = scripts_in_environment / 'templates'
 
         self.base_directory.mkdir()
 
-        for folder in [config.PROGRAMS_RELENV, config.INPUT_RELENV, config.LOGDIR_RELENV, config.RESULT_RELENV,
-                       config.NETWORKDRIVE_RELENV, config.EXTERNALPROGRAMS_RELENV]:
+        for folder in [config.PROGRAMS_RELENV, config.INPUT_RELENV, config.LOGDIR_RELENV, config.RESULT_RELENV, config.NETWORKDRIVE_RELENV, config.EXTERNALPROGRAMS_RELENV]:
             (self.base_directory / folder).mkdir()
 
-        postsetup_installations_template_in_project = \
-            (P_programs_in_project / 'templates' / str(self.setup.os) / f'postsetup_installations{self.__script_suffix}').as_posix()
-        postsetup_installations_template_in_environment = (P_scripts_in_environment / f'template_postsetup_installations{self.__script_suffix}').as_posix()
-        shutil.copy(postsetup_installations_template_in_project, postsetup_installations_template_in_environment)
+        scripts_templates_in_environment.mkdir()
 
-        P_RunExperimentTemplate = self.base_directory / config.PROGRAMS_RELENV / f'template_run_experiment{self.__script_suffix}'
-        script_RunTemplate = RunExperimentTemplateScript(P_RunExperimentTemplate.as_posix(), f'run_experiment{self.__script_suffix}', self.setup, jinja_environment=self.__jinja_project)
-        script_RunTemplate.write()
+        postsetup_installations = Script(f'postsetup_installations{self.__script_suffix}', template_scripts_in_project, only_copy=True)
+        postsetup_installations.copy(scripts_templates_in_environment)
 
-        mount_networkdrives_script_in_project = (P_programs_in_project / 'templates' / str(self.setup.os) / f'mount_networkdrives{self.__script_suffix}').as_posix()
-        mount_networkdrives_script_in_environment = (P_scripts_in_environment / f'template_mount_networkdrives{self.__script_suffix}').as_posix()
-        shutil.copy(mount_networkdrives_script_in_project, mount_networkdrives_script_in_environment)
+        runexperiment_template = RunExperimentTemplateScript(f'run_experiment{self.__script_suffix}', template_scripts_in_project, self.setup)
+        runexperiment_template.render(scripts_templates_in_environment)
 
-        save_installed_packages_script_in_project = (P_programs_in_project / 'templates' / str(self.setup.os) / f'save_installed_packages{self.__script_suffix}').as_posix()
-        save_installed_packages_script_in_environment = (P_scripts_in_environment / f'template_save_installed_packages{self.__script_suffix}').as_posix()
-        shutil.copy(save_installed_packages_script_in_project, save_installed_packages_script_in_environment)
+        mount_networkdrives = Script(f'mount_networkdrives{self.__script_suffix}', template_scripts_in_project, only_copy=True)
+        mount_networkdrives.copy(scripts_templates_in_environment)
 
-        ParseAndTest_program_in_project = P_programs_in_project / 'ParseAndTest'
-        ParseAndTest_program_in_environment = (P_scripts_in_environment / 'ParseAndTest').as_posix()
+        save_installed_packages = Script(f'save_installed_packages{self.__script_suffix}', template_scripts_in_project, only_copy=True)
+        save_installed_packages.copy(scripts_templates_in_environment)
+
+        runscript_wrapper = Script(f'run_script_wrapper{self.__script_suffix}', template_scripts_in_project, only_copy=True)
+        runscript_wrapper.copy(scripts_templates_in_environment)
+
+        if self.setup.os_platform == 'windows':
+            helperfunctions = Script(f'helperfunctions{self.__script_suffix}', template_scripts_in_project, only_copy=True)
+            helperfunctions.copy(scripts_templates_in_environment)
+
+        # todo: outsource copy of python tool
+        ParseAndTest_program_in_project = scripts_in_project / 'ParseAndTest'
+        ParseAndTest_program_in_environment = (scripts_in_environment / 'ParseAndTest').as_posix()
         shutil.copytree(ParseAndTest_program_in_project, ParseAndTest_program_in_environment)
 
-        GUIAutomation_program_in_project = P_programs_in_project / 'GUIAutomation'
-        GUIAutomation_program_in_environment = (P_scripts_in_environment / 'GUIAutomation').as_posix()
+        GUIAutomation_program_in_project = scripts_in_project / 'GUIAutomation'
+        GUIAutomation_program_in_environment = (scripts_in_environment / 'GUIAutomation').as_posix()
         shutil.copytree(GUIAutomation_program_in_project, GUIAutomation_program_in_environment)
 
         # copy input files to input directory inside environment directory
@@ -211,7 +244,13 @@ class Environment:
                 sce.guiscenariofile = guiscenario_path
         self.configuration = EnvironmentConfiguration(name=self.name,
                                                       vagrantbox=self.setup.vagrantbox,
+                                                      os_platform=self.setup.os_platform,
                                                       os=self.setup.os,
+                                                      os_distribution=self.setup.os_distribution,
+                                                      os_version=self.setup.os_version,
+                                                      os_language=self.setup.os_language,
+                                                      os_architecture=self.setup.os_architecture,
+                                                      os_details=self.setup.os_architecture,
                                                       resolution=self.setup.resolution,
                                                       pause_after_gui_automation=self.setup.pause_after_gui_automation,
                                                       idle_after_os_starts=self.setup.idle_after_os_starts,
@@ -227,7 +266,7 @@ class Environment:
         function to load an already existing environment
         """
         self.__load_configuration()
-        self.__script_suffix = config.SCRIPTS_SUFFIX[self.configuration.os]
+        self.__script_suffix = config.SCRIPTS_SUFFIX[self.configuration.os_platform]
 
     def remove(self):
         """
@@ -361,25 +400,24 @@ class Environment:
 
         :param scenario_name: name of the scenario
         """
-        scenario_destination = self.programs_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario'
+        scenario_destination = self.script_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario'
         P_scenario_file = scenario_destination / (scenario_name + ".py")
         os.remove(P_scenario_file.as_posix())
         scenario_class = self.__find_scenario(scenario_name)
         scenario_class.guiscenariofile = None
         log.debug(f'gui scenario file for scenario {scenario_name} got deleted')
 
-    def __remove_input_file(self, scenario_name: str):
+    def __remove_input_file(self, scenario: str):
         """
         removes the input file of a scenario
 
-        :param scenario_name: name of the scenario
+        :param scenario: name of the scenario
         """
-        P_input_file = self.input_directory
-        P_input_file = P_input_file / (scenario_name + ".yml")
-        os.remove(P_input_file.as_posix())
-        scenario_class = self.__find_scenario(scenario_name)
+        input_file = self.input_directory / (scenario + ".yml")
+        os.remove(input_file.as_posix())
+        scenario_class = self.__find_scenario(scenario)
         scenario_class.inputfile = None
-        log.debug(f'input file for scenario {scenario_name} got deleted')
+        log.debug(f'input file for scenario {scenario} got deleted')
 
     def add_gui_scenario_file(self, gui_scenario_file: str, category: str or None = None):
         """
@@ -388,7 +426,7 @@ class Environment:
         :param gui_scenario_file: path of the gui scenario file to be added
         :param category: CURRENTLY NOT IN USE
         """
-        scenario_destination = self.programs_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario'
+        scenario_destination = self.script_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario'
         if category:
             # todo: category can't be used because the folder is a own package which would need to be included into the setup.cfg -> very complicated
             pass
@@ -415,7 +453,7 @@ class Environment:
         :param img_folder: directory, where the image files are located
         :param category: CURRENTLY NOT IN USE
         """
-        img_folder_destination = self.programs_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario' / 'data' / 'img'
+        img_folder_destination = self.script_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario' / 'data' / 'img'
         if category:
             # todo: category can't be used because the folder is a own package which would need to be included into the setup.cfg -> very complicated
             pass
@@ -458,11 +496,11 @@ class Environment:
             scenario_class = self.__create_scenario_class(scenario_name)
         scenario_class.guiscenariofile = P_scenario_file.absolute().as_posix()
         self.__save_configuration()
-        return P_scenario_file.as_posix(), self.programs_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario' / 'data' / 'img'
+        return P_scenario_file.as_posix(), self.script_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario' / 'data' / 'img'
 
     def add_input_file_skeleton(self, scenario_name: str) -> str or None:
         """
-        creates a input file by a template (also creates scenario class if not already existing)
+        creates an input file by a template (also creates scenario class if not already existing)
 
         :param scenario_name: name of the scenario
         """
@@ -670,7 +708,7 @@ class Environment:
             log.info('example file were included successfully')
 
     # def setup_network_drives(self, jinja: jinja2.Environment, scenario_name: str, logfolder: str) -> list or None:
-    #     P_mountnetworkdrivescript = self.programs_directory / f'mount_networkdrives{self.__script_suffix}'
+    #     P_mountnetworkdrivescript = self.script_directory / f'mount_networkdrives{self.__script_suffix}'
     #     used_network_drives = []
     #     for drive in self.setup.networkdrives:
     #         if scenario_name in drive.scenarios:
@@ -734,7 +772,7 @@ class Environment:
         Vagrant_creator.set_box(vgbox)
         Vagrant_creator.set_vbox_name('testvgbox')
 
-        if conf.os == 'windows':
+        if conf.os_platform == 'windows':
             Vagrant_creator.change_communicator('winrm')
 
         if hostonly:
@@ -777,34 +815,98 @@ class Environment:
             if int(idle_after_os_starts) < 90:
                 idle_after_os_starts = "90"
 
-        P_postsetup_installations = self.programs_directory / f'postsetup_installations{self.__script_suffix}'
-        P_mount_networkdrives = self.programs_directory / f'mount_networkdrives{self.__script_suffix}'
-        P_run_experiment = self.programs_directory / f'run_experiment{self.__script_suffix}'
-        P_save_installed_packages = self.programs_directory / f'save_installed_packages{self.__script_suffix}'
+        postsetup_installations = self.script_directory / f'wrapper_postsetup_installations{self.__script_suffix}'
+        mount_networkdrives = self.script_directory / f'wrapper_mount_networkdrives{self.__script_suffix}'
+        run_experiment = self.script_directory / f'wrapper_run_experiment{self.__script_suffix}'
+        save_installed_packages = self.script_directory / f'wrapper_save_installed_packages{self.__script_suffix}'
 
-        if conf.os == 'linux':
+        if conf.os_platform == 'linux':
             Vagrant_creator.add_shell_provisioner_inline("sleep " + idle_after_os_starts)
-            Vagrant_creator.add_shell_provisioner_path(P_postsetup_installations.absolute().as_posix())
+            Vagrant_creator.add_shell_provisioner_path(postsetup_installations.absolute())
             if networkdrive_active:
-                Vagrant_creator.add_shell_provisioner_path(P_mount_networkdrives.absolute().as_posix())
-            Vagrant_creator.add_shell_provisioner_path(P_run_experiment.absolute().as_posix())
-            Vagrant_creator.add_shell_provisioner_path(P_save_installed_packages.absolute().as_posix())
-        elif conf.os == 'windows':
+                Vagrant_creator.add_shell_provisioner_path(mount_networkdrives.absolute())
+            Vagrant_creator.add_shell_provisioner_path(run_experiment.absolute())
+            Vagrant_creator.add_shell_provisioner_path(save_installed_packages.absolute())
+        elif conf.os_platform == 'windows':
             Vagrant_creator.add_shell_provisioner_inline("sleep " + idle_after_os_starts, privileged=True,
                                                          powershell_elevated_interactive=False)
-            Vagrant_creator.add_shell_provisioner_path(P_postsetup_installations.absolute().as_posix(), privileged=True,
+            Vagrant_creator.add_shell_provisioner_path(postsetup_installations.absolute(), privileged=True,
                                                        powershell_elevated_interactive=False)
             if networkdrive_active:
-                Vagrant_creator.add_shell_provisioner_path(P_mount_networkdrives.absolute().as_posix(), privileged=True,
+                Vagrant_creator.add_shell_provisioner_path(mount_networkdrives.absolute(), privileged=True,
                                                            powershell_elevated_interactive=True)
-            Vagrant_creator.add_shell_provisioner_path(P_run_experiment.absolute().as_posix(), privileged=True,
+            Vagrant_creator.add_shell_provisioner_path(run_experiment.absolute(), privileged=True,
                                                        powershell_elevated_interactive=True)
-            Vagrant_creator.add_shell_provisioner_path(P_save_installed_packages.absolute().as_posix(), privileged=True,
+            Vagrant_creator.add_shell_provisioner_path(save_installed_packages.absolute(), privileged=True,
                                                        powershell_elevated_interactive=True)
         else:
-            log.error(f'os {conf.os} not supported')
+            log.error(f'os platform {conf.os_platform} not supported')
             return
         return Vagrant_creator
+
+    def __save_results_in_database(self, scenario: str, result_file: Path, timestamps: dict, vg_exitcode: int, scenario_log_directory: Path):
+        db = DjangoDbApi()
+        input_file = self.input_directory / (scenario + ".yml")
+        if not input_file.is_file():
+            log.error(f'input file is missing')
+            return
+
+        parser = YAMLInputParser(input_file)
+        inputdata = parser.parse()
+
+        resultdata = None
+        if not result_file.is_file():
+            log.warning(f'result file is missing')
+        else:
+            resultdata = yaml_to_dict(result_file)
+
+        logfiledata = {
+            'logfile_vagrant': (scenario_log_directory/'vagrant.log').absolute().as_posix() if (scenario_log_directory/'vagrant.log').is_file() else None,
+            'logfile_gui_automation': (scenario_log_directory/'gui.log').absolute().as_posix() if (scenario_log_directory/'gui.log').is_file() else None,
+            'logfile_parse_and_test': (scenario_log_directory/'parseandtest.log').absolute().as_posix() if (scenario_log_directory/'parseandtest.log').is_file() else None,
+            'logfile_postsetup_installations': (scenario_log_directory/'postsetup_installations.log').absolute().as_posix() if (scenario_log_directory/'postsetup_installations.log').is_file() else None,
+            'logfile_installed_packages': (scenario_log_directory/'save_installed_packages.log').absolute().as_posix() if (scenario_log_directory/'save_installed_packages.log').is_file() else None,
+            'logfile_run_experiment': (scenario_log_directory/'run_experiment.log').absolute().as_posix() if (scenario_log_directory/'run_experiment.log').is_file() else None,
+        }
+
+        VAGRANT_EXITCODE_STATUS_MAPPING = {
+            'default': 'failed',
+            0: 'success'
+        }
+        vagrant_status = ['default']
+        if vg_exitcode in VAGRANT_EXITCODE_STATUS_MAPPING.keys():
+            vagrant_status = VAGRANT_EXITCODE_STATUS_MAPPING[vg_exitcode]
+
+        status_file = self.log_directory/'status.csv'
+        statusdata = {}
+        if status_file.is_file():
+            statusdata = csv_to_dict(status_file)
+        statusdata['VAGRANT'] = vagrant_status
+
+        status_total = 'failed'
+        if statusdata['VAGRANT'] == 'success':
+            if 'gui' and 'parseandtest' in statusdata.keys():
+                if statusdata['gui'] != 'success' and statusdata['parseandtest'] != 'success':
+                    status_total = 'success'
+        statusdata['TOTAL'] = status_total
+
+        os_info = {
+            'os': self.configuration.os,
+            'distribution': self.configuration.os_distribution,
+            'version': self.configuration.os_version,
+            'language': self.configuration.os_language,
+            'architecture': self.configuration.os_architecture
+        }
+
+        db.add_experiment(
+            name=scenario,
+            inputdata=inputdata,
+            resultdata=resultdata,
+            logfiledata=logfiledata,
+            statusdata=statusdata,
+            timestamps=timestamps,
+            os_info=os_info,
+        )
 
     def run(self, scenario: str, debug=False):
         """
@@ -841,39 +943,39 @@ class Environment:
 
         scenario_log_directory = self.log_directory / f'{scenario}_{timestamp_start_filename_format}'
         scenario_log_directory.mkdir()
-        scenario_log_directory_vm_view = (Path('/vagrant') / scenario_log_directory.relative_to(self.base_directory)).as_posix()
+
+        scenario_log_directory_vm_view = self.vm_synced_directory_path / scenario_log_directory.relative_to(self.base_directory)
+        self.__script_manager.set_log_directory_vm_view(scenario_log_directory_vm_view)
 
         resultfile_name = 'result.yml'
         scenario_result_directory = self.result_directory / f'{scenario}_{timestamp_start_filename_format}'
         scenario_result_directory.mkdir()
         scenario_resultfile = scenario_result_directory / resultfile_name
         scenario_result_directory_vm_view = Path('/vagrant') / scenario_result_directory.relative_to(self.base_directory)
-        scenario_resultfile_vm_view = (scenario_result_directory_vm_view / resultfile_name).as_posix()
+        scenario_resultfile_vm_view = scenario_result_directory_vm_view / resultfile_name
 
-        path_postsetupinstallation = self.programs_directory / f'postsetup_installations{self.__script_suffix}'
-        path_runexperiment = self.programs_directory / f'run_experiment{self.__script_suffix}'
-        path_saveinstalledpackages = self.programs_directory / f'save_installed_packages{self.__script_suffix}'
-        path_mountnetworkdrives = self.programs_directory / f'mount_networkdrives{self.__script_suffix}'
+        script_postinstall = PostsetupInstallationsScript(f'postsetup_installations{self.__script_suffix}',
+                                                          self.script_templates_directory,
+                                                          configuration=self.configuration,
+                                                          render_wrapper=True)
+        self.__script_manager.add_script(script_postinstall)
 
-        script_postinstall = PostsetupInstallationsScript(path_postsetupinstallation.as_posix(),
-                                                          f'template_postsetup_installations{self.__script_suffix}',
-                                                          self.configuration,
-                                                          scenario_log_directory_vm_view,
-                                                          jinja_environment=self.__jinja_environment)
-        script_run = RunExperimentScript(path_runexperiment.as_posix(),
-                                         f'template_run_experiment{self.__script_suffix}',
-                                         scenario,
-                                         scenario_resultfile_vm_view,
-                                         scenario_log_directory_vm_view,
-                                         jinja_environment=self.__jinja_environment)
-        script_saveinstalledpackages = SaveInstalledPackagesScript(path_saveinstalledpackages.as_posix(),
-                                                                   f'template_save_installed_packages{self.__script_suffix}',
-                                                                   scenario_log_directory_vm_view,
-                                                                   jinja_environment=self.__jinja_environment)
+        script_run = RunExperimentScript(f'run_experiment{self.__script_suffix}',
+                                         self.script_templates_directory,
+                                         scenario=scenario,
+                                         result_file=scenario_resultfile_vm_view,
+                                         render_wrapper=True)
+        self.__script_manager.add_script(script_run)
 
-        script_postinstall.write()
-        script_run.write()
-        script_saveinstalledpackages.write()
+        script_saveinstalledpackages = SaveInstalledPackagesScript(f'save_installed_packages{self.__script_suffix}',
+                                                                   self.script_templates_directory,
+                                                                   render_wrapper=True)
+        self.__script_manager.add_script(script_saveinstalledpackages)
+
+        if self.configuration.os_platform == 'windows':
+            helperfunctions = Script(f'helperfunctions{self.__script_suffix}',
+                                     self.script_templates_directory)
+            self.__script_manager.add_script(helperfunctions)
 
         # start network drives
         publicnetwork = False
@@ -883,15 +985,13 @@ class Environment:
             if scenario in drive.scenarios:
                 networkdrive_active = True
         if networkdrive_active:
-            networkdrive_dir = (self.base_directory / config.NETWORKDRIVE_RELENV).as_posix()
+            networkdrive_dir = self.base_directory / config.NETWORKDRIVE_RELENV
 
-            networkdrive_container = NetworkDriveContainer(self.configuration.networkdrives, scenario, networkdrive_dir)
+            networkdrive_container = NetworkDriveContainer(config.DEFAULT_NETWORKSHARE_BOX, self.configuration.networkdrives, scenario, networkdrive_dir)
 
-            networkdrive_container.write_mount_script(path_mountnetworkdrives.as_posix(),
-                                                      self.configuration.os,
-                                                      f'template_mount_networkdrives{self.__script_suffix}',
-                                                      scenario_log_directory_vm_view,
-                                                      jinja_environment=self.__jinja_environment)
+            share_information_list = networkdrive_container.get_share_information_list(self.configuration.os_platform)
+            script_mount_networkdrive = MountNetworkDriveScript(f'mount_networkdrives{self.__script_suffix}', self.script_templates_directory, share_information_list=share_information_list, render_wrapper=True)
+            self.__script_manager.add_script(script_mount_networkdrive)
 
             if not networkdrive_container:
                 log.error(f'scenario {scenario} will not start because the network drive vm couldn\'t get created')
@@ -900,19 +1000,17 @@ class Environment:
             if networkdrive_container:
                 publicnetwork = True
 
+        self.__script_manager.render_to_environment(self.script_directory)
+
         log_file_path = scenario_log_directory/'vagrant.log'
         log.debug(f'log path for vagrant log: {log_file_path.absolute()}')
 
         vagrantfile = self.create_Vagrantfile(scenario, hostonly=publicnetwork, networkdrive_active=networkdrive_active)
         box = VagrantBoxVM.fromVagrantFileObject(self.base_directory, vagrantfile, log_file=log_file_path)
-        vg_success = box.run(debug=debug)
+        vg_exitcode = box.run(debug=debug)
 
-        # remove temporary created scripts todo: create a safe delete function that catches cases where exception occur
-        script_postinstall.remove()
-        script_run.remove()
-        script_saveinstalledpackages.remove()
-        if networkdrive_active and (self.programs_directory / f'mount_networkdrives{self.__script_suffix}').is_file():
-            os.remove((self.programs_directory / f'mount_networkdrives{self.__script_suffix}').as_posix())
+        # remove temporary created scripts
+        self.__script_manager.remove_scripts_from_environment()
 
         # delete Vagrantfile
         os.remove((self.base_directory / 'Vagrantfile').as_posix())
@@ -925,14 +1023,14 @@ class Environment:
                 else:
                     log.error("network drive was shutdown early")
 
-        # timestamp of the end of the experiment
+        # get timestamp for end of experiment
         timestamp_end = datetime.now()
 
-        # provide user output
-        if vg_success == 0:
-            print('\n\ntest result can be found in the following path:')
-            print(scenario_resultfile.as_posix())
-        elif vg_success == 1:
-            print('\n\nan error during execution occurred - please check the logs and the above log messages')
-        elif vg_success == 2:
-            print('\n\nan error during the destroy process of the vagrant box occurred - please try to clean it up manually')
+        # save timestamps in dict
+        timestamps = {
+            'timestamp_start': timestamp_start,
+            'timestamp_end': timestamp_end
+        }
+
+        # write results and log information to database
+        self.__save_results_in_database(scenario, scenario_resultfile, timestamps, vg_exitcode, scenario_log_directory)

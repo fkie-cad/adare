@@ -1,13 +1,11 @@
 # external imports
 from typing import Optional, Literal
 from pathlib import Path
-import jinja2
 
 # internal imports
 from adare.backend.attrs_classes import NetworkDrive
 from adare.networkdrive.Networkdrive import NetworkdriveVM
 from adare.networkdrive.attrs_classes import Share, SMBConfiguration, NFSConfiguration, SMBUser
-from adare.backend.script_creation import MountNetworkDriveScript
 from adare.backend.exceptions import SafeDeletionError
 
 # configure logging
@@ -21,9 +19,9 @@ class NetworkDriveContainer:
     """
     Drives: list[NetworkDrive]
     VM: NetworkdriveVM
-    directory: str
+    directory: Path
 
-    def __init__(self, drives: list, scenario: str, networkdrive_directory: str, smb_conf: SMBConfiguration = None, nfs_conf: NFSConfiguration = None):
+    def __init__(self, networkdrive_box: str, drives: list, scenario: str, networkdrive_directory: Path, smb_conf: SMBConfiguration = None, nfs_conf: NFSConfiguration = None):
         self.Drives = []
         self.directory = networkdrive_directory
         for drive in drives:
@@ -31,7 +29,7 @@ class NetworkDriveContainer:
                 self.Drives.append(drive)
         if not self.Drives:
             return
-        self.VM = NetworkdriveVM(networkdrive_directory)
+        self.VM = NetworkdriveVM(networkdrive_directory, box_name=networkdrive_box)
         for drive in self.Drives:
             if drive.type == 'smb' and not self.VM.smb:
                 self.VM.create_smb(smb_conf)
@@ -85,25 +83,16 @@ class NetworkDriveContainer:
             if Path(self.directory).parent.parent.name == "environments":
                 self.VM.cleanup()
             else:
-                raise SafeDeletionError(self.directory)
+                raise SafeDeletionError(self.directory.as_posix())
         else:
             log.warning('network drive vm can not be stopped because it is not running')
 
-    # todo: maybe rewrite it so that less parameters like jinja/template are needed
-    def write_mount_script(self, destination: str, guest_os: Literal['windows', 'linux'], template: str, logfolder: str,
-                           jinja_environment: jinja2.Environment = None):
+    def get_share_information_list(self, guest_os: Literal['windows', 'linux']):
         """
-        write a script to mount the network shares represented within this class
 
-        :param destination: destination folder of the script
-        :param guest_os: os used by the guest
-        :param template: template used to create the script
-        :param logfolder: logfolder used within the script
-        :param jinja_environment: jinja environment where the template can be found
-        :return:
         """
         if not self.Drives:
-            return
+            return []
         share_information_list = []
         for share in self.VM.shares:
             share_info = {
@@ -114,5 +103,4 @@ class NetworkDriveContainer:
             elif guest_os == 'linux':
                 share_info['fstab'] = share.get_fstab_entry(self.VM.get_vm_ip())
             share_information_list.append(share_info)
-        script = MountNetworkDriveScript(destination, template, share_information_list, logfolder, jinja_environment=jinja_environment)
-        script.write()
+        return share_information_list
