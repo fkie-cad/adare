@@ -3,7 +3,7 @@ from pathlib import Path
 
 # internal imports
 from adare.backend.script_creation.Script import Script
-from adare.backend.attrs_classes import EnvironmentConfiguration, EnvironmentSetup
+from adare.backend.attrs_classes import EnvironmentConfiguration
 
 # configure logging
 import logging
@@ -22,32 +22,30 @@ class PostsetupInstallationsScript(Script):
             self.disable_render()
 
 
-class RunExperimentTemplateScript(Script):
-    def __init__(self, name: str, source_directory: Path, setup: EnvironmentSetup, render_wrapper: bool = False):
-        super().__init__(name, source_directory, render_wrapper=render_wrapper)
-        var = {
-            'resolution': setup.resolution,
-            'settings': setup.settings,
-            'gui': setup.gui,
-            'gui_scenario': "{{ gui_scenario }}",
-            'inputfile': "{{ inputfile }}",
-            'outputfile': "{{ outputfile }}",
-            'log_directory': "{{ log_directory }}",
-            'resultfolder': "{{ resultfolder }}",
-            'pauseafterGUIAutmation': setup.pause_after_gui_automation
-        }
-        self.update_variables(var)
-
-
 class RunExperimentScript(Script):
-    def __init__(self, name: str, source_directory: Path, scenario: str = None, result_file: Path = None, render_wrapper: bool = False):
+    def __init__(self, name: str,
+                 source_directory: Path,
+                 scenario_path: Path,
+                 tessdata_directory: Path = None,
+                 scenario_config_file: Path = None,
+                 scenario: str = None,
+                 result_file: Path = None,
+                 project_script_directory: Path = None,
+                 additional_tool_directory: Path = None,
+                 render_wrapper: bool = False):
         super().__init__(name, source_directory, render_wrapper=render_wrapper)
         if scenario and result_file:
             var = {
                 'gui_scenario': scenario,
-                'inputfile': f'/vagrant/input/{scenario}.yml',
+                'inputfile': (scenario_path/f'{scenario}.yml').as_posix(),
                 'outputfile': result_file.as_posix(),
-                'resultfolder': result_file.parent.as_posix(),
+                'result_directory': result_file.parent.as_posix(),
+                'img_directory': (scenario_path/f'img').as_posix(),
+                'tessdata_directory': tessdata_directory.as_posix(),
+                'scenario_config_file': scenario_config_file.as_posix(),
+                'scenario_file': (scenario_path/f'{scenario}.py').as_posix(),
+                'project_script_directory': project_script_directory.as_posix(),
+                'additional_tool_directory': additional_tool_directory.as_posix(),
             }
             self.update_variables(var)
         else:

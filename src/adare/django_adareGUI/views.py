@@ -87,17 +87,19 @@ def experiment(request):
     exp = Experiment.objects.get(uuid=uuid)
     template = loader.get_template('experiment.html')
     duration = exp.timestamp_end - exp.timestamp_start
+
     STATUSNAME_COLOR_MAPPING = {
         'success': 'success',
         'failed': 'danger',
         'warning': 'warning',
-        'not reached': 'warning'
+        'not reached': 'gray-400'
     }
     STATUSNAME_SYMBOL_MAPPING = {
         'success': 'check-square',
         'failed': 'x-square',
         'warning': 'exclamation-square',
-        'not reached': 'question-square',
+        'not reached': 'exclamation-square',
+        #'not reached': 'question-square',
     }
 
     log_vg = get_logfile_content(exp.logfile_vagrant)

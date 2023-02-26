@@ -53,7 +53,7 @@ def determine_projectdirectory(chosen_projectdirectory: str):
             log.warning("provided project path (" + str(chosen_projectdirectory) + ") isn't a valid project directory")
         tested_project_paths.append(chosen_projectdirectory)
     else:
-        if check_if_projectdirectory_is_valid(config.BASEDIR):
-            return Path(config.BASEDIR).as_posix()
-        tested_project_paths.append(config.BASEDIR)
+        if check_if_projectdirectory_is_valid('.'):
+            return Path('.').absolute().as_posix()
+        tested_project_paths.append(Path('.').absolute().as_posix())
     raise NoProjectFoundException(tested_project_paths)

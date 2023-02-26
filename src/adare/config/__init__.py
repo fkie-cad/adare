@@ -21,23 +21,6 @@ ABBREV_ERROR = ['ERROR', 'error', 'Error', 'e', 'E']
 ABBREV_CRITICAL = ['CRITICAL', 'critical', 'Critical', 'c', 'C']
 
 # set default variables
-BASEDIR = "."
-LOGDIR_RELPROJ = "logs"
-PROGRAMS_RELPROJ = "programs"
-SETUPDIR_RELPROJ = "setup"
-ENVDIR_RELPROJ = "environments"
-INPUTDIR_RELPROJ = "input"
-
-ENVCONFIGURATIONFILENAME = ".envconf.yml"
-PROJECTINFOFILENAME = '.projconf.yml'
-
-INPUT_RELENV = "input"
-PROGRAMS_RELENV = "scripts"
-LOGDIR_RELENV = "logs"
-RESULT_RELENV = "result"
-NETWORKDRIVE_RELENV = "networkdrives"
-EXTERNALPROGRAMS_RELENV = "externalprograms"
-
 PARSEANDTESTPROG = 'ParseAndTest'
 GUIAUTOMATIONPROG = 'GUIAutomation'
 
