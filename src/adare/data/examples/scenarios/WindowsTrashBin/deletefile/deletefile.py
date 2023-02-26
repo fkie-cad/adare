@@ -1,19 +1,20 @@
-from guiautomation.Scenario.Scenario import Scenario
-from guibot.guibot import GuiBot
 from pathlib import Path
+import sys
 
-import guiautomation.config as config
+from guiautomation.Scenario.Scenario import Scenario
+from guiautomation.run import run
+from guibot.guibot import GuiBot
+
 import logging
-
 log = logging.getLogger(__name__)
 
 
 class deletefile(Scenario):
     description = "Delete file from home folder to Trash Bin (Ubuntu)"
-    guibot = None
+    guibot: GuiBot = None
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def prepare(self):
         file = "C:/Users/vagrant/Documents/testfile"
@@ -27,23 +28,38 @@ class deletefile(Scenario):
 
         log.info(f'scenario {type(self).__name__} started')
 
-        if guibot.exists('files.png'):
-            guibot.click('files.png').idle(5)
+        match = self.find('files.png')
+        if match:
+            guibot.click(match[0])
+            guibot.idle(5)
         else:
             log.error('files.png button does not exist')
             return 'failed'
-        if guibot.exists('documents.png'):
-            guibot.click('documents.png').idle(5)
+
+        match = self.find_text('Documents')
+        if match:
+            guibot.click(match[0])
+            guibot.idle(5)
         else:
-            log.error('documents.png button does not exist')
+            log.error('documents text does not exist')
             return 'failed'
-        if guibot.exists('testfile.png'):
-            guibot.click('testfile.png').idle(5)
+
+        match = self.find_text('testfile')
+        if match:
+            guibot.click(match)
+            guibot.idle(5)
             guibot.press_keys(guibot.dc_backend.keymap.DELETE)
             self.save_time("DELETIONDATE")
         else:
-            log.error('testfile.png icon cant be found')
+            log.error('testfile text cant be found')
             return 'failed'
 
         log.info(f'scenario {type(self).__name__} done')
         return self.status
+
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('missing file for config path')
+        exit(-1)
+    run(deletefile, config_file=Path(sys.argv[1]))

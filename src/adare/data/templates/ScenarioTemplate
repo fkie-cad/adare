@@ -1,10 +1,13 @@
-from guiautomation.Scenario.Scenario import Scenario
 from pathlib import Path
+import sys
 
-import guiautomation.config as config
+from guiautomation.Scenario.Scenario import Scenario
+from guiautomation.run import run
+from guibot.guibot import GuiBot
+
 import logging
-
 log = logging.getLogger(__name__)
+
 
 class {{ name }}(Scenario):
     description = 'place the description of your scenario here '
@@ -32,3 +35,9 @@ class {{ name }}(Scenario):
 
 
         log.info("scenario " + type(self).__name__ + " done")
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('missing file for config path')
+        exit(-1)
+    run({{ name }}, config_file=Path(sys.argv[1]))

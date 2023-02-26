@@ -50,7 +50,7 @@ class ConsoleHandlerFormatter(logging.Formatter):
         return logging.Formatter.format(self, record)
 
 
-def setup_logger(loglevel_console=logging.DEBUG, loglevel_file=logging.DEBUG, logfile=None, console=True):
+def setup_logger(loglevel_console=logging.DEBUG, loglevel_file=logging.DEBUG, logfile: Path = None, console=True):
     if not loglevel_console:
         loglevel_console = logging.INFO
     if not loglevel_file:
@@ -62,10 +62,10 @@ def setup_logger(loglevel_console=logging.DEBUG, loglevel_file=logging.DEBUG, lo
         logging.getLogger().addHandler(handler)
 
     if logfile:
-        if not Path(logfile).parent.is_dir():
-            print("logging in file " + str(logfile) + " couldn't be initialized")
+        if not logfile.parent.is_dir():
+            print(f"logging in file {logfile} couldn't be initialized")
         else:
-            handler = logging.FileHandler(logfile, encoding='utf-8')
+            handler = logging.FileHandler(logfile.as_posix(), encoding='utf-8')
             handler.setFormatter(FileHandlerFormatter())
             logging.getLogger().addHandler(handler)
             logging.getLogger().setLevel(loglevel_file)
