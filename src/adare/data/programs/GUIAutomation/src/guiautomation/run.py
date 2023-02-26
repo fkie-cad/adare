@@ -1,14 +1,9 @@
 # external imports
-import argparse
-from importlib import import_module
-import sys
-from pkgutil import iter_modules
-from inspect import isclass
-import pkg_resources
 from pathlib import Path
+from typing import Type
 
 # internal imports
-import guiautomation.config as config
+from guiautomation.yamlfeatures.basics import yaml_to_dict
 from guiautomation.Scenario.Scenario import Scenario
 
 # configure logging
@@ -16,56 +11,55 @@ import guiautomation.logger as logger
 import logging as log
 
 
-def setup_logging(arguments, commandline):
-    if arguments.logfile:
-        logger.setup_logger(logfile=arguments.logfile)
+def setup_logging(logfile: Path = None):
+    logger.setup_logger(logfile=logfile)
+
+
+def run(scenario_class: Type[Scenario], config_file: Path or None, config_dict: dict = None):
+    if not config_dict and not config_file:
+        log.error(f'need to provide either config file or config dict')
+    if config_file:
+        if not config_file.is_file():
+            log.error(f'provided config file does not exist')
+            return
+        gui_config = yaml_to_dict(config_file)
     else:
-        logger.setup_logger(logfile=config.DEFAULTLOGFILE)
-    log.info("COMMAND: " + " ".join(commandline))
+        gui_config = config_dict
 
-
-def import_scenario(scenarioname):
-    scenario_class = None
-    package_dir = pkg_resources.resource_filename('guiautomation.Scenario', '')
-    for (_, module_name, _) in iter_modules([package_dir]):
-        module = import_module(f"guiautomation.Scenario.{module_name}")
-        for attribute_name in dir(module):
-            attribute = getattr(module, attribute_name)
-            if isclass(attribute) and issubclass(attribute, Scenario):
-                globals()[attribute_name] = attribute
-                if attribute_name == scenarioname:
-                    scenario_class = attribute
-    return scenario_class
-
-
-def run_scenario(arguments):
-    log.info(f'scenario {arguments.scenarioname} will be run')
-    scenarioclass = import_scenario(arguments.scenarioname)
-    log.info(f'scenario class for scenario {arguments.scenarioname} was imported successfully')
-    if not scenarioclass:
-        log.error(f'no scenario class for scenario {arguments.scenarioname} found')
+    if 'img_folder' not in gui_config.keys():
+        log.error(f'gui config file {config_file} does not contain img_folder attribute')
         return
-    ScenarioObj = scenarioclass()
-    ScenarioObj.prepare()
-    status = ScenarioObj.run()
-    log.info(f'scenario {arguments.scenarioname} is run successfully')
-    log.error((Path(arguments.logfile).parent/'status.csv').as_posix())
-    with open((Path(arguments.logfile).parent/'status.csv').as_posix(), mode='a', encoding='ascii') as f:
+    if 'tessdata_folder' not in gui_config.keys():
+        log.error(f'gui config file {config_file} does not contain tessdata_folder attribute')
+        return
+    if 'logfile' not in gui_config.keys():
+        log.error(f'gui config file {config_file} does not contain logfile attribute')
+        return
+    if 'statusfile' not in gui_config.keys():
+        log.error(f'gui config file {config_file} does not contain statusfile attribute')
+        return
+
+    img_folder = Path(gui_config['img_folder'])
+    tessdata_folder = Path(gui_config['tessdata_folder'])
+    logfile = Path(gui_config['logfile'])
+    statusfile = Path(gui_config['statusfile'])
+
+    setup_logging(logfile)
+
+    scenario_log_file = None
+    if 'scenario_log_file' in gui_config.keys():
+        scenario_log_file = gui_config['scenario_log_file']
+
+    scenario_obj = scenario_class(
+        img_folder=img_folder,
+        tessdata_folder=tessdata_folder,
+        scenario_log_file=scenario_log_file,
+    )
+
+    scenario_obj.prepare()
+    log.debug(f'preperation of scenario {scenario_obj.__class__} done')
+    status = scenario_obj.run()
+    log.debug(f'scenario {scenario_obj.__class__} finished')
+
+    with open(statusfile.as_posix(), mode='a', encoding='ascii') as f:
         f.write(f'gui,{status}\n')
-
-
-def run():
-    parser = argparse.ArgumentParser(description="")
-    parser.add_argument("--logfile")
-    subparsers = parser.add_subparsers()
-
-    subparser_run = subparsers.add_parser('run', help='run a chosen scenario')
-    subparser_run.add_argument('scenarioname', type=str, help='name of the scenario \n to list all available scenarios run the list command')
-    subparser_run.set_defaults(func=run_scenario)
-
-    args = parser.parse_args()
-
-    setup_logging(args, sys.argv)
-
-    args.func(args)
-

@@ -1,0 +1,7 @@
+name: deletefileNFS
+tests:
+  - name: existencefile
+    description: 'check if file is deleted'
+    type: is_not_file
+    params:
+      dst: 'X:/testfile'

@@ -10,6 +10,9 @@ Vagrant.configure("2") do |config|
     config.vm.network "forwarded_port", guest: {{ f.guest }}, host: {{ f.host }}
     {% endif %}
     {% endfor %}
+    {% for s_folder in synced_folders %}
+    config.vm.synced_folder "{{ s_folder.source }}", "{{ s_folder.destination }}"
+    {% endfor %}
 
     config.vm.provider "virtualbox" do |vb|
         {% if virtualbox_memory %}vb.memory = {{ virtualbox_memory }}{% endif %}
