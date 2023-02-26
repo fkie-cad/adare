@@ -30,13 +30,13 @@ class Project:
     name: str
     base_directory: Path
     information: ProjectInformation or None
-    information_file: str
+    information_file: Path
 
     def __init__(self, path: str, create: bool = False):
         self.information = None
-        self.base_directory = Path(path)
+        self.base_directory = Path(path).absolute()
         self.name = self.base_directory.name
-        self.information_file = self.base_directory / config.PROJECTINFOFILENAME
+        self.information_file = self.base_directory / '.projconf.yml'
         if create:
             log.info(f'project in path {self.base_directory} will be created')
             if self.base_directory.exists():
@@ -73,8 +73,7 @@ class Project:
         """
         load an existing project
         """
-        P_project_information = self.base_directory / config.PROJECTINFOFILENAME
-        self.information_file = P_project_information.as_posix()
+        self.information_file = self.base_directory / '.projconf.yml'
         self.__read_information()
         log.info(f'loading project ({self.base_directory}) was successful')
 
@@ -95,20 +94,22 @@ class Project:
             raise ProjectCreationFailied(self.base_directory)
 
         try:
-            shutil.copytree(programs_in_installation, self.base_directory / config.PROGRAMS_RELPROJ)
+            shutil.copytree(programs_in_installation, self.base_directory / 'programs')
         except OSError as e:
             log.error(e, exc_info=True)
             self.__cleanup()
             raise ProjectCreationFailied(self.base_directory)
 
         try:
-            shutil.copytree(templates_in_installation, self.base_directory / config.PROGRAMS_RELPROJ / 'templates')
+            shutil.copytree(templates_in_installation, self.base_directory / 'programs' / 'templates')
         except OSError as e:
             log.error(e, exc_info=True)
             self.__cleanup()
             raise ProjectCreationFailied(self.base_directory)
 
-        for directoryname in [config.SETUPDIR_RELPROJ, config.ENVDIR_RELPROJ]:
+        self.__get_tessdata()
+
+        for directoryname in ['setup', 'environments', 'additional_tools']:
             try:
                 (self.base_directory / directoryname).mkdir()
             except OSError as e:
@@ -116,7 +117,7 @@ class Project:
                 self.__cleanup()
                 raise ProjectCreationFailied(self.base_directory)
 
-        project_information_file = self.base_directory / config.PROJECTINFOFILENAME
+        project_information_file = self.base_directory / '.projconf.yml'
         project_information = ProjectInformation(name=self.name)
         project_information_dict = attr.asdict(project_information)
         try:
@@ -130,10 +131,22 @@ class Project:
 
         log.info(f'project ({self.base_directory}) creation was successful')
 
+    def __get_tessdata(self):
+        """
+        copy tessdata needed for text recognition in the gui automation to the project
+        """
+        tessdata_dir = pkg_resources.resource_filename(config.PACKAGE, '/data/tessdata')
+        try:
+            shutil.copytree(tessdata_dir, self.base_directory/'tessdata')
+        except OSError as e:
+            log.error(e, exc_info=True)
+            self.__cleanup()
+            raise ProjectCreationFailied(self.base_directory)
+
     def __repair_if_broken(self):
         project_children = [f.name for f in self.base_directory.iterdir()]
         broken_element_found = False
-        for mandatory_children in [config.SETUPDIR_RELPROJ, config.ENVDIR_RELPROJ, config.PROGRAMS_RELPROJ,
+        for mandatory_children in ['setup', 'environments', 'programs',
                                    '.projconf.yml']:
             if mandatory_children not in project_children:
                 broken_element_found = True
@@ -274,18 +287,18 @@ class Project:
             raise ScenarioDoesNotExistInEnvironment(environment_name, scenario)
         Env.run(scenario, debug=debug)
 
-    def add_input_to_environment(self, environment: str, input_files_path: str):
-        """
-        add input files to an environment
-
-        :param environment: name of the environment
-        :param input_files_path: path to the input files/file (can be a file or a directory)
-        """
-        if not self.__is_environment(environment):
-            raise EnvironmentDoesNotExist(environment)
-        Env = Environment(environment, self.base_directory)
-        Env.add_input_files(input_files_path)
-        log.debug(f'input files in path {input_files_path} got added successfully to the environment {environment}')
+    # def add_input_to_environment(self, environment: str, input_files_path: str):
+    #     """
+    #     add input files to an environment
+    #
+    #     :param environment: name of the environment
+    #     :param input_files_path: path to the input files/file (can be a file or a directory)
+    #     """
+    #     if not self.__is_environment(environment):
+    #         raise EnvironmentDoesNotExist(environment)
+    #     Env = Environment(environment, self.base_directory)
+    #     Env.add_input_files(input_files_path)
+    #     log.debug(f'input files in path {input_files_path} got added successfully to the environment {environment}')
 
     # def remove_input_from_environment(self, environment: str, input_file_name: str):
     #     if not self.__is_environment(environment):

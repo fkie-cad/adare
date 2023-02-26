@@ -3,6 +3,7 @@ import yaml
 import yaml.constructor
 from typing import Union, Literal, Optional
 import attrs as attr
+from pathlib import Path
 
 # internal imports
 from adare.inputparser.YAMLInputParser import YAMLInputParser
@@ -76,8 +77,7 @@ class Scenario:
     """
     name: str
     description: str = ''
-    inputfile: Union[str, None] = None
-    guiscenariofile: Union[str, None] = None
+    directory: str = ''
     tags: list[str] = attr.Factory(list)
 
     # todo: maybe not only check if valid yaml also check if the custom syntax used by the project is correct
@@ -87,13 +87,14 @@ class Scenario:
 
         :return: bool
         """
-        if not self.inputfile:
+        inputfile = Path(self.directory)/f'{self.name}.yml'
+        if not inputfile.is_file():
             return False
         try:
-            data = YAMLInputParser(self.inputfile).parse()
+            data = YAMLInputParser(inputfile).parse()
             log.debug(f'input file check - parsed input file: {data}')
         except (yaml.constructor.ConstructorError, ValueError, yaml.YAMLError, FileNotFoundError) as e:
-            log.error(f'input file {self.inputfile} couldn\'t be read because of the following exception')
+            log.error(f'input file {inputfile} couldn\'t be read because of the following exception')
             log.error(e, exc_info=True)
             return False
         return True

@@ -158,7 +158,8 @@ BOOTSTRAP5 = {
     },
 
     # The complete URL to the Bootstrap CSS file (None means no theme)
-    "theme_url": 'https://bootswatch.com/5/flatly/bootstrap.css',
+    #"theme_url": 'https://bootswatch.com/5/flatly/bootstrap.css',
+    "theme_url": None,
 
     # Put JavaScript in the HEAD section of the HTML document (only relevant if you use bootstrap5.html)
     'javascript_in_head': True,

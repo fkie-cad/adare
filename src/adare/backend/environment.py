@@ -2,7 +2,6 @@
 import shutil
 import cattrs
 from cattrs.errors import ClassValidationError
-from typing import Union
 from datetime import datetime
 import pkg_resources
 import glob
@@ -19,12 +18,12 @@ from adare.backend.networkdrive import NetworkDriveContainer
 from adare.helperFunctions.yaml import yaml_to_dict, dict_to_yaml
 from adare.helperFunctions.csv import csv_to_dict
 from adare.helperFunctions.jinja.jinjafeatures import init_jinja_environment
-from adare.backend.script_creation.scripts import PostsetupInstallationsScript, RunExperimentScript, SaveInstalledPackagesScript, MountNetworkDriveScript, RunExperimentTemplateScript
+from adare.backend.script_creation.scripts import PostsetupInstallationsScript, RunExperimentScript, SaveInstalledPackagesScript, MountNetworkDriveScript
 from adare.backend.script_creation.Scriptmanager import ScriptManager
 from adare.backend.script_creation.Script import Script
 from adare.backend.exceptions import EnvironmentInitializationFailed, EnvironmentSetupFileMissing, \
     EnvironmentConfigurationMissing, EnvironmentSetupSyntaxError, EnvironmentAlreadyExists, \
-    PackageTemplateFolderMissing, ScenarioAlreadyExists, ScenarioDoesNotExistInEnvironment
+    PackageTemplateFolderMissing, ScenarioAlreadyExists
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
 from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.database.django_db_api import DjangoDbApi
@@ -47,7 +46,6 @@ class Environment:
     base_directory: Path
     programs_directory: Path
     guiscenario_directory: Path
-    input_directory: Path
     log_directory: Path
 
     configuration_file: str
@@ -71,46 +69,61 @@ class Environment:
 
     def __init__(self, name: str, project_directory: Path, create=False, setupfile: str = None):
         self.name = name
+        self.setup = None
 
         self.project_directory = project_directory
-
-        self.base_directory = (self.project_directory/config.ENVDIR_RELPROJ / name)
-        self.log_directory = self.base_directory / config.LOGDIR_RELENV
-        self.script_directory = self.base_directory / config.PROGRAMS_RELENV
-        self.script_templates_directory = self.script_directory / 'templates'
-        self.result_directory = self.base_directory / config.RESULT_RELENV
-        self.input_directory = self.base_directory / config.INPUT_RELENV
-
-        self.guiscenario_directory = self.script_directory/ config.GUIAUTOMATIONPROG / config.SCENARIOBASEDIR_IN_GUIAUTOMATION
-
-        self.configuration_file = (self.base_directory / config.ENVCONFIGURATIONFILENAME).as_posix()
-        self.configuration = None
-
-        self.setup = None
+        self.base_directory = (self.project_directory / 'environments' / name)
         if create:
             self.setupfile = self.__find_setup_file(setupfile)
+            if self.base_directory.exists():
+                raise EnvironmentAlreadyExists(self.name)
+            self.setup = self.__load_setup()
+            self.__script_suffix = config.SCRIPTS_SUFFIX[self.setup.os_platform]
+            self.project_scripts_directory = project_directory / 'programs' / 'templates' / self.setup.os_platform
+
+        # load configuration file and create environment if needed
+        self.configuration_file = (self.base_directory/'.envconf.yml').as_posix()
+        self.configuration = None
+
+        if create:
             self.__create()
         else:
             self.__load()
-        self.__create_jinja_environment()
-        if not self.__jinja_environment:
-            raise EnvironmentInitializationFailed(self.name)
+
         if not self.configuration:
             raise EnvironmentInitializationFailed(self.name)
 
-        vm_synced_directory_path = Path('/')
-        if self.configuration.os_platform == 'windows':
-            vm_synced_directory_path = Path(r'C:/vagrant/')
-        if self.configuration.os_platform == 'linux':
-            vm_synced_directory_path = Path(r'/vagrant/')
+        # set up paths used in project an environment
+        self.project_scripts_directory = project_directory/'programs'/'templates'/self.configuration.os_platform
+        self.project_setup_directory = project_directory / 'setup'
+        self.project_additional_tools_directory = project_directory/'additional_tools'
+        self.project_guiautomation_program = project_directory/'programs'/'GUIAutomation'
+        self.project_parseandtest_program = project_directory/'programs' /'ParseAndTest'
 
-        self.vm_synced_directory_path = vm_synced_directory_path
-        self.script_directory_vm_view = vm_synced_directory_path/'scripts'
-        self.log_directory_vm_view = vm_synced_directory_path/'logs'
+        self.log_directory = self.base_directory / 'logs'
+        self.result_directory = self.base_directory / 'result'
+        self.run_directory = self.base_directory / 'run'
+        self.scenario_directory = self.base_directory / 'scenario'
+
+        # set up paths from the view of the guest/vm
+        vm_root_path = Path(r'/')
+        if self.configuration.os_platform == 'windows':
+            vm_root_path = Path(r'C:/')
+
+        self.vm_project_directory = vm_root_path/'project'
+        self.vm_project_programs_directory = self.vm_project_directory/'programs'
+        self.vm_project_additional_tools_directory = self.vm_project_directory / 'additional_tools'
+        self.vm_environment_directory = self.vm_project_directory/'environments'/self.name
+        self.vm_environment_logs_directory = self.vm_project_directory / 'environments' / self.name / 'logs'
+        self.vm_environment_result_directory = self.vm_project_directory / 'environments' / self.name / 'result'
+        self.vm_environment_run_directory = self.vm_project_directory / 'environments' / self.name / 'run'
+        self.vm_environment_scenario_directory = self.vm_project_directory / 'environments' / self.name / 'scenario'
+
+        self.vm_tessdata_directory = self.vm_project_directory/'tessdata'
 
         self.__script_manager = ScriptManager(
-            script_directory_vm_view=self.script_directory_vm_view,
-            wrapper_template=self.script_templates_directory/f'run_script_wrapper{self.__script_suffix}'
+            script_directory_vm_view=self.vm_environment_run_directory,
+            wrapper_template=self.project_scripts_directory/f'run_script_wrapper{self.__script_suffix}'
         )
 
     def __find_setup_file(self, setupfile: str or None):
@@ -121,7 +134,7 @@ class Environment:
         :return: path of the setupfile
         """
         if not setupfile:
-            setup_files_storage_in_project = self.project_directory / config.SETUPDIR_RELPROJ
+            setup_files_storage_in_project = self.project_setup_directory
             for file in setup_files_storage_in_project.iterdir():
                 if file.stem == self.name:
                     setupfile = file.as_posix()
@@ -142,11 +155,12 @@ class Environment:
         except FileNotFoundError:
             raise EnvironmentSetupFileMissing(self.name)
         try:
-            self.setup = cattrs.structure(setup_dict, EnvironmentSetup)
+            setup = cattrs.structure(setup_dict, EnvironmentSetup)
         except ClassValidationError as e:
             log.error('environment setup file could not be read because of the following exception')
             log.error(e, exc_info=True)
             raise EnvironmentSetupSyntaxError()
+        return setup
 
     def __load_configuration(self) -> EnvironmentConfiguration:
         """
@@ -170,78 +184,30 @@ class Environment:
         """
         create a jinja environment for the templates directory which is located in the project programs directory
         """
-        programs_in_project = self.project_directory / config.PROGRAMS_RELPROJ
-        template_folder = (programs_in_project / 'templates' / self.setup.os_platform).as_posix()
+        template_folder = self.project_scripts_directory.as_posix()
         self.__jinja_project = init_jinja_environment(template_folder)
 
-    def __create_jinja_environment(self):
-        """
-        create a jinja environment for the templates directory which is located in the environment programs directory
-        """
-        template_folder = self.script_directory.as_posix()
-        self.__jinja_environment = init_jinja_environment(template_folder)
+    # def __create_jinja_environment(self):
+    #     """
+    #     create a jinja environment for the templates directory which is located in the environment programs directory
+    #     """
+    #     template_folder = self.script_directory.as_posix()
+    #     self.__jinja_environment = init_jinja_environment(template_folder)
 
     def __create(self):
         """
         function to create an environment (should be only used in the __init__ function of this class)
         """
-        if self.base_directory.exists():
-            raise EnvironmentAlreadyExists(self.name)
-        self.__load_setup()
-        self.__script_suffix = config.SCRIPTS_SUFFIX[self.setup.os_platform]
-
         self.__create_jinja_project()
         if not self.__jinja_project:
             raise EnvironmentInitializationFailed(self.name)
 
-        scripts_in_project = self.project_directory / config.PROGRAMS_RELPROJ
-        template_scripts_in_project = scripts_in_project / 'templates' / str(self.setup.os_platform)
-        scripts_in_environment = self.base_directory / config.PROGRAMS_RELENV
-        scripts_templates_in_environment = scripts_in_environment / 'templates'
-
         self.base_directory.mkdir()
 
-        for folder in [config.PROGRAMS_RELENV, config.INPUT_RELENV, config.LOGDIR_RELENV, config.RESULT_RELENV, config.NETWORKDRIVE_RELENV, config.EXTERNALPROGRAMS_RELENV]:
+        for folder in ['logs', 'result', 'networkdrives', 'scenario', 'run']:
             (self.base_directory / folder).mkdir()
 
-        scripts_templates_in_environment.mkdir()
-
-        postsetup_installations = Script(f'postsetup_installations{self.__script_suffix}', template_scripts_in_project, only_copy=True)
-        postsetup_installations.copy(scripts_templates_in_environment)
-
-        runexperiment_template = RunExperimentTemplateScript(f'run_experiment{self.__script_suffix}', template_scripts_in_project, self.setup)
-        runexperiment_template.render(scripts_templates_in_environment)
-
-        mount_networkdrives = Script(f'mount_networkdrives{self.__script_suffix}', template_scripts_in_project, only_copy=True)
-        mount_networkdrives.copy(scripts_templates_in_environment)
-
-        save_installed_packages = Script(f'save_installed_packages{self.__script_suffix}', template_scripts_in_project, only_copy=True)
-        save_installed_packages.copy(scripts_templates_in_environment)
-
-        runscript_wrapper = Script(f'run_script_wrapper{self.__script_suffix}', template_scripts_in_project, only_copy=True)
-        runscript_wrapper.copy(scripts_templates_in_environment)
-
-        if self.setup.os_platform == 'windows':
-            helperfunctions = Script(f'helperfunctions{self.__script_suffix}', template_scripts_in_project, only_copy=True)
-            helperfunctions.copy(scripts_templates_in_environment)
-
-        # todo: outsource copy of python tool
-        ParseAndTest_program_in_project = scripts_in_project / 'ParseAndTest'
-        ParseAndTest_program_in_environment = (scripts_in_environment / 'ParseAndTest').as_posix()
-        shutil.copytree(ParseAndTest_program_in_project, ParseAndTest_program_in_environment)
-
-        GUIAutomation_program_in_project = scripts_in_project / 'GUIAutomation'
-        GUIAutomation_program_in_environment = (scripts_in_environment / 'GUIAutomation').as_posix()
-        shutil.copytree(GUIAutomation_program_in_project, GUIAutomation_program_in_environment)
-
-        # copy input files to input directory inside environment directory
-        input_in_environment = self.base_directory / config.INPUT_RELENV
-        scenario_dict = self.__copy_input_from_setup(self.setup, input_in_environment)
-        scenarios = [cattrs.structure(sce, Scenario) for sce in scenario_dict]
-        for sce in scenarios:
-            guiscenario_path = self.__check_if_gui_scenario_exists(sce.name)
-            if guiscenario_path:
-                sce.guiscenariofile = guiscenario_path
+        # todo: optionally add option to provide scenarios via setup file
         self.configuration = EnvironmentConfiguration(name=self.name,
                                                       vagrantbox=self.setup.vagrantbox,
                                                       os_platform=self.setup.os_platform,
@@ -255,7 +221,7 @@ class Environment:
                                                       pause_after_gui_automation=self.setup.pause_after_gui_automation,
                                                       idle_after_os_starts=self.setup.idle_after_os_starts,
                                                       settings=self.setup.settings,
-                                                      scenarios=scenarios,
+                                                      scenarios=[],
                                                       usbdevices=self.setup.usbdevices,
                                                       networkdrives=self.setup.networkdrives,
                                                       postsetupinstallations=self.setup.postsetupinstallations)
@@ -287,6 +253,38 @@ class Environment:
                 guiscenario_path = Path(obj).absolute().as_posix()
         return guiscenario_path
 
+    def __create_gui_scenario_skeleton(self, scenario_name: str):
+        template_directory = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/templates'))
+        if not Path(template_directory).is_dir():
+            raise PackageTemplateFolderMissing
+        jinja = init_jinja_environment(template_directory.as_posix())
+        template = jinja.get_template('ScenarioTemplate')
+        filepath = self.scenario_directory/scenario_name/f'{scenario_name}.py'
+        with open(filepath.as_posix(), mode='w') as f:
+            f.write(
+                template.render(
+                    {
+                        'name': scenario_name
+                    }
+                )
+            )
+
+    def __create_input_skeleton(self, scenario_name: str):
+        template_directory = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/templates'))
+        if not Path(template_directory).is_dir():
+            raise PackageTemplateFolderMissing
+        jinja = init_jinja_environment(template_directory.as_posix())
+        template = jinja.get_template('InputfileTemplate')
+        filepath = self.scenario_directory / scenario_name / f'{scenario_name}.yml'
+        with open(filepath.as_posix(), mode='w') as f:
+            f.write(
+                template.render(
+                    {
+                        'name': scenario_name
+                    }
+                )
+            )
+
     def create_scenario(self, scenario_name: str, usb_name: str or None = None, networkdrive_name: str or None = None):
         """
         create scenario skeleton files (input file and gui scenario file)
@@ -295,22 +293,18 @@ class Environment:
         :param scenario_name: name of the scenario to be created
         """
         if self.__find_scenario(scenario_name):
-            log.error(
-                f'scenario with name {scenario_name} is already existing -> choose another name or delete the old scenario')
+            log.error(f'scenario with name {scenario_name} is already existing -> choose another name or delete the old scenario')
             return
-        scenario_pyfile_imgfolder = self.create_gui_scenario_skeleton(scenario_name)
-        input_file = self.add_input_file_skeleton(scenario_name)
+        filepath = self.scenario_directory / scenario_name
+        filepath.mkdir()
+        self.__create_gui_scenario_skeleton(scenario_name)
+        self.__create_input_skeleton(scenario_name)
         if usb_name:
             self.__add_usb_to_scenario(scenario_name, usb_name)
         if networkdrive_name:
             self.__add_networkdrive_to_scenario(scenario_name, networkdrive_name)
         print('\n\n')
-        if scenario_pyfile_imgfolder:
-            print(f'path of the newly created gui scenario file: {scenario_pyfile_imgfolder[0]}')
-            print(
-                f'path of the image folder (where to place the images for automation): {scenario_pyfile_imgfolder[1]}')
-        if input_file:
-            print(f'path of the newly created input file: {input_file}')
+        print(f'new scenario skeleton created (path:{filepath})')
 
     def remove_scenario(self, scenario_name: str):
         """
@@ -318,11 +312,11 @@ class Environment:
 
         :param scenario_name: name of the scenario to be removed
         """
-        if not self.__find_scenario(scenario_name):
+        scenario_dataclass = self.__find_scenario(scenario_name)
+        if not scenario_dataclass:
             log.error(f'scenario with name {scenario_name} does NOT exist in environment')
             return
-        self.__remove_gui_scenario_file(scenario_name)
-        self.__remove_input_file(scenario_name)
+        shutil.rmtree(scenario_dataclass.directory)
         self.__remove_scenario_class(scenario_name)
         log.info(f'scenario {scenario_name} got deleted')
 
@@ -394,140 +388,6 @@ class Environment:
         self.__save_configuration()
         log.info(f'network drive {networkdrive.name} got added successfully')
 
-    def __remove_gui_scenario_file(self, scenario_name: str):
-        """
-        removes the gui scenario file of a scenario
-
-        :param scenario_name: name of the scenario
-        """
-        scenario_destination = self.script_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario'
-        P_scenario_file = scenario_destination / (scenario_name + ".py")
-        os.remove(P_scenario_file.as_posix())
-        scenario_class = self.__find_scenario(scenario_name)
-        scenario_class.guiscenariofile = None
-        log.debug(f'gui scenario file for scenario {scenario_name} got deleted')
-
-    def __remove_input_file(self, scenario: str):
-        """
-        removes the input file of a scenario
-
-        :param scenario: name of the scenario
-        """
-        input_file = self.input_directory / (scenario + ".yml")
-        os.remove(input_file.as_posix())
-        scenario_class = self.__find_scenario(scenario)
-        scenario_class.inputfile = None
-        log.debug(f'input file for scenario {scenario} got deleted')
-
-    def add_gui_scenario_file(self, gui_scenario_file: str, category: str or None = None):
-        """
-        adds an already existing gui scenario file (python file) to the environment
-
-        :param gui_scenario_file: path of the gui scenario file to be added
-        :param category: CURRENTLY NOT IN USE
-        """
-        scenario_destination = self.script_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario'
-        if category:
-            # todo: category can't be used because the folder is a own package which would need to be included into the setup.cfg -> very complicated
-            pass
-        if not Path(gui_scenario_file).is_file() or Path(gui_scenario_file).suffix != '.py':
-            log.error(f'the chosen path ({gui_scenario_file}) is not a python file')
-            return
-        if Path(gui_scenario_file).name in [f.name for f in scenario_destination.iterdir()]:
-            log.error(f'the chosen gui scenario python file {gui_scenario_file} is already existing in the environment')
-            return
-
-        scenario_name = Path(gui_scenario_file).stem
-        scenario_class = self.__find_scenario(scenario_name)
-        if not scenario_class:
-            scenario_class = self.__create_scenario_class(scenario_name)
-        P_scenario_file = scenario_destination / (scenario_name + ".py")
-        scenario_class.guiscenariofile = P_scenario_file.absolute().as_posix()
-
-        shutil.copy(gui_scenario_file, scenario_destination.as_posix())
-
-    def add_gui_scenario_img_folder(self, img_folder: str, category: str or None = None):
-        """
-        adds (image) files from a directory (img_folder) to the img directory of the environment
-
-        :param img_folder: directory, where the image files are located
-        :param category: CURRENTLY NOT IN USE
-        """
-        img_folder_destination = self.script_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario' / 'data' / 'img'
-        if category:
-            # todo: category can't be used because the folder is a own package which would need to be included into the setup.cfg -> very complicated
-            pass
-        if not Path(img_folder).is_dir():
-            log.error(
-                f'the chosen path ({img_folder}) is not a directory -> therefore it can not be a valid gui scenario image folder')
-            return
-        for file in Path(img_folder).iterdir():
-            if file.name not in [f.name for f in img_folder_destination.iterdir()]:
-                shutil.copy(file.as_posix(), img_folder_destination.as_posix())
-            else:
-                log.error(f'the chosen image file {file.name} is already existing')
-
-    def create_gui_scenario_skeleton(self, scenario_name: str) -> tuple or None:
-        """
-        creates a gui scenario file by a template (also creates scenario class if not already existing)
-
-        :param scenario_name: name of the scenario
-        """
-        scenario_class = self.__find_scenario(scenario_name)
-        if scenario_class and scenario_class.guiscenariofile:
-            log.error(f'scenario {scenario_name} already has a gui scenario file')
-            return None
-        P_scenario_file = self.guiscenario_directory
-        P_scenario_file = P_scenario_file / (scenario_name + ".py")
-        templatefolder = pkg_resources.resource_filename(config.PACKAGE, config.PCK_TEMPLATES)
-        if not Path(templatefolder).is_dir():
-            raise PackageTemplateFolderMissing
-        jinja = init_jinja_environment(templatefolder)
-        template = jinja.get_template('ScenarioTemplate')
-        with open(P_scenario_file.as_posix(), mode='w') as f:
-            f.write(
-                template.render(
-                    {
-                        'name': scenario_name
-                    }
-                )
-            )
-        if not scenario_class:
-            scenario_class = self.__create_scenario_class(scenario_name)
-        scenario_class.guiscenariofile = P_scenario_file.absolute().as_posix()
-        self.__save_configuration()
-        return P_scenario_file.as_posix(), self.script_directory / config.GUIAUTOMATIONPROG / 'src' / 'guiautomation' / 'Scenario' / 'data' / 'img'
-
-    def add_input_file_skeleton(self, scenario_name: str) -> str or None:
-        """
-        creates an input file by a template (also creates scenario class if not already existing)
-
-        :param scenario_name: name of the scenario
-        """
-        scenario_class = self.__find_scenario(scenario_name)
-        if scenario_class and scenario_class.inputfile:
-            log.error(f'scenario {scenario_name} already has an input file')
-            return None
-        P_input_file = self.input_directory
-        P_input_file = P_input_file / (scenario_name + ".yml")
-        templatefolder = pkg_resources.resource_filename(config.PACKAGE, config.PCK_TEMPLATES)
-        if not Path(templatefolder).is_dir():
-            raise PackageTemplateFolderMissing
-        jinja = init_jinja_environment(templatefolder)
-        template = jinja.get_template('InputfileTemplate')
-        with open(P_input_file.as_posix(), mode='w') as f:
-            f.write(
-                template.render(
-                    {
-                        'name': scenario_name
-                    }
-                )
-            )
-        if not scenario_class:
-            scenario_class = self.__create_scenario_class(scenario_name)
-        scenario_class.inputfile = P_input_file.absolute().as_posix()
-        self.__save_configuration()
-        return P_input_file.as_posix()
 
     def __find_scenario(self, scenario_name: str) -> Scenario or None:
         """
@@ -568,113 +428,29 @@ class Environment:
         )
         return scenario_dataclass
 
-    def __add_inputfile_to_scenario_class(self, scenario_name: str, inputfile: str):
-        """
-        adds an input file to an scenario
 
-        :param scenario_name: name of the scenario
-        :param inputfile: path of the input file to insert
-        """
-        scenario_class: Scenario or None = self.__find_scenario(scenario_name)
-        if not scenario_class:
-            raise ScenarioDoesNotExistInEnvironment
-        scenario_class.inputfile = inputfile
-
-    def add_input_files(self, input_to_include: str) -> list:
-        """
-        add input files to an environment (and creates dataclass if necessary)
-
-        :param input_to_include: path of the files/directory which should be included as input files
-        :return: list, that contains the paths of all added input files
-        """
-        environment_input_files = [f.name for f in self.input_directory.iterdir()]
-        if input_to_include[-1] in ['\\', '/']:
-            input_to_include = input_to_include[:-1]
-        P_input_to_include = Path(input_to_include)
-        added_input_scenarios = []
-        if P_input_to_include.is_dir():
-            for file in P_input_to_include.iterdir():
-                if not file.is_file():
-                    log.warning(f'{file.as_posix()} gets ignored when copying files to input, because it is not a file')
-                elif file.name in environment_input_files:
-                    log.warning(
-                        f'{file.as_posix()} gets ignored because a file with the same name is already existing in the environments input directory')
-                else:
-                    shutil.copy(file.as_posix(), self.input_directory)
-                    added_input_scenarios.append((self.input_directory / file.name).as_posix())
-                    log.info(f'{file.as_posix()} is copied to environments input folder')
-        elif P_input_to_include.is_file():
-            if P_input_to_include.name in environment_input_files:
-                log.warning(
-                    f'{P_input_to_include.as_posix()} gets ignored because a file with the same name is already existing in the environments input directory')
-            else:
-                shutil.copy(P_input_to_include.as_posix(), self.input_directory)
-                added_input_scenarios.append((self.input_directory / P_input_to_include.name).as_posix())
-                log.info(f'{P_input_to_include.as_posix()} is copied to environments input folder')
-        else:
-            log.error('the provided path for input files is neither a existing file or directory')
-            return []
-
-        for filepath in added_input_scenarios:
-            scenario_name = Path(filepath).stem
-            scenario_dataclass = self.__find_scenario(scenario_name)
-            if not scenario_dataclass:
-                scenario_dataclass = self.__create_scenario_class(scenario_name)
-                self.configuration.scenarios.append(
-                    scenario_dataclass
-                )
-            self.__add_inputfile_to_scenario_class(scenario_name, filepath)
+    def add_scenario_to_config(self, scenario_name: str, scenario_path: Path):
+        scenario_class = self.__create_scenario_class(scenario_name)
+        scenario_class.directory = scenario_path.absolute().as_posix()
         self.__save_configuration()
-        return added_input_scenarios
-
-    def __copy_input_from_setup(self, setup: EnvironmentSetup, outputdirectory: str) -> Union[list, None]:
-        """
-        copy input files provided in the environment setup file to the input directory of the environment and return a
-        list of the scenarios
-
-        """
-        P_outputdirectory = Path(outputdirectory)
-        inputdata = setup.scenarios
-
-        scenarios = []
-        for inp in inputdata:
-            scenario_name = inp.name
-            if Path(inp.inputfile).is_file():
-                if "\"" in inp.name:
-                    log.error("\" is not a allowed character in the name of an input file")
-                    continue
-                inputfile_in_outputdirectory = (P_outputdirectory / (inp.name + ".yml")).as_posix()
-                shutil.copy(inp.inputfile, inputfile_in_outputdirectory)
-                scenario_dict = {
-                    'name': inp.name,
-                    'description': inp.description,
-                    'inputfile': inputfile_in_outputdirectory
-                }
-                scenarios.append(scenario_dict)
-            else:
-                log.error(f'input file for scenario {scenario_name} not found')
-        return scenarios
 
     def add_examples(self):
         """
         ask the user if examples should be included and includes them if wished
         """
         include_examples = False
-        GUIScenarios_in_package = Path(
-            pkg_resources.resource_filename(config.PACKAGE, config.PCK_EXAMPLES_GUISCENARIOS))
-        Inputfiles_in_package = Path(pkg_resources.resource_filename(config.PACKAGE, config.PCK_EXAMPLES_INPUTFILES))
+        scenario_directory_in_package = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/examples/scenarios'))
         if 'ubuntu' in self.configuration.vagrantbox:
             example_class_name = 'Ubuntu Trash Bin'
-            guiscenario_folder = GUIScenarios_in_package / 'UbuntuTrashBin'
-            scenarioinput_folder = Inputfiles_in_package / 'UbuntuTrashBin'
+            scenario_directory = scenario_directory_in_package / 'UbuntuTrashBin'
         elif 'linuxmint' in self.configuration.vagrantbox:
             example_class_name = 'Linux Mint Trash Bin'
-            guiscenario_folder = GUIScenarios_in_package / 'LinuxMintTrashBin'
-            scenarioinput_folder = Inputfiles_in_package / 'LinuxMintTrashBin'
+            scenario_directory = scenario_directory_in_package / 'LinuxMintTrashBin'
         elif 'win' in self.configuration.vagrantbox:
             example_class_name = 'Windows Trash Bin'
-            guiscenario_folder = GUIScenarios_in_package / 'WindowsTrashBin'
-            scenarioinput_folder = Inputfiles_in_package / 'WindowsTrashBin'
+            scenario_directory = scenario_directory_in_package / 'WindowsTrashBin'
+            rbcmd_tool = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/programs/additional_tools'))/'RBCmd.exe'
+            shutil.copy(rbcmd_tool.as_posix(), self.project_additional_tools_directory)
         else:
             return
         include_examples_inp = input(f'Should examples (for {example_class_name}) should be included? (Yes or No)?  ')
@@ -683,10 +459,9 @@ class Environment:
             log.info('examples will be included')
         else:
             log.info('examples will be NOT included')
+
         if include_examples:
-            scenario_files_examples = (guiscenario_folder / '*.py').as_posix()
-            img_folder_examples = (guiscenario_folder / 'img').as_posix()
-            example_config = (guiscenario_folder / 'config.yml').as_posix()
+            example_config = (scenario_directory / 'config.yml').as_posix()
             example_config_dict = yaml_to_dict(example_config)
             Example_Config = cattrs.structure(example_config_dict, ExamplesConfig)
             existing_network_drives = [d.name for d in self.configuration.networkdrives]
@@ -695,17 +470,16 @@ class Environment:
                     self.configuration.networkdrives.append(network_drive)
                 else:
                     log.warning(f'{network_drive.name} is already existing in the environment and will not be added')
-            for file in glob.glob(scenario_files_examples):
-                if Path(file).name != '__init__.py':
-                    self.add_gui_scenario_file(Path(file).as_posix())
-            for folder in glob.glob(img_folder_examples):
-                self.add_gui_scenario_img_folder(Path(folder).as_posix())
 
-            input_files_examples = (scenarioinput_folder / '*.yml').as_posix()
-            for file in glob.glob(input_files_examples):
-                self.add_input_files(file)
-            self.__save_configuration()
-            log.info('example file were included successfully')
+            for scenario in scenario_directory.iterdir():
+                if scenario.is_dir():
+                    scenario_path = self.scenario_directory/scenario.name
+                    shutil.copytree(scenario.as_posix(), scenario_path.as_posix())
+                    self.add_scenario_to_config(scenario.name, scenario_path)
+
+
+
+
 
     # def setup_network_drives(self, jinja: jinja2.Environment, scenario_name: str, logfolder: str) -> list or None:
     #     P_mountnetworkdrivescript = self.script_directory / f'mount_networkdrives{self.__script_suffix}'
@@ -764,6 +538,19 @@ class Environment:
     #         script_mountnetworkdrive.write()
     #         return []
 
+    def create_scenario_config_file(self, scenario: str, vm_environment_scenario_log_directory: Path, vm_scenario_status_file: Path) -> (Path, Path):
+        data = {
+            'img_folder': (self.vm_environment_scenario_directory/scenario/'img').as_posix(),
+            'tessdata_folder': self.vm_tessdata_directory.as_posix(),
+            'logfile': (vm_environment_scenario_log_directory/'gui.log').as_posix(),
+            'statusfile': vm_scenario_status_file.as_posix()
+        }
+        filename = 'scenario_config.yml'
+        filepath = self.run_directory/filename
+        vm_filepath = self.vm_environment_run_directory/filename
+        dict_to_yaml(filepath, data)
+        return filepath, vm_filepath
+
     def create_Vagrantfile(self, scenario_name: str, hostonly: bool = False, networkdrive_active=False):
         conf = self.configuration
         Vagrant_creator = VagrantFile()
@@ -785,6 +572,8 @@ class Environment:
         for usbdevice in conf.usbdevices:
             if scenario_name in usbdevice.scenarios:
                 usbdevices.append(usbdevice)
+
+        Vagrant_creator.add_synced_folder(self.project_directory, Path('/project'))
 
         at_least_one_usb_device = False
         for device in usbdevices:
@@ -815,10 +604,10 @@ class Environment:
             if int(idle_after_os_starts) < 90:
                 idle_after_os_starts = "90"
 
-        postsetup_installations = self.script_directory / f'wrapper_postsetup_installations{self.__script_suffix}'
-        mount_networkdrives = self.script_directory / f'wrapper_mount_networkdrives{self.__script_suffix}'
-        run_experiment = self.script_directory / f'wrapper_run_experiment{self.__script_suffix}'
-        save_installed_packages = self.script_directory / f'wrapper_save_installed_packages{self.__script_suffix}'
+        postsetup_installations = self.run_directory / f'wrapper_postsetup_installations{self.__script_suffix}'
+        mount_networkdrives = self.run_directory / f'wrapper_mount_networkdrives{self.__script_suffix}'
+        run_experiment = self.run_directory / f'wrapper_run_experiment{self.__script_suffix}'
+        save_installed_packages = self.run_directory / f'wrapper_save_installed_packages{self.__script_suffix}'
 
         if conf.os_platform == 'linux':
             Vagrant_creator.add_shell_provisioner_inline("sleep " + idle_after_os_starts)
@@ -846,7 +635,7 @@ class Environment:
 
     def __save_results_in_database(self, scenario: str, result_file: Path, timestamps: dict, vg_exitcode: int, scenario_log_directory: Path):
         db = DjangoDbApi()
-        input_file = self.input_directory / (scenario + ".yml")
+        input_file = self.scenario_directory / scenario / (scenario + ".yml")
         if not input_file.is_file():
             log.error(f'input file is missing')
             return
@@ -915,17 +704,13 @@ class Environment:
         :param scenario: name of the scenario
         :param debug: if True the vm will be not shutdown (immediately) after the scenario but instead wait for a user input to shutdown and clean up
         """
-
         scenario_class: Scenario = self.__find_scenario(scenario)
 
         if not scenario_class:
             log.error(f'scenario {scenario} does not exist in environment configuration')
             return
-        if not scenario_class.inputfile:
-            log.error(f'scenario {scenario} missing a valid input file')
-            return
-        if not scenario_class.guiscenariofile:
-            log.error(f'scenario {scenario} missing a valid gui scenario file')
+        if not scenario_class.directory:
+            log.error(f'scenario {scenario} missing a valid directory')
             return
         if not scenario_class.input_is_valid():
             log.error(
@@ -942,39 +727,46 @@ class Environment:
         timestamp_start_filename_format = timestamp_start.strftime(config.TIMESTAMP_FORMAT).replace(':', '.')
 
         scenario_log_directory = self.log_directory / f'{scenario}_{timestamp_start_filename_format}'
+        vm_scenario_log_directory = self.vm_environment_logs_directory / f'{scenario}_{timestamp_start_filename_format}'
         scenario_log_directory.mkdir()
 
-        scenario_log_directory_vm_view = self.vm_synced_directory_path / scenario_log_directory.relative_to(self.base_directory)
-        self.__script_manager.set_log_directory_vm_view(scenario_log_directory_vm_view)
+        self.__script_manager.set_log_directory_vm_view(vm_scenario_log_directory)
 
         resultfile_name = 'result.yml'
         scenario_result_directory = self.result_directory / f'{scenario}_{timestamp_start_filename_format}'
         scenario_result_directory.mkdir()
         scenario_resultfile = scenario_result_directory / resultfile_name
-        scenario_result_directory_vm_view = Path('/vagrant') / scenario_result_directory.relative_to(self.base_directory)
-        scenario_resultfile_vm_view = scenario_result_directory_vm_view / resultfile_name
+        vm_scenario_result_file = self.vm_environment_result_directory / f'{scenario}_{timestamp_start_filename_format}' / resultfile_name
+        vm_scenario_status_file = self.vm_environment_result_directory / f'{scenario}_{timestamp_start_filename_format}' / 'status.csv'
+
+        scenario_config_file, vm_scenario_config_file = self.create_scenario_config_file(scenario, vm_scenario_log_directory, vm_scenario_status_file)
 
         script_postinstall = PostsetupInstallationsScript(f'postsetup_installations{self.__script_suffix}',
-                                                          self.script_templates_directory,
+                                                          self.project_scripts_directory,
                                                           configuration=self.configuration,
                                                           render_wrapper=True)
         self.__script_manager.add_script(script_postinstall)
 
         script_run = RunExperimentScript(f'run_experiment{self.__script_suffix}',
-                                         self.script_templates_directory,
+                                         self.project_scripts_directory,
+                                         scenario_path=self.vm_environment_scenario_directory/scenario,
+                                         tessdata_directory=self.vm_tessdata_directory,
                                          scenario=scenario,
-                                         result_file=scenario_resultfile_vm_view,
+                                         result_file=vm_scenario_result_file,
+                                         scenario_config_file=vm_scenario_config_file,
+                                         project_script_directory=self.vm_project_programs_directory,
+                                         additional_tool_directory=self.vm_project_additional_tools_directory,
                                          render_wrapper=True)
         self.__script_manager.add_script(script_run)
 
         script_saveinstalledpackages = SaveInstalledPackagesScript(f'save_installed_packages{self.__script_suffix}',
-                                                                   self.script_templates_directory,
+                                                                   self.project_scripts_directory,
                                                                    render_wrapper=True)
         self.__script_manager.add_script(script_saveinstalledpackages)
 
         if self.configuration.os_platform == 'windows':
             helperfunctions = Script(f'helperfunctions{self.__script_suffix}',
-                                     self.script_templates_directory)
+                                     self.project_scripts_directory)
             self.__script_manager.add_script(helperfunctions)
 
         # start network drives
@@ -985,12 +777,12 @@ class Environment:
             if scenario in drive.scenarios:
                 networkdrive_active = True
         if networkdrive_active:
-            networkdrive_dir = self.base_directory / config.NETWORKDRIVE_RELENV
+            networkdrive_dir = self.base_directory / 'networkdrives'
 
             networkdrive_container = NetworkDriveContainer(config.DEFAULT_NETWORKSHARE_BOX, self.configuration.networkdrives, scenario, networkdrive_dir)
 
             share_information_list = networkdrive_container.get_share_information_list(self.configuration.os_platform)
-            script_mount_networkdrive = MountNetworkDriveScript(f'mount_networkdrives{self.__script_suffix}', self.script_templates_directory, share_information_list=share_information_list, render_wrapper=True)
+            script_mount_networkdrive = MountNetworkDriveScript(f'mount_networkdrives{self.__script_suffix}', self.project_scripts_directory, share_information_list=share_information_list, render_wrapper=True)
             self.__script_manager.add_script(script_mount_networkdrive)
 
             if not networkdrive_container:
@@ -1000,20 +792,20 @@ class Environment:
             if networkdrive_container:
                 publicnetwork = True
 
-        self.__script_manager.render_to_environment(self.script_directory)
+        self.__script_manager.render_to_environment(self.run_directory)
 
         log_file_path = scenario_log_directory/'vagrant.log'
         log.debug(f'log path for vagrant log: {log_file_path.absolute()}')
 
         vagrantfile = self.create_Vagrantfile(scenario, hostonly=publicnetwork, networkdrive_active=networkdrive_active)
-        box = VagrantBoxVM.fromVagrantFileObject(self.base_directory, vagrantfile, log_file=log_file_path)
+        box = VagrantBoxVM.fromVagrantFileObject(self.run_directory, vagrantfile, log_file=log_file_path)
         vg_exitcode = box.run(debug=debug)
 
         # remove temporary created scripts
         self.__script_manager.remove_scripts_from_environment()
 
         # delete Vagrantfile
-        os.remove((self.base_directory / 'Vagrantfile').as_posix())
+        os.remove((self.run_directory / 'Vagrantfile').as_posix())
 
         # stop network drives
         if networkdrive_active:

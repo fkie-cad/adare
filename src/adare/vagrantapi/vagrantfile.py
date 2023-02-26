@@ -29,6 +29,7 @@ class VagrantFile:
     nat_port_forwarding: list[dict]
     destination: str
     private_networks: list[dict]
+    synced_folders: list[dict]
 
     def __init__(self,
                  vagrantfile_template: str = pkg_resources.resource_filename(config.PACKAGE, 'data/VagrantfileTemplate/Vagrantfile'),
@@ -54,6 +55,7 @@ class VagrantFile:
         self.networks = []
         self.nat_port_forwarding = []
         self.private_networks = []
+        self.synced_folders = []
 
     def create_vagrant_file(self, destination: Path) -> int:
         """
@@ -75,6 +77,7 @@ class VagrantFile:
         self.options['virtualbox_networks'] = self.networks
         self.options['port_forwardings'] = self.nat_port_forwarding
         self.options['private_networks'] = self.private_networks
+        self.options['synced_folders'] = self.synced_folders
         vagrantfile_template = self.jinja2.get_template("Vagrantfile")
 
         f = open(destination.as_posix(), mode="w")
@@ -404,3 +407,11 @@ class VagrantFile:
             'id': 'ssh'
         }
         self.nat_port_forwarding.append(port_forwarding)
+
+    def add_synced_folder(self, path_on_host: Path, path_in_guest: Path):
+        self.synced_folders.append(
+            {
+                'source': path_on_host.as_posix(),
+                'destination': path_in_guest.as_posix()
+            }
+        )
