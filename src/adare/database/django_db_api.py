@@ -7,7 +7,7 @@ import adare.config as config
 import adare.config.database as config_database
 from adare.helperFunctions.pyfileanalyze import PyModuleAnalyzer
 from adare.helperFunctions.dict.dict import get_value_if_missing_key
-from adare.django_adareGUI.models import Status, OsInfo, Experiment, Test, TestParameter, TestParameterEntries, \
+from adare.django_frontend.django_adareGUI.models import Status, OsInfo, Experiment, Test, TestParameter, TestParameterEntries, \
     TestFunction, Result, Tool
 from adare.helperFunctions.django.orm import get_or_none
 
@@ -173,8 +173,8 @@ class DjangoDbApi:
             description=get_value_if_missing_key(inputdata, 'description', dtype=str),
             os_info=os_info_obj,
             status=status_obj_dict['TOTAL'],
-            status_gui_automation=status_obj_dict['RUN_gui'],
-            status_parse_and_test=status_obj_dict['RUN_parseandtest'],
+            status_gui_automation=status_obj_dict['gui'],
+            status_parse_and_test=status_obj_dict['parseandtest'],
             status_vagrant=status_obj_dict['VAGRANT'],
             logfile_vagrant=logfiledata['logfile_vagrant'],
             logfile_gui_automation=logfiledata['logfile_gui_automation'],

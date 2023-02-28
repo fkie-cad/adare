@@ -1,12 +1,9 @@
 # external imports
-import pkg_resources
-import platform
 
 # internal imports
 from adare.config import PORT_WEBAPP
-from adare.helperFunctions.subprocess.run_command import run_cmd
 from adare.helperFunctions.port.port import is_localhost_port_free
-from adare.django_settings.setup import django_setup
+from adare.django_frontend.commands import runserver
 
 # configure logging
 import logging
@@ -26,21 +23,9 @@ def webapp(arguments):
 
     log.debug(f'webapp port: {port}')
 
-    system = platform.system()
-    cmd = []
-    if system == 'Windows':
-        cmd.append('py')
-    elif system == "Linux" or system == "Darwin":
-        cmd.append('python3')
-    else:
-        log.fatal(f'the os {system} is not supported by the tool')
-    cmd += ['django_manage.py', 'runserver', f'localhost:{port}']
-
-    # django_setup()
-
     print(f'webapp is running on http://127.0.0.1:{port}')
 
-    run_cmd(cmd, cwd=pkg_resources.resource_filename('adare', ''), quiet=True)
+    runserver(port, quiet=True)
 
     print(f'webapp closed')
 

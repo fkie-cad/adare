@@ -46,7 +46,7 @@ class deletefile(Scenario):
 
         match = self.find_text('testfile')
         if match:
-            guibot.click(match)
+            guibot.click(match[0])
             guibot.idle(5)
             guibot.press_keys(guibot.dc_backend.keymap.DELETE)
             self.save_time("DELETIONDATE")

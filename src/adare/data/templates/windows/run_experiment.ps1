@@ -21,7 +21,7 @@ If(!(test-path $resultfolder))
 
 Start-Sleep -s 30
 
-parseandtest {{ inputfile }} {{ outputfile }} --logfile {{ logfolder }}/parseandtest.log 2>&1 | WriteLog
+parseandtest '{{ inputfile }}' '{{ outputfile }}' '{{ log_directory }}/status.csv' --logfile '{{ log_directory }}/parseandtest.log' 2>&1 | WriteLog
 Write-Status("RUN_parseandtest")
 
 Stop-Transcript
