@@ -7,8 +7,8 @@ log = logging.getLogger(__name__)
 
 def csv_to_dict(path: Path, delimiter=',', newline='\n', quotechar='"'):
     data = dict()
-    with open(path.as_posix(), mode='r') as f:
-        reader = csv.reader(f, delimiter=delimiter, newline=newline, quotechar=quotechar)
+    with open(path.as_posix(), mode='r', newline=newline) as f:
+        reader = csv.reader(f, delimiter=delimiter, quotechar=quotechar)
         for row in reader:
             if len(row) != 2:
                 log.warning(f'csv to dict ignores row {row} due to a length not equal 2')

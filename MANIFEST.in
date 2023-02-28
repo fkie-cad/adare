@@ -1,5 +1,5 @@
 recursive-include src/adare/data *
-recursive-include src/adare/django_data *
+recursive-include src/adare/django_frontend/django_data *
 recursive-include src/adare/vagrantapi/VagrantfileCreator/VagrantfileTemplate *
 recursive-include src/adare/networkdrive/templates *
 recursive-include src/adare/webapi *

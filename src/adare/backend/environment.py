@@ -187,13 +187,6 @@ class Environment:
         template_folder = self.project_scripts_directory.as_posix()
         self.__jinja_project = init_jinja_environment(template_folder)
 
-    # def __create_jinja_environment(self):
-    #     """
-    #     create a jinja environment for the templates directory which is located in the environment programs directory
-    #     """
-    #     template_folder = self.script_directory.as_posix()
-    #     self.__jinja_environment = init_jinja_environment(template_folder)
-
     def __create(self):
         """
         function to create an environment (should be only used in the __init__ function of this class)
@@ -254,6 +247,9 @@ class Environment:
         return guiscenario_path
 
     def __create_gui_scenario_skeleton(self, scenario_name: str):
+        """
+        creates a gui scenario skeleton file for a given scenario name
+        """
         template_directory = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/templates'))
         if not Path(template_directory).is_dir():
             raise PackageTemplateFolderMissing
@@ -270,6 +266,9 @@ class Environment:
             )
 
     def __create_input_skeleton(self, scenario_name: str):
+        """
+        creates a input file skeleton file for a given scenario name
+        """
         template_directory = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/templates'))
         if not Path(template_directory).is_dir():
             raise PackageTemplateFolderMissing
@@ -299,12 +298,15 @@ class Environment:
         filepath.mkdir()
         self.__create_gui_scenario_skeleton(scenario_name)
         self.__create_input_skeleton(scenario_name)
+        img_dir = filepath/'img'
+        img_dir.mkdir()
         if usb_name:
             self.__add_usb_to_scenario(scenario_name, usb_name)
         if networkdrive_name:
             self.__add_networkdrive_to_scenario(scenario_name, networkdrive_name)
         print('\n\n')
         print(f'new scenario skeleton created (path:{filepath})')
+        log.debug(f'skeleton for scenario {scenario_name} created')
 
     def remove_scenario(self, scenario_name: str):
         """
@@ -538,7 +540,7 @@ class Environment:
     #         script_mountnetworkdrive.write()
     #         return []
 
-    def create_scenario_config_file(self, scenario: str, vm_environment_scenario_log_directory: Path, vm_scenario_status_file: Path) -> (Path, Path):
+    def __create_scenario_config_file(self, scenario: str, vm_environment_scenario_log_directory: Path, vm_scenario_status_file: Path) -> (Path, Path):
         data = {
             'img_folder': (self.vm_environment_scenario_directory/scenario/'img').as_posix(),
             'tessdata_folder': self.vm_tessdata_directory.as_posix(),
@@ -666,16 +668,18 @@ class Environment:
         if vg_exitcode in VAGRANT_EXITCODE_STATUS_MAPPING.keys():
             vagrant_status = VAGRANT_EXITCODE_STATUS_MAPPING[vg_exitcode]
 
-        status_file = self.log_directory/'status.csv'
+        status_file = scenario_log_directory/'status.csv'
         statusdata = {}
         if status_file.is_file():
             statusdata = csv_to_dict(status_file)
+        else:
+            log.error(f'status file {status_file} is missing')
         statusdata['VAGRANT'] = vagrant_status
 
         status_total = 'failed'
         if statusdata['VAGRANT'] == 'success':
             if 'gui' and 'parseandtest' in statusdata.keys():
-                if statusdata['gui'] != 'success' and statusdata['parseandtest'] != 'success':
+                if statusdata['gui'] == 'success' and statusdata['parseandtest'] == 'success':
                     status_total = 'success'
         statusdata['TOTAL'] = status_total
 
@@ -737,9 +741,9 @@ class Environment:
         scenario_result_directory.mkdir()
         scenario_resultfile = scenario_result_directory / resultfile_name
         vm_scenario_result_file = self.vm_environment_result_directory / f'{scenario}_{timestamp_start_filename_format}' / resultfile_name
-        vm_scenario_status_file = self.vm_environment_result_directory / f'{scenario}_{timestamp_start_filename_format}' / 'status.csv'
+        vm_scenario_status_file = self.vm_environment_logs_directory / f'{scenario}_{timestamp_start_filename_format}' / 'status.csv'
 
-        scenario_config_file, vm_scenario_config_file = self.create_scenario_config_file(scenario, vm_scenario_log_directory, vm_scenario_status_file)
+        scenario_config_file, vm_scenario_config_file = self.__create_scenario_config_file(scenario, vm_scenario_log_directory, vm_scenario_status_file)
 
         script_postinstall = PostsetupInstallationsScript(f'postsetup_installations{self.__script_suffix}',
                                                           self.project_scripts_directory,

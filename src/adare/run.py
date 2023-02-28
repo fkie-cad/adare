@@ -5,23 +5,27 @@ import ast
 import time
 
 # internal imports
+from adare.database.utils import db_exists
+from adare.django_frontend.commands import makemigrations, migrate
 from adare.cli.environment import env_create, env_list, env_run, env_remove, env_create_scenario, \
     env_remove_scenario, env_addusb, env_addnetworkdrive
 from adare.cli.project import project_create, project_remove
 from adare.cli.webapp import webapp
+from adare.cli.showversion import show_version
 # from adare.cli.vagrant import vgbox_add, vgbox_list, vgbox_remove
 from adare.setup_logging import setup_logging
 
+
 def run():
-    # function()
     start_time = time.time()
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('-v', '--version', action='store_true', help='display program version')
     parser.add_argument('--logfile')
     parser.add_argument('--loglevelfile')
     parser.add_argument('--loglevelconsole')
     parser.add_argument('--logdetailsconsole', type=bool, default=False)
-    parser.set_defaults(func=lambda args: parser.print_help())
+    parser.set_defaults(func=lambda args: show_version(args, parser))
 
     subparsers = parser.add_subparsers()
 
@@ -128,6 +132,12 @@ def run():
     # configure logging
     import logging
     log = logging.getLogger(__name__)
+
+    if not db_exists():
+        log.warning(f'django database does not exist and will be created')
+        makemigrations('django_adareGUI', quiet=False)
+        migrate(quiet=False)
+        log.info(f'django database got created successfully')
 
     args.func(args)
 

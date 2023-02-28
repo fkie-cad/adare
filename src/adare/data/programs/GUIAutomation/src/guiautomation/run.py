@@ -12,7 +12,7 @@ import logging as log
 
 
 def setup_logging(logfile: Path = None):
-    logger.setup_logger(logfile=logfile)
+    logger.setup_logger(logfile=logfile, console=False)
 
 
 def run(scenario_class: Type[Scenario], config_file: Path or None, config_dict: dict = None):

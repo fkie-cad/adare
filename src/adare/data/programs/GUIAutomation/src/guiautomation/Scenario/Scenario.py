@@ -1,5 +1,4 @@
 # external imports
-from datetime import datetime
 from subprocess import Popen, PIPE
 from datetime import datetime, timezone
 from guibot.guibot import GuiBot
@@ -64,11 +63,26 @@ class Scenario:
             self.__create_cv_template_matcher(match_file, similarity)
         return match_file
 
+    def __get_textfinder_matcher(self, similarity: float):
+        similarity_100 = int(similarity*100)
+        similarity_str = str(similarity_100).replace('.', '')
+        match_file = self.img_folder/f'cv_template_{similarity_str}.match'
+        if match_file not in self.template_match_files.keys():
+            self.__create_textfinder_matcher(match_file, similarity)
+        return match_file
+
     def __create_cv_template_matcher(self, match_file: Path, similarity: float):
         finder = TemplateFinder()
         finder.params["find"]["similarity"].value = similarity
         TemplateFinder.to_match_file(finder, match_file.as_posix())
         self.template_match_files[similarity] = match_file
+
+    def __create_textfinder_matcher(self, match_file: Path, similarity: float):
+        finder = TextFinder()
+        finder.params["text"]["datapath"].value = f'{self.tessdata_folder.parent.as_posix()}/'
+        finder.params["ocr"]["extra_configs"].value = None
+        finder.params["find"]["similarity"].value = similarity
+        TextFinder.to_match_file(finder, match_file.as_posix())
 
     def __create_steps_file_icon(self, image_path: Path, minimal_similarity: float = 0.6, step: float = 0.1, start_similarity: float = 0.9) -> Path:
         steps_file_name = f'steps_{image_path.stem}.steps'
@@ -84,25 +98,19 @@ class Scenario:
             f.write('\n'.join(match_files))
         return steps_file_path
 
-    def __create_steps_file_text(self, textfile_path: Path) -> Path:
+    def __create_steps_file_text(self, textfile_path: Path, minimal_similarity: float = 0.6, step: float = 0.1, start_similarity: float = 0.9) -> Path:
         steps_file_name = f'steps_{textfile_path.stem}.steps'
         steps_file_path = self.img_folder / steps_file_name
-        line = f'{textfile_path.name}\t{self.__get_textfinder_matcher()}'
+        match_files = []
+        if start_similarity - minimal_similarity > 0 and (start_similarity - minimal_similarity) / step < 100:
+            similarity = start_similarity
+            while similarity >= minimal_similarity:
+                line = f'{textfile_path.name}\t{self.__get_textfinder_matcher(similarity).name}'
+                match_files.append(line)
+                similarity -= step
         with open(steps_file_path.as_posix(), mode='w') as f:
-            f.write(line)
+            f.write('\n'.join(match_files))
         return steps_file_path
-
-    def __create_textfinder_matcher(self, match_file: Path):
-        finder = TextFinder()
-        finder.params["text"]["datapath"].value = f'{self.tessdata_folder.parent.as_posix()}/'
-        finder.params["ocr"]["extra_configs"].value = None
-        TextFinder.to_match_file(finder, match_file.as_posix())
-
-    def __get_textfinder_matcher(self) -> Path:
-        match_file = self.img_folder / f'tesseract_text.match'
-        if not self.text_match_files:
-            self.__create_textfinder_matcher(match_file)
-        return match_file
 
     def __create_textfile(self, string: str) -> Path:
         filename = f'{slugify(string)}.txt'
@@ -148,12 +156,15 @@ class Scenario:
         else:
             return False
 
-    def log(self, content: str):
+    def log(self, content: str, quiet: bool = False):
         if not self.scenario_log_file:
             log.warning(f'log message can not be written to the scenario log because no log file is specified')
             return
         with open(self.scenario_log_file.as_posix(), mode='a') as f:
             timestamp = datetime.now().strftime('%Y%m%d %H:%M:%S')
+            message = f'[{timestamp}]: {content}'
+            if not quiet:
+                print(message)
             f.write(f'[{timestamp}]: {content}')
 
     def __load_vars(self):

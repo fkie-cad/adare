@@ -32,15 +32,15 @@ class ParseAndTest:
         self.InputParser = inputparser
         self.Resultdisplay = resultdisplay
 
-    def parseandtest(self, logfolder: Path):
+    def parseandtest(self, statusfile: Path):
         self.InputParser.parse()
         self.Tester.set_input(self.InputParser.parsed_input)
         status = self.Tester.test()
         self.Resultdisplay.set_outcome(self.Tester.outcome)
         self.Resultdisplay.set_unsupported_types(self.Tester.unsupported_types)
         self.Resultdisplay.format_result()
-        log.error((logfolder/'status.csv').as_posix())
-        with open((logfolder/'status.csv').as_posix(), mode='a', encoding='ascii') as f:
+        log.debug(f'status file: {statusfile}')
+        with open(statusfile.as_posix(), mode='a', encoding='ascii') as f:
             f.write(f'parseandtest,{status}\n')
 
 
@@ -49,6 +49,7 @@ def run():
     parser.set_defaults(func=lambda args: parser.print_help())
     parser.add_argument("input")
     parser.add_argument("output")
+    parser.add_argument("statusfile")
     parser.add_argument("--logfile")
 
     args = parser.parse_args()
@@ -70,4 +71,4 @@ def run():
     resultdisplay = YamlResultFormatter.YamlResultFormatter(Path(path_outputdata).as_posix())
 
     parseandtest = ParseAndTest(inputparser, resultdisplay)
-    parseandtest.parseandtest(Path(args.logfile).parent)
+    parseandtest.parseandtest(Path(args.statusfile))

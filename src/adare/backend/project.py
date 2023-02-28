@@ -16,6 +16,7 @@ from adare.backend.attrs_classes import ProjectInformation, UsbDevice, NetworkDr
 import adare.config as config
 from adare.helperFunctions.yaml import yaml_to_dict, dict_to_yaml
 from adare.backend.environment import Environment
+from adare.helperFunctions.web.download import download
 
 # configure logging
 import logging
@@ -131,17 +132,18 @@ class Project:
 
         log.info(f'project ({self.base_directory}) creation was successful')
 
-    def __get_tessdata(self):
+    def __get_tessdata(self, tessdata_directory: Path = None):
         """
-        copy tessdata needed for text recognition in the gui automation to the project
+            copy tessdata needed for text recognition in the gui automation to the project
         """
-        tessdata_dir = pkg_resources.resource_filename(config.PACKAGE, '/data/tessdata')
-        try:
-            shutil.copytree(tessdata_dir, self.base_directory/'tessdata')
-        except OSError as e:
-            log.error(e, exc_info=True)
-            self.__cleanup()
-            raise ProjectCreationFailied(self.base_directory)
+        if not Path:
+            tessdata_directory = self.base_directory/'tessdata'
+            tessdata_directory.mkdir()
+            tessdata_github_link = r'https://github.com/tesseract-ocr/tessdata/blob/main/eng.traineddata?raw=true'
+            tessdata_file = tessdata_directory/'eng.traineddata'
+            download(tessdata_github_link, tessdata_file)
+        else:
+            shutil.copytree(tessdata_directory, self.base_directory / 'tessdata')
 
     def __repair_if_broken(self):
         project_children = [f.name for f in self.base_directory.iterdir()]
