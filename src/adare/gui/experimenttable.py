@@ -4,12 +4,13 @@ from nicegui import ui
 
 class ExperimentTable:
     ui_self = None
-    switch_button_all = None
-    switch_button_columns = []
+    checkbox_showhideall = None
+    checkboxes_showhide_columns = []
 
-    columns = [
+    columns: list[dict] = [
+        {'name': 'status', 'label': 'status', 'field': 'status', 'required': True, 'sortable': False, 'align': 'left'},
         {'name': 'name', 'label': 'name', 'field': 'name', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
-        {'name': 'uuid', 'label': 'uuid', 'field': 'uuid', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
+        {'name': 'uuid', 'label': 'uuid', 'field': 'uuid', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
         {'name': 'os', 'label': 'os', 'field': 'os', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
         {'name': 'os distribution', 'label': 'os distribution', 'field': 'os_distribution', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
         {'name': 'os version', 'label': 'os version', 'field': 'os_version', 'required': True, 'sortable': True,
@@ -19,16 +20,17 @@ class ExperimentTable:
         {'name': 'time end', 'label': 'time end', 'field': 'time_end', 'required': True, 'sortable': True,
          'align': 'left', 'hide': True},
         {'name': 'btn', 'label': '', 'field': 'btn', 'required': False, 'sortable': False, 'align': 'right'},
+        {'name': 'publish', 'label': 'publish', 'field': 'publish', 'required': False, 'sortable': False, 'align': 'right'},
     ]
-    data = [
-        {'id': 0, 'name': 'deletefile', 'uuid': '738d01fa-94f0-4977-90f8-2ac9d9fed464', 'os': 'Windows', 'os_distribution': 'Windows 10', 'os_version': '10.0.19042', 'time_start': '2022-07-01 14:05:33', 'time_end': '2022-07-01 14:08:21'},
-        {'id': 1, 'name': 'deletefile', 'uuid': 'ae6753b1-bfbf-4655-b937-7b3426a0ab60', 'os': 'Windows',
+    data: list[dict] = [
+        {'id': 0, 'status': 'success', 'name': 'deletefile', 'uuid': '738d01fa-94f0-4977-90f8-2ac9d9fed464', 'os': 'Windows', 'os_distribution': 'Windows 10', 'os_version': '10.0.19042', 'time_start': '2022-07-01 14:05:33', 'time_end': '2022-07-01 14:08:21'},
+        {'id': 1, 'status': 'warning', 'name': 'deletefile', 'uuid': 'ae6753b1-bfbf-4655-b937-7b3426a0ab60', 'os': 'Windows',
          'os_distribution': 'Windows 10', 'os_version': '10.0.19042', 'time_start': '2022-11-07 11:05:33',
          'time_end': '2022-07-01 11:08:21'},
-        {'id': 2, 'name': 'deletefile', 'uuid': 'db390940-a78e-4545-8cf3-bccac43ce9df', 'os': 'Windows',
+        {'id': 2, 'status': 'pending', 'name': 'deletefile', 'uuid': 'db390940-a78e-4545-8cf3-bccac43ce9df', 'os': 'Windows',
          'os_distribution': 'Windows 10', 'os_version': '10.0.19042', 'time_start': '2022-07-01 14:05:33',
          'time_end': '2021-07-01 14:08:21'},
-        {'id': 3, 'name': 'deletefileSMB', 'uuid': 'e9b5f78d-f6de-4ad0-b5b5-71ff3c01214d', 'os': 'Windows',
+        {'id': 3, 'status': 'error', 'name': 'deletefileSMB', 'uuid': 'e9b5f78d-f6de-4ad0-b5b5-71ff3c01214d', 'os': 'Windows',
          'os_distribution': 'Windows 10', 'os_version': '10.0.19042', 'time_start': '2021-07-01 14:05:33',
          'time_end': '2021-07-01 14:08:21'},
         {'id': 4, 'name': 'deletefile', 'uuid': '825ffcac-e271-4f29-b2b2-7b5afb5cb9d4', 'os': 'Windows',
@@ -57,6 +59,18 @@ class ExperimentTable:
                 shown_columns.append(c)
         return shown_columns
 
+    def __all_columns_hidden(self):
+        switch_values = [not c['hide'] for c in self.columns if 'hide' in c.keys()]
+        if all(switch_values):
+            return True
+        return False
+
+    def __all_columns_shown(self):
+        switch_values = [c['hide'] for c in self.columns if 'hide' in c.keys()]
+        if all(switch_values):
+            return True
+        return False
+
     def __get_hideable_columns(self):
         column_dict = {}
         for c in self.columns:
@@ -66,65 +80,99 @@ class ExperimentTable:
 
     def __show_hide_column(self, value, column_field_name):
         columns_by_field_name = self.__get_hideable_columns()
-        columns_by_field_name[column_field_name]['hide'] = not value['args']
+        columns_by_field_name[column_field_name]['hide'] = not value
         self.ui_self._props['columns'] = self.__get_shown_columns()
-        switch_values = [c['hide'] for c in self.columns if 'hide' in c.keys()]
-        if all(switch_values):
-            self.switch_button_all.set_value(True)
-        if False in switch_values:
-            self.switch_button_all.set_value(False)
+        if self.__all_columns_hidden():
+            self.checkbox_showhideall.set_value(True)
+        elif not self.__all_columns_shown():
+            self.checkbox_showhideall.set_value(False)
         self.ui_self.update()
 
     def __show_hide_all(self, value):
         new_columns = []
         for c in self.columns:
-            c['hide'] = not value['args']
-            new_columns.append(c)
+            if 'hide' in c.keys():
+                c['hide'] = not value
+                new_columns.append(c)
+            else:
+                new_columns.append(c)
         self.columns = new_columns
-        if value['args']:
+        if value:
             self.ui_self._props['columns'] = self.columns
-            for s in self.switch_button_columns:
+            for s in self.checkboxes_showhide_columns:
                 s.set_value(True)
         else:
-            for s in self.switch_button_columns:
+            for s in self.checkboxes_showhide_columns:
                 s.set_value(False)
             self.ui_self._props['columns'] = []
         self.ui_self.update()
 
     def add_row(self, row):
+        """ Add a row to the table """
         self.data.append(row)
         self.ui_self.update()
 
-    def create(self):
-        with ui.table(title='experiments', columns=self.__get_shown_columns(), rows=self.data,
-                      pagination=10).classes(
-                'w-100') as table:
-            self.ui_self = table
-            with table.add_slot('top-right'):
-                with ui.input(placeholder='Search').props('type=search').bind_value(table, 'filter').add_slot('append'):
-                    ui.icon('search')
+    def set_table_data(self, columns, data):
+        """ Set the table data and columns """
+        self.columns = columns
+        self.data = data
+        self.ui_self.update()
 
-            table.add_slot('body', """
-                <q-tr :props="props">
-                    <q-td v-for="col in props.cols" :key="col.name" :props="props">
-                        <q-btn v-if="col.name == 'btn'" flat round icon="add_circle" v-bind:href="'/experiment/'+ props.cols[1].value" class="text-slate-700" />
-                        <p v-else>{{ col.value }} </p>
-                    </q-td>
-                </q-tr>
+    def create(self):
+        """ Create the table gui object """
+        with ui.table(columns=self.__get_shown_columns(), rows=self.data,
+                      pagination=10).classes(
+                'w-full') as table:
+            self.ui_self = table
+
+            # add a search bar at the top-right of the table
+            with table.add_slot('top-right'):
+                with ui.row().classes('w-full flex justify-between items-center'):
+                    ui.label('experiments table').classes('text-xl font-bold')
+
+                    with ui.input(placeholder='Search') as search_input:
+                        search_input.props('type=search').bind_value(table, 'filter')
+                        search_input.classes('w-1/4')
+                        with search_input.add_slot('append'):
+                            ui.icon('search')
+
+                    with ui.button(on_click=lambda: menu.open()).props('icon=menu') as btn:
+                        del btn._props['color']
+                        btn.classes('bg-cyan-800 text-white')
+
+                        with ui.menu() as menu, ui.column().classes('gap-0 p-2'):
+                            self.checkbox_showhideall = ui.checkbox('Show all columns', value=False, on_change=lambda e: self.__show_hide_all(e.value))
+                            self.checkbox_showhideall.props('color=cyan-800')
+                            self.checkbox_showhideall.set_value(False)
+                            for index, column in enumerate(self.__get_hideable_columns().values()):
+                                checkbox = ui.checkbox(column['label'], value=True,
+                                            on_change=lambda e, c_name=column['field']: self.__show_hide_column(e.value, c_name))
+                                checkbox.props('color=cyan-800')
+                                self.checkboxes_showhide_columns.append(checkbox)
+                                checkbox.set_value(not column['hide'])
+                            if self.__all_columns_hidden():
+                                self.checkbox_showhideall.set_value(True)
+
+            # add buttons that links to the experiment page for each row
+            table.add_slot('body-cell-btn', """
+                 <q-td :props="props">
+                    <q-btn flat round icon="add_circle" v-bind:href="'/experiment/'+ props.cols[1].value" class="text-slate-700" />
+                 </q-td>
+            """)
+            table.add_slot('body-cell-publish', """
+                 <q-td :props="props">
+                    <q-btn flat round icon="publish" v-bind:href="" />
+                 </q-td>
+            """)
+            table.add_slot('body-cell-status', """
+                 <q-td :props="props" auto-width>
+                    <q-icon name="check_circle" color="green" v-if="props.value == 'success'" size="2rem"/>
+                    <q-icon name="error" color="warning" v-else-if="props.value == 'warning'" size="2rem"/>
+                    <q-icon name="cancel" color="red" v-else-if="props.value == 'error'" size="2rem"/>
+                    <q-icon name="pending" color="grey" v-else-if="props.value == 'pending'" size="2rem"/>
+                    <p v-else>{{ props.value }} </p>
+                 </q-td>
             """)
 
-            with table.add_slot('bottom-row'):
-                self.switch_button_all = ui.switch('show all')
-                self.switch_button_all.set_value(False)
-                for c in self.columns:
-                    column_label = c['field']
-                    if column_label in self.__get_hideable_columns().keys():
-                        switch = ui.switch(column_label)
-                        switch.set_value(not self.__get_hideable_columns()[column_label]['hide'])
-                        switch.on('update:model-value', lambda e, c_name=column_label: self.__show_hide_column(e, c_name))
-                        self.switch_button_columns.append(switch)
-                if all([not v['hide'] for v in self.__get_hideable_columns().values()]):
-                    self.switch_button_all.set_value(True)
-                self.switch_button_all.on('update:model-value', lambda e: self.__show_hide_all(e))
 
 
