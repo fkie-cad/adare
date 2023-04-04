@@ -39,9 +39,12 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     # personal apps
-    'adare.django_frontend.django_adareGUI.apps.DjangoAdareguiConfig',
+    'adare.django_frontend.experiments',
+    'adare.django_frontend.login',
     # bootstrap 5 app
     'bootstrap5',
+    # REST
+    'rest_framework',
     # django apps
     'django.contrib.admin',
     'django.contrib.auth',

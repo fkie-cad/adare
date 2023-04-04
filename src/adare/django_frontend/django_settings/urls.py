@@ -17,14 +17,19 @@ from django.contrib import admin
 from django.urls import path
 from django.shortcuts import redirect
 
-import adare.django_frontend.django_adareGUI.views as gui
+import adare.django_frontend.experiments.views as experiments_views
+import adare.django_frontend.login.views as login_views
 
 urlpatterns = [
     path('', lambda req: redirect('index/')),
     path('admin/', admin.site.urls),
-    path('index/', gui.index),
-    path('get-distributions/', gui.getDistributions, name='GetDistributions'),
-    path('get-versions/', gui.getVersions, name='GetVersions'),
-    path('get-experiments/', gui.getExperiments, name='GetExperiments'),
-    path('experiment/', gui.experiment)
+    path('index/', experiments_views.index),
+    path('get-distributions/', experiments_views.getDistributions, name='GetDistributions'),
+    path('get-versions/', experiments_views.getVersions, name='GetVersions'),
+    path('get-experiments/', experiments_views.getExperiments, name='GetExperiments'),
+    path('experiment/', experiments_views.experiment),
+    path('login/', login_views.LoginView.as_view()),
+    path('logout/', login_views.LogoutView.as_view()),
+    path('publish/', experiments_views.PublishView.as_view()),
+    path('rm/', experiments_views.TestRemoveView.as_view()),
 ]
