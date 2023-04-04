@@ -25,4 +25,3 @@ DB_STATUS_LIST = [
     'warning',
     'not reached'
 ]
-

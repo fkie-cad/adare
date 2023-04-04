@@ -7,7 +7,7 @@ import adare.config as config
 import adare.config.database as config_database
 from adare.helperFunctions.pyfileanalyze import PyModuleAnalyzer
 from adare.helperFunctions.dict.dict import get_value_if_missing_key
-from adare.django_frontend.django_adareGUI.models import Status, OsInfo, Experiment, Test, TestParameter, TestParameterEntries, \
+from adare.django_frontend.experiments.models import Status, OsInfo, Experiment, Test, TestParameter, TestParameterEntries, \
     TestFunction, Result, Tool
 from adare.helperFunctions.django.orm import get_or_none
 

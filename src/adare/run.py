@@ -10,7 +10,7 @@ from adare.django_frontend.commands import makemigrations, migrate
 from adare.cli.environment import env_create, env_list, env_run, env_remove, env_create_scenario, \
     env_remove_scenario, env_addusb, env_addnetworkdrive
 from adare.cli.project import project_create, project_remove
-from adare.cli.webapp import webapp
+from adare.cli.webapp import webapp, webapp2
 from adare.cli.showversion import show_version
 # from adare.cli.vagrant import vgbox_add, vgbox_list, vgbox_remove
 from adare.setup_logging import setup_logging
@@ -54,6 +54,11 @@ def run():
     sp_webapi.add_argument('-p', '--port', type=int, required=False)
     # sp_webapi.add_argument('--host', type=str, required=False)
     sp_webapi.set_defaults(func=webapp)
+
+    sp_webapi = subparsers.add_parser('webapp2')
+    sp_webapi.add_argument('-p', '--port', type=int, required=False)
+    # sp_webapi.add_argument('--host', type=str, required=False)
+    sp_webapi.set_defaults(func=webapp2)
 
     # probably not needed
     # vgbox_subparsers = vgbox.add_subparsers(help='wrapper for needed vagrant commands')
@@ -135,7 +140,8 @@ def run():
 
     if not db_exists():
         log.warning(f'django database does not exist and will be created')
-        makemigrations('django_adareGUI', quiet=False)
+        makemigrations('login', quiet=False)
+        makemigrations('experiments', quiet=False)
         migrate(quiet=False)
         log.info(f'django database got created successfully')
 

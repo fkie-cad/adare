@@ -94,6 +94,7 @@ DEFAULT_NFS_CONF = {
 
 DEFAULT_NETWORKDRIVE_SHARENAME = "share"
 
+
 SCRIPTS_SUFFIX = {
     'linux': '.sh',
     'windows': '.ps1'

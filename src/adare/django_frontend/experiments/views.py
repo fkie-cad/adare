@@ -1,10 +1,19 @@
+# django imports
+from django.utils.timezone import make_aware
+from rest_framework import status
+from rest_framework import views
+from rest_framework.response import Response
 from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse
 from django.template import loader
+
 from pathlib import Path
+import requests
 
-from adare.django_frontend.django_adareGUI.models import Experiment, OsInfo, Test
-
+from adare.django_frontend.experiments.models import Experiment, OsInfo, Test
+from adare.django_frontend.experiments.serializers import ExperimentSerializer
+from adare.django_frontend.login.views import get_actual_user_session
+from adare.config.server import WEBSERVER_URL
 
 def index(request):
     template = loader.get_template('index.html')
@@ -162,3 +171,47 @@ def experiment(request):
         'tests': tests
     }
     return HttpResponse(template.render(context, request))
+
+
+class PublishView(views.APIView):
+
+    def post(self, request):
+        if 'uuid' not in request.data.keys():
+            return Response(f'no uuid provided')
+        uuid = request.data['uuid']
+        exp = Experiment.objects.get(uuid=uuid)
+        experiment_data = ExperimentSerializer(exp).data
+        user_session = get_actual_user_session()
+        if not user_session:
+            return Response(f'no user logged in')
+        with requests.session() as session:
+            req_csrf = session.get(f'{WEBSERVER_URL}/csrf/')
+            csrftoken = req_csrf.cookies['csrftoken']
+            headers = {
+                'X-CSRFToken': csrftoken,
+                'Referer': f'{WEBSERVER_URL}',
+                'Authorization': f'Token {user_session.token}'
+            }
+            req = session.post(f'{WEBSERVER_URL}/api/addexperiment/', json=experiment_data, headers=headers)
+        return Response(f'{req.content}')
+
+
+class TestRemoveView(views.APIView):
+
+    def post(self, request):
+        if 'uuid' not in request.data.keys():
+            return Response(f'no uuid provided')
+        uuid = request.data['uuid']
+        user_session = get_actual_user_session()
+        if not user_session:
+            return Response(f'no user logged in')
+        with requests.session() as session:
+            req_csrf = session.get(f'{WEBSERVER_URL}/csrf/')
+            csrftoken = req_csrf.cookies['csrftoken']
+            headers = {
+                'X-CSRFToken': csrftoken,
+                'Referer': f'{WEBSERVER_URL}',
+                'Authorization': f'Token {user_session.token}'
+            }
+            req = session.post(f'{WEBSERVER_URL}/api/removeexperiment/', json={'uuid': uuid}, headers=headers)
+        return Response(f'{req.content}')
