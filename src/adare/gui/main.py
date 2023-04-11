@@ -2,15 +2,28 @@ from adare.gui.colors import set_colors, TAILWIND_GRADIENTS
 from logindrawer import LoginDrawer
 from header import Header
 from experimenttable import ExperimentTable
+from pathlib import Path
+from styles import style_text_muted_large
+from body_experiment import BodyExperimentPage
 
 from nicegui import ui
 
-# add custom css to use tailwind colors for quasar elements such as checkboxes since they can not be overwritten using the classes property of elements
-#ui.add_head_html(f"<style>{r'X:/Arbeit/adare/src/adare/gui/static/tailwind_color_for_quasar.css'}</style>")
-
+def parse_filter_string(filter_string):
+    filter_dict = {}
+    if filter_string:
+        for filter_key_val in filter_string.split(','):
+            key, value = filter_key_val.split('=')
+            filter_dict[key] = value
+    return filter_dict
 
 @ui.page('/')
-def main_page():
+def main_page(filter_str=None):
+    filter_dict = None
+    if filter_str:
+        filter_dict = parse_filter_string(filter_str)
+
+    # add custom css to page
+    ui.add_head_html(f"<style>{Path(r'./static/custom.css').read_text()}</style>")
     set_colors()
 
     # create right drawer for login
@@ -25,15 +38,29 @@ def main_page():
     experiment_table = ExperimentTable()
     experiment_table.create()
 
+    with ui.footer(value=False) as footer:
+        footer.classes('bg-white')
+        ui.label('Footer')
+
+    def footer_toggle(x):
+        footer.toggle()
+        if x.sender._props['icon'] == 'expand_less':
+            x.sender.props(remove='icon=expand_less', add='icon=expand_more')
+        else:
+            x.sender.props(remove='icon=expand_more', add='icon=expand_less')
+
+    with ui.page_sticky(position='bottom', x_offset=0, y_offset=0).classes('w-full'):
+        ui.button('', on_click=lambda x: footer_toggle(x)).props('icon=expand_less').classes('w-full bg-primary text-white')
+
+@ui.page('/{filter_str}')
+def main_page_wfilter(filter_str):
+    main_page(filter_str)
+
 
 @ui.page('/experiment/{uuid}')
 def show_experiment(uuid: str):
-    ui.add_head_html("""<style>
-        .table-striped tbody tr:nth-of-type(even) {
-          background-color: #f1f5f9;
-        }
-    </style>
-    """)
+    # add custom css to page
+    ui.add_head_html(f"<style>{Path(r'./static/custom.css').read_text()}</style>")
 
     set_colors()
 
@@ -48,58 +75,8 @@ def show_experiment(uuid: str):
     header.create(right_drawer.ui_self)
 
     # create experiment view
-    with ui.card().classes('w-full leading-4').style('gap: 0'):
-        with ui.row().classes('w-full items-center justify-between'):
-            ui.label(f'name').classes('text-gray-400 font-medium text-lg')
-            ui.label(f'uuid').classes('text-gray-400 font-medium text-lg')
-        with ui.row().classes('w-full items-center justify-between'):
-            ui.label('deletefile').classes('text-h5 mb-4')
-            ui.label('b8e1bfb1-81a9-4124-8d0d-6466dcf49220').classes('text-h4 mb-6')
-        ui.separator()
-        with ui.row().classes('mt-6 w-full items-center justify-between'):
-            with ui.column():
-                ui.label('Description')
-            with ui.column():
-                with ui.card().classes('w-full no-padding').style('gap: 0'):
-                    ui.label('os information').classes('w-full grid place-content-center h-10 text-center text-white text-bold bg-primary')
-                    columns = [
-                        {'name': 'key', 'label': 'key', 'field': 'key', 'align': 'left', 'sortable': True},
-                        {'name': 'value', 'label': 'value', 'field': 'value', 'align': 'left', 'sortable': True},
-                    ]
-                    data = [
-                        {
-                            'key': 'os',
-                            'value': 'Windows 10',
-                        },
-                        {
-                            'key': 'distribution',
-                            'value': 'Home',
-                        },
-                    ]
-                    ui.table(columns,rows=data).props('hide-header').classes('w-full table-striped')
-            with ui.column():
-                ui.label('Description')
-            with ui.column():
-                ui.label('Description')
-
-        with ui.row().classes('mt-12 w-full items-center justify-between'):
-            with ui.card().classes('w-full leading-4 no-padding'):
-                ui.label('tests').classes('w-full grid place-content-center h-10 text-center text-white text-bold bg-primary')
-                columns = [
-                    {'name': 'key', 'label': 'key', 'field': 'key', 'align': 'left', 'sortable': True},
-                    {'name': 'value', 'label': 'value', 'field': 'value', 'align': 'left', 'sortable': True},
-                ]
-                data = [
-                    {
-                        'key': 'os',
-                        'value': 'Windows 10',
-                    },
-                    {
-                        'key': 'distribution',
-                        'value': 'Home',
-                    },
-                ]
-                ui.table(columns,rows=data).props('bordered').classes('w-auto m-4 table-striped')
+    body = BodyExperimentPage(uuid)
+    body.show()
 
 
 ui.run()

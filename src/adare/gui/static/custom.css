@@ -1,0 +1,3 @@
+.table-striped tbody tr:nth-of-type(even) {
+    background-color: #f1f5f9;
+}

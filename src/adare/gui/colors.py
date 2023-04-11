@@ -33,3 +33,4 @@ class TailwindGradients:
     shiny_button = 'gradient-to-l from-yellow-600 to-red-600'
 
 TAILWIND_GRADIENTS = TailwindGradients()
+
