@@ -14,7 +14,8 @@ class Header:
             self.ui_self = header
             # self.ui_tabs = Tabs()
             # self.ui_tabs.create()
-            ui.label('Adare').classes('ml-2 text-2xl font-bold text-white')
+            with ui.row():
+                ui.label('Adare').classes('ml-2 text-2xl font-bold text-white')
 
             with ui.avatar('account_circle') as avatar:
                 self.ui_user_avatar = avatar

@@ -1,0 +1,1 @@
+style_text_muted_large = 'text-gray-400 font-medium text-lg'
