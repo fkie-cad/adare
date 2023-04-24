@@ -26,7 +26,7 @@ from adare.backend.exceptions import EnvironmentInitializationFailed, Environmen
     PackageTemplateFolderMissing, ScenarioAlreadyExists
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
 from adare.vagrantapi.vagrantfile import VagrantFile
-from adare.database.django_db_api import DjangoDbApi
+from adare.database.database import ExperimentApi
 from adare.inputparser.YAMLInputParser import YAMLInputParser
 
 # configure logging
@@ -636,7 +636,7 @@ class Environment:
         return Vagrant_creator
 
     def __save_results_in_database(self, scenario: str, result_file: Path, timestamps: dict, vg_exitcode: int, scenario_log_directory: Path):
-        db = DjangoDbApi()
+
         input_file = self.scenario_directory / scenario / (scenario + ".yml")
         if not input_file.is_file():
             log.error(f'input file is missing')
@@ -690,16 +690,16 @@ class Environment:
             'language': self.configuration.os_language,
             'architecture': self.configuration.os_architecture
         }
-
-        db.add_experiment(
-            name=scenario,
-            inputdata=inputdata,
-            resultdata=resultdata,
-            logfiledata=logfiledata,
-            statusdata=statusdata,
-            timestamps=timestamps,
-            os_info=os_info,
-        )
+        with ExperimentApi() as db:
+            db.add_experiment(
+                name=scenario,
+                inputdata=inputdata,
+                resultdata=resultdata,
+                logfiledata=logfiledata,
+                statusdata=statusdata,
+                timestamps=timestamps,
+                os_info=os_info,
+            )
 
     def run(self, scenario: str, debug=False):
         """
