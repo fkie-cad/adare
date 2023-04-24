@@ -14,3 +14,6 @@ def get_cookie_file():
 
 
 WEBSERVER_URL = 'http://localhost:8000'
+LOGIN_URL = WEBSERVER_URL + '/login/'
+LOGOUT_URL = WEBSERVER_URL + '/logout/'
+ADD_EXPERIMENT_URL = WEBSERVER_URL + '/api/experiment/add'

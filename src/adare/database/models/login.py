@@ -1,13 +1,13 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime
-from sqlalchemy.orm import relationship, backref
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship, backref, DeclarativeBase
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 class UserSession(Base):
     __tablename__ = 'user_session'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String)
+    username = Column(String, unique=True)
     token = Column(String)
     expirationdate = Column(DateTime)
 

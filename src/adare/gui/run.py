@@ -7,5 +7,6 @@ log = logging.getLogger(__name__)
 
 
 def runserver(port: int, quiet: bool = True):
-    cmd = ['gui/main.py']
+    # todo: save output to log file
+    cmd = ['gui/main.py', str(port)]
     run_python(cmd, quiet=quiet)
