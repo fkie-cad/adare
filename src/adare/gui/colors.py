@@ -6,7 +6,7 @@ from nicegui import ui
 class QuasarColors:
     """ Quasar Colors namespace for the project to use with tailwind (https://quasar.dev/style/color-palette) """
     primary = '#009374'
-    secondary = '#26A69A'
+    secondary = '#1976D2'
     accent = '#9C27B0'
     # dark = '#1d1d1d
     # dark-page = '#121212'

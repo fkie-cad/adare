@@ -55,3 +55,4 @@ docsrc/_build/
 
 # test python file
 testfile.py
+cleanup_package_dir.py

@@ -1,6 +1,9 @@
+# external imports
+from nicegui import ui
+
+# internal imports
 from adare.gui.extensions.card_table import CardTable
 from adare.gui.styles import STYLE_TEXT_MUTED_LARGE, STYLE_TEXT_MUTED_SMALL
-from nicegui import ui
 from adare.database import database
 from adare.gui.page_experiment.tests_table import TestsTable
 
@@ -94,12 +97,10 @@ class BodyExperimentPage:
                     table.create('os information', dense=False)
                 with ui.element('div').classes('col mx-5'):
                     table = CardTable()
-                    def show_log(x):
-                        print(x)
                     columns = [
                         {'name': 'key', 'label': 'key', 'field': 'key', 'align': 'left', 'sortable': True},
                         {'name': 'value', 'display':'btn_status', 'label': 'value', 'field': 'value', 'align': 'left', 'sortable': True},
-                        {'name': 'log_btn', 'label': 'value', 'display':'log_btn', 'function': show_log, 'field': 'log_btn', 'align': 'left', 'sortable': True},
+                        {'name': 'log_btn', 'label': 'value', 'display':'log_btn', 'field': 'log_btn', 'align': 'left', 'sortable': True},
                     ]
                     data = [
                         {'key': 'total', 'value': self.experiment_data['status'], 'log_btn': None},
