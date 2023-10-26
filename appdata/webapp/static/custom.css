@@ -1,0 +1,13 @@
+body {
+    font-family: Monaco, monospace !important;
+}
+
+
+
+.table-text-large .q-table tbody td {
+    font-size: 0.9rem;
+}
+
+.table-striped tbody tr:nth-of-type(even) {
+    background-color: #f1f5f9;
+}
