@@ -16,8 +16,8 @@ On a high level a desktop forensic experiment is divided into three main parts:
 3. analyze the parsed artifacts
 
 
-The user provides a so called *experiment*, consisting of a *gui automation file* and a *parse and test file*.
-Inside the *gui automation file* is specified
+The user provides a so called *experiment*, consisting of an *action file* and an *testset file*.
+Inside the *testset file* is specified
 
 
 The experiments itself consists each of a *gui automation* and *parse & test* part.
