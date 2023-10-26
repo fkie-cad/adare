@@ -18,7 +18,7 @@ import guiautomation.config as config
 log = logging.getLogger(__name__)
 
 
-class Scenario:
+class Experiment:
     description = None
     vars_tmp_file = config.VARIABLES_FILE
     img_folder: Path = None
@@ -26,24 +26,24 @@ class Scenario:
     status: str = 'success'
     template_match_files: dict
     text_match_file: Path
-    scenario_log_file: Path
+    experiment_log_file: Path
     tessdata_path: Path
 
-    def __init__(self, img_folder: Path, tessdata_folder: Path, scenario_log_file: Path = None):
-        #self.img_folder = Path(pkg_resources.resource_filename('guiautomation.Scenario', 'data/img'))
+    def __init__(self, img_folder: Path, tessdata_folder: Path, experiment_log_file: Path = None):
+        #self.img_folder = Path(pkg_resources.resource_filename('guiautomation.experiment', 'data/img'))
         self.img_folder = img_folder
         self.__load_vars()
         self.guibot = GuiBot()
         log.info(f'GuiBot Object created with display controller(dc) backend {str(type(self.guibot.dc_backend).__name__)} and  computer vision (cv) backend  {str(type(self.guibot.cv_backend).__name__)}')
         self.guibot.add_path(self.img_folder.as_posix())
-        self.scenario_log_file = scenario_log_file
+        self.experiment_log_file = experiment_log_file
         self.template_match_files = {}
         self.text_match_files = None
         self.tessdata_folder = tessdata_folder
 
     def prepare(self):
         """
-        This method can be used in child classes to do stuff before running the gui automation scenario.
+        This method can be used in child classes to do stuff before running the gui automation experiment.
         This can include creating/removing/changing a file or other.
         In cases where a shell/powershell command should be run the method exec_shellcommand.
         """
@@ -157,10 +157,10 @@ class Scenario:
             return False
 
     def log(self, content: str, quiet: bool = False):
-        if not self.scenario_log_file:
-            log.warning(f'log message can not be written to the scenario log because no log file is specified')
+        if not self.experiment_log_file:
+            log.warning(f'log message can not be written to the experiment log because no log file is specified')
             return
-        with open(self.scenario_log_file.as_posix(), mode='a') as f:
+        with open(self.experiment_log_file.as_posix(), mode='a') as f:
             timestamp = datetime.now().strftime('%Y%m%d %H:%M:%S')
             message = f'[{timestamp}]: {content}'
             if not quiet:

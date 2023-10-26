@@ -1,4 +1,4 @@
-from guiautomation.Scenario.Scenario import Scenario
+from guiautomation.experiment.experiment import experiment
 from guibot.guibot import GuiBot
 from pathlib import Path
 
@@ -8,7 +8,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class restorefile(Scenario):
+class restorefile(experiment):
     description = "Restore file (testfile) from Trash Bin to home folder (Ubuntu)"
     guibot = None
 
@@ -41,7 +41,7 @@ class restorefile(Scenario):
     def run(self):
         guibot = self.guibot
 
-        log.info(f'scenario {type(self).__name__} started')
+        log.info(f'experiment {type(self).__name__} started')
 
         if guibot.exists('trashbin_files.png'):
             guibot.click('trashbin_files.png').idle(5)
@@ -60,4 +60,4 @@ class restorefile(Scenario):
             log.error('restoretrashbin.png does not exist')
             return -1
 
-        log.info(f'scenario {type(self).__name__} done')
+        log.info(f'experiment {type(self).__name__} done')

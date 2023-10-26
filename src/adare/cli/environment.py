@@ -51,22 +51,22 @@ def env_list(arguments):
 
 def env_run(arguments):
     """
-    run the provided scenario in the given environment
+    run the provided experiment in the given environment
 
     :param arguments: arguments parsed via input
     """
-    # todo: implement to run multiple scenarios or one scenario multiple times
+    # todo: implement to run multiple experiments or one experiment multiple times
     # todo: check if env name existing and if its correct?
 
     project_directory = determine_projectdirectory(arguments.project)
     # function_description = f'''
-    #     run the scenario {arguments.name} in the environment {arguments.name}
+    #     run the experiment {arguments.name} in the environment {arguments.name}
     #     (which itself can be found in the project directory with path {project_directory})
     # '''
     # log.info(function_description)
 
     project = Project(project_directory)
-    project.run_scenario(arguments.name, arguments.scenario, arguments.debugmode)
+    project.run_experiment(arguments.name, arguments.experiment, arguments.debugmode)
 
 
 def env_remove(arguments):
@@ -80,26 +80,26 @@ def env_remove(arguments):
     project.remove_environment(arguments.name)
 
 
-def env_create_scenario(arguments):
+def env_create_experiment(arguments):
     """
-    create scenario skeleton files [input file, gui scenario file] (in order to write your own scenario)
+    create experiment skeleton files [input file, gui experiment file] (in order to write your own experiment)
 
     :param arguments:  arguments parsed via input
     """
     project_directory = determine_projectdirectory(arguments.project)
     project = Project(project_directory)
-    project.create_scenario(arguments.name, arguments.scenario, networkdrive=arguments.networkdrive, usb=arguments.usb)
+    project.create_experiment(arguments.name, arguments.experiment, networkdrive=arguments.networkdrive, usb=arguments.usb)
 
 
-def env_remove_scenario(arguments):
+def env_remove_experiment(arguments):
     """
-    remove scenario skeleton files [input file, gui scenario file] (in order to write your own scenario)
+    remove experiment skeleton files [input file, gui experiment file] (in order to write your own experiment)
 
     :param arguments:  arguments parsed via input
     """
     project_directory = determine_projectdirectory(arguments.project)
     project = Project(project_directory)
-    project.remove_scenario(arguments.name, arguments.scenario)
+    project.remove_experiment(arguments.name, arguments.experiment)
 
 
 def env_addusb(arguments):

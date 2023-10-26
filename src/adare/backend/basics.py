@@ -2,7 +2,6 @@
 from pathlib import Path
 
 # internal imports
-import adare.config as config
 from adare.backend.exceptions import NoProjectFoundException
 
 # configure logging
@@ -56,4 +55,5 @@ def determine_projectdirectory(chosen_projectdirectory: str):
         if check_if_projectdirectory_is_valid('.'):
             return Path('.').absolute().as_posix()
         tested_project_paths.append(Path('.').absolute().as_posix())
-    raise NoProjectFoundException(tested_project_paths)
+    log.error(f'No valid project directory found. Tested paths: {str(tested_project_paths)} - in most cases you need navigate to the project directory')
+    exit(-1)

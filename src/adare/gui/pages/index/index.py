@@ -1,29 +1,27 @@
 from nicegui import ui
 
-from adare.gui.drawers.logindrawer import LoginDrawer
-from adare.gui.headers.header import Header
-from adare.gui.page_index.experimenttable import ExperimentTable
+from adare.gui.components.Header import Header
 from adare.gui.colors import set_colors
 from adare.gui import add_static_css_files
 
 @ui.page('/')
 def page_index():
+    # redirect to /runs (experiment run overview)
 
     # add custom css to page
     add_static_css_files()
     set_colors()
-
-    # create right drawer for login
-    right_drawer = LoginDrawer()
-    right_drawer.create()
-
-    # create header with tabs
+    #
+    # # create header with tabs
     header = Header()
-    header.create(right_drawer.drawer)
+    header.create()
 
-    # table containing all experiments
-    experiment_table = ExperimentTable()
-    experiment_table.create()
+    ui.open('/runs')
+
+    #
+    # # table containing all experiments
+    # experiment_table = ExperimentTable()
+    # experiment_table.create()
 
     # with ui.footer(value=False) as footer:
     #     footer.classes('bg-white h-full')

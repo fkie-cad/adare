@@ -32,8 +32,8 @@ echo "set resolution to {{ resolution }} done" | tail -n +1 | WriteLog
 sleep 30
 
 su -c "pip3 install /vagrant/scripts/GUIAutomation/" vagrant | tail -n +1 | WriteLog
-su -c "DISPLAY=:0 /home/vagrant/.local/bin/guiautomation --logfile {{ log_directory }}/gui.log run '{{ gui_scenario }}'" vagrant | tail -n +1 | WriteLog
-echo "automation for scenario {{ gui_scenario }} done" | tail -n +1| WriteLog
+su -c "DISPLAY=:0 /home/vagrant/.local/bin/guiautomation --logfile {{ log_directory }}/gui.log run '{{ gui_experiment }}'" vagrant | tail -n +1 | WriteLog
+echo "automation for experiment {{ gui_experiment }} done" | tail -n +1| WriteLog
 
 mkdir -p /vagrant/result/ | tail -n +1 | WriteLog
 
@@ -48,8 +48,8 @@ su -c "{{ setting }}" vagrant | tail -n +1 | WriteLog
 {% endfor %}
 
 su -c "pip3 install /vagrant/scripts/GUIAutomation/" vagrant | tail -n +1 | WriteLog
-su -c "/home/vagrant/.local/bin/guiautomation --logfile {{ log_directory }}/gui.log run '{{ gui_scenario }}'" vagrant | tail -n +1 | WriteLog
-echo "automation for scenario {{ gui_scenario }} done" | tail -n +1| WriteLog
+su -c "/home/vagrant/.local/bin/guiautomation --logfile {{ log_directory }}/gui.log run '{{ gui_experiment }}'" vagrant | tail -n +1 | WriteLog
+echo "automation for experiment {{ gui_experiment }} done" | tail -n +1| WriteLog
 
 mkdir -p /vagrant/result/ | tail -n +1 | WriteLog
 

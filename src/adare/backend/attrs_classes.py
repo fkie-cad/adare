@@ -33,7 +33,7 @@ class NetworkDrive:
     type: str
     local_path: Optional[str or None] = None
     remote_path: Optional[str or None] = None
-    scenarios: Optional[list] = attr.Factory(list)
+    experiments: Optional[list] = attr.Factory(list)
     # nfs specific
     options: Optional[list] = attr.Factory(list)  # currently not implemented
     allowed_hosts: Optional[str or None] = None
@@ -71,9 +71,9 @@ class NetworkDrive:
 
 
 @attr.define
-class Scenario:
+class Experiment:
     """
-    class to store information about a scenario
+    class to store information about an experiment
     """
     name: str
     description: str = ''
@@ -81,9 +81,9 @@ class Scenario:
     tags: list[str] = attr.Factory(list)
 
     # todo: maybe not only check if valid yaml also check if the custom syntax used by the project is correct
-    def input_is_valid(self) -> bool:
+    def testset_file_is_valid(self) -> bool:
         """
-        checks whether the provided input file for the scenario is valid
+        checks whether the provided input file for the experiment is valid
 
         :return: bool
         """
@@ -99,10 +99,10 @@ class Scenario:
             return False
         return True
 
-    # todo: find a way to check if gui scenario file is a valid python file
-    def guiscenario_is_valid(self) -> bool:
+    # todo: find a way to check if gui experiment file is a valid python file
+    def action_file_is_valid(self) -> bool:
         """
-        (not implemented so far) checks whether the provided gui scenario file for the scenario is valid
+        (not implemented so far) checks whether the provided gui experiment file for the experiment is valid
 
         :return:
         """
@@ -131,13 +131,13 @@ class UsbDevice:
     Manufacturer: Union[str, None] = None
     Product: Union[str, None] = None
     SerialNumber: Union[str, None] = None
-    scenarios: list = attr.Factory(list)
+    experiments: list = attr.Factory(list)
 
 
 @attr.define
 class PostsetupInstallations:
     """
-    class to store information about installations that should be done after boot but before the scenario
+    class to store information about installations that should be done after boot but before the experiment
     """
     name: str
     command: str
@@ -162,7 +162,7 @@ class EnvironmentConfiguration:
     pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
     idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
     settings: list = attr.Factory(list)
-    scenarios: list[Scenario] = attr.Factory(list)
+    experiments: list[Experiment] = attr.Factory(list)
     usbdevices: list[UsbDevice] = attr.Factory(list)
     networkdrives: list[NetworkDrive] = attr.Factory(list)
     postsetupinstallations: list[PostsetupInstallations] = attr.Factory(list)
@@ -187,7 +187,7 @@ class EnvironmentSetup:
     pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
     idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
     settings: list = attr.Factory(list)
-    scenarios: list[Scenario] = attr.Factory(list)
+    experiments: list[Experiment] = attr.Factory(list)
     usbdevices: list[UsbDevice] = attr.Factory(list)
     networkdrives: list[NetworkDrive] = attr.Factory(list)
     postsetupinstallations: list[PostsetupInstallations] = attr.Factory(list)
@@ -197,7 +197,7 @@ class EnvironmentSetup:
 @attr.define
 class ExamplesConfig:
     """
-    class to store details for example scenarios
+    class to store details for example experiments
     """
     networkdrives: list[NetworkDrive] = attr.Factory(list)
     usbdevices: list[UsbDevice] = attr.Factory(list)

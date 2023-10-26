@@ -1,5 +1,3 @@
-# external imports
-
 # internal imports
 from adare.config import PORT_WEBAPP
 from adare.helperFunctions.port.port import is_localhost_port_free

@@ -25,3 +25,10 @@ DB_STATUS_LIST = [
     'warning',
     'not reached'
 ]
+
+DB_PUBLISH_STATUS_LIST = [
+    'unknown',
+    'published',
+    'in request',
+    'not published'
+]

@@ -1,7 +1,7 @@
 from pathlib import Path
 import sys
 
-from guiautomation.Scenario.Scenario import Scenario
+from guiautomation.experiment.experiment import experiment
 from guiautomation.run import run
 from guibot.guibot import GuiBot
 
@@ -9,8 +9,8 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class {{ name }}(Scenario):
-    description = 'place the description of your scenario here '
+class {{ name }}(experiment):
+    description = 'place the description of your experiment here '
 
     def __init__(self):
         """
@@ -29,12 +29,12 @@ class {{ name }}(Scenario):
         """
             this function should be used to execute the gui automation steps
         """
-        log.info(f'scenario {type(self).__name__} started')
+        log.info(f'experiment {type(self).__name__} started')
 
         # place the code to execute some stuff here
 
 
-        log.info("scenario " + type(self).__name__ + " done")
+        log.info("experiment " + type(self).__name__ + " done")
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:

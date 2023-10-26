@@ -12,9 +12,6 @@ endif
 # This is most often used to store functions
 .PHONY = help install test systemtest unittest coverage clean flake # executable
 
-## Defining an array variable
-#FILES = input output
-
 # Defines the default target that `make` will to try to make, or in the case of a phony target, execute the specified commands
 # This target is executed whenever we just type `make`
 .DEFAULT_GOAL = help
@@ -28,8 +25,12 @@ help:
 	@echo "to show the coverage report and create a html report type make coverage (please make sure you run make test before)"
 	@echo "------------------------------------"
 
+appdata:
+	${PYTHON} install/copy_appdata.py
+
 install:
 	${PYTHON} -m pip install .
+	${PYTHON} install/copy_appdata.py
 
 test:
 	${PYTHON} -m coverage run -m pytest tests integration || exit 0
@@ -49,7 +50,8 @@ doc:
 
 clean_install:
 	${PYTHON} setup.py bdist_wheel clean
-	${PYTHON} -m pip install .
+	${PYTHON} -m pip install . --no-cache-dir
+	${PYTHON} install/copy_appdata.py
 
 flake:
 	${PYTHON} -m flake8 || exit 0
@@ -61,6 +63,3 @@ django-migrate:
 
 clean-package-dir:
 	${PYTHON} .\cleanup_package_dir.py
-
-#executable:
-#	pyinstaller .\src\adare\run.py

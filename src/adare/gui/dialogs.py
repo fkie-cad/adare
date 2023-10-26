@@ -1,7 +1,7 @@
 from nicegui import ui
 
-from adare.gui.login import LoginIface
-from adare.gui.publish import PublishExpIface
+from adare.gui.interfaces.login import LoginIface
+from adare.gui.interfaces.publish import PublishExpIface
 
 
 

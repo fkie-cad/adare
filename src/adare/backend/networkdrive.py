@@ -6,7 +6,6 @@ from pathlib import Path
 from adare.backend.attrs_classes import NetworkDrive
 from adare.networkdrive.Networkdrive import NetworkdriveVM
 from adare.networkdrive.attrs_classes import Share, SMBConfiguration, NFSConfiguration, SMBUser
-from adare.backend.exceptions import SafeDeletionError
 
 # configure logging
 import logging
@@ -21,11 +20,11 @@ class NetworkDriveContainer:
     VM: NetworkdriveVM
     directory: Path
 
-    def __init__(self, networkdrive_box: str, drives: list, scenario: str, networkdrive_directory: Path, smb_conf: SMBConfiguration = None, nfs_conf: NFSConfiguration = None):
+    def __init__(self, networkdrive_box: str, drives: list, experiment: str, networkdrive_directory: Path, smb_conf: SMBConfiguration = None, nfs_conf: NFSConfiguration = None):
         self.Drives = []
         self.directory = networkdrive_directory
         for drive in drives:
-            if scenario in drive.scenarios:
+            if experiment in drive.experiments:
                 self.Drives.append(drive)
         if not self.Drives:
             return
@@ -83,7 +82,8 @@ class NetworkDriveContainer:
             if Path(self.directory).parent.parent.name == "environments":
                 self.VM.cleanup()
             else:
-                raise SafeDeletionError(self.directory.as_posix())
+                log.warning('network drive vm can not be cleaned up')
+                exit(-1)
         else:
             log.warning('network drive vm can not be stopped because it is not running')
 

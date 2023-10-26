@@ -24,3 +24,8 @@ class VagrantFileWriteError(LoggedException):
 class VagrantBoxDestroyError(LoggedException):
     def __init__(self, reason: str = ''):
         super().__init__(reason)
+
+
+class VagrantBoxRunError(LoggedException):
+    def __init__(self, reason: str = ''):
+        super().__init__(reason)

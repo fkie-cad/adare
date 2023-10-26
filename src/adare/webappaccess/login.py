@@ -1,28 +1,39 @@
 # external imports
-import requests
-import json
 from datetime import datetime
-from pathlib import Path
+import aiohttp
+import asyncio
 
 # internal imports
 import adare.config.server as config_server
 from adare.database.database import UserSessionApi
 from adare.webappaccess.request_header import get_authenticated_request_header
+from adare.webappaccess.webapp import check_webserver_availability
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
 
 class WebappLogin:
-    login_api_url = config_server.LOGIN_URL
-    logout_api_url = config_server.LOGOUT_URL
 
     def __init__(self):
         self.__remove_expired_sessions()
 
+    async def __get_crsf_token(self, req_session: aiohttp.ClientSession):
+        try:
+            async with req_session.get(config_server.CSRF_URL, timeout=config_server.TIMEOUT_SECONDS) as response:
+                csrf = response.cookies['csrftoken'].value
+                req_session.headers.update({'X-CSRFToken': csrf})
+                log.info(f'CSRF token {csrf} received')
+                return csrf
+        except asyncio.exceptions.TimeoutError as e:
+            log.error("CSRF token request failed due to timeout")
+            # close the session to prevent errors
+            return None
+
     def __remove_expired_sessions(self):
         with UserSessionApi() as user_session_api:
             user_session_api.remove_expired_user_sessions()
+
     def __add_user_session(self, username, response_json):
         token_cookie = response_json['token']
         expiration_date = datetime.strptime(response_json['expiry'], '%Y-%m-%dT%H:%M:%S.%fZ')
@@ -33,9 +44,9 @@ class WebappLogin:
         with UserSessionApi() as user_session_api:
             user_session_api.remove_user_session(username=username)
 
-    def get_user_session(self, username):
+    def get_user_session(self, username=None):
         self.__remove_expired_sessions()
-        log.debug(f"Check if user '{username}' is logged in")
+        log.debug(f"Check if user {'' if not username else username} is logged in")
         with UserSessionApi() as user_session_api:
             if not username:
                 # if no username is given check for the first user in database
@@ -45,42 +56,61 @@ class WebappLogin:
             if not user_session:
                 return None
             else:
+                # expunge the user session from the sqlalchemy session to prevent errors
                 user_session_api._session.expunge(user_session)
                 return user_session
 
 
-    def login(self, username, password):
+    async def login(self, username, password):
+        req_session = aiohttp.ClientSession()
         log.debug(f"Login to webapp as user '{username}'")
-        url = self.login_api_url
-        payload = {'username': username, 'password': password}
-        headers = {'Content-Type': 'application/json'}
+        if not await check_webserver_availability():
+            log.error("Login failed due to webserver is not available")
+            await req_session.close()
+            return False, 'webserver is not available'
+
+        url = config_server.LOGIN_URL
+        if not await self.__get_crsf_token(req_session):
+            log.error("Login failed due to CSRF token request failed")
+            await req_session.close()
+            return False, 'csrf token request failed due to timeout'
+
+        data = {'username': username, 'password': password}
         try:
-            response = requests.post(url, data=json.dumps(payload), headers=headers)
-        except requests.exceptions.ConnectionError as e:
+            async with req_session.post(url, json=data) as response:
+                if response.status == 200:
+                    self.__add_user_session(username, await response.json())
+                    log.debug("Login successful")
+                    await req_session.close()
+                    return True, ''
+                else:
+                    log.error("Login failed")
+                    await req_session.close()
+                    return False, 'login failed due to wrong username or password'
+        except aiohttp.ClientConnectionError as e:
             log.error(f"Login failed most likely the server is not running")
             log.debug(e, exc_info=True)
-            return 'connection error'
-        if response.status_code == 200:
-            self.__add_user_session(username, response.json())
-            log.debug("Login successful")
-            return 'success'
-        else:
-            log.error("Login failed")
-            return 'failed'
+            await req_session.close()
+            return False, 'server is not running'
 
-    def logout(self, username):
+    async def logout(self, username):
         log.debug("Logout from webapp")
-        url = self.logout_api_url
+        req_session = aiohttp.ClientSession()
+
+        url = config_server.LOGOUT_URL
         token = self.get_user_session(username).token
         if not token:
             log.error(f"user '{username}' is not logged in")
+            await req_session.close()
             return False
-        header = get_authenticated_request_header(token, config_server.WEBSERVER_URL)
-        response = requests.post(url, json={'username': username},headers=header)
-        if response.status_code == 204:
-            log.debug("Logout successful")
-            self.__remove_user_session(username)
-            return True
-        else:
-            log.error("Logout failed")
-            return False
+        header = get_authenticated_request_header(token)
+        async with req_session.post(url, json={'username': username},headers=header) as response:
+            if response.status == 204:
+                log.debug("Logout successful")
+                self.__remove_user_session(username)
+                await req_session.close()
+                return True
+            else:
+                log.error("Logout failed")
+                await req_session.close()
+                return False

@@ -1,6 +1,6 @@
 import os
 
-from guiautomation.Scenario.Scenario import Scenario
+from guiautomation.experiment.experiment import experiment
 from guibot.guibot import GuiBot
 from pathlib import Path
 
@@ -10,7 +10,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class deletefolder(Scenario):
+class deletefolder(experiment):
     description = "Delete file from home folder to Trash Bin (Linux Mint 20.03)"
     guibot = None
 
@@ -29,7 +29,7 @@ class deletefolder(Scenario):
     def run(self):
         guibot = self.guibot
 
-        log.info(f'scenario {type(self).__name__} started')
+        log.info(f'experiment {type(self).__name__} started')
 
         if guibot.exists('files_taskbar.png'):
             guibot.click('files_taskbar.png').idle(5)
@@ -44,5 +44,5 @@ class deletefolder(Scenario):
             log.error('testfolder.png icon cant be found')
             return -1
 
-        log.info(f'scenario {type(self).__name__} done')
+        log.info(f'experiment {type(self).__name__} done')
 

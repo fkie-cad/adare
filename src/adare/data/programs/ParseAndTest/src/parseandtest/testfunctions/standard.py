@@ -186,7 +186,7 @@ class CheckTimestampParameter(Parameter):
 # @define
 # class CheckTimestamp(BasicTest):
 #     testname: ClassVar[str] = 'check_timestamp'
-#     testdescription: ClassVar[str] = 'tests if a timestamp in a file can be found, which is identical to timestamp stored by the gui scenario'
+#     testdescription: ClassVar[str] = 'tests if a timestamp in a file can be found, which is identical to timestamp stored by the gui experiment'
 #
 #     name: str
 #     params: CheckTimestampParameter

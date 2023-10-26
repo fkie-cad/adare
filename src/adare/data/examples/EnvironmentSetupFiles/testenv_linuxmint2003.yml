@@ -11,4 +11,4 @@ postsetupinstallations:
     command: "apt-get --yes install python3-tk"
   - name: "python3dev"
     command: "apt-get --yes install python3-dev"
-scenarios: []
+experiments: []

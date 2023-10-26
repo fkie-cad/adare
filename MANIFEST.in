@@ -1,6 +1,7 @@
 recursive-include src/adare/data *
-recursive-include src/adare/gui/static *
-recursive-include src/adare/vagrantapi/VagrantfileCreator/VagrantfileTemplate *
-recursive-include src/adare/networkdrive/templates *
-recursive-include src/adare/webapi *
+
+prune **/*.egg-info
+prune **/.idea
+prune **/venv
 prune **/build
+prune **/dist

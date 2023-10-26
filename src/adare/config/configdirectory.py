@@ -28,3 +28,7 @@ def get_default_config_directory(create_if_missing: bool = False, program_name: 
         log.error(f'the config directory ({config_path}) of the tool is missing')
         return None
     return config_path
+
+APPDATA_DIR = get_default_config_directory(create_if_missing=False)
+WEBAPP_FILES = get_default_config_directory(create_if_missing=True)/'webapp'
+WEBAPP_STATIC_FILES = WEBAPP_FILES/'static'
