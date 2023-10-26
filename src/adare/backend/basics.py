@@ -1,9 +1,6 @@
 # external imports
 from pathlib import Path
 
-# internal imports
-from adare.backend.exceptions import NoProjectFoundException
-
 # configure logging
 import logging
 log = logging.getLogger(__name__)
