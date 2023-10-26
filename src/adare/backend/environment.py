@@ -12,18 +12,16 @@ import os
 
 # internal imports
 import adare.config as config
-from adare.backend.attrs_classes import Scenario, UsbDevice, ExamplesConfig, NetworkDrive, \
+from adare.backend.attrs_classes import Experiment, UsbDevice, ExamplesConfig, NetworkDrive, \
     EnvironmentConfiguration, EnvironmentSetup
 from adare.backend.networkdrive import NetworkDriveContainer
 from adare.helperFunctions.yaml import yaml_to_dict, dict_to_yaml
 from adare.helperFunctions.csv import csv_to_dict
+from adare.helperFunctions.hash import hash_file_sha256, combine_hashes
 from adare.helperFunctions.jinja.jinjafeatures import init_jinja_environment
 from adare.backend.script_creation.scripts import PostsetupInstallationsScript, RunExperimentScript, SaveInstalledPackagesScript, MountNetworkDriveScript
 from adare.backend.script_creation.Scriptmanager import ScriptManager
 from adare.backend.script_creation.Script import Script
-from adare.backend.exceptions import EnvironmentInitializationFailed, EnvironmentSetupFileMissing, \
-    EnvironmentConfigurationMissing, EnvironmentSetupSyntaxError, EnvironmentAlreadyExists, \
-    PackageTemplateFolderMissing, ScenarioAlreadyExists
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
 from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.database.database import ExperimentApi
@@ -37,7 +35,7 @@ log = logging.getLogger(__name__)
 class Environment:
     """
     This class in used in order to maintain and change an environment.
-    It contains functions to create, run, list and remove a scenario.
+    It contains functions to create, run, list and remove a experiment.
     """
     name: str
 
@@ -45,7 +43,7 @@ class Environment:
 
     base_directory: Path
     programs_directory: Path
-    guiscenario_directory: Path
+    guiexperiment_directory: Path
     log_directory: Path
 
     configuration_file: str
@@ -72,11 +70,14 @@ class Environment:
         self.setup = None
 
         self.project_directory = project_directory
+        self.project_setup_directory = project_directory / 'setup'
+
         self.base_directory = (self.project_directory / 'environments' / name)
         if create:
             self.setupfile = self.__find_setup_file(setupfile)
             if self.base_directory.exists():
-                raise EnvironmentAlreadyExists(self.name)
+                log.error(f'environment {name} already exists')
+                exit(-1)
             self.setup = self.__load_setup()
             self.__script_suffix = config.SCRIPTS_SUFFIX[self.setup.os_platform]
             self.project_scripts_directory = project_directory / 'programs' / 'templates' / self.setup.os_platform
@@ -91,11 +92,11 @@ class Environment:
             self.__load()
 
         if not self.configuration:
-            raise EnvironmentInitializationFailed(self.name)
+            log.error(f'environment {name} initialization failed')
+            exit(-1)
 
         # set up paths used in project an environment
         self.project_scripts_directory = project_directory/'programs'/'templates'/self.configuration.os_platform
-        self.project_setup_directory = project_directory / 'setup'
         self.project_additional_tools_directory = project_directory/'additional_tools'
         self.project_guiautomation_program = project_directory/'programs'/'GUIAutomation'
         self.project_parseandtest_program = project_directory/'programs' /'ParseAndTest'
@@ -103,7 +104,7 @@ class Environment:
         self.log_directory = self.base_directory / 'logs'
         self.result_directory = self.base_directory / 'result'
         self.run_directory = self.base_directory / 'run'
-        self.scenario_directory = self.base_directory / 'scenario'
+        self.experiment_directory = self.base_directory / 'experiment'
 
         # set up paths from the view of the guest/vm
         vm_root_path = Path(r'/')
@@ -117,7 +118,7 @@ class Environment:
         self.vm_environment_logs_directory = self.vm_project_directory / 'environments' / self.name / 'logs'
         self.vm_environment_result_directory = self.vm_project_directory / 'environments' / self.name / 'result'
         self.vm_environment_run_directory = self.vm_project_directory / 'environments' / self.name / 'run'
-        self.vm_environment_scenario_directory = self.vm_project_directory / 'environments' / self.name / 'scenario'
+        self.vm_environment_experiment_directory = self.vm_project_directory / 'environments' / self.name / 'experiment'
 
         self.vm_tessdata_directory = self.vm_project_directory/'tessdata'
 
@@ -139,7 +140,8 @@ class Environment:
                 if file.stem == self.name:
                     setupfile = file.as_posix()
         if not setupfile:
-            raise EnvironmentSetupFileMissing(self.name)
+            log.error(f'no setup file found for environment {self.name} found')
+            exit(-1)
         return setupfile
 
     def __load_setup(self):
@@ -153,13 +155,14 @@ class Environment:
         try:
             setup_dict = yaml_to_dict(self.setupfile)
         except FileNotFoundError:
-            raise EnvironmentSetupFileMissing(self.name)
+            log.error(f'setup file {self.setupfile} for the environment not found')
+            exit(-1)
         try:
             setup = cattrs.structure(setup_dict, EnvironmentSetup)
         except ClassValidationError as e:
             log.error('environment setup file could not be read because of the following exception')
             log.error(e, exc_info=True)
-            raise EnvironmentSetupSyntaxError()
+            exit(-1)
         return setup
 
     def __load_configuration(self) -> EnvironmentConfiguration:
@@ -170,7 +173,8 @@ class Environment:
         """
         data = yaml_to_dict(self.configuration_file)
         if not data:
-            raise EnvironmentConfigurationMissing
+            log.error(f'environment configuration file {self.configuration_file} not found')
+            exit(-1)
         self.configuration = cattrs.structure(data, EnvironmentConfiguration)
         return self.configuration
 
@@ -193,14 +197,15 @@ class Environment:
         """
         self.__create_jinja_project()
         if not self.__jinja_project:
-            raise EnvironmentInitializationFailed(self.name)
+            log.error(f'jinja env could not be created')
+            exit(-1)
 
         self.base_directory.mkdir()
 
-        for folder in ['logs', 'result', 'networkdrives', 'scenario', 'run']:
+        for folder in ['logs', 'result', 'networkdrives', 'experiment', 'run']:
             (self.base_directory / folder).mkdir()
 
-        # todo: optionally add option to provide scenarios via setup file
+        # todo: optionally add option to provide experiments via setup file
         self.configuration = EnvironmentConfiguration(name=self.name,
                                                       vagrantbox=self.setup.vagrantbox,
                                                       os_platform=self.setup.os_platform,
@@ -214,7 +219,7 @@ class Environment:
                                                       pause_after_gui_automation=self.setup.pause_after_gui_automation,
                                                       idle_after_os_starts=self.setup.idle_after_os_starts,
                                                       settings=self.setup.settings,
-                                                      scenarios=[],
+                                                      experiments=[],
                                                       usbdevices=self.setup.usbdevices,
                                                       networkdrives=self.setup.networkdrives,
                                                       postsetupinstallations=self.setup.postsetupinstallations)
@@ -233,111 +238,113 @@ class Environment:
         """
         shutil.rmtree(self.base_directory.as_posix())
 
-    def __check_if_gui_scenario_exists(self, scenario_name: str) -> str or None:
+    def __check_if_gui_experiment_exists(self, experiment_name: str) -> str or None:
         """
-        check if a gui scenario file to a provided scenario is existing
+        check if a gui experiment file to a provided experiment is existing
 
-        :param scenario_name: name of the scenario
-        :return: path of the gui scenario file; None if no matching gui scenario file found
+        :param experiment_name: name of the experiment
+        :return: path of the gui experiment file; None if no matching gui experiment file found
         """
-        guiscenario_path = None
-        for obj in glob.glob((self.guiscenario_directory / '**' / '*.yml').as_posix()):
-            if Path(obj).stem == scenario_name:
-                guiscenario_path = Path(obj).absolute().as_posix()
-        return guiscenario_path
+        guiexperiment_path = None
+        for obj in glob.glob((self.guiexperiment_directory / '**' / '*.yml').as_posix()):
+            if Path(obj).stem == experiment_name:
+                guiexperiment_path = Path(obj).absolute().as_posix()
+        return guiexperiment_path
 
-    def __create_gui_scenario_skeleton(self, scenario_name: str):
+    def __create_gui_experiment_skeleton(self, experiment_name: str):
         """
-        creates a gui scenario skeleton file for a given scenario name
+        creates a gui experiment skeleton file for a given experiment name
         """
         template_directory = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/templates'))
         if not Path(template_directory).is_dir():
-            raise PackageTemplateFolderMissing
+            log.error(f'template directory {template_directory} is missing')
+            exit(-1)
         jinja = init_jinja_environment(template_directory.as_posix())
-        template = jinja.get_template('ScenarioTemplate')
-        filepath = self.scenario_directory/scenario_name/f'{scenario_name}.py'
+        template = jinja.get_template('ExperimentTemplate')
+        filepath = self.experiment_directory/experiment_name/f'{experiment_name}.py'
         with open(filepath.as_posix(), mode='w') as f:
             f.write(
                 template.render(
                     {
-                        'name': scenario_name
+                        'name': experiment_name
                     }
                 )
             )
 
-    def __create_input_skeleton(self, scenario_name: str):
+    def __create_testsetfile_skeleton(self, experiment_name: str):
         """
-        creates a input file skeleton file for a given scenario name
+        creates a testset file skeleton file for a given experiment name
         """
         template_directory = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/templates'))
         if not Path(template_directory).is_dir():
-            raise PackageTemplateFolderMissing
+            log.error(f'template directory {template_directory} is missing')
+            exit(-1)
         jinja = init_jinja_environment(template_directory.as_posix())
-        template = jinja.get_template('InputfileTemplate')
-        filepath = self.scenario_directory / scenario_name / f'{scenario_name}.yml'
+        template = jinja.get_template('TestsetfileTemplate')
+        filepath = self.experiment_directory / experiment_name / f'{experiment_name}.yml'
         with open(filepath.as_posix(), mode='w') as f:
             f.write(
                 template.render(
                     {
-                        'name': scenario_name
+                        'name': experiment_name
                     }
                 )
             )
 
-    def create_scenario(self, scenario_name: str, usb_name: str or None = None, networkdrive_name: str or None = None):
+    def create_experiment(self, experiment_name: str, usb_name: str or None = None, networkdrive_name: str or None = None):
         """
-        create scenario skeleton files (input file and gui scenario file)
+        create experiment skeleton files (testset file and gui experiment file)
 
-        :param usb_name: name of usb device that is used in the scenario
-        :param scenario_name: name of the scenario to be created
+        :param usb_name: name of usb device that is used in the experiment
+        :param experiment_name: name of the experiment to be created
         """
-        if self.__find_scenario(scenario_name):
-            log.error(f'scenario with name {scenario_name} is already existing -> choose another name or delete the old scenario')
+        if self.__find_experiment(experiment_name):
+            log.error(f'experiment with name {experiment_name} is already existing -> choose another name or delete the old experiment')
             return
-        filepath = self.scenario_directory / scenario_name
+        filepath = self.experiment_directory / experiment_name
         filepath.mkdir()
-        self.__create_gui_scenario_skeleton(scenario_name)
-        self.__create_input_skeleton(scenario_name)
+        self.__create_gui_experiment_skeleton(experiment_name)
+        self.__create_testsetfile_skeleton(experiment_name)
         img_dir = filepath/'img'
         img_dir.mkdir()
         if usb_name:
-            self.__add_usb_to_scenario(scenario_name, usb_name)
+            self.__add_usb_to_experiment(experiment_name, usb_name)
         if networkdrive_name:
-            self.__add_networkdrive_to_scenario(scenario_name, networkdrive_name)
+            self.__add_networkdrive_to_experiment(experiment_name, networkdrive_name)
         print('\n\n')
-        print(f'new scenario skeleton created (path:{filepath})')
-        log.debug(f'skeleton for scenario {scenario_name} created')
+        print(f'new experiment skeleton created (path:{filepath})')
+        log.debug(f'skeleton for experiment {experiment_name} created')
 
-    def remove_scenario(self, scenario_name: str):
+    def remove_experiment(self, experiment_name: str):
         """
-        removes a scenario (includes both input file and gui scenario file as well as the scenario class)
+        removes a experiment (includes both testset file and gui experiment file as well as the experiment class)
 
-        :param scenario_name: name of the scenario to be removed
+        :param experiment_name: name of the experiment to be removed
         """
-        scenario_dataclass = self.__find_scenario(scenario_name)
-        if not scenario_dataclass:
-            log.error(f'scenario with name {scenario_name} does NOT exist in environment')
+        experiment_dataclass = self.__find_experiment(experiment_name)
+        if not experiment_dataclass:
+            log.error(f'experiment with name {experiment_name} does NOT exist in environment')
             return
-        shutil.rmtree(scenario_dataclass.directory)
-        self.__remove_scenario_class(scenario_name)
-        log.info(f'scenario {scenario_name} got deleted')
+        shutil.rmtree(experiment_dataclass.directory)
+        self.__remove_experiment_class(experiment_name)
+        log.info(f'experiment {experiment_name} got deleted')
 
-    def __add_usb_to_scenario(self, scenario_name: str, usb_name: str):
+    def __add_usb_to_experiment(self, experiment_name: str, usb_name: str):
         """
-        add a usb device to a scenario
+        add a usb device to a experiment
 
-        :param scenario_name: name of the scenario
-        :param usb_name: name of the usb, that should be added to the scenario
+        :param experiment_name: name of the experiment
+        :param usb_name: name of the usb, that should be added to the experiment
         """
         Usb = self.__find_usb(usb_name)
         if not Usb:
             log.error(
                 f'usb device {usb_name} is not existing in environment -> add a usb device to the environment first')
-        if scenario_name not in Usb.scenarios:
-            Usb.scenarios.append(scenario_name)
-            log.info(f'usb device {Usb.name} got added successfully to scenario {scenario_name}')
+        if experiment_name not in Usb.experiments:
+            Usb.experiments.append(experiment_name)
+            log.info(f'usb device {Usb.name} got added successfully to experiment {experiment_name}')
         else:
-            log.warning(f'scenario {scenario_name} does already use usb device {usb_name}')
+            log.warning(f'experiment {experiment_name} does already use usb device {usb_name}')
         self.__save_configuration()
 
     def __find_usb(self, usb_name: str) -> UsbDevice or None:
@@ -364,16 +371,16 @@ class Environment:
         self.__save_configuration()
         log.info(f'usb {usb.name} got added successfully')
 
-    def __add_networkdrive_to_scenario(self, scenario_name: str, networkdrive_name: str):
+    def __add_networkdrive_to_experiment(self, experiment_name: str, networkdrive_name: str):
         Networkdrive = self.__find_networkdrive(networkdrive_name)
         if not Networkdrive:
             log.error(
                 f'network drive {networkdrive_name} is not existing in environment -> add this network drive to the environment first')
-        if scenario_name not in Networkdrive.scenarios:
-            Networkdrive.scenarios.append(scenario_name)
-            log.info(f'network drive {Networkdrive.name} got added successfully to scenario {scenario_name}')
+        if experiment_name not in Networkdrive.experiments:
+            Networkdrive.experiments.append(experiment_name)
+            log.info(f'network drive {Networkdrive.name} got added successfully to experiment {experiment_name}')
         else:
-            log.warning(f'scenario {scenario_name} does already use network drive {networkdrive_name}')
+            log.warning(f'experiment {experiment_name} does already use network drive {networkdrive_name}')
         self.__save_configuration()
 
     def __find_networkdrive(self, networkdrive_name: str) -> NetworkDrive or None:
@@ -391,49 +398,50 @@ class Environment:
         log.info(f'network drive {networkdrive.name} got added successfully')
 
 
-    def __find_scenario(self, scenario_name: str) -> Scenario or None:
+    def __find_experiment(self, experiment_name: str) -> Experiment or None:
         """
-        find the dataclass for a scenario
+        find config for the experiment in the environment configuration file
 
-        :param scenario_name: name of the scenario
-        :return dataclass for scenario if scenario was found and None in all other cases
+        :param experiment_name: name of the experiment
+        :return dataclass for experiment if experiment was found and None in all other cases
         """
-        for sce in self.configuration.scenarios:
-            if sce.name == scenario_name:
+        for sce in self.configuration.experiments:
+            if sce.name == experiment_name:
                 return sce
         return None
 
-    def __remove_scenario_class(self, scenario_name: str):
+    def __remove_experiment_class(self, experiment_name: str):
         """
-        removes the dataclass for an scenario
+        removes the dataclass for an experiment
 
-        :param scenario_name: name of the scenario
+        :param experiment_name: name of the experiment
         :return:
         """
-        for sce in self.configuration.scenarios:
-            if sce.name == scenario_name:
-                self.configuration.scenarios.remove(sce)
+        for sce in self.configuration.experiments:
+            if sce.name == experiment_name:
+                self.configuration.experiments.remove(sce)
 
-    def __create_scenario_class(self, scenario_name: str, description='') -> Scenario or None:
+    def __create_experiment_class(self, experiment_name: str, description='') -> Experiment or None:
         """
-        creates a new dataclass for scenario and adds it to the environment configuration
+        creates a new dataclass for experiment and adds it to the environment configuration
 
-        :param scenario_name: name of the scenario
-        :param description: description for the scenario
+        :param experiment_name: name of the experiment
+        :param description: description for the experiment
         :return:
         """
-        if self.__find_scenario(scenario_name):
-            raise ScenarioAlreadyExists
-        scenario_dataclass = Scenario(scenario_name, description)
-        self.configuration.scenarios.append(
-            scenario_dataclass
+        if self.__find_experiment(experiment_name):
+            log.error(f'experiment with name {experiment_name} is already existing -> choose another name or delete the old experiment')
+            exit(-1)
+        experiment_dataclass = Experiment(experiment_name, description)
+        self.configuration.experiments.append(
+            experiment_dataclass
         )
-        return scenario_dataclass
+        return experiment_dataclass
 
 
-    def add_scenario_to_config(self, scenario_name: str, scenario_path: Path):
-        scenario_class = self.__create_scenario_class(scenario_name)
-        scenario_class.directory = scenario_path.absolute().as_posix()
+    def add_experiment_to_config(self, experiment_name: str, experiment_path: Path):
+        experiment_class = self.__create_experiment_class(experiment_name)
+        experiment_class.directory = experiment_path.absolute().as_posix()
         self.__save_configuration()
 
     def add_examples(self):
@@ -441,16 +449,16 @@ class Environment:
         ask the user if examples should be included and includes them if wished
         """
         include_examples = False
-        scenario_directory_in_package = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/examples/scenarios'))
+        experiment_directory_in_package = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/examples/experiments'))
         if 'ubuntu' in self.configuration.vagrantbox:
             example_class_name = 'Ubuntu Trash Bin'
-            scenario_directory = scenario_directory_in_package / 'UbuntuTrashBin'
+            experiment_directory = experiment_directory_in_package / 'UbuntuTrashBin'
         elif 'linuxmint' in self.configuration.vagrantbox:
             example_class_name = 'Linux Mint Trash Bin'
-            scenario_directory = scenario_directory_in_package / 'LinuxMintTrashBin'
+            experiment_directory = experiment_directory_in_package / 'LinuxMintTrashBin'
         elif 'win' in self.configuration.vagrantbox:
             example_class_name = 'Windows Trash Bin'
-            scenario_directory = scenario_directory_in_package / 'WindowsTrashBin'
+            experiment_directory = experiment_directory_in_package / 'WindowsTrashBin'
             rbcmd_tool = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/programs/additional_tools'))/'RBCmd.exe'
             shutil.copy(rbcmd_tool.as_posix(), self.project_additional_tools_directory)
         else:
@@ -463,7 +471,7 @@ class Environment:
             log.info('examples will be NOT included')
 
         if include_examples:
-            example_config = (scenario_directory / 'config.yml').as_posix()
+            example_config = (experiment_directory / 'config.yml').as_posix()
             example_config_dict = yaml_to_dict(example_config)
             Example_Config = cattrs.structure(example_config_dict, ExamplesConfig)
             existing_network_drives = [d.name for d in self.configuration.networkdrives]
@@ -473,21 +481,21 @@ class Environment:
                 else:
                     log.warning(f'{network_drive.name} is already existing in the environment and will not be added')
 
-            for scenario in scenario_directory.iterdir():
-                if scenario.is_dir():
-                    scenario_path = self.scenario_directory/scenario.name
-                    shutil.copytree(scenario.as_posix(), scenario_path.as_posix())
-                    self.add_scenario_to_config(scenario.name, scenario_path)
+            for experiment in experiment_directory.iterdir():
+                if experiment.is_dir():
+                    experiment_path = self.experiment_directory/experiment.name
+                    shutil.copytree(experiment.as_posix(), experiment_path.as_posix(), ignore=shutil.ignore_patterns('*.pyc', '__pycache__'))
+                    self.add_experiment_to_config(experiment.name, experiment_path)
 
 
 
 
 
-    # def setup_network_drives(self, jinja: jinja2.Environment, scenario_name: str, logfolder: str) -> list or None:
+    # def setup_network_drives(self, jinja: jinja2.Environment, experiment_name: str, logfolder: str) -> list or None:
     #     P_mountnetworkdrivescript = self.script_directory / f'mount_networkdrives{self.__script_suffix}'
     #     used_network_drives = []
     #     for drive in self.setup.networkdrives:
-    #         if scenario_name in drive.scenarios:
+    #         if experiment_name in drive.experiments:
     #             used_network_drives.append(drive)
     #
     #     if used_network_drives:
@@ -540,20 +548,20 @@ class Environment:
     #         script_mountnetworkdrive.write()
     #         return []
 
-    def __create_scenario_config_file(self, scenario: str, vm_environment_scenario_log_directory: Path, vm_scenario_status_file: Path) -> (Path, Path):
+    def __create_experiment_config_file(self, experiment: str, vm_environment_experiment_log_directory: Path, vm_experiment_status_file: Path) -> (Path, Path):
         data = {
-            'img_folder': (self.vm_environment_scenario_directory/scenario/'img').as_posix(),
+            'img_folder': (self.vm_environment_experiment_directory/experiment/'img').as_posix(),
             'tessdata_folder': self.vm_tessdata_directory.as_posix(),
-            'logfile': (vm_environment_scenario_log_directory/'gui.log').as_posix(),
-            'statusfile': vm_scenario_status_file.as_posix()
+            'logfile': (vm_environment_experiment_log_directory/'gui.log').as_posix(),
+            'statusfile': vm_experiment_status_file.as_posix()
         }
-        filename = 'scenario_config.yml'
+        filename = 'experiment_config.yml'
         filepath = self.run_directory/filename
         vm_filepath = self.vm_environment_run_directory/filename
         dict_to_yaml(filepath, data)
         return filepath, vm_filepath
 
-    def create_Vagrantfile(self, scenario_name: str, hostonly: bool = False, networkdrive_active=False):
+    def create_Vagrantfile(self, experiment_name: str, hostonly: bool = False, networkdrive_active=False):
         conf = self.configuration
         Vagrant_creator = VagrantFile()
 
@@ -572,7 +580,7 @@ class Environment:
 
         usbdevices = []
         for usbdevice in conf.usbdevices:
-            if scenario_name in usbdevice.scenarios:
+            if experiment_name in usbdevice.experiments:
                 usbdevices.append(usbdevice)
 
         Vagrant_creator.add_synced_folder(self.project_directory, Path('/project'))
@@ -635,40 +643,45 @@ class Environment:
             return
         return Vagrant_creator
 
-    def __save_results_in_database(self, scenario: str, result_file: Path, timestamps: dict, vg_exitcode: int, scenario_log_directory: Path):
-
-        input_file = self.scenario_directory / scenario / (scenario + ".yml")
-        if not input_file.is_file():
-            log.error(f'input file is missing')
+    def __save_results_in_database(self, experiment: str, result_file: Path, timestamps: dict, vg_exitcode: int, experiment_log_directory: Path):
+        action_file = self.experiment_directory / experiment / (experiment + ".py")
+        if not action_file.is_file():
+            log.error(f'action file is missing')
             return
 
-        parser = YAMLInputParser(input_file)
-        inputdata = parser.parse()
+        testset_file = self.experiment_directory / experiment / (experiment + ".yml")
+        if not testset_file.is_file():
+            log.error(f'testset file is missing')
+            return
 
-        resultdata = None
+        parser = YAMLInputParser(testset_file)
+        testsetdata = parser.parse()
+
+        result_data = None
         if not result_file.is_file():
             log.warning(f'result file is missing')
         else:
-            resultdata = yaml_to_dict(result_file)
+            result_data = yaml_to_dict(result_file)
 
         logfiledata = {
-            'logfile_vagrant': (scenario_log_directory/'vagrant.log').absolute().as_posix() if (scenario_log_directory/'vagrant.log').is_file() else None,
-            'logfile_gui_automation': (scenario_log_directory/'gui.log').absolute().as_posix() if (scenario_log_directory/'gui.log').is_file() else None,
-            'logfile_parse_and_test': (scenario_log_directory/'parseandtest.log').absolute().as_posix() if (scenario_log_directory/'parseandtest.log').is_file() else None,
-            'logfile_postsetup_installations': (scenario_log_directory/'postsetup_installations.log').absolute().as_posix() if (scenario_log_directory/'postsetup_installations.log').is_file() else None,
-            'logfile_installed_packages': (scenario_log_directory/'save_installed_packages.log').absolute().as_posix() if (scenario_log_directory/'save_installed_packages.log').is_file() else None,
-            'logfile_run_experiment': (scenario_log_directory/'run_experiment.log').absolute().as_posix() if (scenario_log_directory/'run_experiment.log').is_file() else None,
+            'logfile_vagrant': (experiment_log_directory/'vagrant.log').absolute().as_posix() if (experiment_log_directory/'vagrant.log').is_file() else None,
+            'logfile_gui_automation': (experiment_log_directory/'gui.log').absolute().as_posix() if (experiment_log_directory/'gui.log').is_file() else None,
+            'logfile_parse_and_test': (experiment_log_directory/'parseandtest.log').absolute().as_posix() if (experiment_log_directory/'parseandtest.log').is_file() else None,
+            'logfile_postsetup_installations': (experiment_log_directory/'postsetup_installations.log').absolute().as_posix() if (experiment_log_directory/'postsetup_installations.log').is_file() else None,
+            'logfile_installed_packages': (experiment_log_directory/'save_installed_packages.log').absolute().as_posix() if (experiment_log_directory/'save_installed_packages.log').is_file() else None,
+            'logfile_run_experiment': (experiment_log_directory/'run_experiment.log').absolute().as_posix() if (experiment_log_directory/'run_experiment.log').is_file() else None,
         }
 
         VAGRANT_EXITCODE_STATUS_MAPPING = {
             'default': 'failed',
             0: 'success'
         }
-        vagrant_status = ['default']
         if vg_exitcode in VAGRANT_EXITCODE_STATUS_MAPPING.keys():
             vagrant_status = VAGRANT_EXITCODE_STATUS_MAPPING[vg_exitcode]
+        else:
+            vagrant_status = VAGRANT_EXITCODE_STATUS_MAPPING['default']
 
-        status_file = scenario_log_directory/'status.csv'
+        status_file = experiment_log_directory/'status.csv'
         statusdata = {}
         if status_file.is_file():
             statusdata = csv_to_dict(status_file)
@@ -678,8 +691,8 @@ class Environment:
 
         status_total = 'failed'
         if statusdata['VAGRANT'] == 'success':
-            if 'gui' and 'parseandtest' in statusdata.keys():
-                if statusdata['gui'] == 'success' and statusdata['parseandtest'] == 'success':
+            if 'RUN_gui' and 'RUN_parseandtest' in statusdata.keys():
+                if statusdata['RUN_gui'] == 'success' and statusdata['RUN_parseandtest'] == 'success':
                     status_total = 'success'
         statusdata['TOTAL'] = status_total
 
@@ -690,60 +703,69 @@ class Environment:
             'language': self.configuration.os_language,
             'architecture': self.configuration.os_architecture
         }
+
+        # calculate sha256 hash of the action file and the testset file
+        action_file_hash = hash_file_sha256(action_file)
+        testset_file_hash = hash_file_sha256(testset_file)
+        sha256_validation_hash = combine_hashes([action_file_hash, testset_file_hash])
+
         with ExperimentApi() as db:
-            db.add_experiment(
-                name=scenario,
-                inputdata=inputdata,
-                resultdata=resultdata,
-                logfiledata=logfiledata,
-                statusdata=statusdata,
+            db.add_experiment_run(
+                testset_data=testsetdata,
+                action_file=action_file,
+                testset_file=testset_file,
+                result_data=result_data,
+                logfile_data=logfiledata,
+                status_data=statusdata,
                 timestamps=timestamps,
                 os_info=os_info,
+                sha256_validation_hash=sha256_validation_hash,
             )
+        log.debug(f'results of experiment {experiment} got saved in database')
 
-    def run(self, scenario: str, debug=False):
+    def run(self, experiment: str, debug=False):
         """
-        run a scenario
+        run an experiment
 
-        :param scenario: name of the scenario
-        :param debug: if True the vm will be not shutdown (immediately) after the scenario but instead wait for a user input to shutdown and clean up
+        :param experiment: name of the experiment
+        :param debug: if True the vm will be not shutdown (immediately) after the experiment but instead wait for a user input to shutdown and clean up
         """
-        scenario_class: Scenario = self.__find_scenario(scenario)
+        experiment_class: Experiment = self.__find_experiment(experiment)
 
-        if not scenario_class:
-            log.error(f'scenario {scenario} does not exist in environment configuration')
+        if not experiment_class:
+            log.error(f'experiment {experiment} does not exist in environment configuration')
             return
-        if not scenario_class.directory:
-            log.error(f'scenario {scenario} missing a valid directory')
+        if not experiment_class.directory:
+            log.error(f'experiment metadata for experiment {experiment} (in environment config file) is missing the directory')
             return
-        if not scenario_class.input_is_valid():
+        if not experiment_class.testset_file_is_valid():
             log.error(
-                f'scenario {scenario} can NOT be started because the input file has an error in format (as shown in the exception above)')
+                f'experiment {experiment} can NOT be started because the testset file has an error in format (as shown in the exception above)')
             return
 
         # not implemented so far
-        if not scenario_class.guiscenario_is_valid():
+        if not experiment_class.action_file_is_valid():
             log.error(
-                f'scenario {scenario} can NOT be started because the gui scenario file has an error in format (as shown in the exception above)')
+                f'experiment {experiment} can NOT be started because the gui experiment file has an error in format (as shown in the exception above)')
             return
 
         timestamp_start = datetime.now()
         timestamp_start_filename_format = timestamp_start.strftime(config.TIMESTAMP_FORMAT).replace(':', '.')
 
-        scenario_log_directory = self.log_directory / f'{scenario}_{timestamp_start_filename_format}'
-        vm_scenario_log_directory = self.vm_environment_logs_directory / f'{scenario}_{timestamp_start_filename_format}'
-        scenario_log_directory.mkdir()
+        experiment_log_directory = self.log_directory / f'{experiment}_{timestamp_start_filename_format}'
+        vm_experiment_log_directory = self.vm_environment_logs_directory / f'{experiment}_{timestamp_start_filename_format}'
+        experiment_log_directory.mkdir()
 
-        self.__script_manager.set_log_directory_vm_view(vm_scenario_log_directory)
+        self.__script_manager.set_log_directory_vm_view(vm_experiment_log_directory)
 
         resultfile_name = 'result.yml'
-        scenario_result_directory = self.result_directory / f'{scenario}_{timestamp_start_filename_format}'
-        scenario_result_directory.mkdir()
-        scenario_resultfile = scenario_result_directory / resultfile_name
-        vm_scenario_result_file = self.vm_environment_result_directory / f'{scenario}_{timestamp_start_filename_format}' / resultfile_name
-        vm_scenario_status_file = self.vm_environment_logs_directory / f'{scenario}_{timestamp_start_filename_format}' / 'status.csv'
+        experiment_result_directory = self.result_directory / f'{experiment}_{timestamp_start_filename_format}'
+        experiment_result_directory.mkdir()
+        experiment_resultfile = experiment_result_directory / resultfile_name
+        vm_experiment_result_file = self.vm_environment_result_directory / f'{experiment}_{timestamp_start_filename_format}' / resultfile_name
+        vm_experiment_status_file = self.vm_environment_logs_directory / f'{experiment}_{timestamp_start_filename_format}' / 'status.csv'
 
-        scenario_config_file, vm_scenario_config_file = self.__create_scenario_config_file(scenario, vm_scenario_log_directory, vm_scenario_status_file)
+        experiment_config_file, vm_experiment_config_file = self.__create_experiment_config_file(experiment, vm_experiment_log_directory, vm_experiment_status_file)
 
         script_postinstall = PostsetupInstallationsScript(f'postsetup_installations{self.__script_suffix}',
                                                           self.project_scripts_directory,
@@ -753,11 +775,11 @@ class Environment:
 
         script_run = RunExperimentScript(f'run_experiment{self.__script_suffix}',
                                          self.project_scripts_directory,
-                                         scenario_path=self.vm_environment_scenario_directory/scenario,
+                                         experiment_path=self.vm_environment_experiment_directory/experiment,
                                          tessdata_directory=self.vm_tessdata_directory,
-                                         scenario=scenario,
-                                         result_file=vm_scenario_result_file,
-                                         scenario_config_file=vm_scenario_config_file,
+                                         experiment=experiment,
+                                         result_file=vm_experiment_result_file,
+                                         experiment_config_file=vm_experiment_config_file,
                                          project_script_directory=self.vm_project_programs_directory,
                                          additional_tool_directory=self.vm_project_additional_tools_directory,
                                          render_wrapper=True)
@@ -778,19 +800,19 @@ class Environment:
         networkdrive_container = None
         networkdrive_active = False
         for drive in self.configuration.networkdrives:
-            if scenario in drive.scenarios:
+            if experiment in drive.experiments:
                 networkdrive_active = True
         if networkdrive_active:
             networkdrive_dir = self.base_directory / 'networkdrives'
 
-            networkdrive_container = NetworkDriveContainer(config.DEFAULT_NETWORKSHARE_BOX, self.configuration.networkdrives, scenario, networkdrive_dir)
+            networkdrive_container = NetworkDriveContainer(config.DEFAULT_NETWORKSHARE_BOX, self.configuration.networkdrives, experiment, networkdrive_dir)
 
             share_information_list = networkdrive_container.get_share_information_list(self.configuration.os_platform)
             script_mount_networkdrive = MountNetworkDriveScript(f'mount_networkdrives{self.__script_suffix}', self.project_scripts_directory, share_information_list=share_information_list, render_wrapper=True)
             self.__script_manager.add_script(script_mount_networkdrive)
 
             if not networkdrive_container:
-                log.error(f'scenario {scenario} will not start because the network drive vm couldn\'t get created')
+                log.error(f'experiment {experiment} will not start because the network drive vm couldn\'t get created')
             networkdrive_container.start()
 
             if networkdrive_container:
@@ -798,10 +820,10 @@ class Environment:
 
         self.__script_manager.render_to_environment(self.run_directory)
 
-        log_file_path = scenario_log_directory/'vagrant.log'
+        log_file_path = experiment_log_directory/'vagrant.log'
         log.debug(f'log path for vagrant log: {log_file_path.absolute()}')
 
-        vagrantfile = self.create_Vagrantfile(scenario, hostonly=publicnetwork, networkdrive_active=networkdrive_active)
+        vagrantfile = self.create_Vagrantfile(experiment, hostonly=publicnetwork, networkdrive_active=networkdrive_active)
         box = VagrantBoxVM.fromVagrantFileObject(self.run_directory, vagrantfile, log_file=log_file_path)
         vg_exitcode = box.run(debug=debug)
 
@@ -829,4 +851,5 @@ class Environment:
         }
 
         # write results and log information to database
-        self.__save_results_in_database(scenario, scenario_resultfile, timestamps, vg_exitcode, scenario_log_directory)
+        self.__save_results_in_database(experiment, experiment_resultfile, timestamps, vg_exitcode, experiment_log_directory)
+

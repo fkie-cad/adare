@@ -1,4 +1,4 @@
-from guiautomation.Scenario.Scenario import Scenario
+from guiautomation.experiment.experiment import experiment
 from guibot.guibot import GuiBot
 from pathlib import Path
 
@@ -7,8 +7,8 @@ import logging
 
 log = logging.getLogger(__name__)
 
-class {{ name }}(Scenario):
-    description = 'place the description of your scenario here '
+class {{ name }}(experiment):
+    description = 'place the description of your experiment here '
     guibot = None
 
     def __init__(self):
@@ -32,9 +32,9 @@ class {{ name }}(Scenario):
             this function should be used to execute the gui automation steps
         """
         guibot = self.guibot
-        log.info(f'scenario {type(self).__name__} started')
+        log.info(f'experiment {type(self).__name__} started')
 
         # place the code to execute the mouse and keyboard input here
         # for further explanation visit: https://guibot.readthedocs.io/en/latest/README.html
 
-        log.info(f'scenario {type(self).__name__} done')
+        log.info(f'experiment {type(self).__name__} done')

@@ -25,25 +25,25 @@ class PostsetupInstallationsScript(Script):
 class RunExperimentScript(Script):
     def __init__(self, name: str,
                  source_directory: Path,
-                 scenario_path: Path,
+                 experiment_path: Path,
                  tessdata_directory: Path = None,
-                 scenario_config_file: Path = None,
-                 scenario: str = None,
+                 experiment_config_file: Path = None,
+                 experiment: str = None,
                  result_file: Path = None,
                  project_script_directory: Path = None,
                  additional_tool_directory: Path = None,
                  render_wrapper: bool = False):
         super().__init__(name, source_directory, render_wrapper=render_wrapper)
-        if scenario and result_file:
+        if experiment and result_file:
             var = {
-                'gui_scenario': scenario,
-                'inputfile': (scenario_path/f'{scenario}.yml').as_posix(),
+                'gui_experiment': experiment,
+                'inputfile': (experiment_path/f'{experiment}.yml').as_posix(),
                 'outputfile': result_file.as_posix(),
                 'result_directory': result_file.parent.as_posix(),
-                'img_directory': (scenario_path/f'img').as_posix(),
+                'img_directory': (experiment_path/f'img').as_posix(),
                 'tessdata_directory': tessdata_directory.as_posix(),
-                'scenario_config_file': scenario_config_file.as_posix(),
-                'scenario_file': (scenario_path/f'{scenario}.py').as_posix(),
+                'experiment_config_file': experiment_config_file.as_posix(),
+                'experiment_file': (experiment_path/f'{experiment}.py').as_posix(),
                 'project_script_directory': project_script_directory.as_posix(),
                 'additional_tool_directory': additional_tool_directory.as_posix(),
             }

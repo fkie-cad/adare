@@ -20,7 +20,7 @@ settings:
   - "gsettings set org.gnome.desktop.lockdown disable-lock-screen 'true'"
 usbdevices:
   - name: "testusb"
-    scenarios:
+    experiments:
       - "deletefileUSB"
     VendorId: "0x0781"
     ProductId: "0x5567"
@@ -29,7 +29,7 @@ usbdevices:
     SerialNumber: "4C530000171114113444"
 networkdrives:
   - name: "testdrive"
-    scenarios:
+    experiments:
       - "deletefileSMB"
     type: "smb"
     user: "test"

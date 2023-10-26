@@ -1,4 +1,5 @@
 import requests
+import uuid
 
 import adare.config.server as config_server
 from adare.webappaccess.request_header import get_authenticated_request_header
@@ -46,3 +47,8 @@ class WebappPublishExperiment:
             log.error(f'Could not publish experiment {experiment_uuid} to webapp. Response({response.status_code}): {response.text}')
             return 'failed'
 
+
+# def send_experiment_request():
+#     request = {
+#         "uuid": uuid.uuid4(),
+#     }

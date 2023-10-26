@@ -1,4 +1,4 @@
-from guiautomation.Scenario.Scenario import Scenario
+from guiautomation.experiment.experiment import experiment
 from guibot.guibot import GuiBot
 from pathlib import Path
 
@@ -8,7 +8,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class deletefileNFS(Scenario):
+class deletefileNFS(experiment):
     description = "Delete file from home folder to Trash Bin (Ubuntu)"
     guibot = None
 
@@ -28,7 +28,7 @@ class deletefileNFS(Scenario):
     def run(self):
         guibot = self.guibot
 
-        log.info(f'scenario {type(self).__name__} started')
+        log.info(f'experiment {type(self).__name__} started')
 
         if guibot.exists('files.png'):
             guibot.click('files.png').idle(5)
@@ -54,4 +54,4 @@ class deletefileNFS(Scenario):
             log.error('testfile.png icon cant be found')
             return -1
 
-        log.info(f'scenario {type(self).__name__} done')
+        log.info(f'experiment {type(self).__name__} done')

@@ -7,11 +7,6 @@ import shutil
 import prettytable
 
 # internal imports
-from adare.backend.exceptions import ProjectCreationFailied, ProjectCleanupFailed, ProjectDeletionError, \
-    ProjectEnvironmentCantBeCreated, ProjectNotRepairable, ProjectNotFound, ProjectInformationCouldNotBeRead, \
-    ProjectInformationMissing, ProjectDirectoryParentDirectoryMissing, ProjectDirectoryAlreadyExists, \
-    ProgramFolderMissingInInstallation, EnvironmentAlreadyExists, EnvironmentCreationError, \
-    ScenarioDoesNotExistInEnvironment, EnvironmentDoesNotExist
 from adare.backend.attrs_classes import ProjectInformation, UsbDevice, NetworkDrive
 import adare.config as config
 from adare.helperFunctions.yaml import yaml_to_dict, dict_to_yaml
@@ -41,14 +36,17 @@ class Project:
         if create:
             log.info(f'project in path {self.base_directory} will be created')
             if self.base_directory.exists():
-                raise ProjectDirectoryAlreadyExists(self.base_directory.as_posix())
+                log.error(f'project in path {self.base_directory} already exists')
+                exit(-1)
             elif not self.base_directory.parent.exists():
-                raise ProjectDirectoryParentDirectoryMissing(self.base_directory.as_posix())
+                log.error(f'parent directory of project in path {self.base_directory} does not exist')
+                exit(-1)
             self.__create()
         if not create:
             log.info(f'project in path {self.base_directory} will be loaded')
             if not Path(path).exists():
-                raise ProjectNotFound(self.base_directory.as_posix())
+                log.error(f'project in path {self.base_directory} does not exist')
+                exit(-1)
             self.__repair_if_broken()
             self.__load()
 
@@ -60,7 +58,8 @@ class Project:
         """
         data = yaml_to_dict(self.information_file)
         if not data:
-            raise ProjectInformationCouldNotBeRead
+            log.error(f'project information file ({self.information_file}) could not be read')
+            exit(-1)
         self.information = cattrs.structure(data, ProjectInformation)
         return self.information
 
@@ -85,28 +84,32 @@ class Project:
         programs_in_installation = pkg_resources.resource_filename(config.PACKAGE, config.PCK_PROGRAMS)
         templates_in_installation = pkg_resources.resource_filename(config.PACKAGE, config.PCK_TEMPLATES)
         if not Path(programs_in_installation).is_dir():
-            raise ProgramFolderMissingInInstallation(programs_in_installation)
+            log.error(f'programs directory ({programs_in_installation}) does not exist')
+            exit(-1)
 
         try:
             self.base_directory.mkdir()
         except FileNotFoundError or OSError as e:
             log.error(e, exc_info=True)
             self.__cleanup()
-            raise ProjectCreationFailied(self.base_directory)
+            log.error(f'project ({self.base_directory}) creation failed')
+            exit(-1)
 
         try:
-            shutil.copytree(programs_in_installation, self.base_directory / 'programs')
+            shutil.copytree(programs_in_installation, self.base_directory / 'programs', ignore=shutil.ignore_patterns('*.pyc', '__pycache__'))
         except OSError as e:
             log.error(e, exc_info=True)
             self.__cleanup()
-            raise ProjectCreationFailied(self.base_directory)
+            log.error(f'project ({self.base_directory}) creation failed')
+            exit(-1)
 
         try:
-            shutil.copytree(templates_in_installation, self.base_directory / 'programs' / 'templates')
+            shutil.copytree(templates_in_installation, self.base_directory / 'programs' / 'templates', ignore=shutil.ignore_patterns('*.pyc', '__pycache__'))
         except OSError as e:
             log.error(e, exc_info=True)
             self.__cleanup()
-            raise ProjectCreationFailied(self.base_directory)
+            log.error(f'project ({self.base_directory}) creation failed')
+            exit(-1)
 
         self.__get_tessdata()
 
@@ -116,7 +119,8 @@ class Project:
             except OSError as e:
                 log.error(e, exc_info=True)
                 self.__cleanup()
-                raise ProjectCreationFailied(self.base_directory)
+                log.error(f'project ({self.base_directory}) creation failed')
+                exit(-1)
 
         project_information_file = self.base_directory / '.projconf.yml'
         project_information = ProjectInformation(name=self.name)
@@ -126,7 +130,8 @@ class Project:
         except OSError as e:
             log.error(e, exc_info=True)
             self.__cleanup()
-            raise ProjectCreationFailied(self.base_directory)
+            log.error(f'project ({self.base_directory}) creation failed')
+            exit(-1)
         self.information = project_information
         self.information_file = project_information_file
 
@@ -136,7 +141,7 @@ class Project:
         """
             copy tessdata needed for text recognition in the gui automation to the project
         """
-        if not Path:
+        if not tessdata_directory:
             tessdata_directory = self.base_directory/'tessdata'
             tessdata_directory.mkdir()
             tessdata_github_link = r'https://github.com/tesseract-ocr/tessdata/blob/main/eng.traineddata?raw=true'
@@ -156,7 +161,7 @@ class Project:
                             f'try to recreate the missing directory/file if possible')
                 if not self.__repair_element(mandatory_children):
                     log.error(f'directory/file {mandatory_children} could NOT be recreated')
-                    raise ProjectNotRepairable(self.name)
+                    exit(-1)
                 else:
                     log.info(f'directory/file {mandatory_children} is successfully recreated')
         if broken_element_found:
@@ -174,7 +179,7 @@ class Project:
         if self.information:
             table = prettytable.PrettyTable()
             if details:
-                table.field_names = ["name", "description", "scenarios"]
+                table.field_names = ["name", "description", "experiments"]
             else:
                 table.field_names = ["name", "description"]
 
@@ -182,12 +187,13 @@ class Project:
                 row = [env, "-"]
                 if details:
                     Env = Environment(env, self.base_directory)
-                    row.append(",".join([e.name for e in Env.configuration.scenarios]))
+                    row.append(",".join([e.name for e in Env.configuration.experiments]))
                 table.add_row(row)
             print(f'\n\nList of all environments in project {self.information.name}:')
             print(table)
         else:
-            raise ProjectInformationMissing
+            log.error('project information is not loaded')
+            exit(-1)
 
     # todo: add repair functions
     def __repair_element(self, element: str) -> bool:
@@ -218,7 +224,8 @@ class Project:
             shutil.rmtree(self.base_directory.as_posix())
         except OSError as e:
             log.error(e, exc_info=True)
-            raise ProjectCleanupFailed(self.base_directory)
+            log.error(f'project ({self.base_directory}) cleanup failed')
+            exit(-1)
         log.info(f'project ({self.base_directory}) cleanup was successful')
 
     def remove(self):
@@ -226,11 +233,9 @@ class Project:
         remove the project
         """
         if not self.__is_valid_project_directory():
-            raise ProjectDeletionError(self.base_directory)
-        try:
-            self.__cleanup()
-        except ProjectCleanupFailed:
-            raise ProjectDeletionError(self.base_directory)
+            log.error(f'project deletion failed because the project directory ({self.base_directory}) is not valid')
+            exit(-1)
+        self.__cleanup()
         log.info(f'project ({self.base_directory}) remove was successful')
 
     def __is_environment(self, name: str) -> bool:
@@ -251,15 +256,18 @@ class Project:
         :return: Environment instance which can be used in order to perform operations on the environment
         """
         if not name and not setupfile:
-            raise ProjectEnvironmentCantBeCreated(self.name)
+            log.error('either a setupfile or a name for the environment needs to be provided')
+            exit(-1)
         if not name:
             name = Path(setupfile).stem
         if self.__is_environment(name):
-            raise EnvironmentAlreadyExists
+            log.error(f'environment ({name}) already exists')
+            exit(-1)
 
         Env = Environment(name, self.base_directory, create=True, setupfile=setupfile)
         if not Env:
-            raise EnvironmentCreationError
+            log.error(f'environment ({name}) creation failed')
+            exit(-1)
 
         Env.add_examples()
         Env_info = Env.configuration
@@ -269,13 +277,13 @@ class Project:
         self.__write_information()
         return Env
 
-    def run_scenario(self, environment_name: str, scenario: str, debug=False):
+    def run_experiment(self, environment_name: str, experiment: str, debug=False):
         """
-        run a scenario in a specified scenario
+        run a experiment in a specified experiment
 
         :param environment_name: name of the environment
-        :param scenario: name of the scenario that should be run
-        :param debug: preventing vms from shutting down immediately after the scenario is done to enable a user to
+        :param experiment: name of the experiment that should be run
+        :param debug: preventing vms from shutting down immediately after the experiment is done to enable a user to
                         check for possible errors or to test different things
         """
         if not self.__is_environment(environment_name):
@@ -285,9 +293,10 @@ class Project:
             Env = Environment(environment_name, self.base_directory)
         environment_configuration = Env.configuration
 
-        if scenario not in [s.name for s in environment_configuration.scenarios]:
-            raise ScenarioDoesNotExistInEnvironment(environment_name, scenario)
-        Env.run(scenario, debug=debug)
+        if experiment not in [s.name for s in environment_configuration.experiments]:
+            log.error(f'provided experiment ({experiment}) is not existing in environment ({environment_name})')
+            exit(-1)
+        Env.run(experiment, debug=debug)
 
     # def add_input_to_environment(self, environment: str, input_files_path: str):
     #     """
@@ -308,61 +317,65 @@ class Project:
     #     Env = Environment(environment, self.path)
     #     Env.remove_input_file(input_file_name)
 
-    # def create_guiscenario(self, environment: str, scenario: str):
+    # def create_guiexperiment(self, environment: str, experiment: str):
     #     if not self.__is_environment(environment):
     #         raise EnvironmentDoesNotExist(environment)
     #     Env = Environment(environment, self.path)
-    #     Env.create_gui_scenario_skeleton(scenario)
-    #     log.debug(f'gui scenario file got create successfully')
+    #     Env.create_gui_experiment_skeleton(experiment)
+    #     log.debug(f'gui experiment file got create successfully')
 
-    def create_scenario(self, environment_name: str, scenario_name: str, usb: str or None, networkdrive: str or None):
+    def create_experiment(self, environment_name: str, experiment_name: str, usb: str or None, networkdrive: str or None):
         """
-        creates a new scenario in a specified environment
-
-        :param environment_name: name of the environment
-        :param scenario_name: name of the newly created scenario
-        :param usb: name of a usb device if needed by the scenario
-        :param networkdrive: name of a network drive if needed by the scenario
-        """
-        if not self.__is_environment(environment_name):
-            raise EnvironmentDoesNotExist(environment_name)
-        Env = Environment(environment_name, self.base_directory)
-        Env.create_scenario(scenario_name, usb_name=usb, networkdrive_name=networkdrive)
-
-    def remove_scenario(self, environment_name: str, scenario_name: str):
-        """
-        remove a scenario from an environment
+        creates a new experiment in a specified environment
 
         :param environment_name: name of the environment
-        :param scenario_name: name of the scenario
+        :param experiment_name: name of the newly created experiment
+        :param usb: name of a usb device if needed by the experiment
+        :param networkdrive: name of a network drive if needed by the experiment
         """
         if not self.__is_environment(environment_name):
-            raise EnvironmentDoesNotExist(environment_name)
+            log.error(f'provided environment ({environment_name}) is not existing')
+            exit(-1)
         Env = Environment(environment_name, self.base_directory)
-        Env.remove_scenario(scenario_name)
+        Env.create_experiment(experiment_name, usb_name=usb, networkdrive_name=networkdrive)
+
+    def remove_experiment(self, environment_name: str, experiment_name: str):
+        """
+        remove a experiment from an environment
+
+        :param environment_name: name of the environment
+        :param experiment_name: name of the experiment
+        """
+        if not self.__is_environment(environment_name):
+            log.error(f'provided environment ({environment_name}) is not existing')
+            exit(-1)
+        Env = Environment(environment_name, self.base_directory)
+        Env.remove_experiment(experiment_name)
 
     def add_usb_to_environment(self, environment_name: str, details: dict):
         """
-        add an usb device to an environment, which can be used by scenario if specified in the scenario information
+        add an usb device to an environment, which can be used by experiment if specified in the experiment information
 
         :param environment_name: name of the environment
         :param details: information about the usb device
         """
         if not self.__is_environment(environment_name):
-            raise EnvironmentDoesNotExist(environment_name)
+            log.error(f'provided environment ({environment_name}) is not existing')
+            exit(-1)
         Env = Environment(environment_name, self.base_directory)
         Usb = cattrs.structure(details, UsbDevice)
         Env.add_usb(Usb)
 
     def add_networkdrive_to_environment(self, environment_name: str, details: dict):
         """
-        add a network drive to an environment, which can be used by scenario if specified in the scenario information
+        add a network drive to an environment, which can be used by experiment if specified in the experiment information
 
         :param environment_name: name of the environment
         :param details: information about the network drive
         """
         if not self.__is_environment(environment_name):
-            raise EnvironmentDoesNotExist(environment_name)
+            log.error(f'provided environment ({environment_name}) is not existing')
+            exit(-1)
         Env = Environment(environment_name, self.base_directory)
         Networkdrive = cattrs.structure(details, NetworkDrive)
         Env.add_networkdrive(Networkdrive)
@@ -374,7 +387,8 @@ class Project:
         :param environment_name: name of the environment
         """
         if not self.__is_environment(environment_name):
-            raise EnvironmentDoesNotExist(environment_name)
+            log.error(f'provided environment ({environment_name}) is not existing')
+            exit(-1)
         Env = Environment(environment_name, self.base_directory)
         Env.remove()
         project_information = self.information

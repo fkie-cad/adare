@@ -4,10 +4,11 @@ from typing import Optional
 import vagrant
 import subprocess
 from retry import retry
+import contextlib
 
 # internal imports
 from .vagrantfile import VagrantFile
-from .exceptions import VagrantBoxCreationError, VagrantBoxDestroyError
+from .exceptions import VagrantBoxCreationError, VagrantBoxDestroyError, VagrantBoxRunError
 
 # configure logging
 import logging
@@ -22,12 +23,9 @@ class VagrantBoxVM:
     vagrant: vagrant.Vagrant
     vagrantdirectory_path: Path
 
-    # vm_name: Optional[str]
-
     log_file: Optional[Path]
 
-    def __init__(self, vagrantdirectory_path: Path, log_file: Optional[Path] = None, vm_name: str = 'adarebox'):
-        # self.vm_name = vm_name
+    def __init__(self, vagrantdirectory_path: Path, log_file: Optional[Path] = None):
         self.log_file = log_file
         self.vagrantfile_path = vagrantdirectory_path
 
@@ -37,7 +35,6 @@ class VagrantBoxVM:
         if not (vagrantdirectory_path/'Vagrantfile').is_file():
             raise VagrantBoxCreationError(f'provided path {vagrantdirectory_path} does not contain a Vagrantfile')
 
-        self.vagrant = vagrant.Vagrant(root=self.vagrantfile_path.as_posix())
         log.info(f'vagrant initialized in {self.vagrantfile_path.absolute()} directory')
 
     @classmethod
@@ -63,7 +60,7 @@ class VagrantBoxVM:
         except subprocess.CalledProcessError as e:
             log.debug(e, exc_info=True)
             return_code = e.returncode
-            log.error(f'vagrant up exited with returncode {return_code}')
+            log.error(f'vagrant up exited with returncode {return_code} -> log in {self.log_file} for more details')
         except KeyboardInterrupt as e:
             log.debug(e, exc_info=True)
             log.error(f'vagrant up interrupted by KeyboardInterrupt')
@@ -79,14 +76,22 @@ class VagrantBoxVM:
         return return_code
 
     def up(self):
+        self.vagrant = vagrant.Vagrant(self.vagrantfile_path.as_posix(), quiet_stdout=False, quiet_stderr=False)
+
+        log_file_handle = None
         if self.log_file:
-            with open(self.log_file.as_posix(), mode='w') as lf:
-                for output_line in self.vagrant.up(stream_output=True):
-                    log.debug(output_line[:-1])
-                    lf.write(output_line[:-1])
-        else:
-            for output_line in self.vagrant.up(stream_output=True):
-                log.debug(output_line)
+            log_file_handle = self.log_file.open('w')
+
+        for line in self.vagrant.up(stream_output=True):
+            log.debug(line.rstrip())
+            if self.log_file:
+                log_file_handle.write(line)
+                log_file_handle.flush()
+
+        if self.log_file:
+            log_file_handle.close()
+
+
 
     @retry(subprocess.CalledProcessError, tries=5, delay=1, backoff=2)
     def __destroy_box(self):

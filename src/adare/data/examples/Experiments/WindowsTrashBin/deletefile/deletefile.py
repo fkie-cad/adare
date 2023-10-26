@@ -1,7 +1,7 @@
 from pathlib import Path
 import sys
 
-from guiautomation.Scenario.Scenario import Scenario
+from guiautomation.Experiment.Experiment import Experiment
 from guiautomation.run import run
 from guibot.guibot import GuiBot
 
@@ -9,7 +9,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class deletefile(Scenario):
+class deletefile(Experiment):
     description = "Delete file from home folder to Trash Bin (Ubuntu)"
     guibot: GuiBot = None
 
@@ -26,7 +26,7 @@ class deletefile(Scenario):
     def run(self):
         guibot = self.guibot
 
-        log.info(f'scenario {type(self).__name__} started')
+        log.info(f'experiment {type(self).__name__} started')
 
         match = self.find('files.png')
         if match:
@@ -54,7 +54,7 @@ class deletefile(Scenario):
             log.error('testfile text cant be found')
             return 'failed'
 
-        log.info(f'scenario {type(self).__name__} done')
+        log.info(f'experiment {type(self).__name__} done')
         return self.status
 
 

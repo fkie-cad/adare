@@ -1,1 +1,1 @@
-recursive-include src/guiautomation/Scenario/data *
+recursive-include src/guiautomation/experiment/data *

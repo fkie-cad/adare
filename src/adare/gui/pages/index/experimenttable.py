@@ -1,37 +1,38 @@
 from nicegui import ui
-from adare.gui.extensions.advanced_table.filters import FilterEqual, FilterContains, FilterNotEqual
 from adare.gui.styles import btn_remove_color_prop
 from adare.database import database
 
-from adare.gui.login import LoginIface
+from adare.gui.interfaces.login import LoginIface
 from adare.gui.extensions.advanced_table.advanced_table import AdvancedTable
-from adare.gui.publish import PublishExpIface
+from adare.gui.interfaces.publish import PublishExpIface
+
+
+def toggle_table_fullscreen(table, btn) -> None:
+    """ Toggle the fullscreen of the table. """
+    table.toggle_fullscreen()
+    btn.props('icon=fullscreen_exit' if table.is_fullscreen else 'icon=fullscreen')
 
 class ExperimentTable(AdvancedTable):
     """ Table for showing experiments. """
 
-
     columns: list[dict] = [
-        {'name': 'status', 'label': 'status', 'field': 'status', 'required': True, 'sortable': False, 'align': 'left'},
-        {'name': 'name', 'label': 'name', 'field': 'name', 'required': True, 'sortable': True, 'align': 'left', 'hide': False, 'filter': [FilterEqual, FilterNotEqual, FilterContains]},
-        {'name': 'uuid', 'label': 'uuid', 'field': 'uuid', 'required': True, 'sortable': False, 'align': 'left', 'hide': False, 'filter': [FilterEqual, FilterNotEqual]},
-        {'name': 'os', 'label': 'os', 'field': 'os', 'required': True, 'sortable': True, 'align': 'left', 'hide': False, 'filter': [FilterEqual, FilterNotEqual]},
+        {'name': 'name', 'label': 'name', 'field': 'name', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
+        {'name': 'uuid', 'label': 'uuid', 'field': 'uuid', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
+        {'name': 'os', 'label': 'os', 'field': 'os', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
         {'name': 'os distribution', 'label': 'os distribution', 'field': 'os_distribution', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
         {'name': 'os version', 'label': 'os version', 'field': 'os_version', 'required': True, 'sortable': True,
          'align': 'left', 'hide': False},
-        {'name': 'time start', 'label': 'time start', 'field': 'time_start', 'required': True, 'sortable': True,
-         'align': 'left', 'hide': False},
-        {'name': 'time end', 'label': 'time end', 'field': 'time_end', 'required': True, 'sortable': True,
-         'align': 'left', 'hide': True},
-        {'name': 'btn', 'label': '', 'field': 'btn', 'required': False, 'sortable': False, 'align': 'right'},
-        {'name': 'publish', 'label': 'publish', 'field': 'publish', 'required': False, 'sortable': False, 'align': 'right'},
     ]
+
+    filters = {
+
+    }
 
     publish_disabled: bool = None
 
     def __init__(self):
         super().__init__()
-        self.publish_disabled = not LoginIface.is_logged_in(None)
+        self.publish_disabled = not LoginIface.logged_in
 
     def update_data(self):
         """ Retrieve data from database and update the table. """
@@ -39,14 +40,11 @@ class ExperimentTable(AdvancedTable):
             experiments = db.get_all_experiments()
             self.data = [
                 {
-                    'status': e.status.name,
                     'name': e.name,
                     'uuid': e.uuid,
                     'os': e.os_info.os,
                     'os_distribution': e.os_info.distribution,
                     'os_version': e.os_info.version,
-                    'time_start': e.timestamp_start,
-                    'time_end': e.timestamp_start,
                 } for e in experiments
             ]
 
@@ -62,7 +60,8 @@ class ExperimentTable(AdvancedTable):
         """
         Update the publish_disabled variable and update the table respectively.
         """
-        self.publish_disabled = not LoginIface.is_logged_in(None)
+        LoginIface.update_login_status(None)
+        self.publish_disabled = not LoginIface.logged_in
         # override slot
         self.table.add_slot('body-cell-publish', f"""
              <q-td :props="props">
@@ -74,18 +73,17 @@ class ExperimentTable(AdvancedTable):
 
     def create(self):
         """ Create the table gui object """
+
         data = self._get_shown_data()
 
-        with ui.table(columns=self._get_shown_columns(), rows=data,
-                      pagination=10).classes(
-                'w-full') as table:
-            self.table = table
-            table.classes('table-striped')
+        with ui.table(columns=self._get_shown_columns(), rows=data, pagination=10).classes('w-full table-striped') as self.table:
+            table = self.table
 
             # add a search bar at the top-right of the table
             with table.add_slot('top'):
                 with ui.row().classes('w-full flex justify-between items-center'):
-                    ui.label('experiments table').classes('text-xl font-bold')
+
+                    ui.button(icon='fullscreen', on_click=lambda b: toggle_table_fullscreen(table, b.sender)).props('flat dense')
 
                     with ui.input(placeholder='Search') as search_input:
                         search_input.props('type=search').bind_value(table, 'filter')
@@ -94,7 +92,6 @@ class ExperimentTable(AdvancedTable):
                             ui.icon('search')
 
                     with ui.row():
-                        self.create_filter_menu()
 
                         with ui.button(on_click=lambda: menu_columnselect.open()).props('icon=tune') as btn_columnselect:
                             btn_remove_color_prop(btn_columnselect)
@@ -134,9 +131,6 @@ class ExperimentTable(AdvancedTable):
                  </q-td>
             """)
             table.on('action', lambda e: self._publish_experiment(e))
-
-        LoginIface.add_login_trigger_function(self.update_publish_disabled)
-        LoginIface.add_logout_trigger_function(self.update_publish_disabled)
 
 
 

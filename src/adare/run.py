@@ -6,8 +6,8 @@ import time
 
 # internal imports
 from adare.database.utils import db_exists
-from adare.cli.environment import env_create, env_list, env_run, env_remove, env_create_scenario, \
-    env_remove_scenario, env_addusb, env_addnetworkdrive
+from adare.cli.environment import env_create, env_list, env_run, env_remove, env_create_experiment, \
+    env_remove_experiment, env_addusb, env_addnetworkdrive
 from adare.cli.project import project_create, project_remove
 from adare.cli.webapp import webapp
 from adare.cli.showversion import show_version
@@ -87,7 +87,7 @@ def run():
 
     sp_env_run = env_subparsers.add_parser('run')
     sp_env_run.add_argument('name')
-    sp_env_run.add_argument('scenario')
+    sp_env_run.add_argument('experiment')
     sp_env_run.add_argument('--debugmode', action='store_true')
     sp_env_run.set_defaults(func=env_run)
 
@@ -95,13 +95,13 @@ def run():
     sp_env_remove.add_argument('name')
     sp_env_remove.set_defaults(func=env_remove)
 
-    sp_env_addguiscenario = env_subparsers.add_parser('createscenario')
-    sp_env_addguiscenario.add_argument('name')
-    sp_env_addguiscenario.add_argument('scenario')
-    sp_env_addguiscenario.add_argument('--networkdrive')
-    sp_env_addguiscenario.add_argument('--usb')
-    # sp_env_addguiscenario.add_argument('--category', '-c')
-    sp_env_addguiscenario.set_defaults(func=env_create_scenario)
+    sp_env_addguiexperiment = env_subparsers.add_parser('createexperiment')
+    sp_env_addguiexperiment.add_argument('name')
+    sp_env_addguiexperiment.add_argument('experiment')
+    sp_env_addguiexperiment.add_argument('--networkdrive')
+    sp_env_addguiexperiment.add_argument('--usb')
+    # sp_env_addguiexperiment.add_argument('--category', '-c')
+    sp_env_addguiexperiment.set_defaults(func=env_create_experiment)
 
     sp_env_addusb = env_subparsers.add_parser('addusb')
     sp_env_addusb.add_argument('name')
@@ -113,11 +113,11 @@ def run():
     sp_env_addnetworkdrive.add_argument('details', type=ast.literal_eval)
     sp_env_addnetworkdrive.set_defaults(func=env_addnetworkdrive)
 
-    sp_env_removeguiscenario = env_subparsers.add_parser('removescenario')
-    sp_env_removeguiscenario.add_argument('name')
-    sp_env_removeguiscenario.add_argument('scenario')
-    # sp_env_addguiscenario.add_argument('--category', '-c')
-    sp_env_removeguiscenario.set_defaults(func=env_remove_scenario)
+    sp_env_removeguiexperiment = env_subparsers.add_parser('removeexperiment')
+    sp_env_removeguiexperiment.add_argument('name')
+    sp_env_removeguiexperiment.add_argument('experiment')
+    # sp_env_addguiexperiment.add_argument('--category', '-c')
+    sp_env_removeguiexperiment.set_defaults(func=env_remove_experiment)
 
     # sp_env_addinput = env_subparsers.add_parser('addinput')
     # sp_env_addinput.add_argument('name')

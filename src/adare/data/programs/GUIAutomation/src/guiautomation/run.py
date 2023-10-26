@@ -4,7 +4,7 @@ from typing import Type
 
 # internal imports
 from guiautomation.yamlfeatures.basics import yaml_to_dict
-from guiautomation.Scenario.Scenario import Scenario
+from guiautomation.Experiment.Experiment import Experiment
 
 # configure logging
 import guiautomation.logger as logger
@@ -15,7 +15,7 @@ def setup_logging(logfile: Path = None):
     logger.setup_logger(logfile=logfile, console=False)
 
 
-def run(scenario_class: Type[Scenario], config_file: Path or None, config_dict: dict = None):
+def run(experiment_class: Type[Experiment], config_file: Path or None, config_dict: dict = None):
     if not config_dict and not config_file:
         log.error(f'need to provide either config file or config dict')
     if config_file:
@@ -46,20 +46,20 @@ def run(scenario_class: Type[Scenario], config_file: Path or None, config_dict: 
 
     setup_logging(logfile)
 
-    scenario_log_file = None
-    if 'scenario_log_file' in gui_config.keys():
-        scenario_log_file = gui_config['scenario_log_file']
+    experiment_log_file = None
+    if 'experiment_log_file' in gui_config.keys():
+        experiment_log_file = gui_config['experiment_log_file']
 
-    scenario_obj = scenario_class(
+    experiment_obj = experiment_class(
         img_folder=img_folder,
         tessdata_folder=tessdata_folder,
-        scenario_log_file=scenario_log_file,
+        experiment_log_file=experiment_log_file,
     )
 
-    scenario_obj.prepare()
-    log.debug(f'preperation of scenario {scenario_obj.__class__} done')
-    status = scenario_obj.run()
-    log.debug(f'scenario {scenario_obj.__class__} finished')
+    experiment_obj.prepare()
+    log.debug(f'preperation of experiment {experiment_obj.__class__} done')
+    status = experiment_obj.run()
+    log.debug(f'experiment {experiment_obj.__class__} finished')
 
     with open(statusfile.as_posix(), mode='a', encoding='ascii') as f:
         f.write(f'gui,{status}\n')

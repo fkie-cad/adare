@@ -6,11 +6,11 @@ networkdrives:
   user:
     name: test
     password: test123
-  scenarios:
+  experiments:
   - deletefileSMB
 - name: exampledrivenfs
   type: nfs
   local_path: 'X:'
   remote_path: /mnt/nfs_0
-  scenarios:
+  experiments:
   - deletefileNFS

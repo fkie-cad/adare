@@ -9,8 +9,8 @@ Write-Status("INSTALL_gui")
 pip3 install '{{ project_script_directory }}/ParseAndTest/' 2>&1 | WriteLog
 Write-Status("INSTALL_parseandtest")
 
-#guiautomation --logfile '{{ logfolder }}/gui.log' run --scenariolog '{{ logfolder }}/scenario.log' '{{ gui_scenario }}' '{{ img_directory }}' '{{ tessdata_directory }}' 2>&1 | WriteLog
-py '{{ scenario_file }}' '{{ scenario_config_file }}'
+#guiautomation --logfile '{{ logfolder }}/gui.log' run --experimentlog '{{ logfolder }}/experiment.log' '{{ gui_experiment }}' '{{ img_directory }}' '{{ tessdata_directory }}' 2>&1 | WriteLog
+py '{{ experiment_file }}' '{{ experiment_config_file }}'
 Write-Status("RUN_gui")
 
 $resultfolder = "{{ result_directory }}"
