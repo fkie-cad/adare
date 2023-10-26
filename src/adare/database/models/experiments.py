@@ -1,11 +1,11 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR
-from sqlalchemy.orm import relationship, backref, DeclarativeBase
+from sqlalchemy.orm import relationship, backref
+from sqlalchemy.ext.declarative import declarative_base
 import uuid
 
 from sqlalchemy_serializer import SerializerMixin
 
-class Base(DeclarativeBase):
-    pass
+Base = declarative_base()
 
 mapping_experimentrun_test = Table(
     "mapping_experimentrun_test",

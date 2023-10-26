@@ -1,8 +1,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime
-from sqlalchemy.orm import relationship, backref, DeclarativeBase
+from sqlalchemy.ext.declarative import declarative_base
 
-class Base(DeclarativeBase):
-    pass
+Base = declarative_base()
 
 class UserSession(Base):
     __tablename__ = 'user_session'
