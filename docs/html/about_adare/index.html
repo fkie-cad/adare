@@ -17,10 +17,10 @@
         <script src="../_static/underscore.js"></script>
         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="../_static/doctools.js"></script>
-        <script src="../_static/sphinx_highlight.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Installation" href="../installation/index.html" />
     <link rel="prev" title="Welcome to ADARE’s documentation!" href="../index.html" /> 
 </head>
 
@@ -49,6 +49,8 @@
 <li class="toctree-l2"><a class="reference internal" href="#architecture">Architecture</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">Walkthrough</a></li>
 </ul>
 
         </div>
@@ -80,15 +82,16 @@
 <section id="what-is-adare">
 <h2>What is ADARE?<a class="headerlink" href="#what-is-adare" title="Permalink to this heading"></a></h2>
 <p>ADARE is a desktop forensic analysis tool.
-It can be used to develop, run and validate desktop forensic experiments in an automated way.</p>
+It’s main purpose is to monitor artifact changes over different os and software version in an automated way.</p>
 <p>ADARE on one side uses virtual machines via vagrant, in which the experiment will take place.
-On a high level a desktop forensic experiment is divided into the two parts:</p>
+On a high level a desktop forensic experiment is divided into three main parts:</p>
 <ol class="arabic simple">
 <li><p>gui experiment (sequence of gui actions such as mouse clicks and key presses)</p></li>
-<li><p>parsing and checking the results ()</p></li>
+<li><p>parsing artifacts</p></li>
+<li><p>analyze the parsed artifacts</p></li>
 </ol>
-<p>The user provides a so called <em>experiment</em>, consisting of a <em>gui automation file</em> and a <em>parse and test file</em>.
-Inside the <em>gui automation file</em> is specified</p>
+<p>The user provides a so called <em>experiment</em>, consisting of an <em>action file</em> and an <em>testset file</em>.
+Inside the <em>testset file</em> is specified</p>
 <p>The experiments itself consists each of a <em>gui automation</em> and <em>parse &amp; test</em> part.
 During the <em>gui automation</em> part an user written gui experiment, such as clicking on a file and deleting it to the Trash Bin, will be executed.
 Afterwards in the <em>parse &amp; test</em> the user can provide a way</p>
@@ -103,6 +106,7 @@ Afterwards in the <em>parse &amp; test</em> the user can provide a way</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../index.html" class="btn btn-neutral float-left" title="Welcome to ADARE’s documentation!" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../installation/index.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

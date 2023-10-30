@@ -2,7 +2,7 @@
 Installation
 *************
 
-To install adare clone the `repository <https://github.com/fkie-cad/Adare>`_, navigate into the directory and run ``pip install .``.
+To install adare clone the `repository <https://github.com/fkie-cad/Adare>`_, navigate into the directory and run ``make install``.
 To check whether the tool is successfully installed and ready to use run ``adare -v``.
 
 Requirements
@@ -14,7 +14,7 @@ In case you use Windows, it sometimes necessary to disable Hyper-V such that Vir
 Tested Configurations
 *********************
 
-The tool was tested with the following versions of Python, packer and VirtualBox:
+The tool was tested with the following versions of Python and VirtualBox:
 
 .. list-table::
    :widths: 25 30
