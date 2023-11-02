@@ -16,17 +16,19 @@ This can be done by running the following command, when providing an environment
 
     adare env create  <environment_config_file>.yml --name <environment_name>
 
-The environment config file is a yaml file containing information about the used vagrant machine.
+The environment config file is a yaml file containing information about the environment that is to be created.
+It contains the vagrant box that should be used along with the operating system, telling Adare whether the box is a Windows or Linux box.
+Additionally to that it is also possible to provide a list installations to be done after the box is started to install further applications needed to run the experiment.
 An example of such a file is provided below.
+In section :ref:`Environment Configuration File`_ you can find a detailed description of the environment config file and it possible configurations.
+
 
 .. code-block:: yaml
 
-    vagrant:
-        box: ubuntu/trusty64
-        box_url: https://cloud-images.ubuntu.com/vagrant/trusty/current/trusty-server-cloudimg-amd64-vagrant-disk1.box
-        memory: 2048
-        cpus: 2
-        network:
-            - type: private_network
-              ip:
+    name: <environment_name>
+    vagrantbox: <vagrant_box_name>
+    os_platform: <os_platform> (Windows or Linux)
+    ...
+
+
 

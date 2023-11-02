@@ -21,3 +21,4 @@ In order to do so the user needs to provide a vagrant box of the os.
    about_adare/index
    installation/index
    introduction/index
+   basics/index
