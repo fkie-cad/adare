@@ -1,0 +1,25 @@
+Method,Description
+hover,Hover the mouse over a target or location
+click,Click on a target or location using the left mouse button and optionally holding special keys.
+right_click,Click on a target or location using the right mouse button and optionally holding special keys.
+middle_click,Click on a target or location using the middle mouse button and optionally holding special keys.
+double_click,Double click on a target or location using the left mouse button and optionally holding special keys.
+multi_click,Click N times on a target or location using the left mouse button and optionally holding special keys.
+click_expect,Click on an image or location and wait for another one to appear.
+click_vanish,Click on an image or location and wait for another one to disappear.
+click_at_index,Find all instances of an anchor image and click on the one with the desired index given that they are horizontally then vertically sorted.
+click_at,Clicks on a relative location using a displacement from an anchor.
+select_at,Select an option at a dropdown list using either an integer index or an option image if the order cannot be easily inferred.
+mouse_down,Hold down an arbitrary mouse button on a target or location.
+mouse_up,Release an arbitrary mouse button on a target or location.
+mouse_scroll,Scroll the mouse for a number of clicks.
+drag_drop,Drag from and drop at a target or location optionally holding special keys.
+drag_from,Drag from a target or location optionally holding special keys.
+drag_at,Drop at a target or location optionally holding special keys.
+press_keys,Press a single key or a list of keys simultaneously.
+press_at,Press a single key or a list of keys simultaneously at a specified target or location.
+press_expect,Press a key and wait for a target to appear.
+press_vanish,Press a key and wait for a target to disappear.
+type_text,Type a list of consecutive character keys (without special keys).
+type_at,Type a list of consecutive character keys (without special keys) at a specified target or location.
+fill_at,Fills a new text at a text box using a displacement from an anchor.

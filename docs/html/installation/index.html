@@ -56,6 +56,8 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">Walkthrough</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../basics/index.html">Basics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gui/index.html">Graphical User Interface</a></li>
 </ul>
 
         </div>
@@ -88,12 +90,14 @@
 To check whether the tool is successfully installed and ready to use run <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">-v</span></code>.</p>
 <section id="requirements">
 <h2>Requirements<a class="headerlink" href="#requirements" title="Permalink to this heading"></a></h2>
-<p>The automatic <a class="reference external" href="https://www.virtualbox.org/">VirtualBox</a></p>
-<p>In case you use Windows, it sometimes necessary to disable Hyper-V such that Virtualbox Hypervision can work properly.</p>
+<p>One of the necessary tools to use adare is <a class="reference external" href="https://www.vagrantup.com/">Vagrant</a>, which manages virtual machines.
+Additionally, a virtual machine hypervisor is required.
+Currently, only <a class="reference external" href="https://www.virtualbox.org/">VirtualBox</a> is supported.
+Moreover, if you run adare from a Windows machine, you need to make sure that Hyper-V is disabled, since Hyper-V and the VirtualBox hypervisor interfere each other, which can cause slow and hanging machines.</p>
 </section>
 <section id="tested-configurations">
 <h2>Tested Configurations<a class="headerlink" href="#tested-configurations" title="Permalink to this heading"></a></h2>
-<p>The tool was tested with the following versions of Python and VirtualBox:</p>
+<p>The tool was tested with the following versions of Python, Vagrant, and VirtualBox:</p>
 <table class="colwidths-given docutils align-default">
 <colgroup>
 <col style="width: 45%" />
@@ -108,7 +112,10 @@ To check whether the tool is successfully installed and ready to use run <code c
 <tr class="row-even"><td><p>Python</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">3.8</span></code>, <code class="docutils literal notranslate"><span class="pre">3.9</span></code>, <code class="docutils literal notranslate"><span class="pre">3.10</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>VirtualBox</p></td>
+<tr class="row-odd"><td><p>Vagrant</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">2.3.2</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>VirtualBox</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">6.1</span></code>, <code class="docutils literal notranslate"><span class="pre">7.0</span></code></p></td>
 </tr>
 </tbody>

@@ -1,12 +1,12 @@
 # external imports
 import shutil
-import pkg_resources
 import jinja2
 from pathlib import Path
 from typing import Optional
 
 # internal imports
 import adare.config as config
+from adare.config.configdirectory import NETWORKDRIVE_TEMPLATES_DIR
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
 from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.vagrantapi.vagrantutils import is_box
@@ -50,7 +50,7 @@ class NetworkdriveVM:
             self.vm_config = NetworkdriveVMConfiguration()
             log.debug('network drive vm will be started with default configuration')
 
-        self.__jinja = init_jinja_environment(pkg_resources.resource_filename(config.PACKAGE, 'data/networkdrive/templates'))
+        self.__jinja = init_jinja_environment(NETWORKDRIVE_TEMPLATES_DIR)
         if not self.__jinja:
             log.error('jinja environment could NOT be initialized successfully')
             raise NetworkdriveCreationError

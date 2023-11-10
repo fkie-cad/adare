@@ -20,6 +20,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Action File" href="actionfile.html" />
     <link rel="prev" title="Basics" href="index.html" /> 
 </head>
 
@@ -51,9 +52,16 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">Walkthrough</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Basics</a><ul class="current">
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Environment Configuration File</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Environment Configuration File</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#examples">Examples</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="actionfile.html">Action File</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testsetfile.html">Testset File</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gui/index.html">Graphical User Interface</a></li>
 </ul>
 
         </div>
@@ -83,7 +91,136 @@
              
   <section id="environment-configuration-file">
 <h1>Environment Configuration File<a class="headerlink" href="#environment-configuration-file" title="Permalink to this heading"></a></h1>
-<p>This file contains the configuration for the environment.</p>
+<p>This file contains the configuration for the environment.
+It contains the name of the vagrant box, information about the guest OS as well as potentially additional information such as installations to be performed on the guest OS, before the experiment.
+A minimal configuration file just needs to contain the vagrant box name as well as the platform of the guest OS as shown below:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vagrantbox</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;win10vagrantbox&quot;</span>
+<span class="nt">os_platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span>
+<span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">10&quot;</span>
+<span class="nt">os_distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Home&quot;</span>
+</pre></div>
+</div>
+<p>Additionally, the configuration file can contain the following fields:</p>
+<table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>vagrantbox</p></td>
+<td><p>The name of the vagrant box to use</p></td>
+</tr>
+<tr class="row-odd"><td><p>postsetupinstallations</p></td>
+<td><p>A list of installations to run before the experiment</p></td>
+</tr>
+<tr class="row-even"><td><p>name</p></td>
+<td><p>The name of the VM</p></td>
+</tr>
+<tr class="row-odd"><td><p>os_platform</p></td>
+<td><p>The OS platform to use (e.g. windows, linux)</p></td>
+</tr>
+<tr class="row-even"><td><p>os</p></td>
+<td><p>The OS to use (e.g. windows 10, ubuntu 20.04)</p></td>
+</tr>
+<tr class="row-odd"><td><p>os_distribution</p></td>
+<td><p>The OS distribution to use (e.g. Home, Pro, Enterprise)</p></td>
+</tr>
+<tr class="row-even"><td><p>os_version</p></td>
+<td><p>The OS version to use (e.g. 10, 16.04)</p></td>
+</tr>
+<tr class="row-odd"><td><p>os_architecture</p></td>
+<td><p>The OS architecture to use (e.g. x86, x64)</p></td>
+</tr>
+<tr class="row-even"><td><p>os_language</p></td>
+<td><p>The OS language to use (e.g. en-US, en-GB)</p></td>
+</tr>
+<tr class="row-odd"><td><p>os_details</p></td>
+<td><p>further details about the OS</p></td>
+</tr>
+<tr class="row-even"><td><p>usb_devices</p></td>
+<td><p>A list of USB devices to use</p></td>
+</tr>
+<tr class="row-odd"><td><p>network_drivers</p></td>
+<td><p>A list of network drivers to use</p></td>
+</tr>
+</tbody>
+</table>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Permalink to this heading"></a></h2>
+<p>Below you can find further examples of environment configuration files.</p>
+<p>An extended configuration file for a Windows 10 guest OS with a custom vagrant box:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testenv&quot;</span>
+<span class="nt">vagrantbox</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;win10home21H1_english&quot;</span>
+<span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1920x1080&quot;</span>
+<span class="nt">os_platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span>
+<span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">10&quot;</span>
+<span class="nt">os_distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Home&quot;</span>
+<span class="nt">os_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;21H1&quot;</span>
+<span class="nt">os_language</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;English&quot;</span>
+<span class="nt">postsetupinstallations</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;jinja2&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">jinja2&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tool</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">use</span><span class="nv"> </span><span class="s">templating</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">python&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;datefinder&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">datefinder&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;guibot&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">guibot&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pyautogui&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">pyautogui&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tool</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">change</span><span class="nv"> </span><span class="s">resolution&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;opencv&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">opencv-python&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tesseract&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;choco</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">--no-progress</span><span class="nv"> </span><span class="s">-y</span><span class="nv"> </span><span class="s">tesseract&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tesseract</span><span class="nv"> </span><span class="s">python&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">pytesseract&quot;</span>
+</pre></div>
+</div>
+<p>An example for an Ubuntu 20.04 guest OS:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testenv&quot;</span>
+<span class="nt">vagrantbox</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ubuntu20043_gnome&quot;</span>
+<span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1920x1080&quot;</span>
+<span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;linux&quot;</span>
+<span class="nt">postsetupinstallations</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;jinja2&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">jinja2&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tool</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">use</span><span class="nv"> </span><span class="s">templating</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">python&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;datefinder&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">datefinder&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;update&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;apt-get</span><span class="nv"> </span><span class="s">update&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;&#39;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nfs</span><span class="nv"> </span><span class="s">client&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;apt-get</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">nfs-common&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;smb&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;apt-get</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">cifs-utils&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;&#39;</span>
+<span class="nt">settings</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;gsettings</span><span class="nv"> </span><span class="s">set</span><span class="nv"> </span><span class="s">org.gnome.desktop.lockdown</span><span class="nv"> </span><span class="s">disable-lock-screen</span><span class="nv"> </span><span class="s">&#39;true&#39;&quot;</span>
+<span class="nt">usbdevices</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testusb&quot;</span>
+<span class="w">    </span><span class="nt">scenarios</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;deletefileUSB&quot;</span>
+<span class="w">    </span><span class="nt">VendorId</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0x0781&quot;</span>
+<span class="w">    </span><span class="nt">ProductId</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0x5567&quot;</span>
+<span class="w">    </span><span class="nt">Manufacturer</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;SanDisk&quot;</span>
+<span class="w">    </span><span class="nt">Product</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Cruzer</span><span class="nv"> </span><span class="s">Blade&quot;</span>
+<span class="w">    </span><span class="nt">SerialNumber</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4C530000171114113444&quot;</span>
+<span class="nt">networkdrives</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testdrive&quot;</span>
+<span class="w">    </span><span class="nt">scenarios</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;deletefileSMB&quot;</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;smb&quot;</span>
+<span class="w">    </span><span class="nt">user</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;test&quot;</span>
+<span class="w">    </span><span class="nt">password</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;123&quot;</span>
+</pre></div>
+</div>
+</section>
 </section>
 
 
@@ -91,6 +228,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="index.html" class="btn btn-neutral float-left" title="Basics" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="actionfile.html" class="btn btn-neutral float-right" title="Action File" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

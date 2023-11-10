@@ -2,12 +2,12 @@
 import cattrs
 import attr
 from pathlib import Path
-import pkg_resources
 import shutil
 import prettytable
 
 # internal imports
 from adare.backend.attrs_classes import ProjectInformation, UsbDevice, NetworkDrive
+from adare.config.configdirectory import TEMPLATES_DIR, PROGRAMS_DIR
 import adare.config as config
 from adare.helperFunctions.yaml import yaml_to_dict, dict_to_yaml
 from adare.backend.environment import Environment
@@ -81,10 +81,9 @@ class Project:
         """
         create a new project
         """
-        programs_in_installation = pkg_resources.resource_filename(config.PACKAGE, config.PCK_PROGRAMS)
-        templates_in_installation = pkg_resources.resource_filename(config.PACKAGE, config.PCK_TEMPLATES)
-        if not Path(programs_in_installation).is_dir():
-            log.error(f'programs directory ({programs_in_installation}) does not exist')
+
+        if not PROGRAMS_DIR.is_dir():
+            log.error(f'programs directory ({PROGRAMS_DIR.as_posix()}) does not exist')
             exit(-1)
 
         try:
@@ -96,7 +95,7 @@ class Project:
             exit(-1)
 
         try:
-            shutil.copytree(programs_in_installation, self.base_directory / 'programs', ignore=shutil.ignore_patterns('*.pyc', '__pycache__'))
+            shutil.copytree(PROGRAMS_DIR.as_posix(), self.base_directory / 'programs', ignore=shutil.ignore_patterns('*.pyc', '__pycache__'))
         except OSError as e:
             log.error(e, exc_info=True)
             self.__cleanup()
@@ -104,7 +103,7 @@ class Project:
             exit(-1)
 
         try:
-            shutil.copytree(templates_in_installation, self.base_directory / 'programs' / 'templates', ignore=shutil.ignore_patterns('*.pyc', '__pycache__'))
+            shutil.copytree(TEMPLATES_DIR.as_posix(), self.base_directory / 'programs' / 'templates', ignore=shutil.ignore_patterns('*.pyc', '__pycache__'))
         except OSError as e:
             log.error(e, exc_info=True)
             self.__cleanup()

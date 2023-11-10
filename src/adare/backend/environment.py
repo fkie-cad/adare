@@ -3,7 +3,6 @@ import shutil
 import cattrs
 from cattrs.errors import ClassValidationError
 from datetime import datetime
-import pkg_resources
 import glob
 import attr
 from pathlib import Path
@@ -12,6 +11,7 @@ import os
 
 # internal imports
 import adare.config as config
+from adare.config.configdirectory import TEMPLATES_DIR, EXAMPLES_DIR, PROGRAMS_DIR
 from adare.backend.attrs_classes import Experiment, UsbDevice, ExamplesConfig, NetworkDrive, \
     EnvironmentConfiguration, EnvironmentSetup
 from adare.backend.networkdrive import NetworkDriveContainer
@@ -25,7 +25,7 @@ from adare.backend.script_creation.Script import Script
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
 from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.database.database import ExperimentApi
-from adare.inputparser.YAMLInputParser import YAMLInputParser
+from adare.parser.TestsetFileParser import TestsetFileParser
 
 # configure logging
 import logging
@@ -188,8 +188,7 @@ class Environment:
         """
         create a jinja environment for the templates directory which is located in the project programs directory
         """
-        template_folder = self.project_scripts_directory.as_posix()
-        self.__jinja_project = init_jinja_environment(template_folder)
+        self.__jinja_project = init_jinja_environment(self.project_scripts_directory)
 
     def __create(self):
         """
@@ -215,10 +214,10 @@ class Environment:
                                                       os_language=self.setup.os_language,
                                                       os_architecture=self.setup.os_architecture,
                                                       os_details=self.setup.os_architecture,
-                                                      resolution=self.setup.resolution,
-                                                      pause_after_gui_automation=self.setup.pause_after_gui_automation,
-                                                      idle_after_os_starts=self.setup.idle_after_os_starts,
-                                                      settings=self.setup.settings,
+                                                      # resolution=self.setup.resolution,
+                                                      # pause_after_gui_automation=self.setup.pause_after_gui_automation,
+                                                      # idle_after_os_starts=self.setup.idle_after_os_starts,
+                                                      # settings=self.setup.settings,
                                                       experiments=[],
                                                       usbdevices=self.setup.usbdevices,
                                                       networkdrives=self.setup.networkdrives,
@@ -255,11 +254,7 @@ class Environment:
         """
         creates a gui experiment skeleton file for a given experiment name
         """
-        template_directory = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/templates'))
-        if not Path(template_directory).is_dir():
-            log.error(f'template directory {template_directory} is missing')
-            exit(-1)
-        jinja = init_jinja_environment(template_directory.as_posix())
+        jinja = init_jinja_environment(TEMPLATES_DIR)
         template = jinja.get_template('ExperimentTemplate')
         filepath = self.experiment_directory/experiment_name/f'{experiment_name}.py'
         with open(filepath.as_posix(), mode='w') as f:
@@ -275,11 +270,7 @@ class Environment:
         """
         creates a testset file skeleton file for a given experiment name
         """
-        template_directory = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/templates'))
-        if not Path(template_directory).is_dir():
-            log.error(f'template directory {template_directory} is missing')
-            exit(-1)
-        jinja = init_jinja_environment(template_directory.as_posix())
+        jinja = init_jinja_environment(TEMPLATES_DIR)
         template = jinja.get_template('TestsetfileTemplate')
         filepath = self.experiment_directory / experiment_name / f'{experiment_name}.yml'
         with open(filepath.as_posix(), mode='w') as f:
@@ -290,6 +281,18 @@ class Environment:
                     }
                 )
             )
+
+    def __add_experiment_to_configuration(self, name: str, description: str, directory: Path, tags: list):
+        """
+        add a experiment to the environment configuration
+        """
+        experiment = Experiment(name=name,
+                                description=description,
+                                directory=directory.as_posix(),
+                                tags=tags
+        )
+        self.configuration.experiments.append(experiment)
+        self.__save_configuration()
 
     def create_experiment(self, experiment_name: str, usb_name: str or None = None, networkdrive_name: str or None = None):
         """
@@ -314,6 +317,8 @@ class Environment:
         print('\n\n')
         print(f'new experiment skeleton created (path:{filepath})')
         log.debug(f'skeleton for experiment {experiment_name} created')
+        # add file to configuration
+        self.__add_experiment_to_configuration(experiment_name, '', filepath, [])
 
     def remove_experiment(self, experiment_name: str):
         """
@@ -449,7 +454,11 @@ class Environment:
         ask the user if examples should be included and includes them if wished
         """
         include_examples = False
-        experiment_directory_in_package = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/examples/experiments'))
+        experiment_directory_in_package = EXAMPLES_DIR/'Experiments'
+        if not experiment_directory_in_package.is_dir():
+            log.error(f'directory with examples ({experiment_directory_in_package}) not found')
+            return
+
         if 'ubuntu' in self.configuration.vagrantbox:
             example_class_name = 'Ubuntu Trash Bin'
             experiment_directory = experiment_directory_in_package / 'UbuntuTrashBin'
@@ -459,7 +468,7 @@ class Environment:
         elif 'win' in self.configuration.vagrantbox:
             example_class_name = 'Windows Trash Bin'
             experiment_directory = experiment_directory_in_package / 'WindowsTrashBin'
-            rbcmd_tool = Path(pkg_resources.resource_filename(config.PACKAGE, '/data/programs/additional_tools'))/'RBCmd.exe'
+            rbcmd_tool = PROGRAMS_DIR/'additional_tools'/'RBCmd.exe'
             shutil.copy(rbcmd_tool.as_posix(), self.project_additional_tools_directory)
         else:
             return
@@ -654,8 +663,7 @@ class Environment:
             log.error(f'testset file is missing')
             return
 
-        parser = YAMLInputParser(testset_file)
-        testsetdata = parser.parse()
+        testset_data = TestsetFileParser(testset_file).parse()
 
         result_data = None
         if not result_file.is_file():
@@ -711,7 +719,7 @@ class Environment:
 
         with ExperimentApi() as db:
             db.add_experiment_run(
-                testset_data=testsetdata,
+                testset_data=testset_data,
                 action_file=action_file,
                 testset_file=testset_file,
                 result_data=result_data,

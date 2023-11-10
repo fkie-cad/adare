@@ -1,6 +1,3 @@
-import pkg_resources
-from pathlib import Path
-
 # set program details
 NAME = "Adare"
 VERSION = "0.0.1"
@@ -13,7 +10,6 @@ TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
 CONSOLEHANDLER = '%(levelprefix)s %(name)s - %(message)s'
 CONSOLEHANDLER_SHORT = '%(levelprefix)s %(message)s'
 FILEHANDLER = '[%(asctime)s]: %(name)s: %(levelname)s - %(message)s'
-DEFAULTLOGFILE = "X:/main.log"
 ABBREV_DEBUG = ['DEBUG', 'debug', 'Debug', 'd', 'D']
 ABBREV_INFO = ['INFO', 'info', 'Info', 'i', 'I']
 ABBREV_WARNING = ['WARNING', 'warning', 'Warning', 'w', 'W']
@@ -21,24 +17,10 @@ ABBREV_ERROR = ['ERROR', 'error', 'Error', 'e', 'E']
 ABBREV_CRITICAL = ['CRITICAL', 'critical', 'Critical', 'c', 'C']
 
 # set default variables
-PARSEANDTESTPROG = 'ParseAndTest'
-GUIAUTOMATIONPROG = 'GUIAutomation'
+# PARSEANDTESTPROG = 'ParseAndTest'
+# GUIAUTOMATIONPROG = 'GUIAutomation'
+# experimentBASEDIR_IN_GUIAUTOMATION = 'src/guiautomation/experiment/'
 
-experimentBASEDIR_IN_GUIAUTOMATION = 'src/guiautomation/experiment/'
-
-# default values for data located in package
-PCK = Path(pkg_resources.resource_filename('adare', ''))
-PCK_TEMPLATES = 'data/templates/'
-PCK_EXAMPLES = 'data/examples/'
-PCK_EXAMPLES_SETUPFILES = PCK_EXAMPLES+'EnvironmentSetupFiles'
-PCK_EXAMPLES_GUIexperimentS = PCK_EXAMPLES+'GUIexperiments'
-PCK_EXAMPLES_INPUTFILES = PCK_EXAMPLES+'experimentInputs'
-PCK_PROGRAMS = 'data/programs/'
-PCK_PROGRAMS_GUIAUTOMATION = PCK_PROGRAMS+GUIAUTOMATIONPROG
-PCK_PROGRAMS_PARSEANDTEST = PCK_PROGRAMS+PARSEANDTESTPROG
-PCK_PARSEANDTEST_TESTFUNCTION_DIRS = [
-    PCK/'data/programs/ParseAndTest/src/parseandtest/testfunctions'
-]
 
 # default values for VM and VM scripts
 DEFAULT_RESOLUTION = "1920x1080"

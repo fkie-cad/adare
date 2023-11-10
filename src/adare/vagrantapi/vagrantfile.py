@@ -2,11 +2,11 @@
 import os
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
-import pkg_resources
 from typing import Optional
 
 # internal imports
 import adare.config as config
+from adare.config.configdirectory import VAGRANTFILE_TEMPLATE
 from .exceptions import VagrantFileCreationError, VagrantFileWriteError
 
 # configure logging
@@ -32,15 +32,15 @@ class VagrantFile:
     synced_folders: list[dict]
 
     def __init__(self,
-                 vagrantfile_template: str = pkg_resources.resource_filename(config.PACKAGE, 'data/VagrantfileTemplate/Vagrantfile'),
+                 vagrantfile_template: Path = VAGRANTFILE_TEMPLATE,
                  options: dict = None):
-        if not Path(vagrantfile_template).is_file():
+        if not vagrantfile_template.is_file():
             raise VagrantFileCreationError(f'parsed path ({vagrantfile_template}) for Vagrantfile isn\'t existing')
-        if Path(vagrantfile_template).name != 'Vagrantfile':
+        if vagrantfile_template.name != 'Vagrantfile':
             raise VagrantFileCreationError('provided file isn\'t a Vagrantfile')
 
         self.jinja2 = Environment(
-            loader=FileSystemLoader(Path(vagrantfile_template).parent),
+            loader=FileSystemLoader(vagrantfile_template.parent),
             autoescape=select_autoescape()
         )
 

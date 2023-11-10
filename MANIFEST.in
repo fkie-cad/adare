@@ -1,5 +1,3 @@
-recursive-include src/adare/data *
-
 prune **/*.egg-info
 prune **/.idea
 prune **/venv

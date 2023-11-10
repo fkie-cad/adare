@@ -7,7 +7,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def project_create(arguments):
+def exec_create_project(arguments):
     """
     creates a new project
 
@@ -16,7 +16,7 @@ def project_create(arguments):
     Project(arguments.directory, create=True)
 
 
-def project_remove(arguments):
+def exec_remove_project(arguments):
     """
     removes a project
 

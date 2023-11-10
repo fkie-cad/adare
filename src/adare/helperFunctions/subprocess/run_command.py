@@ -1,8 +1,6 @@
 # external imports
 from subprocess import Popen, PIPE
 import os
-import platform
-import pkg_resources
 
 # internal imports
 from adare.helperFunctions.strings.replace import replace_multiple_strings
@@ -36,12 +34,12 @@ def run_cmd(cmd: list, cwd: str, env: dict = None, quiet=False) -> int:
     return proc.returncode
 
 
-def run_python(cmd: list, quiet=True):
-    system = platform.system()
-    if system == 'Windows':
-        cmd = ['py'] + cmd
-    elif system == "Linux" or system == "Darwin":
-        cmd = ['python3'] + cmd
-    else:
-        log.fatal(f'the os {system} is not supported by the tool')
-    run_cmd(cmd, cwd=pkg_resources.resource_filename('adare', ''), quiet=quiet)
+# def run_python(cmd: list, quiet=True):
+#     system = platform.system()
+#     if system == 'Windows':
+#         cmd = ['py'] + cmd
+#     elif system == "Linux" or system == "Darwin":
+#         cmd = ['python3'] + cmd
+#     else:
+#         log.fatal(f'the os {system} is not supported by the tool')
+#     run_cmd(cmd, cwd=pkg_resources.resource_filename('adare', ''), quiet=quiet)

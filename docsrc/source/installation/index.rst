@@ -5,16 +5,19 @@ Installation
 To install adare clone the `repository <https://github.com/fkie-cad/Adare>`_, navigate into the directory and run ``make install``.
 To check whether the tool is successfully installed and ready to use run ``adare -v``.
 
+
 Requirements
 ************
-The automatic `VirtualBox <https://www.virtualbox.org/>`_
+One of the necessary tools to use adare is `Vagrant <https://www.vagrantup.com/>`_, which manages virtual machines.
+Additionally, a virtual machine hypervisor is required.
+Currently, only `VirtualBox <https://www.virtualbox.org/>`_ is supported.
+Moreover, if you run adare from a Windows machine, you need to make sure that Hyper-V is disabled, since Hyper-V and the VirtualBox hypervisor interfere each other, which can cause slow and hanging machines.
 
-In case you use Windows, it sometimes necessary to disable Hyper-V such that Virtualbox Hypervision can work properly.
 
 Tested Configurations
 *********************
 
-The tool was tested with the following versions of Python and VirtualBox:
+The tool was tested with the following versions of Python, Vagrant, and VirtualBox:
 
 .. list-table::
    :widths: 25 30
@@ -24,5 +27,7 @@ The tool was tested with the following versions of Python and VirtualBox:
      - versions
    * - Python
      - ``3.8``, ``3.9``, ``3.10``
+   * - Vagrant
+     - ``2.3.2``
    * - VirtualBox
      - ``6.1``, ``7.0``
