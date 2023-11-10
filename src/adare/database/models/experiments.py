@@ -6,7 +6,6 @@ import uuid
 from sqlalchemy_serializer import SerializerMixin
 
 Base = declarative_base()
-
 mapping_experimentrun_test = Table(
     "mapping_experimentrun_test",
     Base.metadata,

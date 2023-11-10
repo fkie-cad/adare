@@ -6,7 +6,7 @@ import attrs as attr
 from pathlib import Path
 
 # internal imports
-from adare.inputparser.YAMLInputParser import YAMLInputParser
+from adare.parser.TestsetFileParser import TestsetFileParser
 from adare.networkdrive.attrs_classes import SMBShare, SMBUser, NFSShare
 import adare.config as config
 
@@ -91,7 +91,7 @@ class Experiment:
         if not inputfile.is_file():
             return False
         try:
-            data = YAMLInputParser(inputfile).parse()
+            data = TestsetFileParser(inputfile).parse()
             log.debug(f'input file check - parsed input file: {data}')
         except (yaml.constructor.ConstructorError, ValueError, yaml.YAMLError, FileNotFoundError) as e:
             log.error(f'input file {inputfile} couldn\'t be read because of the following exception')
@@ -158,15 +158,15 @@ class EnvironmentConfiguration:
     os_language: str = ''
     os_architecture: str = ''
     os_details: str = attr.Factory(str)
-    resolution: str = config.DEFAULT_RESOLUTION
-    pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
-    idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
-    settings: list = attr.Factory(list)
+    # resolution: str = config.DEFAULT_RESOLUTION
+    # pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
+    # idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
+    # settings: list = attr.Factory(list)
     experiments: list[Experiment] = attr.Factory(list)
     usbdevices: list[UsbDevice] = attr.Factory(list)
     networkdrives: list[NetworkDrive] = attr.Factory(list)
     postsetupinstallations: list[PostsetupInstallations] = attr.Factory(list)
-    gui: bool = True
+    # gui: bool = True
 
 
 @attr.define
@@ -174,7 +174,6 @@ class EnvironmentSetup:
     """
     class to store the configuration needed when setting up an environment
     """
-    name: Optional[str]
     vagrantbox: str
     os_platform: Literal['windows', 'linux']
     os: str
@@ -182,16 +181,17 @@ class EnvironmentSetup:
     os_version: str = ''
     os_language: str = ''
     os_architecture: str = ''
+    name: Optional[str] = None
     os_details: str = attr.Factory(str)
-    resolution: str = config.DEFAULT_RESOLUTION
-    pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
-    idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
-    settings: list = attr.Factory(list)
+    # resolution: str = config.DEFAULT_RESOLUTION
+    # pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
+    # idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
+    # settings: list = attr.Factory(list)
     experiments: list[Experiment] = attr.Factory(list)
     usbdevices: list[UsbDevice] = attr.Factory(list)
     networkdrives: list[NetworkDrive] = attr.Factory(list)
     postsetupinstallations: list[PostsetupInstallations] = attr.Factory(list)
-    gui: bool = True
+    # gui: bool = True
 
 
 @attr.define

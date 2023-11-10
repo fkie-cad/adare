@@ -7,12 +7,12 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def init_jinja_environment(template_folder: str):
-    if not Path(template_folder).is_dir() or not template_folder:
+def init_jinja_environment(template_folder: Path):
+    if not template_folder.is_dir() or not template_folder:
         return None
     try:
         jinja_env = Environment(
-            loader=FileSystemLoader(template_folder),
+            loader=FileSystemLoader(template_folder.as_posix()),
             autoescape=select_autoescape()
         )
         return jinja_env

@@ -4,11 +4,11 @@ from datetime import datetime
 import adare.config.database as config_database
 from adare.database.models.login import UserSession, Base as LoginBase
 from adare.database.models.experiments import Scenario, PublishStatus, TestParameter, TestParameterEntry, Experiment, ExperimentRun, Status, TestFunction, AbstractTest, Test, Tool, Result, OsInfo, LogFile, Request, Base as ExperimentsBase
-import adare.config as config
 from pathlib import Path
 from adare.helperFunctions.dict.dict import get_value_if_missing_key
 from adare.helperFunctions.pyfileanalyze import PyModuleAnalyzer
 from adare.helperFunctions.hash import hash_file_sha256, combine_hashes
+from adare.config.configdirectory import PROG_PARSEANDTEST_DIR
 
 # configure logging
 import logging
@@ -53,7 +53,7 @@ class ProgramDatabase:
 
 class ExperimentApi(ProgramDatabase):
     testfunction_locations: dict = {
-        'default': config.PCK_PARSEANDTEST_TESTFUNCTION_DIRS
+        'default': PROG_PARSEANDTEST_DIR/'src'/'parseandtest'/'testfunctions',
     }
     def __init__(self, db_path: Path = config_database.get_database_location()):
         super().__init__(db_path)

@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 #         print("    ", end="\r", flush=True)
 
 
-def env_create(arguments):
+def exec_env_create(arguments):
     """
     creates a new environment
 
@@ -31,10 +31,10 @@ def env_create(arguments):
     """
     project_directory = determine_projectdirectory(arguments.project)
     project = Project(project_directory)
-    project.add_environment(arguments.conf, name=arguments.name)
+    project.add_environment(arguments.config, name=arguments.name)
 
 
-def env_list(arguments):
+def exec_env_list(arguments):
     """
     shows the information about environments of a project
 
@@ -49,7 +49,7 @@ def env_list(arguments):
     project.list_environments(details=show_details)
 
 
-def env_run(arguments):
+def exec_run_experiment(arguments):
     """
     run the provided experiment in the given environment
 
@@ -69,7 +69,7 @@ def env_run(arguments):
     project.run_experiment(arguments.name, arguments.experiment, arguments.debugmode)
 
 
-def env_remove(arguments):
+def exec_env_remove(arguments):
     """
     removes the chosen environment
 
@@ -80,7 +80,7 @@ def env_remove(arguments):
     project.remove_environment(arguments.name)
 
 
-def env_create_experiment(arguments):
+def exec_add_experiment(arguments):
     """
     create experiment skeleton files [input file, gui experiment file] (in order to write your own experiment)
 
@@ -88,10 +88,10 @@ def env_create_experiment(arguments):
     """
     project_directory = determine_projectdirectory(arguments.project)
     project = Project(project_directory)
-    project.create_experiment(arguments.name, arguments.experiment, networkdrive=arguments.networkdrive, usb=arguments.usb)
+    project.create_experiment(arguments.environment, arguments.experiment, networkdrive=arguments.networkdrive, usb=arguments.usb)
 
 
-def env_remove_experiment(arguments):
+def exec_remove_experiment(arguments):
     """
     remove experiment skeleton files [input file, gui experiment file] (in order to write your own experiment)
 
@@ -99,10 +99,10 @@ def env_remove_experiment(arguments):
     """
     project_directory = determine_projectdirectory(arguments.project)
     project = Project(project_directory)
-    project.remove_experiment(arguments.name, arguments.experiment)
+    project.remove_experiment(arguments.environment, arguments.experiment)
 
 
-def env_addusb(arguments):
+def exec_env_addusb(arguments):
     """
     adds a usb device to an environment
 
@@ -114,7 +114,7 @@ def env_addusb(arguments):
     project.add_usb_to_environment(arguments.name, arguments.details)
 
 
-def env_addnetworkdrive(arguments):
+def exec_env_addnetworkdrive(arguments):
     """
     adds a network drive to an environment
 

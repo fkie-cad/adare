@@ -6,7 +6,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def show_version(arguments, parser):
+def exec_show_version(arguments, parser):
     """
         cli function to show the program version
     """

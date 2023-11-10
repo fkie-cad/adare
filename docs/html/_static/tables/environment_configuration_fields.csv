@@ -1,0 +1,13 @@
+Field|Description
+vagrantbox|The name of the vagrant box to use
+postsetupinstallations|A list of installations to run before the experiment
+name|The name of the VM
+os_platform|The OS platform to use (e.g. windows, linux)
+os|The OS to use (e.g. windows 10, ubuntu 20.04)
+os_distribution|The OS distribution to use (e.g. Home, Pro, Enterprise)
+os_version|The OS version to use (e.g. 10, 16.04)
+os_architecture|The OS architecture to use (e.g. x86, x64)
+os_language|The OS language to use (e.g. en-US, en-GB)
+os_details|further details about the OS
+usb_devices|A list of USB devices to use
+network_drivers|A list of network drivers to use
