@@ -1,56 +1,49 @@
 # external imports
 from pathlib import Path
 
+# internal imports
+from adare.database.api.project import ProjectManagementApi
+
 # configure logging
 import logging
 log = logging.getLogger(__name__)
 
 
-def check_if_projectdirectory_is_valid(directory: str):
+def __check_project_directory(project_directory: Path) -> bool:
     """
-    check if a given directory is a valid project directory
+    check if the provided project directory is valid
 
-    :param directory: possible project path
-
-    :return: True: path $directory is a valid project directory
-             False: path $directory is NOT a valid project directory
+    :param project_directory:
+    :return:
     """
-    if directory[-1] == "/":
-        directory = directory[:-1]
-    if not Path(directory).is_dir():
-        log.warning("provided base directory ("+directory+") isn't a directory")
+    if not project_directory.exists():
+        log.error(f"provided project directory {project_directory} does not exist")
         return False
-    necessary_subdirectories = ["programs"]
-    missing_subdir = False
-    for subdir in necessary_subdirectories:
-        if not Path(directory + "/" + subdir).is_dir():
-            missing_subdir = True
-            log.warning("provided base directory ("+directory+") is missing the necessary folder " + str(subdir))
-
-    if missing_subdir:
+    if not project_directory.is_dir():
+        log.error(f"provided project directory {project_directory} is not a directory")
         return False
-
     return True
 
 
-def determine_projectdirectory(chosen_projectdirectory: str):
+def determine_projectdirectory(project_name: str = None) -> Path or None:
     """
     determine the directory of the project
 
-    :param chosen_projectdirectory: path of the project path given by the user
+    :param project_name: name of the project
 
     :return: project path: a valid project path
     """
-    tested_project_paths = []
-    if chosen_projectdirectory:
-        if check_if_projectdirectory_is_valid(chosen_projectdirectory):
-            return Path(chosen_projectdirectory).as_posix()
-        else:
-            log.warning("provided project path (" + str(chosen_projectdirectory) + ") isn't a valid project directory")
-        tested_project_paths.append(chosen_projectdirectory)
-    else:
-        if check_if_projectdirectory_is_valid('.'):
-            return Path('.').absolute().as_posix()
-        tested_project_paths.append(Path('.').absolute().as_posix())
-    log.error(f'No valid project directory found. Tested paths: {str(tested_project_paths)} - in most cases you need navigate to the project directory')
-    exit(-1)
+    if project_name:
+        with ProjectManagementApi() as db:
+            project = db.get_project(project_name)
+            if not project:
+                log.warning(f"provided {project_name} does not exist -> try cwd instead")
+            else:
+                project_directory = Path(project.path)
+                return project_directory
+    if not project_name:
+        project_directory = Path.cwd()
+        if __check_project_directory(project_directory):
+            return project_directory
+
+    return None

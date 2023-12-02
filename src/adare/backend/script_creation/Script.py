@@ -96,7 +96,7 @@ class Script:
             destination_script_path = destination_directory / self.name
 
         if not self.only_copy:
-            jinja_env = jinjafeatures.init_jinja_environment(self.directory.as_posix())
+            jinja_env = jinjafeatures.init_jinja_environment(self.directory)
             if not jinja_env:
                 log.error(f'jinja environment for directory {self.directory} could not be created')
                 return

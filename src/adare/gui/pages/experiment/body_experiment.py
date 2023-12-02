@@ -4,7 +4,7 @@ from nicegui import ui
 # internal imports
 from adare.gui.extensions.card_table import CardTable
 from adare.gui.styles import STYLE_TEXT_MUTED_LARGE, STYLE_TEXT_MUTED_SMALL
-from adare.database import database
+from adare.database.api.experiment import ExperimentApi
 from adare.gui.pages.experiment.tests_table import TestsTable
 
 
@@ -17,7 +17,7 @@ class BodyExperimentPage:
         self.experiment_uuid = uuid
 
     def load_data(self):
-        with database.ExperimentApi() as db:
+        with ExperimentApi() as db:
             exp = db.get_experiment_by_uuid(self.experiment_uuid)
             tests = []
             for test in exp.abstract_tests:

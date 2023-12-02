@@ -1,5 +1,5 @@
 from adare.webappaccess.publish_experiment import WebappPublishExperiment
-from adare.gui.login import LoginInterface
+from adare.gui.interfaces.login import LoginInterface
 
 # configure logging
 import logging

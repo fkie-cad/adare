@@ -3,7 +3,6 @@ from pathlib import Path
 
 # internal imports
 from adare.backend.script_creation.Script import Script
-from adare.backend.attrs_classes import EnvironmentConfiguration
 
 # configure logging
 import logging
@@ -11,11 +10,11 @@ log = logging.getLogger(__name__)
 
 
 class PostsetupInstallationsScript(Script):
-    def __init__(self, name: str, source_directory: Path, configuration: EnvironmentConfiguration = None, render_wrapper: bool = False):
+    def __init__(self, name: str, source_directory: Path, postsetup_installations: list, render_wrapper: bool = False):
         super().__init__(name, source_directory, render_wrapper=render_wrapper)
-        if configuration:
+        if postsetup_installations:
             var = {
-                'installations': [[installation.name, installation.description, installation.command] for installation in configuration.postsetupinstallations],
+                'installations': [[installation.name, installation.description, installation.command] for installation in postsetup_installations],
             }
             self.update_variables(var)
         else:

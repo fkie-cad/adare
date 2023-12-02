@@ -1,4 +1,5 @@
 import platform
+from pathlib import Path
 
 # set program details
 NAME = "ParseAndTest"
@@ -15,6 +16,6 @@ DEFAULTLOGFILE = "~/main.log"
 # set filepath for saved variables
 VARIABLES_FILE = ''
 if platform.system() == 'Windows':
-    VARIABLES_FILE = "C:/Users/vagrant/AppData/Local/Temp/LINUXAUTO_VARS"
+    VARIABLES_FILE = Path("C:/Users/vagrant/AppData/Local/Temp/LINUXAUTO_VARS")
 else:
-    VARIABLES_FILE = "/tmp/LINUXAUTO_VARS"
+    VARIABLES_FILE = Path("/tmp/LINUXAUTO_VARS")

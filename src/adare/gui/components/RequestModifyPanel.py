@@ -1,6 +1,6 @@
 from nicegui import ui
 
-from adare.database.database import RequestSessionApi
+from adare.database.api.request import RequestSessionApi
 from adare.gui.components.ErrorDialog import ErrorDialog
 from adare.gui.storage import Storage, toggle_request_table_modifypanel
 from adare.gui.components.RequestTable import RequestTable

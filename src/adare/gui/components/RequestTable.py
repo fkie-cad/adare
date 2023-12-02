@@ -2,7 +2,7 @@ from nicegui import ui
 import asyncio
 
 from adare.gui.components.AdvancedTable import AdvancedTable
-from adare.database.database import RequestSessionApi
+from adare.database.api.request import RequestSessionApi
 from adare.gui.storage import Storage
 from adare.config.gui import SLOT_STATUS_TABLE
 from adare.webappaccess.request import send_experiment_request

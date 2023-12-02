@@ -16,11 +16,6 @@ ABBREV_WARNING = ['WARNING', 'warning', 'Warning', 'w', 'W']
 ABBREV_ERROR = ['ERROR', 'error', 'Error', 'e', 'E']
 ABBREV_CRITICAL = ['CRITICAL', 'critical', 'Critical', 'c', 'C']
 
-# set default variables
-# PARSEANDTESTPROG = 'ParseAndTest'
-# GUIAUTOMATIONPROG = 'GUIAutomation'
-# experimentBASEDIR_IN_GUIAUTOMATION = 'src/guiautomation/experiment/'
-
 
 # default values for VM and VM scripts
 DEFAULT_RESOLUTION = "1920x1080"

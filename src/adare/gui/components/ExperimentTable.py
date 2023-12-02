@@ -1,7 +1,6 @@
 from nicegui import ui
 from adare.gui.styles import btn_remove_color_prop
-from adare.database import database
-from nicegui.background_tasks import create as create_background_task
+from adare.database.api.experiment import ExperimentApi
 
 from adare.gui.interfaces.login import LoginIface
 from adare.gui.components.AdvancedTable import AdvancedTable
@@ -34,7 +33,7 @@ class ExperimentTable(AdvancedTable):
 
     def update_data(self):
         """ Retrieve data from database and update the table. """
-        with database.ExperimentApi() as db:
+        with ExperimentApi() as db:
             experiments = db.get_all_experiments()
             self.data = [
                 {

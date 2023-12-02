@@ -6,7 +6,7 @@ import attrs as attr
 from pathlib import Path
 
 # internal imports
-from adare.parser.TestsetFileParser import TestsetFileParser
+from adare.testsetfile.parser import parse_testsetfile
 from adare.networkdrive.attrs_classes import SMBShare, SMBUser, NFSShare
 import adare.config as config
 
@@ -87,16 +87,19 @@ class Experiment:
 
         :return: bool
         """
-        inputfile = Path(self.directory)/f'{self.name}.yml'
-        if not inputfile.is_file():
+        testsetfile = Path(self.directory)/f'{self.name}.yml'
+        if not testsetfile.is_file():
             return False
         try:
-            data = TestsetFileParser(inputfile).parse()
-            log.debug(f'input file check - parsed input file: {data}')
+            data = parse_testsetfile(testsetfile)
+            if not data:
+                return False
         except (yaml.constructor.ConstructorError, ValueError, yaml.YAMLError, FileNotFoundError) as e:
-            log.error(f'input file {inputfile} couldn\'t be read because of the following exception')
+            log.error(f'input file {testsetfile} couldn\'t be read because of the following exception')
             log.error(e, exc_info=True)
             return False
+
+        log.debug(f'testset file {testsetfile} is valid')
         return True
 
     # todo: find a way to check if gui experiment file is a valid python file
@@ -159,14 +162,15 @@ class EnvironmentConfiguration:
     os_architecture: str = ''
     os_details: str = attr.Factory(str)
     # resolution: str = config.DEFAULT_RESOLUTION
-    # pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
-    # idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
+    pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
+    idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
     # settings: list = attr.Factory(list)
     experiments: list[Experiment] = attr.Factory(list)
     usbdevices: list[UsbDevice] = attr.Factory(list)
     networkdrives: list[NetworkDrive] = attr.Factory(list)
     postsetupinstallations: list[PostsetupInstallations] = attr.Factory(list)
     # gui: bool = True
+    description: str = attr.Factory(str)
 
 
 @attr.define
@@ -183,6 +187,7 @@ class EnvironmentSetup:
     os_architecture: str = ''
     name: Optional[str] = None
     os_details: str = attr.Factory(str)
+    description: str = attr.Factory(str)
     # resolution: str = config.DEFAULT_RESOLUTION
     # pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
     # idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE

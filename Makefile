@@ -55,11 +55,3 @@ clean_install:
 
 flake:
 	${PYTHON} -m flake8 || exit 0
-
-django-migrate:
-	${PYTHON} .\src\adare\django_manage.py makemigrations experiments
-	${PYTHON} .\src\adare\django_manage.py makemigrations login
-	${PYTHON} .\src\adare\django_manage.py migrate
-
-clean-package-dir:
-	${PYTHON} .\cleanup_package_dir.py

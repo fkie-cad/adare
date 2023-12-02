@@ -8,6 +8,11 @@ def hash_file_sha256(filepath: Path):
             h.update(b)
     return h.hexdigest()
 
+def hash_dict_sha256(d: dict):
+    h = hashlib.sha256()
+    h.update(str(d).encode())
+    return h.hexdigest()
+
 def combine_hashes(hashes: list):
     h = hashlib.sha256()
     for hash in hashes:

@@ -5,7 +5,7 @@ import asyncio
 
 # internal imports
 import adare.config.server as config_server
-from adare.database.database import UserSessionApi
+from adare.database.api.usersession import UserSessionApi
 from adare.webappaccess.request_header import get_authenticated_request_header
 from adare.webappaccess.webapp import check_webserver_availability
 

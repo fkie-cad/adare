@@ -4,8 +4,7 @@ from nicegui.background_tasks import create as create_background_task
 
 # internal imports
 from adare.gui.styles import STYLE_TEXT_MUTED_LARGE, STYLE_TEXT_MUTED_SMALL
-from adare.database import database
-from adare.webappaccess.experiment import check_experiment_published
+from adare.database.api.experiment import ExperimentApi
 
 import logging
 log = logging.getLogger(__name__)
@@ -38,7 +37,7 @@ class ScenarioOverview:
         self.scenario_uuid = uuid
 
     def load_data(self):
-        with database.ExperimentApi() as db:
+        with ExperimentApi() as db:
             sce = db.get_scenario_by_uuid(self.scenario_uuid)
 
             self.scenario_data = {

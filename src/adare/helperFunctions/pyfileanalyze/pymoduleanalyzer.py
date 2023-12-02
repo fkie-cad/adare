@@ -27,8 +27,11 @@ class PyModuleAnalyzer:
                     is_subclass = False
                     if hasattr(node, 'bases'):
                         for base in node.bases:
-                            if base.id == parent:
-                                is_subclass = True
+                            if hasattr(base, 'id'):
+                                if base.id == parent:
+                                    is_subclass = True
+                            else:
+                                log.warning(f'base has no id: {base}')
                         if is_subclass:
                             class_list.append(PyClassAnalyzer(node))
                 else:
