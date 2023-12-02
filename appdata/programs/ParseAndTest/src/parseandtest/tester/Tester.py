@@ -11,7 +11,7 @@ from parseandtest.tester.testresult import TestOutcome
 from parseandtest.tester.testcontainer import TestContainer
 from parseandtest.tester.basictest import BasicTest
 import parseandtest.config as config
-from parseandtest.yamlfeatures.basics import yaml_to_dict
+from parseandtest.helperfunctions.yaml import yaml_to_dict
 
 # configure logging
 import logging

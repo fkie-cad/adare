@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR
+from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
@@ -52,7 +52,12 @@ mapping_scenario_tag = Table(
     Column("scenario_uuid", ForeignKey("scenario.uuid")),
     Column("tag_id", ForeignKey("tag.id")),
 )
-
+mapping_postsetupinstallation_environment = Table(
+    "mapping_postsetupinstallation_environment",
+    Base.metadata,
+    Column("postsetupinstallation_id", ForeignKey("postsetupinstallation.id")),
+    Column("environment_id", ForeignKey("environment.id")),
+)
 
 class Tag(SerializerMixin, Base):
     __tablename__ = 'tag'
@@ -165,7 +170,7 @@ class TestFunction(SerializerMixin, Base):
     serialize_rules = ('-id',)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    type = Column(String)
+    type = Column(String, unique=True, nullable=False)
     name = Column(String)
     description = Column(String)
 
@@ -239,9 +244,11 @@ class Test(SerializerMixin, Base):
 class OsInfo(SerializerMixin, Base):
     __tablename__ = 'osinfo'
     RELATIONSHIPS_TO_DICT = True
-    serialize_rules = ('-id',)
+    serialize_rules = ('-id', '-platform')
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+
+    platform = Column(String, nullable=False)
     os = Column(String)
     distribution = Column(String)
     version = Column(String)
@@ -270,7 +277,6 @@ class LogFile(SerializerMixin, Base):
     def __repr__(self):
         return f"<LogFile(name='{self.name}',path='{self.path}')>"
 
-
 class Experiment(SerializerMixin, Base):
     __tablename__ = 'experiment'
     RELATIONSHIPS_TO_DICT = True
@@ -292,6 +298,12 @@ class Experiment(SerializerMixin, Base):
 
     experiment_hash = Column(String, nullable=True)
 
+    environment_id = Column(Integer, ForeignKey('environment.id'), nullable=False)
+    environment = relationship("Environment", backref=backref("experiments", cascade="all, delete-orphan"))
+
+    # ensure that the name of the experiment is unique for a given environment
+    __table_args__ = (UniqueConstraint('name', 'environment_id'),)
+
     def __str__(self):
         return str(self.name)
 
@@ -310,9 +322,9 @@ class ExperimentRun(SerializerMixin, Base):
 
     uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     experiment_id = Column(String, ForeignKey('experiment.uuid'))
-    experiment = relationship(Experiment)
-    timestamp_start = Column(DateTime)
-    timestamp_end = Column(DateTime)
+    experiment = relationship(Experiment, backref=backref("runs", cascade="all, delete-orphan"))
+    timestamp_start = Column(DateTime, nullable=True)
+    timestamp_end = Column(DateTime, nullable=True)
     tests = relationship(Test, secondary=mapping_experimentrun_test)
     publish_status_id = Column(Integer, ForeignKey('publishstatus.id'), nullable=True)
     publish_status = relationship(PublishStatus)
@@ -322,25 +334,26 @@ class ExperimentRun(SerializerMixin, Base):
     status_parse_and_test_id = Column(Integer, ForeignKey('status.id'))
     status_vagrant_id = Column(Integer, ForeignKey('status.id'))
 
-    logfile_gui_automation_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
-    logfile_parse_and_test_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    logfile_action_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    logfile_test_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
     logfile_vagrant_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
     logfile_installed_packages_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
     logfile_postsetup_installations_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
     logfile_run_experiment_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
 
     status = relationship(Status, foreign_keys=[status_id])
-    status_gui_automation = relationship(Status, foreign_keys=[status_gui_automation_id])
-    status_parse_and_test = relationship(Status, foreign_keys=[status_parse_and_test_id])
+    status_action = relationship(Status, foreign_keys=[status_gui_automation_id])
+    status_test = relationship(Status, foreign_keys=[status_parse_and_test_id])
     status_vagrant = relationship(Status, foreign_keys=[status_vagrant_id])
 
-    logfile_gui_automation = relationship(LogFile, foreign_keys=[logfile_gui_automation_id])
-    logfile_parse_and_test = relationship(LogFile, foreign_keys=[logfile_parse_and_test_id])
+    logfile_action = relationship(LogFile, foreign_keys=[logfile_action_id])
+    logfile_test = relationship(LogFile, foreign_keys=[logfile_test_id])
     logfile_vagrant = relationship(LogFile, foreign_keys=[logfile_vagrant_id])
     logfile_installed_packages = relationship(LogFile, foreign_keys=[logfile_installed_packages_id])
     logfile_postsetup_installations = relationship(LogFile, foreign_keys=[logfile_postsetup_installations_id])
     logfile_run_experiment = relationship(LogFile, foreign_keys=[logfile_run_experiment_id])
 
+    # currently not used
     sha256_validation_hash = Column(String, nullable=True)
 
     def __str__(self):
@@ -394,3 +407,51 @@ class Request(SerializerMixin, Base):
 
     def __repr__(self):
         return f"<ExperimentRequest(uuid='{self.uuid}',experiment={self.experiment_id},scenario={self.scenario_id},status={self.status_id})>"
+
+
+class PostSetupInstallation(SerializerMixin, Base):
+    __tablename__ = 'postsetupinstallation'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String)
+    description = Column(String, nullable=True)
+    command = Column(String)
+
+    def __str__(self):
+        return str(self.name)
+
+    def __repr__(self):
+        return f"<PostSetupInstallation(name='{self.name}',description='{self.description}',command='{self.command}')>"
+
+
+class Environment(SerializerMixin, Base):
+    __tablename__ = 'environment'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String)
+    description = Column(String)
+    path = Column(String)
+    vagrant_box = Column(String)
+
+    osinfo_id = Column(Integer, ForeignKey('osinfo.id'))
+    project_id = Column(Integer, ForeignKey('project.id'))
+
+    osinfo = relationship(OsInfo)
+    project = relationship("Project", backref=backref("environments", cascade="all, delete-orphan"))
+    postsetupinstallations = relationship(PostSetupInstallation, secondary=mapping_postsetupinstallation_environment)
+
+    __table_args__ = (UniqueConstraint('name', 'project_id'),)
+
+    def __repr__(self):
+        return f"<Environment(name='{self.name}',description='{self.description}',path='{self.path}',project_id='{self.project_id}')>"
+
+
+class Project(SerializerMixin, Base):
+    __tablename__ = 'project'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True)
+    description = Column(String)
+    path = Column(String, unique=True)
+
+    def __repr__(self):
+        return f"<Project(name='{self.name}',description='{self.description}',path='{self.path}',environments='{self.environments}')>"

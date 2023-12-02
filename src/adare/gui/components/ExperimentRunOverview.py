@@ -6,11 +6,7 @@ from datetime import datetime
 
 # internal imports
 from adare.gui.styles import STYLE_TEXT_MUTED_LARGE, STYLE_TEXT_MUTED_SMALL
-from adare.database import database
-from adare.gui.components.AbstractTestTable import AbstractTestTable
-from adare.gui.components.RunTable import RunTable
-from adare.webappaccess.experiment import check_experiment_published
-from adare.gui.storage import Storage, show_request_modify_panel
+from adare.database.api.experiment import ExperimentApi
 from adare.config.gui import TIMESTAMP_FORMAT_SECONDS, STATUS_COLOR_MAPPING, STATUS_SYMBOL_MAPPING
 from adare.gui.components.TestTable import TestTable
 
@@ -57,7 +53,7 @@ class ExperimentRunOverview:
 
 
     def load_data(self):
-        with database.ExperimentApi() as db:
+        with ExperimentApi() as db:
             exprun = db.get_experimentrun_by_uuid(self.experimentrun_uuid)
 
             self.data = {

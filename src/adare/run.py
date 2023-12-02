@@ -4,37 +4,39 @@ import sys
 import time
 
 # internal imports
-from adare.cli.environment import exec_run_experiment, exec_env_list, exec_env_create, exec_add_experiment, exec_remove_experiment
+from adare.cli.environment import exec_run_experiment, exec_env_create, exec_add_experiment, exec_remove_experiment, exec_env_remove
 from adare.cli.project import exec_create_project, exec_remove_project
 from adare.cli.gui import exec_gui
 from adare.cli.showversion import exec_show_version
+from adare.cli.show import exec_show_env, exec_show_experiment, exec_show_runs, exec_show_run_result, exec_show_project
 from adare.setup_logging import setup_logging
 
 
 def run():
     start_time = time.time()
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-v', '--version', action='store_true', help='display program version')
+    parser = argparse.ArgumentParser(add_help=True, description='Adare - A tool to run experiments in virtual environments')
+    parser.add_argument('-V', '--version', action='store_true', help='display program version')
     parser.add_argument('-l', '--logfile', help='path to logfile')
-    parser.add_argument('-llf', '--log-level-file', help='loglevel for logfile')
-    parser.add_argument('-llc', '--log-level-console', help='loglevel for console')
-    parser.add_argument('-lfc', '--log-format-console', type=bool, default=False, help='log format for logging to console (e.g. %(levelprefix)s %(name)s - %(message)s)')
+    parser.add_argument('-v', '--verbose', action='store_true', help='verbose output (loglevel=INFO)')
+    parser.add_argument('-vv', '--very-verbose', action='store_true', help='very verbose output (loglevel=DEBUG)')
+    parser.add_argument('-log', '--log', type=str, help='logfile')
+    parser.add_argument('-loglvl', '--log-level', help='loglevel for logfile')
     parser.set_defaults(func=lambda args: exec_show_version(args, parser))
 
     subparsers = parser.add_subparsers()
 
     # commands: adare proj ....
-    project = subparsers.add_parser('proj', help='wrapper for needed project commands')
+    project = subparsers.add_parser('project', help='wrapper for needed project commands')
     project.set_defaults(func=lambda args: project.print_help())
     project_subparsers = project.add_subparsers()
 
     project_create = project_subparsers.add_parser('create')
-    project_create.add_argument('directory')
+    project_create.add_argument('name', help='name of the project')
     project_create.set_defaults(func=exec_create_project)
 
     project_remove = project_subparsers.add_parser('remove')
-    project_remove.add_argument('directory')
+    project_remove.add_argument('name', help='name of the project to remove')
     project_remove.set_defaults(func=exec_remove_project)
 
     # commands: adare env ...
@@ -44,9 +46,15 @@ def run():
 
     environment_create = environment_subparsers.add_parser('create')
     environment_create.add_argument('config', help='path to the environment config file')
-    environment_create.add_argument('--name', '-n', required=False, help='name of the environment')
+    environment_create.add_argument('--name', required=False, help='name of the environment')
     environment_create.add_argument('--project', '-p', required=False, help='name of the project to add the environment to')
     environment_create.set_defaults(func=exec_env_create)
+
+    environment_remove = environment_subparsers.add_parser('remove')
+    environment_remove.add_argument('environment', help='name of the environment to remove')
+    environment_remove.add_argument('--project', '-p', required=False, help='name of the project to remove the environment from (if not given, the environment will be removed the current working directory project)')
+    environment_remove.set_defaults(func=exec_env_remove)
+
 
     # commands: adare gui ...
     gui = subparsers.add_parser('gui', help='starts a webgui for adare')
@@ -72,7 +80,7 @@ def run():
     experiment_create.add_argument('--usb')
     experiment_create.set_defaults(func=exec_add_experiment)
 
-    experiment_remove = experiment_subparsers.add_parser('remove', help='remove the skeleton for an experiment from an environment')
+    experiment_remove = experiment_subparsers.add_parser('remove', help='delete an experiment from an environment')
     experiment_remove.add_argument('experiment', help='name of the experimenttestenv_windows10_new to remove')
     experiment_remove.add_argument('--environment', '-env', required=True, help='name of the environment to remove the experiment from')
     experiment_remove.set_defaults(func=exec_remove_experiment)
@@ -82,10 +90,31 @@ def run():
     show.set_defaults(func=lambda args: show.print_help())
     show_subparsers = show.add_subparsers()
 
+    show_project = show_subparsers.add_parser('project', help='show a list of projects')
+    show_project.set_defaults(func=exec_show_project)
+
     show_env = show_subparsers.add_parser('env', help='show the environments of a project')
     show_env.add_argument('--project', '-p', required=False, help='name of the project to show the environments of')
     show_env.add_argument('--details', '-d', action='store_true', help='show details of the environments')
-    show_env.set_defaults(func=exec_env_list)
+    show_env.set_defaults(func=exec_show_env)
+
+    show_exp = show_subparsers.add_parser('exp', help='show a list of experiments')
+    show_exp.add_argument('experiment', help='name of the experiment to show the information of')
+    show_exp.add_argument('environment', help='name of the environment to show the experiments of')
+    show_exp.add_argument('--project', '-p', required=False, help='name of the project to show the experiments of')
+    show_exp.set_defaults(func=exec_show_experiment)
+
+    show_runs = show_subparsers.add_parser('runs', help='show a list of experiment runs')
+    show_runs.add_argument('experiment', help='name of the experiment to show the information of')
+    show_runs.add_argument('environment', help='name of the environment to show the experiments of')
+    show_runs.add_argument('--project', '-p', required=False, help='name of the project to show the experiments of')
+    show_runs.set_defaults(func=exec_show_runs)
+
+
+    show_run_result = show_subparsers.add_parser('result', help='show the results of an experiment run')
+    show_run_result.add_argument('run', help='uuid of the experiment run to show the results of')
+    show_run_result.set_defaults(func=exec_show_run_result)
+
 
     # parse arguments
     args = parser.parse_args()
@@ -102,76 +131,3 @@ def run():
 
     log.debug(f"---  Runtime {(time.time() - start_time) / 60} minutes ---")
     logging.shutdown()
-
-
-    # probably not needed
-    # vgbox_subparsers = vgbox.add_subparsers(help='wrapper for needed vagrant commands')
-    #
-    # sp_vgbox_add = vgbox_subparsers.add_parser('add', help='add a .box image to vagrant')
-    # sp_vgbox_add.add_argument('target')
-    # sp_vgbox_add.add_argument('name')
-    # sp_vgbox_add.set_defaults(func=vgbox_add)
-    #
-    # sp_vgbox_remove = vgbox_subparsers.add_parser('remove', help='remove a box from vagrant by chosen name')
-    # sp_vgbox_remove.add_argument('name')
-    # sp_vgbox_remove.set_defaults(func=vgbox_remove)
-    #
-    # sp_vgbox_list = vgbox_subparsers.add_parser('list', help='list all vagrant boxes available')
-    # sp_vgbox_list.set_defaults(func=vgbox_list)
-
-    # env = subparsers.add_parser('env')
-    # env.add_argument('--project')
-    # env.set_defaults(func=lambda args: env.print_help())
-    #
-    # env_subparsers = env.add_subparsers()
-    #
-    # sp_env_create = env_subparsers.add_parser('create')
-    # sp_env_create.add_argument('conf')
-    # sp_env_create.add_argument('--name')
-    # sp_env_create.set_defaults(func=env_create)
-    #
-    # sp_env_list = env_subparsers.add_parser('list')
-    # sp_env_list.add_argument('--details', '-d', action='store_true')
-    # sp_env_list.set_defaults(func=env_list)
-    #
-    # sp_env_run = env_subparsers.add_parser('run')
-    # sp_env_run.add_argument('name')
-    # sp_env_run.add_argument('experiment')
-    # sp_env_run.add_argument('--debugmode', action='store_true')
-    # sp_env_run.set_defaults(func=env_run)
-    #
-    # sp_env_remove = env_subparsers.add_parser('remove')
-    # sp_env_remove.add_argument('name')
-    # sp_env_remove.set_defaults(func=env_remove)
-
-
-    # sp_env_addguiexperiment = env_subparsers.add_parser('createexperiment')
-    # sp_env_addguiexperiment.add_argument('name')
-    # sp_env_addguiexperiment.add_argument('experiment')
-    # sp_env_addguiexperiment.add_argument('--networkdrive')
-    # sp_env_addguiexperiment.add_argument('--usb')
-    # # sp_env_addguiexperiment.add_argument('--category', '-c')
-    # sp_env_addguiexperiment.set_defaults(func=env_create_experiment)
-    #
-    # sp_env_addusb = env_subparsers.add_parser('addusb')
-    # sp_env_addusb.add_argument('name')
-    # sp_env_addusb.add_argument('details', type=ast.literal_eval)
-    # sp_env_addusb.set_defaults(func=env_addusb)
-    #
-    # sp_env_addnetworkdrive = env_subparsers.add_parser('addnetworkdrive')
-    # sp_env_addnetworkdrive.add_argument('name')
-    # sp_env_addnetworkdrive.add_argument('details', type=ast.literal_eval)
-    # sp_env_addnetworkdrive.set_defaults(func=env_addnetworkdrive)
-    #
-    # sp_env_removeguiexperiment = env_subparsers.add_parser('removeexperiment')
-    # sp_env_removeguiexperiment.add_argument('name')
-    # sp_env_removeguiexperiment.add_argument('experiment')
-    # # sp_env_addguiexperiment.add_argument('--category', '-c')
-    # sp_env_removeguiexperiment.set_defaults(func=env_remove_experiment)
-
-    # sp_env_addinput = env_subparsers.add_parser('addinput')
-    # sp_env_addinput.add_argument('name')
-    # sp_env_addinput.add_argument('input')
-    # sp_env_addinput.set_defaults(func=env_add_inputfiles)
-
-

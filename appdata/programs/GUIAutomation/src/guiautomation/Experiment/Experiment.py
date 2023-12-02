@@ -9,7 +9,7 @@ from pathlib import Path
 from guiautomation.helperfunctions.text import slugify
 
 # internal imports
-from helperfunctions.yaml import dict_to_yaml, yaml_to_dict
+from guiautomation.helperfunctions.yaml import dict_to_yaml, yaml_to_dict
 import guiautomation.config as config
 
 # logging

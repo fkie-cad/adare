@@ -91,18 +91,23 @@ def setup_logger(loglevel_console=None, loglevel_file=None, logfile=None, consol
         :param logfile: path of the logfile that should be used (None if no logfile should be created)
         :param console: True if log should be printed to console and False if not
     """
+
     if not loglevel_console:
         loglevel_console = logging.DEBUG
     if not loglevel_file:
         loglevel_file = logging.DEBUG
-    if console:
-        handler = logging.StreamHandler(sys.stdout)
-        if console_details:
-            handler.setFormatter(ConsoleHandlerFormatter())
-        else:
-            handler.setFormatter(ConsoleShortHandlerFormatter())
-        handler.setLevel(loglevel_console)
-        logging.getLogger().addHandler(handler)
+    if not console:
+        loglevel_console = logging.CRITICAL
+
+
+    handler = logging.StreamHandler(sys.stdout)
+    if console_details:
+        handler.setFormatter(ConsoleHandlerFormatter())
+    else:
+        handler.setFormatter(ConsoleShortHandlerFormatter())
+    handler.setLevel(loglevel_console)
+    logging.getLogger().addHandler(handler)
+    logging.getLogger().setLevel(loglevel_console)
 
     if logfile:
         if not Path(logfile).parent.is_dir():
@@ -111,4 +116,7 @@ def setup_logger(loglevel_console=None, loglevel_file=None, logfile=None, consol
             handler = logging.FileHandler(logfile, encoding='utf-8')
             handler.setFormatter(FileHandlerFormatter())
             logging.getLogger().addHandler(handler)
-            logging.getLogger().setLevel(loglevel_file)
+            # check if loglevel_file is higher than loglevel_console and adjust logger level if necessary
+            if loglevel_file < loglevel_console:
+                logging.getLogger().setLevel(loglevel_file)
+

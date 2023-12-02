@@ -5,7 +5,7 @@ import json
 
 # internal imports
 import adare.config.server as config_server
-from adare.database.database import RequestSessionApi
+from adare.database.api.request import RequestSessionApi
 from adare.webappaccess.login import WebappLogin
 from adare.webappaccess.request_header import get_authenticated_request_header
 

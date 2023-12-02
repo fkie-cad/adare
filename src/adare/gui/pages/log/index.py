@@ -6,7 +6,7 @@ from adare.gui.components.Header import Header
 from adare.gui.colors import set_colors
 from adare.gui import add_static_css_files
 from adare.gui.components.LogDisplay import LogDisplay
-import adare.database.database as database
+from adare.database.api.experiment import ExperimentApi
 
 import logging
 log = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ def page_log(uuid: str):
     header = Header()
     header.create()
 
-    with database.ExperimentApi() as experiment_api:
+    with ExperimentApi() as experiment_api:
         logfile = experiment_api.get_logfile_by_uuid(uuid)
         logfile_path = Path(logfile.path)
 

@@ -1,5 +1,5 @@
 from nicegui import ui
-from adare.database import database
+from adare.database.api.experiment import ExperimentApi
 from adare.gui.components.AdvancedTable import AdvancedTable
 from adare.config.gui import SLOT_STATUS_TABLE
 
@@ -34,7 +34,7 @@ class TestTable(AdvancedTable):
         super().__init__()
 
     def update_data(self):
-        with database.ExperimentApi() as db:
+        with ExperimentApi() as db:
             tests = db.get_experimentrun_by_uuid(self.experimentrun_uuid).tests
 
             self.data = [

@@ -1,11 +1,17 @@
 # external imports
 import yaml
+import re
 import attr
+import datetime
+import dateutil.parser
+import dateutil.relativedelta
 from typing import Optional
+
+# internal imports
+import parseandtest.helperfunctions.regex as helper_regex
 
 # configure logging
 import logging
-
 log = logging.getLogger(__name__)
 
 
@@ -21,7 +27,7 @@ class YamlCustomTag(yaml.YAMLObject):
     string: str
 
     def set_variables(self, variables: dict):
-        pass
+        self.string = helper_regex.resolve_variable_in_string(self.string, variables, regex=False)
 
 
 class YamlString(YamlCustomTag):
@@ -31,7 +37,7 @@ class YamlString(YamlCustomTag):
         self.string = string
 
     def __repr__(self):
-        return f'{self.string}'
+        return f'{self.yaml_tag} {self.string}'
 
     @classmethod
     def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.MappingNode):
@@ -40,6 +46,12 @@ class YamlString(YamlCustomTag):
     @classmethod
     def to_yaml(cls, dumper, data):
         return dumper.represent_scalar(cls.yaml_tag, data.string)
+
+    def compare(self, entry: str) -> ComparisonResult:
+        if self.string == entry:
+            return ComparisonResult(True)
+        else:
+            return ComparisonResult(False)
 
 
 class YamlPath(YamlCustomTag):
@@ -49,7 +61,7 @@ class YamlPath(YamlCustomTag):
         self.string = string
 
     def __repr__(self):
-        return f'{self.string}'
+        return f'{self.yaml_tag} {self.string}'
 
     @classmethod
     def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.MappingNode):
@@ -58,6 +70,12 @@ class YamlPath(YamlCustomTag):
     @classmethod
     def to_yaml(cls, dumper, data):
         return dumper.represent_scalar(cls.yaml_tag, data.string)
+
+    def compare(self, entry: str) -> ComparisonResult:
+        if self.string == entry:
+            return ComparisonResult(True)
+        else:
+            return ComparisonResult(False)
 
 
 class YamlTimestamp(YamlCustomTag):
@@ -70,7 +88,34 @@ class YamlTimestamp(YamlCustomTag):
         self.tolerance = tolerance
 
     def __repr__(self):
-        return f'{self.string}'
+        return f'{self.yaml_tag} {self.string}'
+
+    def compare(self, entry: str) -> ComparisonResult:
+        if not self.timestamp_format_in_entry:
+            try:
+                data_timestamp = dateutil.parser.parse(entry)
+            except dateutil.parser.ParserError as e:
+                return ComparisonResult(False, f'data timestamp couldn\'t be parsed', e)
+        else:
+            try:
+                data_timestamp = datetime.datetime.strptime(entry, self.timestamp_format_in_entry)
+            except ValueError as e:
+                return ComparisonResult(False, f'data timestamp couldn\'t be parsed', e)
+        if not self.timestamp_format_comparison:
+            try:
+                timestamp = dateutil.parser.parse(self.string)
+            except dateutil.parser.ParserError as e:
+                return ComparisonResult(False, f'comparison timestamp couldn\'t be parsed', e)
+        else:
+            try:
+                timestamp = datetime.datetime.strptime(entry, self.timestamp_format_comparison)
+            except ValueError as e:
+                return ComparisonResult(False, f'data timestamp couldn\'t be parsed', e)
+
+        timediff = abs(data_timestamp - timestamp)
+        if timediff < datetime.timedelta(seconds=self.tolerance):
+            return ComparisonResult(True, f'the timestamp had a difference of {timediff}')
+        return ComparisonResult(False, f'the timestamp had a difference of {timediff}')
 
     @classmethod
     def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.MappingNode):
@@ -88,7 +133,7 @@ class YamlRegexString(YamlCustomTag):
         self.string = string
 
     def __repr__(self):
-        return f'{self.string}'
+        return f'{self.yaml_tag} {self.string}'
 
     @classmethod
     def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.MappingNode):
@@ -98,6 +143,19 @@ class YamlRegexString(YamlCustomTag):
     def to_yaml(cls, dumper, data):
         return dumper.represent_scalar(cls.yaml_tag, data.string)
 
+    def set_variables(self, variables: dict):
+        self.string = helper_regex.resolve_variable_in_string(self.string, variables, regex=True)
+
+    def compare(self, entry: str, variables: dict or None = None) -> ComparisonResult:
+        try:
+            compiled_regex = re.compile(self.string)
+        except re.error as e:
+            return ComparisonResult(False, f'regex {self.string} could not be compiled', e)
+        match = compiled_regex.match(self.string)
+        if not match:
+            return ComparisonResult(False)
+        return ComparisonResult(True)
+
 
 class YamlRegexStringAll(YamlRegexString):
     yaml_tag = u'!reALL'
@@ -106,7 +164,7 @@ class YamlRegexStringAll(YamlRegexString):
         super().__init__('.*')
 
     def __repr__(self):
-        return f'{self.string}'
+        return f'{self.yaml_tag}'
 
     @classmethod
     def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.MappingNode):
@@ -116,5 +174,5 @@ class YamlRegexStringAll(YamlRegexString):
     def to_yaml(cls, dumper, data):
         return dumper.represent_scalar(cls.yaml_tag, data.string)
 
-
-YAML_CUSTOM_TAGS = [YamlRegexString, YamlRegexStringAll, YamlTimestamp, YamlString, YamlPath]
+    def compare(self, entry: str, variables: dict or None = None) -> ComparisonResult:
+        return ComparisonResult(True)

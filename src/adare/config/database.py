@@ -16,10 +16,11 @@ def get_database_location():
 
 
 DB_STATUS_LIST = [
+    'in progress',
     'success',
     'failed',
     'warning',
-    'not reached'
+    'not reached',
 ]
 
 DB_PUBLISH_STATUS_LIST = [

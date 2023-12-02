@@ -4,7 +4,7 @@ import uuid
 import adare.config.server as config_server
 from adare.webappaccess.request_header import get_authenticated_request_header
 from adare.webappaccess.login import WebappLogin
-from adare.database.database import ExperimentApi
+from adare.database.api.experiment import ExperimentApi
 
 # configure logging
 import logging

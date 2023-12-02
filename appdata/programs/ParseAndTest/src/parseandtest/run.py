@@ -73,7 +73,7 @@ def run():
         exit(-1)
 
     testset_file_parser = TestsetFileParser(testsetfile)
-    resultdisplay = YamlResultFormatter.YamlResultFormatter(resultfile.as_posix())
+    resultdisplay = YamlResultFormatter.YamlResultFormatter(resultfile)
 
     parseandtest = ParseAndTest(testset_file_parser, resultdisplay)
     parseandtest.parseandtest(statusfile)

@@ -4,7 +4,7 @@ import asyncio
 
 # internal imports
 import adare.config.server as config_server
-from adare.database.database import ExperimentApi
+from adare.database.api.experiment import ExperimentApi
 
 # configure logging
 import logging

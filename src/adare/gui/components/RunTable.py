@@ -2,7 +2,7 @@
 from nicegui import ui
 
 # internal imports
-import adare.database.database as database
+from adare.database.api.experiment import ExperimentApi
 from adare.gui.components.AdvancedTable import AdvancedTable
 from adare.gui.styles import btn_remove_color_prop
 from adare.config.gui import STATUS_ICON_MAPPING, STATUS_COLOR_MAPPING, SLOT_STATUS_TABLE
@@ -58,7 +58,7 @@ class RunTable(AdvancedTable):
 
 
     def update_data(self):
-        with database.ExperimentApi() as db:
+        with ExperimentApi() as db:
             if self.experiment_uuid:
                 experiment_runs = db.get_experiment_runs_by_experiment_uuid(self.experiment_uuid)
             else:

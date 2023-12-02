@@ -1,8 +1,7 @@
-# external imports
-
 # internal imports
 from adare.backend.basics import determine_projectdirectory
 from adare.backend.project import Project
+from adare.backend.environment import Environment
 
 # configure logging
 import logging
@@ -34,39 +33,21 @@ def exec_env_create(arguments):
     project.add_environment(arguments.config, name=arguments.name)
 
 
-def exec_env_list(arguments):
-    """
-    shows the information about environments of a project
-
-    :param arguments: arguments parsed via input
-    """
-    show_details = False
-    if arguments.details:
-        show_details = True
-
-    project_directory = determine_projectdirectory(arguments.project)
-    project = Project(project_directory)
-    project.list_environments(details=show_details)
-
-
 def exec_run_experiment(arguments):
     """
     run the provided experiment in the given environment
 
     :param arguments: arguments parsed via input
     """
-    # todo: implement to run multiple experiments or one experiment multiple times
-    # todo: check if env name existing and if its correct?
 
+    # determine the project directory
     project_directory = determine_projectdirectory(arguments.project)
-    # function_description = f'''
-    #     run the experiment {arguments.name} in the environment {arguments.name}
-    #     (which itself can be found in the project directory with path {project_directory})
-    # '''
-    # log.info(function_description)
 
-    project = Project(project_directory)
-    project.run_experiment(arguments.name, arguments.experiment, arguments.debugmode)
+    # load the environment
+    env = Environment(arguments.environment, project_directory)
+
+    env.run(arguments.experiment, arguments.debugmode)
+
 
 
 def exec_env_remove(arguments):
@@ -75,9 +56,12 @@ def exec_env_remove(arguments):
 
     :param arguments: arguments parsed via input
     """
+    # determine the project directory
     project_directory = determine_projectdirectory(arguments.project)
-    project = Project(project_directory)
-    project.remove_environment(arguments.name)
+
+    # load the environment
+    env = Environment(arguments.environment, project_directory)
+    env.remove()
 
 
 def exec_add_experiment(arguments):
