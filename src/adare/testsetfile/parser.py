@@ -21,6 +21,9 @@ def parse_testsetfile(testset_file: Path) -> FTestsetFile or None:
     log.debug(f'start to read input yaml file ({testset_file})')
     loader, dumper = create_yaml_loader_dumper_inputfiles()
     parsed_input = yaml_to_dict(testset_file, loader=loader)
+    if not parsed_input:
+        log.info(f'parsing input yaml file ({testset_file}) was NOT successful')
+        return None
     log.debug(f'read input yaml file ({testset_file}) was successful')
     try:
         testsetfile: FTestsetFile = cattrs.structure(parsed_input, FTestsetFile)

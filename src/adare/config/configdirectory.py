@@ -47,4 +47,5 @@ PROG_PARSEANDTEST_DIR: Path = PROGRAMS_DIR/'ParseAndTest'
 
 TEMPLATES_DIR: Path = APPDATA_DIR/'templates'
 NETWORKDRIVE_TEMPLATES_DIR: Path = APPDATA_DIR/'networkdrive'/'templates'
-VAGRANTFILE_TEMPLATE: Path = APPDATA_DIR/'VagrantfileTemplate'/'Vagrantfile'
+VAGRANTFILE_TEMPLATE: Path = APPDATA_DIR/'VagrantfileTemplate'/'VagrantfileMultiMachine'
+

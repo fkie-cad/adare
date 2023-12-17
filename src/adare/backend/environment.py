@@ -12,7 +12,7 @@ import os
 # internal imports
 import adare.config as config
 from adare.config.configdirectory import TEMPLATES_DIR, EXAMPLES_DIR, PROGRAMS_DIR
-from adare.backend.attrs_classes import Experiment, UsbDevice, ExamplesConfig, NetworkDrive, \
+from adare.backend.attrs_classes import Experiment, UsbDevice, \
     EnvironmentConfiguration, EnvironmentSetup
 from adare.backend.networkdrive import NetworkDriveContainer
 from adare.helperFunctions.yaml import yaml_to_dict, dict_to_yaml
@@ -22,11 +22,12 @@ from adare.backend.script_creation.scripts import PostsetupInstallationsScript, 
 from adare.backend.script_creation.Scriptmanager import ScriptManager
 from adare.backend.script_creation.Script import Script
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
-from adare.vagrantapi.vagrantfile import VagrantFile
+from adare.vagrantapi.vagrantfile import VagrantFile, VagrantMachine
 from adare.database.api.experiment import ExperimentApi
 from adare.database.api.project import ProjectManagementApi
 from adare.database.models.experiments import Environment as EnvironmentModel
-from adare.backend.setupfile import load_setupfile
+from adare.backend.setupfile import load_setupfile, load_experiment_metadata
+from adare.networkdrive.attrs_classes import SMBShare, NFSShare
 
 # configure logging
 import logging
@@ -237,12 +238,21 @@ class Environment:
                     # check if necessary files are existing
                     action_file = self.__check_if_actionfile_exists(experiment_name)
                     if not action_file:
-                        log.error(f'experiment {experiment_name} is missing the gui automation file -> can\'t add experiment to environment')
+                        log.warning(f'experiment {experiment_name} is missing the gui automation file -> can\'t add experiment to environment')
                         continue
                     testset_file = self.__check_if_testsetfile_exists(experiment_name)
                     if not testset_file:
-                        log.error(f'experiment {experiment_name} is missing the testset file -> can\'t add experiment to environment')
+                        log.warning(f'experiment {experiment_name} is missing the testset file -> can\'t add experiment to environment')
                         continue
+                    experiment_metadata_file = self.__check_if_experimentmetadatafile_exists(experiment_name)
+                    if not experiment_metadata_file:
+                        # create empty experiment metadata file
+                        experiment_metadata_file = self.experiment_directory / experiment_name / 'metadata.yml'
+                        experiment_metadata_file.touch()
+                        log.warning(f'experiment {experiment_name} is missing the experiment metadata file -> empty file got created')
+                    metadata = load_experiment_metadata(experiment_metadata_file)
+
+                    log.debug(f'metadata loaded {metadata}')
 
                     # add experiment to database
                     os_info = db.get_environment(name=self.name, project_name=self.project).osinfo
@@ -252,10 +262,30 @@ class Environment:
                         testset_file=testset_file,
                         environment=env,
                     )
+
+                    if not exp:
+                        print(f'could not add experiment {experiment_name} to database -> most likely to an already existing experiment with the same name')
+                        continue
+
+                    if metadata:
+                        # add network drives to experiment
+                        if metadata.smb:
+                            db.add_smb_to_experiment(exp, metadata.smb)
+                        if metadata.nfs:
+                            db.add_nfs_to_experiment(exp, metadata.nfs)
+                        # add usb devices to experiment
+                        if metadata.usb:
+                            db.add_usb_to_experiment(exp, metadata.usb)
+
                     if existed:
                         log.debug(f'experiment {experiment_name} found in database')
                     else:
                         log.debug(f'experiment {experiment_name} added to environment {self.name}')
+            # remove experiments from database which are not existing in the environment
+            for experiment in db.get_experiments_in_env(self.project, self.name):
+                if not (self.experiment_directory/experiment.name).is_dir():
+                    db.remove_experiment(env, experiment.name)
+                    log.debug(f'experiment {experiment.name} removed from database')
         log.debug(f'experiments in environment {self.name} updated')
 
 
@@ -282,9 +312,9 @@ class Environment:
         with ProjectManagementApi() as db:
             db.remove_environment(name=self.name, project_name=self.project)
 
-    def __create_gui_experiment_skeleton(self, experiment_name: str):
+    def __create_actionfile_skeleton(self, experiment_name: str):
         """
-        creates a gui experiment skeleton file for a given experiment name
+        creates an action skeleton file for a given experiment name
         """
         jinja = init_jinja_environment(TEMPLATES_DIR)
         template = jinja.get_template('ExperimentTemplate')
@@ -318,7 +348,7 @@ class Environment:
         """
         check if a testset file to a provided experiment is existing
 
-        :param experiment_name:
+        :param experiment_name: name of the experiment
         :return:
         """
         testset_file = self.experiment_directory / experiment_name / (experiment_name + '.yml')
@@ -331,7 +361,7 @@ class Environment:
         """
         check if an action file to a provided experiment is existing
 
-        :param experiment_name:
+        :param experiment_name: name of the experiment
         :return:
         """
         action_file = self.experiment_directory / experiment_name / (experiment_name + '.py')
@@ -340,46 +370,108 @@ class Environment:
             return None
         return action_file
 
+    def __check_if_experimentmetadatafile_exists(self, experiment_name: str):
+        """
+        check if an experiment metadata file to a provided experiment is existing
 
-    # def create_experiment(self, experiment_name: str, usb_name: str or None = None, networkdrive_name: str or None = None):
-    #     """
-    #     create experiment skeleton files (testset file and gui experiment file)
-    #
-    #     :param usb_name: name of usb device that is used in the experiment
-    #     :param experiment_name: name of the experiment to be created
-    #     """
-    #     if self.__find_experiment(experiment_name):
-    #         log.error(f'experiment with name {experiment_name} is already existing -> choose another name or delete the old experiment')
-    #         return
-    #     filepath = self.experiment_directory / experiment_name
-    #     filepath.mkdir()
-    #     self.__create_gui_experiment_skeleton(experiment_name)
-    #     self.__create_testsetfile_skeleton(experiment_name)
-    #     img_dir = filepath/'img'
-    #     img_dir.mkdir()
-    #     if usb_name:
-    #         self.__add_usb_to_experiment(experiment_name, usb_name)
-    #     if networkdrive_name:
-    #         self.__add_networkdrive_to_experiment(experiment_name, networkdrive_name)
-    #     print('\n\n')
-    #     print(f'new experiment skeleton created (path:{filepath})')
-    #     log.debug(f'skeleton for experiment {experiment_name} created')
-    #     # add file to configuration
-    #     self.__add_experiment_to_configuration(experiment_name, '', filepath, [])
-    #
-    # def remove_experiment(self, experiment_name: str):
-    #     """
-    #     removes a experiment (includes both testset file and gui experiment file as well as the experiment class)
-    #
-    #     :param experiment_name: name of the experiment to be removed
-    #     """
-    #     experiment_dataclass = self.__find_experiment(experiment_name)
-    #     if not experiment_dataclass:
-    #         log.error(f'experiment with name {experiment_name} does NOT exist in environment')
-    #         return
-    #     shutil.rmtree(experiment_dataclass.directory)
-    #     self.__remove_experiment_class(experiment_name)
-    #     log.info(f'experiment {experiment_name} got deleted')
+        :param experiment_name: name of the experiment
+        :return:
+        """
+        experiment_metadata_file = self.experiment_directory / experiment_name / 'metadata.yml'
+        if not experiment_metadata_file.is_file():
+            log.error(f'experiment metadata file for experiment {experiment_name} is missing')
+            return None
+        return experiment_metadata_file
+
+
+    def __remove_experiment_from_db(self, experiment_name: str):
+        """
+        removes the experiment from the database
+        """
+        with ProjectManagementApi() as db:
+            env = db.get_environment(name=self.name, project_name=self.project)
+            db.remove_experiment(env, experiment_name)
+        log.debug(f'experiment {self.name} removed from database')
+
+    def __remove_experiment_from_filesystem(self, experiment_name: str):
+        """
+        removes the experiment from the filesystem
+        """
+        shutil.rmtree(self.experiment_directory/experiment_name)
+        log.debug(f'experiment {self.name} removed from filesystem')
+
+    def __is_experiment_existing(self, experiment_name: str) -> bool:
+        """
+        check if an experiment is existing in the environment
+
+        :param experiment_name: name of the experiment
+        :return: True if the experiment is existing and False in all other cases
+        """
+
+        # check if experiment with this name already exists
+        with ProjectManagementApi() as db:
+            exist_in_db = True if db.get_experiment_in_env(self.project, experiment_name, self.name) else False
+        exist_in_filesystem = (self.experiment_directory/experiment_name).is_dir()
+        if exist_in_db and exist_in_filesystem:
+            log.error(f'experiment with name {experiment_name} already exists')
+            return True
+        elif exist_in_db:
+            log.fatal(f'experiment with name {experiment_name} already exists in database but not in filesystem -> experiment will be removed from database')
+            self.__remove_experiment_from_db(experiment_name)
+            return True
+        elif exist_in_filesystem:
+            log.fatal(f'experiment with name {experiment_name} already exists in filesystem but not in database -> experiment will be removed from filesystem')
+            self.__remove_experiment_from_filesystem(experiment_name)
+            return True
+        return False
+
+    def create_experiment(self, experiment_name: str, usb: list[UsbDevice] = None, smb_drives: list[SMBShare] = None, nfs_drives: list[NFSShare] = None):
+        """
+        create experiment skeleton files (testset file and gui experiment file)
+
+        :param usb_name: name of usb device that is used in the experiment
+        :param experiment_name: name of the experiment to be created
+        """
+        # check if experiment with this name already exists
+        if self.__is_experiment_existing(experiment_name):
+            print(f'experiment with name {experiment_name} already exists')
+            exit(-1)
+
+        # create experiment directory with template files
+        experiment_directory = self.experiment_directory/experiment_name
+        experiment_directory.mkdir()
+        # create an empty img directory
+        (experiment_directory/'img').mkdir()
+        # create a template action and testset file
+        self.__create_actionfile_skeleton(experiment_name)
+        self.__create_testsetfile_skeleton(experiment_name)
+
+        # update database
+        self.__update_experiments()
+        # add usb devices to experiment
+        if usb or smb_drives or nfs_drives:
+            with ExperimentApi() as db:
+                experiment = db.get_experiment_in_env(self.project, experiment_name, self.name)
+                if usb:
+                    for usb_device in usb:
+                        db.add_usb_to_experiment(experiment, usb_device)
+                if smb_drives:
+                    for smb_drive in smb_drives:
+                        db.add_smb_to_experiment(experiment, smb_drive)
+                if nfs_drives:
+                    for nfs_drive in nfs_drives:
+                        db.add_nfsdrive_to_experiment(experiment, nfs_drive)
+
+    def remove_experiment(self, experiment_name: str):
+        """
+        removes an experiment (which is existing in the environment)
+
+        :param experiment_name: name of the experiment
+        :return:
+        """
+        self.__remove_experiment_from_db(experiment_name)
+        self.__remove_experiment_from_filesystem(experiment_name)
+
 
     # def __add_usb_to_experiment(self, experiment_name: str, usb_name: str):
     #     """
@@ -399,17 +491,7 @@ class Environment:
     #         log.warning(f'experiment {experiment_name} does already use usb device {usb_name}')
     #     self.__save_configuration()
     #
-    # def __find_usb(self, usb_name: str) -> UsbDevice or None:
-    #     """
-    #     find a usb device in the environment by the name of the usb
-    #
-    #     :param usb_name: name of the usb device
-    #     """
-    #     for Usb in self.configuration.usbdevices:
-    #         if Usb.name == usb_name:
-    #             return Usb
-    #     return None
-    #
+
     # def add_usb(self, usb: UsbDevice):
     #     """
     #     adds a new usb device to the environment
@@ -618,65 +700,47 @@ class Environment:
         dict_to_yaml(filepath, data)
         return filepath, vm_filepath
 
-    def create_vagrantfile(self, experiment_name: str, vm_name: str, hostonly: bool = False, networkdrive_active=False):
+    def create_vagrantfile(self, experiment: str, vm_name: str, hostonly: bool = False, networkdrive_active=False) -> VagrantFile or None:
         with ProjectManagementApi() as db:
             environment: EnvironmentModel = db.get_environment(name=self.name, project_name=self.project)
             if not environment:
                 log.error(f'environment {self.name} not found in database')
                 exit(-1)
 
-            vagrant_creator = VagrantFile()
+            vg_machine = VagrantMachine(vm_name)
+            vg_file = VagrantFile()
 
             vgbox = environment.vagrant_box
-            vagrant_creator.set_box(vgbox)
-            vagrant_creator.set_vbox_name(vm_name)
+            vg_machine.set_box(vgbox)
 
             if environment.osinfo.platform == 'windows':
-                vagrant_creator.change_communicator('winrm')
+                vg_machine.change_communicator('winrm')
 
             if hostonly:
-                vagrant_creator.add_network_private(config.DEFAULT_VM_IP)
+                vg_machine.add_network_private(config.DEFAULT_VM_IP)
 
-            vagrant_creator.enable_gui()
-            vagrant_creator.disable_virtualbox_guestautoupdate()
+            vg_machine.enable_gui()
+            vg_file.disable_virtualbox_guestautoupdate()
 
-            # usbdevices = []
-            # for usbdevice in conf.usbdevices:
-            #     if experiment_name in usbdevice.experiments:
-            #         usbdevices.append(usbdevice)
 
-            vagrant_creator.add_synced_folder(self.project_directory, Path('/project'))
+            vg_machine.add_synced_folder(self.project_directory, Path('/project'))
 
-            # at_least_one_usb_device = False
-            # for device in usbdevices:
-            #     vendor_id = None
-            #     product_id = None
-            #     manufacturer = None
-            #     product = None
-            #     serial_number = None
-            #     name = device.name
-            #
-            #     at_least_one_usb_device = True
-            #     if hasattr(device, 'VendorId'):
-            #         vendor_id = device.VendorId
-            #     if hasattr(device, 'ProductId'):
-            #         product_id = device.ProductId
-            #     if hasattr(device, 'Manufacturer'):
-            #         manufacturer = device.Manufacturer
-            #     if hasattr(device, 'Product'):
-            #         product = device.Product
-            #     if hasattr(device, 'SerialNumber'):
-            #         serial_number = device.SerialNumber
-            #     Vagrant_creator.add_usb_device(name, vendor_id=vendor_id, product_id=product_id, manufacturer=manufacturer,
-            #                                    product=product, serial_number=serial_number)
+            # set up usb devices
+            idle_after_os_starts = "5"
+            experiment = db.get_experiment_in_env(self.project, experiment, self.name)
+            if len(experiment.usbdrives) > 0:
+                for usbdrive in experiment.usbdrives:
+                    vg_machine.add_usb_device(
+                        name=usbdrive.name,
+                        vendor_id=usbdrive.vendor_id if usbdrive.vendor_id else None,
+                        product_id=usbdrive.product_id if usbdrive.product_id else None,
+                        manufacturer=usbdrive.manufacturer if usbdrive.manufacturer else None,
+                        product=usbdrive.product if usbdrive.product else None,
+                        serial_number=usbdrive.serial_number if usbdrive.serial_number else None,
+                    )
 
-            # idle_after_os_starts = conf.idle_after_os_starts
-            #
-            # if at_least_one_usb_device:
-            #     if int(idle_after_os_starts) < 90:
-            #         idle_after_os_starts = "90"
-
-            idle_after_os_starts = "90"
+                # idle to ensure that the usb devices are connected
+                idle_after_os_starts = "60"
 
             postsetup_installations = self.run_directory / f'wrapper_postsetup_installations{self.__script_suffix}'
             mount_networkdrives = self.run_directory / f'wrapper_mount_networkdrives{self.__script_suffix}'
@@ -684,97 +748,33 @@ class Environment:
             save_installed_packages = self.run_directory / f'wrapper_save_installed_packages{self.__script_suffix}'
 
             if environment.osinfo.platform == 'linux':
-                vagrant_creator.add_shell_provisioner_inline("sleep " + idle_after_os_starts)
-                vagrant_creator.add_shell_provisioner_path(postsetup_installations.absolute())
+                vg_machine.add_shell_provisioner_inline("sleep " + idle_after_os_starts)
+                vg_machine.add_shell_provisioner_path(postsetup_installations.absolute())
                 if networkdrive_active:
-                    vagrant_creator.add_shell_provisioner_path(mount_networkdrives.absolute())
-                vagrant_creator.add_shell_provisioner_path(run_experiment.absolute())
-                vagrant_creator.add_shell_provisioner_path(save_installed_packages.absolute())
+                    # add script that waits till network drives are available
+                    vg_machine.add_shell_provisioner_path(mount_networkdrives.absolute())
+                vg_machine.add_shell_provisioner_path(run_experiment.absolute())
+                vg_machine.add_shell_provisioner_path(save_installed_packages.absolute())
             elif environment.osinfo.platform == 'windows':
-                vagrant_creator.add_shell_provisioner_inline("sleep " + idle_after_os_starts, privileged=True,
+                vg_machine.add_shell_provisioner_inline("sleep " + idle_after_os_starts, privileged=True,
                                                              powershell_elevated_interactive=False)
-                vagrant_creator.add_shell_provisioner_path(postsetup_installations.absolute(), privileged=True,
+                vg_machine.add_shell_provisioner_path(postsetup_installations.absolute(), privileged=True,
                                                            powershell_elevated_interactive=False)
                 if networkdrive_active:
-                    vagrant_creator.add_shell_provisioner_path(mount_networkdrives.absolute(), privileged=True,
+                    vg_machine.add_shell_provisioner_path(mount_networkdrives.absolute(), privileged=True,
                                                                powershell_elevated_interactive=True)
-                vagrant_creator.add_shell_provisioner_path(run_experiment.absolute(), privileged=True,
+                vg_machine.add_shell_provisioner_path(run_experiment.absolute(), privileged=True,
                                                            powershell_elevated_interactive=True)
-                vagrant_creator.add_shell_provisioner_path(save_installed_packages.absolute(), privileged=True,
+                vg_machine.add_shell_provisioner_path(save_installed_packages.absolute(), privileged=True,
                                                            powershell_elevated_interactive=True)
             else:
                 log.error(f'os platform {environment.osinfo.platform} not supported')
-                return
-            return vagrant_creator
+                return None
 
+            vg_file.add_machine(vg_machine, order=99)
 
-    # def __save_results_in_database(self, experiment: str, result_file: Path, timestamps: dict, vg_exitcode: int, experiment_log_directory: Path):
-    #     pass
-        # testset_file = self.__check_if_testsetfile_exists(experiment)
-        # action_file = self.__check_if_actionfile_exists(experiment)
-        # if not testset_file or not action_file:
-        #     log.error(f'can\'t save results in database because testset file or action file is missing')
-        #     return
-        #
-        # result_data = None
-        # if not result_file.is_file():
-        #     log.warning(f'result file is missing')
-        # else:
-        #     result_data = yaml_to_dict(result_file)
-        #
-        # logfiledata = {
-        #     'logfile_vagrant': (experiment_log_directory/'vagrant.log').absolute().as_posix() if (experiment_log_directory/'vagrant.log').is_file() else None,
-        #     'logfile_gui_automation': (experiment_log_directory/'gui.log').absolute().as_posix() if (experiment_log_directory/'gui.log').is_file() else None,
-        #     'logfile_parse_and_test': (experiment_log_directory/'parseandtest.log').absolute().as_posix() if (experiment_log_directory/'parseandtest.log').is_file() else None,
-        #     'logfile_postsetup_installations': (experiment_log_directory/'postsetup_installations.log').absolute().as_posix() if (experiment_log_directory/'postsetup_installations.log').is_file() else None,
-        #     'logfile_installed_packages': (experiment_log_directory/'save_installed_packages.log').absolute().as_posix() if (experiment_log_directory/'save_installed_packages.log').is_file() else None,
-        #     'logfile_run_experiment': (experiment_log_directory/'run_experiment.log').absolute().as_posix() if (experiment_log_directory/'run_experiment.log').is_file() else None,
-        # }
-        #
-        # VAGRANT_EXITCODE_STATUS_MAPPING = {
-        #     'default': 'failed',
-        #     0: 'success'
-        # }
-        # if vg_exitcode in VAGRANT_EXITCODE_STATUS_MAPPING.keys():
-        #     vagrant_status = VAGRANT_EXITCODE_STATUS_MAPPING[vg_exitcode]
-        # else:
-        #     vagrant_status = VAGRANT_EXITCODE_STATUS_MAPPING['default']
-        #
-        # status_file = experiment_log_directory/'status.csv'
-        # statusdata = {}
-        # if status_file.is_file():
-        #     statusdata = csv_to_dict(status_file)
-        # else:
-        #     log.error(f'status file {status_file} is missing')
-        # statusdata['VAGRANT'] = vagrant_status
-        #
-        # status_total = 'failed'
-        # if statusdata['VAGRANT'] == 'success':
-        #     if 'RUN_gui' and 'RUN_parseandtest' in statusdata.keys():
-        #         if statusdata['RUN_gui'] == 'success' and statusdata['RUN_parseandtest'] == 'success':
-        #             status_total = 'success'
-        # statusdata['TOTAL'] = status_total
-        #
-        # os_info = self.__get_os_info()
-        #
-        # # calculate sha256 hash of the action file and the testset file
-        # action_file_hash = hash_file_sha256(action_file)
-        # testset_file_hash = hash_file_sha256(testset_file)
-        # sha256_validation_hash = combine_hashes([action_file_hash, testset_file_hash])
-        #
-        # with ExperimentApi() as db:
-        #     db.add_experiment_run(
-        #         testset_data=testset_data,
-        #         action_file=action_file,
-        #         testset_file=testset_file,
-        #         result_data=result_data,
-        #         logfile_data=logfiledata,
-        #         status_data=statusdata,
-        #         timestamps=timestamps,
-        #         os_info=os_info,
-        #         sha256_validation_hash=sha256_validation_hash,
-        #     )
-        # log.debug(f'results of experiment {experiment} got saved in database')
+            return vg_file
+
 
     def __create_experimentrun_database(self, experiment: str, timestamp_start: datetime, logfile_data: dict):
         with ProjectManagementApi() as db:
@@ -859,7 +859,39 @@ class Environment:
             if not testset_file:
                 log.error(f'testset file for experiment {experiment.name} is missing')
                 return False
+            metadata_file = self.__check_if_experimentmetadatafile_exists(experiment.name)
+            if not metadata_file:
+                log.error(f'experiment metadata file for experiment {experiment.name} is missing')
+                return False
             return True
+
+    def __setup_networkdrives(self, experiment: str) -> VagrantMachine or None:
+        with ExperimentApi() as db:
+            exp = db.get_experiment_in_env(self.project, experiment, self.name)
+            if not exp:
+                log.error(f'experiment {experiment} not found in database')
+                exit(-1)
+            networkdrive_dir = self.base_directory / 'networkdrives'
+            networkdrive_container = NetworkDriveContainer(exp, box=config.DEFAULT_NETWORKSHARE_BOX, directory=networkdrive_dir)
+
+            if not networkdrive_container.is_emtpy():
+                log.info('network drive setup starts')
+                vg_machine = networkdrive_container.setup()
+                if not vg_machine:
+                    log.error(f'network drive setup failed')
+                    print(f'network drive setup failed')
+                    exit(-1)
+                share_information_list = networkdrive_container.get_share_information_list(self.platform)
+                script_mount_networkdrive = MountNetworkDriveScript(f'mount_networkdrives{self.__script_suffix}',
+                                                                    self.project_scripts_directory,
+                                                                    share_information_list=share_information_list,
+                                                                    render_wrapper=True)
+                self.__script_manager.add_script(script_mount_networkdrive)
+                log.info('network drive setup finished')
+                return vg_machine
+            log.debug('no network drives found in environment -> network drive setup will be skipped')
+            return None
+
 
 
     def run(self, experiment: str, debug=False):
@@ -938,28 +970,10 @@ class Environment:
             self.__script_manager.add_script(helperfunctions)
 
         # start network drives
-        publicnetwork = False
-        networkdrive_container = None
-        networkdrive_active = False
-        # for drive in self.configuration.networkdrives:
-        #     if experiment in drive.experiments:
-        #         networkdrive_active = True
-        # if networkdrive_active:
-        #     networkdrive_dir = self.base_directory / 'networkdrives'
-        #
-        #     networkdrive_container = NetworkDriveContainer(config.DEFAULT_NETWORKSHARE_BOX, self.configuration.networkdrives, experiment, networkdrive_dir)
-        #
-        #     share_information_list = networkdrive_container.get_share_information_list(self.configuration.os_platform)
-        #     script_mount_networkdrive = MountNetworkDriveScript(f'mount_networkdrives{self.__script_suffix}', self.project_scripts_directory, share_information_list=share_information_list, render_wrapper=True)
-        #     self.__script_manager.add_script(script_mount_networkdrive)
-        #
-        #     if not networkdrive_container:
-        #         log.error(f'experiment {experiment} will not start because the network drive vm couldn\'t get created')
-        #     networkdrive_container.start()
-        #
-        #     if networkdrive_container:
-        #         publicnetwork = True
+        networkdrive_vg_machine = self.__setup_networkdrives(experiment)
+        networkdrive: bool = True if networkdrive_vg_machine else False
 
+        # render scripts to environment
         self.__script_manager.render_to_environment(self.run_directory)
 
         log_file_path = experiment_log_directory/'vagrant.log'
@@ -969,7 +983,14 @@ class Environment:
         random_number = random.randint(100000, 999999)
         vm_name = f'{self.name}{experiment}{random_number}'
 
-        vagrantfile = self.create_vagrantfile(experiment, vm_name, hostonly=publicnetwork, networkdrive_active=networkdrive_active)
+        vagrantfile = self.create_vagrantfile(experiment, vm_name, networkdrive_active=networkdrive)
+        if not vagrantfile:
+            log.error(f'vagrantfile could not be created')
+            exit(-1)
+        # add network drive vagrant machine to vagrantfile
+        if networkdrive_vg_machine:
+            vagrantfile.add_machine(networkdrive_vg_machine, order=0)
+
         box = VagrantBoxVM.fromVagrantFileObject(self.run_directory, vagrantfile, log_file=log_file_path, vm_name=vm_name)
 
         logfiledata = {
@@ -993,14 +1014,6 @@ class Environment:
         # delete Vagrantfile
         os.remove((self.run_directory / 'Vagrantfile').as_posix())
         os.remove(experiment_config_file.as_posix())
-
-        # stop network drives
-        # if networkdrive_active:
-        #     if networkdrive_container:
-        #         if networkdrive_container.VM.is_alive():
-        #             networkdrive_container.stop()
-        #         else:
-        #             log.error("network drive was shutdown early")
 
         # write results and log information to database
         self.__save_results_in_database(run_uuid, experiment_resultfile, datetime.now(), vg_exitcode, experiment_log_directory)

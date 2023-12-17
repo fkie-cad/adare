@@ -1,5 +1,5 @@
-Action File
-************
+Action Set File
+***************
 
 The action file is a python file containing all actions that mimic user behaviour.
 To create a skeleton for a new action file, as shown below, run the following command::
@@ -118,8 +118,9 @@ Therefore the ``Experiment`` class offers the two methods described below.
         :param timestamp_var_name: the name to save the timestamp under
         :type timestamp_var_name: str
 
-Examples
-#########
+
+Action File Example
+###################
 
 One example for an action file, which deletes a file is shown below.
 

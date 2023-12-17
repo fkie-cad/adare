@@ -118,8 +118,9 @@ Therefore the ``Experiment`` class offers the two methods described below.
         :param timestamp_var_name: the name to save the timestamp under
         :type timestamp_var_name: str
 
-Examples
-#########
+
+Action File Example
+###################
 
 One example for an action file, which deletes a file is shown below.
 

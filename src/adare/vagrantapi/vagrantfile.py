@@ -14,13 +14,8 @@ import logging
 log = logging.getLogger(__name__)
 
 
-# Todo: add multi machine setup https://developer.hashicorp.com/vagrant/docs/multi-machine
-class VagrantFile:
-    """
-    This class can be used to create a Vagrantfile successively.
-    Therefore, various functions are provided in order to add provisioners, change vm settings, ...
-    """
-    jinja2: Environment = None
+class VagrantMachine:
+    name: str
     options: dict
     provisioners: list[dict]
     usbdevices: list[dict]
@@ -31,24 +26,11 @@ class VagrantFile:
     private_networks: list[dict]
     synced_folders: list[dict]
 
-    def __init__(self,
-                 vagrantfile_template: Path = VAGRANTFILE_TEMPLATE,
-                 options: dict = None):
-        if not vagrantfile_template.is_file():
-            raise VagrantFileCreationError(f'parsed path ({vagrantfile_template}) for Vagrantfile isn\'t existing')
-        if vagrantfile_template.name != 'Vagrantfile':
-            raise VagrantFileCreationError('provided file isn\'t a Vagrantfile')
-
-        self.jinja2 = Environment(
-            loader=FileSystemLoader(vagrantfile_template.parent),
-            autoescape=select_autoescape()
-        )
-
-        if not options:
-            self.options = dict()
-        else:
-            self.options = options
-
+    def __init__(self, name: str):
+        self.name = name
+        self.options = {
+            'name': name,
+        }
         self.provisioners = []
         self.usbdevices = []
         self.additional_vboxmanage = []
@@ -57,37 +39,19 @@ class VagrantFile:
         self.private_networks = []
         self.synced_folders = []
 
-    def create_vagrant_file(self, destination: Path) -> int:
-        """
-        creates a vagrant file with all configurations stored in the class
-
-        :param destination: file path of the Vagrantfile, that will be created
-        """
-        if destination.is_file():
-            os.remove(destination.as_posix())
-        if not destination.parent.is_dir():
-            raise VagrantFileWriteError('chosen destination for Vagrantfile isn\'t valid')
-
-        if not self.jinja2:
-            raise VagrantFileWriteError('jinja environment could NOT be created in initialization')
-
-        self.options['provisioners'] = self.provisioners
-        self.options['usbdevices'] = self.usbdevices
-        self.options['additional_vboxmanage_commands'] = self.additional_vboxmanage
-        self.options['virtualbox_networks'] = self.networks
-        self.options['port_forwardings'] = self.nat_port_forwarding
-        self.options['private_networks'] = self.private_networks
-        self.options['synced_folders'] = self.synced_folders
-        vagrantfile_template = self.jinja2.get_template("Vagrantfile")
-
-        f = open(destination.as_posix(), mode="w")
-        f.write(
-            vagrantfile_template.render(
-                self.options
-            )
+    def get_options(self):
+        self.options.update(
+            {
+                'provisioners': self.provisioners,
+                'usbdevices': self.usbdevices,
+                'additional_vboxmanage_commands': self.additional_vboxmanage,
+                'virtualbox_networks': self.networks,
+                'port_forwardings': self.nat_port_forwarding,
+                'private_networks': self.private_networks,
+                'synced_folders': self.synced_folders
+            }
         )
-        f.close()
-        return 0
+        return self.options
 
     def set_memory(self, memory: int):
         """
@@ -115,14 +79,14 @@ class VagrantFile:
         """
         self.options['config_vm_box'] = name
 
-    def set_vbox_name(self, name: str):
-        """
-        sets a name for the newly created vm
-
-        :param name: name of the newly created vm
-        :return:
-        """
-        self.options['virtualbox_name'] = name
+    # def set_vbox_name(self, name: str):
+    #     """
+    #     sets a name for the newly created vm
+    #
+    #     :param name: name of the newly created vm
+    #     :return:
+    #     """
+    #     self.options['virtualbox_name'] = name
 
     def get_vbox_name(self) -> Optional[str]:
         """
@@ -150,22 +114,6 @@ class VagrantFile:
         :return:
         """
         self.options['virtualbox_gui'] = False
-
-    def disable_virtualbox_guestautoupdate(self):
-        """
-        disable vagrant from doing auto updates for virtualbox guest additions
-
-        :return:
-        """
-        self.options['vagrant_disable_vbguestautoupdate'] = True
-
-    def enable_virtualbox_guestautoupdate(self):
-        """
-        enable vagrant from doing auto updates for virtualbox guest additions
-
-        :return:
-        """
-        self.options['vagrant_disable_vbguestautoupdate'] = False
 
     def enable_virtualbox_usb(self):
         """
@@ -259,12 +207,12 @@ class VagrantFile:
             })
         self.provisioners.append(provisioner)
 
-    def add_file_provisioner(self, localpath: Path, remotepath: Path):
+    def add_file_provisioner(self, localpath: Path, remotepath: str):
         """
         add a provisioner to provide files to the vm
 
         :param localpath: path on host
-        :param remotepath: path on guest (vm)
+        :param remotepath: path on guest (vm) where the file should be copied to
         :return:
         """
         provisioner = {
@@ -276,7 +224,7 @@ class VagrantFile:
                 },
                 {
                     'key': "destination",
-                    'value': remotepath.as_posix()
+                    'value': remotepath
                 }
             ]
         }
@@ -415,3 +363,82 @@ class VagrantFile:
                 'destination': path_in_guest.as_posix()
             }
         )
+
+
+
+class VagrantFile:
+    """
+    This class can be used to create a Vagrantfile successively.
+    Therefore, various functions are provided in order to add provisioners, change vm settings, ...
+    """
+    jinja2: Environment = None
+    options: dict
+    machines: dict
+
+    def __init__(self, vagrantfile_template: Path = VAGRANTFILE_TEMPLATE, options: dict = None):
+        if not vagrantfile_template.is_file():
+            raise VagrantFileCreationError(f'parsed path ({vagrantfile_template}) for Vagrantfile isn\'t existing')
+
+        self.jinja2 = Environment(
+            loader=FileSystemLoader(vagrantfile_template.parent),
+            autoescape=select_autoescape()
+        )
+        self.machines = dict()
+        if options:
+            self.options = options
+        else:
+            self.options = dict()
+
+
+    def add_machine(self, machine: VagrantMachine, order: int = -1):
+        if order < 0:
+            if len(self.machines) == 0:
+                order = 0
+            else:
+                order = max(self.machines.keys()) + 1
+        self.machines[order] = machine
+        if 'machines' not in self.options.keys():
+            self.options['machines'] = []
+
+
+    def create_vagrant_file(self, destination: Path) -> int:
+        """
+        creates a vagrant file with all configurations stored in the class
+
+        :param destination: file path of the Vagrantfile, that will be created
+        """
+        if destination.is_file():
+            os.remove(destination.as_posix())
+        if not destination.parent.is_dir():
+            raise VagrantFileWriteError('chosen destination for Vagrantfile isn\'t valid')
+
+        # loop through all machines and add them to the options based on their order
+        for order in sorted(self.machines.keys()):
+            self.options['machines'].append(self.machines[order].get_options())
+
+        vagrantfile_template = self.jinja2.get_template("VagrantfileMultiMachine")
+
+        f = open(destination.as_posix(), mode="w")
+        f.write(
+            vagrantfile_template.render(
+                self.options
+            )
+        )
+        f.close()
+        return 0
+
+    def disable_virtualbox_guestautoupdate(self):
+        """
+        disable vagrant from doing auto updates for virtualbox guest additions
+
+        :return:
+        """
+        self.options['vagrant_disable_vbguestautoupdate'] = True
+
+    def enable_virtualbox_guestautoupdate(self):
+        """
+        enable vagrant from doing auto updates for virtualbox guest additions
+
+        :return:
+        """
+        self.options['vagrant_disable_vbguestautoupdate'] = False

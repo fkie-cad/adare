@@ -11,16 +11,15 @@ The tool provides a way to analyze forensic artifacts over various os versions a
 In order to do so the user needs to provide a vagrant box of the os.
 
 
-.. The documentation provides in section :doc:`basics/howtocreateawindowsbox/index` an a short walk through how to create a Windows Vagrant Box.
-
 .. toctree::
    :hidden:
    :maxdepth: 2
    :caption: Contents:
 
-   about_adare/index
-   installation/index
    introduction/index
-   basics/index
-   advanced/index
+   installation/index
+   gettingstarted/index
+   architecture/index
+   cli/index
    gui/index
+   advanced/index

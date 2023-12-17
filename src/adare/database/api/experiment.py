@@ -9,10 +9,11 @@ from adare.helperFunctions.pyfileanalyze import PyModuleAnalyzer
 from adare.helperFunctions.hash import hash_file_sha256, combine_hashes, hash_dict_sha256
 from adare.config.configdirectory import PROG_PARSEANDTEST_DIR
 import adare.config.database as config_database
-from adare.database.models.experiments import PostSetupInstallation, Scenario, PublishStatus, TestParameter, TestParameterEntry, Experiment, ExperimentRun, Status, TestFunction, AbstractTest, Test, Tool, Result, OsInfo, LogFile, Request, Environment, Project, Base as ExperimentsBase
+from adare.database.models.experiments import USBDrive, NFSDrive, SMBDrive, NFSShare, SMBShare, NetworkDriveUser, PostSetupInstallation, Scenario, PublishStatus, TestParameter, TestParameterEntry, Experiment, ExperimentRun, Status, TestFunction, AbstractTest, Test, Tool, Result, OsInfo, LogFile, Request, Environment, Project, Base as ExperimentsBase
 from adare.database.api.database import DatabaseApi
 from adare.testsetfile.parser import parse_testsetfile
 from adare.testsetfile.fileformat import FTestsetFile, FTest, FToolTest
+from adare.backend.attrs_classes import UsbDevice as SetupUsbDevice, SMBConfiguration as SetupSMBConfiguration, NFSConfiguration as SetupNFSConfiguration, NFSShare as SetupNFSShare, SMBShare as SetupSMBShare
 
 # configure logging
 import logging
@@ -51,6 +52,13 @@ class ExperimentApi(DatabaseApi):
         """
         experiment = self._session.query(Experiment).filter_by(name=experiment_name).join(Experiment.environment).filter_by(name=env_name).join(Environment.project).filter_by(name=project_name).first()
         return experiment
+
+    def get_experiments_in_env(self, project_name: str, env_name: str):
+        """
+            Returns all experiments in the given environment.
+        """
+        experiments = self._session.query(Experiment).join(Experiment.environment).filter_by(name=env_name).join(Environment.project).filter_by(name=project_name).all()
+        return experiments
 
     def get_all_experiments(self):
         """
@@ -358,6 +366,17 @@ class ExperimentApi(DatabaseApi):
 
         return abstract_tests
 
+    def remove_experiment(self, environment: Environment, experiment_name: str):
+        """
+            Removes the experiment from the database.
+        """
+        experiment = self._session.query(Experiment).filter_by(name=experiment_name, environment=environment).first()
+        if not experiment:
+            log.error(f'Experiment {experiment_name} not found in database')
+            return
+        self._session.delete(experiment)
+        self._session.commit()
+
 
     def get_experiment(self, os_info: OsInfo, action_file: Path, testset_file: Path, environment: Environment) -> (Experiment, bool):
         """
@@ -374,13 +393,25 @@ class ExperimentApi(DatabaseApi):
         sha256_osinfo = hash_dict_sha256(os_info)
         experiment_hash = combine_hashes([sha256_osinfo, sha256_action_file, sha256_testset_file])
 
-        # check if experiment exists
-        experiment_q = self._session.query(Experiment).filter_by(experiment_hash=experiment_hash, os_info=os_info, environment=environment)
-        if experiment_q.count() > 0:
-            experiment = experiment_q.first()
-            return experiment, True
 
         testset: FTestsetFile = parse_testsetfile(testset_file)
+
+        if not testset:
+            log.debug(f'could not parse testset file {testset_file}')
+            testset = FTestsetFile(
+                name=Path(testset_file).stem,
+                tests=[],
+            )
+
+        # check if experiment exists
+        experiment_q = self._session.query(Experiment).filter_by(name=testset.name, environment=environment)
+        if experiment_q.count() > 0:
+            experiment = experiment_q.first()
+            # check if experiment hash is the same
+            if experiment_hash != experiment.experiment_hash:
+                log.error(f'hash of experiment {experiment.name} does not match')
+                return None, True
+            return experiment, True
 
         # create abstract test objects from test data
         abstract_test_objects: list = self.__get_abstracttests_from_testsetfile(testset)
@@ -429,7 +460,7 @@ class ExperimentApi(DatabaseApi):
         # get status
         status_not_reached = self._session.query(Status).filter_by(name='not reached').first()
         status_in_progress = self._session.query(Status).filter_by(name='in progress').first()
-        pulbish_status_unknown = self._session.query(PublishStatus).filter_by(name='unknown').first()
+        publish_status_not_published = self._session.query(PublishStatus).filter_by(name='not published').first()
 
         run = ExperimentRun(
             experiment=experiment,
@@ -438,7 +469,7 @@ class ExperimentApi(DatabaseApi):
             status_action=status_not_reached,
             status_test=status_not_reached,
             status_vagrant=status_in_progress,
-            publish_status=pulbish_status_unknown,
+            publish_status=publish_status_not_published,
             logfile_vagrant=self.__add_logfile('vagrant', logfile_data['vagrant']),
             logfile_action=self.__add_logfile('action', logfile_data['action']),
             logfile_test=self.__add_logfile('test', logfile_data['test']),
@@ -498,7 +529,7 @@ class ExperimentApi(DatabaseApi):
 
                 result = Result(
                     status=status,
-                    details=json.dumps(result_dict['details']),
+                    details=str(result_dict['details']),
                 )
 
                 new_test = Test(
@@ -518,3 +549,146 @@ class ExperimentApi(DatabaseApi):
 
         # commit changes
         self._session.commit()
+
+    def add_usb_to_experiment(self, experiment: Experiment, usb: SetupUsbDevice) -> USBDrive:
+        """
+            Adds a usb to the experiment.
+        """
+        # check if usb already exists
+        usb_q = self._session.query(USBDrive).filter_by(name=usb.name, serial_number=usb.SerialNumber, vendor_id=usb.VendorId, product_id=usb.ProductId, product=usb.Product, manufacturer=usb.Manufacturer)
+        if usb_q.count() > 0:
+            usb_obj = usb_q.first()
+            log.warning(f'usb {usb_obj.name} already exists in database')
+        else:
+            usb_obj = USBDrive(
+                name=usb.name,
+                serial_number=usb.SerialNumber,
+                vendor_id=usb.VendorID,
+                product_id=usb.ProductID,
+                product=usb.Product,
+                manufacturer=usb.Manufacturer,
+            )
+            self._session.add(usb_obj)
+            log.info(f'added usb {usb_obj.name} to database')
+        experiment.usbdrives.append(usb_obj)
+        self._session.commit()
+        return usb_obj
+
+    def __get_or_create_nfs_share(self, share: SetupNFSShare) -> NFSShare:
+        """
+            Gets or creates a nfs share.
+        """
+        nfs_share_q = self._session.query(NFSShare).filter_by(name=share.name, local_path=share.local_path, remote_path=share.remote_path)
+        if nfs_share_q.count() > 0:
+            nfs_share_obj = nfs_share_q.first()
+        else:
+            nfs_share_obj = NFSShare(
+                name=share.name,
+                local_path=share.local_path,
+                remote_path=share.remote_path,
+                allowed_hosts=share.allowed_hosts,
+            )
+            self._session.add(nfs_share_obj)
+            self._session.commit()
+        return nfs_share_obj
+
+    def __get_or_create_smb_share(self, share: SetupSMBShare) -> SMBShare or None:
+        """
+            Gets or creates a smb share.
+        """
+        smb_share_q = self._session.query(SMBShare).filter_by(name=share.name, local_path=share.local_path, remote_path=share.remote_path)
+        if smb_share_q.count() > 0:
+            smb_share_obj = smb_share_q.first()
+        else:
+            # get users
+            smb_user = self._session.query(NetworkDriveUser).filter_by(username=share.user.name, password=share.user.password).first()
+            if not smb_user:
+                return None
+            smb_share_obj = SMBShare(
+                name=share.name,
+                local_path=share.local_path,
+                remote_path=share.remote_path,
+                user=smb_user,
+            )
+            self._session.add(smb_share_obj)
+            self._session.commit()
+        return smb_share_obj
+
+    def add_nfs_to_experiment(self, experiment: Experiment, nfs: SetupNFSConfiguration) -> NFSDrive or None:
+        """
+            Adds a nfs to the experiment.
+        """
+        # check if nfs already exists
+        nfs_q = self._session.query(NFSDrive).filter_by(name=nfs.name)
+        if nfs_q.count() > 0:
+            nfs_obj = nfs_q.first()
+            log.debug(f'nfs {nfs_obj.name} already exists in database')
+        else:
+            nfs_obj = NFSDrive(
+                name=nfs.name,
+            )
+            self._session.add(nfs_obj)
+            for share in nfs.shares:
+                nfs_obj.shares.append(self.__get_or_create_nfs_share(share))
+            log.info(f'added nfs {nfs_obj.name} to database')
+        experiment.nfsdrive = nfs_obj
+        self._session.commit()
+        return nfs_obj
+
+    def add_smb_to_experiment(self, experiment: Experiment, smb: SetupSMBConfiguration) -> SMBDrive:
+        """
+            Adds a smb to the experiment.
+        """
+        # check if smb already exists
+        smb_q = self._session.query(SMBDrive).filter_by(name=smb.name)
+        if smb_q.count() > 0:
+            smb_obj = smb_q.first()
+            log.debug(f'smb {smb_obj.name} already exists in database')
+        else:
+            smb_obj = SMBDrive(
+                name=smb.name,
+                workgroup=smb.workgroup,
+            )
+            # create users
+            for user in smb.users:
+                smb_user_q = self._session.query(NetworkDriveUser).filter_by(username=user.name, password=user.password)
+                if smb_user_q.count() > 0:
+                    smb_user_obj = smb_user_q.first()
+                else:
+                    smb_user_obj = NetworkDriveUser(username=user.name, password=user.password)
+                    self._session.add(smb_user_obj)
+                    self._session.commit()
+                smb_obj.users.append(smb_user_obj)
+
+            # create shares
+            for share in smb.shares:
+                smb_share = self.__get_or_create_smb_share(share)
+                if smb_share:
+                    smb_obj.shares.append(smb_share)
+                else:
+                    log.warning(f'could not add smb share {share.name} to database')
+
+        experiment.smbdrive = smb_obj
+        self._session.commit()
+        return smb_obj
+
+    def get_usb_drives(self):
+        """
+            Returns the usb drive with the given id.
+        """
+        usb_drives = self._session.query(USBDrive).all()
+        return usb_drives
+
+    def get_smb_drives(self):
+        """
+            Returns the smb drive with the given id.
+        """
+        smb_drives = self._session.query(SMBDrive).all()
+        return smb_drives
+
+    def get_nfs_drives(self):
+        """
+            Returns the nfs drive with the given id.
+        """
+        nfs_drives = self._session.query(NFSDrive).all()
+        return nfs_drives

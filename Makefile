@@ -48,6 +48,9 @@ coverage:
 doc:
 	${PYTHON} setup.py build_sphinx
 
+clean_docs:
+
+
 clean_install:
 	${PYTHON} setup.py bdist_wheel clean
 	${PYTHON} -m pip install . --no-cache-dir

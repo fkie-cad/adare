@@ -156,6 +156,8 @@ class SMBShare(Share):
     gid: int = config.DEFAULT_SMB_CONF['share']['gid']
     read_only: bool = not writable
 
+
+
     def get_fstab_entry(self, ip: str) -> str:
         if self.read_only:
             mode = 'ro'
@@ -193,7 +195,7 @@ class SMBConfiguration:
     """
     name: str = config.DEFAULT_SMB_CONF['name']
     shares: list[SMBShare] = attr.Factory(list)
-    users: list[SMBUser] = attr.Factory(lambda: [SMBUser()])
+    users: list[SMBUser] = attr.Factory(list)
     workgroup: str = config.DEFAULT_SMB_CONF['workgroup']
 
     def __check_share(self, share: SMBShare) -> bool:
@@ -218,6 +220,9 @@ class SMBConfiguration:
         """
         if self.__check_share(share):
             self.shares.append(share)
+            # add the user to the smb configuration
+            if not self.is_user(share.user):
+                self.add_user(share.user)
         else:
             log.error(f'share {share.name} could not be added to the smb configuration successfully')
 

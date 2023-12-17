@@ -48,16 +48,14 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">About ADARE</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#what-is-adare">What is ADARE?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#architecture">Architecture</a></li>
-</ul>
-</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">About ADARE</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">Walkthrough</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../basics/index.html">Basics</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../structure/index.html">Structure and Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../gui/index.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
 </ul>
 
         </div>
@@ -86,26 +84,18 @@
              
   <section id="about-adare">
 <h1>About ADARE<a class="headerlink" href="#about-adare" title="Permalink to this heading"></a></h1>
-<section id="what-is-adare">
-<h2>What is ADARE?<a class="headerlink" href="#what-is-adare" title="Permalink to this heading"></a></h2>
 <p>ADARE is a desktop forensic analysis tool.
 It’s main purpose is to monitor artifact changes over different os and software version in an automated way.</p>
 <p>ADARE on one side uses virtual machines via vagrant, in which the experiment will take place.
-On a high level a desktop forensic experiment is divided into three main parts:</p>
+On a high level a desktop forensic experiment is divided into two main phases:</p>
 <ol class="arabic simple">
-<li><p>gui experiment (sequence of gui actions such as mouse clicks and key presses)</p></li>
-<li><p>parsing artifacts</p></li>
-<li><p>analyze the parsed artifacts</p></li>
+<li><p>action phase (sequence of gui actions such as mouse clicks and key presses)</p></li>
+<li><p>parsing phase (parsing of forensic artifacts)</p></li>
+<li><p>analysis phase (analysis of parsed artifacts as well as the state of the virtual machine)</p></li>
 </ol>
-<p>The user provides a so called <em>experiment</em>, consisting of an <em>action file</em> and an <em>testset file</em>.
-Inside the <em>testset file</em> is specified</p>
-<p>The experiments itself consists each of a <em>gui automation</em> and <em>parse &amp; test</em> part.
-During the <em>gui automation</em> part an user written gui experiment, such as clicking on a file and deleting it to the Trash Bin, will be executed.
-Afterwards in the <em>parse &amp; test</em> the user can provide a way</p>
-</section>
-<section id="architecture">
-<h2>Architecture<a class="headerlink" href="#architecture" title="Permalink to this heading"></a></h2>
-</section>
+<p>Users can use ADARE to reproduce already existing experiments or write their own experiments.
+To view the results of an experiment run ADARE’s web interface as well as CLI can be used.</p>
+<p>It is recommended to read the <a class="reference internal" href="../introduction/index.html#walkthrough"><span class="std std-ref">Walkthrough</span></a> chapter first, which shows how to use create and run experiments.</p>
 </section>
 
 

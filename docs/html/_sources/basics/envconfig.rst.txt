@@ -20,8 +20,9 @@ Additionally, the configuration file can contain the following fields:
     :widths: 30, 70
     :header-rows: 1
 
-Examples
-########
+
+Environment Configuration File Examples
+#######################################
 Below you can find further examples of environment configuration files.
 
 An extended configuration file for a Windows 10 guest OS with a custom vagrant box:
@@ -78,22 +79,5 @@ An example for an Ubuntu 20.04 guest OS:
         description: ''
     settings:
       - "gsettings set org.gnome.desktop.lockdown disable-lock-screen 'true'"
-    usbdevices:
-      - name: "testusb"
-        scenarios:
-          - "deletefileUSB"
-        VendorId: "0x0781"
-        ProductId: "0x5567"
-        Manufacturer: "SanDisk"
-        Product: "Cruzer Blade"
-        SerialNumber: "4C530000171114113444"
-    networkdrives:
-      - name: "testdrive"
-        scenarios:
-          - "deletefileSMB"
-        type: "smb"
-        user: "test"
-        password: "123"
-
 
 

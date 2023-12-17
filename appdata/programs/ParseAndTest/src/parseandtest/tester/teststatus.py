@@ -27,8 +27,8 @@ class TestMissingkey(TestStatus):
 
 
 @attrs.define
-class TestInputError(TestStatus):
-    status = attrs.field(default='input error', init=False)
+class TestSyntaxError(TestStatus):
+    status = attrs.field(default='syntax error', init=False)
 
 
 @attrs.define

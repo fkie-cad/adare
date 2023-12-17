@@ -176,3 +176,6 @@ class YamlRegexStringAll(YamlRegexString):
 
     def compare(self, entry: str, variables: dict or None = None) -> ComparisonResult:
         return ComparisonResult(True)
+
+
+YAML_CUSTOM_TAGS = [YamlRegexString, YamlRegexStringAll, YamlTimestamp, YamlString, YamlPath]

@@ -7,67 +7,12 @@ from pathlib import Path
 
 # internal imports
 from adare.testsetfile.parser import parse_testsetfile
-from adare.networkdrive.attrs_classes import SMBShare, SMBUser, NFSShare
 import adare.config as config
+from adare.networkdrive.attrs_classes import SMBShare, NFSShare, SMBConfiguration, NFSConfiguration
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
-
-
-@attr.define
-class NetworkDriveUser:
-    """
-    class to store information about a network drive user
-    """
-    name: str = 'networkdriveuser'
-    password: str = ''
-
-
-@attr.define
-class NetworkDrive:
-    """
-    class to store information about a network drive
-    """
-    name: str
-    type: str
-    local_path: Optional[str or None] = None
-    remote_path: Optional[str or None] = None
-    experiments: Optional[list] = attr.Factory(list)
-    # nfs specific
-    options: Optional[list] = attr.Factory(list)  # currently not implemented
-    allowed_hosts: Optional[str or None] = None
-    # smb specific
-    user: Optional[NetworkDriveUser] = attr.Factory(NetworkDriveUser)
-    comment: Optional[str] = None
-    writable: Optional[bool] = None
-
-    def to_smb_share(self) -> SMBShare:
-        share = SMBShare()
-        if self.local_path:
-            share.local_path = self.local_path
-        if self.remote_path:
-            share.remote_path = self.remote_path
-        if self.user:
-            user = SMBUser(self.user.name, self.user.password)
-            share.user = user
-        if self.comment:
-            share.comment = self.comment
-        if self.writable:
-            share.writable = self.writable
-        return share
-
-    def to_nfs_share(self) -> NFSShare:
-        share = NFSShare(self.name)
-        if self.local_path:
-            share.local_path = self.local_path
-        if self.remote_path:
-            share.remote_path = self.remote_path
-        if self.allowed_hosts:
-            share.allowed_hosts = self.allowed_hosts
-        # if self.options:
-        #     share.options = self.options
-        return share
 
 
 @attr.define
@@ -102,15 +47,6 @@ class Experiment:
         log.debug(f'testset file {testsetfile} is valid')
         return True
 
-    # todo: find a way to check if gui experiment file is a valid python file
-    def action_file_is_valid(self) -> bool:
-        """
-        (not implemented so far) checks whether the provided gui experiment file for the experiment is valid
-
-        :return:
-        """
-        return True
-
 
 @attr.define
 class ProjectInformation:
@@ -134,7 +70,6 @@ class UsbDevice:
     Manufacturer: Union[str, None] = None
     Product: Union[str, None] = None
     SerialNumber: Union[str, None] = None
-    experiments: list = attr.Factory(list)
 
 
 @attr.define
@@ -167,7 +102,6 @@ class EnvironmentConfiguration:
     # settings: list = attr.Factory(list)
     experiments: list[Experiment] = attr.Factory(list)
     usbdevices: list[UsbDevice] = attr.Factory(list)
-    networkdrives: list[NetworkDrive] = attr.Factory(list)
     postsetupinstallations: list[PostsetupInstallations] = attr.Factory(list)
     # gui: bool = True
     description: str = attr.Factory(str)
@@ -194,15 +128,24 @@ class EnvironmentSetup:
     # settings: list = attr.Factory(list)
     experiments: list[Experiment] = attr.Factory(list)
     usbdevices: list[UsbDevice] = attr.Factory(list)
-    networkdrives: list[NetworkDrive] = attr.Factory(list)
     postsetupinstallations: list[PostsetupInstallations] = attr.Factory(list)
     # gui: bool = True
 
 
 @attr.define
-class ExamplesConfig:
+class ExperimentMetadata:
     """
-    class to store details for example experiments
+    class to store the metadata of an experiment
     """
-    networkdrives: list[NetworkDrive] = attr.Factory(list)
-    usbdevices: list[UsbDevice] = attr.Factory(list)
+    smb: Optional[SMBConfiguration] = None
+    nfs: Optional[NFSConfiguration] = None
+    usb: list[UsbDevice] = attr.Factory(list)
+
+    def fix_smb_users(self):
+        """
+        add all users of the smb shares to the smb users
+        """
+        if self.smb:
+            for share in self.smb.shares:
+                if share.user not in self.smb.users:
+                    self.smb.add_user(share.user)

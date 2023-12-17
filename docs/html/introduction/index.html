@@ -20,8 +20,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Basics" href="../basics/index.html" />
-    <link rel="prev" title="Installation" href="../installation/index.html" /> 
+    <link rel="next" title="Installation Guide" href="../installation/index.html" />
+    <link rel="prev" title="Welcome to ADARE’s documentation!" href="../index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -48,12 +48,13 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="../about_adare/index.html">About ADARE</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Walkthrough</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../basics/index.html">Basics</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Structure and Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../gui/index.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
 </ul>
 
         </div>
@@ -91,14 +92,14 @@ This can be simply done by navigating to the directory where you want to create 
 <p>This will create a directory with the name &lt;project_name&gt; and within it data, such as data used for the text recognition within the experiemnts.</p>
 <p>Within this project a user must create an environment, dedicated to contain experiments related to one specific virtual machine.
 This can be done by running the following command, when providing an environment config file:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">env</span> <span class="n">create</span>  <span class="o">&lt;</span><span class="n">environment_config_file</span><span class="o">&gt;.</span><span class="n">yml</span> <span class="o">--</span><span class="n">name</span> <span class="o">&lt;</span><span class="n">environment_name</span><span class="o">&gt;</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">env</span> <span class="n">create</span>  <span class="o">&lt;</span><span class="n">environment_config_file</span><span class="o">&gt;.</span><span class="n">yml</span>
 </pre></div>
 </div>
 <p>The environment config file is a yaml file containing information about the environment that is to be created.
 It contains the vagrant box that should be used along with the operating system, telling Adare whether the box is a Windows or Linux box.
 Additionally to that it is also possible to provide a list installations to be done after the box is started to install further applications needed to run the experiment.
 An example of such a file is provided below.
-In section <a class="reference internal" href="../basics/envconfig.html#environment-configuration-file"><span class="std std-ref">Environment Configuration File</span></a> you can find a detailed description of the environment config file and it possible configurations.</p>
+In section <span class="xref std std-ref">basics/envconfig:Environment Configuration File</span> you can find a detailed description of the environment config file and it possible configurations.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;environment_name&gt;</span>
 <span class="nt">vagrantbox</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;vagrant_box_name&gt;</span>
 <span class="nt">os_platform</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;os_platform&gt; (Windows or Linux)</span>
@@ -223,7 +224,7 @@ It would then look like this:</p>
 <span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!reALL</span>
 </pre></div>
 </div>
-<p>More detailed explanation as well as details how to create both files can be found in section <a class="reference internal" href="../basics/actionfile.html#action-file"><span class="std std-ref">Action File</span></a> and <a class="reference internal" href="../basics/testsetfile.html#testset-file"><span class="std std-ref">Testset File</span></a> respectively.</p>
+<p>More detailed explanation as well as details how to create both files can be found in section <span class="xref std std-ref">basics/actionfile:Action File</span> and <span class="xref std std-ref">basics/testsetfile:Testset File</span> respectively.</p>
 <p>After the action and testset file are created, the experiment can be executed by running the following command:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">exp</span> <span class="n">run</span> <span class="o">&lt;</span><span class="n">experiment_name</span><span class="o">&gt;</span> <span class="o">--</span><span class="n">env</span> <span class="o">&lt;</span><span class="n">environment_name</span><span class="o">&gt;</span>
 </pre></div>
@@ -238,8 +239,8 @@ Additionally to that the results can be viewed via the gui as described in secti
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../installation/index.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../basics/index.html" class="btn btn-neutral float-right" title="Basics" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../index.html" class="btn btn-neutral float-left" title="Welcome to ADARE’s documentation!" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../installation/index.html" class="btn btn-neutral float-right" title="Installation Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
