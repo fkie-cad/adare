@@ -8,8 +8,7 @@ from typing import ClassVar, Optional
 # internal imports
 from parseandtest.tester.basictest import BasicTest, Parameter
 from parseandtest.tester.testresult import TestResult
-from parseandtest.tester.teststatus import TestStatus, TestSuccess, TestError, TestFailed, TestMissingkey, TestInputError
-from parseandtest.tester.testdetail import TestDetail, TestDetailList, TestDetailText
+from parseandtest.tester.teststatus import TestStatus, TestSuccess, TestError, TestFailed, TestMissingkey, TestSyntaxError
 import parseandtest.customyaml.customtags as yaml_custom_tags
 
 # configure logging
@@ -131,15 +130,14 @@ class DirContent(BasicTest):
     result: Optional[TestResult] = None
 
     def test(self, variables) -> TestResult:
-        details = []
         if not Path(self.params.dst).is_dir():
-            details += TestDetailText(name='reason for failure', data=f'directory {self.params.dst} does not exist')
+            details = f'directory {self.params.dst} does not exist'
             testresult = TestFailed()
             return self.set_result(testresult, details=details)
 
         files_in_dst = [f.name for f in Path(self.params.dst).iterdir()]
-        details.append(TestDetailList(name='expected files/directorys', data=self.params.files))
-        details.append(TestDetailList(name='found files/directorys', data=files_in_dst))
+        details = f'expected files/directorys {self.params.files} \n'
+        details += f'found files/directorys {files_in_dst}'
         if files_in_dst == self.params.files:
             testresult = TestSuccess()
             return self.set_result(testresult, details=details)
@@ -165,21 +163,21 @@ class RegexMatch(BasicTest):
     result: Optional[TestResult] = None
 
     def test(self, variables) -> TestResult:
-        details = []
+        details = ''
         try:
             f = open(self.params.dst, mode="rb")
             data = f.read().decode("utf-8")
             f.close()
         except FileNotFoundError:
             testresult = TestFailed()
-            details.append(TestDetailText(name='info', data=f'file with path {self.params.dst} is not existing'))
+            details = f'file with path {self.params.dst} is not existing'
             return self.set_result(testresult, details=details)
 
         try:
             pattern = re.compile(self.params.regex)
         except re.error:
-            testresult = TestInputError()
-            details.append(TestDetailText(name='info', data=f'given regular expression could not be compiled ({self.params.regex})'))
+            testresult = TestSyntaxError()
+            details =f'given regular expression could not be compiled ({self.params.regex})'
             return self.set_result(testresult, details=details)
 
         match = pattern.match(data)
@@ -210,7 +208,7 @@ class CsvEntryExists(BasicTest):
         dst, status = self.resolve_globfilepath(self.params.dst)
         if not dst:
             testresult = TestFailed()
-            details.append(TestDetailText(name='info', data=f'file with path {self.params.dst} can\'t be used, because no unambiguous file could be identified (because {status})'))
+            details = f'file with path {self.params.dst} can\'t be used, because no unambiguous file could be identified (because {status})'
             return self.set_result(testresult, details=details)
         log.debug(f'dst file {dst} will be used for test {self.name}')
         csv_content = pd.read_csv(dst)
@@ -241,7 +239,7 @@ class CsvEntryExists(BasicTest):
             testresult = TestFailed()
             return self.set_result(testresult, details=details)
         else:
-            details.append(TestDetailList(name='matching rows', data=matching_rows))
+            details=f'matching rows: {matching_rows}'
             testresult = TestSuccess()
             return self.set_result(testresult, details=details)
 

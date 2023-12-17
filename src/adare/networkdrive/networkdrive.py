@@ -8,7 +8,7 @@ from typing import Optional
 import adare.config as config
 from adare.config.configdirectory import NETWORKDRIVE_TEMPLATES_DIR
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
-from adare.vagrantapi.vagrantfile import VagrantFile
+from adare.vagrantapi.vagrantfile import VagrantMachine
 from adare.vagrantapi.vagrantutils import is_box
 from adare.helperFunctions.jinja.jinjafeatures import init_jinja_environment
 from adare.networkdrive.exceptions import NetworkdriveCreationError
@@ -19,7 +19,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class NetworkdriveVM:
+class NetworkDrive:
     """
         class that creates a virtual machine, which consists of network drives such as smb and nfs
         (therefore vagrant, virtualbox as well as and ubuntu server vagrant box with installed nfs and smb server is required)
@@ -36,23 +36,11 @@ class NetworkdriveVM:
 
     __jinja: jinja2.Environment
 
-    # Todo: find a way to replace this
-    active: bool = False
-
-    def __init__(self, vg_directory: Path, box_name: str, networkdrive_vm_config: Optional[NetworkdriveVMConfiguration] = None):
+    def __init__(self, vg_directory: Path, box_name: str):
+        self.shares = []
         self.box_name = box_name
         if not is_box(self.box_name):
             log.error(f'class networkdrive vm could NOT be created due to the fact that the given vagrant box ({self.box_name}) does NOT exist')
-            raise NetworkdriveCreationError
-
-        self.vm_config = networkdrive_vm_config
-        if not self.vm_config:
-            self.vm_config = NetworkdriveVMConfiguration()
-            log.debug('network drive vm will be started with default configuration')
-
-        self.__jinja = init_jinja_environment(NETWORKDRIVE_TEMPLATES_DIR)
-        if not self.__jinja:
-            log.error('jinja environment could NOT be initialized successfully')
             raise NetworkdriveCreationError
 
         self.vg_directory = vg_directory
@@ -63,14 +51,8 @@ class NetworkdriveVM:
             except OSError or FileExistsError as e:
                 log.error(e)
                 raise NetworkdriveCreationError
-        try:
-            (vg_directory/"config").mkdir()
-            log.debug(f'config directory was created successfully in network drive directory ({vg_directory})')
-        except OSError or FileExistsError as e:
-            log.error(e)
-            raise NetworkdriveCreationError
 
-        self.shares = []
+        self.vm_config = NetworkdriveVMConfiguration()
 
     def create_smb(self, smb_configuration: SMBConfiguration or None = None) -> int:
         """
@@ -122,6 +104,7 @@ class NetworkdriveVM:
         if not smb_user:
             smb_user = SMBUser()
         self.smb.add_user(smb_user)
+        log.info(f'smb user {smb_user.name} got added successfully to the network drive vm')
 
     def is_smb_user(self, smb_user: SMBUser) -> bool:
         """
@@ -156,6 +139,7 @@ class NetworkdriveVM:
         except FileNotFoundError or OSError as e:
             log.error(e)
             return -1
+        log.info(f'setup_smb.sh was created successfully in network drive directory ({self.vg_directory})')
 
         try:
             f_path = (self.vg_directory / "config" / "smb.conf")
@@ -164,6 +148,7 @@ class NetworkdriveVM:
         except FileNotFoundError or OSError as e:
             log.error(e)
             return -1
+        log.info(f'smb.conf was created successfully in network drive directory ({self.vg_directory})')
 
     def __write_nfs_files(self):
         """
@@ -179,58 +164,63 @@ class NetworkdriveVM:
         except FileNotFoundError or OSError or KeyError as e:
             log.error(e)
             return -1
+        log.info(f'setup_nfs.sh was created successfully in network drive directory ({self.vg_directory})')
 
-    def __write_vagrantfile(self):
+    def get_vg_machine(self) -> VagrantMachine:
         """
-            create the Vagrantfile used for starting the VM
+            create the vagrant machine for the network drive
         """
-        vg_creator = VagrantFile()
-        vg_creator.set_box(self.box_name)
-        vg_creator.add_network_private(ip=self.vm_config.ip)
-        vg_creator.set_cpus(self.vm_config.cpu)
-        vg_creator.set_memory(self.vm_config.memory)
-        vg_creator.disable_virtualbox_guestautoupdate()
-        vg_creator.add_file_provisioner("./config", "/home/vagrant/config")
+        vg_machine = VagrantMachine('networkdrive')
+        vg_machine.set_box(self.box_name)
+        vg_machine.add_network_private(ip=self.vm_config.ip)
+        vg_machine.set_cpus(self.vm_config.cpu)
+        vg_machine.set_memory(self.vm_config.memory)
+        vg_machine.add_file_provisioner(self.vg_directory/"config", "/home/vagrant/config")
+
         if self.smb:
-            vg_creator.add_shell_provisioner_path("./setup_smb.sh")
+            vg_machine.add_shell_provisioner_path(self.vg_directory/"setup_smb.sh")
         if self.nfs:
-            vg_creator.add_shell_provisioner_path("./setup_nfs.sh")
-        vg_creator.change_ssh_port(3022)
-        vg_file_path = self.vg_directory/"Vagrantfile"
-        vg_creator.create_vagrant_file(vg_file_path)
+            vg_machine.add_shell_provisioner_path(self.vg_directory/"setup_nfs.sh")
+        vg_machine.change_ssh_port(3022)
+        log.info('vagrant machine for network drive got created successfully')
+        return vg_machine
 
     def get_vm_ip(self):
         return self.vm_config.ip
 
-    def start(self):
+    def create(self) -> VagrantMachine or None:
         """
-            starts the network drive VM (vagrant up)
+            creates the network drive vagrant machine
         """
+        self.__jinja = init_jinja_environment(NETWORKDRIVE_TEMPLATES_DIR)
+        if not self.__jinja:
+            log.error('jinja environment could NOT be initialized successfully')
+            return None
+
+        try:
+            (self.vg_directory/"config").mkdir()
+            log.debug(f'config directory was created successfully in network drive directory ({self.vg_directory})')
+        except FileExistsError as e:
+            log.debug(f'config directory already exists in network drive directory ({self.vg_directory})')
+        except OSError as e:
+            log.error(e)
+            return None
+
         if not self.smb and not self.nfs:
             log.warning("vm for network drive didn't get started because whether a smb nor a nfs share was configured")
-            return {}
-        self.__write_vagrantfile()
+            return None
+
+        vg_machine = self.get_vg_machine()
+
         if self.smb:
             self.__write_smb_files()
         if self.nfs:
             self.__write_nfs_files()
-        self.box_vm.up()
-        self.active = True
 
-    def stop(self):
-        """
-            stops the network drive VM (vagrant destroy)
-        """
-        self.box_vm.destroy()
-        self.active = False
+        log.info('network drive vagrant machine got created successfully')
 
-    def is_alive(self):
-        """
-        check if a network drive vm is still existing
+        return vg_machine
 
-        :return: True if it exists and False if not
-        """
-        return self.active
 
     def cleanup(self):
         """

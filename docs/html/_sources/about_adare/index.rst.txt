@@ -2,27 +2,17 @@
 About ADARE
 ***********************
 
-What is ADARE?
-****************
-
 ADARE is a desktop forensic analysis tool.
 It's main purpose is to monitor artifact changes over different os and software version in an automated way.
 
 ADARE on one side uses virtual machines via vagrant, in which the experiment will take place.
-On a high level a desktop forensic experiment is divided into three main parts:
+On a high level a desktop forensic experiment is divided into two main phases:
 
-1. gui experiment (sequence of gui actions such as mouse clicks and key presses)
-2. parsing artifacts
-3. analyze the parsed artifacts
+1. action phase (sequence of gui actions such as mouse clicks and key presses)
+2. parsing phase (parsing of forensic artifacts)
+3. analysis phase (analysis of parsed artifacts as well as the state of the virtual machine)
 
+Users can use ADARE to reproduce already existing experiments or write their own experiments.
+To view the results of an experiment run ADARE's web interface as well as CLI can be used.
 
-The user provides a so called *experiment*, consisting of an *action file* and an *testset file*.
-Inside the *testset file* is specified
-
-
-The experiments itself consists each of a *gui automation* and *parse & test* part.
-During the *gui automation* part an user written gui experiment, such as clicking on a file and deleting it to the Trash Bin, will be executed.
-Afterwards in the *parse & test* the user can provide a way
-
-Architecture
-****************
+It is recommended to read the :ref:`introduction/index:Walkthrough` chapter first, which shows how to use create and run experiments.

@@ -58,6 +58,31 @@ mapping_postsetupinstallation_environment = Table(
     Column("postsetupinstallation_id", ForeignKey("postsetupinstallation.id")),
     Column("environment_id", ForeignKey("environment.id")),
 )
+mapping_usbdrive_experiment = Table(
+    "mapping_usbdrive_experiment",
+    Base.metadata,
+    Column("usbdrive_id", ForeignKey("usbdrive.id")),
+    Column("experiment_uuid", ForeignKey("experiment.uuid")),
+)
+mapping_smbdrive_smbshare = Table(
+    "mapping_smbdrive_smbshare",
+    Base.metadata,
+    Column("smbdrive_id", ForeignKey("smbdrive.id")),
+    Column("smbshare_id", ForeignKey("smbshare.id")),
+)
+mapping_smbdrive_user = Table(
+    "mapping_smbdrive_user",
+    Base.metadata,
+    Column("smbdrive_id", ForeignKey("smbdrive.id")),
+    Column("user_id", ForeignKey("networkdriveuser.id")),
+)
+mapping_nfsdrive_nfsshare = Table(
+    "mapping_nfsdrive_nfsshare",
+    Base.metadata,
+    Column("nfsdrive_id", ForeignKey("nfsdrive.id")),
+    Column("nfsshare_id", ForeignKey("nfshare.id")),
+)
+
 
 class Tag(SerializerMixin, Base):
     __tablename__ = 'tag'
@@ -277,6 +302,97 @@ class LogFile(SerializerMixin, Base):
     def __repr__(self):
         return f"<LogFile(name='{self.name}',path='{self.path}')>"
 
+class NetworkDriveUser(SerializerMixin, Base):
+    __tablename__ = 'networkdriveuser'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String)
+    password = Column(String)
+
+    def __str__(self):
+        return str(self.name)
+
+    def __repr__(self):
+        return f"<NetworkDriveUser(username='{self.username}',password='{self.password}')>"
+
+
+class SMBShare(SerializerMixin, Base):
+    __tablename__ = 'smbshare'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String)
+    local_path = Column(String)
+    remote_path = Column(String)
+    user_id = Column(Integer, ForeignKey('networkdriveuser.id'))
+    user = relationship("NetworkDriveUser", backref=backref("smbdrives", cascade="all, delete-orphan"))
+
+    def __str__(self):
+        return str(self.name)
+
+    def __repr__(self):
+        return f"<SMBShare(name='{self.name}',local_path='{self.local_path}',remote_path='{self.remote_path}',user='{self.user}')>"
+
+
+
+class NFSShare(SerializerMixin, Base):
+    __tablename__ = 'nfshare'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String)
+    local_path = Column(String)
+    remote_path = Column(String)
+    allowed_hosts = Column(String)
+    # options = Column(String)
+
+    def __str__(self):
+        return str(self.name)
+
+    def __repr__(self):
+        return f"<NFSShare(name='{self.name}',local_path='{self.local_path}',remote_path='{self.remote_path}',allowed_hosts='{self.allowed_hosts}')>"
+
+
+class SMBDrive(SerializerMixin, Base):
+    __tablename__ = 'smbdrive'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True)
+    shares = relationship(SMBShare, secondary=mapping_smbdrive_smbshare)
+    users = relationship(NetworkDriveUser, secondary=mapping_smbdrive_user)
+    workgroup = Column(String)
+
+    def __str__(self):
+        return str(self.name)
+
+
+class NFSDrive(SerializerMixin, Base):
+    __tablename__ = 'nfsdrive'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True)
+    shares = relationship(NFSShare, secondary=mapping_nfsdrive_nfsshare)
+
+    def __str__(self):
+        return str(self.name)
+
+
+class USBDrive(SerializerMixin, Base):
+    __tablename__ = 'usbdrive'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String)
+    vendor_id = Column(String)
+    product_id = Column(String)
+    manufacturer = Column(String)
+    product = Column(String)
+    serial_number = Column(String)
+
+
 class Experiment(SerializerMixin, Base):
     __tablename__ = 'experiment'
     RELATIONSHIPS_TO_DICT = True
@@ -300,6 +416,12 @@ class Experiment(SerializerMixin, Base):
 
     environment_id = Column(Integer, ForeignKey('environment.id'), nullable=False)
     environment = relationship("Environment", backref=backref("experiments", cascade="all, delete-orphan"))
+
+    smbdrive_id = Column(Integer, ForeignKey('smbdrive.id'), nullable=True)
+    smbdrive = relationship(SMBDrive)
+    nfsdrive_id = Column(Integer, ForeignKey('nfsdrive.id'), nullable=True)
+    nfsdrive = relationship(NFSDrive)
+    usbdrives = relationship(USBDrive, secondary=mapping_usbdrive_experiment)
 
     # ensure that the name of the experiment is unique for a given environment
     __table_args__ = (UniqueConstraint('name', 'environment_id'),)

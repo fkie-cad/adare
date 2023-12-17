@@ -1,4 +1,4 @@
-Testset File
+Test Set File
 *************
 
 The testset file is a yaml file, which tells the tests to be executed after the gui automation took place.
@@ -144,8 +144,8 @@ Below the testfunctions are listed with their parameters and a short description
     :type entry: list[str,regex,regexALL,timestamp]
 
 
-Examples
-########
+Testset File Example
+####################
 
 An example testset file to test whether the windows trash bin work as expected is provided below.
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Testset File &mdash; &#39;ADARE&#39;  documentation</title>
+  <title>Test Set File &mdash; &#39;ADARE&#39;  documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
@@ -19,9 +19,7 @@
         <script src="../_static/doctools.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
-    <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Advanced" href="../advanced/index.html" />
-    <link rel="prev" title="Action File" href="actionfile.html" /> 
+    <link rel="search" title="Search" href="../search.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -47,22 +45,14 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul class="current">
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="../about_adare/index.html">About ADARE</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">Walkthrough</a></li>
-<li class="toctree-l1 current"><a class="reference internal" href="index.html">Basics</a><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="envconfig.html">Environment Configuration File</a></li>
-<li class="toctree-l2"><a class="reference internal" href="actionfile.html">Action File</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Testset File</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#testfunctions">Testfunctions</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#examples">Examples</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Structure and Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../gui/index.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
 </ul>
 
         </div>
@@ -79,8 +69,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-          <li class="breadcrumb-item"><a href="index.html">Basics</a></li>
-      <li class="breadcrumb-item active">Testset File</li>
+      <li class="breadcrumb-item active">Test Set File</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/basics/testsetfile.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -90,8 +79,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="testset-file">
-<h1>Testset File<a class="headerlink" href="#testset-file" title="Permalink to this heading"></a></h1>
+  <section id="test-set-file">
+<h1>Test Set File<a class="headerlink" href="#test-set-file" title="Permalink to this heading"></a></h1>
 <p>The testset file is a yaml file, which tells the tests to be executed after the gui automation took place.
 The file is structured as follows:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;experiment_name&gt;</span>
@@ -257,8 +246,8 @@ These types are used within yaml by setting a prefix before the value, such as <
 </dd></dl>
 
 </section>
-<section id="examples">
-<h2>Examples<a class="headerlink" href="#examples" title="Permalink to this heading"></a></h2>
+<section id="testset-file-example">
+<h2>Testset File Example<a class="headerlink" href="#testset-file-example" title="Permalink to this heading"></a></h2>
 <p>An example testset file to test whether the windows trash bin work as expected is provided below.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deletefile</span>
 <span class="nt">tests</span><span class="p">:</span>
@@ -302,10 +291,7 @@ These types are used within yaml by setting a prefix before the value, such as <
 
            </div>
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="actionfile.html" class="btn btn-neutral float-left" title="Action File" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../advanced/index.html" class="btn btn-neutral float-right" title="Advanced" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-    </div>
+          <footer>
 
   <hr/>
 

@@ -94,7 +94,7 @@ class VagrantBoxVM:
         if self.log_file:
             log_file_handle = self.log_file.open('w')
 
-        for line in self.vagrant.up(stream_output=True, vm_name=self.vm_name):
+        for line in self.vagrant.up(stream_output=True):
             log.debug(line.rstrip())
             if self.log_file:
                 log_file_handle.write(line)

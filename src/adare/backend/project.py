@@ -97,13 +97,18 @@ class Project:
             copy tessdata needed for text recognition in the gui automation to the project
         """
         if not tessdata_directory:
+            log.info('download tessdata training data for text recognition in gui automation')
             tessdata_directory = self.base_directory/'tessdata'
             tessdata_directory.mkdir()
             tessdata_github_link = r'https://github.com/tesseract-ocr/tessdata/blob/main/eng.traineddata?raw=true'
             tessdata_file = tessdata_directory/'eng.traineddata'
-            download(tessdata_github_link, tessdata_file)
+            download(tessdata_github_link, tessdata_file, quiet=True)
+            log.info('download of tessdata training data for text recognition in gui automation was successful')
         else:
+            log.info('copy tessdata training data for text recognition in gui automation')
             shutil.copytree(tessdata_directory, self.base_directory / 'tessdata')
+            log.info('copy of tessdata training data for text recognition in gui automation was successful')
+
 
     def __repair_if_broken(self):
         project_children = [f.name for f in self.base_directory.iterdir()]

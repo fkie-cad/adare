@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Basics &mdash; &#39;ADARE&#39;  documentation</title>
+  <title>Structure and Concepts &mdash; &#39;ADARE&#39;  documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
@@ -20,7 +20,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Environment Configuration File" href="envconfig.html" />
+    <link rel="next" title="Command Line Interface (CLI)" href="../cli/index.html" />
     <link rel="prev" title="Walkthrough" href="../introduction/index.html" /> 
 </head>
 
@@ -51,14 +51,14 @@
 <li class="toctree-l1"><a class="reference internal" href="../about_adare/index.html">About ADARE</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">Walkthrough</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Basics</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="envconfig.html">Environment Configuration File</a></li>
-<li class="toctree-l2"><a class="reference internal" href="actionfile.html">Action File</a></li>
-<li class="toctree-l2"><a class="reference internal" href="testsetfile.html">Testset File</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Structure and Concepts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#terminology">Terminology</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#files-and-directories">Files and Directories</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../gui/index.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
 </ul>
 
         </div>
@@ -75,7 +75,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Basics</li>
+      <li class="breadcrumb-item active">Structure and Concepts</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/basics/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -85,10 +85,76 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="basics">
-<h1>Basics<a class="headerlink" href="#basics" title="Permalink to this heading"></a></h1>
-<div class="toctree-wrapper compound">
-</div>
+  <section id="structure-and-concepts">
+<h1>Structure and Concepts<a class="headerlink" href="#structure-and-concepts" title="Permalink to this heading"></a></h1>
+<p>The ADARE framework consists of several components, whose terms are frequently used in the documentation.
+This section aims to provide a concise overview of the framework’s structure and its associated terminology.</p>
+<a class="reference internal image-reference" href="../_images/structure.png"><img alt="../_images/structure.png" src="../_images/structure.png" style="width: 100%;" /></a>
+<p>The core functionality of this framework lies in running experiments and facilitating both the viewing and publishing of their results.
+An experiment consists of a series of <a class="reference internal" href="#term-action"><span class="xref std std-term">actions</span></a> and <a class="reference internal" href="#term-test"><span class="xref std std-term">tests</span></a>, all executed on a virtual machine.
+The <a class="reference internal" href="#term-action"><span class="xref std std-term">actions</span></a>, which are grouped into an <a class="reference internal" href="#term-action-set"><span class="xref std std-term">action set</span></a>, aim to simulate user interactions with the virtual machine, such as deleting a file by clicking and pressing delete.
+Conversely, a <a class="reference internal" href="#term-test-set"><span class="xref std std-term">test set</span></a> which comprises multiple <a class="reference internal" href="#term-test"><span class="xref std std-term">tests</span></a>, is used to verify the state of forensic artifacts as well as the state of the machine by comparing them against a known ground truth.</p>
+<p><a class="reference internal" href="#term-experiment"><span class="xref std std-term">Experiments</span></a> are organized within <a class="reference internal" href="#term-environment"><span class="xref std std-term">environments</span></a>.
+Each <a class="reference internal" href="#term-environment"><span class="xref std std-term">environment</span></a> is associated with a Vagrant box, which is essentially the virtual machine used for running <a class="reference internal" href="#term-experiment"><span class="xref std std-term">experiments</span></a>.
+<a class="reference internal" href="#term-environment"><span class="xref std std-term">Environments</span></a> also include necessary details for the <a class="reference internal" href="#term-experiment"><span class="xref std std-term">experiments</span></a>, like the installation of specific software.
+These <a class="reference internal" href="#term-environment"><span class="xref std std-term">environments</span></a> are organized into <a class="reference internal" href="#term-project"><span class="xref std std-term">projects</span></a>, which serve to categorize related <a class="reference internal" href="#term-experiment"><span class="xref std std-term">experiments</span></a>.
+<a class="reference internal" href="#term-project"><span class="xref std std-term">Projects</span></a> can provide common resources, such as tools used across all <a class="reference internal" href="#term-environment"><span class="xref std std-term">environments</span></a> within the project.</p>
+<p>In the system, <a class="reference internal" href="#term-project"><span class="xref std std-term">Projects</span></a>, <a class="reference internal" href="#term-environment"><span class="xref std std-term">Environments</span></a>, and <a class="reference internal" href="#term-experiment"><span class="xref std std-term">Experiments</span></a> are represented as directories in the file system and as tables in a database.
+The relevant directory tree is depicted in the structure overview above.
+<a class="reference internal" href="#term-action"><span class="xref std std-term">Actions</span></a> are specified in a Python file, named the <a class="reference internal" href="#term-action-set-file"><span class="xref std std-term">action set file</span></a>, located within the experiment directory.
+A <a class="reference internal" href="#term-test-set"><span class="xref std std-term">test set</span></a> is defined in a YAML file, termed the <a class="reference internal" href="#term-test-set-file"><span class="xref std std-term">test set file</span></a>, also within the experiment directory.
+To create an <a class="reference internal" href="#term-environment"><span class="xref std std-term">environment</span></a>, a YAML file known as the :term:<a href="#id1"><span class="problematic" id="id2">`</span></a>environment setup file ` is required.
+This file contains details about the Vagrant box and other information like the guest operating system.</p>
+<section id="terminology">
+<h2>Terminology<a class="headerlink" href="#terminology" title="Permalink to this heading"></a></h2>
+<p>Below is a list of terms that are used throughout the documentation and their meaning.</p>
+<dl class="glossary simple">
+<dt id="term-project">project<a class="headerlink" href="#term-project" title="Permalink to this term"></a></dt><dd><p>A project is a collection of <a class="reference internal" href="#term-environment"><span class="xref std std-term">environments</span></a>.
+It can be used to group related <a class="reference internal" href="#term-environment"><span class="xref std std-term">environments</span></a>.
+It is represented by a directory on the file system and a table in the database.</p>
+</dd>
+<dt id="term-environment">environment<a class="headerlink" href="#term-environment" title="Permalink to this term"></a></dt><dd><p>An environment is a collection of <a class="reference internal" href="#term-experiment"><span class="xref std std-term">experiments</span></a>, which are executed on the same virtual machine.
+It is represented by a directory on the file system and a table in the database.</p>
+</dd>
+<dt id="term-environment-setup-file">environment setup file<a class="headerlink" href="#term-environment-setup-file" title="Permalink to this term"></a></dt><dd><p>An environment setup file is a YAML file that contains information needed to create the environment.</p>
+</dd>
+<dt id="term-experiment">experiment<a class="headerlink" href="#term-experiment" title="Permalink to this term"></a></dt><dd><p>An experiment is a specific set of actions and tests that are executed on a virtual machine.
+Experiments can be downloaded from the ADARE gitea or be created.</p>
+</dd>
+<dt id="term-experiment-run">experiment run<a class="headerlink" href="#term-experiment-run" title="Permalink to this term"></a></dt><dd><p>An experiment run is a single execution of an experiment.</p>
+</dd>
+<dt id="term-scenario">scenario<a class="headerlink" href="#term-scenario" title="Permalink to this term"></a></dt><dd><p>A scenario encapsulates a set of experiments that aim to investigate the same forensic artifact.
+It is not represented by a file or a table in the database.
+Experiments can be assigned to multiple scenarios.
+However, whether an experiment is part of a scenario plays no role in the execution of the experiment.</p>
+</dd>
+<dt id="term-action">action<a class="headerlink" href="#term-action" title="Permalink to this term"></a></dt><dd><p>An action is a single simulated interaction between a user and the virtual machine.
+This can be, for example, clicking on a file or pressing a key.</p>
+</dd>
+<dt id="term-action-set">action set<a class="headerlink" href="#term-action-set" title="Permalink to this term"></a></dt><dd><p>An action set is a series of actions arranged in an execution flow with possibly branches.</p>
+</dd>
+<dt id="term-action-set-file">action set file<a class="headerlink" href="#term-action-set-file" title="Permalink to this term"></a></dt><dd><p>The action set file is unique per experiment python file including the execution flow of actions.</p>
+</dd>
+<dt id="term-test">test<a class="headerlink" href="#term-test" title="Permalink to this term"></a></dt><dd><p>A test checks the state of the virtual machine and its forensic artifacts after the actions are played.
+This can be, for example, checking whether a file exists or whether a registry key has a specific value.
+Alternatively, a test can also check whether the trash bin artifact contains a within the actions deleted file.</p>
+</dd>
+<dt id="term-test-set">test set<a class="headerlink" href="#term-test-set" title="Permalink to this term"></a></dt><dd><p>A test set is a collection of tests.</p>
+</dd>
+<dt id="term-test-set-file">test set file<a class="headerlink" href="#term-test-set-file" title="Permalink to this term"></a></dt><dd><p>The test set file is a YAML file including a test set.</p>
+</dd>
+<dt id="term-gui">gui<a class="headerlink" href="#term-gui" title="Permalink to this term"></a></dt><dd><p>The gui is the graphical user interface of the ADARE framework.
+It mainly can be used to view the results of experiment runs.</p>
+</dd>
+<dt id="term-cli">cli<a class="headerlink" href="#term-cli" title="Permalink to this term"></a></dt><dd><p>The cli is the command line interface of the ADARE framework.
+It can be used to execute experiments and view the results of experiment runs.</p>
+</dd>
+</dl>
+</section>
+<section id="files-and-directories">
+<h2>Files and Directories<a class="headerlink" href="#files-and-directories" title="Permalink to this heading"></a></h2>
+<p>The ADARE framework uses a directory structure to organize its files.</p>
+</section>
 </section>
 
 
@@ -96,7 +162,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../introduction/index.html" class="btn btn-neutral float-left" title="Walkthrough" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="envconfig.html" class="btn btn-neutral float-right" title="Environment Configuration File" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../cli/index.html" class="btn btn-neutral float-right" title="Command Line Interface (CLI)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

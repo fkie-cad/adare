@@ -1,6 +1,6 @@
-*************
-Installation
-*************
+******************
+Installation Guide
+******************
 
 To install adare clone the `repository <https://github.com/fkie-cad/Adare>`_, navigate into the directory and run ``make install``.
 To check whether the tool is successfully installed and ready to use run ``adare -v``.
