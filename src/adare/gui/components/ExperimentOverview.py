@@ -5,7 +5,7 @@ import asyncio
 
 # internal imports
 from adare.gui.styles import STYLE_TEXT_MUTED_LARGE, STYLE_TEXT_MUTED_SMALL
-from adare.database import database
+from adare.database.api.experiment import ExperimentApi
 from adare.gui.components.AbstractTestTable import AbstractTestTable
 from adare.gui.components.RunTable import RunTable
 from adare.webappaccess.experiment import check_experiment_published
@@ -40,7 +40,7 @@ class ExperimentOverview:
         show_request_modify_panel(uuid=self.experiment_uuid, req_type='experiment')
 
     def load_data(self):
-        with database.ExperimentApi() as db:
+        with ExperimentApi() as db:
             exp = db.get_experiment_by_uuid(self.experiment_uuid)
             run_counts = db.get_experiment_run_counts_by_status(self.experiment_uuid)
 
