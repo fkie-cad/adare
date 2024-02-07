@@ -23,12 +23,14 @@ def __get_default_appdata_directory(create_if_missing: bool = False, program_nam
     if system == 'Windows':
         appdata_path = Path(os.getenv('APPDATA'))
     elif system == "Linux":
-        appdata_path = Path(f'~/.{program_name}/')
+        appdata_path = Path(f'~/.{program_name.lower()}/').expanduser()
+        if not appdata_path.exists():
+            appdata_path.mkdir(parents=False)
     else:
         log.fatal(f'the os {system} is not supported by the tool')
         return None
     if appdata_path:
-        appdata_path = appdata_path/program_name
+        appdata_path = appdata_path/program_name.lower()
         if create_if_missing:
             appdata_path.mkdir(parents=False, exist_ok=True)
     if not appdata_path.is_dir():
