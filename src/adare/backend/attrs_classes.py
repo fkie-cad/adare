@@ -43,7 +43,6 @@ class Experiment:
             log.error(f'input file {testsetfile} couldn\'t be read because of the following exception')
             log.error(e, exc_info=True)
             return False
-
         log.debug(f'testset file {testsetfile} is valid')
         return True
 
