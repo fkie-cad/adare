@@ -28,9 +28,9 @@ help:
 appdata:
 	${PYTHON} install/copy_appdata.py
 
-install:
-	${PYTHON} -m pip install .
-	${PYTHON} install/copy_appdata.py
+adare:
+	${PYTHON} -m pip install adare/.
+	${PYTHON} adare/install/copy_appdata.py
 
 test:
 	${PYTHON} -m coverage run -m pytest tests integration || exit 0
