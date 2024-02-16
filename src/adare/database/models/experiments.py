@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, UniqueConstraint, Boolean
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
@@ -39,18 +39,6 @@ mapping_abstracttest_testparameterentry = Table(
     Base.metadata,
     Column("abstracttest_uuid", ForeignKey("abstracttest.uuid")),
     Column("testparameterentry_id", ForeignKey("testparameterentry.id")),
-)
-mapping_scenario_experiment = Table(
-    "mapping_scenario_experiment",
-    Base.metadata,
-    Column("scenario_uuid", ForeignKey("scenario.uuid")),
-    Column("experiment_uuid", ForeignKey("experiment.uuid")),
-)
-mapping_scenario_tag = Table(
-    "mapping_scenario_tag",
-    Base.metadata,
-    Column("scenario_uuid", ForeignKey("scenario.uuid")),
-    Column("tag_id", ForeignKey("tag.id")),
 )
 mapping_postsetupinstallation_environment = Table(
     "mapping_postsetupinstallation_environment",
@@ -302,6 +290,7 @@ class LogFile(SerializerMixin, Base):
     def __repr__(self):
         return f"<LogFile(name='{self.name}',path='{self.path}')>"
 
+
 class NetworkDriveUser(SerializerMixin, Base):
     __tablename__ = 'networkdriveuser'
     RELATIONSHIPS_TO_DICT = True
@@ -391,6 +380,39 @@ class USBDrive(SerializerMixin, Base):
     manufacturer = Column(String)
     product = Column(String)
     serial_number = Column(String)
+
+
+
+class Project(SerializerMixin, Base):
+    __tablename__ = 'project'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True)
+    description = Column(String)
+    path = Column(String, unique=True)
+
+    def __repr__(self):
+        return f"<Project(name='{self.name}',description='{self.description}',path='{self.path}',environments='{self.environments}')>"
+
+
+
+class Environment(SerializerMixin, Base):
+    __tablename__ = 'environment'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String)
+    vagrantbox = Column(String)
+    description = Column(String)
+
+    osinfo_id = Column(Integer, ForeignKey('osinfo.id'))
+    osinfo = relationship(OsInfo)
+
+    sha256hash = Column(String, unique=True)
+
+    requested = Column(Boolean, default=False)
+    published = Column(Boolean, default=False)
 
 
 class Experiment(SerializerMixin, Base):
@@ -483,52 +505,6 @@ class ExperimentRun(SerializerMixin, Base):
 
     def __repr__(self):
         return f"<ExperimentRun(uuid='{self.uuid}',experiment={self.experiment_id})>"
-
-
-class Scenario(SerializerMixin, Base):
-    __tablename__ = 'scenario'
-    RELATIONSHIPS_TO_DICT = True
-
-    uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String)
-    description = Column(String)
-    publish_status_id = Column(Integer, ForeignKey('publishstatus.id'), nullable=True)
-    experiments = relationship(Experiment, secondary=mapping_scenario_experiment, backref='experiments')
-
-    publish_status = relationship(PublishStatus)
-    tags = relationship(Tag, secondary=mapping_scenario_tag)
-
-
-    def __str__(self):
-        return str(self.name)
-
-    def __repr__(self):
-        return f"<experiment(name='{self.name}',publish_status='{self.publish_status}')>"
-
-
-class Request(SerializerMixin, Base):
-    __tablename__ = 'request'
-    RELATIONSHIPS_TO_DICT = True
-
-    uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    title = Column(String)
-    description = Column(String)
-    type = Column(String)
-
-    experiment_id = Column(String, ForeignKey('experiment.uuid'), nullable=True)
-    experiment = relationship(Experiment)
-
-    scenario_id = Column(String, ForeignKey('scenario.uuid'), nullable=True)
-    scenario = relationship(Scenario)
-
-    status_id = Column(Integer, ForeignKey('publishstatus.id'))
-    status = relationship(PublishStatus)
-
-    def __str__(self):
-        return str(self.uuid)
-
-    def __repr__(self):
-        return f"<ExperimentRequest(uuid='{self.uuid}',experiment={self.experiment_id},scenario={self.scenario_id},status={self.status_id})>"
 
 
 class PostSetupInstallation(SerializerMixin, Base):
