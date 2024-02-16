@@ -9,10 +9,10 @@ from adare.helperFunctions.pyfileanalyze import PyModuleAnalyzer
 from adare.helperFunctions.hash import hash_file_sha256, combine_hashes, hash_dict_sha256
 from adare.config.configdirectory import PROG_PARSEANDTEST_DIR
 import adare.config.database as config_database
-from adare.database.models.experiments import USBDrive, NFSDrive, SMBDrive, NFSShare, SMBShare, NetworkDriveUser, PostSetupInstallation, Scenario, PublishStatus, TestParameter, TestParameterEntry, Experiment, ExperimentRun, Status, TestFunction, AbstractTest, Test, Tool, Result, OsInfo, LogFile, Request, Environment, Project, Base as ExperimentsBase
+from adare.database.models.experiments import USBDrive, NFSDrive, SMBDrive, NFSShare, SMBShare, NetworkDriveUser, PostSetupInstallation, PublishStatus, TestParameter, TestParameterEntry, Experiment, ExperimentRun, Status, TestFunction, AbstractTest, Test, Tool, Result, OsInfo, LogFile, Request, Environment, Project, Base as ExperimentsBase
 from adare.database.api.database import DatabaseApi
-from adare.testsetfile.parser import parse_testsetfile
-from adare.testsetfile.fileformat import FTestsetFile, FTest, FToolTest
+from adarelib.testsetfile.parser import parse_testsetfile
+from adarelib.testsetfile.fileformat import FTestsetFile, FTest, FToolTest
 from adare.backend.attrs_classes import UsbDevice as SetupUsbDevice, SMBConfiguration as SetupSMBConfiguration, NFSConfiguration as SetupNFSConfiguration, NFSShare as SetupNFSShare, SMBShare as SetupSMBShare
 
 # configure logging

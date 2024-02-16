@@ -522,34 +522,3 @@ class PostSetupInstallation(SerializerMixin, Base):
     def __repr__(self):
         return f"<PostSetupInstallation(name='{self.name}',description='{self.description}',command='{self.command}')>"
 
-
-class Environment(SerializerMixin, Base):
-    __tablename__ = 'environment'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String)
-    description = Column(String)
-    path = Column(String)
-    vagrant_box = Column(String)
-
-    osinfo_id = Column(Integer, ForeignKey('osinfo.id'))
-    project_id = Column(Integer, ForeignKey('project.id'))
-
-    osinfo = relationship(OsInfo)
-    project = relationship("Project", backref=backref("environments", cascade="all, delete-orphan"))
-    postsetupinstallations = relationship(PostSetupInstallation, secondary=mapping_postsetupinstallation_environment)
-
-    __table_args__ = (UniqueConstraint('name', 'project_id'),)
-
-    def __repr__(self):
-        return f"<Environment(name='{self.name}',description='{self.description}',path='{self.path}',project_id='{self.project_id}')>"
-
-
-class Project(SerializerMixin, Base):
-    __tablename__ = 'project'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True)
-    description = Column(String)
-    path = Column(String, unique=True)
-
-    def __repr__(self):
-        return f"<Project(name='{self.name}',description='{self.description}',path='{self.path}',environments='{self.environments}')>"
