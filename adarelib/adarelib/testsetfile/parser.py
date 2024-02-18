@@ -3,9 +3,9 @@ from pathlib import Path
 import cattrs
 
 # internal imports
-from adare.customyaml.customloader import create_yaml_loader_dumper_inputfiles
-from adare.helperFunctions.yaml import yaml_to_dict
-from adare.testsetfile.fileformat import FTestsetFile
+from adarelib.customyaml.customloader import create_yaml_loader_dumper_inputfiles
+from adarelib.helperfunctions.yaml import yaml_to_dict
+from adarelib.testsetfile.fileformat import FTestsetFile
 
 # logging configuration
 import logging
