@@ -1,8 +1,38 @@
 import shutil
 from pathlib import Path
 import tqdm
+import os
+import platform
 
-from adare.config.configdirectory import APPDATA_DIR
+def __get_default_appdata_directory(create_if_missing: bool = False, program_name: str = 'adare') -> Path or None:
+    """
+    get the default config directory for the tool
+
+    :param create_if_missing: if True, the directory will be created if it does not exist
+    :param program_name: the name of the program
+    :return:
+    """
+    system = platform.system()
+    if system == 'Windows':
+        appdata_path = Path(os.getenv('APPDATA'))
+    elif system == "Linux":
+        appdata_path = Path(f'~/.{program_name.lower()}/').expanduser()
+        if not appdata_path.exists():
+            appdata_path.mkdir(parents=False)
+    else:
+        print(f'the os {system} is not supported by the tool')
+        return None
+    if appdata_path:
+        appdata_path = appdata_path/program_name.lower()
+        if create_if_missing:
+            appdata_path.mkdir(parents=False, exist_ok=True)
+    if not appdata_path.is_dir():
+        print(f'the appdata directory ({appdata_path}) of the tool is missing')
+        return None
+    return appdata_path
+
+
+APPDATA_DIR: Path = __get_default_appdata_directory(create_if_missing=True)
 
 IGNORE_PATTERNS = ['venv',
                    'build',

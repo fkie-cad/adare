@@ -16,6 +16,8 @@ endif
 # This target is executed whenever we just type `make`
 .DEFAULT_GOAL = help
 
+.ONESHELL:
+
 help:
 	@echo "---------------HELP-----------------"
 	@echo "to install the project type make install"
@@ -29,32 +31,12 @@ appdata:
 	${PYTHON} install/copy_appdata.py
 
 adare:
-	${PYTHON} -m pip install adare/.
-	${PYTHON} adare/install/copy_appdata.py
-
-test:
-	${PYTHON} -m coverage run -m pytest tests integration || exit 0
-
-systemtest:
-	${PYTHON} -m coverage run -m pytest integration || exit 0
-
-unittest:
-	${PYTHON} -m coverage run -m pytest tests || exit 0
-
-coverage:
-	${PYTHON} -m coverage report
-	${PYTHON} -m coverage html
-
-doc:
-	${PYTHON} setup.py build_sphinx
-
-clean_docs:
-
-
-clean_install:
-	${PYTHON} setup.py bdist_wheel clean
-	${PYTHON} -m pip install . --no-cache-dir
+	cd adare
+	poetry install
+	@ln -sf $(shell cd adare; poetry run which adare) ~/.local/bin/adare
 	${PYTHON} install/copy_appdata.py
 
-flake:
-	${PYTHON} -m flake8 || exit 0
+adarevm:
+	cd adarevm
+	poetry install
+
