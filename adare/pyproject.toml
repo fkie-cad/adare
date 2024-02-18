@@ -19,6 +19,7 @@ nicegui = "^1.4.15"
 retry = "^0.9.2"
 python-vagrant = "^1.0.0"
 prettytable = "^3.9.0"
+tqdm = "^4.66.2"
 
 
 [tool.poetry.scripts]
