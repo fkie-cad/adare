@@ -8,7 +8,12 @@ readme = "README.md"
 [tool.poetry.dependencies]
 adarelib = {path = "../adarelib"}
 python = "^3.10"
+guibot = "^0.50.1"
+pytest-mock = "^3.12.0"
 
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.1"
 
 [build-system]
 requires = ["poetry-core"]
