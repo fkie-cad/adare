@@ -1,5 +1,5 @@
 # external imports
-import attr
+import attrs
 from typing import Union
 
 # configure logging
@@ -7,24 +7,27 @@ import logging
 log = logging.getLogger(__name__)
 
 
-@attr.define
-class FTest:
+@attrs.define
+class Test:
     name: str
-    description: str
     type: str
-    params: dict
+    params: dict = {}
+    description: str = ''
+    depends_on: list[str] = []
 
 
-@attr.define
-class FToolTest:
-    tool: str
-    command: str
-    tests: list[FTest]
-
-
-@attr.define
-class FTestsetFile:
+@attrs.define
+class Command:
     name: str
-    tests: list[Union[FTest, FToolTest]]
+    command: str
+    tool: str
+    description: str = ''
+
+
+@attrs.define
+class TestsetFile:
+    name: str
+    tests: list[Test]
+    commands: list[Command]
     description: str = ''
 
