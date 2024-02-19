@@ -1,16 +1,17 @@
 # external imports
 import glob
 from typing import Optional, ClassVar
-from attrs import define, asdict
+import attrs
 import re
 
 # internal imports
 from adarevm.testset.teststatus import TestStatus
-from adarevm.testset.testresult import TestResult
 from adarelib.customyaml.customtags import YamlCustomTag
+from adarevm.event import EventSystem
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -68,14 +69,15 @@ def resolve_yamlobj_in_dict(dictionary: dict):
     return new_d
 
 
-@define
+@attrs.define
 class Parameter:
     """
     Parameter is the base class for all test parameters.
     """
     pass
 
-@define
+
+@attrs.define
 class BasicTest:
     """
     BasicTest is the base class for all tests. It provides basic functionality like setting the result of a test.
@@ -86,26 +88,6 @@ class BasicTest:
     name: str
     params: Parameter
     description: Optional[str]
-
-    def set_result(self, status: TestStatus, details: list = None):
-        """
-        Sets the result of the test and returns it.
-        :param status: TestStatus
-        :param details:
-        :return:
-        """
-        if not details:
-            details = []
-        self.result = TestResult(
-            name=self.name,
-            function=self.testname,
-            function_description=self.testdescription,
-            function_options=resolve_yamlobj_in_dict(asdict(self.params)),
-            description=self.description,
-            details=details,
-            result=status
-        )
-        return self.result
 
     def resolve_globfilepath(self, globfilepath: str) -> (str, str):
         """
@@ -122,7 +104,8 @@ class BasicTest:
         else:
             return found_files[0], ""
 
-    def resolve_variable_in_string(self, string: str, variables: dict, regex=False):
+    @staticmethod
+    def resolve_variable_in_string(string: str, variables: dict, regex=False):
         """
         replace a variable in a string (e.g. test{VARIABLE} with VARIABLE=value -> testvalue)
         :param string: string to replace variables in
@@ -135,10 +118,9 @@ class BasicTest:
             return re.sub(regex_expr, lambda match: resolve_var_in_match_regex(match, variables), string)
         return re.sub(regex_expr, lambda match: resolve_var_in_match_string(match, variables), string)
 
-    def test(self, variables: dict) -> TestResult:
+    def test(self):
         """
         This method has to be implemented by all subclasses. It should return a TestResult object.
-        :param variables: dict with variables
         :return:
         """
         pass

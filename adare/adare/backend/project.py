@@ -4,7 +4,7 @@ import shutil
 
 # internal imports
 from adare.config.configdirectory import TEMPLATES_DIR, PROGRAMS_DIR
-from adare.helperFunctions.web.download import download
+from adarelib.helperfunctions.web.download import download
 from adare.database.api.project import ProjectManagementApi
 from adare.backend.environment import Environment
 from adare.backend.setupfile import load_setupfile

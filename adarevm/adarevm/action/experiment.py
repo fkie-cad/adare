@@ -1,4 +1,5 @@
 # external imports
+import contextlib
 from subprocess import Popen, PIPE
 from datetime import datetime, timezone
 from guibot.guibot import GuiBot
@@ -11,6 +12,8 @@ from adarelib.helperfunctions.text import slugify
 # internal imports
 from adarelib.helperfunctions.yaml import dict_to_yaml, yaml_to_dict
 import adarevm.config as config
+from adarevm.testset.testset import Testset
+from adarevm.event import EventSystem, ActionEvent
 
 # logging
 import logging
@@ -27,8 +30,10 @@ class Experiment:
     template_match_files: dict
     text_match_file: Path
     tessdata_path: Path
+    testset: Testset
+    event_system: EventSystem
 
-    def __init__(self, img_folder: Path, tessdata_folder: Path):
+    def __init__(self, img_folder: Path, tessdata_folder: Path, testset: Testset, event_system):
         self.img_folder = img_folder
         self.__load_vars()
         self.guibot = GuiBot()
@@ -37,6 +42,8 @@ class Experiment:
         self.template_match_files = {}
         self.text_match_files = None
         self.tessdata_folder = tessdata_folder
+        self.testset = testset
+        self.event_system = event_system
 
     def prepare(self):
         """
@@ -53,20 +60,22 @@ class Experiment:
         Finder.to_match_file(finder, (self.img_folder/name).as_posix())
 
     def __get_cv_template_matcher(self, similarity: float) -> Path:
-        similarity_100 = int(similarity*100)
-        similarity_str = str(similarity_100).replace('.', '')
-        match_file = self.img_folder/f'cv_template_{similarity_str}.match'
+        match_file = self.__get_match_file_name(similarity)
         if match_file not in self.template_match_files.keys():
             self.__create_cv_template_matcher(match_file, similarity)
         return match_file
 
     def __get_textfinder_matcher(self, similarity: float):
-        similarity_100 = int(similarity*100)
-        similarity_str = str(similarity_100).replace('.', '')
-        match_file = self.img_folder/f'cv_template_{similarity_str}.match'
+        match_file = self.__get_match_file_name(similarity)
         if match_file not in self.template_match_files.keys():
             self.__create_textfinder_matcher(match_file, similarity)
         return match_file
+
+
+    def __get_match_file_name(self, similarity):
+        similarity_100 = int(similarity * 100)
+        similarity_str = str(similarity_100).replace('.', '')
+        return self.img_folder / f'cv_template_{similarity_str}.match'
 
     def __create_cv_template_matcher(self, match_file: Path, similarity: float):
         finder = TemplateFinder()
@@ -132,13 +141,10 @@ class Experiment:
             # check if steps file does already exist
             if image.suffix == 'steps':
                 match_objects = self.guibot.find(image_name)
-            # if not create steps file first before searching
             elif image.suffix in ['.png', '.jpeg', 'jpg']:
                 steps_filepath = self.__create_steps_file_icon(image, minimal_similarity=minimal_similarity, step=similarity_steps)
-                try:
+                with contextlib.suppress(guibot.errors.FindError):
                     match_objects = self.guibot.find_all(steps_filepath.name)
-                except guibot.errors.FindError:
-                    pass
         else:
             log.error(f'provided image {image} does not exits')
 
@@ -205,6 +211,38 @@ class Experiment:
             return
         self.vars[key] = value
         self.__save_vars()
+
+    def run_test(self, name: str):
+        """
+        runs a test
+        :param name: name of the test
+        :return:
+        """
+        self.testset.test(name)
+
+    def run_tests(self, names: list[str]):
+        """
+        runs a list of tests
+        :param names: list of test names
+        :return:
+        """
+        for name in names:
+            self.run_test(name)
+
+    def run_all_tests(self):
+        """
+        runs all tests
+        :return:
+        """
+        self.testset.testall()
+
+    def event(self, name: str, description: str):
+        self.event_system.log(
+            ActionEvent(
+                name=name,
+                description=description
+            )
+        )
 
     def exec_shellcommand(self, command: list, cwd=None):
         """

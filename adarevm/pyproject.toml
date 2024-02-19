@@ -10,6 +10,13 @@ adarelib = {path = "../adarelib"}
 python = "^3.10"
 guibot = "^0.50.1"
 pytest-mock = "^3.12.0"
+datefinder = "^0.7.3"
+pyautogui = "^0.9.54"
+opencv-python = "^4.9.0.80"
+pytesseract = "^0.3.10"
+
+[tool.poetry.scripts]
+adarevm = "adarevm.run:main"
 
 
 [tool.poetry.group.dev.dependencies]

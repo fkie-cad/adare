@@ -1,61 +1,87 @@
 # external imports
 from pathlib import Path
 from typing import Type
+import argparse
+import cattrs
+import sys
 
 # internal imports
 from adarelib.helperfunctions.yaml import yaml_to_dict
+from adarelib.experimentconfig import ExperimentConfig
+from adarevm.event import EventSystem
+from adarevm.testset.testset import Testset
 from adarevm.action.experiment import Experiment
+from adarelib.helperfunctions.module import import_module_from_pyfile
 
-# configure logging
-import adarevm.logger as logger
+# logging configuration
+from adarelib.logger import logger
 import logging as log
 
 
-def setup_logging(logfile: Path = None):
-    logger.setup_logger(logfile=logfile, console=False)
+def setup_logging(arguments, commandline, logfile: Path):
+    logger.setup_logger(logfile=logfile)
+    log.info(f'COMMAND: {" ".join(commandline)}')
 
 
-def run(experiment_class: Type[Experiment], config_file: Path or None, config_dict: dict = None):
-    if not config_dict and not config_file:
-        log.error(f'need to provide either config file or config dict')
-    if config_file:
-        if not config_file.is_file():
-            log.error(f'provided config file does not exist')
-            return
-        gui_config = yaml_to_dict(config_file)
-    else:
-        gui_config = config_dict
-
-    if 'img_folder' not in gui_config.keys():
-        log.error(f'gui config file {config_file} does not contain img_folder attribute')
-        return
-    if 'tessdata_folder' not in gui_config.keys():
-        log.error(f'gui config file {config_file} does not contain tessdata_folder attribute')
-        return
-    if 'logfile' not in gui_config.keys():
-        log.error(f'gui config file {config_file} does not contain logfile attribute')
-        return
-    if 'statusfile' not in gui_config.keys():
-        log.error(f'gui config file {config_file} does not contain statusfile attribute')
-        return
-
-    img_folder = Path(gui_config['img_folder'])
-    tessdata_folder = Path(gui_config['tessdata_folder'])
-    logfile = Path(gui_config['logfile'])
-    statusfile = Path(gui_config['statusfile'])
-
-    setup_logging(logfile)
+def _load_action_from_file(experiment_file: Path) -> Type[Experiment]:
+    module = import_module_from_pyfile(experiment_file)
+    # get child class of Experiment
+    for name, obj in module.__dict__.items():
+        if isinstance(obj, type) and issubclass(obj, Experiment) and obj != Experiment:
+            return obj
 
 
-    experiment_obj = experiment_class(
-        img_folder=img_folder,
-        tessdata_folder=tessdata_folder,
+def main():
+    parser = argparse.ArgumentParser(description='run an experiment')
+    parser.add_argument('config', type=Path, help='path to the config file')
+    args = parser.parse_args()
+
+    config_file = args.config
+    # parse yaml config file
+    config_dict = yaml_to_dict(config_file)
+    try:
+        config: ExperimentConfig = cattrs.structure(config_dict, ExperimentConfig)
+    except cattrs.ClassValidationError as e:
+        print(f'config file {config_file} does not contain all required attributes')
+        print(e)
+        sys.exit(1)
+
+    setup_logging(args, sys.argv, Path(config.logfile))
+
+    event_system = EventSystem(
+        path=Path(config.eventfile),
+        experiment_name=config.experiment,
     )
 
-    experiment_obj.prepare()
-    log.debug(f'preperation of experiment {experiment_obj.__class__} done')
-    status = experiment_obj.run()
-    log.debug(f'experiment {experiment_obj.__class__} finished')
+    testset = Testset(
+        testfunctions_directory=Path(config.testfunction_directory),
+        testsetfile=Path(config.testset),
+        event_system=event_system
+    )
+    
+    # get experiment class
+    ExperimentClass = _load_action_from_file(Path(config.action))
+    experiment = ExperimentClass(
+        tessdata_folder=Path(config.tessdata),
+        img_folder=Path(config.img),
+        testset=testset,
+        event_system=event_system,
+    )
 
-    with open(statusfile.as_posix(), mode='a', encoding='ascii') as f:
-        f.write(f'gui,{status}\n')
+    try:
+        experiment.prepare()
+    except Exception as e:
+        event_system.save()
+        raise e
+    log.debug(f'preparation of experiment {experiment.__class__} done')
+    try:
+        experiment.run()
+    except Exception as e:
+        event_system.save()
+        raise e
+    log.debug(f'experiment {experiment.__class__} finished')
+
+
+
+
+

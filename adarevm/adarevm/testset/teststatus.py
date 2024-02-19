@@ -34,3 +34,5 @@ class TestSyntaxError(TestStatus):
 @attrs.define
 class TestError(TestStatus):
     status = attrs.field(default='error', init=False)
+
+
