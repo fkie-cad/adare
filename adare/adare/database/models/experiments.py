@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHA
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
+from datetime import datetime
 
 from sqlalchemy_serializer import SerializerMixin
 
@@ -44,7 +45,7 @@ mapping_postsetupinstallation_environment = Table(
     "mapping_postsetupinstallation_environment",
     Base.metadata,
     Column("postsetupinstallation_id", ForeignKey("postsetupinstallation.id")),
-    Column("environment_id", ForeignKey("environment.id")),
+    Column("environment_id", ForeignKey("environment.uuid")),
 )
 mapping_usbdrive_experiment = Table(
     "mapping_usbdrive_experiment",
@@ -69,6 +70,12 @@ mapping_nfsdrive_nfsshare = Table(
     Base.metadata,
     Column("nfsdrive_id", ForeignKey("nfsdrive.id")),
     Column("nfsshare_id", ForeignKey("nfshare.id")),
+)
+mapping_experiment_environment = Table(
+    "mapping_experiment_environment",
+    Base.metadata,
+    Column("experiment_uuid", ForeignKey("experiment.uuid")),
+    Column("environment_id", ForeignKey("environment.uuid")),
 )
 
 
@@ -103,24 +110,6 @@ class Status(SerializerMixin, Base):
 
     def __repr__(self):
         return f"<Status(name='{self.name}')>"
-
-
-class PublishStatus(SerializerMixin, Base):
-    """
-        Collection of possible status.
-    """
-    __tablename__ = 'publishstatus'
-    RELATIONSHIPS_TO_DICT = True
-    serialize_rules = ('-id',)
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True, nullable=False)
-
-    def __str__(self):
-        return str(self.name)
-
-    def __repr__(self):
-        return f"<PublishStatus(name='{self.name}')>"
 
 
 class Result(SerializerMixin, Base):
@@ -158,6 +147,7 @@ class TestParameter(SerializerMixin, Base):
 
     def __repr__(self):
         return f"<TestParameter(name='{self.name}',dtype='{self.dtype}')>"
+
 
 class TestParameterEntry(SerializerMixin, Base):
     __tablename__ = 'testparameterentry'
@@ -253,7 +243,6 @@ class Test(SerializerMixin, Base):
         return f"<Test(uuid='{self.uuid}',abstracttest='{self.abstracttest}')>"
 
 
-
 class OsInfo(SerializerMixin, Base):
     __tablename__ = 'osinfo'
     RELATIONSHIPS_TO_DICT = True
@@ -324,7 +313,6 @@ class SMBShare(SerializerMixin, Base):
         return f"<SMBShare(name='{self.name}',local_path='{self.local_path}',remote_path='{self.remote_path}',user='{self.user}')>"
 
 
-
 class NFSShare(SerializerMixin, Base):
     __tablename__ = 'nfshare'
     RELATIONSHIPS_TO_DICT = True
@@ -382,7 +370,6 @@ class USBDrive(SerializerMixin, Base):
     serial_number = Column(String)
 
 
-
 class Project(SerializerMixin, Base):
     __tablename__ = 'project'
     RELATIONSHIPS_TO_DICT = True
@@ -393,15 +380,14 @@ class Project(SerializerMixin, Base):
     path = Column(String, unique=True)
 
     def __repr__(self):
-        return f"<Project(name='{self.name}',description='{self.description}',path='{self.path}',environments='{self.environments}')>"
-
+        return f"<Project(name='{self.name}',description='{self.description}',path='{self.path}')>"
 
 
 class Environment(SerializerMixin, Base):
     __tablename__ = 'environment'
     RELATIONSHIPS_TO_DICT = True
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String)
     vagrantbox = Column(String)
     description = Column(String)
@@ -409,10 +395,13 @@ class Environment(SerializerMixin, Base):
     osinfo_id = Column(Integer, ForeignKey('osinfo.id'))
     osinfo = relationship(OsInfo)
 
+    file = Column(String)
     sha256hash = Column(String, unique=True)
 
-    requested = Column(Boolean, default=False)
+    in_request = Column(Boolean, default=False)
     published = Column(Boolean, default=False)
+
+    creation_date = Column(DateTime, nullable=True, default=datetime.now)
 
 
 class Experiment(SerializerMixin, Base):
@@ -420,24 +409,23 @@ class Experiment(SerializerMixin, Base):
     RELATIONSHIPS_TO_DICT = True
 
     uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String)
+    name = Column(String, unique=True)
     description = Column(String)
-    publish_status_id = Column(Integer, ForeignKey('publishstatus.id'), nullable=False)
 
-    action_file = Column(String)
-    testset_file = Column(String)
-
-    os_info_id = Column(Integer, ForeignKey('osinfo.id'))
-
-    os_info = relationship(OsInfo)
-    publish_status = relationship(PublishStatus)
     tags = relationship(Tag, secondary=mapping_experiment_tag)
     abstract_tests = relationship(AbstractTest, secondary=mapping_experiment_abstracttest)
 
-    experiment_hash = Column(String, nullable=True)
+    action_file = Column(String)
+    testset_file = Column(String)
+    metadata_file = Column(String)
 
-    environment_id = Column(Integer, ForeignKey('environment.id'), nullable=False)
-    environment = relationship("Environment", backref=backref("experiments", cascade="all, delete-orphan"))
+    sha256_action = Column(String, nullable=True)
+    sha256_testset = Column(String, nullable=True)
+    sha256_metadata = Column(String, nullable=True)
+    sha256_hash = Column(String, nullable=True)
+
+    in_request = Column(Boolean, default=False)
+    published = Column(Boolean, default=False)
 
     smbdrive_id = Column(Integer, ForeignKey('smbdrive.id'), nullable=True)
     smbdrive = relationship(SMBDrive)
@@ -445,8 +433,7 @@ class Experiment(SerializerMixin, Base):
     nfsdrive = relationship(NFSDrive)
     usbdrives = relationship(USBDrive, secondary=mapping_usbdrive_experiment)
 
-    # ensure that the name of the experiment is unique for a given environment
-    __table_args__ = (UniqueConstraint('name', 'environment_id'),)
+    environments = relationship(Environment, secondary=mapping_experiment_environment, backref='experiments')
 
     def __str__(self):
         return str(self.name)
@@ -467,11 +454,14 @@ class ExperimentRun(SerializerMixin, Base):
     uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     experiment_id = Column(String, ForeignKey('experiment.uuid'))
     experiment = relationship(Experiment, backref=backref("runs", cascade="all, delete-orphan"))
+    environment_id = Column(Integer, ForeignKey('environment.uuid'))
+    environment = relationship(Environment, backref=backref("runs", cascade="all, delete-orphan"))
+
     timestamp_start = Column(DateTime, nullable=True)
     timestamp_end = Column(DateTime, nullable=True)
     tests = relationship(Test, secondary=mapping_experimentrun_test)
-    publish_status_id = Column(Integer, ForeignKey('publishstatus.id'), nullable=True)
-    publish_status = relationship(PublishStatus)
+
+    published = Column(Boolean, default=False)
 
     status_id = Column(Integer, ForeignKey('status.id'))
     status_gui_automation_id = Column(Integer, ForeignKey('status.id'))
@@ -515,6 +505,8 @@ class PostSetupInstallation(SerializerMixin, Base):
     name = Column(String)
     description = Column(String, nullable=True)
     command = Column(String)
+
+    environments = relationship(Environment, secondary=mapping_postsetupinstallation_environment, backref='postsetupinstallations')
 
     def __str__(self):
         return str(self.name)

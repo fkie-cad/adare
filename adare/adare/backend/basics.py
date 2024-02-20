@@ -2,7 +2,7 @@
 from pathlib import Path
 
 # internal imports
-from adare.database.api.project import ProjectManagementApi
+from adare.database.api.project import ProjectDbApi
 
 # configure logging
 import logging
@@ -25,25 +25,18 @@ def __check_project_directory(project_directory: Path) -> bool:
     return True
 
 
-def determine_projectdirectory(project_name: str = None) -> Path or None:
-    """
-    determine the directory of the project
-
-    :param project_name: name of the project
-
-    :return: project path: a valid project path
-    """
+def determine_projectdirectory(project_name: str) -> Path or None:
     if project_name:
-        with ProjectManagementApi() as db:
-            project = db.get_project(project_name)
-            if not project:
-                log.warning(f"provided {project_name} does not exist -> try cwd instead")
-            else:
+        with ProjectDbApi() as db:
+            if project := db.get_project(project_name):
                 project_directory = Path(project.path)
-                return project_directory
-    if not project_name:
-        project_directory = Path.cwd()
-        if __check_project_directory(project_directory):
-            return project_directory
+                if __check_project_directory(project_directory):
+                    return project_directory
+            else:
+                log.error(f"project {project_name} does not exist in database")
+                return None
 
+    project_directory = Path.cwd()
+    if __check_project_directory(project_directory):
+        return project_directory
     return None

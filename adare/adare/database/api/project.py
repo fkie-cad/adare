@@ -3,7 +3,6 @@ import sqlalchemy
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
 
-
 # internal imports
 import adare.config.database as config_database
 from adare.database.models.experiments import OsInfo, Project, Environment, Base as ExperimentBase
@@ -11,31 +10,31 @@ from adare.database.api.experiment import ExperimentApi
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
-
-class ProjectManagementApi(ExperimentApi):
+class ProjectDbApi(ExperimentApi):
 
     def __init__(self, db_path: Path = config_database.get_database_location()):
         super().__init__(db_path)
         ExperimentBase.metadata.create_all(self.engine)
-        
-    def add_project(self, name: str, path: Path, description: str = None) -> Project:
+
+    def add_project(self, name: str, path: Path, description: str = None) -> (Project, bool):
         # check if project already exists
         project = self._session.query(Project).filter(Project.name == name).first()
         if project:
             log.error(f"Project '{name}' already exists in database ({project.path})")
-            return project
+            return project, False
         project = Project(name=name, path=path.as_posix(), description=description)
         self._session.add(project)
         self._session.commit()
-        return project
+        return project, True
 
-    def remove_project(self, name: str) -> None:
-        project = self._session.query(Project).filter(Project.name == name).first()
+    def remove_project_by_path(self, path: Path) -> None:
+        project = self._session.query(Project).filter(Project.path == path.as_posix()).first()
         if not project:
-            raise sqlalchemy.orm.exc.NoResultFound(f"Project '{name}' not found in database")
+            raise sqlalchemy.orm.exc.NoResultFound(f"Project '{path.as_posix()}' not found in database")
         self._session.delete(project)
         self._session.commit()
 
@@ -60,13 +59,15 @@ class ProjectManagementApi(ExperimentApi):
         project = self._session.query(Project).filter(Project.name == project_name).first()
         if not project:
             raise sqlalchemy.orm.exc.NoResultFound(f"Project '{project_name}' not found in database")
-        environment = self._session.query(Environment).filter(Environment.name == name, Environment.project == project).first()
+        environment = self._session.query(Environment).filter(Environment.name == name,
+                                                              Environment.project == project).first()
         if not environment:
             log.error(f"Environment '{name}' not found in database")
             return None
         return environment
 
-    def add_environment(self, name: str, path: Path, project_name: str, os_info: dict, vagrant_box: str, description: str = None) -> Environment:
+    def add_environment(self, name: str, path: Path, project_name: str, os_info: dict, vagrant_box: str,
+                        description: str = None) -> Environment:
         project = self._session.query(Project).filter(Project.name == project_name).first()
         if not project:
             raise sqlalchemy.orm.exc.NoResultFound(f"Project '{project_name}' not found in database")
@@ -77,7 +78,6 @@ class ProjectManagementApi(ExperimentApi):
             os_info_obj = OsInfo(**os_info)
             self._session.add(os_info_obj)
         self._session.commit()
-
 
         environment = Environment(
             name=name,
@@ -96,7 +96,8 @@ class ProjectManagementApi(ExperimentApi):
         if not project:
             raise sqlalchemy.orm.exc.NoResultFound(f"Project '{project_name}' not found in database")
         # get environment from project
-        environment = self._session.query(Environment).filter(Environment.name == name, Environment.project == project).first()
+        environment = self._session.query(Environment).filter(Environment.name == name,
+                                                              Environment.project == project).first()
         if not environment:
             raise sqlalchemy.orm.exc.NoResultFound(f"Environment '{name}' not found in database")
         self._session.delete(environment)
@@ -110,4 +111,3 @@ class ProjectManagementApi(ExperimentApi):
             return self._session.query(Environment).filter(Environment.project == project).all()
         else:
             return self._session.query(Environment).all()
-

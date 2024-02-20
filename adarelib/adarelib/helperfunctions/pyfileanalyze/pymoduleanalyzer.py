@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Optional
 
 # internal imports
-from adare.helperFunctions.pyfileanalyze.load import load_as_ast_module
-from adare.helperFunctions.pyfileanalyze.pyclassanalyzer import PyClassAnalyzer
+from adarelib.helperfunctions.pyfileanalyze.load import load_as_ast_module
+from adarelib.helperfunctions.pyfileanalyze.pyclassanalyzer import PyClassAnalyzer
 
 # configure logging
 import logging

@@ -1,7 +1,9 @@
+# external imports
+from pathlib import Path
+
 # internal imports
 from adare.backend.basics import determine_projectdirectory
-from adare.backend.project import Project
-from adare.database.api.project import ProjectManagementApi
+from adare.backend.project.commands import project_create, project_remove, project_add_tessdata
 
 # configure logging
 import logging
@@ -14,14 +16,9 @@ def exec_create_project(arguments):
 
     :param arguments: arguments parsed via input
     """
-    # check if project already exists
-    with ProjectManagementApi() as api:
-        project = api.get_project(arguments.name)
-        if project:
-            print(f"Project '{project.name}' already exists in database ({project.path})")
-            print(f"Use 'adare show project' to show all projects")
-            return
-    Project(arguments.name, create=True)
+    path = Path.cwd() / arguments.name
+    description = arguments.description or ""
+    project_create(path, path.name, description)
 
 
 def exec_remove_project(arguments):
@@ -30,11 +27,24 @@ def exec_remove_project(arguments):
 
     :param arguments: arguments parsed via input
     """
-    with ProjectManagementApi() as api:
-        project = api.get_project(arguments.name)
-        if not project:
-            print(f"Project '{arguments.name}' is not found and therefore cannot be removed")
-            return
-    project_directory = determine_projectdirectory(arguments.name)
-    project = Project(project_directory)
-    project.remove()
+    path = determine_projectdirectory(arguments.name)
+    if not path:
+        log.error("no valid project directory provided")
+        exit(1)
+    if not path:
+        log.error("no valid project directory provided")
+        exit(1)
+    project_remove(path)
+
+
+def exec_download_tessdata(arguments):
+    """
+    downloads the tessdata for the given language
+
+    :param arguments: arguments parsed via input
+    """
+    path = determine_projectdirectory(arguments.name)
+    if not path:
+        log.error("no valid project directory provided")
+        exit(1)
+    project_add_tessdata(path, arguments.language)
