@@ -3,7 +3,7 @@ import ast
 from typing import Union, Optional
 
 # internal imports
-from adare.helperFunctions.pyfileanalyze.pyclassattributeanalyzer import PyClassAttributeAnalyzer
+from adarelib.helperfunctions.pyfileanalyze.pyclassattributeanalyzer import PyClassAttributeAnalyzer
 
 # configure logging
 import logging

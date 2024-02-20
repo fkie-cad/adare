@@ -4,6 +4,7 @@ import tqdm
 import os
 import platform
 
+
 def __get_default_appdata_directory(create_if_missing: bool = False, program_name: str = 'adare') -> Path or None:
     """
     get the default config directory for the tool
@@ -15,6 +16,7 @@ def __get_default_appdata_directory(create_if_missing: bool = False, program_nam
     system = platform.system()
     if system == 'Windows':
         appdata_path = Path(os.getenv('APPDATA'))
+        appdata_path = appdata_path / program_name.lower()
     elif system == "Linux":
         appdata_path = Path(f'~/.{program_name.lower()}/').expanduser()
         if not appdata_path.exists():
@@ -22,10 +24,8 @@ def __get_default_appdata_directory(create_if_missing: bool = False, program_nam
     else:
         print(f'the os {system} is not supported by the tool')
         return None
-    if appdata_path:
-        appdata_path = appdata_path/program_name.lower()
-        if create_if_missing:
-            appdata_path.mkdir(parents=False, exist_ok=True)
+    if create_if_missing:
+        appdata_path.mkdir(parents=False, exist_ok=True)
     if not appdata_path.is_dir():
         print(f'the appdata directory ({appdata_path}) of the tool is missing')
         return None
@@ -40,13 +40,18 @@ IGNORE_PATTERNS = ['venv',
                    '*.egg-info',
                    '__pycache__',
                    '*.pyc',
-]
+                   '.git',
+                   ]
 
 if __name__ == '__main__':
 
-    appdata_local = Path('./appdata')
+    adare = Path('../')
 
     # copy all files and folders from appdata_local to appdata_dir with progress bar and actual file that is copied
     # (if a file or directory already exists, it will be overwritten)
-    for file in tqdm.tqdm(appdata_local.iterdir(), desc='copying appdata files'):
-        shutil.copytree(file, APPDATA_DIR/file.name, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*IGNORE_PATTERNS))
+    shutil.copytree(adare, APPDATA_DIR / 'adare', dirs_exist_ok=True, ignore=shutil.ignore_patterns(*IGNORE_PATTERNS))
+
+    # move all files from adare/adare/appdata to appdata root
+    for file in (APPDATA_DIR / 'adare' / 'adare' / 'appdata').iterdir():
+        shutil.copytree(file, APPDATA_DIR / file.name, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns(*IGNORE_PATTERNS))

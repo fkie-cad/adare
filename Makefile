@@ -27,8 +27,6 @@ help:
 	@echo "to show the coverage report and create a html report type make coverage (please make sure you run make test before)"
 	@echo "------------------------------------"
 
-appdata:
-	${PYTHON} install/copy_appdata.py
 
 adare:
 	cd adare
