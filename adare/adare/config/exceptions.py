@@ -1,7 +1,5 @@
-from adare import exception_baseclasses
+from adarelib.exceptions import LoggedException
 
 
-class ConfigDirectoryError(exception_baseclasses.LoggedException):
-    def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
+class ConfigDirectoryError(LoggedException):
+    pass

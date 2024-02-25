@@ -21,7 +21,7 @@ class PyModuleAnalyzer:
     def get_classes(self, parent: str = None) -> list[PyClassAnalyzer]:
         class_list: list = []
         for node in self.module.body:
-            if type(node) == ast.ClassDef:
+            if isinstance(node,ast.ClassDef):
                 node: ast.ClassDef
                 if parent:
                     is_subclass = False
@@ -40,12 +40,8 @@ class PyModuleAnalyzer:
 
     def has_class(self, class_name: str) -> bool:
         classes = self.get_classes()
-        found_class = class_name in [cl.name for cl in classes]
-        return found_class
+        return class_name in [cl.name for cl in classes]
 
     def get_class(self, class_name: str) -> Optional[PyClassAnalyzer]:
         classes = self.get_classes()
-        for cl in classes:
-            if cl.name == class_name:
-                return cl
-        return None
+        return next((cl for cl in classes if cl.name == class_name), None)

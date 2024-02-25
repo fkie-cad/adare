@@ -1,0 +1,7 @@
+name: {{ name }}
+tests:
+  - name: existencefile
+    description: 'check if file exists'
+    type: is_not_file
+    params:
+      dst: 'C:/Users/vagrant/Documents/testfile'

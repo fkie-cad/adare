@@ -3,7 +3,8 @@ from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
 from datetime import datetime
-
+from adarelib.helperfunctions.hash import hash_file_sha256, combine_hashes
+from sqlalchemy import event
 from sqlalchemy_serializer import SerializerMixin
 
 Base = declarative_base()
@@ -76,6 +77,12 @@ mapping_experiment_environment = Table(
     Base.metadata,
     Column("experiment_uuid", ForeignKey("experiment.uuid")),
     Column("environment_id", ForeignKey("environment.uuid")),
+)
+mapping_abstracttest_tool = Table(
+    "mapping_abstracttest_tool",
+    Base.metadata,
+    Column("abstracttest_uuid", ForeignKey("abstracttest.uuid")),
+    Column("tool_id", ForeignKey("tool.id")),
 )
 
 
@@ -186,7 +193,7 @@ class TestFunction(SerializerMixin, Base):
         return f"<TestFunction(name='{self.name}',test_name='{self.test_name}',test_description='{self.test_description}')>"
 
 
-class Tool(SerializerMixin, Base):
+class Command(SerializerMixin, Base):
     __tablename__ = 'tool'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id',)
@@ -199,7 +206,7 @@ class Tool(SerializerMixin, Base):
         return str(self.name)
 
     def __repr__(self):
-        return f"<Tool(name='{self.name}',command='{self.command}')>"
+        return f"<Command(name='{self.name}',command='{self.command}')>"
 
 
 class AbstractTest(SerializerMixin, Base):
@@ -211,11 +218,11 @@ class AbstractTest(SerializerMixin, Base):
     description = Column(String)
 
     testfunction = relationship(TestFunction)
-    parameters = relationship(TestParameterEntry, secondary=mapping_abstracttest_testparameterentry)
-    tool = relationship(Tool)
-
     testfunction_id = Column(Integer, ForeignKey('testfunction.id'))
-    tool_id = Column(Integer, ForeignKey('tool.id'), nullable=True)
+
+    parameters = relationship(TestParameterEntry, secondary=mapping_abstracttest_testparameterentry)
+
+    depends_on_tool = relationship(Command, secondary=mapping_abstracttest_tool)
 
     def __str__(self):
         return str(self.name)
@@ -322,6 +329,7 @@ class NFSShare(SerializerMixin, Base):
     local_path = Column(String)
     remote_path = Column(String)
     allowed_hosts = Column(String)
+
     # options = Column(String)
 
     def __str__(self):
@@ -395,13 +403,24 @@ class Environment(SerializerMixin, Base):
     osinfo_id = Column(Integer, ForeignKey('osinfo.id'))
     osinfo = relationship(OsInfo)
 
+    project_id = Column(Integer, ForeignKey('project.id'))
+    project = relationship(Project, backref=backref("environments", cascade="all, delete-orphan"))
+
     file = Column(String)
-    sha256hash = Column(String, unique=True)
+    sha256_hash = Column(String, unique=True)
 
     in_request = Column(Boolean, default=False)
     published = Column(Boolean, default=False)
 
-    creation_date = Column(DateTime, nullable=True, default=datetime.now)
+    created_at = Column(DateTime, nullable=True, default=datetime.now)
+
+    def __str__(self):
+        return str(self.name)
+
+    def __repr__(self):
+        return f"<Environment(name='{self.name}',osinfo='{self.osinfo}',vagrantbox='{self.vagrantbox}')>"
+
+
 
 
 class Experiment(SerializerMixin, Base):
@@ -418,10 +437,14 @@ class Experiment(SerializerMixin, Base):
     action_file = Column(String)
     testset_file = Column(String)
     metadata_file = Column(String)
+    bibtex_file = Column(String, nullable=True, default=None)
+    markdown_file = Column(String, nullable=True, default=None)
 
-    sha256_action = Column(String, nullable=True)
-    sha256_testset = Column(String, nullable=True)
-    sha256_metadata = Column(String, nullable=True)
+    sha256_action = Column(String)
+    sha256_testset = Column(String)
+    sha256_metadata = Column(String)
+    sha256_bibtex = Column(String, nullable=True)
+    sha256_markdown = Column(String, nullable=True)
     sha256_hash = Column(String, nullable=True)
 
     in_request = Column(Boolean, default=False)
@@ -434,6 +457,10 @@ class Experiment(SerializerMixin, Base):
     usbdrives = relationship(USBDrive, secondary=mapping_usbdrive_experiment)
 
     environments = relationship(Environment, secondary=mapping_experiment_environment, backref='experiments')
+    project_id = Column(Integer, ForeignKey('project.id'))
+    project = relationship(Project, backref=backref("experiments", cascade="all, delete-orphan"))
+
+    created_at = Column(DateTime, nullable=True, default=datetime.now)
 
     def __str__(self):
         return str(self.name)
@@ -446,10 +473,13 @@ class Experiment(SerializerMixin, Base):
 class ExperimentRun(SerializerMixin, Base):
     __tablename__ = 'experimentrun'
     RELATIONSHIPS_TO_DICT = True
-    serialize_rules = ('-logfile_run_experiment','-logfile_postsetup_installations', '-logfile_vagrant', '-logfile_parse_and_test', '-logfile_gui_automation', '-logfile_installed_packages',
-                       '-logfile_run_experiment_id','-logfile_postsetup_installations_id', '-logfile_vagrant_id', '-logfile_parse_and_test_id', '-logfile_gui_automation_id', '-logfile_installed_packages_id',
-                       '-status_gui_automation', '-status_parse_and_test', '-status_vagrant',
-                       '-status_id','-status_gui_automation_id','-status_parse_and_test_id','-status_vagrant_id')
+    serialize_rules = (
+        '-logfile_run_experiment', '-logfile_postsetup_installations', '-logfile_vagrant', '-logfile_parse_and_test',
+        '-logfile_gui_automation', '-logfile_installed_packages',
+        '-logfile_run_experiment_id', '-logfile_postsetup_installations_id', '-logfile_vagrant_id',
+        '-logfile_parse_and_test_id', '-logfile_gui_automation_id', '-logfile_installed_packages_id',
+        '-status_gui_automation', '-status_parse_and_test', '-status_vagrant',
+        '-status_id', '-status_gui_automation_id', '-status_parse_and_test_id', '-status_vagrant_id')
 
     uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     experiment_id = Column(String, ForeignKey('experiment.uuid'))
@@ -506,11 +536,11 @@ class PostSetupInstallation(SerializerMixin, Base):
     description = Column(String, nullable=True)
     command = Column(String)
 
-    environments = relationship(Environment, secondary=mapping_postsetupinstallation_environment, backref='postsetupinstallations')
+    environments = relationship(Environment, secondary=mapping_postsetupinstallation_environment,
+                                backref='postsetupinstallations')
 
     def __str__(self):
         return str(self.name)
 
     def __repr__(self):
         return f"<PostSetupInstallation(name='{self.name}',description='{self.description}',command='{self.command}')>"
-

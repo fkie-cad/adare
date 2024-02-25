@@ -6,18 +6,35 @@ import time
 # internal imports
 # from adare.cli.environment import exec_env_create, exec_env_remove
 # from adare.cli.experiment import exec_exp_run, exec_exp_create, exec_exp_remove
-from adare.cli.project import exec_create_project, exec_remove_project
-from adare.cli.environment import exec_environment_load
+from adare.cli.project import exec_create_project, exec_remove_project, exec_list_projects
+from adare.cli.environment import exec_environment_load, exec_environment_list, exec_environment_create, \
+    exec_environment_delete
+from adare.cli.experiment import exec_experiment_create, exec_experiment_load
+from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
 from adare.cli.showversion import exec_show_version
 # from adare.cli.show import exec_show_env, exec_show_experiment, exec_show_runs, exec_show_run_result, exec_show_project, exec_show_usb, exec_show_nfs, exec_show_smb
+from adare.cli.web import exec_web_login
 from adare.setup_logging import setup_logging
+from adarelib.exceptions import LoggedException, LoggedErrorException
+
+
+def exec_with_error_printing(func, *args, **kwargs):
+    try:
+        func(*args, **kwargs)
+    except LoggedException as e:
+        e.print()
+        if isinstance(e, LoggedErrorException):
+            exit(-1)
+        else:
+            exit(0)
 
 
 def main():
     start_time = time.time()
 
-    parser = argparse.ArgumentParser(add_help=True, description='Adare - A tool to run experiments in virtual environments')
+    parser = argparse.ArgumentParser(add_help=True,
+                                     description='Adare - A tool to run experiments in virtual environments')
     parser.add_argument('-V', '--version', action='store_true', help='display program version')
     parser.add_argument('-l', '--logfile', help='path to logfile')
     parser.add_argument('-v', '--verbose', action='store_true', help='verbose output (loglevel=INFO)')
@@ -28,6 +45,14 @@ def main():
 
     subparsers = parser.add_subparsers()
 
+    # commands: adare manage ...
+    manage = subparsers.add_parser('manage', help='wrapper for needed manage commands')
+    manage.set_defaults(func=lambda args: manage.print_help())
+    manage_subparsers = manage.add_subparsers()
+
+    manage_reset = manage_subparsers.add_parser('reset', help='remove database (use with caution)')
+    manage_reset.set_defaults(func=lambda args: exec_with_error_printing(exec_manage_reset, args))
+
     # commands: adare proj ....
     project = subparsers.add_parser('project', help='wrapper for needed project commands')
     project.set_defaults(func=lambda args: project.print_help())
@@ -36,11 +61,14 @@ def main():
     project_create = project_subparsers.add_parser('create')
     project_create.add_argument('name', help='name of the project')
     project_create.add_argument('--description', '-d', required=False, help='description of the project')
-    project_create.set_defaults(func=exec_create_project)
+    project_create.set_defaults(func=lambda args: exec_with_error_printing(exec_create_project, args))
 
     project_remove = project_subparsers.add_parser('remove')
     project_remove.add_argument('name', help='name of the project to remove')
-    project_remove.set_defaults(func=exec_remove_project)
+    project_remove.set_defaults(func=lambda args: exec_with_error_printing(exec_remove_project, args))
+
+    project_list = project_subparsers.add_parser('list')
+    project_list.set_defaults(func=lambda args: exec_with_error_printing(exec_list_projects, args))
 
     # commands: adare env ...
     environment = subparsers.add_parser('env', help='wrapper for needed environment commands')
@@ -49,9 +77,54 @@ def main():
 
     environment_load = environment_subparsers.add_parser('load')
     environment_load.add_argument('environment', help='name of the environment to load')
-    environment_load.add_argument('--project', '-p', required=False, help='name of the project to load the environment to')
+    environment_load.add_argument('--project', '-p', required=False,
+                                  help='name of the project to load the environment to')
     environment_load.add_argument('--force', '-f', action='store_true', help='force the update of the environment')
-    environment_load.set_defaults(func=lambda args: exec_environment_load(args))
+    environment_load.set_defaults(func=lambda args: exec_with_error_printing(exec_environment_load, args))
+
+    environment_list = environment_subparsers.add_parser('list')
+    environment_list.add_argument('--project', '-p', required=False,
+                                  help='name of the project to list the environments of')
+    environment_list.set_defaults(func=lambda args: exec_with_error_printing(exec_environment_list, args))
+
+    environment_create = environment_subparsers.add_parser('create')
+    environment_create.add_argument('name', help='name of the environment')
+    environment_create.add_argument('--project', '-p', required=False,
+                                    help='name of the project to add the environment to')
+    environment_create.set_defaults(func=lambda args: exec_with_error_printing(exec_environment_create, args))
+
+    environment_delete = environment_subparsers.add_parser('delete')
+    environment_delete.add_argument('uuid', help='uuid of the environment')
+    environment_delete.add_argument('--force', '-f', action='store_true', help='force the deletion of the environment')
+    environment_delete.set_defaults(func=lambda args: exec_with_error_printing(exec_environment_delete, args))
+
+    # commands: adare exp ...
+    experiment = subparsers.add_parser('exp', help='wrapper for needed experiment commands')
+    experiment.add_argument('--project', '-p', required=False, help='name of the project')
+    experiment.set_defaults(func=lambda args: experiment.print_help())
+    experiment_subparsers = experiment.add_subparsers()
+
+    experiment_create = experiment_subparsers.add_parser('create',
+                                                         help='create the skeleton for new experiment to an environment')
+    experiment_create.add_argument('experiment', help='name of the experiment to add')
+    experiment_create.set_defaults(func=lambda args: exec_with_error_printing(exec_experiment_create, args))
+
+    experiment_load = experiment_subparsers.add_parser('load', help='load the experiment')
+    experiment_load.add_argument('experiment', help='name of the experiment to load')
+    experiment_load.add_argument('--force', '-f', action='store_true', help='force the update of the experiment')
+    experiment_load.set_defaults(func=lambda args: exec_with_error_printing(exec_experiment_load, args))
+
+
+    # commands: adare web ...
+    web = subparsers.add_parser('web', help='wrapper for needed web commands')
+    web.set_defaults(func=lambda args: web.print_help())
+    web_subparsers = web.add_subparsers()
+
+    web_login = web_subparsers.add_parser('login', help='login to the web interface')
+    web_login.set_defaults(func=lambda args: exec_with_error_printing(exec_web_login, args))
+
+    web_logout = web_subparsers.add_parser('logout', help='logout from the web interface')
+    web_logout.set_defaults(func=lambda args: exec_with_error_printing(exec_web_login, args))
 
     #
     # environment_create = environment_subparsers.add_parser('create')
@@ -132,7 +205,6 @@ def main():
     #
     # show_smb = show_subparsers.add_parser('smb', help='show the smb devices')
     # show_smb.set_defaults(func=exec_show_smb)
-
 
     # parse arguments
     args = parser.parse_args()

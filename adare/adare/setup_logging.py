@@ -36,7 +36,7 @@ def setup_logging(arguments, commandline):
         elif arguments.log_level in config.ABBREV_CRITICAL:
             loglevel_file = log.CRITICAL
 
-    console_logging = True if loglevel_console else False
+    console_logging = bool(loglevel_console)
     if arguments.logfile:
         logger.setup_logger(loglevel_console=loglevel_console, logfile=arguments.log, console=console_logging,  loglevel_file=loglevel_file)
     else:
