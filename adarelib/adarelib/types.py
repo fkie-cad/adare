@@ -1,6 +1,6 @@
 # external imports
-import attr
-from typing import Optional
+from typing import Union, Literal, Optional
+import attrs
 
 # internal imports
 import adare.config as config
@@ -10,7 +10,84 @@ import logging
 log = logging.getLogger(__name__)
 
 
-@attr.define
+@attrs.define
+class UsbDevice:
+    """
+    class to store information about a usb device
+    """
+    name: str
+    VendorId: Union[str, None] = None
+    ProductId: Union[str, None] = None
+    Manufacturer: Union[str, None] = None
+    Product: Union[str, None] = None
+    SerialNumber: Union[str, None] = None
+
+
+@attrs.define
+class PostsetupInstallations:
+    """
+    class to store information about installations that should be done after boot but before the experiment
+    """
+    name: str
+    command: str
+    description: Optional[str] = ''
+
+
+@attrs.define
+class OsInfo:
+    os: str
+    platform: Literal['windows', 'linux']
+    distribution: str
+    version: str = ''
+    language: str = ''
+    architecture: str = ''
+    details: str = ''
+
+
+@attrs.define
+class EnvironmentMetadata:
+    """
+    class to store the configuration of an environment
+    """
+    name: Optional[str]
+    vagrantbox: str
+    os: OsInfo
+    # resolution: str = config.DEFAULT_RESOLUTION
+    pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
+    idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
+    # settings: list = attrs.Factory(list)
+    usbdevices: list[UsbDevice] = attrs.Factory(list)
+    postsetupinstallations: list[PostsetupInstallations] = attrs.Factory(list)
+    # gui: bool = True
+    description: str = attrs.Factory(str)
+
+
+@attrs.define
+class Test:
+    name: str
+    type: str
+    params: dict = {}
+    description: str = ''
+    depends_on: list[str] = []
+
+
+@attrs.define
+class Command:
+    name: str
+    command: str
+    tool: str
+    description: str = ''
+
+
+@attrs.define
+class TestsetFile:
+    name: str
+    tests: list[Test]
+    commands: list[Command] = attrs.Factory(list)
+    description: str = ''
+
+
+@attrs.define
 class Share:
     """
     base class for network shares used by the network drive vm
@@ -24,7 +101,7 @@ class Share:
         pass
 
 
-@attr.define
+@attrs.define
 class NetworkdriveVMConfiguration:
     """
         configuration of the network drive  VM (such as used cpu's, memory and the ip in the internal vm network, where the VM can be found)
@@ -34,7 +111,7 @@ class NetworkdriveVMConfiguration:
     ip: str = config.DEFAULT_NETWORKSHARES_VM['ip']
 
 
-@attr.define
+@attrs.define
 class NFSShare(Share):
     """
         configuration of an nfs share
@@ -54,6 +131,7 @@ class NFSShare(Share):
     # used for client mount only
     local_path: str = config.DEFAULT_NFS_CONF['share']['path']
     read_only: bool = False
+
     # mount options
     # port: Optional[str] = None
     # rsize: Optional[str] = None
@@ -68,8 +146,7 @@ class NFSShare(Share):
             'dump': 0,
             'pass': 0,
         }
-        fstab_str = '\t'.join([str(x) for x in fstab_entry.values()])
-        return fstab_str
+        return '\t'.join([str(x) for x in fstab_entry.values()])
 
     def get_mount_option_string(self) -> str:
         options = []
@@ -89,17 +166,16 @@ class NFSShare(Share):
         options = ''
         if mount_info['options']:
             options = ' ' + ' '.join(mount_info['options'])
-        command = f'mount "{mount_info["remote_path"]}" "{mount_info["local_path"]}"{options}'
-        return command
+        return f'mount "{mount_info["remote_path"]}" "{mount_info["local_path"]}"{options}'
 
 
-@attr.define
+@attrs.define
 class NFSConfiguration:
     """
         configuration of an nfs server
     """
     name: str = config.DEFAULT_NFS_CONF['name']
-    shares: list[NFSShare] = attr.Factory(list)
+    shares: list[NFSShare] = attrs.Factory(list)
 
     def __check_share(self, share: NFSShare) -> bool:
         """
@@ -124,7 +200,7 @@ class NFSConfiguration:
             log.error(f'share ({share.name}) could not be added to the smb configuration successfully')
 
 
-@attr.define
+@attrs.define
 class SMBUser:
     """
         configuration of an smb user
@@ -133,7 +209,7 @@ class SMBUser:
     password: str = config.DEFAULT_SMB_CONF['user']['password']
 
 
-@attr.define
+@attrs.define
 class SMBShare(Share):
     """
         configuration of an smb share
@@ -144,7 +220,7 @@ class SMBShare(Share):
 
     # used for server setup only
     comment: str = config.DEFAULT_SMB_CONF['share']['comment']
-    user: SMBUser = attr.Factory(SMBUser)
+    user: SMBUser = attrs.Factory(SMBUser)
     guest_ok: bool = False
     browseable_no: bool = False
     writable: bool = config.DEFAULT_SMB_CONF['share']['writable']
@@ -156,13 +232,8 @@ class SMBShare(Share):
     gid: int = config.DEFAULT_SMB_CONF['share']['gid']
     read_only: bool = not writable
 
-
-
     def get_fstab_entry(self, ip: str) -> str:
-        if self.read_only:
-            mode = 'ro'
-        else:
-            mode = 'rw'
+        mode = 'ro' if self.read_only else 'rw'
         fstab_entry = {
             'file_system': f'//{ip}/{self.name}',
             'mount_point': self.local_path,
@@ -171,8 +242,7 @@ class SMBShare(Share):
             'dump': 0,
             'pass': 0,
         }
-        fstab_str = '\t'.join([str(x) for x in fstab_entry.values()])
-        return fstab_str
+        return '\t'.join([str(x) for x in fstab_entry.values()])
 
     def get_windows_mount_command(self, ip: str):
         mount_info = {
@@ -184,18 +254,17 @@ class SMBShare(Share):
         if mount_info['options']:
             options += ' '.join(mount_info['options'])
 
-        command = f'net use "{mount_info["local_path"]}" "{mount_info["remote_path"]}"{options}'
-        return command
+        return f'net use "{mount_info["local_path"]}" "{mount_info["remote_path"]}"{options}'
 
 
-@attr.define
+@attrs.define
 class SMBConfiguration:
     """
         configuration of an smb server
     """
     name: str = config.DEFAULT_SMB_CONF['name']
-    shares: list[SMBShare] = attr.Factory(list)
-    users: list[SMBUser] = attr.Factory(list)
+    shares: list[SMBShare] = attrs.Factory(list)
+    users: list[SMBUser] = attrs.Factory(list)
     workgroup: str = config.DEFAULT_SMB_CONF['workgroup']
 
     def __check_share(self, share: SMBShare) -> bool:
@@ -227,9 +296,7 @@ class SMBConfiguration:
             log.error(f'share {share.name} could not be added to the smb configuration successfully')
 
     def is_user(self, user: SMBUser) -> bool:
-        if user.name in [u.name for u in self.users]:
-            return True
-        return False
+        return user.name in [u.name for u in self.users]
 
     def add_user(self, user: SMBUser):
         """
@@ -240,12 +307,34 @@ class SMBConfiguration:
         if not self.is_user(user):
             self.users.append(user)
         else:
-            log.error(f'user {user.name} does already exist in the smb configuration and could therefore not be added to the smb configuration')
+            log.error(
+                f'user {user.name} does already exist in the smb configuration and could therefore not be added to the smb configuration')
 
     def get_user_by_name(self, name: str) -> Optional[SMBUser]:
         for u in self.users:
             if u.name == name:
-                user = u
-                return user
+                return u
         log.error(f'user with name {name} is not existing the in the smb configuration')
         return None
+
+
+@attrs.define
+class ExperimentMetadata:
+    """
+    class to store the metadata of an experiment
+    """
+    environments: list[str] = attrs.Factory(list)
+    tags: list[str] = attrs.Factory(list)
+    smb: Optional[SMBConfiguration] = None
+    nfs: Optional[NFSConfiguration] = None
+    usb: list[UsbDevice] = attrs.Factory(list)
+    description: str = attrs.Factory(str)
+
+    def fix_smb_users(self):
+        """
+        add all users of the smb shares to the smb users
+        """
+        if self.smb:
+            for share in self.smb.shares:
+                if share.user not in self.smb.users:
+                    self.smb.add_user(share.user)

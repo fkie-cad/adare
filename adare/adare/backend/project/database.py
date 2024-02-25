@@ -11,24 +11,27 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class ProjectDatabase:
-    project_path: Path
+def get_project_by_path(project_path: Path) -> Project or None:
+    with ProjectDbApi() as api:
+        project = api.get_project_by_path(project_path)
+        if project is None:
+            log.error(f'project {project_path} not found')
+            return None
+    return project
 
-    def __init__(self, project_path: Path):
-        self.project_path = project_path
 
-    def add(self, name: str, description: str = None) -> (Project, bool):
-        with ProjectDbApi() as db:
-            return db.add_project(name, self.project_path, description)
+def get_all_projects() -> list[Project]:
+    with ProjectDbApi() as api:
+        projects = api.get_projects()
+    return projects or []
 
-    def remove(self) -> None:
-        with ProjectDbApi() as db:
-            db.remove_project_by_path(self.project_path)
 
-    def get(self) -> Project or None:
-        with ProjectDbApi() as db:
-            return db.get_project_by_path(self.project_path)
+def add_project(name: str, description: str, path: Path):
+    with ProjectDbApi() as api:
+        api.add_project(name, path, description)
 
-    def get_all(self) -> list[Project]:
-        with ProjectDbApi() as db:
-            return db.get_projects()
+
+def remove_project(project_path: Path):
+    with ProjectDbApi() as api:
+        api.remove_project_by_path(project_path)
+

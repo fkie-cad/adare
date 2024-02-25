@@ -17,3 +17,9 @@ def slugify(value, allow_unicode=False):
         value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
     value = re.sub(r'[^\w\s-]', '', value.lower())
     return re.sub(r'[-\s]+', '-', value).strip('-_')
+
+
+def clean_rich_inline_str(text: str):
+    # Pattern to match Rich style tags (e.g., [bold], [/bold], [italic red], [/italic red])
+    pattern = r"\[\/*[a-zA-Z0-9 _]+\]"
+    return re.sub(pattern, "", text)

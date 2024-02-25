@@ -47,3 +47,18 @@ class DatabaseApi:
     def __stop_sqlalchemy_session(self):
         self._session.commit()
         self._session.close()
+
+    def _add_commit(self, obj):
+        self._session.add(obj)
+        self._session.commit()
+        return obj
+
+    def _delete_commit(self, obj):
+        self._session.delete(obj)
+        self._session.commit()
+        return obj
+
+    def _expunge_multiple(self, objs):
+        for obj in objs:
+            self._session.expunge(obj)
+        return objs

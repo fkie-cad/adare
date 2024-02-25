@@ -8,9 +8,8 @@ log = logging.getLogger(__name__)
 
 
 def get_database_location():
-
     if not APPDATA_DIR.is_dir():
-        raise ConfigDirectoryError(f'the config directory could not be set')
+        raise ConfigDirectoryError('the config directory could not be set')
 
     return APPDATA_DIR / 'adare.db.sqlite3'
 

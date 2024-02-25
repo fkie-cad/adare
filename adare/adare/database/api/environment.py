@@ -1,21 +1,22 @@
 # external imports
 import attrs
 import sqlalchemy
-from sqlalchemy.orm import sessionmaker
 from pathlib import Path
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.models.experiments import Environment, OsInfo
+from adare.database.models.experiments import Environment, OsInfo, Experiment, ExperimentRun, Project
 from adare.database.api.database import DatabaseApi
-from adare.backend.attrs_classes import EnvironmentConfiguration, OsInfo as OsInfoAttrs
+from adarelib.types import EnvironmentMetadata, OsInfo as OsInfoAttrs
+from adare.database.api.experiment import ExperimentApi
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
-class EnvironmentDbApi(DatabaseApi):
+class EnvironmentDbApi(ExperimentApi):
 
     def __init__(self, db_path: Path = config_database.get_database_location()):
         super().__init__(db_path)
@@ -26,8 +27,7 @@ class EnvironmentDbApi(DatabaseApi):
         if os_info:
             return os_info, False
         os_info = OsInfo(**os_info_dict)
-        self._session.add(os_info)
-        self._session.commit()
+        self._add_commit(os_info)
         return os_info, True
 
     def get_environments_by_path(self, path: Path) -> list[Environment]:
@@ -35,17 +35,28 @@ class EnvironmentDbApi(DatabaseApi):
         return self._session.query(Environment).filter(Environment.file == path.as_posix()).order_by(
             sqlalchemy.desc(Environment.created_at)).all()
 
-    def get_or_create_environment(self, environment_configuration: EnvironmentConfiguration, environment_file: Path, sha256hash: str) -> (
-    Environment, bool):
+    def get_environment_by_uuid(self, uuid: str) -> Environment:
+        return self._session.query(Environment).filter(Environment.uuid == uuid).first()
+
+
+
+    def get_or_create_environment(self, project_path: Path, environment_metadata: EnvironmentMetadata, environment_file: Path,
+                                  sha256hash: str) -> (
+            Environment, bool):
         environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
         if environment:
             return environment, False
         log.info(f"Environment with hash '{sha256hash}' not found in database -> creating new entry")
-        os_info, _ = self.get_or_create_os_info(environment_configuration.os)
+        os_info, _ = self.get_or_create_os_info(environment_metadata.os)
+        project = self._session.query(Project).filter(Project.path == project_path).first()
+        if not project:
+            log.error(f"Project with path '{project_path}' not found in database -> cannot create environment")
+            return None, False
         environment = Environment(
-            name=environment_configuration.name,
-            description=environment_configuration.description,
-            vagrantbox=environment_configuration.vagrantbox,
+            name=environment_metadata.name,
+            project=project,
+            description=environment_metadata.description,
+            vagrantbox=environment_metadata.vagrantbox,
             osinfo=os_info,
             sha256hash=sha256hash,
             file=environment_file.as_posix(),
@@ -54,19 +65,58 @@ class EnvironmentDbApi(DatabaseApi):
         self._session.commit()
         return environment, True
 
-    def update_environment(self, environment_configuration: EnvironmentConfiguration, environment_file: Path, sha256hash: str) -> bool:
+    def update_environment(self, environment_metadata: EnvironmentMetadata, environment_file: Path,
+                           sha256hash: str) -> bool:
         environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
         if not environment:
             log.error(f"Environment with hash '{sha256hash}' not found in database -> cannot update")
             return False
         if environment.runs:
-            log.error(f"Environment with hash '{sha256hash}' has already been used for experiments, so it cannot be updated because this would invalidate the results")
+            log.error(
+                f"Environment with hash '{sha256hash}' has already been used for experiments, so it cannot be updated because this would invalidate the results")
             return False
-        os_info, _ = self.get_or_create_os_info(environment_configuration.os)
-        environment.name = environment_configuration.name
-        environment.description = environment_configuration.description
-        environment.vagrantbox = environment_configuration.vagrantbox
+        os_info, _ = self.get_or_create_os_info(environment_metadata.os)
+        environment.name = environment_metadata.name
+        environment.description = environment_metadata.description
+        environment.vagrantbox = environment_metadata.vagrantbox
         environment.osinfo = os_info
         environment.file = environment_file.as_posix()
         self._session.commit()
         log.info(f"Environment with hash '{sha256hash}' updated in database")
+
+    def delete_environment(self, environment: Environment):
+        self._delete_commit(environment)
+        log.info(f"Environment with hash '{environment.sha256hash}' deleted from database")
+
+    def get_environments(self, project_path: Path = None) -> list:
+        # retrieve all environments and expunge them from the session
+        if project_path:
+            environments = self._session.query(Environment).filter(Environment.project.path == project_path).all()
+        else:
+            environments = self._session.query(Environment).all()
+
+        # get all experiment with at least one run in the environment.runs list
+        experiment_per_env = {}
+        for environment in environments:
+            experiments = {run.experiment.name for run in environment.runs}
+            experiment_per_env[environment.uuid] = [
+                {
+                    'name': experiment.name,
+                    'runs': len([run for run in environment.runs if run.experiment.name == experiment.name])
+                }
+                for experiment in experiments
+            ]
+
+        # get count of runs for each environment for each experiment
+        for env in environments:
+            self._expunge_multiple(env.runs)
+        self._expunge_multiple(environments)
+
+        return [
+            {
+                'name': env.name,
+                'description': env.description,
+                'experiments': experiment_per_env[env.uuid],
+            }
+            for env in environments
+        ]

@@ -6,7 +6,7 @@ import cattrs
 import attrs
 
 from adarevm.testset.basictest import BasicTest
-from adarelib.testsetfile.fileformat import TestsetFile
+from adarelib.types import TestsetFile
 from adarelib.helperfunctions.module import import_module_from_pyfile
 
 import logging

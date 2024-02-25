@@ -37,6 +37,7 @@ def determine_projectdirectory(project_name: str) -> Path or None:
                 return None
 
     project_directory = Path.cwd()
-    if __check_project_directory(project_directory):
-        return project_directory
+    with ProjectDbApi() as db:
+        if db.get_project_by_path(project_directory):
+            return project_directory
     return None
