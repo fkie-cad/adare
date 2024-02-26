@@ -26,8 +26,17 @@ class PyClassAnalyzer:
                 attr: Union[ast.Assign, ast.AnnAssign]
                 if PyClassAttributeAnalyzer(attr).get_attribute_as_dict()['name'] == attr_name:
                     return PyClassAttributeAnalyzer(attr)
-        else:
-            return None
+        return None
+        
+    def get_method(self, method_name: str) -> Optional[ast.FunctionDef]:
+        return next(
+            (
+                method
+                for method in self.root.body
+                if type(method) == ast.FunctionDef and method.name == method_name
+            ),
+            None,
+        )
 
     def get_attribute_as_dict(self, attr_name: str) -> dict:
         attr = self.get_attribute(attr_name)

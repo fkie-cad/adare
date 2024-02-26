@@ -8,5 +8,6 @@ class LoginFailedError(LoggedErrorException):
 class AlreadyLoggedIn(LoggedErrorException):
     pass
 
+
 class NoUserLoggedIn(LoggedErrorException):
     pass

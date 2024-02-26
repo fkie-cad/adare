@@ -1,63 +1,58 @@
 # external imports
 from pathlib import Path
+import shutil
 
 # internal imports
 from adare.config.configdirectory import TEMPLATES_DIR
-from adare.backend.testfunction.exceptions import TestfunctionDirectoryCreationError, TestfunctionCreationError
+from adare.backend.testfunction.exceptions import TestfunctionDirectoryCreationError, TestfunctionCreationError, \
+    TestfunctionMissingFileError
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
 class TestfunctionDirectory:
     path: Path
+    requirements: Path
+    pythonfile: Path
 
-    def __init__(self, project: Path):
-        self.path = project / 'testfunctions'
-        if not self.path.exists():
-            try:
-                self.path.mkdir()
-            except OSError as e:
-                raise TestfunctionDirectoryCreationError(
-                    log,
-                    message=f'Error creating testfunction directory: {e.strerror}',
-                ) from e
+    def __init__(self, project: Path, name: str):
+        self.path = project / 'testfunctions' / name
+        self.requirements = self.path / 'requirements.txt'
+        self.pythonfile = self.path / f'{name}.py'
 
-    def __testfunction_exists(self, testfunction: str):
-        return (self.path / testfunction).exists()
+    def testfunction_exists(self):
+        return self.pythonfile.exists()
 
-    def create_testfunction(self, testfunction: str):
-        testfunction_path = self.path / testfunction
+    def create_testfunction(self):
         testfunction_template = TEMPLATES_DIR / 'testfunction' / 'testfunction.py'
-        if self.__testfunction_exists(testfunction):
+        if self.testfunction_exists():
             raise TestfunctionCreationError(
                 log,
-                message=f'Testfunction {testfunction} already exists',
+                message=f'Testfunction {self.path.name} already exists',
             )
 
         try:
-            with open(testfunction_path, 'w') as f:
+            with open(self.pythonfile, 'w') as f:
                 f.write(testfunction_template.read_text())
         except OSError as e:
             raise TestfunctionCreationError(
                 log,
                 message=f'Error creating testfunction file: {e.strerror}',
             ) from e
-        return testfunction_path
 
-    def remove_testfunction(self, testfunction: str):
-        testfunction_path = self.path / testfunction
-        if not self.__testfunction_exists(testfunction):
+    def remove_testfunction(self):
+        if not self.testfunction_exists():
             raise TestfunctionCreationError(
                 log,
-                message=f'Testfunction {testfunction} does not exist',
+                message=f'Testfunction {self.path.name} does not exist',
             )
         try:
-            testfunction_path.unlink()
+            shutil.rmtree(self.path)
         except OSError as e:
             raise TestfunctionCreationError(
                 log,
                 message=f'Error removing testfunction file: {e.strerror}',
             ) from e
-        return testfunction_path

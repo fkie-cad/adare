@@ -3,11 +3,11 @@ import hashlib
 import os
 import requests
 import http.server
-import socketserver
 import urllib.parse
 from urllib.parse import parse_qs, urlparse
 import secrets
 import datetime
+import webbrowser
 
 from adarelib.helperfunctions.port import is_localhost_port_free
 from adare.config.server import GITEA_URL, GITEA_CLIENT_ID, PORT_OAUTH2_REDIRECT, WEBSERVER_URL
@@ -16,6 +16,7 @@ from adare.database.api.usersession import UserSessionApi
 from adarelib.console import console_print, log_print
 
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -44,33 +45,26 @@ class RedirectHandler(http.server.SimpleHTTPRequestHandler):
 
         # Shut down the HTTP server
         resp = exchange_code_for_token(GITEA_CLIENT_ID, authorization_code, self.code_verifier, self.redirect_uri)
-        gitea_access_token = resp['access_token']
-        gitea_expiry = datetime.datetime.now() + datetime.timedelta(seconds=resp['expires_in'])
-        gitea_refresh_token = resp.get('refresh_token', None)
+        self.server.gitea_access_token = resp['access_token']
+        self.server.gitea_access_token_expiry = datetime.datetime.now() + datetime.timedelta(seconds=resp['expires_in'])
+        self.server.gitea_refresh_token = resp.get('refresh_token', None)
         log.info("Received access token")
 
-        # access django api to retrieve django knox token
-        response = requests.post(f'{WEBSERVER_URL}api/auth/gitea/', data={'access_token': gitea_access_token})
-        if response.status_code != 200:
-            raise LoginFailedError(log, f"Failed to retrieve Django token ({response.status_code}): {response.text}")
+    def log_message(self, format, *args):
+        log.info(f'[{self.log_date_time_string()}] {format % args}')
 
-        log.info("Received Django token")
 
-        django_username = response.json()['user']
-        django_token = response.json()['token']
-        django_expiry = datetime.datetime.strptime(response.json()['expiry'], '%Y-%m-%dT%H:%M:%S.%fZ')
+class LoginHTTPServer(http.server.HTTPServer):
+    gitea_access_token: str
+    gitea_access_token_expiry: datetime.datetime
+    gitea_refresh_token: str
 
-        # Save the tokens to the database
-        with UserSessionApi() as db:
-            db.add_user_session(
-                username=django_username,
-                gitea_token=gitea_access_token,
-                gitea_token_expiration=gitea_expiry,
-                gitea_refresh_token=gitea_refresh_token,
-                django_token=django_token,
-                django_token_expiration=django_expiry,
-            )
-        log.info("Saved tokens to database")
+    def __init__(self, server_address, RequestHandlerClass):
+        super().__init__(server_address, RequestHandlerClass)
+        self.server_activate()
+        self.gitea_access_token = ''
+        self.gitea_access_token_expiry = datetime.datetime.now()
+        self.gitea_refresh_token = ''
 
 
 def generate_state():
@@ -95,18 +89,60 @@ def start_oauth_flow(redirect_uri, port):
     code_challenge = generate_code_challenge(code_verifier)
     state = generate_state()
 
-    with socketserver.TCPServer(("", port), RedirectHandler) as httpd:
+    with LoginHTTPServer(('localhost', port), RedirectHandler) as httpd:
         RedirectHandler.code_verifier = code_verifier
         RedirectHandler.state = state
         RedirectHandler.redirect_uri = redirect_uri
         log.info(f"Started HTTP server on port {port}")
 
         # Step 1: Redirect user to the authorization endpoint
-        auth_url = f"{GITEA_URL}login/oauth/authorize?response_type=code&client_id={GITEA_CLIENT_ID}&redirect_uri={urllib.parse.quote_plus(redirect_uri)}&code_challenge={code_challenge}&code_challenge_method=S256&state={state}"
-        console_print(f"Please go to the following URL to login: [i blue]{auth_url}[/i blue]")
+        auth_url = f"{GITEA_URL}login/oauth/authorize?response_type=code&client_id={GITEA_CLIENT_ID}&redirect_uri={urllib.parse.quote_plus(redirect_uri)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256"
+        webbrowser.open(auth_url, new=0, autoraise=True)
+        console_print("A browser window has been opened. Please log in and authorize the application.")
+        console_print(f'\nIf the browser does not open, please visit the following URL manually: [i blue]{auth_url}[/i blue]')
 
         # Wait for a single request and get self.path from the handler
-        httpd.handle_request()
+        try:
+            httpd.handle_request()
+        except KeyboardInterrupt as e:
+            console_print("Received keyboard interrupt, shutting down HTTP server")
+            raise LoginFailedError(log, "Login cancelled by user") from e
+        finally:
+            httpd.server_close()
+
+        gitea_access_token = httpd.gitea_access_token
+        gitea_access_token_expiry = httpd.gitea_access_token_expiry
+        gitea_refresh_token = httpd.gitea_refresh_token
+
+    # access django api to retrieve django knox token
+    try:
+        response = requests.post(f'{WEBSERVER_URL}api/auth/gitea/', data={'access_token': gitea_access_token})
+        if response.status_code != 200:
+            raise LoginFailedError(log,
+                                   f"Failed to retrieve Django token ({response.status_code}): {response.text}")
+    except requests.exceptions.RequestException as e:
+        raise LoginFailedError(
+            log, "Failed to retrieve Django token"
+        ) from e
+
+    log.info("Received Django token")
+
+    django_username = response.json()['user']
+    django_token = response.json()['token']
+    django_expiry = datetime.datetime.strptime(response.json()['expiry'], '%Y-%m-%dT%H:%M:%S.%fZ')
+
+    # Save the tokens to the database
+    with UserSessionApi() as db:
+        db.add_user_session(
+            username=django_username,
+            gitea_token=gitea_access_token,
+            gitea_token_expiration=gitea_access_token_expiry,
+            gitea_refresh_token=gitea_refresh_token,
+            django_token=django_token,
+            django_token_expiration=django_expiry,
+        )
+    log.info("Saved tokens to database")
+    log_print(log, f"\nLogged in as user [b]{django_username}[/b]")
 
 
 def exchange_code_for_token(client_id, code, code_verifier, redirect_uri):
@@ -163,4 +199,4 @@ def logout(username: str = None):
         if not username:
             raise NoUserLoggedIn(log, "No user is currently logged in")
         db.remove_user_session(username)
-    log_print(log, f'Logged out user {username}')
+    log_print(log, f'Logged out user [b]{username}[/b]')
