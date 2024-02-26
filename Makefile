@@ -18,6 +18,7 @@ ifeq ($(OS),Windows_NT)
 	@echo "Running PowerShell script..."
 	@powershell.exe -File ./adare/install/install.ps1
 else
+	chmod +x ./adare/install/install.sh
 	@echo "Running shell script..."
 	@./adare/install/install.sh
 endif

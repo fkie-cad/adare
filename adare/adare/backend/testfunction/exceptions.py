@@ -8,3 +8,15 @@ class TestfunctionDirectoryCreationError(LoggedErrorException):
 
 class TestfunctionCreationError(LoggedErrorException):
     pass
+
+
+class TestfunctionRemovalError(LoggedErrorException):
+    pass
+
+
+class TestfunctionMissingFileError(LoggedErrorException):
+    pass
+
+
+class TestfunctionUpdatedError(LoggedErrorException):
+    pass

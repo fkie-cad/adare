@@ -14,7 +14,8 @@ from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
 from adare.cli.showversion import exec_show_version
 # from adare.cli.show import exec_show_env, exec_show_experiment, exec_show_runs, exec_show_run_result, exec_show_project, exec_show_usb, exec_show_nfs, exec_show_smb
-from adare.cli.web import exec_web_login
+from adare.cli.web import exec_web_login, exec_web_logout
+from adare.cli.testfunction import exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 from adare.setup_logging import setup_logging
 from adarelib.exceptions import LoggedException, LoggedErrorException
 
@@ -115,6 +116,29 @@ def main():
     experiment_load.set_defaults(func=lambda args: exec_with_error_printing(exec_experiment_load, args))
 
 
+    # commands: adare testfunction ...
+    testfunction = subparsers.add_parser('testfunction', help='wrapper for needed testfunction commands')
+    testfunction.add_argument('--project', '-p', required=False, help='name of the project')
+    testfunction.set_defaults(func=lambda args: testfunction.print_help())
+    testfunction_subparsers = testfunction.add_subparsers()
+
+    testfunction_create = testfunction_subparsers.add_parser('create', help='create a new testfunction')
+    testfunction_create.add_argument('name', help='name of the testfunction to create')
+    testfunction_create.set_defaults(func=lambda args: exec_with_error_printing(exec_create_testfunction, args))
+
+    testfunction_remove = testfunction_subparsers.add_parser('remove', help='remove a testfunction')
+    testfunction_remove.add_argument('name', help='name of the testfunction to remove')
+    testfunction_remove.set_defaults(func=lambda args: exec_with_error_printing(exec_remove_testfunction, args))
+
+    testfunction_load = testfunction_subparsers.add_parser('load', help='load a testfunction')
+    testfunction_load.add_argument('name', help='name of the testfunction to load')
+    testfunction_load.set_defaults(func=lambda args: exec_with_error_printing(exec_load_testfunction, args))
+
+    testfunction_list = testfunction_subparsers.add_parser('list', help='list all testfunctions')
+    testfunction_list.set_defaults(func=lambda args: exec_with_error_printing(exec_list_testfunctions, args))
+
+
+
     # commands: adare web ...
     web = subparsers.add_parser('web', help='wrapper for needed web commands')
     web.set_defaults(func=lambda args: web.print_help())
@@ -124,7 +148,7 @@ def main():
     web_login.set_defaults(func=lambda args: exec_with_error_printing(exec_web_login, args))
 
     web_logout = web_subparsers.add_parser('logout', help='logout from the web interface')
-    web_logout.set_defaults(func=lambda args: exec_with_error_printing(exec_web_login, args))
+    web_logout.set_defaults(func=lambda args: exec_with_error_printing(exec_web_logout, args))
 
     #
     # environment_create = environment_subparsers.add_parser('create')

@@ -9,7 +9,7 @@ def get_cookie_file():
     return APPDATA_DIR / 'adare.cookies'
 
 
-WEBSERVER_URL = 'http://localhost:8000/'
+WEBSERVER_URL = 'https://adare.seclab-bonn.de/'
 API_URL = f'{WEBSERVER_URL}api/'
 LOGIN_URL = f'{WEBSERVER_URL}api/user/login/'
 LOGOUT_URL = f'{WEBSERVER_URL}api/user/logout/'

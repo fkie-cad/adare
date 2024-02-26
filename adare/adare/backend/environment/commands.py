@@ -11,12 +11,13 @@ from adarelib.helperfunctions.hash import hash_file_sha256
 from adare.config.configdirectory import TEMPLATES_DIR
 from adarelib.helperfunctions.cli import print_df
 from adarelib.parsers import parse_environment_file
+from adarelib.exceptions import TemplateMissingError
+from adare.backend.environment.exceptions import EnvironmentLoadFailed, EnvironmentFileAlreadyExists
 
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
-
 
 
 def environment_load(project: Path, environment: str, force: bool = False):
@@ -26,15 +27,17 @@ def environment_load(project: Path, environment: str, force: bool = False):
     if not environment_file.exists():
         environment_file = project_directory.environments / f'{environment}.yaml'
         if not environment_file.exists():
-            log.error(f'environment file {environment_file} does not exist')
-            exit(1)
+            raise EnvironmentLoadFailed(
+                log,
+                f'environment file {environment_file} does not exist',
+                possible_solutions=[
+                    'Did you create the environment file?',
+                    'If not, try to create the environment file via [i]adare env create[/i].',
+                ]
+            )
 
     environment_file_sha256 = hash_file_sha256(environment_file)
     environment_configuration: EnvironmentMetadata = parse_environment_file(environment_file)
-
-    if not environment_configuration:
-        log.error(f'environment file {environment_file} could not be loaded')
-        exit(1)
 
     environment_database.update_environment(project, environment_configuration, environment_file, environment_file_sha256, force=force)
     log.info(f'environment file {environment_file} loaded')
@@ -45,13 +48,27 @@ def environment_create(project: Path, environment: str):
     environment_file = project_directory.environments / f'{environment}.yml'
     environment_file2 = project_directory.environments / f'{environment}.yaml'
     if environment_file.is_file() or environment_file2.is_file():
-        log.error(f'environment file {environment_file} already exists')
-        exit(1)
+        raise EnvironmentFileAlreadyExists(
+            log,
+            f'environment file {environment_file} already exists',
+            possible_solutions=[
+                'Did you want to update the environment?',
+                'If yes, try to update the environment via [i]adare env load[/i].',
+                'If not, try to create the environment with a different name.',
+            ]
+        )
 
     environment_file_template = TEMPLATES_DIR / 'environment' / 'environment.yml'
     if not environment_file_template.is_file():
-        log.error(f'environment file template {environment_file_template} does not exist')
-        exit(1)
+        raise TemplateMissingError(
+            log,
+            f'environment file template [i]{environment_file_template}[/i] does not exist',
+            possible_solutions=[
+                'Did the installation was done via make install?',
+                'If not, try to reinstall adare via make install.',
+                'If the problem persists, please open an issue on GitHub.'
+            ]
+        )
 
     environment_file_template_content = environment_file_template.read_text()
     environment_file_content = jinja2.Template(environment_file_template_content).render(environment=environment)

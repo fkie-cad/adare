@@ -29,7 +29,6 @@ class LoggedException(Exception):
         console.print(self.rich_message, highlight=False)
 
 
-
 class LoggedErrorException(LoggedException):
     error_name: str
     error_mitigation: list
@@ -42,9 +41,9 @@ class LoggedErrorException(LoggedException):
     def print(self):
         console.print()
         console.print(f'{self.error_name}:', highlight=False, style='underline bold')
-        console.print(f'{self.message}\n', highlight=False)
-        console.print('Possible Solutions:', highlight=False, style='')
+        console.print(f'{self.message}', highlight=False)
         if self.possible_solutions:
+            console.print('\nPossible Solutions:', highlight=False, style='')
             prefix_whitespace_count = 3
             for index, mitigation in enumerate(self.possible_solutions):
                 print_string = ' '*prefix_whitespace_count + f'([b][cyan]{index+1}[/cyan][/b]) {mitigation}'
@@ -61,3 +60,18 @@ class TestSetFormatError(LoggedErrorException):
 
     pass
 
+
+class TemplateMissingError(LoggedErrorException):
+    pass
+
+
+class TestfunctionParameterClassMissingError(LoggedErrorException):
+    pass
+
+
+class TestfunctionSyntaxError(LoggedErrorException):
+    pass
+
+
+class NoProjectFoundError(LoggedErrorException):
+    pass

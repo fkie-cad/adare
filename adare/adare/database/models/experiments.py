@@ -174,23 +174,48 @@ class TestParameterEntry(SerializerMixin, Base):
         return f"<TestParameterEntries(parameter='{self.parameter}',dtype='{self.value}')>"
 
 
+class TestFunctionFile(SerializerMixin, Base):
+    __tablename__ = 'testfunctionfile'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String)
+    path = Column(String, unique=True)
+    sha256hash = Column(String, unique=True)
+    description = Column(String, nullable=True, default=None)
+
+    def __str__(self):
+        return str(self.name)
+
+    def __repr__(self):
+        return f"<TestFunctionContainer(name='{self.name}',description='{self.description}')>"
+
+
 class TestFunction(SerializerMixin, Base):
     __tablename__ = 'testfunction'
     RELATIONSHIPS_TO_DICT = True
     serialize_rules = ('-id',)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    type = Column(String, unique=True, nullable=False)
+    type = Column(String)
     name = Column(String)
     description = Column(String)
+    sha256hash = Column(String, unique=True)
+
+    file_id = Column(Integer, ForeignKey('testfunctionfile.id'))
+    file = relationship(TestFunctionFile, backref=backref("testfunctions", cascade="all, delete-orphan"))
 
     possible_parameters = relationship(TestParameter, secondary=mapping_testfunction_testparameter)
 
+    @property
+    def fullname(self):
+        return f"{self.file.name}.{self.name}"
+
     def __str__(self):
-        return str(self.name)
+        return self.fullname
 
     def __repr__(self):
-        return f"<TestFunction(name='{self.name}',test_name='{self.test_name}',test_description='{self.test_description}')>"
+        return f"<TestFunction(name='{self.fullname}',description='{self.description}')>"
 
 
 class Command(SerializerMixin, Base):
@@ -217,7 +242,7 @@ class AbstractTest(SerializerMixin, Base):
     name = Column(String)
     description = Column(String)
 
-    testfunction = relationship(TestFunction)
+    testfunction = relationship(TestFunction, backref=backref("abstracttests", cascade="all, delete-orphan"))
     testfunction_id = Column(Integer, ForeignKey('testfunction.id'))
 
     parameters = relationship(TestParameterEntry, secondary=mapping_abstracttest_testparameterentry)
@@ -241,7 +266,7 @@ class Test(SerializerMixin, Base):
     abstracttest_id = Column(CHAR(32), ForeignKey('abstracttest.uuid'))
 
     result = relationship(Result)
-    abstracttest = relationship(AbstractTest)
+    abstracttest = relationship(AbstractTest, backref=backref("tests", cascade="all, delete-orphan"))
 
     def __str__(self):
         return str(self.uuid)
@@ -407,7 +432,7 @@ class Environment(SerializerMixin, Base):
     project = relationship(Project, backref=backref("environments", cascade="all, delete-orphan"))
 
     file = Column(String)
-    sha256_hash = Column(String, unique=True)
+    sha256hash = Column(String, unique=True)
 
     in_request = Column(Boolean, default=False)
     published = Column(Boolean, default=False)

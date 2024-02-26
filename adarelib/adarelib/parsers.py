@@ -19,8 +19,13 @@ def parse_metadata_file(metadata_file: Path) -> ExperimentMetadata:
     except cattrs.BaseValidationError as e:
         log.error(f'parsing errors while parsing metadata file {metadata_file}:')
         exec_msgs = cattrs.transform_error(e)
+        exec_msgs_str = "\n".join(exec_msgs)
         raise DataStructuringError(
-            metadata_file, 'ExperimentMetadata', "\n".join(exec_msgs)
+            log,
+            message=f'parsing errors while parsing metadata file {metadata_file}:{exec_msgs_str}',
+            possible_solutions=[
+                'fix the structure of the metadata file',
+            ]
         ) from e
     return metadata
 
@@ -43,9 +48,11 @@ def parse_testsetfile(testset_file: Path) -> TestsetFile:
     except cattrs.BaseValidationError as e:
         error_msg = "\n".join(cattrs.transform_error(e))
         raise DataStructuringError(
-            file=testset_file,
-            class_name='TestsetFile',
-            error=error_msg
+            log,
+            message=f'parsing errors while parsing testset file {testset_file}:{error_msg}',
+            possible_solutions=[
+                'fix the structure of the testset file',
+            ]
         ) from e
     log.debug(f'testsetfile {testset_file} got successfully parsed')
     return testsetfile
@@ -58,8 +65,10 @@ def parse_environment_file(environment_file: Path) -> EnvironmentMetadata|None:
     except cattrs.BaseValidationError as e:
         error_msg = "\n".join(cattrs.transform_error(e))
         raise DataStructuringError(
-            file=environment_file,
-            class_name='EnvironmentMetadata',
-            error=error_msg
+            log,
+            message=f'parsing errors while parsing environment file {environment_file}:{error_msg}',
+            possible_solutions=[
+                'fix the structure of the environment file',
+            ]
         ) from e
     return environment
