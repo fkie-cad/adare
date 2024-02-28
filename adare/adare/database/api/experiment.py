@@ -98,18 +98,18 @@ class ExperimentApi(ProjectDbApi):
             action_file=experiment_directory.actionfile.as_posix(),
             testset_file=experiment_directory.testsetfile.as_posix(),
             metadata_file=experiment_directory.metadatafile.as_posix(),
-            bibtext_file=experiment_directory.bibtextfile.as_posix(),
+            bibtex_file=experiment_directory.bibtexfile.as_posix(),
             markdown_file=experiment_directory.markdownfile.as_posix(),
             sha256_action=experiment_directory.sha256_action,
             sha256_testset=experiment_directory.sha256_testset,
             sha256_metadata=experiment_directory.sha256_metadata,
-            sha256_bibtext=experiment_directory.sha256_bibtext,
+            sha256_bibtex=experiment_directory.sha256_bibtex,
             sha256_markdown=experiment_directory.sha256_markdown,
             sha256_hash=experiment_directory.sha256,
             project=project,
         )
-        experiment.environments.set(environments)
-        experiment.tags.set(tags)
+        experiment.environments = environments
+        experiment.tags = tags
         for obj in abstract_test_objects:
             if obj:
                 experiment.abstract_tests.append(obj)
@@ -119,9 +119,25 @@ class ExperimentApi(ProjectDbApi):
 
         return experiment
 
+    def remove_experiment_by_uuid(self, experiment_uuid: str):
+        if (
+            experiment := self._session.query(Experiment)
+            .filter_by(uuid=experiment_uuid)
+            .first()
+        ):
+            self.remove_experiment(experiment)
+        else:
+            raise ValueError(f'experiment with uuid {experiment_uuid} not found')
+
     def remove_experiment(self, experiment: Experiment):
+        # delete all experiment runs
+        for run in experiment.runs:
+            self._session.delete(run)
         self._session.delete(experiment)
 
+    def experiment_sha256_equals(self, experiment_uuid: str, sha256: str) -> bool:
+        experiment = self._session.query(Experiment).filter_by(uuid=experiment_uuid).first()
+        return experiment.sha256_hash == sha256
 
     def __get_abstract_test(self, test: FTest, command_list: list[Command]) -> AbstractTest or None:
         all_commands_exist = all(
@@ -133,7 +149,7 @@ class ExperimentApi(ProjectDbApi):
                 message='test [b]{test.name}[/b] mentions a command that does not exist in the database.',
             )
 
-        testfunction = self._session.query(TestFunction).filter_by(type=test.type).first()
+        testfunction = self._session.query(TestFunction).filter_by(name=test.type).first()
         if not testfunction:
             raise TestSetFormatError(
                 log,
@@ -160,18 +176,16 @@ class ExperimentApi(ProjectDbApi):
         parameter_entry_ids_data = [p.id for p in parameter_entries]
         abstract_test_obj = (
             self._session.query(AbstractTest)
-            .join(AbstractTest.parameters)  # Adjust this based on your actual relationship/association setup
+            .join(AbstractTest.parameters)
+            .join(AbstractTest.depends_on_tool)
             .filter(
                 AbstractTest.name == test.name,
                 AbstractTest.description == test.description,
                 AbstractTest.testfunction == testfunction,
-                AbstractTest.depends_on_tool == commands,
-                # Filter for AbstractTests that have exactly the parameter entries you're interested in
-                # This might require a more complex subquery or exists clause depending on your schema
+                Command.id.in_([c.id for c in commands]),
+                TestParameterEntry.id.in_(parameter_entry_ids_data)
             )
-            # Check for matching parameter ID count to ensure exact match
-            .having(sqlalchemy.func.count(TestParameter.id) == len(parameter_entry_ids_data))
-            .first()  # Only fetch the first match, if it exists
+            .first()
         )
 
         # if abstract test does not exist, create it
@@ -182,7 +196,7 @@ class ExperimentApi(ProjectDbApi):
                 testfunction=testfunction,
                 depends_on_tool=commands
             )
-            abstract_test_obj.parameters.set(parameter_entries)
+            abstract_test_obj.parameters = parameter_entries
             self._session.add(abstract_test_obj)
 
         return abstract_test_obj
@@ -208,3 +222,4 @@ class ExperimentApi(ProjectDbApi):
         """
         command_list = self.__get_command_list(testset)
         return [self.__get_abstract_test(test, command_list) for test in testset.tests]
+

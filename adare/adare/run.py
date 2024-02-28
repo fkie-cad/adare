@@ -9,7 +9,7 @@ import time
 from adare.cli.project import exec_create_project, exec_remove_project, exec_list_projects
 from adare.cli.environment import exec_environment_load, exec_environment_list, exec_environment_create, \
     exec_environment_delete
-from adare.cli.experiment import exec_experiment_create, exec_experiment_load
+from adare.cli.experiment import exec_experiment_create, exec_experiment_load, exec_experiment_run
 from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
 from adare.cli.showversion import exec_show_version
@@ -115,6 +115,10 @@ def main():
     experiment_load.add_argument('--force', '-f', action='store_true', help='force the update of the experiment')
     experiment_load.set_defaults(func=lambda args: exec_with_error_printing(exec_experiment_load, args))
 
+    experiment_run = experiment_subparsers.add_parser('run', help='run the experiment in a given environment')
+    experiment_run.add_argument('experiment', help='name of the experiment to run')
+    experiment_run.add_argument('environment', help='name of the environment where the experiment should be run')
+    experiment_run.set_defaults(func=lambda args: exec_with_error_printing(exec_experiment_run, args))
 
     # commands: adare testfunction ...
     testfunction = subparsers.add_parser('testfunction', help='wrapper for needed testfunction commands')
@@ -136,8 +140,6 @@ def main():
 
     testfunction_list = testfunction_subparsers.add_parser('list', help='list all testfunctions')
     testfunction_list.set_defaults(func=lambda args: exec_with_error_printing(exec_list_testfunctions, args))
-
-
 
     # commands: adare web ...
     web = subparsers.add_parser('web', help='wrapper for needed web commands')

@@ -5,7 +5,7 @@ import jinja2
 import os
 
 # internal imports
-from adare.helperFunctions.jinja import jinjafeatures
+from adarelib.helperfunctions.jinja import jinjafeatures
 
 # configure logging
 import logging
@@ -30,11 +30,7 @@ class Script:
 
     def __init__(self, name: str, source_directory: Path, variables: dict or None = None, render_wrapper: bool = False, only_copy: bool = False):
         self.name = name
-        if not variables:
-            self.variables = {}
-        else:
-            self.variables = variables
-
+        self.variables = variables or {}
         self.is_template = True
         self.directory = source_directory
         self.render_wrapper = render_wrapper
@@ -70,7 +66,7 @@ class Script:
             self.wrapper = wrapper_script
             return wrapper_script
         else:
-            log.error(f'script was not rendered, therefore no wrapper could be created')
+            log.error('script was not rendered, therefore no wrapper could be created')
             return None
 
     def disable_render(self):
@@ -116,9 +112,8 @@ class Script:
         self.destination_directory = destination_directory
         self.destination_script_path = destination_script_path
 
-        if self.render_wrapper:
-            if not self.wrapper:
-                self.create_wrapper()
+        if self.render_wrapper and not self.wrapper:
+            self.create_wrapper()
 
     def copy(self, destination_directory: Path, name: str = None):
         """
@@ -140,9 +135,8 @@ class Script:
             log.error(f'rendered script {self.name} could not be deleted because it was not rendered before')
             return
         os.remove(self.destination_script_path.as_posix())
-        if delete_wrapper:
-            if self.wrapper:
-                self.wrapper.remove_rendered_script()
+        if delete_wrapper and self.wrapper:
+            self.wrapper.remove_rendered_script()
 
     def exists(self) -> bool:
         """

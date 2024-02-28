@@ -3,6 +3,7 @@ from pathlib import Path
 
 # internal imports
 from adare.backend.script_creation.Script import Script
+from adare.backend.experiment.directory import ExperimentRunDirectory
 
 # configure logging
 import logging
@@ -11,28 +12,31 @@ log = logging.getLogger(__name__)
 
 class ScriptManager:
     scripts: list[Script]
-    script_directory_vm_view: Path
-    log_directory: Path = None
     wrapper_template: Path
 
-    def __init__(self, script_directory_vm_view: Path, wrapper_template: Path):
-        self.scripts = []
-        self.script_directory_vm_view = script_directory_vm_view
-        self.wrapper_template = wrapper_template
+    experiment_run_directory: ExperimentRunDirectory
+    shared_root_directory_host: Path
+    shared_root_directory_vm: Path
 
-    def set_log_directory_vm_view(self, log_directory_vm_view: Path):
-        self.log_directory = log_directory_vm_view
+    def __init__(self, experiment_run_directory: ExperimentRunDirectory, shared_root_directory_host: Path, shared_root_directory_vm:Path, wrapper_template: Path):
+        self.scripts = []
+        self.wrapper_template = wrapper_template
+        self.experiment_run_directory = experiment_run_directory
+        self.shared_root_directory_host = shared_root_directory_host
+        self.shared_root_directory_vm = shared_root_directory_vm
+
 
     def add_script(self, script: Script):
-        script.set_scripts_path_remote(self.script_directory_vm_view)
+        script.scripts_path_remote = self.experiment_run_directory.get_path_relative_to_shared_directory('scripts_directory', self.shared_root_directory_host, self.shared_root_directory_vm)
         script.set_wrapper_template(self.wrapper_template)
-        script.update_variables({'log_directory': self.log_directory.as_posix()})
         self.scripts.append(script)
 
-    def render_to_environment(self, environment_script_directory: Path):
+    def render(self, render_directory: Path):
         for script in self.scripts:
-            script.render(environment_script_directory)
+            script.render(render_directory)
 
-    def remove_scripts_from_environment(self):
+
+
+    def remove_scripts(self):
         for script in self.scripts:
             script.remove_rendered_script(delete_wrapper=True)

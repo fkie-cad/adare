@@ -39,7 +39,6 @@ class CommandEnd(Event):
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(TIMESTAMP_FORMAT)))
 
 
-
 @attrs.define
 class TestStart(Event):
     test_name: str
@@ -48,10 +47,15 @@ class TestStart(Event):
 
 
 @attrs.define
-class TestEnd(Event):
-    test_name: str
+class TestResult:
     status: TestStatus
     details: list = attrs.field(default=attrs.Factory(list))
+
+
+@attrs.define
+class TestEnd(Event):
+    test_name: str
+    result: TestResult
     category: str = 'test'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(TIMESTAMP_FORMAT)))
 

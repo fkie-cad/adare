@@ -8,11 +8,13 @@ import os
 import shutil
 
 # internal imports
-from .vagrantfile import VagrantFile
-from .exceptions import VagrantBoxCreationError, VagrantBoxDestroyError, VagrantBoxRunError
+from adare.vagrantapi.vagrantfile import VagrantFile
+from adare.vagrantapi.exceptions import VagrantBoxCreationError, VagrantBoxDestroyError, VagrantBoxRunError
+from adarelib.exceptions import LoggedException
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -37,22 +39,24 @@ class VagrantBoxVM:
         if not vagrantdirectory_path.is_dir():
             raise VagrantBoxCreationError(f'provided path {vagrantdirectory_path} is not a directory')
 
-        if not (vagrantdirectory_path/'Vagrantfile').is_file():
+        if not (vagrantdirectory_path / 'Vagrantfile').is_file():
             raise VagrantBoxCreationError(f'provided path {vagrantdirectory_path} does not contain a Vagrantfile')
 
         log.info(f'vagrant initialized in {self.vagrantfile_path.absolute()} directory')
 
     @classmethod
-    def fromVagrantFileObject(cls, vagrantdirectory_path: Path, vagrantfile: VagrantFile, log_file: Optional[Path] = None, vm_name: Optional[str] = None):
+    def fromVagrantFileObject(cls, vagrantdirectory_path: Path, vagrantfile: VagrantFile,
+                              log_file: Optional[Path] = None, vm_name: Optional[str] = None):
         """
         create a VagrantBox instance by a provided Vagrantfile object instance and a directory where the Vagrantfile will be stored
         """
         log.info(f'provided Vagrantfile will be saved in in the provided directory {vagrantdirectory_path.absolute()}')
-        vagrantfile.create_vagrant_file(vagrantdirectory_path/'Vagrantfile')
+        vagrantfile.create_vagrant_file(vagrantdirectory_path / 'Vagrantfile')
         return cls(vagrantdirectory_path, log_file=log_file, vm_name=vm_name)
 
     @classmethod
-    def fromVagrantDirectory(cls, vagrantdirectory_path: Path, log_file: Optional[Path] = None, vm_name: Optional[str] = None):
+    def fromVagrantDirectory(cls, vagrantdirectory_path: Path, log_file: Optional[Path] = None,
+                             vm_name: Optional[str] = None):
         """
         create a VagrantBox instance by a provided directory that contains a Vagrantfile
         """
@@ -61,21 +65,24 @@ class VagrantBoxVM:
     def run(self, debug: bool = False) -> int:
         try:
             self.__clean_up_virtualbox()
-        except (PermissionError, OSError) as e:
-            log.error(e, exc_info=True)
-            log.warning('clean up of virtualbox failed -> try to delete the VM manually!')
-            raise VagrantBoxRunError()
-        
-        return_code = 0
+        except OSError as e:
+            raise VagrantBoxRunError(
+                log,
+                'clean up of left over files in VirtualBox failed due to the exception above',
+                possible_solutions=[
+                    'try to delete the files manually',
+                ],
+            ) from e
+
         try:
             self.up()
         except subprocess.CalledProcessError as e:
-            log.debug(e, exc_info=True)
-            return_code = e.returncode
-            log.error(f'vagrant up exited with returncode {return_code} -> log in {self.log_file} for more details')
+            raise VagrantBoxRunError(
+                log,
+                f'vagrant up failed with return code {e.returncode}',
+            ) from e
         except KeyboardInterrupt as e:
-            log.debug(e, exc_info=True)
-            log.error(f'vagrant up interrupted by KeyboardInterrupt')
+            raise LoggedException(log, 'vagrant up was interrupted by the user') from e
 
         if debug:
             log.info('debugmode - execution was stopped after the provisioning step and before destroying the vm')
@@ -85,15 +92,12 @@ class VagrantBoxVM:
             log.info('debugmode - execution continued')
 
         self.destroy()
-        return return_code
+        return 0
 
     def up(self):
         self.vagrant = vagrant.Vagrant(self.vagrantfile_path.as_posix(), quiet_stdout=False, quiet_stderr=False)
 
-        log_file_handle = None
-        if self.log_file:
-            log_file_handle = self.log_file.open('w')
-
+        log_file_handle = self.log_file.open('w') if self.log_file else None
         for line in self.vagrant.up(stream_output=True):
             log.debug(line.rstrip())
             if self.log_file:
@@ -103,8 +107,6 @@ class VagrantBoxVM:
         if self.log_file:
             log_file_handle.close()
 
-
-
     @retry(subprocess.CalledProcessError, tries=5, delay=1, backoff=2)
     def __destroy_box(self):
         self.vagrant.destroy()
@@ -113,11 +115,14 @@ class VagrantBoxVM:
         try:
             self.__destroy_box()
         except subprocess.CalledProcessError as e:
-            log.error(e, exc_info=True)
-            log.fatal('destroy failed due to the exception above -> try to delete the VM manually!')
-            raise VagrantBoxDestroyError()
+            raise VagrantBoxDestroyError(
+                log,
+                'vagrant destroy failed with return code {e.returncode}',
+                possible_solutions=[
+                    'try to delete the VM manually',
+                ],
+            ) from e
         log.info(f'vagrant box ({self.vagrantfile_path}) got destroyed successfully')
-
 
     @retry((PermissionError, OSError), delay=2, tries=5)
     def __clean_up_virtualbox(self):

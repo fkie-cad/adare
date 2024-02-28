@@ -6,6 +6,7 @@ from adare.backend.script_creation.Script import Script
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -14,7 +15,8 @@ class PostsetupInstallationsScript(Script):
         super().__init__(name, source_directory, render_wrapper=render_wrapper)
         if postsetup_installations:
             var = {
-                'installations': [[installation.name, installation.description, installation.command] for installation in postsetup_installations],
+                'installations': [[installation.name, installation.description, installation.command] for installation
+                                  in postsetup_installations],
             }
             self.update_variables(var)
         else:
@@ -22,37 +24,29 @@ class PostsetupInstallationsScript(Script):
 
 
 class RunExperimentScript(Script):
-    def __init__(self, name: str,
+    def __init__(self,
+                 name: str,
                  source_directory: Path,
-                 experiment_path: Path,
-                 tessdata_directory: Path = None,
-                 experiment_config_file: Path = None,
-                 experiment: str = None,
-                 result_file: Path = None,
-                 project_script_directory: Path = None,
-                 additional_tool_directory: Path = None,
-                 render_wrapper: bool = False):
+                 script_directory: Path,
+                 log_directory: Path,
+                 path_directories: list[Path],
+                 adarevm_path: Path,
+                 experiment_config_file: Path,
+                 render_wrapper: bool = False
+                 ):
         super().__init__(name, source_directory, render_wrapper=render_wrapper)
-        if experiment and result_file:
-            var = {
-                'gui_experiment': experiment,
-                'inputfile': (experiment_path/f'{experiment}.yml').as_posix(),
-                'outputfile': result_file.as_posix(),
-                'result_directory': result_file.parent.as_posix(),
-                'img_directory': (experiment_path/f'img').as_posix(),
-                'tessdata_directory': tessdata_directory.as_posix(),
-                'experiment_config_file': experiment_config_file.as_posix(),
-                'experiment_file': (experiment_path/f'{experiment}.py').as_posix(),
-                'project_script_directory': project_script_directory.as_posix(),
-                'additional_tool_directory': additional_tool_directory.as_posix(),
-            }
-            self.update_variables(var)
-        else:
-            self.disable_render()
+        self.var = {
+            'script_directory': script_directory,
+            'log_directory': log_directory,
+            'path_directories': path_directories,
+            'adarevm': adarevm_path,
+            'experiment_config_file': experiment_config_file,
+        }
 
 
 class MountNetworkDriveScript(Script):
-    def __init__(self, name: str, source_directory: Path, share_information_list: list = None, render_wrapper: bool = False):
+    def __init__(self, name: str, source_directory: Path, share_information_list: list = None,
+                 render_wrapper: bool = False):
         super().__init__(name, source_directory, render_wrapper=render_wrapper)
         if share_information_list:
             var = {

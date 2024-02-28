@@ -5,9 +5,9 @@ from pathlib import Path
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.models.experiments import Environment, OsInfo, Experiment, ExperimentRun, Project
+from adare.database.models.experiments import Environment, OsInfo, Experiment, ExperimentRun, Project, PostSetupInstallation
 from adare.database.api.database import DatabaseApi
-from adarelib.types import EnvironmentMetadata, OsInfo as OsInfoAttrs
+from adarelib.types import EnvironmentMetadata, OsInfo as OsInfoAttrs, PostsetupInstallations as PostsetupInstallationsAttrs
 from adare.database.api.experiment import ExperimentApi
 
 # configure logging
@@ -38,9 +38,18 @@ class EnvironmentDbApi(ExperimentApi):
     def get_environment_by_uuid(self, uuid: str) -> Environment:
         return self._session.query(Environment).filter(Environment.uuid == uuid).first()
 
+    def __get_or_create_installations(self, installations: list[PostsetupInstallationsAttrs]) -> list[PostSetupInstallation]:
+        installation_objects = []
+        for installation in installations:
+            installation_obj, created = PostSetupInstallation.objects.get_or_create(
+                name=installation.name,
+                command=installation.command,
+                description=installation.description,
+            )
+            installation_objects.append(installation_obj)
+        return installation_objects
 
-
-    def get_or_create_environment(self, project_path: Path, environment_metadata: EnvironmentMetadata, environment_file: Path,
+    def get_or_create_environment(self, project_path: Path, environment_metadata: EnvironmentMetadata, environment_file:Path,
                                   sha256hash: str) -> (
             Environment, bool):
         environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
@@ -48,7 +57,7 @@ class EnvironmentDbApi(ExperimentApi):
             return environment, False
         log.info(f"Environment with hash '{sha256hash}' not found in database -> creating new entry")
         os_info, _ = self.get_or_create_os_info(environment_metadata.os)
-        project = self._session.query(Project).filter(Project.path == project_path).first()
+        project = self._session.query(Project).filter(Project.path == project_path.as_posix()).first()
         if not project:
             log.error(f"Project with path '{project_path}' not found in database -> cannot create environment")
             return None, False
@@ -61,6 +70,7 @@ class EnvironmentDbApi(ExperimentApi):
             sha256hash=sha256hash,
             file=environment_file.as_posix(),
         )
+        environment.installations = self.__get_or_create_installations(environment_metadata.postsetupinstallations)
         self._session.add(environment)
         self._session.commit()
         return environment, True
@@ -91,7 +101,8 @@ class EnvironmentDbApi(ExperimentApi):
     def get_environments(self, project_path: Path = None) -> list:
         # retrieve all environments and expunge them from the session
         if project_path:
-            environments = self._session.query(Environment).filter(Environment.project.path == project_path).all()
+            projects = self._session.query(Project).filter(Project.path == project_path.as_posix()).all()
+            environments = [env for project in projects for env in project.environments]
         else:
             environments = self._session.query(Environment).all()
 
@@ -120,3 +131,51 @@ class EnvironmentDbApi(ExperimentApi):
             }
             for env in environments
         ]
+
+    def get_environment_installations(self, environment_uuid: str):
+        if (
+            env := self._session.query(Environment)
+            .filter_by(uuid=environment_uuid)
+            .first()
+        ):
+            return [
+                PostsetupInstallationsAttrs(
+                    name=installation.name,
+                    command=installation.command,
+                    description=installation.description
+                ) for installation in env.installations
+            ]
+        else:
+            raise ValueError(f'environment {environment_uuid} not found in database')
+
+    def get_environment_platform(self, environment_uuid: str):
+        if (
+            env := self._session.query(Environment)
+            .filter_by(uuid=environment_uuid)
+            .first()
+        ):
+            return env.osinfo.platform
+        else:
+            raise ValueError(f'environment {environment_uuid} not found in database')
+
+    def get_environment(self, name: str, project_name: str):
+        if (
+            env := self._session.query(Environment)
+            .filter_by(name=name)
+            .join(Project)
+            .filter(Project.name == project_name)
+            .first()
+        ):
+            return env
+        else:
+            raise ValueError(f'environment {name} not found in database')
+
+    def get_environment_vagrant_box(self, environment_uuid: str):
+        if (
+            env := self._session.query(Environment)
+            .filter_by(uuid=environment_uuid)
+            .first()
+        ):
+            return env.vagrantbox
+        else:
+            raise ValueError(f'environment {environment_uuid} not found in database')

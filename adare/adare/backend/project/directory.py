@@ -6,14 +6,14 @@ import shutil
 from adare.config.configdirectory import ADARE_DIR, APPDATA_DIR
 from adarelib.helperfunctions.web.download import download
 from adare.backend.project.exceptions import ProjectDirectoryCreationError, ProjectDirectoryRemovalError, ProjectDirectoryCopyError
-
+from adare.backend.directory import Directory
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
 
 
-class ProjectDirectory:
+class ProjectDirectory(Directory):
     path: Path
     tessdata: Path
     environments: Path
@@ -23,10 +23,11 @@ class ProjectDirectory:
     shared_tools: Path
     shared_data: Path
     adare: Path
+    adarevm: Path
     run: Path
 
     def __init__(self, path: Path):
-        self.path = path
+        super().__init__(path)
         self.environments = path / 'environments'
         self.experiments = path / 'experiments'
         self.testfunctions = path / 'testfunctions'
@@ -34,6 +35,7 @@ class ProjectDirectory:
         self.shared_tools = self.shared / 'tools'
         self.shared_data = self.shared / 'data'
         self.adare = path / 'adare'
+        self.adarevm = self.adare / 'adarevm'
         self.tessdata = path / '.tessdata'
         self.run = path / '.run'
 
@@ -100,4 +102,3 @@ class ProjectDirectory:
                 log,
                 message=f'standard testfunction ([i]{APPDATA_DIR/"testfunctions"/"standard.py"}[/i]) could not be copied to project directory ({self.testfunctions}): {e.strerror}',
             ) from e
-
