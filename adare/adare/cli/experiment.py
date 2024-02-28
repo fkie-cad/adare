@@ -1,23 +1,30 @@
 # internal imports
 from adare.backend.basics import determine_projectdirectory
-from adare.backend.experiment.commands import experiment_create, experiment_load
+from adare.backend.experiment.commands import experiment_create, experiment_load, experiment_run
+from adarelib.exceptions import NoProjectFoundError
 # configure logging
 import logging
 log = logging.getLogger(__name__)
 
 
 def exec_experiment_load(arguments):
-    project_directory = determine_projectdirectory(arguments.project)
-    if not project_directory:
-        log.error('no project directory found')
-        exit(1)
-    experiment_load(project_directory, arguments.experiment, force=arguments.force)
+    if project_directory := determine_projectdirectory(arguments.project):
+        experiment_load(project_directory, arguments.experiment, force=arguments.force)
+    else:
+        raise NoProjectFoundError(log)
 
 
 def exec_experiment_create(arguments):
-    project_directory = determine_projectdirectory(arguments.project)
-    if not project_directory:
-        log.error('no project directory found')
-        exit(1)
-    experiment_create(project_directory, arguments.experiment)
+    if project_directory := determine_projectdirectory(arguments.project):
+        experiment_create(project_directory, arguments.experiment)
+    else:
+        raise NoProjectFoundError(log)
+
+
+
+def exec_experiment_run(arguments):
+    if project_directory := determine_projectdirectory(arguments.project):
+        experiment_run(project_directory, arguments.experiment, arguments.environment)
+    else:
+        raise NoProjectFoundError(log)
 

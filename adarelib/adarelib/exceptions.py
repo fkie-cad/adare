@@ -51,6 +51,7 @@ class LoggedErrorException(LoggedException):
         console.print()
 
 
+
 class DataStructuringError(LoggedErrorException):
 
     pass
@@ -74,4 +75,5 @@ class TestfunctionSyntaxError(LoggedErrorException):
 
 
 class NoProjectFoundError(LoggedErrorException):
-    pass
+    def __init__(self, log: logging.Logger):
+        super().__init__(log, 'no project directory found')

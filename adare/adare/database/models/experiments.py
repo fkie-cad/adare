@@ -101,6 +101,22 @@ class Tag(SerializerMixin, Base):
         return f"<Tag(name='{self.name}')>"
 
 
+class PostSetupInstallation(SerializerMixin, Base):
+    __tablename__ = 'postsetupinstallation'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String)
+    description = Column(String, nullable=True)
+    command = Column(String)
+
+    def __str__(self):
+        return str(self.name)
+
+    def __repr__(self):
+        return f"<PostSetupInstallation(name='{self.name}',description='{self.description}',command='{self.command}')>"
+
+
 class Status(SerializerMixin, Base):
     """
         Collection of possible status.
@@ -143,7 +159,6 @@ class Result(SerializerMixin, Base):
 class TestParameter(SerializerMixin, Base):
     __tablename__ = 'testparameter'
     RELATIONSHIPS_TO_DICT = True
-    serialize_rules = ('-id',)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
@@ -431,6 +446,8 @@ class Environment(SerializerMixin, Base):
     project_id = Column(Integer, ForeignKey('project.id'))
     project = relationship(Project, backref=backref("environments", cascade="all, delete-orphan"))
 
+    installations = relationship(PostSetupInstallation, secondary=mapping_postsetupinstallation_environment)
+
     file = Column(String)
     sha256hash = Column(String, unique=True)
 
@@ -444,8 +461,6 @@ class Environment(SerializerMixin, Base):
 
     def __repr__(self):
         return f"<Environment(name='{self.name}',osinfo='{self.osinfo}',vagrantbox='{self.vagrantbox}')>"
-
-
 
 
 class Experiment(SerializerMixin, Base):
@@ -494,29 +509,23 @@ class Experiment(SerializerMixin, Base):
         return f"<Experiment(name='{self.name}',publish_status='{self.publish_status}')>"
 
 
-
 class ExperimentRun(SerializerMixin, Base):
     __tablename__ = 'experimentrun'
     RELATIONSHIPS_TO_DICT = True
-    serialize_rules = (
-        '-logfile_run_experiment', '-logfile_postsetup_installations', '-logfile_vagrant', '-logfile_parse_and_test',
-        '-logfile_gui_automation', '-logfile_installed_packages',
-        '-logfile_run_experiment_id', '-logfile_postsetup_installations_id', '-logfile_vagrant_id',
-        '-logfile_parse_and_test_id', '-logfile_gui_automation_id', '-logfile_installed_packages_id',
-        '-status_gui_automation', '-status_parse_and_test', '-status_vagrant',
-        '-status_id', '-status_gui_automation_id', '-status_parse_and_test_id', '-status_vagrant_id')
 
     uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     experiment_id = Column(String, ForeignKey('experiment.uuid'))
     experiment = relationship(Experiment, backref=backref("runs", cascade="all, delete-orphan"))
     environment_id = Column(Integer, ForeignKey('environment.uuid'))
     environment = relationship(Environment, backref=backref("runs", cascade="all, delete-orphan"))
+    path = Column(String, nullable=True)
 
     timestamp_start = Column(DateTime, nullable=True)
     timestamp_end = Column(DateTime, nullable=True)
     tests = relationship(Test, secondary=mapping_experimentrun_test)
 
     published = Column(Boolean, default=False)
+
 
     status_id = Column(Integer, ForeignKey('status.id'))
     status_gui_automation_id = Column(Integer, ForeignKey('status.id'))
@@ -550,22 +559,3 @@ class ExperimentRun(SerializerMixin, Base):
 
     def __repr__(self):
         return f"<ExperimentRun(uuid='{self.uuid}',experiment={self.experiment_id})>"
-
-
-class PostSetupInstallation(SerializerMixin, Base):
-    __tablename__ = 'postsetupinstallation'
-    RELATIONSHIPS_TO_DICT = True
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String)
-    description = Column(String, nullable=True)
-    command = Column(String)
-
-    environments = relationship(Environment, secondary=mapping_postsetupinstallation_environment,
-                                backref='postsetupinstallations')
-
-    def __str__(self):
-        return str(self.name)
-
-    def __repr__(self):
-        return f"<PostSetupInstallation(name='{self.name}',description='{self.description}',command='{self.command}')>"

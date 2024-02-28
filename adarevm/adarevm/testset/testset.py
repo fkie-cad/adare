@@ -2,8 +2,8 @@ from pathlib import Path
 from subprocess import Popen, PIPE
 import shutil
 
-from adarelib.testsetfile.parser import parse_testsetfile
-from adarelib.testsetfile.fileformat import TestsetFile
+from adarelib.parsers import parse_testsetfile
+from adarelib.types import TestsetFile
 from adarelib.testfunction import import_basictest_subclasses, check_if_tests_exist, structure_tests
 
 from adarevm.event import EventSystem, CommandEnd, CommandStart

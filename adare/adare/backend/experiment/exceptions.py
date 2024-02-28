@@ -20,3 +20,7 @@ class ExperimentDirectoryAlreadyExistsError(LoggedErrorException):
 
 class ExperimentDirectoryDoesNotExistError(LoggedErrorException):
     pass
+
+
+class ExperimentFileMissingError(LoggedErrorException):
+    pass

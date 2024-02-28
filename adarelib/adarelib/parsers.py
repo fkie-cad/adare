@@ -15,7 +15,8 @@ log = logging.getLogger(__name__)
 
 def parse_metadata_file(metadata_file: Path) -> ExperimentMetadata:
     try:
-        metadata = cattrs.structure(metadata_file.read_text(), ExperimentMetadata)
+        json_dict = yaml_to_dict(metadata_file)
+        metadata = cattrs.structure(json_dict, ExperimentMetadata)
     except cattrs.BaseValidationError as e:
         log.error(f'parsing errors while parsing metadata file {metadata_file}:')
         exec_msgs = cattrs.transform_error(e)
