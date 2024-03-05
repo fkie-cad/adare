@@ -1,6 +1,7 @@
 # external imports
 from typing import Union, Literal, Optional
 import attrs
+from datetime import datetime
 
 # internal imports
 import adare.config as config
@@ -338,3 +339,93 @@ class ExperimentMetadata:
             for share in self.smb.shares:
                 if share.user not in self.smb.users:
                     self.smb.add_user(share.user)
+
+
+
+@attrs.define
+class TestStatus:
+    status: str
+
+
+@attrs.define
+class TestFailed(TestStatus):
+    status = attrs.field(default='failed', init=False)
+
+
+@attrs.define
+class TestSuccess(TestStatus):
+    status = attrs.field(default='success', init=False)
+
+
+@attrs.define
+class TestMissingKey(TestStatus):
+    status = attrs.field(default='missing key', init=False)
+
+
+@attrs.define
+class TestSyntaxError(TestStatus):
+    status = attrs.field(default='syntax error', init=False)
+
+
+@attrs.define
+class TestError(TestStatus):
+    status = attrs.field(default='error', init=False)
+
+
+@attrs.define
+class Event:
+    # action or test
+    category: str
+    timestamp: str
+
+
+@attrs.define
+class ActionEvent(Event):
+    name: str
+    description: str
+    category: str = 'action'
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+
+
+@attrs.define
+class CommandStart(Event):
+    command_name: str
+    category: str = 'command'
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+
+
+@attrs.define
+class CommandEnd(Event):
+    command_name: str
+    category: str = 'command'
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+
+
+@attrs.define
+class TestStart(Event):
+    test_name: str
+    category: str = 'test'
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+
+
+@attrs.define
+class TestResult:
+    status: TestStatus
+    details: list = attrs.field(default=attrs.Factory(list))
+
+
+@attrs.define
+class TestEnd(Event):
+    test_name: str
+    result: TestResult
+    category: str = 'test'
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+
+
+@attrs.define
+class EventSystemData:
+    version: str
+    experiment: str
+    start_time: str
+    end_time: str
+    events: list[Event] = attrs.field(default=attrs.Factory(list))

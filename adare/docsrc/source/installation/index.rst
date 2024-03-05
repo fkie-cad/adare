@@ -31,3 +31,4 @@ The tool was tested with the following versions of Python, Vagrant, and VirtualB
      - ``2.3.2``
    * - VirtualBox
      - ``6.1``, ``7.0``
+

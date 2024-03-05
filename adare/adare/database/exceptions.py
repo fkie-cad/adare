@@ -24,3 +24,8 @@ class DatabaseTestfunctionUpdateError(LoggedErrorException):
 
 class DatabaseTestValidationError(LoggedErrorException):
     pass
+
+
+class DatabaseProjectNotFoundError(LoggedErrorException):
+    pass
+
