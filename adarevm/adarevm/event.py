@@ -4,69 +4,10 @@ import attrs
 
 from adarevm.config import TIMESTAMP_FORMAT
 from adarelib.helperfunctions.yaml import dict_to_yaml
-from adarevm.testset.teststatus import TestStatus
+from adarelib.types import Event, EventSystemData
 
 import logging
 log = logging.getLogger(__name__)
-
-
-@attrs.define
-class Event:
-    # action or test
-    category: str
-    timestamp: str
-
-
-@attrs.define
-class ActionEvent(Event):
-    name: str
-    description: str
-    category: str = 'action'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(TIMESTAMP_FORMAT)))
-
-
-@attrs.define
-class CommandStart(Event):
-    command_name: str
-    category: str = 'command'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(TIMESTAMP_FORMAT)))
-
-
-@attrs.define
-class CommandEnd(Event):
-    command_name: str
-    category: str = 'command'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(TIMESTAMP_FORMAT)))
-
-
-@attrs.define
-class TestStart(Event):
-    test_name: str
-    category: str = 'test'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(TIMESTAMP_FORMAT)))
-
-
-@attrs.define
-class TestResult:
-    status: TestStatus
-    details: list = attrs.field(default=attrs.Factory(list))
-
-
-@attrs.define
-class TestEnd(Event):
-    test_name: str
-    result: TestResult
-    category: str = 'test'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(TIMESTAMP_FORMAT)))
-
-
-@attrs.define
-class EventSystemData:
-    version: str
-    experiment: str
-    start_time: str
-    end_time: str
-    events: list = attrs.field(default=attrs.Factory(list))
 
 
 class EventSystem:

@@ -16,20 +16,19 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def create_installations_script(environment_uuid: str, template_directory: Path,
-                                script_suffix: str) -> PostsetupInstallationsScript:
+def create_installations_script(experiment_run_directory: ExperimentRunDirectory, environment_uuid: str, template_directory: Path) -> PostsetupInstallationsScript:
     installations: list[PostsetupInstallations] = experiment_database.get_environment_installations(environment_uuid)
     return PostsetupInstallationsScript(
-        name=f'installations{script_suffix}',
+        name=experiment_run_directory.install_script.name,
         postsetup_installations=installations,
         source_directory=template_directory,
         render_wrapper=True,
     )
 
 
-def create_packagedump_script(template_directory: Path, script_suffix: str) -> SaveInstalledPackagesScript:
+def create_packagedump_script(experiment_run_directory: ExperimentRunDirectory, template_directory: Path) -> SaveInstalledPackagesScript:
     return SaveInstalledPackagesScript(
-        name=f'packagedump{script_suffix}',
+        name=experiment_run_directory.packagedump_script.name,
         source_directory=template_directory,
         render_wrapper=True,
     )

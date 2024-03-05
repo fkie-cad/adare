@@ -46,19 +46,16 @@ class LoggedErrorException(LoggedException):
             console.print('\nPossible Solutions:', highlight=False, style='')
             prefix_whitespace_count = 3
             for index, mitigation in enumerate(self.possible_solutions):
-                print_string = ' '*prefix_whitespace_count + f'([b][cyan]{index+1}[/cyan][/b]) {mitigation}'
+                print_string = ' ' * prefix_whitespace_count + f'([b][cyan]{index + 1}[/cyan][/b]) {mitigation}'
                 console.print(print_string, highlight=False)
         console.print()
 
 
-
 class DataStructuringError(LoggedErrorException):
-
     pass
 
 
 class TestSetFormatError(LoggedErrorException):
-
     pass
 
 

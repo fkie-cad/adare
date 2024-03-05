@@ -9,6 +9,7 @@ from adare.database.models.experiments import Environment, OsInfo, Experiment, E
 from adare.database.api.database import DatabaseApi
 from adarelib.types import EnvironmentMetadata, OsInfo as OsInfoAttrs, PostsetupInstallations as PostsetupInstallationsAttrs
 from adare.database.api.experiment import ExperimentApi
+from adare.database.exceptions import DatabaseProjectNotFoundError
 
 # configure logging
 import logging
@@ -41,26 +42,23 @@ class EnvironmentDbApi(ExperimentApi):
     def __get_or_create_installations(self, installations: list[PostsetupInstallationsAttrs]) -> list[PostSetupInstallation]:
         installation_objects = []
         for installation in installations:
-            installation_obj, created = PostSetupInstallation.objects.get_or_create(
-                name=installation.name,
-                command=installation.command,
-                description=installation.description,
-            )
+            installation_obj, created = self.get_or_create(PostSetupInstallation, **attrs.asdict(installation))
             installation_objects.append(installation_obj)
         return installation_objects
 
     def get_or_create_environment(self, project_path: Path, environment_metadata: EnvironmentMetadata, environment_file:Path,
-                                  sha256hash: str) -> (
-            Environment, bool):
+                                  sha256hash: str) -> Environment:
         environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
         if environment:
-            return environment, False
+            return environment
         log.info(f"Environment with hash '{sha256hash}' not found in database -> creating new entry")
         os_info, _ = self.get_or_create_os_info(environment_metadata.os)
         project = self._session.query(Project).filter(Project.path == project_path.as_posix()).first()
         if not project:
-            log.error(f"Project with path '{project_path}' not found in database -> cannot create environment")
-            return None, False
+            raise DatabaseProjectNotFoundError(
+                log,
+                f"Project with path '{project_path}' not found in database -> cannot create environment"
+            )
         environment = Environment(
             name=environment_metadata.name,
             project=project,
@@ -73,7 +71,7 @@ class EnvironmentDbApi(ExperimentApi):
         environment.installations = self.__get_or_create_installations(environment_metadata.postsetupinstallations)
         self._session.add(environment)
         self._session.commit()
-        return environment, True
+        return environment
 
     def update_environment(self, environment_metadata: EnvironmentMetadata, environment_file: Path,
                            sha256hash: str) -> bool:

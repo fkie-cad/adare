@@ -1,7 +1,7 @@
 # external imports
 from pathlib import Path
 import jinja2
-import random
+import uuid
 
 # internal imports
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
@@ -98,18 +98,14 @@ def __create_vagrantfile(vg_vm_name: str, experiment_run_directory: ExperimentRu
         shared_root_directory_vm,
     )
 
-    install_script_vm = experiment_run_directory.get_path_relative_to_shared_directory('wrapper_install_script', shared_root_directory_host, shared_root_directory_vm)
-    packagedump_script_vm = experiment_run_directory.get_path_relative_to_shared_directory('wrapper_packagedump_script', shared_root_directory_host, shared_root_directory_vm)
-    run_script_vm = experiment_run_directory.get_path_relative_to_shared_directory('wrapper_run_script', shared_root_directory_host, shared_root_directory_vm)
-
     if environment_platform == 'windows':
-        vg_machine.add_shell_provisioner_path(install_script_vm)
-        vg_machine.add_shell_provisioner_path(run_script_vm)
-        vg_machine.add_shell_provisioner_path(packagedump_script_vm)
+        vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_install_script)
+        vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_run_script)
+        vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_packagedump_script)
     elif environment_platform == 'linux':
-        vg_machine.add_shell_provisioner_path(install_script_vm, privileged=True, powershell_elevated_interactive=False)
-        vg_machine.add_shell_provisioner_path(run_script_vm, privileged=True, powershell_elevated_interactive=True)
-        vg_machine.add_shell_provisioner_path(packagedump_script_vm, privileged=True, powershell_elevated_interactive=True)
+        vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_install_script, privileged=True, powershell_elevated_interactive=False)
+        vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_run_script, privileged=True, powershell_elevated_interactive=True)
+        vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_packagedump_script, privileged=True, powershell_elevated_interactive=True)
     else:
         raise ValueError(f'unknown environment platform {environment_platform}')
 
@@ -148,7 +144,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     script_suffix = SCRIPTS_SUFFIX[environment_platform]
 
     # create run project structure
-    experiment_run_directory = ExperimentRunDirectory(project_directory, experiment_name)
+    experiment_run_directory = ExperimentRunDirectory(project_directory, experiment_name, script_suffix)
     experiment_run_directory.create()
 
     # create experiment config file
@@ -172,8 +168,8 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     ]
 
     # create scripts
-    installation_script = create_installations_script(environment_uuid, templates_experiment_scripts, script_suffix)
-    packagedump_script = create_packagedump_script(templates_experiment_scripts, script_suffix)
+    installation_script = create_installations_script(experiment_run_directory, environment_uuid, templates_experiment_scripts)
+    packagedump_script = create_packagedump_script(experiment_run_directory, templates_experiment_scripts)
     run_script = create_run_script(
         run_config_file=experiment_run_directory.get_path_relative_to_shared_directory('run_config_file', shared_root_directory_host, shared_root_directory_vm),
         experimentrun_directory=experiment_run_directory,
@@ -200,8 +196,8 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     # todo: add network drive and mount scripts
 
     # create Vagrantfile
-    random_number = random.randint(100000, 999999)
-    vm_name = f'{environment_name}{experiment_name}{random_number}'
+    experimentrun_uuid = str(uuid.uuid4())
+    vm_name = f'{environment_name}{experiment_name}{experimentrun_uuid}'
     vagrantfile: VagrantFile = __create_vagrantfile(
         vm_name,
         experiment_run_directory,

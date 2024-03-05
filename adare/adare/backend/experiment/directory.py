@@ -47,7 +47,7 @@ class ExperimentRunDirectory(Directory):
     packagedump_log: Path
 
 
-    def __init__(self, project_directory: ProjectDirectory, experiment: str):
+    def __init__(self, project_directory: ProjectDirectory, experiment: str, script_suffix: str = '.sh'):
         super().__init__(project_directory.run / experiment / datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
         self.log_directory = self.path / 'logs'
         self.scripts_directory = self.path / 'scripts'
@@ -59,15 +59,15 @@ class ExperimentRunDirectory(Directory):
         self.status_file = self.path / 'status.yml'
         self.run_config_file = self.path / 'config.yml'
 
-        self.install_script = self.scripts_directory / 'install.sh'
-        self.wrapper_install_script = self.scripts_directory / 'wrapper_install.sh'
-        self.run_script = self.scripts_directory / 'run.sh'
-        self.wrapper_run_script = self.scripts_directory / 'wrapper_run.sh'
-        self.packagedump_script = self.scripts_directory / 'packagedump.sh'
-        self.wrapper_packagedump_script = self.scripts_directory / 'wrapper_packagedump.sh'
+        self.install_script = self.scripts_directory / f'installations{script_suffix}'
+        self.wrapper_install_script = self.scripts_directory / f'wrapper_installations{script_suffix}'
+        self.run_script = self.scripts_directory / f'run{script_suffix}'
+        self.wrapper_run_script = self.scripts_directory / f'wrapper_run{script_suffix}'
+        self.packagedump_script = self.scripts_directory / f'packagedump{script_suffix}'
+        self.wrapper_packagedump_script = self.scripts_directory / f'wrapper_packagedump{script_suffix}'
 
         self.vagrant_log = self.log_directory / 'vagrant.log'
-        self.install_log = self.log_directory / 'install.log'
+        self.install_log = self.log_directory / 'installations.log'
         self.run_log = self.log_directory / 'run.log'
         self.packagedump_log = self.log_directory / 'packagedump.log'
 

@@ -509,6 +509,104 @@ class Experiment(SerializerMixin, Base):
         return f"<Experiment(name='{self.name}',publish_status='{self.publish_status}')>"
 
 
+class Event(SerializerMixin, Base):
+    __tablename__ = 'event'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_type = Column(String)
+    event_log_id = Column(Integer, ForeignKey('eventlog.id'))
+    event_log = relationship("EventLog", backref=backref("events", cascade="all, delete-orphan"))
+
+    timestamp = Column(DateTime)
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'event',
+        'polymorphic_on': event_type
+    }
+
+
+class ActionEvent(Event):
+    __tablename__ = 'action_event'
+    __mapper_args__ = {
+        'polymorphic_identity': 'action_event',
+    }
+    id = Column(Integer, ForeignKey('event.id'), primary_key=True)
+    name = Column(String)
+    description = Column(String)
+
+
+class CommandStartEvent(Event):
+    __tablename__ = 'command_start_event'
+    __mapper_args__ = {
+        'polymorphic_identity': 'command_start_event',
+    }
+    id = Column(Integer, ForeignKey('event.id'), primary_key=True)
+    command_name = Column(String)
+
+
+class CommandEndEvent(Event):
+    __tablename__ = 'command_end_event'
+    __mapper_args__ = {
+        'polymorphic_identity': 'command_end_event',
+    }
+    id = Column(Integer, ForeignKey('event.id'), primary_key=True)
+    command_name = Column(String)
+
+
+class TestStartEvent(Event):
+    __tablename__ = 'test_start_event'
+    __mapper_args__ = {
+        'polymorphic_identity': 'test_start_event',
+    }
+    id = Column(Integer, ForeignKey('event.id'), primary_key=True)
+    test_name = Column(String)
+
+
+class TestEndEvent(Event):
+    __tablename__ = 'test_end_event'
+    __mapper_args__ = {
+        'polymorphic_identity': 'test_end_event',
+    }
+    id = Column(Integer, ForeignKey('event.id'), primary_key=True)
+    test_name = Column(String)
+    result_id = Column(Integer, ForeignKey('result.id'))
+    result = relationship(Result)
+
+    def __str__(self):
+        return str(self.test_name)
+
+    def __repr__(self):
+        return f"<TestEndEvent(test_name='{self.test_name}',result='{self.result}')>"
+
+
+class EventLog(SerializerMixin, Base):
+    __tablename__ = 'eventlog'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    path = Column(String)
+    start_time = Column(DateTime)
+    end_time = Column(DateTime)
+
+
+class ExperimentRunEvents(SerializerMixin, Base):
+    __tablename__ = 'events'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_type = Column(String)
+    event_log_id = Column(Integer, ForeignKey('eventlog.id'))
+    event_log = relationship("EventLog", backref=backref("events", cascade="all, delete-orphan"))
+
+    timestamp = Column(DateTime)
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'event',
+        'polymorphic_on': event_type
+    }
+
+
 class ExperimentRun(SerializerMixin, Base):
     __tablename__ = 'experimentrun'
     RELATIONSHIPS_TO_DICT = True
@@ -520,35 +618,33 @@ class ExperimentRun(SerializerMixin, Base):
     environment = relationship(Environment, backref=backref("runs", cascade="all, delete-orphan"))
     path = Column(String, nullable=True)
 
+    event_log_id = Column(Integer, ForeignKey('eventlog.id'))
+    event_log = relationship("EventLog", backref=backref("experimentruns", cascade="all, delete-orphan"))
+
     timestamp_start = Column(DateTime, nullable=True)
     timestamp_end = Column(DateTime, nullable=True)
     tests = relationship(Test, secondary=mapping_experimentrun_test)
 
     published = Column(Boolean, default=False)
 
-
     status_id = Column(Integer, ForeignKey('status.id'))
-    status_gui_automation_id = Column(Integer, ForeignKey('status.id'))
-    status_parse_and_test_id = Column(Integer, ForeignKey('status.id'))
+    status_adarevm_id = Column(Integer, ForeignKey('status.id'))
     status_vagrant_id = Column(Integer, ForeignKey('status.id'))
 
-    logfile_action_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
-    logfile_test_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
     logfile_vagrant_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    logfile_adarevm_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
     logfile_installed_packages_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
-    logfile_postsetup_installations_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    logfile_installations_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
     logfile_run_experiment_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
 
     status = relationship(Status, foreign_keys=[status_id])
-    status_action = relationship(Status, foreign_keys=[status_gui_automation_id])
-    status_test = relationship(Status, foreign_keys=[status_parse_and_test_id])
+    status_adarevm = relationship(Status, foreign_keys=[status_adarevm_id])
     status_vagrant = relationship(Status, foreign_keys=[status_vagrant_id])
 
-    logfile_action = relationship(LogFile, foreign_keys=[logfile_action_id])
-    logfile_test = relationship(LogFile, foreign_keys=[logfile_test_id])
     logfile_vagrant = relationship(LogFile, foreign_keys=[logfile_vagrant_id])
+    logfile_adarevm = relationship(LogFile, foreign_keys=[logfile_adarevm_id])
     logfile_installed_packages = relationship(LogFile, foreign_keys=[logfile_installed_packages_id])
-    logfile_postsetup_installations = relationship(LogFile, foreign_keys=[logfile_postsetup_installations_id])
+    logfile_postsetup_installations = relationship(LogFile, foreign_keys=[logfile_installations_id])
     logfile_run_experiment = relationship(LogFile, foreign_keys=[logfile_run_experiment_id])
 
     # currently not used

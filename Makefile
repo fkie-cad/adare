@@ -34,3 +34,6 @@ else
 	@echo "Running shell script..."
 	@./adarevm/install/install.sh
 endif
+
+docs:
+	cd adare && poetry run sphinx-build -b html docsrc/source docs
