@@ -1,5 +1,5 @@
 ############################################
-# Adare Windows Setup
+# AdareVM windows setup
 ############################################
 
 ## install chocolatey

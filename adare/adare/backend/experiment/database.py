@@ -1,11 +1,12 @@
 # external imports
 from pathlib import Path
+from datetime import datetime
 
 # internal imports
 from adare.database.models.experiments import Project, Experiment
 from adare.database.api.experiment import ExperimentApi
 from adare.database.api.environment import EnvironmentDbApi
-from adare.backend.experiment.directory import ExperimentDirectory
+from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 
 # configure logging
 import logging
@@ -56,3 +57,24 @@ def get_environment_uuid(project_path: Path, experiment_name: str):
 def get_environment_vagrant_box(environment_uuid: str):
     with EnvironmentDbApi() as api:
         return api.get_environment_vagrant_box(environment_uuid)
+
+
+def create_experiment_run(experiment_name: str, environment_name: str, project_name: str, experimentrun_directory: ExperimentRunDirectory) -> str:
+    with ExperimentApi() as api:
+        environment = api.get_environment(environment_name, project_name)
+        experiment = api.get_experiment(experiment_name, environment)
+        experiment_run = api.create_experiment_run(
+            experiment=experiment,
+            environment=environment,
+            path=experimentrun_directory.path,
+            event_log=experimentrun_directory.event_file,
+            logfile_vagrant=experimentrun_directory.vagrant_log,
+            logfile_run_experiment=experimentrun_directory.run_log,
+            logfile_installed_packages=experimentrun_directory.packagedump_log,
+            logfile_postsetup_installations=experimentrun_directory.install_log,
+        )
+        return experiment_run.uuid
+
+def update_experiment_run_start(experiment_run_uuid: str, timestamp: datetime):
+    with ExperimentApi() as api:
+        api.update_experiment_run_start(experiment_run_uuid, timestamp)

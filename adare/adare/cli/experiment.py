@@ -24,7 +24,7 @@ def exec_experiment_create(arguments):
 
 def exec_experiment_run(arguments):
     if project_directory := determine_projectdirectory(arguments.project):
-        experiment_run(project_directory, arguments.experiment, arguments.environment)
+        experiment_run(project_directory, arguments.experiment, arguments.environment, arguments.breakpoints, arguments.break_all)
     else:
         raise NoProjectFoundError(log)
 

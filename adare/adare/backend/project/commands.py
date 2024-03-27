@@ -44,6 +44,8 @@ def project_create(path: Path, name: str, description: str = ''):
         log.info(f'project directory {path} removed, since standard testfunction could not be copied')
         raise e
 
+    project_directory.download_tessdata('eng')
+
     log.info(f'project in path {path} created')
 
 

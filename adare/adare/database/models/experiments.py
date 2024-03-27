@@ -318,7 +318,7 @@ class LogFile(SerializerMixin, Base):
 
     uuid = Column(CHAR(32), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String)
-    path = Column(String)
+    path = Column(String, unique=True)
 
     def __str__(self):
         return str(self.name)
@@ -468,7 +468,7 @@ class Experiment(SerializerMixin, Base):
     RELATIONSHIPS_TO_DICT = True
 
     uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String, unique=True)
+    name = Column(String)
     description = Column(String)
 
     tags = relationship(Tag, secondary=mapping_experiment_tag)
@@ -586,25 +586,27 @@ class EventLog(SerializerMixin, Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     path = Column(String)
-    start_time = Column(DateTime)
-    end_time = Column(DateTime)
+    start_time = Column(DateTime, nullable=True)
+    end_time = Column(DateTime, nullable=True)
 
 
-class ExperimentRunEvents(SerializerMixin, Base):
-    __tablename__ = 'events'
+class ExperimentRunFiles(SerializerMixin, Base):
+    __tablename__ = 'experimentrunfiles'
     RELATIONSHIPS_TO_DICT = True
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    event_type = Column(String)
-    event_log_id = Column(Integer, ForeignKey('eventlog.id'))
-    event_log = relationship("EventLog", backref=backref("events", cascade="all, delete-orphan"))
 
-    timestamp = Column(DateTime)
+    log_vagrant_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    log_vagrant = relationship(LogFile, foreign_keys=[log_vagrant_id])
 
-    __mapper_args__ = {
-        'polymorphic_identity': 'event',
-        'polymorphic_on': event_type
-    }
+    package_dump_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    package_dump = relationship(LogFile, foreign_keys=[package_dump_id])
+
+    log_installations_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    log_installations = relationship(LogFile, foreign_keys=[log_installations_id])
+
+    log_run_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    log_run = relationship(LogFile, foreign_keys=[log_run_id])
 
 
 class ExperimentRun(SerializerMixin, Base):
@@ -616,6 +618,7 @@ class ExperimentRun(SerializerMixin, Base):
     experiment = relationship(Experiment, backref=backref("runs", cascade="all, delete-orphan"))
     environment_id = Column(Integer, ForeignKey('environment.uuid'))
     environment = relationship(Environment, backref=backref("runs", cascade="all, delete-orphan"))
+
     path = Column(String, nullable=True)
 
     event_log_id = Column(Integer, ForeignKey('eventlog.id'))
@@ -627,25 +630,12 @@ class ExperimentRun(SerializerMixin, Base):
 
     published = Column(Boolean, default=False)
 
-    status_id = Column(Integer, ForeignKey('status.id'))
-    status_adarevm_id = Column(Integer, ForeignKey('status.id'))
-    status_vagrant_id = Column(Integer, ForeignKey('status.id'))
+    status = Column(String, default='pending')
+    status_adarevm = Column(String, default='pending')
+    status_vagrant = Column(String, default='pending')
 
-    logfile_vagrant_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
-    logfile_adarevm_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
-    logfile_installed_packages_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
-    logfile_installations_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
-    logfile_run_experiment_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
-
-    status = relationship(Status, foreign_keys=[status_id])
-    status_adarevm = relationship(Status, foreign_keys=[status_adarevm_id])
-    status_vagrant = relationship(Status, foreign_keys=[status_vagrant_id])
-
-    logfile_vagrant = relationship(LogFile, foreign_keys=[logfile_vagrant_id])
-    logfile_adarevm = relationship(LogFile, foreign_keys=[logfile_adarevm_id])
-    logfile_installed_packages = relationship(LogFile, foreign_keys=[logfile_installed_packages_id])
-    logfile_postsetup_installations = relationship(LogFile, foreign_keys=[logfile_installations_id])
-    logfile_run_experiment = relationship(LogFile, foreign_keys=[logfile_run_experiment_id])
+    files_id = Column(Integer, ForeignKey('experimentrunfiles.id'))
+    files = relationship(ExperimentRunFiles, backref=backref("experimentrun", uselist=False))
 
     # currently not used
     sha256_validation_hash = Column(String, nullable=True)

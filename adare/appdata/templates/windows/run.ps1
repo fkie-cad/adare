@@ -12,7 +12,13 @@ Add-PathVariable "{{ path }}"
 # goto the directory of adarevm and install it with poetry
 cd "{{ adarevm }}"
 poetry install
+poetry update adarelib
 Write-Status("InstallAdarevm")
+
+# get path to adarevm executable
+$adarevmExecutable = $(poetry run where adarevm | Where-Object { $_ -like "*.cmd" })
+# add to the PATH of the session
+Add-PathVariable (Split-Path $adarevmExecutable)
 
 adarevm '{{ experiment_config_file }}'
 Write-Status("RunAdarevm")

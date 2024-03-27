@@ -18,7 +18,7 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
     with EnvironmentDbApi() as db:
         environments = db.get_environments_by_path(environment_file)
         if not environments:
-            env, _ = db.get_or_create_environment(project_path, environment_metadata, environment_file, sha256hash)
+            db.get_or_create_environment(project_path, environment_metadata, environment_file, sha256hash)
             log.info(f'environment file {environment_file} loaded')
             return
         for env in environments:

@@ -9,6 +9,7 @@ class ExperimentConfig:
     action: str
     testfunction_directory: str
 
+    breakpoint_directory: str
     tessdata: str
     img: str
 

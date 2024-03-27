@@ -35,13 +35,15 @@ class RunExperimentScript(Script):
                  render_wrapper: bool = False
                  ):
         super().__init__(name, source_directory, render_wrapper=render_wrapper)
-        self.var = {
+        var = {
             'script_directory': script_directory,
             'log_directory': log_directory,
             'path_directories': path_directories,
             'adarevm': adarevm_path,
             'experiment_config_file': experiment_config_file,
         }
+        self.update_variables(var)
+
 
 
 class MountNetworkDriveScript(Script):

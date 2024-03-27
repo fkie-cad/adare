@@ -11,3 +11,57 @@ ABBREV_INFO = ['INFO', 'info', 'Info', 'i', 'I']
 ABBREV_WARNING = ['WARNING', 'warning', 'Warning', 'w', 'W']
 ABBREV_ERROR = ['ERROR', 'error', 'Error', 'e', 'E']
 ABBREV_CRITICAL = ['CRITICAL', 'critical', 'Critical', 'c', 'C']
+
+
+DEFAULT_RESOLUTION = "1920x1080"
+DEFAULT_VM_IP = "192.168.142.10"
+DEFAULT_GUI_LOGLEVEL = "info"
+DEFAULT_PAUSE_AFTERGUIAUTOMATION = "30"
+DEFAULT_START_OS_IDLE = "60"
+
+# default variables for network drives
+SUPPORTED_NETWORKDRIVE_TYPES = ["smb", "nfs"]
+
+DEFAULT_NETWORKSHARES_VM = {
+    'cpu': "2",
+    'memory': "1024",
+    'ip': "192.168.142.100"
+}
+
+DEFAULT_NETWORKSHARE_BOX = "networkshares"
+
+DEFAULT_SMB_CONF = {
+    'name': 'SMB share',
+    'workgroup': 'WORKGROUP',
+    'share':
+        {
+            'name': 'SMBshare',
+            'remote_path': '/mnt/smb_share_0',
+            'path': '/mnt/smb',
+            'comment': 'This is an SMB share',
+            'user': 'vagrant',
+            'writable': True,
+            'uid': 1000,
+            'gid': 1000
+        },
+    'user':
+        {
+            'name': 'vagrant',
+            'password': 'vagrant',
+        }
+}
+
+DEFAULT_NFS_CONF = {
+    'name': 'NFS share',
+    'share':
+        {
+            'name': 'NFSshare',
+            'remote_path': '/mnt/nfs_share_0',
+            'path': '/mnt/nfs',
+            'host': '*',
+            'options': ["rw"]
+        }
+
+}
+
+DEFAULT_NETWORKDRIVE_SHARENAME = "share"
