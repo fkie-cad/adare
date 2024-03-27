@@ -9,6 +9,7 @@ import adare.backend.experiment.database as experiment_database
 from adarelib.types import PostsetupInstallations
 from adare.config import SCRIPTS_SUFFIX
 from adare.backend.experiment.directory import ExperimentRunDirectory
+from adare.backend.project.directory import ProjectDirectory
 
 # configure logging
 import logging
@@ -34,15 +35,15 @@ def create_packagedump_script(experiment_run_directory: ExperimentRunDirectory, 
     )
 
 
-def create_run_script(run_config_file: Path, experimentrun_directory: ExperimentRunDirectory, adarevm_directory: Path,
-                      path_directories: list[Path], template_directory: Path, script_suffix: str) -> Script:
+def create_run_script(experimentrun_directory: ExperimentRunDirectory, project_directory: ProjectDirectory,
+                      path_directories: list[Path], template_directory: Path, script_suffix: str, shared_root_directory_host: Path, shared_root_directory_vm: Path) -> Script:
     return RunExperimentScript(
         name=f'run{script_suffix}',
         source_directory=template_directory,
-        script_directory=experimentrun_directory.path,
-        log_directory=experimentrun_directory.log_directory,
+        script_directory=experimentrun_directory.get_path_relative_to_shared_directory('scripts_directory', shared_root_directory_host, shared_root_directory_vm),
+        log_directory=experimentrun_directory.get_path_relative_to_shared_directory('log_directory', shared_root_directory_host, shared_root_directory_vm),
         path_directories=path_directories,
-        adarevm_path=adarevm_directory,
-        experiment_config_file=run_config_file,
+        adarevm_path=project_directory.get_path_relative_to_shared_directory('adarevm', shared_root_directory_host, shared_root_directory_vm),
+        experiment_config_file=experimentrun_directory.get_path_relative_to_shared_directory('run_config_file', shared_root_directory_host, shared_root_directory_vm),
         render_wrapper=True,
     )

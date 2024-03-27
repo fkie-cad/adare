@@ -4,9 +4,10 @@ import shutil
 
 from adarelib.parsers import parse_testsetfile
 from adarelib.types import TestsetFile
-from adarelib.testfunction import import_basictest_subclasses, check_if_tests_exist, structure_tests
+from adarelib.testfunction import import_basictest_subclasses, get_missing_testfunctions, structure_tests
 
-from adarevm.event import EventSystem, CommandEnd, CommandStart
+from adarevm.event import EventSystem
+from adarelib.types import CommandStart, CommandEnd
 
 import logging
 
@@ -28,7 +29,7 @@ class Testset:
         self.supported_tests = import_basictest_subclasses(testfunctions_directory)
         self.testsetfile: TestsetFile = parse_testsetfile(testsetfile)
 
-        if unsupported_testfunctions := check_if_tests_exist(
+        if unsupported_testfunctions := get_missing_testfunctions(
                 self.testsetfile, self.supported_tests
         ):
             log.error(
@@ -103,7 +104,7 @@ class Testset:
     def __check_if_command_already_executed(self, command_name: str):
         return command_name in [e.name for e in self.event_system.data.events]
 
-    def test(self, name: str):
+    def test(self, name: str, variables: dict):
         if name not in self.tests:
             log.error(f'test with name {name} does NOT exist')
             raise TestsetExecutionError(f'test with name {name} does NOT exist')
@@ -113,11 +114,11 @@ class Testset:
             for dependency in test_in_testsetfile.depends_on:
                 if not self.__check_if_command_already_executed(dependency):
                     self.execute_command(dependency)
-        events = test.test()
-        for event in events:
-            self.event_system.log(event)
+        test.variables = variables
+        test.eventsystem = self.event_system
+        test.test(variables)
         self.event_system.save()
 
-    def testall(self):
+    def testall(self, variables: dict):
         for test in self.tests:
-            self.test(test)
+            self.test(test, variables)

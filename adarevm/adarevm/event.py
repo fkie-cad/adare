@@ -26,6 +26,7 @@ class EventSystem:
 
     def log(self, event: Event):
         self.data.events.append(event)
+        self.save()
 
     def save(self):
         self.data.end_time = datetime.now().strftime(TIMESTAMP_FORMAT)

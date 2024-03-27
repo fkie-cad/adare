@@ -11,10 +11,10 @@ import shutil
 from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.vagrantapi.exceptions import VagrantBoxCreationError, VagrantBoxDestroyError, VagrantBoxRunError
 from adarelib.exceptions import LoggedException
+from adarelib.breakpoint import BreakPoint
 
 # configure logging
 import logging
-
 log = logging.getLogger(__name__)
 
 
@@ -26,6 +26,7 @@ class VagrantBoxVM:
     vagrant: vagrant.Vagrant
     vm_name: str = 'ADARE'
     vagrantdirectory_path: Path
+    should_watch: bool = False
 
     log_file: Optional[Path]
 
@@ -86,15 +87,16 @@ class VagrantBoxVM:
 
         if debug:
             log.info('debugmode - execution was stopped after the provisioning step and before destroying the vm')
-            answer = ''
-            while answer not in ['y', 'Y', 'Yes', 'YES']:
-                answer = input('\ndebugmode: to continue press y/Y: ')
+            BreakPoint(
+                'before_box_destroy',
+            )
             log.info('debugmode - execution continued')
 
         self.destroy()
         return 0
 
     def up(self):
+        self.should_watch = True
         self.vagrant = vagrant.Vagrant(self.vagrantfile_path.as_posix(), quiet_stdout=False, quiet_stderr=False)
 
         log_file_handle = self.log_file.open('w') if self.log_file else None
@@ -106,12 +108,14 @@ class VagrantBoxVM:
 
         if self.log_file:
             log_file_handle.close()
+        self.should_watch = False
 
     @retry(subprocess.CalledProcessError, tries=5, delay=1, backoff=2)
     def __destroy_box(self):
         self.vagrant.destroy()
 
     def destroy(self):
+        self.should_watch = False
         try:
             self.__destroy_box()
         except subprocess.CalledProcessError as e:
@@ -137,3 +141,6 @@ class VagrantBoxVM:
             if vm_path.is_dir():
                 shutil.rmtree(vm_path)
                 log.info(f'left over files ({vm_path}) in VirtualBox got deleted')
+
+
+

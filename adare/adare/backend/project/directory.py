@@ -36,8 +36,8 @@ class ProjectDirectory(Directory):
         self.shared_data = self.shared / 'data'
         self.adare = path / 'adare'
         self.adarevm = self.adare / 'adarevm'
-        self.tessdata = path / '.tessdata'
-        self.run = path / '.run'
+        self.tessdata = path / 'tessdata'
+        self.run = path / 'run'
 
     def create(self):
         try:
@@ -96,9 +96,9 @@ class ProjectDirectory(Directory):
 
     def copy_standard_testfunction(self):
         try:
-            shutil.copy(APPDATA_DIR/'testfunctions'/'standard.py', self.testfunctions/'standard.py')
+            shutil.copytree(APPDATA_DIR/'testfunctions'/'standard', self.testfunctions/'standard')
         except OSError as e:
             raise ProjectDirectoryCopyError(
                 log,
-                message=f'standard testfunction ([i]{APPDATA_DIR/"testfunctions"/"standard.py"}[/i]) could not be copied to project directory ({self.testfunctions}): {e.strerror}',
+                message=f'standard testfunction directory ([i]{APPDATA_DIR/"testfunctions"/"standard"}[/i]) could not be copied to project directory ({self.testfunctions/"standard"}): {e.strerror}',
             ) from e

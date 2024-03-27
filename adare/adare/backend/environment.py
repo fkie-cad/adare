@@ -18,7 +18,8 @@ from adare.backend.networkdrive import NetworkDriveContainer
 from adare.helperFunctions.yaml import yaml_to_dict, dict_to_yaml
 from adare.helperFunctions.csv import csv_to_dict
 from adare.helperFunctions.jinja.jinjafeatures import init_jinja_environment
-from adare.backend.script_creation.scripts import PostsetupInstallationsScript, RunExperimentScript, SaveInstalledPackagesScript, MountNetworkDriveScript
+from adare.backend.script_creation.scripts import PostsetupInstallationsScript, RunExperimentScript, \
+    SaveInstalledPackagesScript, MountNetworkDriveScript
 from adare.backend.script_creation.Scriptmanager import ScriptManager
 from adare.backend.script_creation.Script import Script
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
@@ -31,6 +32,7 @@ from adare.networkdrive.attrs_classes import SMBShare, NFSShare
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -81,7 +83,6 @@ class Environment:
                 exit(-1)
             self.project_directory = Path(project_class.path)
 
-
         self.project_setup_directory = self.project_directory / 'setup'
 
         self.base_directory = (self.project_directory / 'environments' / name)
@@ -96,9 +97,9 @@ class Environment:
             self.project_scripts_directory = self.project_directory / 'programs' / 'templates' / self.setup.os_platform
 
         # set up paths used in project an environment
-        self.project_additional_tools_directory = self.project_directory/'additional_tools'
-        self.project_guiautomation_program = self.project_directory/'programs'/'GUIAutomation'
-        self.project_parseandtest_program = self.project_directory/'programs' /'ParseAndTest'
+        self.project_additional_tools_directory = self.project_directory / 'additional_tools'
+        self.project_guiautomation_program = self.project_directory / 'programs' / 'GUIAutomation'
+        self.project_parseandtest_program = self.project_directory / 'programs' / 'ParseAndTest'
 
         self.log_directory = self.base_directory / 'logs'
         self.result_directory = self.base_directory / 'result'
@@ -114,27 +115,27 @@ class Environment:
             log.error(f'platform of environment {self.name} not set')
             exit(-1)
 
-        self.project_scripts_directory = self.project_directory/'programs'/'templates'/self.platform
+        self.project_scripts_directory = self.project_directory / 'programs' / 'templates' / self.platform
 
         # set up paths from the view of the guest/vm
         vm_root_path = Path(r'/')
         if self.platform == 'windows':
             vm_root_path = Path(r'C:/')
 
-        self.vm_project_directory = vm_root_path/'project'
-        self.vm_project_programs_directory = self.vm_project_directory/'programs'
+        self.vm_project_directory = vm_root_path / 'project'
+        self.vm_project_programs_directory = self.vm_project_directory / 'programs'
         self.vm_project_additional_tools_directory = self.vm_project_directory / 'additional_tools'
-        self.vm_environment_directory = self.vm_project_directory/'environments'/self.name
+        self.vm_environment_directory = self.vm_project_directory / 'environments' / self.name
         self.vm_environment_logs_directory = self.vm_project_directory / 'environments' / self.name / 'logs'
         self.vm_environment_result_directory = self.vm_project_directory / 'environments' / self.name / 'result'
         self.vm_environment_run_directory = self.vm_project_directory / 'environments' / self.name / 'run'
         self.vm_environment_experiment_directory = self.vm_project_directory / 'environments' / self.name / 'experiment'
 
-        self.vm_tessdata_directory = self.vm_project_directory/'tessdata'
+        self.vm_tessdata_directory = self.vm_project_directory / 'tessdata'
 
         self.__script_manager = ScriptManager(
             script_directory_vm_view=self.vm_environment_run_directory,
-            wrapper_template=self.project_scripts_directory/f'run_script_wrapper{self.__script_suffix}'
+            wrapper_template=self.project_scripts_directory / f'run_script_wrapper{self.__script_suffix}'
         )
 
         # update testfunction -> maybe do only on environment creation and demand
@@ -238,18 +239,21 @@ class Environment:
                     # check if necessary files are existing
                     action_file = self.__check_if_actionfile_exists(experiment_name)
                     if not action_file:
-                        log.warning(f'experiment {experiment_name} is missing the gui automation file -> can\'t add experiment to environment')
+                        log.warning(
+                            f'experiment {experiment_name} is missing the gui automation file -> can\'t add experiment to environment')
                         continue
                     testset_file = self.__check_if_testsetfile_exists(experiment_name)
                     if not testset_file:
-                        log.warning(f'experiment {experiment_name} is missing the testset file -> can\'t add experiment to environment')
+                        log.warning(
+                            f'experiment {experiment_name} is missing the testset file -> can\'t add experiment to environment')
                         continue
                     experiment_metadata_file = self.__check_if_experimentmetadatafile_exists(experiment_name)
                     if not experiment_metadata_file:
                         # create empty experiment metadata file
                         experiment_metadata_file = self.experiment_directory / experiment_name / 'metadata.yml'
                         experiment_metadata_file.touch()
-                        log.warning(f'experiment {experiment_name} is missing the experiment metadata file -> empty file got created')
+                        log.warning(
+                            f'experiment {experiment_name} is missing the experiment metadata file -> empty file got created')
                     metadata = load_experiment_metadata(experiment_metadata_file)
 
                     log.debug(f'metadata loaded {metadata}')
@@ -257,14 +261,15 @@ class Environment:
                     # add experiment to database
                     os_info = db.get_environment(name=self.name, project_name=self.project).osinfo
                     exp, existed = db.get_experiment(
-                        os_info = os_info,
+                        os_info=os_info,
                         action_file=action_file,
                         testset_file=testset_file,
                         environment=env,
                     )
 
                     if not exp:
-                        print(f'could not add experiment {experiment_name} to database -> most likely to an already existing experiment with the same name')
+                        print(
+                            f'could not add experiment {experiment_name} to database -> most likely to an already existing experiment with the same name')
                         continue
 
                     if metadata:
@@ -283,11 +288,10 @@ class Environment:
                         log.debug(f'experiment {experiment_name} added to environment {self.name}')
             # remove experiments from database which are not existing in the environment
             for experiment in db.get_experiments_in_env(self.project, self.name):
-                if not (self.experiment_directory/experiment.name).is_dir():
+                if not (self.experiment_directory / experiment.name).is_dir():
                     db.remove_experiment(env, experiment.name)
                     log.debug(f'experiment {experiment.name} removed from database')
         log.debug(f'experiments in environment {self.name} updated')
-
 
     def __load(self):
         """
@@ -318,7 +322,7 @@ class Environment:
         """
         jinja = init_jinja_environment(TEMPLATES_DIR)
         template = jinja.get_template('ExperimentTemplate')
-        filepath = self.experiment_directory/experiment_name/f'{experiment_name}.py'
+        filepath = self.experiment_directory / experiment_name / f'{experiment_name}.py'
         with open(filepath.as_posix(), mode='w') as f:
             f.write(
                 template.render(
@@ -383,7 +387,6 @@ class Environment:
             return None
         return experiment_metadata_file
 
-
     def __remove_experiment_from_db(self, experiment_name: str):
         """
         removes the experiment from the database
@@ -397,7 +400,7 @@ class Environment:
         """
         removes the experiment from the filesystem
         """
-        shutil.rmtree(self.experiment_directory/experiment_name)
+        shutil.rmtree(self.experiment_directory / experiment_name)
         log.debug(f'experiment {self.name} removed from filesystem')
 
     def __is_experiment_existing(self, experiment_name: str) -> bool:
@@ -411,21 +414,24 @@ class Environment:
         # check if experiment with this name already exists
         with ProjectManagementApi() as db:
             exist_in_db = True if db.get_experiment_in_env(self.project, experiment_name, self.name) else False
-        exist_in_filesystem = (self.experiment_directory/experiment_name).is_dir()
+        exist_in_filesystem = (self.experiment_directory / experiment_name).is_dir()
         if exist_in_db and exist_in_filesystem:
             log.error(f'experiment with name {experiment_name} already exists')
             return True
         elif exist_in_db:
-            log.fatal(f'experiment with name {experiment_name} already exists in database but not in filesystem -> experiment will be removed from database')
+            log.fatal(
+                f'experiment with name {experiment_name} already exists in database but not in filesystem -> experiment will be removed from database')
             self.__remove_experiment_from_db(experiment_name)
             return True
         elif exist_in_filesystem:
-            log.fatal(f'experiment with name {experiment_name} already exists in filesystem but not in database -> experiment will be removed from filesystem')
+            log.fatal(
+                f'experiment with name {experiment_name} already exists in filesystem but not in database -> experiment will be removed from filesystem')
             self.__remove_experiment_from_filesystem(experiment_name)
             return True
         return False
 
-    def create_experiment(self, experiment_name: str, usb: list[UsbDevice] = None, smb_drives: list[SMBShare] = None, nfs_drives: list[NFSShare] = None):
+    def create_experiment(self, experiment_name: str, usb: list[UsbDevice] = None, smb_drives: list[SMBShare] = None,
+                          nfs_drives: list[NFSShare] = None):
         """
         create experiment skeleton files (testset file and gui experiment file)
 
@@ -438,10 +444,10 @@ class Environment:
             exit(-1)
 
         # create experiment directory with template files
-        experiment_directory = self.experiment_directory/experiment_name
+        experiment_directory = self.experiment_directory / experiment_name
         experiment_directory.mkdir()
         # create an empty img directory
-        (experiment_directory/'img').mkdir()
+        (experiment_directory / 'img').mkdir()
         # create a template action and testset file
         self.__create_actionfile_skeleton(experiment_name)
         self.__create_testsetfile_skeleton(experiment_name)
@@ -471,7 +477,6 @@ class Environment:
         """
         self.__remove_experiment_from_db(experiment_name)
         self.__remove_experiment_from_filesystem(experiment_name)
-
 
     # def __add_usb_to_experiment(self, experiment_name: str, usb_name: str):
     #     """
@@ -626,10 +631,6 @@ class Environment:
         #             shutil.copytree(experiment.as_posix(), experiment_path.as_posix(), ignore=shutil.ignore_patterns('*.pyc', '__pycache__'))
         #             self.add_experiment_to_config(experiment.name, experiment_path)
 
-
-
-
-
     # def setup_network_drives(self, jinja: jinja2.Environment, experiment_name: str, logfolder: str) -> list or None:
     #     P_mountnetworkdrivescript = self.script_directory / f'mount_networkdrives{self.__script_suffix}'
     #     used_network_drives = []
@@ -687,20 +688,22 @@ class Environment:
     #         script_mountnetworkdrive.write()
     #         return []
 
-    def __create_experiment_config_file(self, experiment: str, vm_environment_experiment_log_directory: Path, vm_experiment_status_file: Path) -> (Path, Path):
+    def __create_experiment_config_file(self, experiment: str, vm_environment_experiment_log_directory: Path,
+                                        vm_experiment_status_file: Path) -> (Path, Path):
         data = {
-            'img_folder': (self.vm_environment_experiment_directory/experiment/'img').as_posix(),
+            'img_folder': (self.vm_environment_experiment_directory / experiment / 'img').as_posix(),
             'tessdata_folder': self.vm_tessdata_directory.as_posix(),
-            'logfile': (vm_environment_experiment_log_directory/'gui.log').as_posix(),
+            'logfile': (vm_environment_experiment_log_directory / 'gui.log').as_posix(),
             'statusfile': vm_experiment_status_file.as_posix()
         }
         filename = 'experiment_config.yml'
-        filepath = self.run_directory/filename
-        vm_filepath = self.vm_environment_run_directory/filename
+        filepath = self.run_directory / filename
+        vm_filepath = self.vm_environment_run_directory / filename
         dict_to_yaml(filepath, data)
         return filepath, vm_filepath
 
-    def create_vagrantfile(self, experiment: str, vm_name: str, hostonly: bool = False, networkdrive_active=False) -> VagrantFile or None:
+    def create_vagrantfile(self, experiment: str, vm_name: str, hostonly: bool = False,
+                           networkdrive_active=False) -> VagrantFile or None:
         with ProjectManagementApi() as db:
             environment: EnvironmentModel = db.get_environment(name=self.name, project_name=self.project)
             if not environment:
@@ -721,7 +724,6 @@ class Environment:
 
             vg_machine.enable_gui()
             vg_file.disable_virtualbox_guestautoupdate()
-
 
             vg_machine.add_synced_folder(self.project_directory, Path('/project'))
 
@@ -757,16 +759,16 @@ class Environment:
                 vg_machine.add_shell_provisioner_path(save_installed_packages.absolute())
             elif environment.osinfo.platform == 'windows':
                 vg_machine.add_shell_provisioner_inline("sleep " + idle_after_os_starts, privileged=True,
-                                                             powershell_elevated_interactive=False)
+                                                        powershell_elevated_interactive=False)
                 vg_machine.add_shell_provisioner_path(postsetup_installations.absolute(), privileged=True,
-                                                           powershell_elevated_interactive=False)
+                                                      powershell_elevated_interactive=False)
                 if networkdrive_active:
                     vg_machine.add_shell_provisioner_path(mount_networkdrives.absolute(), privileged=True,
-                                                               powershell_elevated_interactive=True)
+                                                          powershell_elevated_interactive=True)
                 vg_machine.add_shell_provisioner_path(run_experiment.absolute(), privileged=True,
-                                                           powershell_elevated_interactive=True)
+                                                      powershell_elevated_interactive=True)
                 vg_machine.add_shell_provisioner_path(save_installed_packages.absolute(), privileged=True,
-                                                           powershell_elevated_interactive=True)
+                                                      powershell_elevated_interactive=True)
             else:
                 log.error(f'os platform {environment.osinfo.platform} not supported')
                 return None
@@ -774,7 +776,6 @@ class Environment:
             vg_file.add_machine(vg_machine, order=99)
 
             return vg_file
-
 
     def __create_experimentrun_database(self, experiment: str, timestamp_start: datetime, logfile_data: dict):
         with ProjectManagementApi() as db:
@@ -788,12 +789,13 @@ class Environment:
                 log.error(f'experiment {experiment} not found in database')
                 exit(-1)
 
-            run = db.create_experiment_run(experiment=experiment, timestamp_start=timestamp_start, logfile_data=logfile_data)
+            run = db.create_experiment_run(experiment=experiment, timestamp_start=timestamp_start,
+                                           logfile_data=logfile_data)
             log.debug(f'experiment run {run.uuid} created in database')
             return run.uuid
 
-
-    def __save_results_in_database(self, run_uuid: str, result_file: Path, timestamp_end: datetime, vg_exitcode: int, experiment_log_directory: Path):
+    def __save_results_in_database(self, run_uuid: str, result_file: Path, timestamp_end: datetime, vg_exitcode: int,
+                                   experiment_log_directory: Path):
         result_data = None
         if not result_file.is_file():
             log.warning(f'result file is missing')
@@ -811,7 +813,7 @@ class Environment:
             vagrant_status = VAGRANT_EXITCODE_STATUS_MAPPING['default']
 
         # determine status of experiment -> todo: make this more pretty
-        status_file = experiment_log_directory/'status.csv'
+        status_file = experiment_log_directory / 'status.csv'
         if status_file.is_file():
             statusdata = csv_to_dict(status_file)
         else:
@@ -836,7 +838,6 @@ class Environment:
                 status_data=statusdata,
             )
         log.debug(f'results of experiment run {run_uuid} got saved in database')
-
 
     def check_if_experiment_is_existing(self, experiment: str) -> bool:
         """
@@ -872,7 +873,8 @@ class Environment:
                 log.error(f'experiment {experiment} not found in database')
                 exit(-1)
             networkdrive_dir = self.base_directory / 'networkdrives'
-            networkdrive_container = NetworkDriveContainer(exp, box=config.DEFAULT_NETWORKSHARE_BOX, directory=networkdrive_dir)
+            networkdrive_container = NetworkDriveContainer(exp, box=config.DEFAULT_NETWORKSHARE_BOX,
+                                                           directory=networkdrive_dir)
 
             if not networkdrive_container.is_emtpy():
                 log.info('network drive setup starts')
@@ -891,8 +893,6 @@ class Environment:
                 return vg_machine
             log.debug('no network drives found in environment -> network drive setup will be skipped')
             return None
-
-
 
     def run(self, experiment: str, debug=False):
         """
@@ -923,8 +923,9 @@ class Environment:
         vm_experiment_result_file = self.vm_environment_result_directory / f'{experiment}_{timestamp_start_filename_format}' / resultfile_name
         vm_experiment_status_file = self.vm_environment_logs_directory / f'{experiment}_{timestamp_start_filename_format}' / 'status.csv'
 
-        experiment_config_file, vm_experiment_config_file = self.__create_experiment_config_file(experiment, vm_experiment_log_directory, vm_experiment_status_file)
-
+        experiment_config_file, vm_experiment_config_file = self.__create_experiment_config_file(experiment,
+                                                                                                 vm_experiment_log_directory,
+                                                                                                 vm_experiment_status_file)
 
         with ProjectManagementApi() as db:
             env = db.get_environment(name=self.name, project_name=self.project)
@@ -949,7 +950,7 @@ class Environment:
 
         script_run = RunExperimentScript(f'run_experiment{self.__script_suffix}',
                                          self.project_scripts_directory,
-                                         experiment_path=self.vm_environment_experiment_directory/experiment,
+                                         experiment_path=self.vm_environment_experiment_directory / experiment,
                                          tessdata_directory=self.vm_tessdata_directory,
                                          experiment=experiment,
                                          result_file=vm_experiment_result_file,
@@ -976,7 +977,7 @@ class Environment:
         # render scripts to environment
         self.__script_manager.render_to_environment(self.run_directory)
 
-        log_file_path = experiment_log_directory/'vagrant.log'
+        log_file_path = experiment_log_directory / 'vagrant.log'
         log.debug(f'log path for vagrant log: {log_file_path.absolute()}')
 
         # create a unique name for the vm
@@ -991,15 +992,23 @@ class Environment:
         if networkdrive_vg_machine:
             vagrantfile.add_machine(networkdrive_vg_machine, order=0)
 
-        box = VagrantBoxVM.fromVagrantFileObject(self.run_directory, vagrantfile, log_file=log_file_path, vm_name=vm_name)
+        box = VagrantBoxVM.fromVagrantFileObject(self.run_directory, vagrantfile, log_file=log_file_path,
+                                                 vm_name=vm_name)
 
         logfiledata = {
-            'vagrant': (experiment_log_directory/'vagrant.log').absolute().as_posix() if (experiment_log_directory/'vagrant.log').is_file() else None,
-            'action': (experiment_log_directory/'gui.log').absolute().as_posix() if (experiment_log_directory/'gui.log').is_file() else None,
-            'test': (experiment_log_directory/'parseandtest.log').absolute().as_posix() if (experiment_log_directory/'parseandtest.log').is_file() else None,
-            'postsetup_installations': (experiment_log_directory/'postsetup_installations.log').absolute().as_posix() if (experiment_log_directory/'postsetup_installations.log').is_file() else None,
-            'installed_packages': (experiment_log_directory/'save_installed_packages.log').absolute().as_posix() if (experiment_log_directory/'save_installed_packages.log').is_file() else None,
-            'run_experiment': (experiment_log_directory/'run_experiment.log').absolute().as_posix() if (experiment_log_directory/'run_experiment.log').is_file() else None,
+            'vagrant': (experiment_log_directory / 'vagrant.log').absolute().as_posix() if (
+                        experiment_log_directory / 'vagrant.log').is_file() else None,
+            'action': (experiment_log_directory / 'gui.log').absolute().as_posix() if (
+                        experiment_log_directory / 'gui.log').is_file() else None,
+            'test': (experiment_log_directory / 'parseandtest.log').absolute().as_posix() if (
+                        experiment_log_directory / 'parseandtest.log').is_file() else None,
+            'postsetup_installations': (
+                        experiment_log_directory / 'postsetup_installations.log').absolute().as_posix() if (
+                        experiment_log_directory / 'postsetup_installations.log').is_file() else None,
+            'installed_packages': (experiment_log_directory / 'save_installed_packages.log').absolute().as_posix() if (
+                        experiment_log_directory / 'save_installed_packages.log').is_file() else None,
+            'run_experiment': (experiment_log_directory / 'run_experiment.log').absolute().as_posix() if (
+                        experiment_log_directory / 'run_experiment.log').is_file() else None,
         }
 
         # add experiment run to database
@@ -1016,8 +1025,5 @@ class Environment:
         os.remove(experiment_config_file.as_posix())
 
         # write results and log information to database
-        self.__save_results_in_database(run_uuid, experiment_resultfile, datetime.now(), vg_exitcode, experiment_log_directory)
-
-
-
-
+        self.__save_results_in_database(run_uuid, experiment_resultfile, datetime.now(), vg_exitcode,
+                                        experiment_log_directory)

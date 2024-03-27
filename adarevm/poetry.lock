@@ -14,6 +14,50 @@ type = "directory"
 url = "../adarelib"
 
 [[package]]
+name = "attrs"
+version = "23.2.0"
+description = "Classes Without Boilerplate"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1"},
+    {file = "attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30"},
+]
+
+[package.extras]
+cov = ["attrs[tests]", "coverage[toml] (>=5.3)"]
+dev = ["attrs[tests]", "pre-commit"]
+docs = ["furo", "myst-parser", "sphinx", "sphinx-notfound-page", "sphinxcontrib-towncrier", "towncrier", "zope-interface"]
+tests = ["attrs[tests-no-zope]", "zope-interface"]
+tests-mypy = ["mypy (>=1.6)", "pytest-mypy-plugins"]
+tests-no-zope = ["attrs[tests-mypy]", "cloudpickle", "hypothesis", "pympler", "pytest (>=4.3.0)", "pytest-xdist[psutil]"]
+
+[[package]]
+name = "cattrs"
+version = "23.2.3"
+description = "Composable complex class support for attrs and dataclasses."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "cattrs-23.2.3-py3-none-any.whl", hash = "sha256:0341994d94971052e9ee70662542699a3162ea1e0c62f7ce1b4a57f563685108"},
+    {file = "cattrs-23.2.3.tar.gz", hash = "sha256:a934090d95abaa9e911dac357e3a8699e0b4b14f8529bcc7d2b1ad9d51672b9f"},
+]
+
+[package.dependencies]
+attrs = ">=23.1.0"
+exceptiongroup = {version = ">=1.1.1", markers = "python_version < \"3.11\""}
+typing-extensions = {version = ">=4.1.0,<4.6.3 || >4.6.3", markers = "python_version < \"3.11\""}
+
+[package.extras]
+bson = ["pymongo (>=4.4.0)"]
+cbor2 = ["cbor2 (>=5.4.6)"]
+msgpack = ["msgpack (>=1.0.5)"]
+orjson = ["orjson (>=3.9.2)"]
+pyyaml = ["pyyaml (>=6.0)"]
+tomlkit = ["tomlkit (>=0.11.8)"]
+ujson = ["ujson (>=5.7.0)"]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 description = "Cross-platform colored terminal text."
@@ -649,7 +693,18 @@ files = [
     {file = "tomli-2.0.1.tar.gz", hash = "sha256:de526c12914f0c550d15924c62d72abc48d6fe7364aa87328337a31007fe8a4f"},
 ]
 
+[[package]]
+name = "typing-extensions"
+version = "4.10.0"
+description = "Backported and Experimental Type Hints for Python 3.8+"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475"},
+    {file = "typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb"},
+]
+
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "4d1bba94d56fd1189f4be972329d4f0ff775d521ff9aa87939cfa6b140291ed2"
+content-hash = "ef462b34dac0cf61ffb320d0478abe54325261c310778869b8bb4b5c3b8344f6"

@@ -23,6 +23,7 @@ prompt-toolkit = "^3.0.43"
 six = "^1.16.0"
 sphinx = "^7.2.6"
 sphinx-rtd-theme = "^2.0.0"
+watchdog = "^4.0.0"
 
 
 [tool.poetry.scripts]

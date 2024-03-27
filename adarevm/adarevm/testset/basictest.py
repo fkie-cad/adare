@@ -5,7 +5,7 @@ import attrs
 import re
 
 # internal imports
-from adarevm.testset.teststatus import TestStatus
+from adarelib.types import Event, TestResult, TestEvent
 from adarelib.customyaml.customtags import YamlCustomTag
 from adarevm.event import EventSystem
 
@@ -117,6 +117,17 @@ class BasicTest:
         if regex:
             return re.sub(regex_expr, lambda match: resolve_var_in_match_regex(match, variables), string)
         return re.sub(regex_expr, lambda match: resolve_var_in_match_string(match, variables), string)
+
+    def log_event(self, event: Event):
+        self.eventsystem.log(event)
+
+    def log_test_event(self, result: TestResult):
+        self.log_event(TestEvent(
+            test_name=self.name,
+            result=result
+        ))
+        log.info(f'test {self.name} finished with result {result}')
+
 
     def test(self):
         """

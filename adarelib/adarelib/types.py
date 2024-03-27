@@ -3,11 +3,11 @@ from typing import Union, Literal, Optional
 import attrs
 from datetime import datetime
 
-# internal imports
-import adare.config as config
+import adarelib.config as config
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -46,6 +46,26 @@ class OsInfo:
 
 
 @attrs.define
+class CopyData:
+    source: str
+    destination: str
+
+
+@attrs.define
+class DownloadData:
+    url: str
+    destination: str
+
+
+@attrs.define
+class Disk:
+    name: str
+    size: int
+    mountpoint: str
+    filesystem: str
+
+
+@attrs.define
 class EnvironmentMetadata:
     """
     class to store the configuration of an environment
@@ -53,13 +73,7 @@ class EnvironmentMetadata:
     name: Optional[str]
     vagrantbox: str
     os: OsInfo
-    # resolution: str = config.DEFAULT_RESOLUTION
-    pause_after_gui_automation: str = config.DEFAULT_PAUSE_AFTERGUIAUTOMATION
-    idle_after_os_starts: str = config.DEFAULT_START_OS_IDLE
-    # settings: list = attrs.Factory(list)
-    usbdevices: list[UsbDevice] = attrs.Factory(list)
     postsetupinstallations: list[PostsetupInstallations] = attrs.Factory(list)
-    # gui: bool = True
     description: str = attrs.Factory(str)
 
 
@@ -329,6 +343,7 @@ class ExperimentMetadata:
     smb: Optional[SMBConfiguration] = None
     nfs: Optional[NFSConfiguration] = None
     usb: list[UsbDevice] = attrs.Factory(list)
+    disk: list[Disk] = attrs.Factory(list)
     description: str = attrs.Factory(str)
 
     def fix_smb_users(self):
@@ -339,7 +354,6 @@ class ExperimentMetadata:
             for share in self.smb.shares:
                 if share.user not in self.smb.users:
                     self.smb.add_user(share.user)
-
 
 
 @attrs.define
@@ -401,12 +415,6 @@ class CommandEnd(Event):
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
 
 
-@attrs.define
-class TestStart(Event):
-    test_name: str
-    category: str = 'test'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-
 
 @attrs.define
 class TestResult:
@@ -415,10 +423,47 @@ class TestResult:
 
 
 @attrs.define
-class TestEnd(Event):
+class TestEvent(Event):
     test_name: str
     result: TestResult
     category: str = 'test'
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+
+
+@attrs.define
+class GuiEvent(Event):
+    pass
+
+
+@attrs.define
+class GuiFindEvent(GuiEvent):
+    text: bool
+    objective: str
+    success: bool
+    category: str = 'gui.find'
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+
+
+@attrs.define
+class GuiClickEvent(GuiEvent):
+    clicktype: str
+    modifiers: list[str]
+    success: bool
+    category: str = 'gui.click'
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+
+
+@attrs.define
+class GuiKeypressEvent(GuiEvent):
+    keys: list[str]
+    category: str = 'gui.keypress'
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+
+
+@attrs.define
+class GuiIdleEvent(GuiEvent):
+    seconds: int
+    category: str = 'gui.idle'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
 
 

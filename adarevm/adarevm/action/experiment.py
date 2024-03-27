@@ -13,7 +13,8 @@ from adarelib.helperfunctions.text import slugify
 from adarelib.helperfunctions.yaml import dict_to_yaml, yaml_to_dict
 import adarevm.config as config
 from adarevm.testset.testset import Testset
-from adarevm.event import EventSystem, ActionEvent
+from adarevm.event import EventSystem
+from adarelib.types import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent
 
 # logging
 import logging
@@ -25,25 +26,25 @@ class Experiment:
     description = None
     vars_tmp_file: Path = config.VARIABLES_FILE
     img_folder: Path = None
-    vars: dict
+    variables: dict
     status: str = 'success'
     template_match_files: dict
     text_match_file: Path
     tessdata_path: Path
     testset: Testset
-    event_system: EventSystem
+    eventsystem: EventSystem
 
-    def __init__(self, img_folder: Path, tessdata_folder: Path, testset: Testset, event_system):
+    def __init__(self, img_folder: Path, tessdata_folder: Path, testset: Testset, eventsystem: EventSystem):
         self.img_folder = img_folder
-        self.__load_vars()
         self.guibot = GuiBot()
         log.info(f'GuiBot Object created with display controller(dc) backend {str(type(self.guibot.dc_backend).__name__)} and  computer vision (cv) backend  {str(type(self.guibot.cv_backend).__name__)}')
         self.guibot.add_path(self.img_folder.as_posix())
+        # self.guibot.cv_backend.synchronize_backend("tesserocr", "ocr")
         self.template_match_files = {}
         self.text_match_files = None
         self.tessdata_folder = tessdata_folder
         self.testset = testset
-        self.event_system = event_system
+        self.eventsystem = eventsystem
 
     def prepare(self):
         """
@@ -163,23 +164,6 @@ class Experiment:
         except guibot.errors.FindError:
             return None
 
-    def __load_vars(self):
-        """
-        loads the variables from the variables file
-        :return:
-        """
-        try:
-            self.vars = yaml_to_dict(self.vars_tmp_file)
-        except FileNotFoundError:
-            self.vars = {}
-
-    def __save_vars(self):
-        """
-        saves the variables to the variables file
-        :return:
-        """
-        dict_to_yaml(self.vars_tmp_file, self.vars)
-
     def save_time(self, timestamp_var_name: str):
         """
         saves the current time to the variables file
@@ -187,11 +171,10 @@ class Experiment:
         :return:
         """
         key = f'TIMESTAMP.{timestamp_var_name}'
-        if key in self.vars.keys():
+        if key in self.variables.keys():
             log.error(f'time can\'t be saved because key {key} is already existing in the variables file')
             return
-        self.vars[key] = datetime.now(timezone.utc).astimezone().strftime(config.TIMESTAMP_FORMAT)
-        self.__save_vars()
+        self.variables[key] = datetime.now(timezone.utc).astimezone().strftime(config.TIMESTAMP_FORMAT)
 
     def save_variable(self, name: str, value: str):
         """
@@ -203,14 +186,13 @@ class Experiment:
         key = f'{name}'
         forbidden_keys = [f'TIMESTAMP.{key}']
         for k in forbidden_keys:
-            if k in self.vars.keys():
+            if k in self.variables.keys():
                 log.error(f'key {k} does exist in variable file and therefore key {name} can NOT be added to the storage')
                 return
-        if key in self.vars.keys():
+        if key in self.variables.keys():
             log.error(f'value {value} can\'t be saved because key {key} is already existing in the variables file')
             return
-        self.vars[key] = value
-        self.__save_vars()
+        self.variables[key] = value
 
     def run_test(self, name: str):
         """
@@ -218,7 +200,7 @@ class Experiment:
         :param name: name of the test
         :return:
         """
-        self.testset.test(name)
+        self.testset.test(name, self.variables)
 
     def run_tests(self, names: list[str]):
         """
@@ -234,13 +216,50 @@ class Experiment:
         runs all tests
         :return:
         """
-        self.testset.testall()
+        self.testset.testall(self.variables)
 
-    def event(self, name: str, description: str):
-        self.event_system.log(
-            ActionEvent(
-                name=name,
-                description=description
+    def click(self, target_or_location: str, modifiers = None):
+        match = self.guibot.click(target_or_location, modifiers=modifiers)
+        self.eventsystem.log(
+            GuiClickEvent(
+                clicktype='left', modifiers=modifiers, success=bool(match)
+            )
+        )
+        return match
+
+    def right_click(self, target_or_location: str, modifiers = None):
+        match = self.guibot.right_click(target_or_location, modifiers=modifiers)
+        self.eventsystem.log(
+            GuiClickEvent(
+                clicktype='right', modifiers=modifiers, success=bool(match)
+            )
+        )
+        return match
+
+    def double_click(self, target_or_location, modifiers = None):
+        match = self.guibot.double_click(target_or_location, modifiers=modifiers)
+        self.eventsystem.log(
+            GuiClickEvent(
+                clicktype='double', modifiers=modifiers, success=bool(match)
+            )
+        )
+        return match
+
+    def press_keys(self, keys):
+        self.guibot.press_keys(keys)
+        if type(keys) is str:
+            keys = [keys]
+        self.eventsystem.log(
+            GuiKeypressEvent(
+                keys=keys
+            )
+        )
+
+    def idle(self, timeout: int):
+        self.guibot.idle(timeout)
+        self.eventsystem.log(
+            GuiIdleEvent(
+                seconds=timeout
             )
         )
 
@@ -275,10 +294,3 @@ class Experiment:
         else:
             log.info(f'({" ".join(command)}) exited successfully.')
         return ret
-
-    def run(self):
-        """
-        runs the gui automation experiment
-        :return:
-        """
-        pass

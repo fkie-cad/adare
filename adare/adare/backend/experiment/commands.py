@@ -1,13 +1,16 @@
 # external imports
 from pathlib import Path
-import jinja2
 import uuid
+from datetime import datetime
+import threading
+from watchdog.observers import Observer
+import time
 
 # internal imports
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 import adare.backend.experiment.database as experiment_database
 from adare.backend.experiment.exceptions import ExperimentDirectoryAlreadyExistsError, ExperimentDirectoryDoesNotExistError
-from adarelib.exceptions import LoggedException, LoggedErrorException
+from adarelib.exceptions import LoggedException
 from adare.backend.project.directory import ProjectDirectory
 from adare.backend.experiment.scripts import create_installations_script, create_packagedump_script, create_run_script
 from adarelib.experimentconfig import ExperimentConfig
@@ -16,8 +19,10 @@ from adare.config.configdirectory import TEMPLATES_DIR
 from adare.backend.script_creation.Scriptmanager import ScriptManager
 from adare.backend.script_creation.Script import Script
 from adare.vagrantapi.vagrantfile import VagrantFile, VagrantMachine
-from adare.vagrantapi.exceptions import VagrantFileCreationError
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
+from adarelib.helperfunctions.string import make_string_path_safe
+from adarelib.breakpoint import BreakPoint, BreakpointReceiveHandler
+from adare.backend.experiment.event import EventHandler
 
 # configure logging
 import logging
@@ -98,11 +103,11 @@ def __create_vagrantfile(vg_vm_name: str, experiment_run_directory: ExperimentRu
         shared_root_directory_vm,
     )
 
-    if environment_platform == 'windows':
+    if environment_platform == 'linux':
         vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_install_script)
         vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_run_script)
         vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_packagedump_script)
-    elif environment_platform == 'linux':
+    elif environment_platform == 'windows':
         vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_install_script, privileged=True, powershell_elevated_interactive=False)
         vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_run_script, privileged=True, powershell_elevated_interactive=True)
         vg_machine.add_shell_provisioner_path(experiment_run_directory.wrapper_packagedump_script, privileged=True, powershell_elevated_interactive=True)
@@ -118,6 +123,25 @@ def __cleanup_experiment_run(experiment_run_directory: ExperimentRunDirectory):
     experiment_run_directory.clean()
 
 
+def __watch_for_breakpoints(vagrant_box_vm: VagrantBoxVM, experimentrun_uuid: str, run_directory: Path, bp_directory: Path, breakpoints: list[str] = None):
+    bp_handler = BreakpointReceiveHandler(breakpoints)
+    event_handler = EventHandler(experimentrun_uuid)
+    observer = Observer()
+    observer.schedule(event_handler, run_directory.as_posix(), recursive=False)
+    observer.schedule(bp_handler, bp_directory.as_posix(), recursive=True)
+    observer.start()
+    try:
+        while vagrant_box_vm.should_watch:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        vagrant_box_vm.destroy()
+    finally:
+        observer.stop()
+        observer.join()
+        log.info(f'watching for file creations in {bp_directory.as_posix()} stopped')
+
+
+
 def experiment_run(project_path: Path, experiment_name: str, environment_name: str, breakpoints: list[str] = None, break_all: bool = False):
     project_directory = ProjectDirectory(project_path)
     experiment_directory: ExperimentDirectory = ExperimentDirectory(
@@ -129,6 +153,10 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     # check integrity of the used testfunction
 
     # check integrity of the used environment
+
+    bp_name = 'after_integrity_checks'
+    if break_all or (breakpoints and (bp_name in breakpoints)):
+        BreakPoint(bp_name)
 
     # get environment uuid
     environment_uuid = experiment_database.get_environment_uuid(project_path, environment_name)
@@ -157,7 +185,8 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
         img=experiment_directory.get_path_relative_to_shared_directory('img', shared_root_directory_host, shared_root_directory_vm).as_posix(),
         logfile=experiment_run_directory.get_path_relative_to_shared_directory('log_file', shared_root_directory_host, shared_root_directory_vm).as_posix(),
         eventfile=experiment_run_directory.get_path_relative_to_shared_directory('event_file', shared_root_directory_host, shared_root_directory_vm).as_posix(),
-        statusfile=experiment_run_directory.get_path_relative_to_shared_directory('status_file', shared_root_directory_host, shared_root_directory_vm).as_posix()
+        statusfile=experiment_run_directory.get_path_relative_to_shared_directory('status_file', shared_root_directory_host, shared_root_directory_vm).as_posix(),
+        breakpoint_directory=experiment_run_directory.get_path_relative_to_shared_directory('breakpoint_directory', shared_root_directory_host, shared_root_directory_vm).as_posix(),
     )
     experiment_run_directory.create_run_config(run_config_file)
 
@@ -171,12 +200,13 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     installation_script = create_installations_script(experiment_run_directory, environment_uuid, templates_experiment_scripts)
     packagedump_script = create_packagedump_script(experiment_run_directory, templates_experiment_scripts)
     run_script = create_run_script(
-        run_config_file=experiment_run_directory.get_path_relative_to_shared_directory('run_config_file', shared_root_directory_host, shared_root_directory_vm),
         experimentrun_directory=experiment_run_directory,
-        adarevm_directory=project_directory.get_path_relative_to_shared_directory('adarevm', shared_root_directory_host, shared_root_directory_vm),
+        project_directory=project_directory,
         path_directories=paths_to_add,
         template_directory=templates_experiment_scripts,
-        script_suffix=script_suffix
+        script_suffix=script_suffix,
+        shared_root_directory_host=shared_root_directory_host,
+        shared_root_directory_vm=shared_root_directory_vm
     )
     wrapper_template = templates_experiment_scripts / f'run_script_wrapper{script_suffix}'
 
@@ -197,7 +227,9 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
 
     # create Vagrantfile
     experimentrun_uuid = str(uuid.uuid4())
-    vm_name = f'{environment_name}{experiment_name}{experimentrun_uuid}'
+    experimentrun_uuid_str = make_string_path_safe(experimentrun_uuid)
+
+    vm_name = f'{environment_name}{experiment_name}{experimentrun_uuid_str}'
     vagrantfile: VagrantFile = __create_vagrantfile(
         vm_name,
         experiment_run_directory,
@@ -213,9 +245,32 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     box = VagrantBoxVM.fromVagrantFileObject(experiment_run_directory.path, vagrantfile, log_file=experiment_run_directory.log_file, vm_name=experiment_run_directory.path.name)
 
     # create experiment run in database
+    experiment_run_uuid = experiment_database.create_experiment_run(
+        experiment_name,
+        environment_name,
+        project_path.name,
+        experiment_run_directory
+    )
 
-    # run box
-    box.run(debug=False)
+    bp_name = 'before_box_start'
+    if break_all or (breakpoints and (bp_name in breakpoints)):
+        BreakPoint(bp_name).trigger()
+
+    bp_name = 'before_box_destroy'
+    debug = bool(break_all or (breakpoints and (bp_name in breakpoints)))
+
+    timestamp_start = datetime.now()
+    # update experiment run in database
+    experiment_database.update_experiment_run_start(experiment_run_uuid, timestamp_start)
+    threading.Thread(target=box.run, kwargs={'debug': debug}).start()
+    __watch_for_breakpoints(box, experimentrun_uuid, experiment_run_directory.path, experiment_run_directory.breakpoint_directory, breakpoints)
+    timestamp_end = datetime.now()
+    duration = timestamp_end - timestamp_start
+    log.info(f'experiment run {experiment_run_uuid} finished after {duration}')
+
+    bp_name = 'after_box_termination'
+    if break_all or (breakpoints and (bp_name in breakpoints)):
+        BreakPoint(bp_name).trigger()
 
     # collect results
 

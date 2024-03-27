@@ -16,7 +16,10 @@ log = logging.getLogger(__name__)
 def import_basictest_subclasses(directory: Path) -> dict:
     testdict = {}
 
-    for file in directory.glob('*.py'):
+    for testfunction_dir in directory.iterdir():
+        file = testfunction_dir / f'{testfunction_dir.name}.py'
+        if not (testfunction_dir / f'{testfunction_dir.name}.py').exists():
+            continue
         module = import_module_from_pyfile(file)
         testdict[file.stem] = {}
 
@@ -29,24 +32,32 @@ def import_basictest_subclasses(directory: Path) -> dict:
     return testdict
 
 
-def check_if_tests_exist(testset: TestsetFile, testfunction_collection: dict):
-    # todo: change here since testfunction collection is more nested
+def get_testclass_from_testfunction(testfunction: str, testfunction_collection: dict):
+    if '.' not in testfunction:
+        return testfunction_collection['standard'].get(testfunction)
+    testfunction_list, testfunction = testfunction.split('.', 1)
+    return testfunction_collection[testfunction_list].get(testfunction)
+
+
+def get_missing_testfunctions(testset: TestsetFile, testfunction_collection: dict):
     return [
         test.type
         for test in testset.tests
-        if test.type not in testfunction_collection
+        if not get_testclass_from_testfunction(
+            test.type, testfunction_collection
+        )
     ]
 
 
 def structure_tests(testset: TestsetFile, testfunction_collection: dict) -> (dict, dict):
-    if check_if_tests_exist(testset, testfunction_collection):
+    if get_missing_testfunctions(testset, testfunction_collection):
         raise ValueError('testset contains tests that are not supported by the testfunction collection')
 
     structure_error_dict = {}
     tests = {}
 
     for test in testset.tests:
-        testclass = testfunction_collection[test.type]
+        testclass = get_testclass_from_testfunction(test.type, testfunction_collection)
         try:
             testclass_instance = cattrs.structure(attrs.asdict(test), testclass)
         except cattrs.errors.ClassValidationError as e:

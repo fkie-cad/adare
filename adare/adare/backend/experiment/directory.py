@@ -26,6 +26,7 @@ class ExperimentRunDirectory(Directory):
     path: Path
     log_directory: Path
     scripts_directory: Path
+    breakpoint_directory: Path
     # testsetfile: Path
     # actionfile: Path
     # testfunction_directory: Path
@@ -51,6 +52,8 @@ class ExperimentRunDirectory(Directory):
         super().__init__(project_directory.run / experiment / datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
         self.log_directory = self.path / 'logs'
         self.scripts_directory = self.path / 'scripts'
+        self.breakpoint_directory = self.path / 'breakpoints'
+        self.status_directory = self.path / 'status'
         # self.testfunction_directory = self.path / 'testfunctions'
         # self.testsetfile = self.path / 'testset.yml'
         # self.actionfile = self.path / 'action.py'
@@ -76,6 +79,8 @@ class ExperimentRunDirectory(Directory):
         self.path.mkdir(parents=False)
         self.scripts_directory.mkdir(parents=False)
         self.log_directory.mkdir(parents=False)
+        self.breakpoint_directory.mkdir(parents=False)
+        self.status_directory.mkdir(parents=False)
         # self.testfunction_directory.mkdir(parents=False)
 
     def create_run_config(self, experiment_config: ExperimentConfig):

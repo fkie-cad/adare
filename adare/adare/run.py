@@ -118,6 +118,9 @@ def main():
     experiment_run = experiment_subparsers.add_parser('run', help='run the experiment in a given environment')
     experiment_run.add_argument('experiment', help='name of the experiment to run')
     experiment_run.add_argument('environment', help='name of the environment where the experiment should be run')
+    experiment_run.add_argument('--breakpoints', '-b', nargs='*', default=[],
+                                help='name of the breakpoints to stop the experiment at')
+    experiment_run.add_argument('--break-all', '-ba', action='store_true', help='run the experiment in debug mode')
     experiment_run.set_defaults(func=lambda args: exec_with_error_printing(exec_experiment_run, args))
 
     # commands: adare testfunction ...

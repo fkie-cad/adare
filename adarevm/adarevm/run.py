@@ -1,4 +1,5 @@
 # external imports
+import logging
 from pathlib import Path
 from typing import Type
 import argparse
@@ -21,6 +22,9 @@ import logging as log
 def setup_logging(arguments, commandline, logfile: Path):
     logger.setup_logger(logfile=logfile)
     log.info(f'COMMAND: {" ".join(commandline)}')
+    # set logging level of guibot.finder to ERROR
+    guibot_finder_logger = logging.getLogger('guibot.finder')
+    guibot_finder_logger.setLevel(logging.ERROR)
 
 
 def _load_action_from_file(experiment_file: Path) -> Type[Experiment]:
@@ -62,23 +66,15 @@ def main():
     # get experiment class
     ExperimentClass = _load_action_from_file(Path(config.action))
     experiment = ExperimentClass(
-        tessdata_folder=Path(config.tessdata),
+        tessdata_folder=Path(config.tessdata).absolute(),
         img_folder=Path(config.img),
         testset=testset,
-        event_system=event_system,
+        eventsystem=event_system,
     )
 
-    try:
-        experiment.prepare()
-    except Exception as e:
-        event_system.save()
-        raise e
+    experiment.prepare()
     log.debug(f'preparation of experiment {experiment.__class__} done')
-    try:
-        experiment.run()
-    except Exception as e:
-        event_system.save()
-        raise e
+    experiment.run()
     log.debug(f'experiment {experiment.__class__} finished')
 
 
