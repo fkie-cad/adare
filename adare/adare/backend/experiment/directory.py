@@ -88,7 +88,6 @@ class ExperimentRunDirectory(Directory):
         dict_to_yaml(self.run_config_file, data)
 
 
-
 class ExperimentDirectory(Directory):
     path: Path
     img: Path

@@ -1,4 +1,5 @@
 # external imports
+import threading
 from pathlib import Path
 from typing import Optional
 import vagrant
@@ -63,7 +64,7 @@ class VagrantBoxVM:
         """
         return cls(vagrantdirectory_path, log_file, vm_name=vm_name)
 
-    def run(self, debug: bool = False) -> int:
+    def run(self, debug: bool = False, ctrlc_event: threading.Event = None) -> int:
         try:
             self.__clean_up_virtualbox()
         except OSError as e:
@@ -76,7 +77,7 @@ class VagrantBoxVM:
             ) from e
 
         try:
-            self.up()
+            self.up(ctrlc_event)
         except subprocess.CalledProcessError as e:
             raise VagrantBoxRunError(
                 log,
@@ -95,12 +96,15 @@ class VagrantBoxVM:
         self.destroy()
         return 0
 
-    def up(self):
+    def up(self, ctrlc_event: threading.Event = None):
         self.should_watch = True
         self.vagrant = vagrant.Vagrant(self.vagrantfile_path.as_posix(), quiet_stdout=False, quiet_stderr=False)
 
         log_file_handle = self.log_file.open('w') if self.log_file else None
         for line in self.vagrant.up(stream_output=True):
+            if ctrlc_event and ctrlc_event.is_set():
+                self.destroy()
+                raise KeyboardInterrupt('vagrant up was interrupted by the user')
             log.debug(line.rstrip())
             if self.log_file:
                 log_file_handle.write(line)
@@ -141,6 +145,7 @@ class VagrantBoxVM:
             if vm_path.is_dir():
                 shutil.rmtree(vm_path)
                 log.info(f'left over files ({vm_path}) in VirtualBox got deleted')
+
 
 
 

@@ -22,9 +22,9 @@ import logging as log
 def setup_logging(arguments, commandline, logfile: Path):
     logger.setup_logger(logfile=logfile)
     log.info(f'COMMAND: {" ".join(commandline)}')
-    # set logging level of guibot.finder to ERROR
-    guibot_finder_logger = logging.getLogger('guibot.finder')
-    guibot_finder_logger.setLevel(logging.ERROR)
+    # # set logging level of guibot.finder to ERROR
+    # guibot_finder_logger = logging.getLogger('guibot.finder')
+    # guibot_finder_logger.setLevel(logging.ERROR)
 
 
 def _load_action_from_file(experiment_file: Path) -> Type[Experiment]:

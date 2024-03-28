@@ -19,6 +19,7 @@ class VagrantMachine:
     options: dict
     provisioners: list[dict]
     usbdevices: list[dict]
+    resolution: tuple
     additional_vboxmanage: list[dict]
     networks: list[dict]
     nat_port_forwarding: list[dict]
@@ -239,12 +240,19 @@ class VagrantMachine:
         """
         self.options['ssh_shell'] = shh_shell
 
-    # def change_resolution(self, x, y, bpp=32):
-    #     self.options['virtualbox_resolution'] = {
-    #         'x': x,
-    #         'y': y,
-    #         'bpp': bpp
-    #     }
+    def set_resolution(self, x, y):
+        """
+        set the resolution of the vm
+
+        :param x: x resolution
+        :param y: y resolution
+        :return:
+        """
+        self.options['resolution'] = {
+            'x': x,
+            'y': y
+        }
+
 
     def change_communicator(self, communicator: str):
         """
@@ -274,18 +282,20 @@ class VagrantMachine:
             log.error("usbfilter is missing a filter")
             return -1
 
-        usbfilter = dict()
-        vboxmanage_cmdline = '["usbfilter", "add", "0", "--target", :id, "--name","' + name + '"'
+        usbfilter = {}
+        vboxmanage_cmdline = (
+            f'["usbfilter", "add", "0", "--target", :id, "--name","{name}"'
+        )
         if vendor_id:
-            vboxmanage_cmdline += ', "--vendorid", "' + vendor_id + '"'
+            vboxmanage_cmdline += f', "--vendorid", "{vendor_id}"'
         if product_id:
-            vboxmanage_cmdline += ', "--productid", "' + product_id + '"'
+            vboxmanage_cmdline += f', "--productid", "{product_id}"'
         if manufacturer:
-            vboxmanage_cmdline += ', "--manufacturer", "' + manufacturer + '"'
+            vboxmanage_cmdline += f', "--manufacturer", "{manufacturer}"'
         if product:
-            vboxmanage_cmdline += ', "--product", "' + product + '"'
+            vboxmanage_cmdline += f', "--product", "{product}"'
         if serial_number:
-            vboxmanage_cmdline += ', "--serialnumber", "' + serial_number + '"'
+            vboxmanage_cmdline += f', "--serialnumber", "{serial_number}"'
         vboxmanage_cmdline += ']'
         usbfilter['vboxmanagecommand'] = vboxmanage_cmdline
         self.usbdevices.append(usbfilter)
@@ -383,19 +393,13 @@ class VagrantFile:
             loader=FileSystemLoader(vagrantfile_template.parent),
             autoescape=select_autoescape()
         )
-        self.machines = dict()
-        if options:
-            self.options = options
-        else:
-            self.options = dict()
+        self.machines = {}
+        self.options = options or {}
 
 
     def add_machine(self, machine: VagrantMachine, order: int = -1):
         if order < 0:
-            if len(self.machines) == 0:
-                order = 0
-            else:
-                order = max(self.machines.keys()) + 1
+            order = 0 if len(self.machines) == 0 else max(self.machines.keys()) + 1
         self.machines[order] = machine
         if 'machines' not in self.options.keys():
             self.options['machines'] = []
@@ -418,13 +422,12 @@ class VagrantFile:
 
         vagrantfile_template = self.jinja2.get_template("VagrantfileMultiMachine")
 
-        f = open(destination.as_posix(), mode="w")
-        f.write(
-            vagrantfile_template.render(
-                self.options
+        with open(destination.as_posix(), mode="w") as f:
+            f.write(
+                vagrantfile_template.render(
+                    self.options
+                )
             )
-        )
-        f.close()
         return 0
 
     def disable_virtualbox_guestautoupdate(self):

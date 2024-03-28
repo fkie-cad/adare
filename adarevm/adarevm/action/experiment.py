@@ -149,6 +149,12 @@ class Experiment:
         else:
             log.error(f'provided image {image} does not exits')
 
+        self.eventsystem.log(
+            GuiFindEvent(
+                objective=image_name, success=bool(match_objects), text=False
+            )
+        )
+
         return match_objects
 
     def find_text(self, text: str) -> list[guibot.match.Match] or None:
@@ -160,7 +166,13 @@ class Experiment:
         textfile = self.__create_textfile(text)
         stepsfile = self.__create_steps_file_text(textfile)
         try:
-            return self.guibot.find_all(stepsfile.name)
+            elements = self.guibot.find_all(stepsfile.name)
+            self.eventsystem.log(
+                GuiFindEvent(
+                    objective=text, success=bool(elements), text=True
+                )
+            )
+            return elements
         except guibot.errors.FindError:
             return None
 

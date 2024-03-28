@@ -25,6 +25,7 @@ Vagrant.configure("2") do |config|
                 {% if machine.virtualbox_modifyvm_usbehci_on %}vb.customize ["modifyvm", :id, "--usbehci", "on"]{% endif %}
                 {% for usb in machine.usbdevices -%}# usbname: {{ usb.name }}
                 vb.customize {{ usb.vboxmanagecommand }}{%- endfor %}
+                {% if machine.resolution %}vb.customize ["setextradata", :id, "GUI\/LastGuestSizeHint", "{{machine.resolution.x}},{{machine.resolution.y}}"]{% endif %}
             end
             {% for network in machine.virtualbox_networks -%}
             {{ machine.name }}.vm.network "{{ network.vgname }}"{% for option in network.details -%},{{ option.key }}: "{{ option.value }}"{%- endfor %}

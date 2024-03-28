@@ -62,3 +62,13 @@ class MountNetworkDriveScript(Script):
 class SaveInstalledPackagesScript(Script):
     def __init__(self, name: str, source_directory: Path, render_wrapper: bool = False):
         super().__init__(name, source_directory, render_wrapper=render_wrapper)
+
+
+class SetScreenResolutionScript(Script):
+    def __init__(self, name: str, source_directory: Path, resolution: tuple, render_wrapper: bool = False):
+        super().__init__(name, source_directory, render_wrapper=render_wrapper)
+        var = {
+            'x': resolution[0],
+            'y': resolution[1]
+        }
+        self.update_variables(var)
