@@ -4,7 +4,7 @@ from pathlib import Path
 # internal imports
 from adare.backend.script_creation.Script import Script
 from adare.backend.script_creation.scripts import PostsetupInstallationsScript, SaveInstalledPackagesScript, \
-    RunExperimentScript
+    RunExperimentScript, SetScreenResolutionScript
 import adare.backend.experiment.database as experiment_database
 from adarelib.types import PostsetupInstallations
 from adare.config import SCRIPTS_SUFFIX
@@ -36,7 +36,7 @@ def create_packagedump_script(experiment_run_directory: ExperimentRunDirectory, 
 
 
 def create_run_script(experimentrun_directory: ExperimentRunDirectory, project_directory: ProjectDirectory,
-                      path_directories: list[Path], template_directory: Path, script_suffix: str, shared_root_directory_host: Path, shared_root_directory_vm: Path) -> Script:
+                      path_directories: list[Path], template_directory: Path, script_suffix: str, shared_root_directory_host: Path, shared_root_directory_vm: Path) -> RunExperimentScript:
     return RunExperimentScript(
         name=f'run{script_suffix}',
         source_directory=template_directory,

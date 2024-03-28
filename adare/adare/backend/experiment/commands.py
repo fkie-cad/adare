@@ -84,7 +84,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
         log.info(f'experiment {experiment_name} created')
 
 
-def __create_vagrantfile(vg_vm_name: str, experiment_run_directory: ExperimentRunDirectory, environment_uuid: str, shared_root_directory_vm: Path, shared_root_directory_host: Path, template_directory: Path, script_suffix: str) -> VagrantFile:
+def __create_vagrantfile(vg_vm_name: str, experiment_run_directory: ExperimentRunDirectory, environment_uuid: str, shared_root_directory_vm: Path, shared_root_directory_host: Path, template_directory: Path, script_suffix: str, resolution=(1920,1080)) -> VagrantFile:
     vg_machine = VagrantMachine(vg_vm_name)
     vg_file = VagrantFile()
 
@@ -97,6 +97,7 @@ def __create_vagrantfile(vg_vm_name: str, experiment_run_directory: ExperimentRu
 
     vg_machine.enable_gui()
     vg_file.disable_virtualbox_guestautoupdate()
+    vg_machine.set_resolution(resolution[0], resolution[1])
 
     vg_machine.add_synced_folder(
         shared_root_directory_host,
@@ -123,7 +124,7 @@ def __cleanup_experiment_run(experiment_run_directory: ExperimentRunDirectory):
     experiment_run_directory.clean()
 
 
-def __watch_for_breakpoints(vagrant_box_vm: VagrantBoxVM, experimentrun_uuid: str, run_directory: Path, bp_directory: Path, breakpoints: list[str] = None):
+def __watch_for_breakpoints(vagrant_box_vm: VagrantBoxVM, experimentrun_uuid: str, run_directory: Path, bp_directory: Path, ctrlc_event: threading.Event, breakpoints: list[str] = None):
     bp_handler = BreakpointReceiveHandler(breakpoints)
     event_handler = EventHandler(experimentrun_uuid)
     observer = Observer()
@@ -134,12 +135,12 @@ def __watch_for_breakpoints(vagrant_box_vm: VagrantBoxVM, experimentrun_uuid: st
         while vagrant_box_vm.should_watch:
             time.sleep(1)
     except KeyboardInterrupt:
-        vagrant_box_vm.destroy()
+        # send KeyboardInterrupt to thread executing the box
+        ctrlc_event.set()
     finally:
         observer.stop()
         observer.join()
         log.info(f'watching for file creations in {bp_directory.as_posix()} stopped')
-
 
 
 def experiment_run(project_path: Path, experiment_name: str, environment_name: str, breakpoints: list[str] = None, break_all: bool = False):
@@ -262,8 +263,9 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     timestamp_start = datetime.now()
     # update experiment run in database
     experiment_database.update_experiment_run_start(experiment_run_uuid, timestamp_start)
-    threading.Thread(target=box.run, kwargs={'debug': debug}).start()
-    __watch_for_breakpoints(box, experimentrun_uuid, experiment_run_directory.path, experiment_run_directory.breakpoint_directory, breakpoints)
+    ctrlc_event = threading.Event()
+    threading.Thread(target=box.run, kwargs={'debug': debug, 'ctrlc_event': ctrlc_event}).start()
+    __watch_for_breakpoints(box, experimentrun_uuid, experiment_run_directory.path, experiment_run_directory.breakpoint_directory, ctrlc_event, breakpoints)
     timestamp_end = datetime.now()
     duration = timestamp_end - timestamp_start
     log.info(f'experiment run {experiment_run_uuid} finished after {duration}')
