@@ -536,37 +536,19 @@ class ActionEvent(Event):
     description = Column(String)
 
 
-class CommandStartEvent(Event):
-    __tablename__ = 'command_start_event'
+class CommandEvent(Event):
+    __tablename__ = 'command_event'
     __mapper_args__ = {
-        'polymorphic_identity': 'command_start_event',
+        'polymorphic_identity': 'command_event',
     }
     id = Column(Integer, ForeignKey('event.id'), primary_key=True)
     command_name = Column(String)
 
 
-class CommandEndEvent(Event):
-    __tablename__ = 'command_end_event'
+class TestEvent(Event):
+    __tablename__ = 'test_event'
     __mapper_args__ = {
-        'polymorphic_identity': 'command_end_event',
-    }
-    id = Column(Integer, ForeignKey('event.id'), primary_key=True)
-    command_name = Column(String)
-
-
-class TestStartEvent(Event):
-    __tablename__ = 'test_start_event'
-    __mapper_args__ = {
-        'polymorphic_identity': 'test_start_event',
-    }
-    id = Column(Integer, ForeignKey('event.id'), primary_key=True)
-    test_name = Column(String)
-
-
-class TestEndEvent(Event):
-    __tablename__ = 'test_end_event'
-    __mapper_args__ = {
-        'polymorphic_identity': 'test_end_event',
+        'polymorphic_identity': 'test_event',
     }
     id = Column(Integer, ForeignKey('event.id'), primary_key=True)
     test_name = Column(String)
@@ -577,7 +559,7 @@ class TestEndEvent(Event):
         return str(self.test_name)
 
     def __repr__(self):
-        return f"<TestEndEvent(test_name='{self.test_name}',result='{self.result}')>"
+        return f"<TestEvent(test_name='{self.test_name}',result='{self.result}')>"
 
 
 class EventLog(SerializerMixin, Base):

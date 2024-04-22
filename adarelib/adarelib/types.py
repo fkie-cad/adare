@@ -1,6 +1,7 @@
 # external imports
 from typing import Union, Literal, Optional
 import attrs
+import cattrs
 from datetime import datetime
 
 import adarelib.config as config
@@ -391,6 +392,8 @@ class Event:
     # action or test
     category: str
     timestamp: str
+    id_in_run: int
+    status: str
 
 
 @attrs.define
@@ -399,21 +402,17 @@ class ActionEvent(Event):
     description: str
     category: str = 'action'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+    id_in_run: int = -1
+    status = 'started'
 
 
 @attrs.define
-class CommandStart(Event):
+class CommandEvent(Event):
     command_name: str
     category: str = 'command'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-
-
-@attrs.define
-class CommandEnd(Event):
-    command_name: str
-    category: str = 'command'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-
+    id_in_run: int = -1
+    status = 'started'
 
 
 @attrs.define
@@ -425,9 +424,11 @@ class TestResult:
 @attrs.define
 class TestEvent(Event):
     test_name: str
-    result: TestResult
+    result: TestResult = None
     category: str = 'test'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+    id_in_run: int = -1
+    status = 'started'
 
 
 @attrs.define
@@ -439,18 +440,26 @@ class GuiEvent(Event):
 class GuiFindEvent(GuiEvent):
     text: bool
     objective: str
-    success: bool
+    success: int = -1
     category: str = 'gui.find'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+    id_in_run: int = -1
+    status = 'started'
+
+
 
 
 @attrs.define
 class GuiClickEvent(GuiEvent):
     clicktype: str
     modifiers: list[str]
-    success: bool
+    success: int = -1
     category: str = 'gui.click'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+    id_in_run: int = -1
+    status = 'started'
+
+
 
 
 @attrs.define
@@ -458,6 +467,9 @@ class GuiKeypressEvent(GuiEvent):
     keys: list[str]
     category: str = 'gui.keypress'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+    id_in_run: int = -1
+    status = 'started'
+
 
 
 @attrs.define
@@ -465,6 +477,8 @@ class GuiIdleEvent(GuiEvent):
     seconds: int
     category: str = 'gui.idle'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+    id_in_run: int = -1
+    status = 'started'
 
 
 @attrs.define
@@ -474,3 +488,24 @@ class EventSystemData:
     start_time: str
     end_time: str
     events: list[Event] = attrs.field(default=attrs.Factory(list))
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        events = []
+        for event in data['events']:
+            supported_events = {
+                'action': ActionEvent,
+                'test': TestEvent,
+                'gui.find': GuiFindEvent,
+                'gui.click': GuiClickEvent,
+                'gui.keypress': GuiKeypressEvent,
+                'gui.idle': GuiIdleEvent,
+                'command': CommandEvent,
+            }
+            if event['category'] in supported_events:
+                event_class = supported_events[event['category']]
+                events.append(cattrs.structure(event, event_class))
+            else:
+                log.warning(f'event category {event["category"]} is not supported')
+        data['events'] = events
+        return cattrs.structure(data, cls)

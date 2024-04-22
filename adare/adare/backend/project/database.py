@@ -3,7 +3,7 @@ from pathlib import Path
 
 # internal imports
 from adare.database.api.project import ProjectDbApi
-from adare.database.models.experiments import Project
+from adare.database.models.experiment import Project
 
 
 # configure logging

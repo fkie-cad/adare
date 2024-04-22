@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime
 
 # internal imports
-from adare.database.models.experiments import Project, Experiment
+from adare.database.models.experiment import Project, Experiment
 from adare.database.api.experiment import ExperimentApi
 from adare.database.api.environment import EnvironmentDbApi
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory

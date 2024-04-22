@@ -26,7 +26,7 @@ from adare.vagrantapi.vagrantbox import VagrantBoxVM
 from adare.vagrantapi.vagrantfile import VagrantFile, VagrantMachine
 from adare.database.api.experiment import ExperimentApi
 from adare.database.api.project import ProjectManagementApi
-from adare.database.models.experiments import Environment as EnvironmentModel
+from adare.database.models.experiment import Environment as EnvironmentModel
 from adare.backend.setupfile import load_setupfile, load_experiment_metadata
 from adare.networkdrive.attrs_classes import SMBShare, NFSShare
 

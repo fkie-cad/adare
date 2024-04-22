@@ -5,7 +5,7 @@ from pathlib import Path
 # internal imports
 from adare.networkdrive.networkdrive import NetworkDrive
 from adare.networkdrive.attrs_classes import SMBConfiguration, NFSConfiguration, SMBUser, SMBShare, NFSShare
-from adare.database.models.experiments import Experiment
+from adare.database.models.experiment import Experiment
 from adare.vagrantapi.vagrantfile import VagrantMachine
 
 # configure logging
