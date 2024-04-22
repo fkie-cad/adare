@@ -5,7 +5,7 @@ from pathlib import Path
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.models.experiments import OsInfo, Project, Environment, Base as ExperimentBase
+from adare.database.models.experiment import OsInfo, Project, Environment, Base as ExperimentBase
 from adare.database.api.database import DatabaseApi
 from adare.database.exceptions import DatabaseProjectCreationError
 

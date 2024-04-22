@@ -6,7 +6,7 @@ import ast
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.models.experiments import TestFunction, TestFunctionFile, TestParameter, Test, \
+from adare.database.models.experiment import TestFunction, TestFunctionFile, TestParameter, Test, \
     Base as ExperimentBase, AbstractTest
 from adare.database.api.experiment import ExperimentApi
 from adare.database.exceptions import DatabaseTestfunctionCreationError, DatabaseTestfunctionRemovalError, \

@@ -11,8 +11,7 @@ log = logging.getLogger(__name__)
 def read_event_file(event_file: Path) -> EventSystemData:
     with open(event_file, 'r') as f:
         data = f.read()
-        log.warning(data)
-        return cattrs.structure(data, EventSystemData)
+        return EventSystemData.from_dict(data)
 
 
 class EventHandler(FileSystemEventHandler):
@@ -24,11 +23,10 @@ class EventHandler(FileSystemEventHandler):
     def on_modified(self, event: FileSystemEvent) -> None:
         eventssystemdata = None
         if event.src_path.endswith('events.yml'):
-            print('changed')
             try:
                 eventssystemdata = read_event_file(Path(event.src_path))
             except cattrs.errors.ClassValidationError as e:
                 log.error(f'Error reading event file: {e}')
                 log.error(e, exc_info=True)
-            print(eventssystemdata)
+        print(eventssystemdata)
 

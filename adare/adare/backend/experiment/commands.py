@@ -22,7 +22,7 @@ from adare.vagrantapi.vagrantfile import VagrantFile, VagrantMachine
 from adare.vagrantapi.vagrantbox import VagrantBoxVM
 from adarelib.helperfunctions.string import make_string_path_safe
 from adarelib.breakpoint import BreakPoint, BreakpointReceiveHandler
-from adare.backend.experiment.event import EventHandler
+from adare.backend.watcher.event import EventHandler
 
 # configure logging
 import logging
@@ -124,7 +124,7 @@ def __cleanup_experiment_run(experiment_run_directory: ExperimentRunDirectory):
     experiment_run_directory.clean()
 
 
-def __watch_for_breakpoints(vagrant_box_vm: VagrantBoxVM, experimentrun_uuid: str, run_directory: Path, bp_directory: Path, ctrlc_event: threading.Event, breakpoints: list[str] = None):
+def __install_watchers(vagrant_box_vm: VagrantBoxVM, experimentrun_uuid: str, run_directory: Path, bp_directory: Path, ctrlc_event: threading.Event, breakpoints: list[str] = None):
     bp_handler = BreakpointReceiveHandler(breakpoints)
     event_handler = EventHandler(experimentrun_uuid)
     observer = Observer()
@@ -140,7 +140,7 @@ def __watch_for_breakpoints(vagrant_box_vm: VagrantBoxVM, experimentrun_uuid: st
     finally:
         observer.stop()
         observer.join()
-        log.info(f'watching for file creations in {bp_directory.as_posix()} stopped')
+        log.info(f'all watchers stopped')
 
 
 def experiment_run(project_path: Path, experiment_name: str, environment_name: str, breakpoints: list[str] = None, break_all: bool = False):
@@ -265,7 +265,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     experiment_database.update_experiment_run_start(experiment_run_uuid, timestamp_start)
     ctrlc_event = threading.Event()
     threading.Thread(target=box.run, kwargs={'debug': debug, 'ctrlc_event': ctrlc_event}).start()
-    __watch_for_breakpoints(box, experimentrun_uuid, experiment_run_directory.path, experiment_run_directory.breakpoint_directory, ctrlc_event, breakpoints)
+    __install_watchers(box, experimentrun_uuid, experiment_run_directory.path, experiment_run_directory.breakpoint_directory, ctrlc_event, breakpoints)
     timestamp_end = datetime.now()
     duration = timestamp_end - timestamp_start
     log.info(f'experiment run {experiment_run_uuid} finished after {duration}')

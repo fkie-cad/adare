@@ -5,7 +5,7 @@ from pathlib import Path
 # internal imports
 from adarelib.types import EnvironmentMetadata
 from adare.database.api.environment import EnvironmentDbApi
-from adare.database.models.experiments import Environment
+from adare.database.models.experiment import Environment
 from adare.backend.environment.exceptions import EnvironmentDeletionError, EnvironmentDoesNotExistInDatabase, \
     EnvironmentAlreadyExists, EnvironmentUpdateError
 

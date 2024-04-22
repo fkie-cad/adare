@@ -14,7 +14,7 @@ from adarelib.helperfunctions.yaml import dict_to_yaml, yaml_to_dict
 import adarevm.config as config
 from adarevm.testset.testset import Testset
 from adarevm.event import EventSystem
-from adarelib.types import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent
+from adarelib.types import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent, GuiClickEventStart
 
 # logging
 import logging

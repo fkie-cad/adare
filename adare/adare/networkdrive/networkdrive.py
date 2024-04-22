@@ -221,7 +221,6 @@ class NetworkDrive:
 
         return vg_machine
 
-
     def cleanup(self):
         """
         clean up the files/directory's in order to create the networkdrive VM

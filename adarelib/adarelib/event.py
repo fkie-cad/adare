@@ -24,9 +24,12 @@ class EventSystem:
             events=[]
         )
 
-    def log(self, event: Event):
+    def log(self, event: Event) -> int:
+        if event.id_in_run < 0:
+            event.id_in_run = len(self.data.events)
         self.data.events.append(event)
         self.save()
+        return event.id_in_run
 
     def save(self):
         self.data.end_time = datetime.now().strftime(TIMESTAMP_FORMAT)
