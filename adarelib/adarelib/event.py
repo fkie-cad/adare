@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 class EventSystem:
     path: Path
     data: EventSystemData
+    stage: str
 
     def __init__(self, path: Path, experiment_name: str):
         self.path = path
@@ -23,13 +24,13 @@ class EventSystem:
             end_time='',
             events=[]
         )
+        self.stage = 'init'
 
-    def log(self, event: Event) -> int:
-        if event.id_in_run < 0:
-            event.id_in_run = len(self.data.events)
+    def log(self, event: Event) -> str:
+        event.stage = self.stage
         self.data.events.append(event)
         self.save()
-        return event.id_in_run
+        return event.uuid
 
     def save(self):
         self.data.end_time = datetime.now().strftime(TIMESTAMP_FORMAT)

@@ -2,6 +2,8 @@ from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from pathlib import Path
 import cattrs
 
+from adarelib.helperfunctions.yaml import yaml_to_dict
+from adare.database.api.event import EventDbApi
 from adarelib.types import EventSystemData
 
 import logging
@@ -9,9 +11,8 @@ log = logging.getLogger(__name__)
 
 
 def read_event_file(event_file: Path) -> EventSystemData:
-    with open(event_file, 'r') as f:
-        data = f.read()
-        return EventSystemData.from_dict(data)
+    data: dict = yaml_to_dict(event_file)
+    return EventSystemData.from_dict(data)
 
 
 class EventHandler(FileSystemEventHandler):
@@ -28,5 +29,7 @@ class EventHandler(FileSystemEventHandler):
             except cattrs.errors.ClassValidationError as e:
                 log.error(f'Error reading event file: {e}')
                 log.error(e, exc_info=True)
-        print(eventssystemdata)
+        if eventssystemdata:
+            with EventDbApi() as db:
+                db.update_events(self.experimentrun_uuid, eventssystemdata)
 

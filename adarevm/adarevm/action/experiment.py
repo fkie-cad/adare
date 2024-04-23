@@ -3,18 +3,19 @@ import contextlib
 from subprocess import Popen, PIPE
 from datetime import datetime, timezone
 from guibot.guibot import GuiBot
+from guibot.match import Match
 import guibot.match
 import guibot.errors
 from guibot.finder import Finder, TemplateFinder, TextFinder
 from pathlib import Path
-from adarelib.helperfunctions.text import slugify
 
 # internal imports
-from adarelib.helperfunctions.yaml import dict_to_yaml, yaml_to_dict
+from adarelib.helperfunctions.text import slugify
+from adarevm.shell import execute_on_shell
 import adarevm.config as config
 from adarevm.testset.testset import Testset
-from adarevm.event import EventSystem
-from adarelib.types import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent, GuiClickEventStart
+from adarelib.event import EventSystem
+from adarelib.types import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent, CommandEvent, ActionEvent, Event, ErrorEvent
 
 # logging
 import logging
@@ -22,7 +23,6 @@ log = logging.getLogger(__name__)
 
 
 class Experiment:
-
     description = None
     vars_tmp_file: Path = config.VARIABLES_FILE
     img_folder: Path = None
@@ -45,6 +45,7 @@ class Experiment:
         self.tessdata_folder = tessdata_folder
         self.testset = testset
         self.eventsystem = eventsystem
+        self.variables = {}
 
     def prepare(self):
         """
@@ -53,6 +54,15 @@ class Experiment:
         In cases where a shell/powershell command should be run the method exec_shellcommand.
         """
         pass
+
+    def run(self):
+        """
+        This method should be overwritten in child classes.
+        """
+        pass
+
+    def log(self, event: Event):
+        self.eventsystem.log(event)
 
     def create_match_file_from_finder(self, name: str, finder: Finder):
         """
@@ -71,7 +81,6 @@ class Experiment:
         if match_file not in self.template_match_files.keys():
             self.__create_textfinder_matcher(match_file, similarity)
         return match_file
-
 
     def __get_match_file_name(self, similarity):
         similarity_100 = int(similarity * 100)
@@ -136,6 +145,11 @@ class Experiment:
         :param similarity_steps: the steps to decrease the similarity by
         :return:
         """
+        self.log(
+            GuiFindEvent(
+                objective=image_name, text=False, status="running"
+            )
+        )
         match_objects = []
         image = (self.img_folder/image_name)
         if image.is_file():
@@ -149,9 +163,9 @@ class Experiment:
         else:
             log.error(f'provided image {image} does not exits')
 
-        self.eventsystem.log(
+        self.log(
             GuiFindEvent(
-                objective=image_name, success=bool(match_objects), text=False
+                objective=image_name, success=bool(match_objects), text=False, status="done"
             )
         )
 
@@ -163,17 +177,27 @@ class Experiment:
         :param text: string to be found
         :return:
         """
+        self.log(
+            GuiFindEvent(
+                objective=text, text=True, status="running"
+            )
+        )
         textfile = self.__create_textfile(text)
         stepsfile = self.__create_steps_file_text(textfile)
         try:
             elements = self.guibot.find_all(stepsfile.name)
             self.eventsystem.log(
                 GuiFindEvent(
-                    objective=text, success=bool(elements), text=True
+                    objective=text, success=bool(elements), text=True, status="done"
                 )
             )
             return elements
         except guibot.errors.FindError:
+            self.eventsystem.log(
+                GuiFindEvent(
+                    objective=text, success=False, text=True, status="done"
+                )
+            )
             return None
 
     def save_time(self, timestamp_var_name: str):
@@ -230,29 +254,48 @@ class Experiment:
         """
         self.testset.testall(self.variables)
 
-    def click(self, target_or_location: str, modifiers = None):
+    def error(self, name: str, message: str):
+        """
+        logs an error
+        :param name: name of the error
+        :param message: message of the error
+        :return:
+        """
+        log.error(f'{name}: {message}')
+        self.log(
+            ErrorEvent(
+                error_name=name, error=message
+            )
+        )
+
+    def __target_or_location_to_str(self, target_or_location):
+        if type(target_or_location) is Match:
+            return f'({target_or_location.x}, {target_or_location.y})'
+        return str(target_or_location)
+
+    def click(self, target_or_location, modifiers=None):
         match = self.guibot.click(target_or_location, modifiers=modifiers)
         self.eventsystem.log(
             GuiClickEvent(
-                clicktype='left', modifiers=modifiers, success=bool(match)
+                clicktype='left', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status="done"
             )
         )
         return match
 
-    def right_click(self, target_or_location: str, modifiers = None):
+    def right_click(self, target_or_location, modifiers=None):
         match = self.guibot.right_click(target_or_location, modifiers=modifiers)
         self.eventsystem.log(
             GuiClickEvent(
-                clicktype='right', modifiers=modifiers, success=bool(match)
+                clicktype='right', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status="done"
             )
         )
         return match
 
-    def double_click(self, target_or_location, modifiers = None):
+    def double_click(self, target_or_location, modifiers=None):
         match = self.guibot.double_click(target_or_location, modifiers=modifiers)
         self.eventsystem.log(
             GuiClickEvent(
-                clicktype='double', modifiers=modifiers, success=bool(match)
+                clicktype='double', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status="done"
             )
         )
         return match
@@ -263,46 +306,30 @@ class Experiment:
             keys = [keys]
         self.eventsystem.log(
             GuiKeypressEvent(
-                keys=keys
+                keys=keys, status="done"
             )
         )
 
     def idle(self, timeout: int):
+        self.eventsystem.log(
+            GuiIdleEvent(
+                seconds=timeout,
+                status="running"
+            )
+        )
         self.guibot.idle(timeout)
         self.eventsystem.log(
             GuiIdleEvent(
-                seconds=timeout
+                seconds=timeout,
+                status="done"
             )
         )
 
-    def exec_shellcommand(self, command: list, cwd=None):
+    def exec_shellcommand(self, command: list, cwd: Path = None):
         """
         executes a shell command
         :param command: list of command and arguments
         :param cwd: current working directory where the command should be executed
         :return:
         """
-
-        log.info("run command '" + " ".join(command) + "'")
-        if not cwd:
-            proc = Popen(command, stdout=PIPE, stderr=PIPE)
-        else:
-            proc = Popen(command, stdout=PIPE, stderr=PIPE, cwd=cwd)
-        stdout, stderr = proc.communicate()
-        ret = {
-            'returncode': proc.returncode,
-            'stdout': stdout.decode("utf-8"),
-            'stderr': stderr.decode("utf-8")
-        }
-        log.debug("'" + " ".join(command) + "' exited with returncode: " + str(ret['returncode']))
-        if ret['stdout']:
-            log.debug(
-                "'" + " ".join(command) + "' exited with stdout: " + ret['stdout'])
-        if ret['stderr']:
-            log.debug(
-                "'" + " ".join(command) + "' exited with stderr: " + ret['stderr'])
-        if ret['returncode'] != 0:
-            log.error(" ".join(command) + " exited with an error (returncode " + str(ret['returncode']) + ")")
-        else:
-            log.info(f'({" ".join(command)}) exited successfully.')
-        return ret
+        return execute_on_shell(command, cwd=cwd, event_system=self.eventsystem)

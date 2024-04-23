@@ -55,7 +55,7 @@ class deletefile(Experiment):
             return 'failed'
 
         log.info(f'experiment {type(self).__name__} done')
-        return self.status
+        return 'success'
 
 
 if __name__ == '__main__':

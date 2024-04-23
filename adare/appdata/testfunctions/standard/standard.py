@@ -28,6 +28,7 @@ class FileExists(BasicTest):
     name: str
     params: FileExistsParameter
     description: Optional[str] = ''
+    variables: Optional[dict] = None
 
     def test(self):
         if Path(self.params.dst).is_file():
@@ -40,7 +41,7 @@ class FileExists(BasicTest):
                 status=TestFailed(),
                 details=[f'file with path {self.params.dst} does not exist']
             )
-        self.log_test_event(result)
+        return result
 
 
 @attrs.define
@@ -56,6 +57,7 @@ class FileDoesNotExist(BasicTest):
     name: str
     params: FileDoesNotExistParameter
     description: Optional[str] = ''
+    variables: Optional[dict] = None
 
     def test(self):
         if not Path(self.params.dst).is_file():
@@ -67,7 +69,7 @@ class FileDoesNotExist(BasicTest):
                 status=TestFailed(),
                 details=[f'file with path {self.params.dst} does exist']
             )
-        self.log_test_event(result)
+        return result
 
 
 
@@ -84,6 +86,7 @@ class DirExists(BasicTest):
     name: str
     params: DirExistsParameter
     description: Optional[str] = ''
+    variables: Optional[dict] = None
 
     def test(self):
         if Path(self.params.dst).is_dir():
@@ -95,7 +98,7 @@ class DirExists(BasicTest):
                 status=TestFailed(),
                 details=[f'directory with path {self.params.dst} does not exist']
             )
-        self.log_test_event(result)
+        return result
 
 
 @attrs.define
@@ -111,6 +114,7 @@ class DirDoesNotExist(BasicTest):
     name: str
     params: DirDoesNotExistParameter
     description: Optional[str] = ''
+    variables: Optional[dict] = None
 
     def test(self):
         if not Path(self.params.dst).is_dir():
@@ -122,7 +126,7 @@ class DirDoesNotExist(BasicTest):
                 status=TestFailed(),
                 details=[f'directory with path {self.params.dst} does exist']
             )
-        self.log_test_event(result)
+        return result
 
 
 @attrs.define
@@ -139,6 +143,7 @@ class DirContent(BasicTest):
     name: str
     params: DirContentParameter
     description: Optional[str] = ''
+    variables: Optional[dict] = None
 
     def test(self):
         dst, status = self.resolve_globfilepath(self.params.dst)
@@ -147,8 +152,7 @@ class DirContent(BasicTest):
                 status=TestFailed(),
                 details=[f'directory with path {self.params.dst} can\'t be used, because no unambiguous directory could be identified (because {status})']
             )
-            self.log_test_event(result)
-            return
+            return result
         log.debug(f'dst directory {dst} will be used for test {self.name}')
 
         dir_content = [str(p) for p in Path(dst).iterdir()]
@@ -166,14 +170,12 @@ class DirContent(BasicTest):
                 status=TestFailed(),
                 details=details
             )
-            self.log_test_event(result)
-            return
+            return result
 
         result = TestResult(
             status=TestSuccess()
         )
-        self.log_test_event(result)
-        return
+        return  result
 
 
 @attrs.define
@@ -190,6 +192,7 @@ class FileContentMatchesRegex(BasicTest):
     name: str
     params: FileContentMatchesRegexParameter
     description: Optional[str] = ''
+    variables: Optional[dict] = None
 
     def test(self):
         dst, status = self.resolve_globfilepath(self.params.dst)
@@ -198,8 +201,7 @@ class FileContentMatchesRegex(BasicTest):
                 status=TestFailed(),
                 details=[f'file with path {self.params.dst} can\'t be used, because no unambiguous file could be identified (because {status})']
             )
-            self.log_test_event(result)
-            return
+            return result
         log.debug(f'dst file {dst} will be used for test {self.name}')
         try:
             with open(dst, 'r') as f:
@@ -209,8 +211,7 @@ class FileContentMatchesRegex(BasicTest):
                 status=TestFailed(),
                 details=[f'file with path {self.params.dst} does not exist']
             )
-            self.log_test_event(result)
-            return
+            return result
         if re.search(self.params.regex, data):
             result = TestResult(
                 status=TestSuccess()
@@ -220,8 +221,7 @@ class FileContentMatchesRegex(BasicTest):
                 status=TestFailed(),
                 details=['file content does not match regex expression'],
             )
-        self.log_test_event(result)
-        return
+        return result
 
 
 def _row_match(row, comparison_list):
@@ -251,6 +251,7 @@ class CsvContainsLineMatchingRegex(BasicTest):
     name: str
     params: CsvContainsLineMatchingRegexParameter
     description: Optional[str] = ''
+    variables: Optional[dict] = None
 
     def test(self):
         dst, status = self.resolve_globfilepath(self.params.dst)
@@ -259,8 +260,7 @@ class CsvContainsLineMatchingRegex(BasicTest):
                 status=TestFailed(),
                 details=[f'file with path {self.params.dst} can\'t be used, because no unambiguous file could be identified']
             )
-            self.log_test_event(result)
-            return
+            return result
 
         log.debug(f'dst file {dst} will be used for test {self.name}')
         comparison_list = []
@@ -278,18 +278,15 @@ class CsvContainsLineMatchingRegex(BasicTest):
                         result = TestResult(
                             status=TestSuccess()
                         )
-                        self.log_test_event(result)
-                        return
+                        return result
             result = TestResult(
                 status=TestFailed(),
                 details=[f'entry {self.params.entry} does not exist in file']
             )
-            self.log_test_event(result)
-            return
+            return result
         except FileNotFoundError:
             result = TestResult(
                 status=TestFailed(),
                 details=[f'file with path {self.params.dst} does not exist']
             )
-            self.log_test_event(result)
-            return
+            return result

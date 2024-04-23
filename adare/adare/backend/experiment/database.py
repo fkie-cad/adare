@@ -67,7 +67,6 @@ def create_experiment_run(experiment_name: str, environment_name: str, project_n
             experiment=experiment,
             environment=environment,
             path=experimentrun_directory.path,
-            event_log=experimentrun_directory.event_file,
             logfile_vagrant=experimentrun_directory.vagrant_log,
             logfile_run_experiment=experimentrun_directory.run_log,
             logfile_installed_packages=experimentrun_directory.packagedump_log,

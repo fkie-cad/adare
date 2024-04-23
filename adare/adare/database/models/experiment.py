@@ -1,10 +1,8 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, UniqueConstraint, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, Boolean
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
 from datetime import datetime
-from adarelib.helperfunctions.hash import hash_file_sha256, combine_hashes
-from sqlalchemy import event
 from sqlalchemy_serializer import SerializerMixin
 
 Base = declarative_base()
@@ -506,17 +504,20 @@ class Experiment(SerializerMixin, Base):
         return str(self.name)
 
     def __repr__(self):
-        return f"<Experiment(name='{self.name}',publish_status='{self.publish_status}')>"
+        return f"<Experiment(name='{self.name}')>"
 
 
 class Event(SerializerMixin, Base):
     __tablename__ = 'event'
     RELATIONSHIPS_TO_DICT = True
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(CHAR(32), primary_key=True, default=lambda: str(uuid.uuid4()))
     event_type = Column(String)
-    event_log_id = Column(Integer, ForeignKey('eventlog.id'))
-    event_log = relationship("EventLog", backref=backref("events", cascade="all, delete-orphan"))
+    experiment_run_id = Column(String, ForeignKey('experimentrun.uuid'))
+    experiment_run = relationship("ExperimentRun", backref=backref("events", cascade="all, delete-orphan"))
+    status = Column(String)
+    error = Column(String)
+    stage = Column(String)
 
     timestamp = Column(DateTime)
 
@@ -531,7 +532,7 @@ class ActionEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'action_event',
     }
-    id = Column(Integer, ForeignKey('event.id'), primary_key=True)
+    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
     name = Column(String)
     description = Column(String)
 
@@ -541,8 +542,10 @@ class CommandEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'command_event',
     }
-    id = Column(Integer, ForeignKey('event.id'), primary_key=True)
-    command_name = Column(String)
+    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    command = Column(String)
+    returncode = Column(Integer, nullable=True)
+    stdout = Column(String, nullable=True)
 
 
 class TestEvent(Event):
@@ -550,9 +553,9 @@ class TestEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'test_event',
     }
-    id = Column(Integer, ForeignKey('event.id'), primary_key=True)
+    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
     test_name = Column(String)
-    result_id = Column(Integer, ForeignKey('result.id'))
+    result_id = Column(Integer, ForeignKey('result.id'), nullable=True)
     result = relationship(Result)
 
     def __str__(self):
@@ -562,14 +565,60 @@ class TestEvent(Event):
         return f"<TestEvent(test_name='{self.test_name}',result='{self.result}')>"
 
 
-class EventLog(SerializerMixin, Base):
-    __tablename__ = 'eventlog'
-    RELATIONSHIPS_TO_DICT = True
+class ErrorEvent(Event):
+    __tablename__ = 'error_event'
+    __mapper_args__ = {
+        'polymorphic_identity': 'error_event',
+    }
+    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    error_name = Column(String)
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    path = Column(String)
-    start_time = Column(DateTime, nullable=True)
-    end_time = Column(DateTime, nullable=True)
+    def __str__(self):
+        return str(self.error)
+
+    def __repr__(self):
+        return f"<ErrorEvent(error='{self.error}')>"
+
+
+class GuiFindEvent(Event):
+    __tablename__ = 'gui_find_event'
+    __mapper_args__ = {
+        'polymorphic_identity': 'gui_find_event',
+    }
+    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    text = Column(Boolean)
+    objective = Column(String)
+    success = Column(Integer)
+
+
+class GuiClickEvent(Event):
+    __tablename__ = 'gui_click_event'
+    __mapper_args__ = {
+        'polymorphic_identity': 'gui_click_event',
+    }
+    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    clicktype = Column(String)
+    modifiers = Column(String)
+    target = Column(String)
+
+
+class GuiKeypressEvent(Event):
+    __tablename__ = 'gui_keypress_event'
+    __mapper_args__ = {
+        'polymorphic_identity': 'gui_keypress_event',
+    }
+    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    keys = Column(String)
+
+
+class GuiIdleEvent(Event):
+    __tablename__ = 'gui_idle_event'
+    __mapper_args__ = {
+        'polymorphic_identity': 'gui_idle_event',
+    }
+    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    seconds = Column(Integer)
+
 
 
 class ExperimentRunFiles(SerializerMixin, Base):
@@ -602,9 +651,6 @@ class ExperimentRun(SerializerMixin, Base):
     environment = relationship(Environment, backref=backref("runs", cascade="all, delete-orphan"))
 
     path = Column(String, nullable=True)
-
-    event_log_id = Column(Integer, ForeignKey('eventlog.id'))
-    event_log = relationship("EventLog", backref=backref("experimentruns", cascade="all, delete-orphan"))
 
     timestamp_start = Column(DateTime, nullable=True)
     timestamp_end = Column(DateTime, nullable=True)

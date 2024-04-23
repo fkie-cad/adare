@@ -1,6 +1,5 @@
 import shutil
 from pathlib import Path
-import tqdm
 import os
 import platform
 

@@ -9,10 +9,12 @@ import sys
 # internal imports
 from adarelib.helperfunctions.yaml import yaml_to_dict
 from adarelib.experimentconfig import ExperimentConfig
-from adarevm.event import EventSystem
+from adarelib.event import EventSystem
+from adarelib.types import ErrorEvent
 from adarevm.testset.testset import Testset
 from adarevm.action.experiment import Experiment
 from adarelib.helperfunctions.module import import_module_from_pyfile
+from adarelib.exceptions import LoggedErrorException
 
 # logging configuration
 from adarelib.logger import logger
@@ -53,29 +55,41 @@ def main():
     setup_logging(args, sys.argv, Path(config.logfile))
 
     event_system = EventSystem(
-        path=Path(config.eventfile),
-        experiment_name=config.experiment,
+            path=Path(config.eventfile),
+            experiment_name=config.experiment,
     )
+    event_system.stage = 'init testset'
+    try:
+        testset = Testset(
+            testfunctions_directory=Path(config.testfunction_directory),
+            testsetfile=Path(config.testset),
+            event_system=event_system
+        )
 
-    testset = Testset(
-        testfunctions_directory=Path(config.testfunction_directory),
-        testsetfile=Path(config.testset),
-        event_system=event_system
-    )
-    
-    # get experiment class
-    ExperimentClass = _load_action_from_file(Path(config.action))
-    experiment = ExperimentClass(
-        tessdata_folder=Path(config.tessdata).absolute(),
-        img_folder=Path(config.img),
-        testset=testset,
-        eventsystem=event_system,
-    )
+        event_system.stage = 'init experiment'
+        # get experiment class
+        ExperimentClass = _load_action_from_file(Path(config.action))
+        experiment = ExperimentClass(
+            tessdata_folder=Path(config.tessdata).absolute(),
+            img_folder=Path(config.img),
+            testset=testset,
+            eventsystem=event_system,
+        )
 
-    experiment.prepare()
-    log.debug(f'preparation of experiment {experiment.__class__} done')
-    experiment.run()
-    log.debug(f'experiment {experiment.__class__} finished')
+        event_system.stage = 'prepare experiment'
+        experiment.prepare()
+        log.debug(f'preparation of experiment {experiment.__class__} done')
+        event_system.stage = 'run experiment'
+        experiment.run()
+        log.debug(f'experiment {experiment.__class__} finished')
+    except LoggedErrorException as e:
+        event_system.log(
+            ErrorEvent(
+                error_name=e.error_name,
+                error=e.message,
+            )
+        )
+        exit(1)
 
 
 

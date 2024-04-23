@@ -2,18 +2,13 @@
 import sqlalchemy
 from pathlib import Path
 from datetime import datetime
-import json
 
 # internal imports
-from adarelib.helperfunctions.pyfileanalyze import PyModuleAnalyzer
-from adarelib.helperfunctions.hash import combine_hashes
 from adare.config.configdirectory import PROG_PARSEANDTEST_DIR
 import adare.config.database as config_database
-from adare.database.models.experiment import ExperimentRunFiles, EventLog, Event, Tag, USBDrive, NFSDrive, SMBDrive, NFSShare, SMBShare, NetworkDriveUser, PostSetupInstallation, TestParameter, TestParameterEntry, Experiment, ExperimentRun, Status, TestFunction, AbstractTest, Test, Command, Result, OsInfo, LogFile, Environment, Project, Base as ExperimentsBase
+from adare.database.models.experiment import ExperimentRunFiles, Tag, TestParameter, TestParameterEntry, Experiment, ExperimentRun, TestFunction, AbstractTest, Command, LogFile, Environment, Base as ExperimentsBase
 from adare.database.api.project import ProjectDbApi
-from adarelib.parsers import parse_testsetfile
 from adarelib.types import TestsetFile as FTestsetFile, Test as FTest
-from adarelib.types import UsbDevice as SetupUsbDevice, SMBConfiguration as SetupSMBConfiguration, NFSConfiguration as SetupNFSConfiguration, NFSShare as SetupNFSShare, SMBShare as SetupSMBShare, ExperimentMetadata
 from adare.backend.experiment.directory import ExperimentDirectory
 from adarelib.exceptions import TestSetFormatError
 
@@ -125,13 +120,6 @@ class ExperimentApi(ProjectDbApi):
             .first()
         )
 
-    def __create_eventlog(self, path: Path) -> EventLog:
-        event_log = EventLog(
-            path=path.as_posix()
-        )
-        self._session.add(event_log)
-        return event_log
-
     def __create_logfile(self, path: Path) -> LogFile:
         logfile = LogFile(
             name=path.name,
@@ -141,13 +129,10 @@ class ExperimentApi(ProjectDbApi):
         return logfile
 
     def create_experiment_run(
-            self, experiment: Experiment, environment: Environment, path: Path, event_log: Path,
+            self, experiment: Experiment, environment: Environment, path: Path,
             logfile_vagrant: Path, logfile_installed_packages: Path, logfile_postsetup_installations: Path,
             logfile_run_experiment: Path,
     ) -> ExperimentRun:
-        event_log = self.__create_eventlog(
-            path=event_log,
-        )
         experiment_run_files = ExperimentRunFiles(
             log_vagrant=self.__create_logfile(logfile_vagrant),
             package_dump=self.__create_logfile(logfile_installed_packages),
@@ -160,7 +145,6 @@ class ExperimentApi(ProjectDbApi):
             experiment=experiment,
             environment=environment,
             path=path.as_posix(),
-            event_log=event_log,
             files=experiment_run_files,
         )
         self._session.add(experiment_run)
@@ -170,7 +154,6 @@ class ExperimentApi(ProjectDbApi):
     def update_experiment_run_start(self, experiment_run_uuid: str, timestamp: datetime):
         experiment_run = self._session.query(ExperimentRun).filter_by(uuid=experiment_run_uuid).first()
         experiment_run.timestamp_start = timestamp
-        experiment_run.event_log.start_time = timestamp
 
     def finish_experiment_run(self, experiment_run_uuid: str, timestamp: datetime):
         experiment_run = self._session.query(ExperimentRun).filter_by(uuid=experiment_run_uuid).first()
