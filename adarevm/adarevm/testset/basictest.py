@@ -5,9 +5,7 @@ import attrs
 import re
 
 # internal imports
-from adarelib.types import Event, TestResult, TestEvent
 from adarelib.customyaml.customtags import YamlCustomTag
-from adarevm.event import EventSystem
 
 # configure logging
 import logging
@@ -88,6 +86,7 @@ class BasicTest:
     name: str
     params: Parameter
     description: Optional[str]
+    variables: Optional[dict]
 
     def resolve_globfilepath(self, globfilepath: str) -> (str, str):
         """
@@ -104,8 +103,8 @@ class BasicTest:
         else:
             return found_files[0], ""
 
-    @staticmethod
-    def resolve_variable_in_string(string: str, variables: dict, regex=False):
+
+    def resolve_variable_in_string(self, string: str, regex=False):
         """
         replace a variable in a string (e.g. test{VARIABLE} with VARIABLE=value -> testvalue)
         :param string: string to replace variables in
@@ -115,19 +114,8 @@ class BasicTest:
         """
         regex_expr = r"{{[ ]*(.*?)[ ]*}}"
         if regex:
-            return re.sub(regex_expr, lambda match: resolve_var_in_match_regex(match, variables), string)
-        return re.sub(regex_expr, lambda match: resolve_var_in_match_string(match, variables), string)
-
-    def log_event(self, event: Event):
-        self.eventsystem.log(event)
-
-    def log_test_event(self, result: TestResult):
-        self.log_event(TestEvent(
-            test_name=self.name,
-            result=result
-        ))
-        log.info(f'test {self.name} finished with result {result}')
-
+            return re.sub(regex_expr, lambda match: resolve_var_in_match_regex(match, self.variables), string)
+        return re.sub(regex_expr, lambda match: resolve_var_in_match_string(match, self.variables), string)
 
     def test(self):
         """

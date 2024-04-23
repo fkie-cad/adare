@@ -3,6 +3,7 @@ from typing import Union, Literal, Optional
 import attrs
 import cattrs
 from datetime import datetime
+import uuid
 
 import adarelib.config as config
 
@@ -392,8 +393,10 @@ class Event:
     # action or test
     category: str
     timestamp: str
-    id_in_run: int
     status: str
+    uuid: str
+    error: str
+    stage: str
 
 
 @attrs.define
@@ -402,17 +405,24 @@ class ActionEvent(Event):
     description: str
     category: str = 'action'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    id_in_run: int = -1
-    status = 'started'
+    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    status = 'running'
+    error: str = ''
+    stage: str = ''
 
 
 @attrs.define
 class CommandEvent(Event):
-    command_name: str
+    name: str
+    command: str
     category: str = 'command'
+    returncode: int = -1
+    stdout: str = ''
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    id_in_run: int = -1
-    status = 'started'
+    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    status = 'running'
+    error: str = ''
+    stage: str = ''
 
 
 @attrs.define
@@ -427,8 +437,21 @@ class TestEvent(Event):
     result: TestResult = None
     category: str = 'test'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    id_in_run: int = -1
-    status = 'started'
+    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    status = 'running'
+    error: str = ''
+    stage: str = ''
+
+
+@attrs.define
+class ErrorEvent(Event):
+    error_name: str
+    category: str = 'error'
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    status: str = ''
+    stage: str = ''
+    error: str = ''
 
 
 @attrs.define
@@ -443,23 +466,23 @@ class GuiFindEvent(GuiEvent):
     success: int = -1
     category: str = 'gui.find'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    id_in_run: int = -1
-    status = 'started'
-
-
+    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    status = 'running'
+    error: str = ''
+    stage: str = ''
 
 
 @attrs.define
 class GuiClickEvent(GuiEvent):
     clicktype: str
     modifiers: list[str]
-    success: int = -1
+    target: str
     category: str = 'gui.click'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    id_in_run: int = -1
-    status = 'started'
-
-
+    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    status = 'running'
+    error: str = ''
+    stage: str = ''
 
 
 @attrs.define
@@ -467,9 +490,10 @@ class GuiKeypressEvent(GuiEvent):
     keys: list[str]
     category: str = 'gui.keypress'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    id_in_run: int = -1
-    status = 'started'
-
+    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    status = 'running'
+    error: str = ''
+    stage: str = ''
 
 
 @attrs.define
@@ -477,8 +501,10 @@ class GuiIdleEvent(GuiEvent):
     seconds: int
     category: str = 'gui.idle'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    id_in_run: int = -1
-    status = 'started'
+    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    status = 'running'
+    error: str = ''
+    stage: str = ''
 
 
 @attrs.define

@@ -3,16 +3,16 @@
 ############################################
 
 # install guibot
-pip3 install guibot
+py -m pip install guibot
 
 # install pyautogui
-pip3 install pyautogui
+py -m pip install pyautogui
 
 # install opencv
-pip3 install opencv-python
+py -m pip install opencv-python
 
 # install tesseract
 choco install --no-progress -y tesseract
 
 # install pytesseract
-pip3 install pytesseract
+py -m pip install pytesseract
