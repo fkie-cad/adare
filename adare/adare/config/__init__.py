@@ -4,7 +4,7 @@ VERSION = "0.0.1"
 PACKAGE = 'adare'
 
 # timestamp format
-TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
+TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%f'
 
 # LOGGING DEFAULTS
 CONSOLEHANDLER = '%(levelprefix)s %(name)s - %(message)s'

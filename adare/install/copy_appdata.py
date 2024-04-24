@@ -40,6 +40,7 @@ IGNORE_PATTERNS = ['venv',
                    '__pycache__',
                    '*.pyc',
                    '.git',
+                   'poetry.lock',
                    ]
 
 if __name__ == '__main__':

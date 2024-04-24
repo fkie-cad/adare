@@ -227,10 +227,10 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     # todo: add network drive and mount scripts
 
     # create Vagrantfile
-    experimentrun_uuid = str(uuid.uuid4())
-    experimentrun_uuid_str = make_string_path_safe(experimentrun_uuid)
+    vagrantfile_uuid = str(uuid.uuid4())
+    vagrantfile_uuid_str = make_string_path_safe(vagrantfile_uuid)
 
-    vm_name = f'{environment_name}{experiment_name}{experimentrun_uuid_str}'
+    vm_name = f'{environment_name}{experiment_name}{vagrantfile_uuid_str}'
     vagrantfile: VagrantFile = __create_vagrantfile(
         vm_name,
         experiment_run_directory,
@@ -265,7 +265,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     experiment_database.update_experiment_run_start(experiment_run_uuid, timestamp_start)
     ctrlc_event = threading.Event()
     threading.Thread(target=box.run, kwargs={'debug': debug, 'ctrlc_event': ctrlc_event}).start()
-    __install_watchers(box, experimentrun_uuid, experiment_run_directory.path, experiment_run_directory.breakpoint_directory, ctrlc_event, breakpoints)
+    __install_watchers(box, experiment_run_uuid, experiment_run_directory.path, experiment_run_directory.breakpoint_directory, ctrlc_event, breakpoints)
     timestamp_end = datetime.now()
     duration = timestamp_end - timestamp_start
     log.info(f'experiment run {experiment_run_uuid} finished after {duration}')

@@ -6,7 +6,7 @@ authors = ["miqsoft <mksaxhandball@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-adarelib = {path = "../adarelib"}
+adarelib = {path = "../adarelib",develop=true}
 python = "^3.10"
 guibot = "^0.50.1"
 pytest-mock = "^3.12.0"
