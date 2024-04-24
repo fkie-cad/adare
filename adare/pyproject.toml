@@ -6,7 +6,7 @@ authors = ["miqsoft <mksaxhandball@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-adarelib = {path = "../adarelib"}
+adarelib = {path = "../adarelib", develop=true}
 python = "^3.10"
 requests = "^2.31.0"
 sqlalchemy = "^2.0.27"

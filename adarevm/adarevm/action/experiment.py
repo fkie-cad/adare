@@ -274,6 +274,8 @@ class Experiment:
         return str(target_or_location)
 
     def click(self, target_or_location, modifiers=None):
+        if not modifiers:
+            modifiers = []
         match = self.guibot.click(target_or_location, modifiers=modifiers)
         self.eventsystem.log(
             GuiClickEvent(
@@ -283,6 +285,8 @@ class Experiment:
         return match
 
     def right_click(self, target_or_location, modifiers=None):
+        if not modifiers:
+            modifiers = []
         match = self.guibot.right_click(target_or_location, modifiers=modifiers)
         self.eventsystem.log(
             GuiClickEvent(
@@ -292,6 +296,8 @@ class Experiment:
         return match
 
     def double_click(self, target_or_location, modifiers=None):
+        if not modifiers:
+            modifiers = []
         match = self.guibot.double_click(target_or_location, modifiers=modifiers)
         self.eventsystem.log(
             GuiClickEvent(
@@ -302,7 +308,7 @@ class Experiment:
 
     def press_keys(self, keys):
         self.guibot.press_keys(keys)
-        if type(keys) is str:
+        if type(keys) is not list:
             keys = [keys]
         self.eventsystem.log(
             GuiKeypressEvent(

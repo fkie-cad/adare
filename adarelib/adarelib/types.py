@@ -13,6 +13,10 @@ import logging
 log = logging.getLogger(__name__)
 
 
+TEST_FAILED = 'failed'
+TEST_SUCCESS = 'success'
+
+
 @attrs.define
 class UsbDevice:
     """
@@ -359,36 +363,6 @@ class ExperimentMetadata:
 
 
 @attrs.define
-class TestStatus:
-    status: str
-
-
-@attrs.define
-class TestFailed(TestStatus):
-    status = attrs.field(default='failed', init=False)
-
-
-@attrs.define
-class TestSuccess(TestStatus):
-    status = attrs.field(default='success', init=False)
-
-
-@attrs.define
-class TestMissingKey(TestStatus):
-    status = attrs.field(default='missing key', init=False)
-
-
-@attrs.define
-class TestSyntaxError(TestStatus):
-    status = attrs.field(default='syntax error', init=False)
-
-
-@attrs.define
-class TestError(TestStatus):
-    status = attrs.field(default='error', init=False)
-
-
-@attrs.define
 class Event:
     # action or test
     category: str
@@ -427,14 +401,14 @@ class CommandEvent(Event):
 
 @attrs.define
 class TestResult:
-    status: TestStatus
+    status: Literal['success', 'failure']
     details: list = attrs.field(default=attrs.Factory(list))
 
 
 @attrs.define
 class TestEvent(Event):
     test_name: str
-    result: TestResult = None
+    result: Optional[TestResult] = None
     category: str = 'test'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
@@ -517,6 +491,8 @@ class EventSystemData:
 
     @classmethod
     def from_dict(cls, data: dict):
+        if not data:
+            return None
         events = []
         for event in data['events']:
             supported_events = {
@@ -534,4 +510,4 @@ class EventSystemData:
             else:
                 log.warning(f'event category {event["category"]} is not supported')
         data['events'] = events
-        return cattrs.structure(data, cls)
+        return cls(**data)

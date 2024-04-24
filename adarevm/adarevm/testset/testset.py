@@ -85,13 +85,12 @@ class Testset:
                 if not self.__check_if_command_already_executed(dependency):
                     self.execute_command(dependency)
         test.variables = variables
-        test.eventsystem = self.event_system
         self.event_system.log(
             TestEvent(
                 test_name=name, status='running'
             )
         )
-        test_result = test.test(variables)
+        test_result = test.test()
         self.event_system.log(
             TestEvent(
                 test_name=name, status='success', result=test_result

@@ -74,6 +74,7 @@ def create_experiment_run(experiment_name: str, environment_name: str, project_n
         )
         return experiment_run.uuid
 
+
 def update_experiment_run_start(experiment_run_uuid: str, timestamp: datetime):
     with ExperimentApi() as api:
         api.update_experiment_run_start(experiment_run_uuid, timestamp)

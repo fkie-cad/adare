@@ -115,22 +115,6 @@ class PostSetupInstallation(SerializerMixin, Base):
         return f"<PostSetupInstallation(name='{self.name}',description='{self.description}',command='{self.command}')>"
 
 
-class Status(SerializerMixin, Base):
-    """
-        Collection of possible status.
-    """
-    __tablename__ = 'status'
-    RELATIONSHIPS_TO_DICT = True
-    serialize_rules = ('-id',)
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True, nullable=False)
-
-    def __str__(self):
-        return str(self.name)
-
-    def __repr__(self):
-        return f"<Status(name='{self.name}')>"
 
 
 class Result(SerializerMixin, Base):
@@ -142,10 +126,9 @@ class Result(SerializerMixin, Base):
     serialize_rules = ('-id', '-status_id')
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    status_id = Column(Integer, ForeignKey('status.id'), nullable=False)
+    status = Column(String)
     details = Column(String, nullable=True)
 
-    status = relationship(Status)
 
     def __str__(self):
         return str(self.status)
@@ -532,7 +515,7 @@ class ActionEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'action_event',
     }
-    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     name = Column(String)
     description = Column(String)
 
@@ -542,7 +525,7 @@ class CommandEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'command_event',
     }
-    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     command = Column(String)
     returncode = Column(Integer, nullable=True)
     stdout = Column(String, nullable=True)
@@ -553,7 +536,7 @@ class TestEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'test_event',
     }
-    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     test_name = Column(String)
     result_id = Column(Integer, ForeignKey('result.id'), nullable=True)
     result = relationship(Result)
@@ -570,7 +553,7 @@ class ErrorEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'error_event',
     }
-    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     error_name = Column(String)
 
     def __str__(self):
@@ -585,7 +568,7 @@ class GuiFindEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'gui_find_event',
     }
-    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     text = Column(Boolean)
     objective = Column(String)
     success = Column(Integer)
@@ -596,7 +579,7 @@ class GuiClickEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'gui_click_event',
     }
-    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     clicktype = Column(String)
     modifiers = Column(String)
     target = Column(String)
@@ -607,7 +590,7 @@ class GuiKeypressEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'gui_keypress_event',
     }
-    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     keys = Column(String)
 
 
@@ -616,9 +599,31 @@ class GuiIdleEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'gui_idle_event',
     }
-    id = Column(Integer, ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     seconds = Column(Integer)
 
+
+class EventFactory:
+    @staticmethod
+    def create_event(event_type, **kwargs):
+        if event_type == 'action':
+            return ActionEvent(**kwargs)
+        elif event_type == 'command':
+            return CommandEvent(**kwargs)
+        elif event_type == 'test':
+            return TestEvent(**kwargs)
+        elif event_type == 'error_event':
+            return ErrorEvent(**kwargs)
+        elif event_type == 'gui.find':
+            return GuiFindEvent(**kwargs)
+        elif event_type == 'gui.click':
+            return GuiClickEvent(**kwargs)
+        elif event_type == 'gui.keypress':
+            return GuiKeypressEvent(**kwargs)
+        elif event_type == 'gui.idle':
+            return GuiIdleEvent(**kwargs)
+        else:
+            raise ValueError(f'Invalid event type: {event_type}')
 
 
 class ExperimentRunFiles(SerializerMixin, Base):
