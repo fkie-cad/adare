@@ -4,7 +4,6 @@ from adare.gui.interfaces.login import LoginIface
 from adare.gui.interfaces.publish import PublishExpIface
 
 
-
 def create_login_dialogs():
     with ui.dialog() as connection_error_dialog, ui.card():
         ui.label('Could not connect to the server.')

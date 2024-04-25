@@ -28,8 +28,6 @@ watchdog = "^4.0.0"
 
 [tool.poetry.scripts]
 adare = "adare.run:main"
-adaretest = "adare.test:main"
-test = "adare.test:main"
 
 [tool.poetry.extras]
 docs = ["Sphinx", "sphinx-rtd-theme"]

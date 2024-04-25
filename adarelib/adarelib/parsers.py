@@ -3,7 +3,8 @@ import cattrs
 from pathlib import Path
 
 # internal imports
-from adarelib.types import ExperimentMetadata, TestsetFile, EnvironmentMetadata
+from adarelib.types.backend import ExperimentMetadata, EnvironmentMetadata
+from adarelib.types.testset import TestsetFile
 from adarelib.exceptions import DataStructuringError
 from adarelib.customyaml.customloader import create_yaml_loader_dumper_inputfiles
 from adarelib.helperfunctions.yaml import yaml_to_dict

@@ -1,6 +1,5 @@
 # external imports
 import contextlib
-from subprocess import Popen, PIPE
 from datetime import datetime, timezone
 from guibot.guibot import GuiBot
 from guibot.match import Match
@@ -15,7 +14,7 @@ from adarevm.shell import execute_on_shell
 import adarevm.config as config
 from adarevm.testset.testset import Testset
 from adarelib.event import EventSystem
-from adarelib.types import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent, CommandEvent, ActionEvent, Event, ErrorEvent
+from adarelib.types.event import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent, CommandEvent, ActionEvent, Event, ErrorEvent
 
 # logging
 import logging

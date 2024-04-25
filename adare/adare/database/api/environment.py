@@ -7,7 +7,7 @@ from pathlib import Path
 import adare.config.database as config_database
 from adare.database.models.experiment import Environment, OsInfo, Experiment, ExperimentRun, Project, PostSetupInstallation
 from adare.database.api.database import DatabaseApi
-from adarelib.types import EnvironmentMetadata, OsInfo as OsInfoAttrs, PostsetupInstallations as PostsetupInstallationsAttrs
+from adarelib.types.backend import EnvironmentMetadata, OsInfo as OsInfoAttrs, PostsetupInstallations as PostsetupInstallationsAttrs
 from adare.database.api.experiment import ExperimentApi
 from adare.database.exceptions import DatabaseProjectNotFoundError
 

@@ -11,7 +11,9 @@ from adare.webappaccess.webapp import check_webserver_availability
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
+
 
 class WebappLogin:
 
@@ -60,7 +62,6 @@ class WebappLogin:
                 user_session_api._session.expunge(user_session)
                 return user_session
 
-
     async def login(self, username, password):
         req_session = aiohttp.ClientSession()
         log.debug(f"Login to webapp as user '{username}'")
@@ -104,7 +105,7 @@ class WebappLogin:
             await req_session.close()
             return False
         header = get_authenticated_request_header(token)
-        async with req_session.post(url, json={'username': username},headers=header) as response:
+        async with req_session.post(url, json={'username': username}, headers=header) as response:
             if response.status == 204:
                 log.debug("Logout successful")
                 self.__remove_user_session(username)

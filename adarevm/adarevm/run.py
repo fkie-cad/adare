@@ -10,7 +10,7 @@ import sys
 from adarelib.helperfunctions.yaml import yaml_to_dict
 from adarelib.experimentconfig import ExperimentConfig
 from adarelib.event import EventSystem
-from adarelib.types import ErrorEvent
+from adarelib.types.event import ErrorEvent
 from adarevm.testset.testset import Testset
 from adarevm.action.experiment import Experiment
 from adarelib.helperfunctions.module import import_module_from_pyfile
