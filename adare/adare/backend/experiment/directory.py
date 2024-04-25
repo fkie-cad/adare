@@ -8,7 +8,8 @@ import attrs
 # internal imports
 from adare.config.configdirectory import TEMPLATES_DIR
 from adarelib.helperfunctions.hash import hash_file_sha256, combine_hashes
-from adarelib.types import ExperimentMetadata, TestsetFile
+from adarelib.types.backend import ExperimentMetadata
+from adarelib.types.testset import TestsetFile
 from adare.backend.experiment.exceptions import ExperimentFileCreationError, ExperimentDirectoryCreationError, \
     ExperimentRemovalError, ExperimentFileMissingError
 from adarelib.parsers import parse_metadata_file, parse_testsetfile

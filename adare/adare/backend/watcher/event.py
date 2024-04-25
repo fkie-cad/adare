@@ -4,7 +4,7 @@ import cattrs
 
 from adarelib.helperfunctions.yaml import yaml_to_dict
 from adare.database.api.event import EventDbApi
-from adarelib.types import EventSystemData
+from adarelib.types.event import EventSystemData
 
 import logging
 log = logging.getLogger(__name__)

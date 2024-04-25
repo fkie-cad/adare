@@ -6,7 +6,7 @@ from adare.backend.script_creation.Script import Script
 from adare.backend.script_creation.scripts import PostsetupInstallationsScript, SaveInstalledPackagesScript, \
     RunExperimentScript, SetScreenResolutionScript
 import adare.backend.experiment.database as experiment_database
-from adarelib.types import PostsetupInstallations
+from adarelib.types.backend import PostsetupInstallations
 from adare.config import SCRIPTS_SUFFIX
 from adare.backend.experiment.directory import ExperimentRunDirectory
 from adare.backend.project.directory import ProjectDirectory

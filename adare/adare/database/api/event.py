@@ -5,7 +5,7 @@ from datetime import datetime
 # internal imports
 from adare.database.models.experiment import EventFactory, Event as ModelEvent, ExperimentRun, Result as ModelResult
 from adare.database.api.experiment import ExperimentApi
-from adarelib.types import EventSystemData
+from adarelib.types.event import EventSystemData
 from adarelib.config import TIMESTAMP_FORMAT
 
 # configure logging

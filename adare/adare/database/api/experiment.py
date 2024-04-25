@@ -8,7 +8,7 @@ from adare.config.configdirectory import PROG_PARSEANDTEST_DIR
 import adare.config.database as config_database
 from adare.database.models.experiment import ExperimentRunFiles, Tag, TestParameter, TestParameterEntry, Experiment, ExperimentRun, TestFunction, AbstractTest, Command, LogFile, Environment, Base as ExperimentsBase
 from adare.database.api.project import ProjectDbApi
-from adarelib.types import TestsetFile as FTestsetFile, Test as FTest
+from adarelib.types.testset import TestsetFile as FTestsetFile, Test as FTest
 from adare.backend.experiment.directory import ExperimentDirectory
 from adarelib.exceptions import TestSetFormatError
 

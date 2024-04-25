@@ -274,8 +274,6 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     if break_all or (breakpoints and (bp_name in breakpoints)):
         BreakPoint(bp_name).trigger()
 
-    # collect results
-
     # cleanup
     #__cleanup_experiment_run(experiment_run_directory)
 

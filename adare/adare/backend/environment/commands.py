@@ -5,7 +5,7 @@ import pandas as pd
 
 # internal imports
 import adare.backend.environment.database as environment_database
-from adarelib.types import EnvironmentMetadata
+from adarelib.types.backend import EnvironmentMetadata
 from adare.backend.project.directory import ProjectDirectory
 from adarelib.helperfunctions.hash import hash_file_sha256
 from adare.config.configdirectory import TEMPLATES_DIR
