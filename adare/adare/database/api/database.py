@@ -27,13 +27,13 @@ class DatabaseApi:
         if not self._session:
             log.error('Could not start sqlalchemy session.')
             return None
-        log.info('Started sqlalchemy session.')
+        log.debug('Started sqlalchemy session.')
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self._session:
             self.__stop_sqlalchemy_session()
-            log.info('Stopped sqlalchemy session.')
+            log.debug('Stopped sqlalchemy session.')
         else:
             log.error('Could not stop sqlalchemy session, because session was not created.')
 

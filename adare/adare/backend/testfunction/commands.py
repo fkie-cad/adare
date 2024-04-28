@@ -1,6 +1,5 @@
 # external imports
 from pathlib import Path
-import shutil
 import pandas as pd
 
 # internal imports
@@ -38,7 +37,7 @@ def testfunction_load(project_path: Path, name: str):
             log,
             message=f'Testfunction {name} does not exist',
         )
-    testfunction_database.load_testfunction_file(testfunction_directory.pythonfile)
+    testfunction_database.load_testfunction_file(project_path, testfunction_directory.pythonfile)
 
 
 def testfunction_list():

@@ -1,12 +1,10 @@
-import importlib
-import importlib.util
 from inspect import isclass
 from pathlib import Path
 import cattrs
 import attrs
 
 from adarevm.testset.basictest import BasicTest
-from adarelib.types import TestsetFile
+from adarelib.types.testset import TestsetFile
 from adarelib.helperfunctions.module import import_module_from_pyfile
 
 import logging

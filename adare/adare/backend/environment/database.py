@@ -1,7 +1,6 @@
 # external imports
 from pathlib import Path
 
-
 # internal imports
 from adarelib.types.backend import EnvironmentMetadata
 from adare.database.api.environment import EnvironmentDbApi
@@ -81,3 +80,16 @@ def delete_environment(environment_uuid: str, force: bool = False):
 def get_environments(project_path: Path = None) -> list[Environment]:
     with EnvironmentDbApi() as db:
         return db.get_environments(project_path)
+
+
+def get_environment_path_by_project_and_name(project_path: Path, environment_name: str) -> Path:
+    with EnvironmentDbApi() as db:
+        if environment := db.get_environment_by_project_and_name(
+            project_path, environment_name
+        ):
+            return Path(environment.file)
+        else:
+            raise EnvironmentDoesNotExistInDatabase(
+                log,
+                f'environment {environment_name} does not exist in the database',
+            )

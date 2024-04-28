@@ -24,3 +24,19 @@ class ExperimentDirectoryDoesNotExistError(LoggedErrorException):
 
 class ExperimentFileMissingError(LoggedErrorException):
     pass
+
+
+class VagrantBoxMissingError(LoggedErrorException):
+    pass
+
+
+class ExperimentIntegrityError(LoggedErrorException):
+    pass
+
+
+class EnvironmentIntegrityError(LoggedErrorException):
+    pass
+
+
+class TestfunctionIntegrityError(LoggedErrorException):
+    pass

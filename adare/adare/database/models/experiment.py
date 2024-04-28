@@ -82,6 +82,12 @@ mapping_abstracttest_tool = Table(
     Column("abstracttest_uuid", ForeignKey("abstracttest.uuid")),
     Column("tool_id", ForeignKey("tool.id")),
 )
+mapping_project_testfunctionfile = Table(
+    "mapping_project_testfunctionfile",
+    Base.metadata,
+    Column("project_id", ForeignKey("project.id")),
+    Column("testfunctionfile_id", ForeignKey("testfunctionfile.id")),
+)
 
 
 class Tag(SerializerMixin, Base):
@@ -113,8 +119,6 @@ class PostSetupInstallation(SerializerMixin, Base):
 
     def __repr__(self):
         return f"<PostSetupInstallation(name='{self.name}',description='{self.description}',command='{self.command}')>"
-
-
 
 
 class Result(SerializerMixin, Base):
@@ -177,7 +181,7 @@ class TestFunctionFile(SerializerMixin, Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
     path = Column(String, unique=True)
-    sha256hash = Column(String, unique=True)
+    sha256hash = Column(String)
     description = Column(String, nullable=True, default=None)
 
     def __str__(self):
@@ -408,6 +412,8 @@ class Project(SerializerMixin, Base):
     description = Column(String)
     path = Column(String, unique=True)
 
+    testfunction_files = relationship(TestFunctionFile, secondary=mapping_project_testfunctionfile, backref='projects')
+
     def __repr__(self):
         return f"<Project(name='{self.name}',description='{self.description}',path='{self.path}')>"
 
@@ -466,7 +472,7 @@ class Experiment(SerializerMixin, Base):
     sha256_metadata = Column(String)
     sha256_bibtex = Column(String, nullable=True)
     sha256_markdown = Column(String, nullable=True)
-    sha256_hash = Column(String, nullable=True)
+    sha256 = Column(String, nullable=True)
 
     in_request = Column(Boolean, default=False)
     published = Column(Boolean, default=False)
@@ -664,8 +670,6 @@ class ExperimentRun(SerializerMixin, Base):
     published = Column(Boolean, default=False)
 
     status = Column(String, default='pending')
-    status_adarevm = Column(String, default='pending')
-    status_vagrant = Column(String, default='pending')
 
     files_id = Column(Integer, ForeignKey('experimentrunfiles.id'))
     files = relationship(ExperimentRunFiles, backref=backref("experimentrun", uselist=False))

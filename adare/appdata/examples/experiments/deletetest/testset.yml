@@ -1,0 +1,7 @@
+name: deletetest
+tests:
+  - name: existencefile
+    description: 'check if file exists'
+    type: file_exists
+    params:
+      dst: 'C:/Users/vagrant/Documents/testfile'

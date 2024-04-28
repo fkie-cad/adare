@@ -156,7 +156,7 @@ class EnvironmentDbApi(ExperimentApi):
         else:
             raise ValueError(f'environment {environment_uuid} not found in database')
 
-    def get_environment(self, name: str, project_name: str):
+    def get_environment(self, name: str, project_name: str) -> Environment:
         if (
             env := self._session.query(Environment)
             .filter_by(name=name)
@@ -165,8 +165,8 @@ class EnvironmentDbApi(ExperimentApi):
             .first()
         ):
             return env
-        else:
-            raise ValueError(f'environment {name} not found in database')
+        log.error(f'environment {name} not found in database')
+        raise None
 
     def get_environment_vagrant_box(self, environment_uuid: str):
         if (
@@ -177,3 +177,16 @@ class EnvironmentDbApi(ExperimentApi):
             return env.vagrantbox
         else:
             raise ValueError(f'environment {environment_uuid} not found in database')
+
+    def get_environment_by_project_and_name(self, project_path: Path, environment_name: str) -> Environment:
+        if (
+            project := self._session.query(Project)
+            .filter(Project.path == project_path.as_posix())
+            .first()
+        ):
+            return self._session.query(Environment).filter_by(name=environment_name, project=project).first()
+        else:
+            raise DatabaseProjectNotFoundError(
+                log,
+                f"Project with path '{project_path}' not found in database -> cannot get environment"
+            )

@@ -10,17 +10,39 @@ from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRu
 
 # configure logging
 import logging
-
 log = logging.getLogger(__name__)
 
 
-def get_latest_experiment_by_project_and_name(project_path: Path, experiment_name: str) -> str | None:
+def get_experiment_by_project_and_name(project_path: Path, experiment_name: str) -> str | None:
     with ExperimentApi() as api:
-        experiment = api.get_latest_experiment_by_project_and_name(project_path, experiment_name)
+        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
         if experiment is None:
             log.error('experiment not found')
             return None
         return experiment.uuid
+
+
+def get_experiment_hashes(project_path: Path, experiment_name: str) -> dict:
+    with ExperimentApi() as api:
+        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+        if experiment is None:
+            log.error('experiment not found')
+            raise ValueError('experiment not found')
+        return {
+            'experiment': experiment.sha256,
+            'action': experiment.sha256_action,
+            'testset': experiment.sha256_testset,
+            'metadata': experiment.sha256_metadata,
+        }
+
+
+def get_experiment_run_count(project_path: Path, experiment_name: str) -> int:
+    with ExperimentApi() as api:
+        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+        if experiment is None:
+            log.error('experiment not found')
+            raise ValueError('experiment not found')
+        return len(experiment.runs)
 
 
 def create_experiment(name: str, project_path: Path, experiment_directory: ExperimentDirectory) -> Experiment:
@@ -71,6 +93,7 @@ def create_experiment_run(experiment_name: str, environment_name: str, project_n
             logfile_run_experiment=experimentrun_directory.run_log,
             logfile_installed_packages=experimentrun_directory.packagedump_log,
             logfile_postsetup_installations=experimentrun_directory.install_log,
+            status='running',
         )
         return experiment_run.uuid
 
@@ -78,3 +101,19 @@ def create_experiment_run(experiment_name: str, environment_name: str, project_n
 def update_experiment_run_start(experiment_run_uuid: str, timestamp: datetime):
     with ExperimentApi() as api:
         api.update_experiment_run_start(experiment_run_uuid, timestamp)
+
+
+def get_experiment_testfunction_files(project_path: Path, experiment_name: str):
+    testfunction_files = []
+    with ExperimentApi() as api:
+        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+        for abs_test in experiment.abstract_tests:
+            if abs_test.testfunction.file.name not in testfunction_files:
+                testfunction_files.append(Path(abs_test.testfunction.file.path))
+        return testfunction_files
+
+
+def update_experiment_run_status(experiment_run_uuid: str, status: str):
+    with ExperimentApi() as api:
+        api.update_experiment_run_status(experiment_run_uuid, status)
+

@@ -72,5 +72,4 @@ class TestfunctionSyntaxError(LoggedErrorException):
 
 
 class NoProjectFoundError(LoggedErrorException):
-    def __init__(self, log: logging.Logger):
-        super().__init__(log, 'no project directory found')
+    pass

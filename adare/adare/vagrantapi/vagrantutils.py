@@ -9,9 +9,8 @@ log = logging.getLogger(__name__)
 
 
 def get_available_boxes():
-    Vagrant = vagrant.Vagrant()
-    available_boxes = Vagrant.box_list()
-    return available_boxes
+    vg = vagrant.Vagrant()
+    return vg.box_list()
 
 
 def is_box(name: str):
@@ -19,11 +18,7 @@ def is_box(name: str):
         checks whether a vagrant box exists
     """
     available_boxes = get_available_boxes()
-    found = False
-    for box in available_boxes:
-        if box.name == name:
-            found = True
-    return found
+    return any(box.name == name for box in available_boxes)
 
 
 def print_available_boxes():
@@ -39,15 +34,15 @@ def print_available_boxes():
 
 
 def box_add(name: str, path: Path):
-    Vagrant = vagrant.Vagrant()
-    Vagrant.box_add(name, path.as_posix())
+    vg = vagrant.Vagrant()
+    vg.box_add(name, path.as_posix())
 
 
 def box_remove(name: str, provider: str):
-    Vagrant = vagrant.Vagrant()
-    Vagrant.box_remove(name, provider)
+    vg = vagrant.Vagrant()
+    vg.box_remove(name, provider)
 
 
 def box_is_alive(box_id: str):
-    Vagrant = vagrant.Vagrant()
-    return Vagrant.status(box_id)
+    vg = vagrant.Vagrant()
+    return vg.status(box_id)

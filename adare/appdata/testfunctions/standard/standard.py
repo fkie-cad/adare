@@ -7,7 +7,7 @@ from typing import ClassVar, Optional
 
 # internal imports
 from adarevm.testset.basictest import BasicTest, Parameter
-from adarelib.types import TestResult, TEST_FAILED, TEST_SUCCESS
+from adarelib.types.event import TestResult, TEST_FAILED, TEST_SUCCESS
 import adarelib.customyaml.customtags as yml
 
 # configure logging

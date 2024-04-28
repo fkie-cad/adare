@@ -7,7 +7,6 @@ from adare.backend.experiment.directory import ExperimentRunDirectory
 
 # configure logging
 import logging
-
 log = logging.getLogger(__name__)
 
 

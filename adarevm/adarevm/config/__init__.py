@@ -15,3 +15,4 @@ elif platform.system() == 'Linux':
 # set log format
 CONSOLEHANDLER = '%(levelprefix)s %(name)s - %(message)s'
 FILEHANDLER = '[%(asctime)s]: %(name)s: %(levelname)s - %(message)s'
+
