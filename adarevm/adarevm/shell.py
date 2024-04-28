@@ -1,13 +1,8 @@
 from pathlib import Path
 from subprocess import Popen, PIPE
-import shutil
 
-from adarelib.parsers import parse_testsetfile
-from adarelib.types import TestsetFile
-from adarelib.testfunction import import_basictest_subclasses, get_missing_testfunctions, structure_tests
-
+from adarelib.types.event import CommandEvent
 from adarelib.event import EventSystem
-from adarelib.types import TestEvent, CommandEvent, Test
 
 import logging
 log = logging.getLogger(__name__)

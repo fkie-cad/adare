@@ -4,7 +4,7 @@ import attrs
 
 from adarevm.config import TIMESTAMP_FORMAT
 from adarelib.helperfunctions.yaml import dict_to_yaml
-from adarelib.types import Event, EventSystemData
+from adarelib.types.event import Event, EventSystemData
 
 import logging
 log = logging.getLogger(__name__)

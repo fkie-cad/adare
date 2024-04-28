@@ -48,7 +48,6 @@ class ExperimentRunDirectory(Directory):
     run_log: Path
     packagedump_log: Path
 
-
     def __init__(self, project_directory: ProjectDirectory, experiment: str, script_suffix: str = '.sh'):
         super().__init__(project_directory.run / experiment / datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
         self.log_directory = self.path / 'logs'

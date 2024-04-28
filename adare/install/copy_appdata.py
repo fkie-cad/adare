@@ -33,15 +33,17 @@ def __get_default_appdata_directory(create_if_missing: bool = False, program_nam
 
 APPDATA_DIR: Path = __get_default_appdata_directory(create_if_missing=True)
 
-IGNORE_PATTERNS = ['venv',
-                   'build',
-                   '.idea',
-                   '*.egg-info',
-                   '__pycache__',
-                   '*.pyc',
-                   '.git',
-                   'poetry.lock',
-                   ]
+IGNORE_PATTERNS = [
+    'venv',
+    'build',
+    '.idea',
+    '*.egg-info',
+    '__pycache__',
+    '*.pyc',
+    '.git',
+    'poetry.lock',
+]
+
 
 if __name__ == '__main__':
 

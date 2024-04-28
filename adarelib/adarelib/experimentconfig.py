@@ -1,3 +1,4 @@
+from adarelib.breakpoint import BreakPoint
 import attrs
 
 
@@ -12,6 +13,7 @@ class ExperimentConfig:
     breakpoint_directory: str
     tessdata: str
     img: str
+    breakpoints: list[BreakPoint]
 
     logfile: str
     eventfile: str

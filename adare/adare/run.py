@@ -12,6 +12,7 @@ from adare.cli.environment import exec_environment_load, exec_environment_list, 
 from adare.cli.experiment import exec_experiment_create, exec_experiment_load, exec_experiment_run
 from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
+from adare.cli.help import exec_help_breakpoints
 from adare.cli.showversion import exec_show_version
 # from adare.cli.show import exec_show_env, exec_show_experiment, exec_show_runs, exec_show_run_result, exec_show_project, exec_show_usb, exec_show_nfs, exec_show_smb
 from adare.cli.web import exec_web_login, exec_web_logout
@@ -120,7 +121,7 @@ def main():
     experiment_run.add_argument('environment', help='name of the environment where the experiment should be run')
     experiment_run.add_argument('--breakpoints', '-b', nargs='*', default=[],
                                 help='name of the breakpoints to stop the experiment at')
-    experiment_run.add_argument('--break-all', '-ba', action='store_true', help='run the experiment in debug mode')
+    experiment_run.add_argument('--debug', '-d', action='store_true', help='run the experiment in debug mode (stop at all breakpoints)')
     experiment_run.set_defaults(func=lambda args: exec_with_error_printing(exec_experiment_run, args))
 
     # commands: adare testfunction ...
@@ -154,6 +155,16 @@ def main():
 
     web_logout = web_subparsers.add_parser('logout', help='logout from the web interface')
     web_logout.set_defaults(func=lambda args: exec_with_error_printing(exec_web_logout, args))
+
+    # commands: adare help
+    help_sp = subparsers.add_parser('help', help='show help for special options')
+    help_sp.set_defaults(func=lambda args: help_sp.print_help())
+    help_subparsers = help_sp.add_subparsers()
+    help_breakpoints = help_subparsers.add_parser('breakpoints', help='show help for breakpoints')
+    help_breakpoints.add_argument('--breakpoint', '-b', required=False, help='name of the breakpoint to show the help of')
+    help_breakpoints.set_defaults(func=lambda args: exec_help_breakpoints(args))
+
+
 
     #
     # environment_create = environment_subparsers.add_parser('create')

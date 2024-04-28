@@ -12,7 +12,6 @@ import shutil
 from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.vagrantapi.exceptions import VagrantBoxCreationError, VagrantBoxDestroyError, VagrantBoxRunError
 from adarelib.exceptions import LoggedException
-from adarelib.breakpoint import BreakPoint
 
 # configure logging
 import logging
@@ -64,7 +63,7 @@ class VagrantBoxVM:
         """
         return cls(vagrantdirectory_path, log_file, vm_name=vm_name)
 
-    def run(self, debug: bool = False, ctrlc_event: threading.Event = None) -> int:
+    def run(self, breakpoints: list, ctrlc_event: threading.Event = None) -> int:
         try:
             self.__clean_up_virtualbox()
         except OSError as e:
@@ -86,17 +85,10 @@ class VagrantBoxVM:
         except KeyboardInterrupt as e:
             raise LoggedException(log, 'vagrant up was interrupted by the user') from e
 
-        if debug:
-            log.info('debugmode - execution was stopped after the provisioning step and before destroying the vm')
-            BreakPoint(
-                'before_box_destroy',
-            )
-            log.info('debugmode - execution continued')
-
         self.destroy()
         return 0
 
-    def up(self, ctrlc_event: threading.Event = None):
+    def up(self, breakpoints, ctrlc_event: threading.Event = None):
         self.should_watch = True
         self.vagrant = vagrant.Vagrant(self.vagrantfile_path.as_posix(), quiet_stdout=False, quiet_stderr=False)
 

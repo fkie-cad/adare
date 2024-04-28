@@ -43,29 +43,30 @@ class Testset:
         available_commands = [com.name for com in self.testsetfile.commands]
         if command_name not in available_commands:
             raise TestsetExecutionError(log, f'command {command_name} is not available')
-        self.event_system.log(
-            CommandEvent(
-                command=command_name, status='running',
-            )
-        )
         # retrieve the command from the testsetfile
         command = next(com for com in self.testsetfile.commands if com.name == command_name)
+        self.event_system.log(
+            CommandEvent(
+                name=command_name, command=command.command, status='running',
+            )
+        )
 
         toolpath = command.command.split(' ')[0]
+        if shutil.which(toolpath):
+            return
+
+        log.error(f'tool with path {toolpath} does NOT exist')
+        toolpath = f'./{toolpath}'
+        command_path = f'./{command.command}'
         if not shutil.which(toolpath):
             log.error(f'tool with path {toolpath} does NOT exist')
-            toolpath = f'./{toolpath}'
-            command = f'./{command.command}'
-            if not shutil.which(toolpath):
-                log.error(f'tool with path {toolpath} does NOT exist')
-                self.event_system.log(
-                    CommandEvent(
-                        command=command_name, status='failed', error=f'tool with path {toolpath} does NOT exist'
-                    )
+            self.event_system.log(
+                CommandEvent(
+                    name=command_name, command=command.command, status='failed', error=f'tool with path {toolpath} does NOT exist'
                 )
-                raise TestsetExecutionError(log, f'tool with path {toolpath} does NOT exist')
-
-        execute_on_shell(command.split(" "), event_system=self.event_system)
+            )
+            raise TestsetExecutionError(log, f'tool with path {toolpath} does NOT exist')
+        execute_on_shell(command_path.split(" "), event_system=self.event_system)
 
     def __check_if_command_already_executed(self, command_name: str) -> bool:
         command_events = [event for event in self.event_system.data.events if isinstance(event, CommandEvent)]
@@ -91,7 +92,7 @@ class Testset:
         test_result = test.test()
         self.event_system.log(
             TestEvent(
-                test_name=name, status='success', result=test_result
+                test_name=name, status='done', result=test_result
             )
         )
         self.event_system.save()

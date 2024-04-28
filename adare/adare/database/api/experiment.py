@@ -6,20 +6,23 @@ from datetime import datetime
 # internal imports
 from adare.config.configdirectory import PROG_PARSEANDTEST_DIR
 import adare.config.database as config_database
-from adare.database.models.experiment import ExperimentRunFiles, Tag, TestParameter, TestParameterEntry, Experiment, ExperimentRun, TestFunction, AbstractTest, Command, LogFile, Environment, Base as ExperimentsBase
+from adare.database.models.experiment import ExperimentRunFiles, Tag, TestParameter, TestParameterEntry, Experiment, \
+    ExperimentRun, TestFunction, AbstractTest, Command, LogFile, Environment, Base as ExperimentsBase
 from adare.database.api.project import ProjectDbApi
 from adarelib.types.testset import TestsetFile as FTestsetFile, Test as FTest
 from adare.backend.experiment.directory import ExperimentDirectory
 from adarelib.exceptions import TestSetFormatError
+from adare.database.exceptions import EnvironmentMissingError
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
 class ExperimentApi(ProjectDbApi):
     testfunction_locations: dict[str, Path] = {
-        'default': PROG_PARSEANDTEST_DIR/'src'/'parseandtest'/'testfunctions',
+        'default': PROG_PARSEANDTEST_DIR / 'src' / 'parseandtest' / 'testfunctions',
     }
 
     def __init__(self, db_path: Path = config_database.get_database_location()):
@@ -39,17 +42,16 @@ class ExperimentApi(ProjectDbApi):
         """
         self._session.delete(experiment_run)
 
-    def get_latest_experiment_by_project_and_name(self, project_path: Path, experiment_name: str) -> Experiment:
+    def get_experiment_by_project_and_name(self, project_path: Path, experiment_name: str) -> Experiment:
         project = self.get_project_by_path(project_path)
-        return (
-            self._session.query(Experiment)
-            .filter_by(
-                name=experiment_name,
-                project=project
-            )
-            .order_by(sqlalchemy.desc(Experiment.created_at))
-            .first()
+        experiments = self._session.query(Experiment).filter_by(
+            name=experiment_name,
+            project=project
         )
+        # check if multiple experiments with the same name exist
+        if experiments.count() > 1:
+            raise ValueError(f'multiple experiments with name {experiment_name} found')
+        return experiments.first()
 
     def get_or_create_tags(self, tags: list[str]) -> list:
         """
@@ -69,13 +71,13 @@ class ExperimentApi(ProjectDbApi):
         ]
         for name in names:
             if (
-                env := self._session.query(Environment)
-                .filter_by(name=name)
-                .first()
+                    env := self._session.query(Environment)
+                            .filter_by(name=name)
+                            .first()
             ):
                 environments.append(env)
             else:
-                raise ValueError(f'environment {name} not found in database')
+                return []
         return environments
 
     def create_experiment(self, name: str, project_path: Path, experiment_directory: ExperimentDirectory) -> Experiment:
@@ -86,6 +88,16 @@ class ExperimentApi(ProjectDbApi):
         abstract_test_objects: list = self.__get_abstracttests_from_testsetfile(testset)
         tags = self.get_or_create_tags(metadata.tags)
         environments = self.get_environments_by_name(metadata.environments)
+        if not environments:
+            raise EnvironmentMissingError(
+                log,
+                message='no environment found for experiment',
+                possible_solutions=[
+                    'load the environment with [i]adare environment load[/i]',
+                    'create a new environment with [i]adare environment create[/i] and then load it'
+                ]
+            )
+
         experiment = Experiment(
             name=name,
             description=metadata.description,
@@ -99,7 +111,7 @@ class ExperimentApi(ProjectDbApi):
             sha256_metadata=experiment_directory.sha256_metadata,
             sha256_bibtex=experiment_directory.sha256_bibtex,
             sha256_markdown=experiment_directory.sha256_markdown,
-            sha256_hash=experiment_directory.sha256,
+            sha256=experiment_directory.sha256,
             project=project,
         )
         experiment.environments = environments
@@ -131,7 +143,7 @@ class ExperimentApi(ProjectDbApi):
     def create_experiment_run(
             self, experiment: Experiment, environment: Environment, path: Path,
             logfile_vagrant: Path, logfile_installed_packages: Path, logfile_postsetup_installations: Path,
-            logfile_run_experiment: Path,
+            logfile_run_experiment: Path, status: str
     ) -> ExperimentRun:
         experiment_run_files = ExperimentRunFiles(
             log_vagrant=self.__create_logfile(logfile_vagrant),
@@ -146,6 +158,7 @@ class ExperimentApi(ProjectDbApi):
             environment=environment,
             path=path.as_posix(),
             files=experiment_run_files,
+            status=status
         )
         self._session.add(experiment_run)
         self._session.commit()
@@ -161,9 +174,9 @@ class ExperimentApi(ProjectDbApi):
 
     def remove_experiment_by_uuid(self, experiment_uuid: str):
         if (
-            experiment := self._session.query(Experiment)
-            .filter_by(uuid=experiment_uuid)
-            .first()
+                experiment := self._session.query(Experiment)
+                        .filter_by(uuid=experiment_uuid)
+                        .first()
         ):
             self.remove_experiment(experiment)
         else:
@@ -177,7 +190,7 @@ class ExperimentApi(ProjectDbApi):
 
     def experiment_sha256_equals(self, experiment_uuid: str, sha256: str) -> bool:
         experiment = self._session.query(Experiment).filter_by(uuid=experiment_uuid).first()
-        return experiment.sha256_hash == sha256
+        return experiment.sha256 == sha256
 
     def __get_abstract_test(self, test: FTest, command_list: list[Command]) -> AbstractTest or None:
         all_commands_exist = all(
@@ -203,7 +216,8 @@ class ExperimentApi(ProjectDbApi):
         for p_key, p_val in test.params.items():
             parameter = self._session.query(TestParameter).filter_by(name=p_key).first()
             # check if TestParameterEntry already exists
-            test_parameter_entry_q = self._session.query(TestParameterEntry).filter_by(parameter=parameter, value=str(p_val))
+            test_parameter_entry_q = self._session.query(TestParameterEntry).filter_by(parameter=parameter,
+                                                                                       value=str(p_val))
             test_parameter_entry_obj = test_parameter_entry_q.first()
             if not test_parameter_entry_obj:
                 # create an TestParameterEntry object for the parameter
@@ -263,3 +277,6 @@ class ExperimentApi(ProjectDbApi):
         command_list = self.__get_command_list(testset)
         return [self.__get_abstract_test(test, command_list) for test in testset.tests]
 
+    def update_experiment_run_status(self, experiment_run_uuid: str, status: str):
+        experiment_run = self._session.query(ExperimentRun).filter_by(uuid=experiment_run_uuid).first()
+        experiment_run.status = status

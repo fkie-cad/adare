@@ -35,3 +35,23 @@ def remove_project(project_path: Path):
     with ProjectDbApi() as api:
         api.remove_project_by_path(project_path)
 
+
+def get_project_testfunction_hashes(project_path: Path) -> dict:
+    with ProjectDbApi() as api:
+        project = api.get_project_by_path(project_path)
+        hashes = {
+            testfunction_file.path: testfunction_file.sha256hash
+            for testfunction_file in project.testfunction_files
+        }
+    return hashes
+
+
+def get_project_environment_hashes(project_path: Path) -> dict:
+    with ProjectDbApi() as api:
+        project = api.get_project_by_path(project_path)
+        hashes = {
+            environment_file.file: environment_file.sha256hash
+            for environment_file in project.environments
+        }
+    return hashes
+

@@ -7,6 +7,7 @@ from adare.config.configdirectory import ADARE_DIR, APPDATA_DIR
 from adarelib.helperfunctions.web.download import download
 from adare.backend.project.exceptions import ProjectDirectoryCreationError, ProjectDirectoryRemovalError, ProjectDirectoryCopyError
 from adare.backend.directory import Directory
+from adarelib.helperfunctions.hash import hash_file_sha256
 
 # configure logging
 import logging
@@ -56,6 +57,18 @@ class ProjectDirectory(Directory):
                 log,
                 message=f'project directory ({self.path}) removal failed: {e.strerror}',
             ) from e
+
+    def get_environment_hash(self, environment_file: Path) -> str:
+        if not environment_file.relative_to(self.environments):
+            raise ValueError(
+                f'environment file {environment_file} is not in environments directory {self.environments}')
+        return hash_file_sha256(environment_file)
+
+    def get_testfunction_hash(self, testfunction_file: Path) -> str:
+        if not testfunction_file.relative_to(self.testfunctions):
+            raise ValueError(
+                f'testfunction file {testfunction_file} is not in testfunctions directory {self.testfunctions}')
+        return hash_file_sha256(testfunction_file)
 
     def exists(self) -> bool:
         # check if all paths exist

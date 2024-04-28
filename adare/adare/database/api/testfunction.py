@@ -164,11 +164,17 @@ class TestfunctionDbApi(ExperimentApi):
                 message=f'parameter class for testfunction class {testfunction_class.name} is missing',
             )
 
-    def create_testfunction_file_obj(self, path: Path):
+    def create_testfunction_file_obj(self, project_path: Path, path: Path):
         if self.testfunction_file_obj_exists(path):
             raise DatabaseTestfunctionCreationError(
                 log,
                 message=f'Testfunction file {path} already exists in database',
+            )
+        project = self.get_project(project_path.name)
+        if not project:
+            raise DatabaseTestfunctionCreationError(
+                log,
+                message=f'Project {project_path.name} does not exist in database',
             )
         module_analyzer = PyModuleAnalyzer(path)
         testfunction_file = TestFunctionFile(
@@ -176,6 +182,7 @@ class TestfunctionDbApi(ExperimentApi):
             path=path.as_posix(),
             sha256hash=hash_file_sha256(path),
         )
+        testfunction_file.projects.append(project)
         self._session.add(testfunction_file)
 
         for t_func_class in module_analyzer.get_classes(parent='BasicTest'):

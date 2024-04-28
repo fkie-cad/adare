@@ -29,3 +29,6 @@ class DatabaseTestValidationError(LoggedErrorException):
 class DatabaseProjectNotFoundError(LoggedErrorException):
     pass
 
+
+class EnvironmentMissingError(LoggedErrorException):
+    pass

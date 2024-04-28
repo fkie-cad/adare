@@ -65,3 +65,6 @@ DEFAULT_NFS_CONF = {
 }
 
 DEFAULT_NETWORKDRIVE_SHARENAME = "share"
+
+# maximum time for a breakpoint to be active
+BREAKPOINT_LIMIT_SECONDS = 60*5

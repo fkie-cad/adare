@@ -39,6 +39,16 @@ def environment_load(project: Path, environment: str, force: bool = False):
     environment_file_sha256 = hash_file_sha256(environment_file)
     environment_configuration: EnvironmentMetadata = parse_environment_file(environment_file)
 
+    # check if file name equals environment name
+    if environment != environment_configuration.name:
+        raise EnvironmentLoadFailed(
+            log,
+            f'environment name in file {environment_configuration.name} does not match the file name {environment}',
+            possible_solutions=[
+                'rename the file or change the environment name in the file and try again',
+            ]
+        )
+
     environment_database.update_environment(project, environment_configuration, environment_file, environment_file_sha256, force=force)
     log.info(f'environment file {environment_file} loaded')
 
