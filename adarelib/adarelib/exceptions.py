@@ -73,3 +73,19 @@ class TestfunctionSyntaxError(LoggedErrorException):
 
 class NoProjectFoundError(LoggedErrorException):
     pass
+
+
+class EnvironmentNotFoundError(LoggedErrorException):
+    pass
+
+
+class ProjectNotFoundError(LoggedErrorException):
+    pass
+
+
+class ExperimentNotFoundError(LoggedErrorException):
+    pass
+
+
+class ArgumentsError(LoggedErrorException):
+    pass

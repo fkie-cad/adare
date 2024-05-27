@@ -90,27 +90,27 @@ def environment_delete(environment_uuid: str, force: bool = False):
     environment_database.delete_environment(environment_uuid, force=force)
     log.info('environment deleted')
 
-
-def environment_list(project: Path):
-
-    environments = environment_database.get_environments(project)
-
-    columns = ['name', 'description', 'experiments']
-    env_data = []
-    if environments:
-        env_data.extend(
-            [
-                env.get('name'),
-                env.get('description'),
-                "\n".join(
-                    [
-                        f"{exp.get('name')} ({exp.get('runs')} runs)"
-                        for exp in env.get('experiments')
-                    ]),
-            ]
-            for env in environments
-        )
-    df_env = pd.DataFrame(env_data, columns=columns)
-
-    title = f'Environments (project {project})' if project else 'Environments'
-    print_df(df_env, title)
+#
+# def environment_list(project: Path):
+#
+#     environments = environment_database.get_environments(project)
+#
+#     columns = ['name', 'description', 'experiments']
+#     env_data = []
+#     if environments:
+#         env_data.extend(
+#             [
+#                 env.get('name'),
+#                 env.get('description'),
+#                 "\n".join(
+#                     [
+#                         f"{exp.get('name')} ({exp.get('runs')} runs)"
+#                         for exp in env.get('experiments')
+#                     ]),
+#             ]
+#             for env in environments
+#         )
+#     df_env = pd.DataFrame(env_data, columns=columns)
+#
+#     title = f'Environments (project {project})' if project else 'Environments'
+#     print_df(df_env, title)

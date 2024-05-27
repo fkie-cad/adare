@@ -40,3 +40,11 @@ class EnvironmentIntegrityError(LoggedErrorException):
 
 class TestfunctionIntegrityError(LoggedErrorException):
     pass
+
+
+class NoEnvironmentError(LoggedErrorException):
+    pass
+
+
+class MultipleEnvironmentsError(LoggedErrorException):
+    pass

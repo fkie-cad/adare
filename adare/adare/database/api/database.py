@@ -63,6 +63,9 @@ class DatabaseApi:
             self._session.expunge(obj)
         return objs
 
+    def _expunge_all(self):
+        self._session.expunge_all()
+
     def get_or_create(self, model, defaults=None, **kwargs):
         if instance := self._session.query(model).filter_by(**kwargs).first():
             return instance, False

@@ -7,6 +7,7 @@ from adare.database.models.experiment import Project, Experiment
 from adare.database.api.experiment import ExperimentApi
 from adare.database.api.environment import EnvironmentDbApi
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
+from adare.backend.experiment.exceptions import NoEnvironmentError, MultipleEnvironmentsError
 
 # configure logging
 import logging
@@ -117,3 +118,25 @@ def update_experiment_run_status(experiment_run_uuid: str, status: str):
     with ExperimentApi() as api:
         api.update_experiment_run_status(experiment_run_uuid, status)
 
+
+def get_experiment_environment(project_path: Path, experiment_name: str):
+    with ExperimentApi() as api:
+        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+        if experiment is None:
+            log.error('experiment not found')
+            raise ValueError('experiment not found')
+        if len(experiment.environments) == 0:
+            log.error('experiment has no environment')
+            raise NoEnvironmentError(
+                log,
+                f'experiment {experiment} has no environment',
+            )
+        elif len(experiment.environments) > 1:
+            raise MultipleEnvironmentsError(
+                log,
+                f'experiment {experiment} has multiple environments',
+                possible_solutions=[
+                    'specify the environment with -e <environment>'
+                ]
+            )
+        return Path(experiment.environments[0].file)

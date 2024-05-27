@@ -9,6 +9,8 @@ readme = "README.md"
 python = "^3.10"
 adarevm = {path="adarevm"}
 adare = {path="adare"}
+pyautogui = "^0.9.54"
+pillow = "^10.3.0"
 
 
 [build-system]

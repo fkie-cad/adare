@@ -42,7 +42,9 @@ class BreakPoint:
             log.warning(f'Breakpoint file {json_file} could not be read')
             return None
         name = json_data.get('name', None)
-        return None if name is None else cls(name, json_file)
+        description = json_data.get('description', '')
+        usage = json_data.get('usage', [])
+        return None if name is None else cls(name, description, usage, json_file)
 
     def __to_json(self, json_file: Path):
         data = {
@@ -69,19 +71,12 @@ class BreakPoint:
 
 
 class BreakpointReceiveHandler(FileSystemEventHandler):
-    breakpoints: list[str]
-
-    def __init__(self, breakpoints: list[str]):
-        self.breakpoints = breakpoints
 
     def on_created(self, event: FileSystemEvent) -> None:
         breakpoint_file = Path(event.src_path)
         if bp := BreakPoint.from_json(breakpoint_file):
-            if bp.name in self.breakpoints:
-                log.info(f'Breakpoint {bp.name} received')
-                bp.trigger()
-            else:
-                breakpoint_file.unlink()
+            log.info(f'Breakpoint {bp.name} received')
+            bp.trigger()
 
 
 def resolve_breakpoints(breakpoints_identifier: list[str]) -> list[BreakPoint]:

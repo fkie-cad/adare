@@ -85,7 +85,7 @@ def main():
     )
     event_system.stage = 'init testset'
     try:
-        BP_BOX_BEFORE_ACTION.trigger_on_guest_if_in_breakpoints(config.breakpoints, config.breakpoint_directory)
+        BP_BOX_BEFORE_ACTION.trigger_on_guest_if_in_breakpoints(config.breakpoints, Path(config.breakpoint_directory))
         run_action(config, event_system)
     except LoggedErrorException as e:
         event_system.log(
@@ -95,4 +95,4 @@ def main():
             )
         )
     finally:
-        BP_BOX_BEFORE_BOX_STOP.trigger_on_guest_if_in_breakpoints(config.breakpoints, config.breakpoint_directory)
+        BP_BOX_BEFORE_BOX_STOP.trigger_on_guest_if_in_breakpoints(config.breakpoints, Path(config.breakpoint_directory))

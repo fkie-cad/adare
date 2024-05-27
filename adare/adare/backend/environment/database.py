@@ -93,3 +93,4 @@ def get_environment_path_by_project_and_name(project_path: Path, environment_nam
                 log,
                 f'environment {environment_name} does not exist in the database',
             )
+

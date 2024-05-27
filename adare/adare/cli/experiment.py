@@ -34,4 +34,3 @@ def exec_experiment_run(arguments):
         experiment_run(project_directory, arguments.experiment, arguments.environment, breakpoints)
     else:
         raise NoProjectFoundError(log, message='no project directory found')
-

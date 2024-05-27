@@ -1,0 +1,26 @@
+name: deletetest
+tests:
+  - name: existencefile
+    description: 'check if file exists'
+    type: file_exists
+    params:
+      dst: 'C:/Users/vagrant/Documents/testfile'
+  - name: deletedfileInfo
+    description: 'check if file metadata exists'
+    type: csv_contains_line_matching_regex
+    depends_on: RBCmd
+    params:
+      dst: 'C:/Users/vagrant/Documents/test/*.csv'
+      entry:
+        - !re '.*'
+        - '$I'
+        - 'C:\Users\vagrant\Documents\testfile'
+        - !re '.*'
+        - !timestamp
+          timestamp: '{{ TIMESTAMP.DELETIONDATE }}'
+          tolerance: 30
+commands:
+  - name: RBCmd
+    description: 'Run RBCmd.exe'
+    tool: RBCmd.exe
+    command: 'RBCmd.exe -d C:\ --csv C:/Users/vagrant/Documents/test'

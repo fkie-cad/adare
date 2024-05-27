@@ -27,6 +27,7 @@ class Directory:
 
     def clean(self):
         shutil.rmtree(self.path)
+        log.info(f'remove directory {self.path}')
 
 
 
