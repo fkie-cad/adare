@@ -1,6 +1,8 @@
 # external imports
 from pathlib import Path
 
+import pandas as pd
+
 # internal imports
 from adare.database.api.project import ProjectDbApi
 from adare.database.models.experiment import Project
@@ -16,6 +18,15 @@ def get_project_by_path(project_path: Path) -> Project or None:
         project = api.get_project_by_path(project_path)
         if project is None:
             log.error(f'project {project_path} not found')
+            return None
+    return project
+
+
+def get_project_by_name(project_name: str) -> Project or None:
+    with ProjectDbApi() as api:
+        project = api.get_project(project_name)
+        if project is None:
+            log.error(f'project {project_name} not found')
             return None
     return project
 

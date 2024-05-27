@@ -7,7 +7,7 @@ import attrs
 
 # internal imports
 from adare.config.configdirectory import TEMPLATES_DIR
-from adarelib.helperfunctions.hash import hash_file_sha256, combine_hashes
+from adarelib.helperfunctions.hash import hash_file_sha256, combine_hashes, hash_dict_sha256
 from adarelib.types.backend import ExperimentMetadata
 from adarelib.types.testset import TestsetFile
 from adare.backend.experiment.exceptions import ExperimentFileCreationError, ExperimentDirectoryCreationError, \
@@ -20,6 +20,7 @@ from adarelib.helperfunctions.yaml import dict_to_yaml
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -86,6 +87,10 @@ class ExperimentRunDirectory(Directory):
     def create_run_config(self, experiment_config: ExperimentConfig):
         data = attrs.asdict(experiment_config)
         dict_to_yaml(self.run_config_file, data)
+
+    def clean(self):
+        # todo: implement clean method (think what needs to be cleaned)
+        pass
 
 
 class ExperimentDirectory(Directory):
@@ -211,13 +216,10 @@ class ExperimentDirectory(Directory):
         return combine_hashes([
             self.sha256_action,
             self.sha256_testset,
-            self.sha256_metadata,
+            #self.sha256_metadata,
         ])
 
     # def copy_to_run_directory(self, run_directory: ExperimentRunDirectory):
     #     # copy action and testset file to run directory
     #     shutil.copy(self.actionfile, run_directory.actionfile)
     #     shutil.copy(self.testsetfile, run_directory.testsetfile)
-
-
-

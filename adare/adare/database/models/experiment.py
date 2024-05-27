@@ -428,7 +428,7 @@ class Environment(SerializerMixin, Base):
     description = Column(String)
 
     osinfo_id = Column(Integer, ForeignKey('osinfo.id'))
-    osinfo = relationship(OsInfo)
+    osinfo = relationship(OsInfo, backref=backref("environments", cascade="all, delete-orphan"))
 
     project_id = Column(Integer, ForeignKey('project.id'))
     project = relationship(Project, backref=backref("environments", cascade="all, delete-orphan"))
@@ -488,6 +488,7 @@ class Experiment(SerializerMixin, Base):
     project = relationship(Project, backref=backref("experiments", cascade="all, delete-orphan"))
 
     created_at = Column(DateTime, nullable=True, default=datetime.now)
+
 
     def __str__(self):
         return str(self.name)
@@ -618,8 +619,6 @@ class EventFactory:
             return CommandEvent(**kwargs)
         elif event_type == 'test':
             return TestEvent(**kwargs)
-        elif event_type == 'error_event':
-            return ErrorEvent(**kwargs)
         elif event_type == 'gui.find':
             return GuiFindEvent(**kwargs)
         elif event_type == 'gui.click':
@@ -628,6 +627,8 @@ class EventFactory:
             return GuiKeypressEvent(**kwargs)
         elif event_type == 'gui.idle':
             return GuiIdleEvent(**kwargs)
+        elif event_type == 'error':
+            return ErrorEvent(**kwargs)
         else:
             raise ValueError(f'Invalid event type: {event_type}')
 

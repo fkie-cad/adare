@@ -57,3 +57,4 @@ def exec_list_projects(arguments):
     :param arguments: arguments parsed via input
     """
     project_list()
+

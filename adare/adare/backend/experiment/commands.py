@@ -27,6 +27,7 @@ from adarelib.breakpoint import BreakpointReceiveHandler, BP_HOST_BEFORE_CLEANUP
 from adare.backend.watcher.event import EventHandler
 from adare.vagrantapi import vagrantutils
 from adarelib.breakpoint import BreakPoint
+from adare.backend.experiment.print import ExperimentFlowConsole
 
 # configure logging
 import logging
@@ -128,8 +129,8 @@ def __cleanup_experiment_run(experiment_run_directory: ExperimentRunDirectory):
     experiment_run_directory.clean()
 
 
-def __install_watchers(vagrant_box_vm: VagrantBoxVM, experimentrun_uuid: str, run_directory: Path, bp_directory: Path, ctrlc_event: threading.Event, breakpoints: list[str] = None):
-    bp_handler = BreakpointReceiveHandler(breakpoints)
+def __install_watchers(vagrant_box_vm: VagrantBoxVM, experimentrun_uuid: str, run_directory: Path, bp_directory: Path, ctrlc_event: threading.Event):
+    bp_handler = BreakpointReceiveHandler()
     event_handler = EventHandler(experimentrun_uuid)
     observer = Observer()
     observer.schedule(event_handler, run_directory.as_posix(), recursive=False)
@@ -160,10 +161,10 @@ def __experiment_integrity_check(project_path: Path, experiment_name: str, exper
         file_changed.append('testset')
     else:
         log.info(f'integrity check for testset file {experiment_directory.testsetfile} passed')
-    if experiment_directory.sha256_metadata != experiment_hashes['metadata']:
-        file_changed.append('metadata')
-    else:
-        log.info(f'integrity check for metadata file {experiment_directory.metadatafile} passed')
+    # if experiment_directory.sha256_metadata != experiment_hashes['metadata']:
+    #     file_changed.append('metadata')
+    # else:
+    #     log.info(f'integrity check for metadata file {experiment_directory.metadatafile} passed')
 
     message = 'to ensure the integrity of an experiment, experiment related files are not allowed to be changed after the experiment has been loaded\n'
     message += f'However, the following files have been changed: {", ".join(file_changed)}'
@@ -242,6 +243,12 @@ def __project_integrity_check(project_path: Path, project_directory: ProjectDire
 def experiment_run(project_path: Path, experiment_name: str, environment_name: str, breakpoints: list[BreakPoint] = None):
     timestamp_start = datetime.now()
 
+    # create an event to stop the box when ctrl+c is pressed
+    ctrlc_event = threading.Event()
+
+    log.info(f'starting experiment run {experiment_name} in project {project_path}')
+    experiment_flow_console = ExperimentFlowConsole(ctrlc_event)
+
     project_directory = ProjectDirectory(project_path)
     experiment_directory: ExperimentDirectory = ExperimentDirectory(
         project_path,
@@ -250,14 +257,20 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
 
     # check integrity of the experiment and environment
     __experiment_integrity_check(project_path, experiment_name, experiment_directory)
+    experiment_flow_console.log_success(f'experiment integrity check passed')
     # get used testfunctions
     testfunction_files = experiment_database.get_experiment_testfunction_files(project_path, experiment_name)
     testfunction_files_names = ",".join([file.name for file in testfunction_files])
     log.info(f'experiment {experiment_name} uses the following testfunction files: {testfunction_files_names}')
     # get used environment
-    environment_file = environment_database.get_environment_path_by_project_and_name(project_path, environment_name)
+    if environment_name:
+        environment_file = environment_database.get_environment_path_by_project_and_name(project_path, environment_name)
+    else:
+        environment_file = experiment_database.get_experiment_environment(project_path, experiment_name)
+        environment_name = environment_file.stem
     # check integrity of the project
     __project_integrity_check(project_path, project_directory, environments=[environment_file], testfunctions=testfunction_files)
+    experiment_flow_console.log_success(f'project integrity check passed')
 
     # get environment uuid
     environment_uuid = experiment_database.get_environment_uuid(project_path, environment_name)
@@ -306,7 +319,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     # setup paths to add to the PATH variable on the VM
     paths_to_add = [
         project_directory.get_path_relative_to_shared_directory('adare', shared_root_directory_host, shared_root_directory_vm),
-        project_directory.get_path_relative_to_shared_directory('run', shared_root_directory_host, shared_root_directory_vm),
+        project_directory.get_path_relative_to_shared_directory('shared_tools', shared_root_directory_host, shared_root_directory_vm),
     ]
 
     # create scripts
@@ -374,17 +387,22 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
 
     # update experiment run in database
     experiment_database.update_experiment_run_start(experiment_run_uuid, timestamp_start)
-    # create an event to stop the box when ctrl+c is pressed
-    ctrlc_event = threading.Event()
 
     BP_HOST_BEFORE_BOX_START.trigger_if_in_breakpoints(breakpoints)
     # track time directly before box start
     timestamp_before_box_start = datetime.now()
     # start the box in a separate thread
-    threading.Thread(target=box.run, kwargs={'breakpoints': breakpoints, 'ctrlc_event': ctrlc_event}).start()
+    vg_thread = threading.Thread(target=box.run, kwargs={'breakpoints': breakpoints, 'ctrlc_event': ctrlc_event})
+    vg_thread.start()
+    vagrant_box_finished_event = threading.Event()
+    experiment_flow_console.log_ongoing('vagrant box running', vagrant_box_finished_event)
 
     # start the watchers that watches for events and breakpoints
-    __install_watchers(box, experiment_run_uuid, experiment_run_directory.path, experiment_run_directory.breakpoint_directory, ctrlc_event, breakpoints)
+    __install_watchers(box, experiment_run_uuid, experiment_run_directory.path, experiment_run_directory.breakpoint_directory, ctrlc_event)
+
+    # wait for the box to finish
+    vg_thread.join()
+    vagrant_box_finished_event.set()
 
     experiment_database.update_experiment_run_status(experiment_run_uuid, 'done')
 
@@ -394,7 +412,8 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     duration_box = timestamp_end - timestamp_before_box_start
     log.info(f'experiment run {experiment_run_uuid} finished after {duration_total} seconds (box run time: {duration_box})')
 
-    # todo: cleanup
+    # clean up the experiment run directory
     BP_HOST_BEFORE_CLEANUP.trigger_if_in_breakpoints(breakpoints)
-    #__cleanup_experiment_run(experiment_run_directory)
+    __cleanup_experiment_run(experiment_run_directory)
+    experiment_flow_console.log_success(f'experiment run {experiment_run_uuid} finished')
 

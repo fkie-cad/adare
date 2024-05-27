@@ -43,9 +43,7 @@ class ProjectDbApi(DatabaseApi):
 
     def get_projects(self) -> list[Project]:
         projects = self._session.query(Project).all()
-        for project in projects:
-            self._expunge_multiple(project.environments)
-        self._expunge_multiple(projects)
+        self._expunge_all()
         return projects
 
     def get_project(self, name: str) -> Project or None:

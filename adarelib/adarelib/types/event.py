@@ -157,6 +157,7 @@ class EventSystemData:
                 'gui.keypress': GuiKeypressEvent,
                 'gui.idle': GuiIdleEvent,
                 'command': CommandEvent,
+                'error': ErrorEvent
             }
             if event['category'] in supported_events:
                 event_class = supported_events[event['category']]

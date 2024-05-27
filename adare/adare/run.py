@@ -7,14 +7,14 @@ import time
 # from adare.cli.environment import exec_env_create, exec_env_remove
 # from adare.cli.experiment import exec_exp_run, exec_exp_create, exec_exp_remove
 from adare.cli.project import exec_create_project, exec_remove_project, exec_list_projects
-from adare.cli.environment import exec_environment_load, exec_environment_list, exec_environment_create, \
+from adare.cli.environment import exec_environment_load, exec_environment_create, \
     exec_environment_delete
 from adare.cli.experiment import exec_experiment_create, exec_experiment_load, exec_experiment_run
 from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
 from adare.cli.help import exec_help_breakpoints
 from adare.cli.showversion import exec_show_version
-# from adare.cli.show import exec_show_env, exec_show_experiment, exec_show_runs, exec_show_run_result, exec_show_project, exec_show_usb, exec_show_nfs, exec_show_smb
+from adare.cli.show import exec_show_projects, exec_show_project, exec_show_environment, exec_show_environments, exec_show_experiments, exec_show_experiment, exec_show_runs, exec_show_run
 from adare.cli.web import exec_web_login, exec_web_logout
 from adare.cli.testfunction import exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 from adare.setup_logging import setup_logging
@@ -84,11 +84,6 @@ def main():
     environment_load.add_argument('--force', '-f', action='store_true', help='force the update of the environment')
     environment_load.set_defaults(func=lambda args: exec_with_error_printing(exec_environment_load, args))
 
-    environment_list = environment_subparsers.add_parser('list')
-    environment_list.add_argument('--project', '-p', required=False,
-                                  help='name of the project to list the environments of')
-    environment_list.set_defaults(func=lambda args: exec_with_error_printing(exec_environment_list, args))
-
     environment_create = environment_subparsers.add_parser('create')
     environment_create.add_argument('name', help='name of the environment')
     environment_create.add_argument('--project', '-p', required=False,
@@ -118,7 +113,7 @@ def main():
 
     experiment_run = experiment_subparsers.add_parser('run', help='run the experiment in a given environment')
     experiment_run.add_argument('experiment', help='name of the experiment to run')
-    experiment_run.add_argument('environment', help='name of the environment where the experiment should be run')
+    experiment_run.add_argument('-e', '--environment', help='name of the environment where the experiment should be run')
     experiment_run.add_argument('--breakpoints', '-b', nargs='*', default=[],
                                 help='name of the breakpoints to stop the experiment at')
     experiment_run.add_argument('--debug', '-d', action='store_true', help='run the experiment in debug mode (stop at all breakpoints)')
@@ -164,7 +159,46 @@ def main():
     help_breakpoints.add_argument('--breakpoint', '-b', required=False, help='name of the breakpoint to show the help of')
     help_breakpoints.set_defaults(func=lambda args: exec_help_breakpoints(args))
 
+    # command: adare show
+    show = subparsers.add_parser('show', help='show information')
+    show.set_defaults(func=lambda args: show.print_help())
+    show_subparsers = show.add_subparsers()
 
+    show_projects = show_subparsers.add_parser('projects', help='show a list of projects')
+    show_projects.set_defaults(func=lambda args: exec_with_error_printing(exec_show_projects, args))
+
+    show_project = show_subparsers.add_parser('project', help='show a project')
+    show_project.add_argument('project', help='name of the project')
+    show_project.set_defaults(func=lambda args: exec_with_error_printing(exec_show_project, args))
+
+    show_environments = show_subparsers.add_parser('environments', help='show all environments in a project')
+    show_environments.add_argument('-proj', '--project', help='name of the project')
+    show_environments.set_defaults(func=lambda args: exec_with_error_printing(exec_show_environments, args))
+
+    show_environment = show_subparsers.add_parser('environment', help='show an environment')
+    show_environment.add_argument('environment', help='name of the environment')
+    show_environment.add_argument('-proj', '--project', help='name of the project')
+    show_environment.set_defaults(func=lambda args: exec_with_error_printing(exec_show_environment, args))
+
+    show_experiments = show_subparsers.add_parser('experiments', help='show all experiments in an environment')
+    show_experiments.add_argument('-proj', '--project', help='name of the project')
+    show_experiments.add_argument('-env', '--environment', help='name of the environment')
+    show_experiments.add_argument('-env-id', '--environment-uuid', help='uuid of the environment')
+    show_experiments.set_defaults(func=lambda args: exec_with_error_printing(exec_show_experiments, args))
+
+    show_experiment = show_subparsers.add_parser('experiment', help='show an experiment')
+    show_experiment.add_argument('-exp', '--experiment', help='name of the experiment')
+    show_experiment.add_argument('-proj', '--project', help='name of the project')
+    show_experiment.add_argument('-env', '--environment', help='name of the environment')
+    show_experiment.add_argument('-exp-id', '--experiment-uuid', help='uuid of the experiment')
+    show_experiment.set_defaults(func=lambda args: exec_with_error_printing(exec_show_experiment, args))
+
+    show_runs = show_subparsers.add_parser('runs', help='show all runs')
+    show_runs.set_defaults(func=lambda args: exec_with_error_printing(exec_show_runs, args))
+
+    show_run = show_subparsers.add_parser('run', help='show a run')
+    show_run.add_argument('-run-id', '--run-uuid', help='uuid of the run')
+    show_run.set_defaults(func=lambda args: exec_with_error_printing(exec_show_run, args))
 
     #
     # environment_create = environment_subparsers.add_parser('create')

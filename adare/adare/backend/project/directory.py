@@ -82,6 +82,8 @@ class ProjectDirectory(Directory):
         self.experiments.mkdir()
         self.testfunctions.mkdir()
         self.shared.mkdir()
+        self.shared_tools.mkdir()
+        self.shared_data.mkdir()
         self.adare.mkdir()
         self.tessdata.mkdir()
         self.run.mkdir()
