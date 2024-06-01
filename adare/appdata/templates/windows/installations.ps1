@@ -1,5 +1,6 @@
 . "{{ scripts_directory }}\helperfunctions.ps1"
 
+StartStage "installations"
 Start-Transcript  "{{ log_directory }}/postsetup_installations.log"
 
 {% for installationline in installations %}
@@ -8,3 +9,4 @@ Start-Transcript  "{{ log_directory }}/postsetup_installations.log"
 {% endfor %}
 
 Stop-Transcript
+EndStage "installations"

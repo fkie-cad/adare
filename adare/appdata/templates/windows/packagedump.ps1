@@ -1,5 +1,6 @@
 . "{{ scripts_directory }}\helperfunctions.ps1"
 
+StartStage "dump_installed_software"
 Start-Transcript {{ log_directory }}/save_installed_packages.log
 
 $InstalledSoftware = Get-ChildItem "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
@@ -12,4 +13,4 @@ foreach($obj in $InstalledSoftware){
 }
 
 Stop-Transcript
-
+EndStage "dump_installed_software"

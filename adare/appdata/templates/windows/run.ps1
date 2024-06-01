@@ -1,6 +1,7 @@
 # import helper functions (Add-PathVariable, WriteLog, Write-Status, ...)
 . "{{ script_directory }}/helperfunctions.ps1"
 
+StartStage "run_experiment"
 # start logging
 Start-Transcript "{{ log_directory }}/run.log"
 
@@ -13,7 +14,6 @@ Add-PathVariable "{{ path }}"
 cd "{{ adarevm }}"
 poetry install
 poetry update adarelib
-Write-Status("InstallAdarevm")
 
 # get path to adarevm executable
 $adarevmExecutable = $(poetry run where adarevm | Where-Object { $_ -like "*.cmd" })
@@ -21,6 +21,6 @@ $adarevmExecutable = $(poetry run where adarevm | Where-Object { $_ -like "*.cmd
 Add-PathVariable (Split-Path $adarevmExecutable)
 
 adarevm '{{ experiment_config_file }}'
-Write-Status("RunAdarevm")
 
 Stop-Transcript
+EndStage "run_experiment"

@@ -216,7 +216,6 @@ class ExperimentDirectory(Directory):
         return combine_hashes([
             self.sha256_action,
             self.sha256_testset,
-            #self.sha256_metadata,
         ])
 
     # def copy_to_run_directory(self, run_directory: ExperimentRunDirectory):
