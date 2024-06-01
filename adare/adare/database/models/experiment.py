@@ -533,9 +533,10 @@ class CommandEvent(Event):
         'polymorphic_identity': 'command_event',
     }
     id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
+    name = Column(String)
     command = Column(String)
-    returncode = Column(Integer, nullable=True)
-    stdout = Column(String, nullable=True)
+    returncode = Column(Integer)
+    stdout = Column(String)
 
 
 class TestEvent(Event):
@@ -650,6 +651,52 @@ class ExperimentRunFiles(SerializerMixin, Base):
 
     log_run_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
     log_run = relationship(LogFile, foreign_keys=[log_run_id])
+
+
+class Stage(SerializerMixin, Base):
+    __tablename__ = 'stage'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True)
+    description = Column(String, nullable=True)
+    optional = Column(Boolean)
+
+    parent_id = Column(Integer, ForeignKey('stage.id'), nullable=True)
+    parent = relationship("Stage", remote_side=[id], backref=backref("children", cascade="all, delete-orphan"))
+
+
+class StageInRun(SerializerMixin, Base):
+    __tablename__ = 'stageinrun'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    stage_id = Column(Integer, ForeignKey('stage.id'))
+    stage = relationship(Stage)
+
+    start_time = Column(DateTime, nullable=True)
+    end_time = Column(DateTime, nullable=True)
+
+    run_id = Column(String, ForeignKey('experimentrun.uuid'))
+    run = relationship("ExperimentRun", backref=backref("stages", cascade="all, delete-orphan"))
+
+    @property
+    def duration(self):
+        if self.start_time and self.end_time:
+            return self.end_time - self.start_time
+        return None
+
+    @property
+    def pending(self):
+        return not self.start_time
+
+    @property
+    def in_progress(self):
+        return self.start_time and not self.end_time
+
+    @property
+    def finished(self):
+        return self.start_time and self.end_time
 
 
 class ExperimentRun(SerializerMixin, Base):

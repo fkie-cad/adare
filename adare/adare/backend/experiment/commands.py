@@ -21,7 +21,7 @@ from adare.config.configdirectory import TEMPLATES_DIR
 from adare.backend.script_creation.Scriptmanager import ScriptManager
 from adare.backend.script_creation.Script import Script
 from adare.vagrantapi.vagrantfile import VagrantFile, VagrantMachine
-from adare.vagrantapi.vagrantbox import VagrantBoxVM
+from adare.vagrantapi.vagrantbox import VagrantBoxVM, VagrantOutputProcessor
 from adarelib.helperfunctions.string import make_string_path_safe
 from adarelib.breakpoint import BreakpointReceiveHandler, BP_HOST_BEFORE_CLEANUP, BP_HOST_BEFORE_BOX_START, BP_HOST_AFTER_VAGRANTFILE_CREATION
 from adare.backend.watcher.event import EventHandler
@@ -392,10 +392,11 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     # track time directly before box start
     timestamp_before_box_start = datetime.now()
     # start the box in a separate thread
-    vg_thread = threading.Thread(target=box.run, kwargs={'breakpoints': breakpoints, 'ctrlc_event': ctrlc_event})
+    output_processor = VagrantOutputProcessor(experiment_run_uuid=experiment_run_uuid)
+    vg_thread = threading.Thread(target=box.run, kwargs={'ctrlc_event': ctrlc_event, 'output_processor': output_processor})
     vg_thread.start()
     vagrant_box_finished_event = threading.Event()
-    experiment_flow_console.log_ongoing('vagrant box running', vagrant_box_finished_event)
+    experiment_flow_console.log_ongoing(spinner='vagrant', message='vagrant box running', event=vagrant_box_finished_event)
 
     # start the watchers that watches for events and breakpoints
     __install_watchers(box, experiment_run_uuid, experiment_run_directory.path, experiment_run_directory.breakpoint_directory, ctrlc_event)

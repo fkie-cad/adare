@@ -1,21 +1,122 @@
 # external imports
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
+import typing
 import vagrant
 import subprocess
 from retry import retry
 import os
 import shutil
+import re
 
 # internal imports
 from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.vagrantapi.exceptions import VagrantBoxCreationError, VagrantBoxDestroyError, VagrantBoxRunError
 from adarelib.exceptions import LoggedException
+from adarelib.types.experiment import Stage
+from adare.database.api.stage import StageDbApi
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
+
+
+class VagrantOutputProcessor:
+    experiment_run_uuid: str
+    machine: str
+    provider: str
+
+    # pattern to match the header which contains the machine and provider
+    # e.g. Bringing machine 'X' up with 'Y' provider...
+    header_pattern = re.compile(r"Bringing machine '(?P<machine>.+)' up with '(?P<provider>.+)' provider\.\.\.")
+    vagrant_message_pattern = re.compile(r"==> (?P<machine>.+): (?P<message>.+)")
+    submessage_pattern = re.compile(r" {4}(?P<machine>.+): (?P<message>.+)")
+
+    stage_message_pattern = re.compile(r"stage (?P<stage>.+): (?P<message>.+) \((?P<timestamp>.+)\)")
+
+    def __init__(self, experiment_run_uuid: str):
+        self.experiment_run_uuid = experiment_run_uuid
+        self.machine = ''
+        self.provider = ''
+
+    def process(self, line: str):
+        if match := self.header_pattern.match(line):
+            self.machine = match.group('machine')
+            self.provider = match.group('provider')
+        elif match := self.vagrant_message_pattern.match(line):
+            # these are vagrant log messages sent by vagrant
+            if match:
+                message = match.group('message')
+                log.debug(message)
+        elif match := self.submessage_pattern.match(line):
+            # these are messages within a provisioner, ...
+            if match:
+                message = match.group('message')
+                if match := self.stage_message_pattern.match(message):
+                    stage = match.group('stage')
+                    message = match.group('message')
+                    timestamp = match.group('timestamp')
+                    if message not in ['start', 'end']:
+                        log.warning(f'so far only start and end messages are supported for stages')
+                    stage_data = {
+                        'name': stage,
+                    }
+                    if message == 'start':
+                        stage_data['start_time'] = timestamp
+                    if message == 'end':
+                        stage_data['end_time'] = timestamp
+                    stage = Stage.from_data(stage_data)
+                    with StageDbApi() as api:
+                        api.update_stage_in_run(stage, self.experiment_run_uuid)
+                else:
+                    log.debug(message)
+
+
+class CustomVagrant(vagrant.Vagrant):
+
+    def _stream_vagrant_command(self, args) -> Iterator[str]:
+        """
+        Execute a vagrant command, returning a generator of the output lines.
+        Caller should consume the entire generator to avoid the hanging the
+        subprocess.
+
+        :param args: Arguments for the Vagrant command.
+        :return: generator that yields each line of the command stdout.
+        :rtype: generator iterator
+        """
+        # Make subprocess command
+        command = self._make_vagrant_command(args)
+        sp_args = {
+            "args": command,
+            "cwd": self.root,
+            "env": self.env,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.STDOUT,
+            "bufsize": 1,  # line-buffered,
+            "universal_newlines": True,
+            "start_new_session": True,
+        }
+
+        # Iterate over output lines.
+        # See http://stackoverflow.com/questions/2715847/python-read-streaming-input-from-subprocess-communicate#17698359
+        with subprocess.Popen(**sp_args) as p:
+            stdout = typing.cast(typing.IO, p.stdout)
+            with stdout:
+                for line in iter(stdout.readline, b""):
+                    yield line
+            p.wait()
+            # Raise CalledProcessError for consistency with _call_vagrant_command
+            if p.returncode != 0:
+                raise subprocess.CalledProcessError(p.returncode, command)
+
+    def destroy(self, vm_name=None) -> Iterator[str]:
+        """
+        Terminate the running Vagrant box.
+        """
+        generator = self._stream_vagrant_command(["destroy", vm_name, "--force"])
+        self._cached_conf[vm_name] = None  # remove cached configuration
+        return generator
 
 
 class VagrantBoxVM:
@@ -63,7 +164,7 @@ class VagrantBoxVM:
         """
         return cls(vagrantdirectory_path, log_file, vm_name=vm_name)
 
-    def run(self, breakpoints: list, ctrlc_event: threading.Event = None) -> int:
+    def run(self, ctrlc_event: threading.Event = None, output_processor: VagrantOutputProcessor = None) -> int:
         try:
             self.__clean_up_virtualbox()
         except OSError as e:
@@ -76,28 +177,30 @@ class VagrantBoxVM:
             ) from e
 
         try:
-            self.up(ctrlc_event)
+            self.up(ctrlc_event, output_processor)
         except subprocess.CalledProcessError as e:
             raise VagrantBoxRunError(
                 log,
                 f'vagrant up failed with return code {e.returncode}',
             ) from e
         except KeyboardInterrupt as e:
-            raise LoggedException(log, 'vagrant up was interrupted by the user') from e
+            #raise LoggedException(log, 'vagrant up was interrupted by the user') from e
+            return 1
 
-        self.destroy()
+        self.destroy(output_processor)
         return 0
 
-    def up(self, breakpoints, ctrlc_event: threading.Event = None):
+    def up(self, ctrlc_event: threading.Event = None, output_processor: VagrantOutputProcessor = None):
         self.should_watch = True
-        self.vagrant = vagrant.Vagrant(self.vagrantfile_path.as_posix(), quiet_stdout=False, quiet_stderr=False)
+        self.vagrant = CustomVagrant(self.vagrantfile_path.as_posix(), quiet_stdout=False, quiet_stderr=False)
 
         log_file_handle = self.log_file.open('w') if self.log_file else None
         for line in self.vagrant.up(stream_output=True):
             if ctrlc_event and ctrlc_event.is_set():
-                self.destroy()
+                self.destroy(output_processor)
                 raise KeyboardInterrupt('vagrant up was interrupted by the user')
-            log.debug(line.rstrip())
+            if output_processor:
+                output_processor.process(line)
             if self.log_file:
                 log_file_handle.write(line)
                 log_file_handle.flush()
@@ -107,13 +210,15 @@ class VagrantBoxVM:
         self.should_watch = False
 
     @retry(subprocess.CalledProcessError, tries=5, delay=1, backoff=2)
-    def __destroy_box(self):
-        self.vagrant.destroy()
+    def __destroy_box(self, output_processor: VagrantOutputProcessor = None):
+        for line in self.vagrant.destroy():
+            if output_processor:
+                output_processor.process(line)
 
-    def destroy(self):
+    def destroy(self, output_processor: VagrantOutputProcessor = None):
         self.should_watch = False
         try:
-            self.__destroy_box()
+            self.__destroy_box(output_processor)
         except subprocess.CalledProcessError as e:
             raise VagrantBoxDestroyError(
                 log,

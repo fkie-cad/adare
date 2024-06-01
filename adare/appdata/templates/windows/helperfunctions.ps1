@@ -13,6 +13,34 @@ function WriteLog
     }
 }
 
+function StartStage {
+    param (
+        [string]$stage
+    )
+    $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
+    $LogMessage = "stage $stage: start ($Stamp)"
+    Write-host "$LogMessage"
+}
+
+function StageMessage {
+    param (
+        [string]$stage,
+        [string]$message
+    )
+    $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
+    $LogMessage = "stage $stage: $message ($Stamp)"
+    Write-host "$LogMessage"
+}
+
+function EndStage {
+    param (
+        [string]$stage
+    )
+    $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
+    $LogMessage = "stage $stage: end ($Stamp)"
+    Write-host "$LogMessage"
+}
+
 function Add-PathVariable {
     param (
         [string]$addPath

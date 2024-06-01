@@ -1,5 +1,6 @@
 . "{{ scripts_directory }}\helperfunctions.ps1"
 
+StartStage "mount_networkdrives"
 Start-Transcript {{ log_directory }}/mount_networkdrives.log
 
 {% if share %}
@@ -18,3 +19,4 @@ Write-Host 'no share provided'
 {{ s.command }} 2>&1 | WriteLog
 {% endfor %}
 Stop-Transcript
+EndStage "mount_networkdrives"
