@@ -13,6 +13,7 @@ from adarelib.types.testset import TestsetFile as FTestsetFile, Test as FTest
 from adare.backend.experiment.directory import ExperimentDirectory
 from adarelib.exceptions import TestSetFormatError
 from adare.database.exceptions import EnvironmentMissingError
+from adare.database.fixtures import fixture_stages
 
 # configure logging
 import logging
@@ -31,7 +32,11 @@ class ExperimentApi(ProjectDbApi):
 
     def __enter__(self):
         super().__enter__()
+        self.__fixtures()
         return self
+
+    def __fixtures(self):
+        fixture_stages(self._session)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         super().__exit__(exc_type, exc_val, exc_tb)

@@ -21,7 +21,8 @@ from adare.config.configdirectory import TEMPLATES_DIR
 from adare.backend.script_creation.Scriptmanager import ScriptManager
 from adare.backend.script_creation.Script import Script
 from adare.vagrantapi.vagrantfile import VagrantFile, VagrantMachine
-from adare.vagrantapi.vagrantbox import VagrantBoxVM, VagrantOutputProcessor
+from adare.vagrantapi.vagrantbox import VagrantBoxVM
+from adare.vagrantapi.outputprocessor import VagrantOutputProcessor
 from adarelib.helperfunctions.string import make_string_path_safe
 from adarelib.breakpoint import BreakpointReceiveHandler, BP_HOST_BEFORE_CLEANUP, BP_HOST_BEFORE_BOX_START, BP_HOST_AFTER_VAGRANTFILE_CREATION
 from adare.backend.watcher.event import EventHandler
@@ -257,7 +258,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
 
     # check integrity of the experiment and environment
     __experiment_integrity_check(project_path, experiment_name, experiment_directory)
-    experiment_flow_console.log_success(f'experiment integrity check passed')
+    experiment_flow_console.log_success('experiment integrity check passed')
     # get used testfunctions
     testfunction_files = experiment_database.get_experiment_testfunction_files(project_path, experiment_name)
     testfunction_files_names = ",".join([file.name for file in testfunction_files])
@@ -270,7 +271,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
         environment_name = environment_file.stem
     # check integrity of the project
     __project_integrity_check(project_path, project_directory, environments=[environment_file], testfunctions=testfunction_files)
-    experiment_flow_console.log_success(f'project integrity check passed')
+    experiment_flow_console.log_success('project integrity check passed')
 
     # get environment uuid
     environment_uuid = experiment_database.get_environment_uuid(project_path, environment_name)
@@ -396,7 +397,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     vg_thread = threading.Thread(target=box.run, kwargs={'ctrlc_event': ctrlc_event, 'output_processor': output_processor})
     vg_thread.start()
     vagrant_box_finished_event = threading.Event()
-    experiment_flow_console.log_ongoing(spinner='vagrant', message='vagrant box running', event=vagrant_box_finished_event)
+    experiment_flow_console.log_spinner(spinner='vagrant', message='vagrant box running', event=vagrant_box_finished_event)
 
     # start the watchers that watches for events and breakpoints
     __install_watchers(box, experiment_run_uuid, experiment_run_directory.path, experiment_run_directory.breakpoint_directory, ctrlc_event)

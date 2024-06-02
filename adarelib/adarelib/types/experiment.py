@@ -1,14 +1,15 @@
 import attrs
 from datetime import datetime
 import cattrs
+import typing
 
 
 @attrs.define
 class Stage:
-    name: str
-    description: str
-    parent: "Stage" = None
-    optional: bool = False
+    description: typing.ClassVar[str] = 'stage description'
+    name: typing.ClassVar[str] = 'stage'
+    parent: typing.ClassVar["Stage"] = None
+    optional: typing.ClassVar[bool] = False
     start_time: datetime = None
     end_time: datetime = None
 
@@ -18,65 +19,81 @@ class Stage:
     @classmethod
     def from_data(cls, data: dict):
         subclasses = cls.__subclasses__()
-        for subclass in subclasses:
-            if subclass.name == data['name']:
-                return cattrs.structure(data, subclass)
-        return None
+        return next(
+            (
+                cattrs.structure(data, subclass)
+                for subclass in subclasses
+                if subclass.name == data['name']
+            ),
+            None,
+        )
+
+    @classmethod
+    def get_subclasses(cls):
+        return cls.__subclasses__()
 
 
 @attrs.define
 class SetupStage(Stage):
-    name = 'setup'
-    description = 'todo ...'
-    optional = False
+    name: typing.ClassVar[str] = 'setup'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = None
 
 
 @attrs.define
 class BootStage(Stage):
-    name = 'boot'
-    description = 'todo ...'
-    optional = False
+    name: typing.ClassVar[str] = 'boot'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = None
 
 
 @attrs.define
 class InstallStage(Stage):
-    name = 'install'
-    description = 'todo ...'
-    optional = False
+    name: typing.ClassVar[str] = 'install'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = None
 
 
 @attrs.define
 class MountStage(Stage):
-    name = 'mount'
-    description = 'todo ...'
-    optional = True
+    name: typing.ClassVar[str] = 'mount'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = True
+    parent: typing.ClassVar["Stage"] = None
 
 
 @attrs.define
 class ExperimentStage(Stage):
-    name = 'experiment'
-    description = 'todo ...'
-    optional = False
+    name: typing.ClassVar[str] = 'experiment'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = None
 
 
 @attrs.define
 class DumpStage(Stage):
-    name = 'dump'
-    description = 'todo ...'
-    optional = True
+    name: typing.ClassVar[str] = 'dump'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = True
+    parent: typing.ClassVar["Stage"] = None
 
 
 @attrs.define
 class TeardownStage(Stage):
-    name = 'teardown'
-    description = 'todo ...'
-    optional = False
+    name: typing.ClassVar[str] = 'teardown'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = None
 
 
 @attrs.define
 class CleanupStage(Stage):
-    name = 'cleanup'
-    description = 'todo ...'
-    optional = False
+    name: typing.ClassVar[str] = 'cleanup'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = None
 
 
