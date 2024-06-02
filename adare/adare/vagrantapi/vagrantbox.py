@@ -8,69 +8,15 @@ import subprocess
 from retry import retry
 import os
 import shutil
-import re
 
 # internal imports
 from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.vagrantapi.exceptions import VagrantBoxCreationError, VagrantBoxDestroyError, VagrantBoxRunError
-from adarelib.exceptions import LoggedException
-from adarelib.types.experiment import Stage
-from adare.database.api.stage import StageDbApi
+from adare.vagrantapi.outputprocessor import OutputProcessor
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
-
-
-class VagrantOutputProcessor:
-    experiment_run_uuid: str
-    machine: str
-    provider: str
-
-    # pattern to match the header which contains the machine and provider
-    # e.g. Bringing machine 'X' up with 'Y' provider...
-    header_pattern = re.compile(r"Bringing machine '(?P<machine>.+)' up with '(?P<provider>.+)' provider\.\.\.")
-    vagrant_message_pattern = re.compile(r"==> (?P<machine>.+): (?P<message>.+)")
-    submessage_pattern = re.compile(r" {4}(?P<machine>.+): (?P<message>.+)")
-
-    stage_message_pattern = re.compile(r"stage (?P<stage>.+): (?P<message>.+) \((?P<timestamp>.+)\)")
-
-    def __init__(self, experiment_run_uuid: str):
-        self.experiment_run_uuid = experiment_run_uuid
-        self.machine = ''
-        self.provider = ''
-
-    def process(self, line: str):
-        if match := self.header_pattern.match(line):
-            self.machine = match.group('machine')
-            self.provider = match.group('provider')
-        elif match := self.vagrant_message_pattern.match(line):
-            # these are vagrant log messages sent by vagrant
-            if match:
-                message = match.group('message')
-                log.debug(message)
-        elif match := self.submessage_pattern.match(line):
-            # these are messages within a provisioner, ...
-            if match:
-                message = match.group('message')
-                if match := self.stage_message_pattern.match(message):
-                    stage = match.group('stage')
-                    message = match.group('message')
-                    timestamp = match.group('timestamp')
-                    if message not in ['start', 'end']:
-                        log.warning(f'so far only start and end messages are supported for stages')
-                    stage_data = {
-                        'name': stage,
-                    }
-                    if message == 'start':
-                        stage_data['start_time'] = timestamp
-                    if message == 'end':
-                        stage_data['end_time'] = timestamp
-                    stage = Stage.from_data(stage_data)
-                    with StageDbApi() as api:
-                        api.update_stage_in_run(stage, self.experiment_run_uuid)
-                else:
-                    log.debug(message)
 
 
 class CustomVagrant(vagrant.Vagrant):
@@ -103,8 +49,7 @@ class CustomVagrant(vagrant.Vagrant):
         with subprocess.Popen(**sp_args) as p:
             stdout = typing.cast(typing.IO, p.stdout)
             with stdout:
-                for line in iter(stdout.readline, b""):
-                    yield line
+                yield from iter(stdout.readline, b"")
             p.wait()
             # Raise CalledProcessError for consistency with _call_vagrant_command
             if p.returncode != 0:
@@ -164,7 +109,7 @@ class VagrantBoxVM:
         """
         return cls(vagrantdirectory_path, log_file, vm_name=vm_name)
 
-    def run(self, ctrlc_event: threading.Event = None, output_processor: VagrantOutputProcessor = None) -> int:
+    def run(self, ctrlc_event: threading.Event = None, output_processor: OutputProcessor = None) -> int:
         try:
             self.__clean_up_virtualbox()
         except OSError as e:
@@ -190,7 +135,7 @@ class VagrantBoxVM:
         self.destroy(output_processor)
         return 0
 
-    def up(self, ctrlc_event: threading.Event = None, output_processor: VagrantOutputProcessor = None):
+    def up(self, ctrlc_event: threading.Event = None, output_processor: OutputProcessor = None):
         self.should_watch = True
         self.vagrant = CustomVagrant(self.vagrantfile_path.as_posix(), quiet_stdout=False, quiet_stderr=False)
 
@@ -210,12 +155,12 @@ class VagrantBoxVM:
         self.should_watch = False
 
     @retry(subprocess.CalledProcessError, tries=5, delay=1, backoff=2)
-    def __destroy_box(self, output_processor: VagrantOutputProcessor = None):
+    def __destroy_box(self, output_processor: OutputProcessor = None):
         for line in self.vagrant.destroy():
             if output_processor:
                 output_processor.process(line)
 
-    def destroy(self, output_processor: VagrantOutputProcessor = None):
+    def destroy(self, output_processor: OutputProcessor = None):
         self.should_watch = False
         try:
             self.__destroy_box(output_processor)

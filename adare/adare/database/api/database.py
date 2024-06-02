@@ -5,7 +5,6 @@ from pathlib import Path
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.fixtures import fixture_stages
 
 # configure logging
 import logging
@@ -14,6 +13,7 @@ log = logging.getLogger(__name__)
 
 
 class DatabaseApi:
+    engine: sqlalchemy.engine.base.Engine
     _session: sqlalchemy.orm.Session
 
     def __init__(self, db_path: Path = config_database.get_database_location()):
@@ -23,17 +23,12 @@ class DatabaseApi:
         self.session_starter = sessionmaker(autoflush=False)
         self.session_starter.configure(bind=self.engine)
 
-    def __fixtures(self):
-        fixture_stages(self._session)
-
     def __enter__(self):
         self.__start_sqlalchemy_session()
         if not self._session:
             log.error('Could not start sqlalchemy session.')
             return None
         log.debug('Started sqlalchemy session.')
-        self.__fixtures()
-        log.debug('Loaded fixtures.')
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

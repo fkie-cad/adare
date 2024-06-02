@@ -18,7 +18,7 @@ function StartStage {
         [string]$stage
     )
     $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
-    $LogMessage = "stage $stage: start ($Stamp)"
+    $LogMessage = "stage $($stage): start ($($Stamp))"
     Write-host "$LogMessage"
 }
 
@@ -28,7 +28,7 @@ function StageMessage {
         [string]$message
     )
     $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
-    $LogMessage = "stage $stage: $message ($Stamp)"
+    $LogMessage = "stage $($stage): $($message) ($($Stamp))"
     Write-host "$LogMessage"
 }
 
@@ -37,7 +37,7 @@ function EndStage {
         [string]$stage
     )
     $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
-    $LogMessage = "stage $stage: end ($Stamp)"
+    $LogMessage = "stage $($stage): end ($($Stamp))"
     Write-host "$LogMessage"
 }
 
@@ -55,17 +55,4 @@ function Add-PathVariable {
     } else {
         Throw "'$addPath' is not a valid path."
     }
-}
-
-function Write-Status {
-    param (
-        [string]$statusname
-    )
-    if($?){
-        $status = "success"
-    }else{
-        $status = "failed"
-    }
-    $statusfile = "{{ log_directory }}/status.csv"
-    "$($statusname),$($status)" | Out-File -Encoding ASCII -Append $statusfile
 }
