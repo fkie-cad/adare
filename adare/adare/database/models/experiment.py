@@ -4,6 +4,8 @@ from sqlalchemy.ext.declarative import declarative_base
 import uuid
 from datetime import datetime
 from sqlalchemy_serializer import SerializerMixin
+from sqlalchemy.ext.hybrid import hybrid_property
+from adarelib.config import StatusEnum
 
 Base = declarative_base()
 mapping_experimentrun_test = Table(
@@ -90,6 +92,20 @@ mapping_project_testfunctionfile = Table(
 )
 
 
+class Status(SerializerMixin, Base):
+    __tablename__ = 'status'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String)
+
+    def __str__(self):
+        return str(self.name)
+
+    def __repr__(self):
+        return f"<Status(name='{self.name}')>"
+
+
 class Tag(SerializerMixin, Base):
     __tablename__ = 'tag'
     RELATIONSHIPS_TO_DICT = True
@@ -130,7 +146,7 @@ class Result(SerializerMixin, Base):
     serialize_rules = ('-id', '-status_id')
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    status = Column(String)
+    status = Column(Integer)
     details = Column(String, nullable=True)
 
 
@@ -503,13 +519,22 @@ class Event(SerializerMixin, Base):
 
     uuid = Column(CHAR(32), primary_key=True, default=lambda: str(uuid.uuid4()))
     event_type = Column(String)
+    category = Column(String)
     experiment_run_id = Column(String, ForeignKey('experimentrun.uuid'))
     experiment_run = relationship("ExperimentRun", backref=backref("events", cascade="all, delete-orphan"))
     status = Column(String)
     error = Column(String)
-    stage = Column(String)
+    stage = Column(Boolean, default=False)
 
     timestamp = Column(DateTime)
+
+    @hybrid_property
+    def stage_submessage(self):
+        return None
+
+    @hybrid_property
+    def stage_result(self):
+        return None
 
     __mapper_args__ = {
         'polymorphic_identity': 'event',
@@ -526,6 +551,10 @@ class ActionEvent(Event):
     name = Column(String)
     description = Column(String)
 
+    @property
+    def stage_submessage(self):
+        return f'{self.name}'
+
 
 class CommandEvent(Event):
     __tablename__ = 'command_event'
@@ -537,6 +566,14 @@ class CommandEvent(Event):
     command = Column(String)
     returncode = Column(Integer)
     stdout = Column(String)
+
+    @property
+    def stage_submessage(self):
+        return f'{self.command}'
+
+    @property
+    def stage_result(self):
+        return StatusEnum.SUCCESS if self.returncode == 0 else StatusEnum.FAILED
 
 
 class TestEvent(Event):
@@ -555,6 +592,16 @@ class TestEvent(Event):
     def __repr__(self):
         return f"<TestEvent(test_name='{self.test_name}',result='{self.result}')>"
 
+    @property
+    def stage_submessage(self):
+        return f'{self.test_name}'
+
+    @property
+    def stage_result(self):
+        if self.result is None:
+            return StatusEnum.PENDING
+        return self.result.status
+
 
 class ErrorEvent(Event):
     __tablename__ = 'error_event'
@@ -563,12 +610,21 @@ class ErrorEvent(Event):
     }
     id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     error_name = Column(String)
+    error_msg = Column(String)
 
     def __str__(self):
         return str(self.error)
 
     def __repr__(self):
-        return f"<ErrorEvent(error='{self.error}')>"
+        return f"<ErrorEvent(error='{self.error_msg}')>"
+
+    @property
+    def stage_submessage(self):
+        return f'{self.error_msg}'
+
+    @property
+    def stage_result(self):
+        return StatusEnum.ERROR
 
 
 class GuiFindEvent(Event):
@@ -581,6 +637,16 @@ class GuiFindEvent(Event):
     objective = Column(String)
     success = Column(Integer)
 
+    @property
+    def stage_submessage(self):
+        msg = '(text)' if self.text else '(img)'
+        msg += f' {self.objective}'
+        return msg
+
+    @property
+    def stage_result(self):
+        return StatusEnum.SUCCESS if self.success == 1 else StatusEnum.FAILED
+
 
 class GuiClickEvent(Event):
     __tablename__ = 'gui_click_event'
@@ -592,6 +658,17 @@ class GuiClickEvent(Event):
     modifiers = Column(String)
     target = Column(String)
 
+    @property
+    def stage_submessage(self):
+        msg = f'{self.clicktype} {self.target}'
+        if self.modifiers:
+            msg += f' (mod: {self.modifiers})'
+        return msg
+
+    @property
+    def stage_result(self):
+        return StatusEnum.SUCCESS
+
 
 class GuiKeypressEvent(Event):
     __tablename__ = 'gui_keypress_event'
@@ -600,6 +677,14 @@ class GuiKeypressEvent(Event):
     }
     id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     keys = Column(String)
+
+    @property
+    def stage_submessage(self):
+        return f'{self.keys}'
+
+    @property
+    def stage_result(self):
+        return StatusEnum.SUCCESS
 
 
 class GuiIdleEvent(Event):
@@ -610,28 +695,38 @@ class GuiIdleEvent(Event):
     id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     seconds = Column(Integer)
 
+    @property
+    def stage_submessage(self):
+        return f'{self.seconds} seconds'
+
+    @property
+    def stage_result(self):
+        return StatusEnum.SUCCESS
+
 
 class EventFactory:
     @staticmethod
-    def create_event(event_type, **kwargs):
-        if event_type == 'action':
+    def create_event(category, **kwargs):
+        # add category to kwargs
+        kwargs['category'] = category
+        if category == 'action':
             return ActionEvent(**kwargs)
-        elif event_type == 'command':
+        elif category == 'command':
             return CommandEvent(**kwargs)
-        elif event_type == 'test':
+        elif category == 'test':
             return TestEvent(**kwargs)
-        elif event_type == 'gui.find':
+        elif category == 'gui:find':
             return GuiFindEvent(**kwargs)
-        elif event_type == 'gui.click':
+        elif category == 'gui:click':
             return GuiClickEvent(**kwargs)
-        elif event_type == 'gui.keypress':
+        elif category == 'gui:keypress':
             return GuiKeypressEvent(**kwargs)
-        elif event_type == 'gui.idle':
+        elif category == 'gui:idle':
             return GuiIdleEvent(**kwargs)
-        elif event_type == 'error':
+        elif category == 'error':
             return ErrorEvent(**kwargs)
         else:
-            raise ValueError(f'Invalid event type: {event_type}')
+            raise ValueError(f'Invalid category: {category}')
 
 
 class ExperimentRunFiles(SerializerMixin, Base):
@@ -659,6 +754,7 @@ class Stage(SerializerMixin, Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, unique=True)
+    msg = Column(String, nullable=True)
     description = Column(String, nullable=True)
     optional = Column(Boolean)
 
@@ -676,6 +772,9 @@ class StageInRun(SerializerMixin, Base):
 
     start_time = Column(DateTime, nullable=True)
     end_time = Column(DateTime, nullable=True)
+    status = Column(Integer, default=StatusEnum.PENDING)
+    sub_msg = Column(String, nullable=True)
+    result_status = Column(Integer, nullable=True)
 
     run_id = Column(String, ForeignKey('experimentrun.uuid'))
     run = relationship("ExperimentRun", backref=backref("stages", cascade="all, delete-orphan"))
@@ -704,9 +803,9 @@ class ExperimentRun(SerializerMixin, Base):
     RELATIONSHIPS_TO_DICT = True
 
     uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    experiment_id = Column(String, ForeignKey('experiment.uuid'))
+    experiment_id = Column(String, ForeignKey('experiment.uuid'), nullable=True)
     experiment = relationship(Experiment, backref=backref("runs", cascade="all, delete-orphan"))
-    environment_id = Column(Integer, ForeignKey('environment.uuid'))
+    environment_id = Column(Integer, ForeignKey('environment.uuid'), nullable=True)
     environment = relationship(Environment, backref=backref("runs", cascade="all, delete-orphan"))
 
     path = Column(String, nullable=True)
@@ -717,13 +816,19 @@ class ExperimentRun(SerializerMixin, Base):
 
     published = Column(Boolean, default=False)
 
-    status = Column(String, default='pending')
+    status = Column(Integer, default=StatusEnum.PENDING)
 
-    files_id = Column(Integer, ForeignKey('experimentrunfiles.id'))
+    files_id = Column(Integer, ForeignKey('experimentrunfiles.id'), nullable=True)
     files = relationship(ExperimentRunFiles, backref=backref("experimentrun", uselist=False))
 
     # currently not used
     sha256_validation_hash = Column(String, nullable=True)
+
+    @property
+    def is_valid(self):
+        if self.experiment_id and self.environment_id and self.files_id:
+            return True
+        return False
 
     def __str__(self):
         return str(self.uuid)

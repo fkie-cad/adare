@@ -24,10 +24,12 @@ six = "^1.16.0"
 sphinx = "^7.2.6"
 sphinx-rtd-theme = "^2.0.0"
 watchdog = "^4.0.0"
+keyboard = "^0.13.5"
 
 
 [tool.poetry.scripts]
 adare = "adare.run:main"
+adareexp = "adare.example:main"
 
 [tool.poetry.extras]
 docs = ["Sphinx", "sphinx-rtd-theme"]

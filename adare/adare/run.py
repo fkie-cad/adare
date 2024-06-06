@@ -41,7 +41,6 @@ def main():
     parser.add_argument('-l', '--logfile', help='path to logfile')
     parser.add_argument('-v', '--verbose', action='store_true', help='verbose output (loglevel=INFO)')
     parser.add_argument('-vv', '--very-verbose', action='store_true', help='very verbose output (loglevel=DEBUG)')
-    parser.add_argument('-log', '--log', type=str, help='logfile')
     parser.add_argument('-loglvl', '--log-level', help='loglevel for logfile')
     parser.set_defaults(func=lambda args: exec_show_version(args, parser))
 

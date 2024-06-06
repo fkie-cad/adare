@@ -4,7 +4,7 @@ from pathlib import Path
 # internal imports
 from adare.backend.script_creation.Script import Script
 from adare.backend.script_creation.scripts import PostsetupInstallationsScript, SaveInstalledPackagesScript, \
-    RunExperimentScript, SetScreenResolutionScript
+    RunExperimentScript, ShutdownScript
 import adare.backend.experiment.database as experiment_database
 from adarelib.types.backend import PostsetupInstallations
 from adare.config import SCRIPTS_SUFFIX
@@ -40,10 +40,17 @@ def create_run_script(experimentrun_directory: ExperimentRunDirectory, project_d
     return RunExperimentScript(
         name=f'run{script_suffix}',
         source_directory=template_directory,
-        script_directory=experimentrun_directory.get_path_relative_to_shared_directory('scripts_directory', shared_root_directory_host, shared_root_directory_vm),
         log_directory=experimentrun_directory.get_path_relative_to_shared_directory('log_directory', shared_root_directory_host, shared_root_directory_vm),
         path_directories=path_directories,
         adarevm_path=project_directory.get_path_relative_to_shared_directory('adarevm', shared_root_directory_host, shared_root_directory_vm),
         experiment_config_file=experimentrun_directory.get_path_relative_to_shared_directory('run_config_file', shared_root_directory_host, shared_root_directory_vm),
+        render_wrapper=True,
+    )
+
+
+def create_shutdown_script(experimentrun_directory: ExperimentRunDirectory, template_directory: Path) -> ShutdownScript:
+    return ShutdownScript(
+        name=experimentrun_directory.shutdown_script.name,
+        source_directory=template_directory,
         render_wrapper=True,
     )

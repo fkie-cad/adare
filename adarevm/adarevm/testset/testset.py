@@ -6,6 +6,7 @@ from adarelib.types.testset import TestsetFile
 from adarelib.testfunction import import_basictest_subclasses, get_missing_testfunctions, structure_tests
 from adarelib.event import EventSystem
 from adarelib.types.event import TestEvent, CommandEvent
+from adarelib.config import StatusEnum
 from adarevm.shell import execute_on_shell
 from adarelib.exceptions import LoggedErrorException
 
@@ -47,7 +48,7 @@ class Testset:
         command = next(com for com in self.testsetfile.commands if com.name == command_name)
         self.event_system.log(
             CommandEvent(
-                name=command_name, command=command.command, status='running',
+                name=command_name, command=command.command, status=StatusEnum.RUNNING,
             )
         )
 
@@ -62,7 +63,7 @@ class Testset:
             log.error(f'tool with path {toolpath} does NOT exist')
             self.event_system.log(
                 CommandEvent(
-                    name=command_name, command=command.command, status='failed', error=f'tool with path {toolpath} does NOT exist'
+                    name=command_name, command=command.command, status=StatusEnum.FAILED, error=f'tool with path {toolpath} does NOT exist'
                 )
             )
             raise TestsetExecutionError(log, f'tool with path {toolpath} does NOT exist')
@@ -86,13 +87,13 @@ class Testset:
         test.variables = variables
         self.event_system.log(
             TestEvent(
-                test_name=name, status='running'
+                test_name=name, status=StatusEnum.RUNNING
             )
         )
         test_result = test.test()
         self.event_system.log(
             TestEvent(
-                test_name=name, status='done', result=test_result
+                test_name=name, status=StatusEnum.FINISHED, result=test_result
             )
         )
         self.event_system.save()

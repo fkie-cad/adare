@@ -5,13 +5,14 @@ import cattrs
 from adarelib.helperfunctions.yaml import yaml_to_dict
 from adare.database.api.event import EventDbApi
 from adarelib.types.event import EventSystemData
+from adarelib.customyaml.customloader import YAML_STATUS_LOADER
 
 import logging
 log = logging.getLogger(__name__)
 
 
 def read_event_file(event_file: Path) -> EventSystemData:
-    data: dict = yaml_to_dict(event_file)
+    data: dict = yaml_to_dict(event_file, loader=YAML_STATUS_LOADER)
     return EventSystemData.from_dict(data)
 
 

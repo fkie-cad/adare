@@ -12,8 +12,6 @@ import logging
 log = logging.getLogger(__name__)
 
 
-TEST_FAILED = 'failed'
-TEST_SUCCESS = 'success'
 
 
 @attrs.define
@@ -21,10 +19,10 @@ class Event:
     # action or test
     category: str
     timestamp: str
-    status: str
+    status: int
     uuid: str
     error: str
-    stage: str
+    stage: bool
 
 
 @attrs.define
@@ -34,9 +32,9 @@ class ActionEvent(Event):
     category: str = 'action'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
-    status = 'running'
+    status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: str = ''
+    stage: bool = False
 
 
 @attrs.define
@@ -48,14 +46,14 @@ class CommandEvent(Event):
     stdout: str = ''
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
-    status = 'running'
+    status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: str = ''
+    stage: bool = False
 
 
 @attrs.define
 class TestResult:
-    status: Literal['success', 'failure']
+    status: Literal[config.StatusEnum.SUCCESS, config.StatusEnum.FAILED]
     details: list = attrs.field(default=attrs.Factory(list))
 
 
@@ -66,9 +64,9 @@ class TestEvent(Event):
     category: str = 'test'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
-    status = 'running'
+    status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: str = ''
+    stage: bool = True
 
 
 @attrs.define
@@ -77,9 +75,10 @@ class ErrorEvent(Event):
     category: str = 'error'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
-    status: str = ''
+    status: int = config.StatusEnum.NONE
     stage: str = ''
     error: str = ''
+    error_msg: str = ''
 
 
 @attrs.define
@@ -92,12 +91,12 @@ class GuiFindEvent(GuiEvent):
     text: bool
     objective: str
     success: int = -1
-    category: str = 'gui.find'
+    category: str = 'gui:find'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
-    status = 'running'
+    status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: str = ''
+    stage: bool = False
 
 
 @attrs.define
@@ -105,34 +104,34 @@ class GuiClickEvent(GuiEvent):
     clicktype: str
     modifiers: list[str]
     target: str
-    category: str = 'gui.click'
+    category: str = 'gui:click'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
-    status = 'running'
+    status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: str = ''
+    stage: bool = False
 
 
 @attrs.define
 class GuiKeypressEvent(GuiEvent):
     keys: list[str]
-    category: str = 'gui.keypress'
+    category: str = 'gui:keypress'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
-    status = 'running'
+    status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: str = ''
+    stage: bool = False
 
 
 @attrs.define
 class GuiIdleEvent(GuiEvent):
     seconds: int
-    category: str = 'gui.idle'
+    category: str = 'gui:idle'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
-    status = 'running'
+    status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: str = ''
+    stage: bool = False
 
 
 @attrs.define
@@ -152,10 +151,10 @@ class EventSystemData:
             supported_events = {
                 'action': ActionEvent,
                 'test': TestEvent,
-                'gui.find': GuiFindEvent,
-                'gui.click': GuiClickEvent,
-                'gui.keypress': GuiKeypressEvent,
-                'gui.idle': GuiIdleEvent,
+                'gui:find': GuiFindEvent,
+                'gui:click': GuiClickEvent,
+                'gui:keypress': GuiKeypressEvent,
+                'gui:idle': GuiIdleEvent,
                 'command': CommandEvent,
                 'error': ErrorEvent
             }

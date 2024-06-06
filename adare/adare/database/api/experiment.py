@@ -13,7 +13,7 @@ from adarelib.types.testset import TestsetFile as FTestsetFile, Test as FTest
 from adare.backend.experiment.directory import ExperimentDirectory
 from adarelib.exceptions import TestSetFormatError
 from adare.database.exceptions import EnvironmentMissingError
-from adare.database.fixtures import fixture_stages
+from adare.database.fixtures import fixture_stages, fixture_status
 
 # configure logging
 import logging
@@ -36,6 +36,7 @@ class ExperimentApi(ProjectDbApi):
         return self
 
     def __fixtures(self):
+        fixture_status(self._session)
         fixture_stages(self._session)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -145,8 +146,8 @@ class ExperimentApi(ProjectDbApi):
         self._session.add(logfile)
         return logfile
 
-    def create_experiment_run(
-            self, experiment: Experiment, environment: Environment, path: Path,
+    def update_experiment_run(
+            self, run_uuid: str, experiment: Experiment, environment: Environment, path: Path,
             logfile_vagrant: Path, logfile_installed_packages: Path, logfile_postsetup_installations: Path,
             logfile_run_experiment: Path, status: str
     ) -> ExperimentRun:
@@ -158,13 +159,17 @@ class ExperimentApi(ProjectDbApi):
 
         )
         self._session.add(experiment_run_files)
-        experiment_run = ExperimentRun(
-            experiment=experiment,
-            environment=environment,
-            path=path.as_posix(),
-            files=experiment_run_files,
-            status=status
-        )
+        experiment_run = self._session.query(ExperimentRun).filter_by(uuid=run_uuid).first()
+        experiment_run.environment = environment
+        experiment_run.experiment = experiment
+        experiment_run.path = path.as_posix()
+        experiment_run.files = experiment_run_files
+        experiment_run.status = status
+        self._session.commit()
+        return experiment_run
+
+    def initialize_experiment_run(self) -> ExperimentRun:
+        experiment_run = ExperimentRun()
         self._session.add(experiment_run)
         self._session.commit()
         return experiment_run

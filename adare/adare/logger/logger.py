@@ -66,6 +66,7 @@ class ConsoleShortHandlerFormatter(logging.Formatter):
         logging.Formatter.__init__(self, config.CONSOLEHANDLER_SHORT, None)
 
     def format(self, record):
+
         if record.levelno == logging.DEBUG:
             record.levelprefix = "[*]"
         elif record.levelno == logging.INFO:
@@ -99,7 +100,6 @@ def setup_logger(loglevel_console=None, loglevel_file=None, logfile=None, consol
     if not console:
         loglevel_console = logging.CRITICAL
 
-
     handler = logging.StreamHandler(sys.stdout)
     if console_details:
         handler.setFormatter(ConsoleHandlerFormatter())
@@ -115,6 +115,7 @@ def setup_logger(loglevel_console=None, loglevel_file=None, logfile=None, consol
         else:
             handler = logging.FileHandler(logfile, encoding='utf-8')
             handler.setFormatter(FileHandlerFormatter())
+            handler.setLevel(loglevel_file)
             logging.getLogger().addHandler(handler)
             # check if loglevel_file is higher than loglevel_console and adjust logger level if necessary
             if loglevel_file < loglevel_console:

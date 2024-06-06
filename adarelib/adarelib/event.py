@@ -5,6 +5,7 @@ import attrs
 from adarevm.config import TIMESTAMP_FORMAT
 from adarelib.helperfunctions.yaml import dict_to_yaml
 from adarelib.types.event import Event, EventSystemData
+from adarelib.customyaml.customloader import YAML_STATUS_DUMPER
 
 import logging
 log = logging.getLogger(__name__)
@@ -35,4 +36,4 @@ class EventSystem:
     def save(self):
         self.data.end_time = datetime.now().strftime(TIMESTAMP_FORMAT)
         data = attrs.asdict(self.data)
-        dict_to_yaml(self.path, data)
+        dict_to_yaml(self.path, data, dumper=YAML_STATUS_DUMPER)

@@ -1,3 +1,5 @@
+from enum import IntEnum
+
 NAME = 'adarelib'
 # timestamp format
 TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%f'
@@ -68,3 +70,25 @@ DEFAULT_NETWORKDRIVE_SHARENAME = "share"
 
 # maximum time for a breakpoint to be active
 BREAKPOINT_LIMIT_SECONDS = 60*5
+
+
+class StatusEnum(IntEnum):
+    NONE = 0
+    SUCCESS = 1
+    FAILED = 2
+    WARNING = 3
+    ERROR = 4
+    RUNNING = 5
+    PENDING = 6
+    INTERRUPTED = 7
+    FINISHED = 8
+
+    @staticmethod
+    def is_valid(value: int):
+        return value in StatusEnum.__members__
+
+
+
+
+
+

@@ -1,12 +1,16 @@
 # external imports
 import attrs
 from datetime import datetime
+import sqlalchemy.orm
+import queue
+from pathlib import Path
 
 # internal imports
-from adare.database.models.experiment import EventFactory, Event as ModelEvent, ExperimentRun, Result as ModelResult
+from adare.database.models.experiment import EventFactory, Event as ModelEvent, ExperimentRun, Result as ModelResult, Stage, StageInRun
 from adare.database.api.experiment import ExperimentApi
 from adarelib.types.event import EventSystemData
-from adarelib.config import TIMESTAMP_FORMAT
+from adare.config import database as config_database
+from adarelib.config import TIMESTAMP_FORMAT, StatusEnum
 
 # configure logging
 import logging
@@ -23,6 +27,11 @@ def replace_list_recursive_in_dict(d: dict):
 
 
 class EventDbApi(ExperimentApi):
+    stage_in_run_id: int
+
+    def __init__(self, db_path: Path = config_database.get_database_location()):
+        super().__init__(db_path)
+        self.stage_in_run_id = -1
 
     def get_or_create_test_result(self, test_result_data: dict):
         test_result = self._session.query(ModelResult).filter_by(**test_result_data).first()
@@ -31,6 +40,41 @@ class EventDbApi(ExperimentApi):
             self._session.add(test_result)
             self._session.commit()
         return test_result
+
+    def __update_stage(self, event: ModelEvent, experiment_run: ExperimentRun):
+        if not (stage_db := self._session.query(Stage).filter(Stage.name == f'box.experiment.{event.category}').first()):
+            log.warning(f"Stage '{event.event_type}' not found in database")
+            return
+        if self.stage_in_run_id < 0:
+            kwargs = {
+                'stage_id': stage_db.id,
+                'run_id': experiment_run.uuid,
+                'start_time': event.timestamp,
+                'sub_msg': event.stage_submessage,
+            }
+            if event.status == StatusEnum.FINISHED:
+                kwargs['end_time'] = event.timestamp
+                kwargs['status'] = event.stage_result
+            # create new stage in run
+            stage_in_run = StageInRun(**kwargs)
+            self._session.add(stage_in_run)
+            self._session.commit()
+            self.stage_in_run_id = stage_in_run.id
+            log.info(f"Added stage '{event.event_type}' to run {experiment_run.uuid}")
+        else:
+            stage_in_run = self._session.query(StageInRun).filter_by(id=self.stage_in_run_id).first()
+            if not stage_in_run:
+                log.error(f"Stage in run with id {self.stage_in_run_id} not found")
+                return
+            # update stage in run
+            if event.status == StatusEnum.FINISHED:
+                stage_in_run.end_time = event.timestamp
+                stage_in_run.status = event.stage_result
+                log.info(f"Stage '{event.event_type}' finished with status {event.stage_result}")
+                stage_in_run = None
+            stage_in_run.sub_msg = event.stage_submessage
+            log.info(f"Updated stage '{event.event_type}' in run {experiment_run.uuid}")
+            self._session.commit()
 
     def update_events(self, experiment_run_uuid: str, eventsystem: EventSystemData):
         experiment_run = self._session.query(ExperimentRun).filter_by(uuid=experiment_run_uuid).first()
@@ -52,7 +96,7 @@ class EventDbApi(ExperimentApi):
                     continue
                 event_data = attrs.asdict(event)
                 # rename category to event_type
-                event_type = event_data.pop('category')
+                category = event_data.pop('category')
                 replace_list_recursive_in_dict(event_data)
                 # convert string to datetime object
                 event_data['timestamp'] = datetime.strptime(event_data['timestamp'], TIMESTAMP_FORMAT)
@@ -63,8 +107,11 @@ class EventDbApi(ExperimentApi):
                         event_data['result_id'] = result.id
                     else:
                         log.fatal(f'could not create test result for event {event.uuid}')
-                model_event: ModelEvent = EventFactory.create_event(event_type, **event_data)
+                model_event: ModelEvent = EventFactory.create_event(category, **event_data)
                 self._session.add(model_event)
                 log.info(f'added event {model_event.uuid} to experiment run {experiment_run_uuid}')
+                if model_event.stage:
+                    self.__update_stage(model_event, experiment_run)
+
             self._session.commit()
             log.info(f'updated events for experiment run {experiment_run_uuid}')

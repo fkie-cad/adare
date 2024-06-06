@@ -14,7 +14,8 @@ from adarevm.shell import execute_on_shell
 import adarevm.config as config
 from adarevm.testset.testset import Testset
 from adarelib.event import EventSystem
-from adarelib.types.event import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent, CommandEvent, ActionEvent, Event, ErrorEvent
+from adarelib.config import StatusEnum
+from adarelib.types.event import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent, Event, ErrorEvent
 
 # logging
 import logging
@@ -146,7 +147,7 @@ class Experiment:
         """
         self.log(
             GuiFindEvent(
-                objective=image_name, text=False, status="running"
+                objective=image_name, text=False, status=StatusEnum.RUNNING
             )
         )
         match_objects = []
@@ -164,7 +165,7 @@ class Experiment:
 
         self.log(
             GuiFindEvent(
-                objective=image_name, success=bool(match_objects), text=False, status="done"
+                objective=image_name, success=bool(match_objects), text=False, status=StatusEnum.FINISHED
             )
         )
 
@@ -178,7 +179,7 @@ class Experiment:
         """
         self.log(
             GuiFindEvent(
-                objective=text, text=True, status="running"
+                objective=text, text=True, status=StatusEnum.RUNNING
             )
         )
         textfile = self.__create_textfile(text)
@@ -187,14 +188,14 @@ class Experiment:
             elements = self.guibot.find_all(stepsfile.name)
             self.eventsystem.log(
                 GuiFindEvent(
-                    objective=text, success=bool(elements), text=True, status="done"
+                    objective=text, success=bool(elements), text=True, status=StatusEnum.FINISHED
                 )
             )
             return elements
         except guibot.errors.FindError:
             self.eventsystem.log(
                 GuiFindEvent(
-                    objective=text, success=False, text=True, status="done"
+                    objective=text, success=False, text=True, status=StatusEnum.FINISHED
                 )
             )
             return None
@@ -263,7 +264,7 @@ class Experiment:
         log.error(f'{name}: {message}')
         self.log(
             ErrorEvent(
-                error_name=name, error=message
+                error_name=name, error_msg=message, status=StatusEnum.FINISHED
             )
         )
 
@@ -278,7 +279,7 @@ class Experiment:
         match = self.guibot.click(target_or_location, modifiers=modifiers)
         self.eventsystem.log(
             GuiClickEvent(
-                clicktype='left', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status="done"
+                clicktype='left', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status=StatusEnum.FINISHED
             )
         )
         return match
@@ -289,7 +290,7 @@ class Experiment:
         match = self.guibot.right_click(target_or_location, modifiers=modifiers)
         self.eventsystem.log(
             GuiClickEvent(
-                clicktype='right', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status="done"
+                clicktype='right', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status=StatusEnum.FINISHED
             )
         )
         return match
@@ -300,7 +301,7 @@ class Experiment:
         match = self.guibot.double_click(target_or_location, modifiers=modifiers)
         self.eventsystem.log(
             GuiClickEvent(
-                clicktype='double', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status="done"
+                clicktype='double', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status=StatusEnum.FINISHED
             )
         )
         return match
@@ -311,7 +312,7 @@ class Experiment:
             keys = [keys]
         self.eventsystem.log(
             GuiKeypressEvent(
-                keys=keys, status="done"
+                keys=keys, status=StatusEnum.FINISHED
             )
         )
 
@@ -319,14 +320,14 @@ class Experiment:
         self.eventsystem.log(
             GuiIdleEvent(
                 seconds=timeout,
-                status="running"
+                status=StatusEnum.RUNNING
             )
         )
         self.guibot.idle(timeout)
         self.eventsystem.log(
             GuiIdleEvent(
                 seconds=timeout,
-                status="done"
+                status=StatusEnum.FINISHED
             )
         )
 

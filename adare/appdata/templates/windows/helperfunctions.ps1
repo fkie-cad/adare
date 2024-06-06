@@ -9,7 +9,7 @@ function WriteLog
     $LogContent -Split "`r`n" | ForEach-Object {
         $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
         $LogMessage = "[$Stamp]: $_"
-        Write-host "$LogMessage"
+        Write-Host "$LogMessage"
     }
 }
 
@@ -19,7 +19,7 @@ function StartStage {
     )
     $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
     $LogMessage = "stage $($stage): start ($($Stamp))"
-    Write-host "$LogMessage"
+    Write-Host "$LogMessage"
 }
 
 function StageMessage {
@@ -29,7 +29,7 @@ function StageMessage {
     )
     $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
     $LogMessage = "stage $($stage): $($message) ($($Stamp))"
-    Write-host "$LogMessage"
+    Write-Host "$LogMessage"
 }
 
 function EndStage {
@@ -38,7 +38,7 @@ function EndStage {
     )
     $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
     $LogMessage = "stage $($stage): end ($($Stamp))"
-    Write-host "$LogMessage"
+    Write-Host "$LogMessage"
 }
 
 function Add-PathVariable {

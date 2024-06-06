@@ -96,3 +96,4 @@ def main():
         )
     finally:
         BP_BOX_BEFORE_BOX_STOP.trigger_on_guest_if_in_breakpoints(config.breakpoints, Path(config.breakpoint_directory))
+    sys.exit(0)
