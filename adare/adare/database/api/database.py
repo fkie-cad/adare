@@ -8,7 +8,6 @@ import adare.config.database as config_database
 
 # configure logging
 import logging
-
 log = logging.getLogger(__name__)
 
 
@@ -28,13 +27,13 @@ class DatabaseApi:
         if not self._session:
             log.error('Could not start sqlalchemy session.')
             return None
-        log.debug('Started sqlalchemy session.')
+        # log.debug('Started sqlalchemy session.')
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self._session:
             self.__stop_sqlalchemy_session()
-            log.debug('Stopped sqlalchemy session.')
+            # log.debug('Stopped sqlalchemy session.')
         else:
             log.error('Could not stop sqlalchemy session, because session was not created.')
 

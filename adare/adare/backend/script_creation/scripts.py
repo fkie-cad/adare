@@ -27,7 +27,6 @@ class RunExperimentScript(Script):
     def __init__(self,
                  name: str,
                  source_directory: Path,
-                 script_directory: Path,
                  log_directory: Path,
                  path_directories: list[Path],
                  adarevm_path: Path,
@@ -36,7 +35,6 @@ class RunExperimentScript(Script):
                  ):
         super().__init__(name, source_directory, render_wrapper=render_wrapper)
         var = {
-            'script_directory': script_directory,
             'log_directory': log_directory,
             'path_directories': path_directories,
             'adarevm': adarevm_path,
@@ -72,3 +70,8 @@ class SetScreenResolutionScript(Script):
             'y': resolution[1]
         }
         self.update_variables(var)
+
+
+class ShutdownScript(Script):
+    def __init__(self, name: str, source_directory: Path, render_wrapper: bool = False):
+        super().__init__(name, source_directory, render_wrapper=render_wrapper)

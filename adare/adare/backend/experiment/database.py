@@ -3,11 +3,13 @@ from pathlib import Path
 from datetime import datetime
 
 # internal imports
-from adare.database.models.experiment import Project, Experiment
+from adare.database.models.experiment import Project, Experiment, StageInRun
 from adare.database.api.experiment import ExperimentApi
 from adare.database.api.environment import EnvironmentDbApi
+from adare.database.api.stage import StageDbApi
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 from adare.backend.experiment.exceptions import NoEnvironmentError, MultipleEnvironmentsError
+from adarelib.types.stage import Stage as StageType
 
 # configure logging
 import logging
@@ -82,11 +84,12 @@ def get_environment_vagrant_box(environment_uuid: str):
         return api.get_environment_vagrant_box(environment_uuid)
 
 
-def create_experiment_run(experiment_name: str, environment_name: str, project_name: str, experimentrun_directory: ExperimentRunDirectory) -> str:
+def update_experiment_run(experiment_run_uuid: str, experiment_name: str, environment_name: str, project_name: str, experimentrun_directory: ExperimentRunDirectory) -> str:
     with ExperimentApi() as api:
         environment = api.get_environment(environment_name, project_name)
         experiment = api.get_experiment(experiment_name, environment)
-        experiment_run = api.create_experiment_run(
+        experiment_run = api.update_experiment_run(
+            run_uuid=experiment_run_uuid,
             experiment=experiment,
             environment=environment,
             path=experimentrun_directory.path,
@@ -97,6 +100,11 @@ def create_experiment_run(experiment_name: str, environment_name: str, project_n
             status='running',
         )
         return experiment_run.uuid
+
+
+def initialize_experiment_run():
+    with ExperimentApi() as api:
+        return api.initialize_experiment_run().uuid
 
 
 def update_experiment_run_start(experiment_run_uuid: str, timestamp: datetime):
@@ -140,3 +148,8 @@ def get_experiment_environment(project_path: Path, experiment_name: str):
                 ]
             )
         return Path(experiment.environments[0].file)
+
+
+def update_stage_in_run(stage: StageType, experimentrun_uuid: str):
+    with StageDbApi() as db:
+        db.update_stage_in_run(stage, experimentrun_uuid)

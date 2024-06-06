@@ -38,7 +38,7 @@ def setup_logging(arguments, commandline):
 
     console_logging = bool(loglevel_console)
     if arguments.logfile:
-        logger.setup_logger(loglevel_console=loglevel_console, logfile=arguments.log, console=console_logging,  loglevel_file=loglevel_file)
+        logger.setup_logger(loglevel_console=loglevel_console, logfile=arguments.logfile, console=console_logging,  loglevel_file=loglevel_file)
     else:
         logger.setup_logger(loglevel_console=loglevel_console, logfile=None, console=console_logging, loglevel_file=loglevel_file)
 

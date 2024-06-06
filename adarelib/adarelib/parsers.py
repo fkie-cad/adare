@@ -6,7 +6,7 @@ from pathlib import Path
 from adarelib.types.backend import ExperimentMetadata, EnvironmentMetadata
 from adarelib.types.testset import TestsetFile
 from adarelib.exceptions import DataStructuringError
-from adarelib.customyaml.customloader import create_yaml_loader_dumper_inputfiles
+from adarelib.customyaml.customloader import YAML_TESTSET_LOADER
 from adarelib.helperfunctions.yaml import yaml_to_dict
 
 # configure logging
@@ -39,8 +39,7 @@ def parse_testsetfile(testset_file: Path) -> TestsetFile:
     :return: TestsetFile object
     """
     log.debug(f'start to read input yaml file ({testset_file})')
-    loader, dumper = create_yaml_loader_dumper_inputfiles()
-    parsed_input = yaml_to_dict(testset_file, loader=loader)
+    parsed_input = yaml_to_dict(testset_file, loader=YAML_TESTSET_LOADER)
     if not parsed_input:
         log.info(f'parsing input yaml file ({testset_file}) was NOT successful')
         return None

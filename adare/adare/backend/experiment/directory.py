@@ -69,6 +69,8 @@ class ExperimentRunDirectory(Directory):
         self.wrapper_run_script = self.scripts_directory / f'wrapper_run{script_suffix}'
         self.packagedump_script = self.scripts_directory / f'packagedump{script_suffix}'
         self.wrapper_packagedump_script = self.scripts_directory / f'wrapper_packagedump{script_suffix}'
+        self.shutdown_script = self.scripts_directory / f'shutdown{script_suffix}'
+        self.wrapper_shutdown_script = self.scripts_directory / f'wrapper_shutdown{script_suffix}'
 
         self.vagrant_log = self.log_directory / 'vagrant.log'
         self.install_log = self.log_directory / 'installations.log'

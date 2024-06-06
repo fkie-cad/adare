@@ -67,6 +67,7 @@ class BreakPoint:
 
     def trigger_on_guest_if_in_breakpoints(self, breakpoints: list['BreakPoint'], json_file: Path):
         if self.name in [bp.name for bp in breakpoints]:
+            log.info(f'Breakpoint {self.name} received')
             self.trigger_on_guest(json_file)
 
 
