@@ -73,15 +73,15 @@ BREAKPOINT_LIMIT_SECONDS = 60*5
 
 
 class StatusEnum(IntEnum):
-    NONE = 0
-    SUCCESS = 1
-    FAILED = 2
-    WARNING = 3
-    ERROR = 4
-    RUNNING = 5
-    PENDING = 6
-    INTERRUPTED = 7
-    FINISHED = 8
+    NONE = 1
+    SUCCESS = 2
+    FAILED = 3
+    WARNING = 4
+    ERROR = 5
+    RUNNING = 6
+    PENDING = 7
+    INTERRUPTED = 8
+    FINISHED = 9
 
     @staticmethod
     def is_valid(value: int):

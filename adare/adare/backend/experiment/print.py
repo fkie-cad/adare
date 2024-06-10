@@ -12,6 +12,38 @@ import logging
 log = logging.getLogger(__name__)
 
 
+class StatusIconMapping:
+    mapping: dict
+    colormapping: dict
+
+    def __init__(self):
+        self.mapping = {
+            StatusEnum.NONE: '',
+            StatusEnum.SUCCESS: ':heavy_check_mark:',
+            StatusEnum.WARNING: ':warning:',
+            StatusEnum.FAILED: ':heavy_multiplication_x:',
+            StatusEnum.ERROR: ':x:',
+            StatusEnum.INTERRUPTED: ':high_voltage:'
+        }
+
+        self.colormapping = {
+            StatusEnum.NONE: '',
+            StatusEnum.SUCCESS: 'green',
+            StatusEnum.WARNING: 'yellow',
+            StatusEnum.FAILED: 'red',
+            StatusEnum.ERROR: 'red',
+            StatusEnum.INTERRUPTED: 'yellow'
+        }
+
+    def get_icon(self, status: int, color: bool = False):
+        if status not in self.mapping.keys():
+            return ''
+        if color and status in self.colormapping.keys():
+            return f'[{self.colormapping[status]}]{self.mapping[status]}[/{self.colormapping[status]}]'
+        return self.mapping[status]
+status_icon_mapping = StatusIconMapping()
+
+
 class ExperimentFlowConsole:
     console: Console
     stop_event: threading.Event
@@ -73,6 +105,9 @@ class ExperimentFlowConsole:
         if message_object['level'] > 0:
             message = ' ' * 2 * message_object['level'] + message
 
+        if message_object['result_status']:
+            message = f'{message} {status_icon_mapping.get_icon(message_object["result_status"], color=True)}'
+
         return message
 
     def log_success(self, identifier: str, message: str, level: int = 0):
@@ -81,7 +116,8 @@ class ExperimentFlowConsole:
             'spinner': None,
             'spinner_style': None,
             'level': level,
-            'status': StatusEnum.SUCCESS
+            'status': StatusEnum.SUCCESS,
+            'result_status': None,
         }
 
     def log_warning(self, identifier: str, message: str, level: int = 0):
@@ -90,7 +126,8 @@ class ExperimentFlowConsole:
             'spinner': None,
             'spinner_style': None,
             'level': level,
-            'status': StatusEnum.WARNING
+            'status': StatusEnum.WARNING,
+            'result_status': None,
         }
 
     def log_error(self, identifier: str, message: str, level: int = 0):
@@ -99,7 +136,8 @@ class ExperimentFlowConsole:
             'spinner': None,
             'spinner_style': None,
             'level': level,
-            'status': StatusEnum.ERROR
+            'status': StatusEnum.ERROR,
+            'result_status': None,
         }
 
     def log_interrupted(self, identifier: str, message: str, level: int = 0):
@@ -108,7 +146,8 @@ class ExperimentFlowConsole:
             'spinner': None,
             'spinner_style': None,
             'level': level,
-            'status': StatusEnum.INTERRUPTED
+            'status': StatusEnum.INTERRUPTED,
+            'result_status': None,
         }
 
     def change_log_message(self, identifier: str, message: str):
@@ -120,14 +159,16 @@ class ExperimentFlowConsole:
             'spinner': spinner,
             'spinner_style': spinner_style,
             'level': level,
-            'status': StatusEnum.NONE
+            'status': StatusEnum.NONE,
+            'result_status': None,
         }
 
-    def log_spinner_done(self, identifier: str, status: int, message: str = None):
+    def log_spinner_done(self, identifier: str, status: int, message: str = None, result_status: int = None):
         updated_msg = self.messages[identifier]
         updated_msg['spinner'] = None
         updated_msg['spinner_style'] = None
         updated_msg['status'] = status
+        updated_msg['result_status'] = result_status
         if message:
             updated_msg['message'] = message
         self.messages[identifier] = updated_msg

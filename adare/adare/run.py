@@ -38,7 +38,7 @@ def main():
     parser = argparse.ArgumentParser(add_help=True,
                                      description='Adare - A tool to run experiments in virtual environments')
     parser.add_argument('-V', '--version', action='store_true', help='display program version')
-    parser.add_argument('-l', '--logfile', help='path to logfile')
+    parser.add_argument('-log', '--logfile', help='path to logfile')
     parser.add_argument('-v', '--verbose', action='store_true', help='verbose output (loglevel=INFO)')
     parser.add_argument('-vv', '--very-verbose', action='store_true', help='very verbose output (loglevel=DEBUG)')
     parser.add_argument('-loglvl', '--log-level', help='loglevel for logfile')

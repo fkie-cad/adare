@@ -62,7 +62,7 @@ class VagrantOutputProcessor(OutputProcessor):
         timestamp = match.group('timestamp')
         if message not in ['start', 'end']:
             log.warning('so far only start and end messages are supported for stages')
-        stage_class = Stage.get_subclass(stage_name)
+        stage_class = Stage.get_subclass(f'box.{stage_name}')
         if stage_class:
             stage = stage_class()
             if message == 'start':
