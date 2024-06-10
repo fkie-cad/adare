@@ -39,7 +39,7 @@ def fixture_status(session: sqlalchemy.orm.Session):
     for status in StatusEnum:
         if session.query(Status).filter(Status.name == status.name).first():
             continue
-        status_db = Status(name=status.name)
+        status_db = Status(name=status.name, id=status.value)
         session.add(status_db)
         session.commit()
         updated = True

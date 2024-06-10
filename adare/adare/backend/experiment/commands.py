@@ -159,6 +159,12 @@ def __install_watchers(experimentrun_uuid: str, run_directory: Path, bp_director
     observer.start()
     while not ctrlc_event.is_set() and not shutdown_event.is_set() and observer.is_alive():
         time.sleep(0.1)
+    if ctrlc_event.is_set():
+        log.info('keyboard interrupt received, stopping watchers after 1s delay')
+        time.sleep(1)
+    if shutdown_event.is_set():
+        log.info('shutdown event received, stopping watchers after 1s delay')
+        time.sleep(1)
     observer.stop()
     observer.join()
     log.info('all watchers stopped')

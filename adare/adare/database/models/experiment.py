@@ -223,7 +223,7 @@ class TestFunction(SerializerMixin, Base):
 
     possible_parameters = relationship(TestParameter, secondary=mapping_testfunction_testparameter)
 
-    @property
+    @hybrid_property
     def fullname(self):
         return f"{self.file.name}.{self.name}"
 
@@ -551,7 +551,7 @@ class ActionEvent(Event):
     name = Column(String)
     description = Column(String)
 
-    @property
+    @hybrid_property
     def stage_submessage(self):
         return f'{self.name}'
 
@@ -567,11 +567,11 @@ class CommandEvent(Event):
     returncode = Column(Integer)
     stdout = Column(String)
 
-    @property
+    @hybrid_property
     def stage_submessage(self):
         return f'{self.command}'
 
-    @property
+    @hybrid_property
     def stage_result(self):
         return StatusEnum.SUCCESS if self.returncode == 0 else StatusEnum.FAILED
 
@@ -592,13 +592,13 @@ class TestEvent(Event):
     def __repr__(self):
         return f"<TestEvent(test_name='{self.test_name}',result='{self.result}')>"
 
-    @property
+    @hybrid_property
     def stage_submessage(self):
         return f'{self.test_name}'
 
-    @property
+    @hybrid_property
     def stage_result(self):
-        if self.result is None:
+        if not self.result:
             return StatusEnum.PENDING
         return self.result.status
 
@@ -618,11 +618,11 @@ class ErrorEvent(Event):
     def __repr__(self):
         return f"<ErrorEvent(error='{self.error_msg}')>"
 
-    @property
+    @hybrid_property
     def stage_submessage(self):
         return f'{self.error_msg}'
 
-    @property
+    @hybrid_property
     def stage_result(self):
         return StatusEnum.ERROR
 
@@ -637,13 +637,13 @@ class GuiFindEvent(Event):
     objective = Column(String)
     success = Column(Integer)
 
-    @property
+    @hybrid_property
     def stage_submessage(self):
         msg = '(text)' if self.text else '(img)'
         msg += f' {self.objective}'
         return msg
 
-    @property
+    @hybrid_property
     def stage_result(self):
         return StatusEnum.SUCCESS if self.success == 1 else StatusEnum.FAILED
 
@@ -658,14 +658,14 @@ class GuiClickEvent(Event):
     modifiers = Column(String)
     target = Column(String)
 
-    @property
+    @hybrid_property
     def stage_submessage(self):
         msg = f'{self.clicktype} {self.target}'
         if self.modifiers:
             msg += f' (mod: {self.modifiers})'
         return msg
 
-    @property
+    @hybrid_property
     def stage_result(self):
         return StatusEnum.SUCCESS
 
@@ -678,11 +678,11 @@ class GuiKeypressEvent(Event):
     id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     keys = Column(String)
 
-    @property
+    @hybrid_property
     def stage_submessage(self):
         return f'{self.keys}'
 
-    @property
+    @hybrid_property
     def stage_result(self):
         return StatusEnum.SUCCESS
 
@@ -695,11 +695,11 @@ class GuiIdleEvent(Event):
     id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
     seconds = Column(Integer)
 
-    @property
+    @hybrid_property
     def stage_submessage(self):
         return f'{self.seconds} seconds'
 
-    @property
+    @hybrid_property
     def stage_result(self):
         return StatusEnum.SUCCESS
 
@@ -779,21 +779,21 @@ class StageInRun(SerializerMixin, Base):
     run_id = Column(String, ForeignKey('experimentrun.uuid'))
     run = relationship("ExperimentRun", backref=backref("stages", cascade="all, delete-orphan"))
 
-    @property
+    @hybrid_property
     def duration(self):
         if self.start_time and self.end_time:
             return self.end_time - self.start_time
         return None
 
-    @property
+    @hybrid_property
     def pending(self):
         return not self.start_time
 
-    @property
+    @hybrid_property
     def in_progress(self):
         return self.start_time and not self.end_time
 
-    @property
+    @hybrid_property
     def finished(self):
         return self.start_time and self.end_time
 
@@ -824,7 +824,7 @@ class ExperimentRun(SerializerMixin, Base):
     # currently not used
     sha256_validation_hash = Column(String, nullable=True)
 
-    @property
+    @hybrid_property
     def is_valid(self):
         if self.experiment_id and self.environment_id and self.files_id:
             return True

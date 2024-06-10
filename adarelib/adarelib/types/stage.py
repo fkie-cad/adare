@@ -17,28 +17,26 @@ class Stage:
     # set default to now
     start_time: datetime = None
     end_time: datetime = None
-    status: int = StatusEnum.NONE
+    status: int = attrs.field(default=StatusEnum.NONE)
     sub_msg: str = ''
-    result_status: int = StatusEnum.NONE
-    start_event: threading.Event = threading.Event()
-    end_event: threading.Event = threading.Event()
+    result_status: int = attrs.field(default=StatusEnum.NONE)
 
     def __str__(self):
         return f'{self.name}: {self.msg}'
 
     def start(self):
         self.start_time = datetime.now()
-        self.start_event.set()
 
     def set_status(self, status: int):
         if StatusEnum.is_valid(status):
             self.status = status
+        else:
+            raise ValueError(f'Invalid status: {status}')
 
     def end(self, status: int = StatusEnum.SUCCESS):
         self.end_time = datetime.now()
-        if not self.status:
+        if self.status == StatusEnum.NONE:
             self.status = status
-        self.end_event.set()
 
     @classmethod
     def get_subclass(cls, name: str):
