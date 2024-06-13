@@ -1,5 +1,10 @@
 # external imports
 import pandas as pd
+from rich.layout import Layout
+from rich import print as rprint
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 # internal imports
 from adarelib.helperfunctions.cli import print_df, print_dict
@@ -67,14 +72,38 @@ def print_run_list():
 
 
 def print_run_details(run_uuid: str):
+    console = Console()
+    # Get the size of the terminal
+    terminal_size = console.size
+    # Set the height as terminal height minus 10
+    desired_height = terminal_size.height - 10 if terminal_size.height > 10 else 1
+    console = Console(height=desired_height)
+
     with DataRetrievalApi() as api:
         df_run: pd.DataFrame = api.get_run_details(run_uuid)
-    visible_columns = [
-        'uuid',
-        'experiment_id',
-        'environment_id',
-        'status',
-    ]
-    print_df(df_run[visible_columns], 'Run Details')
+        # visible_columns = [
+        #     'uuid',
+        #     'experiment_id',
+        #     'environment_id',
+        #     'status',
+        # ]
+        # print_df(df_run[visible_columns], 'Run Details')
+        layout = Layout()
+        metadata = Layout(name='metadata', ratio=2)
+        table_metadata = Table()
+        table_metadata.add_column('key')
+        table_metadata.add_column('value')
+        table_metadata.add_row('uuid', df_run['uuid'].values[0])
+        table_metadata.add_row('experiment', df_run['experiment_name'].values[0])
+
+        tests = Layout(name='tests', ratio=3)
+
+        layout.split_row(
+            metadata,
+            tests,
+        )
+        console.print(layout)
+
+
 
 

@@ -8,7 +8,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def execute_on_shell(command: list, cwd: Path = None, event_system: EventSystem = None) -> dict:
+def execute_on_shell(command: list, cwd: Path = None) -> dict:
     """
     executes a shell command
     :param command: list of command and arguments
@@ -17,12 +17,6 @@ def execute_on_shell(command: list, cwd: Path = None, event_system: EventSystem 
     :return:
     """
     command_str = " ".join(command)
-    if event_system:
-        event_system.log(
-            CommandEvent(
-                name=command[0], command=command_str, status="running"
-            )
-        )
     if cwd:
         proc = Popen(command, stdout=PIPE, stderr=PIPE, cwd=cwd)
     else:
@@ -53,12 +47,4 @@ def execute_on_shell(command: list, cwd: Path = None, event_system: EventSystem 
         )
         for line in stderr:
             log.error(line)
-    if event_system:
-        status = 'success' if ret['returncode'] == 0 else 'failed'
-        event_system.log(
-            CommandEvent(
-                name=command[0], command=command_str, status=status, returncode=ret['returncode'], stdout=" ".join(ret['stdout']),
-                error=" ".join(ret['stderr'])
-            )
-        )
     return ret

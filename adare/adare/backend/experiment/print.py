@@ -3,6 +3,7 @@ import threading
 import time
 from rich.live import Live
 from rich.text import Text
+from rich.layout import Layout
 from rich.spinner import SPINNERS
 
 from adarelib.config import StatusEnum
@@ -10,38 +11,6 @@ from adarelib.config import StatusEnum
 # configure logging
 import logging
 log = logging.getLogger(__name__)
-
-
-class StatusIconMapping:
-    mapping: dict
-    colormapping: dict
-
-    def __init__(self):
-        self.mapping = {
-            StatusEnum.NONE: '',
-            StatusEnum.SUCCESS: ':heavy_check_mark:',
-            StatusEnum.WARNING: ':warning:',
-            StatusEnum.FAILED: ':heavy_multiplication_x:',
-            StatusEnum.ERROR: ':x:',
-            StatusEnum.INTERRUPTED: ':high_voltage:'
-        }
-
-        self.colormapping = {
-            StatusEnum.NONE: '',
-            StatusEnum.SUCCESS: 'green',
-            StatusEnum.WARNING: 'yellow',
-            StatusEnum.FAILED: 'red',
-            StatusEnum.ERROR: 'red',
-            StatusEnum.INTERRUPTED: 'yellow'
-        }
-
-    def get_icon(self, status: int, color: bool = False):
-        if status not in self.mapping.keys():
-            return ''
-        if color and status in self.colormapping.keys():
-            return f'[{self.colormapping[status]}]{self.mapping[status]}[/{self.colormapping[status]}]'
-        return self.mapping[status]
-status_icon_mapping = StatusIconMapping()
 
 
 class ExperimentFlowConsole:
@@ -53,6 +22,8 @@ class ExperimentFlowConsole:
     messages: dict
     ticks_per_second: int = 12
 
+    layout: Text
+
     def __init__(self, disable: bool = False):
         self.console = Console()
         self.stop_event = threading.Event()
@@ -60,10 +31,16 @@ class ExperimentFlowConsole:
         self.thread = None
         self.disable = disable
 
+        terminal_size = self.console.size
+        # Set the height as terminal height minus 10
+        desired_height = terminal_size.height - 10 if terminal_size.height > 10 else 1
+        self.console = Console(height=desired_height)
+
+        self.layout = Text('Loading...')
+
     def _start_live_in_thread(self):
-        text = Text('Loading...')
         tick_count = 0
-        with Live(text, console=self.console, refresh_per_second=self.ticks_per_second) as live:
+        with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second) as live:
             while not self.stop_event.is_set():
                 messages_as_str = '\n'.join([self._generate_message(identifier, spinner_position=tick_count) for identifier in self.messages.keys()])
                 live.update(messages_as_str)
@@ -81,17 +58,28 @@ class ExperimentFlowConsole:
             self.stop_event.set()
             self.thread.join()
 
+    def __get_status_icon(self, status: int):
+        if status == StatusEnum.NONE:
+            return ''
+        elif status == StatusEnum.SUCCESS:
+            return '[green]:heavy_check_mark:[/green]'
+        elif status == StatusEnum.WARNING:
+            return '[yellow]:warning:[/yellow]'
+        elif status == StatusEnum.FAILED:
+            return '[red]:heavy_multiplication_x:[/red]'
+        elif status == StatusEnum.ERROR:
+            return '[red]:x:[/red]'
+        elif status == StatusEnum.FINISHED:
+            return '[green]:black_small_square:[/green]'
+        elif status == StatusEnum.INTERRUPTED:
+            return '[yellow]:high_voltage:[/yellow]'
+        else:
+            return ''
+
     def _generate_message(self, identifier: str, spinner_position: int = 0):
         message_object = self.messages[identifier]
         message = message_object['message']
-        if message_object['status'] == StatusEnum.SUCCESS:
-            message = f'[green]:heavy_check_mark:[/green] {message}'
-        elif message_object['status'] == StatusEnum.WARNING:
-            message = f'[yellow]![/yellow] {message}'
-        elif message_object['status'] == StatusEnum.ERROR:
-            message = f'[red]:heavy_multiplication_x:[/red] {message}'
-        elif message_object['status'] == StatusEnum.INTERRUPTED:
-            message = f'[yellow]:high_voltage:[/yellow] {message}'
+        message = f'{self.__get_status_icon(message_object["status"])} {message}'
 
         if message_object['spinner']:
             spinner = SPINNERS[message_object['spinner']]['frames']
@@ -106,7 +94,7 @@ class ExperimentFlowConsole:
             message = ' ' * 2 * message_object['level'] + message
 
         if message_object['result_status']:
-            message = f'{message} {status_icon_mapping.get_icon(message_object["result_status"], color=True)}'
+            message = f'{message} {self.__get_status_icon(message_object["result_status"])}'
 
         return message
 
@@ -147,6 +135,26 @@ class ExperimentFlowConsole:
             'spinner_style': None,
             'level': level,
             'status': StatusEnum.INTERRUPTED,
+            'result_status': None,
+        }
+
+    def log_failed(self, identifier: str, message: str, level: int = 0):
+        self.messages[identifier] = {
+            'message': message,
+            'spinner': None,
+            'spinner_style': None,
+            'level': level,
+            'status': StatusEnum.FAILED,
+            'result_status': None,
+        }
+
+    def log_finished(self, identifier: str, message: str, level: int = 0):
+        self.messages[identifier] = {
+            'message': message,
+            'spinner': None,
+            'spinner_style': None,
+            'level': level,
+            'status': StatusEnum.FINISHED,
             'result_status': None,
         }
 

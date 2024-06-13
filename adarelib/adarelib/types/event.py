@@ -12,8 +12,6 @@ import logging
 log = logging.getLogger(__name__)
 
 
-
-
 @attrs.define
 class Event:
     # action or test
@@ -25,16 +23,16 @@ class Event:
     stage: bool
 
 
-@attrs.define
-class ActionEvent(Event):
-    name: str
-    description: str
-    category: str = 'action'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
-    status: int = config.StatusEnum.RUNNING
-    error: str = ''
-    stage: bool = False
+# @attrs.define
+# class ActionEvent(Event):
+#     name: str
+#     description: str
+#     category: str = 'action'
+#     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
+#     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+#     status: int = config.StatusEnum.RUNNING
+#     error: str = ''
+#     stage: bool = True
 
 
 @attrs.define
@@ -48,7 +46,8 @@ class CommandEvent(Event):
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
     status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: bool = False
+    stage: bool = True
+    group_id: int = -1
 
 
 @attrs.define
@@ -67,6 +66,7 @@ class TestEvent(Event):
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
+    group_id: int = -1
 
 
 @attrs.define
@@ -79,6 +79,8 @@ class ErrorEvent(Event):
     stage: str = ''
     error: str = ''
     error_msg: str = ''
+    stage: bool = True
+    group_id: int = -1
 
 
 @attrs.define
@@ -96,7 +98,8 @@ class GuiFindEvent(GuiEvent):
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
     status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: bool = False
+    stage: bool = True
+    group_id: int = -1
 
 
 @attrs.define
@@ -109,7 +112,8 @@ class GuiClickEvent(GuiEvent):
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
     status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: bool = False
+    stage: bool = True
+    group_id: int = -1
 
 
 @attrs.define
@@ -120,7 +124,8 @@ class GuiKeypressEvent(GuiEvent):
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
     status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: bool = False
+    stage: bool = True
+    group_id: int = -1
 
 
 @attrs.define
@@ -131,7 +136,8 @@ class GuiIdleEvent(GuiEvent):
     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
     status: int = config.StatusEnum.RUNNING
     error: str = ''
-    stage: bool = False
+    stage: bool = True
+    group_id: int = -1
 
 
 @attrs.define
@@ -149,7 +155,6 @@ class EventSystemData:
         events = []
         for event in data['events']:
             supported_events = {
-                'action': ActionEvent,
                 'test': TestEvent,
                 'gui:find': GuiFindEvent,
                 'gui:click': GuiClickEvent,
@@ -165,3 +170,6 @@ class EventSystemData:
                 log.warning(f'event category {event["category"]} is not supported')
         data['events'] = events
         return cls(**data)
+
+
+

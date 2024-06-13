@@ -4,7 +4,7 @@ import shutil
 from adarelib.parsers import parse_testsetfile
 from adarelib.types.testset import TestsetFile
 from adarelib.testfunction import import_basictest_subclasses, get_missing_testfunctions, structure_tests
-from adarelib.event import EventSystem
+from adarelib.event import EventSystem, EventCtxManager
 from adarelib.types.event import TestEvent, CommandEvent
 from adarelib.config import StatusEnum
 from adarevm.shell import execute_on_shell
@@ -46,28 +46,32 @@ class Testset:
             raise TestsetExecutionError(log, f'command {command_name} is not available')
         # retrieve the command from the testsetfile
         command = next(com for com in self.testsetfile.commands if com.name == command_name)
-        self.event_system.log(
-            CommandEvent(
-                name=command_name, command=command.command, status=StatusEnum.RUNNING,
-            )
-        )
 
-        toolpath = command.command.split(' ')[0]
-        if shutil.which(toolpath):
-            return
-
-        log.error(f'tool with path {toolpath} does NOT exist')
-        toolpath = f'./{toolpath}'
-        command_path = f'./{command.command}'
-        if not shutil.which(toolpath):
-            log.error(f'tool with path {toolpath} does NOT exist')
-            self.event_system.log(
+        with EventCtxManager(
                 CommandEvent(
-                    name=command_name, command=command.command, status=StatusEnum.FAILED, error=f'tool with path {toolpath} does NOT exist'
+                    name=command_name, command=command.command, status=StatusEnum.RUNNING,
+                ), self.event_system
+        ) as event_ctx:
+            toolpath = command.command.split(' ')[0]
+            toolpath = f'./{toolpath}'
+            command_path = f'./{command.command}'
+            if not shutil.which(toolpath):
+                log.error(f'tool with path {toolpath} does NOT exist')
+                event_ctx.update(
+                    CommandEvent(
+                        name=command_name, command=command.command, status=StatusEnum.FAILED,
+                        error=f'tool with path {toolpath} does NOT exist'
+                    )
+                )
+                raise TestsetExecutionError(log, f'tool with path {toolpath} does NOT exist')
+
+            ret = execute_on_shell(command_path.split(" "))
+            event_ctx.update(
+                CommandEvent(
+                    name=command_name, command=command.command, status=StatusEnum.FINISHED,
+                    returncode=ret['returncode'], stdout=ret['stdout']
                 )
             )
-            raise TestsetExecutionError(log, f'tool with path {toolpath} does NOT exist')
-        execute_on_shell(command_path.split(" "), event_system=self.event_system)
 
     def __check_if_command_already_executed(self, command_name: str) -> bool:
         command_events = [event for event in self.event_system.data.events if isinstance(event, CommandEvent)]
@@ -85,17 +89,19 @@ class Testset:
                 if not self.__check_if_command_already_executed(dependency):
                     self.execute_command(dependency)
         test.variables = variables
-        self.event_system.log(
-            TestEvent(
-                test_name=name, status=StatusEnum.RUNNING
+        with EventCtxManager(
+                TestEvent(
+                    test_name=name, status=StatusEnum.RUNNING
+                ),
+                self.event_system
+        ) as event_ctx:
+            test_result = test.test()
+            event_ctx.update(
+                TestEvent(
+                    test_name=name, status=StatusEnum.FINISHED, result=test_result
+                )
             )
-        )
-        test_result = test.test()
-        self.event_system.log(
-            TestEvent(
-                test_name=name, status=StatusEnum.FINISHED, result=test_result
-            )
-        )
+
         self.event_system.save()
 
     def testall(self, variables: dict):

@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 
 lock = Lock()
 
+
 def replace_list_recursive_in_dict(d: dict):
     for key, value in d.items():
         if isinstance(value, dict):
@@ -28,11 +29,9 @@ def replace_list_recursive_in_dict(d: dict):
 
 
 class EventDbApi(ExperimentApi):
-    stage_in_run_id: int
 
     def __init__(self, db_path: Path = config_database.get_database_location()):
         super().__init__(db_path)
-        self.stage_in_run_id = -1
 
     def get_or_create_test_result(self, test_result_data: dict):
         test_result = self._session.query(ModelResult).filter_by(**test_result_data).first()
@@ -46,40 +45,39 @@ class EventDbApi(ExperimentApi):
         if not (stage_db := self._session.query(Stage).filter(Stage.name == f'box.experiment.{event.category}').first()):
             log.warning(f"Stage '{event.event_type}' not found in database")
             return
-        if self.stage_in_run_id < 0:
+        # find stage in run in running events
+        group_event = self._session.query(ModelEvent) \
+            .filter(ModelEvent.group_id == event.group_id,
+                    ModelEvent.experiment_run_id == experiment_run.uuid,
+                    ModelEvent.uuid != event.uuid) \
+            .first()
+        if not group_event:
             kwargs = {
                 'stage_id': stage_db.id,
                 'run_id': experiment_run.uuid,
                 'start_time': event.timestamp,
                 'sub_msg': event.stage_submessage,
             }
-            if event.status == StatusEnum.FINISHED:
+            if event.status != StatusEnum.RUNNING:
                 kwargs['end_time'] = event.timestamp
-                kwargs['status'] = StatusEnum.SUCCESS
+                kwargs['status'] = event.status
                 kwargs['result_status'] = event.stage_result
-
             # create new stage in run
             stage_in_run = StageInRun(**kwargs)
             self._session.add(stage_in_run)
-            self._session.commit()
-            if event.status != StatusEnum.FINISHED:
-                self.stage_in_run_id = stage_in_run.id
+            event.stage_in_run = stage_in_run
             log.info(f"added stage '{event.event_type}' to run {experiment_run.uuid}")
         else:
-            stage_in_run = self._session.query(StageInRun).filter_by(id=self.stage_in_run_id).first()
-            if not stage_in_run:
-                log.error(f"stage in run with id {self.stage_in_run_id} not found")
-                return
-            # update stage in run
-            if event.status == StatusEnum.FINISHED:
-                stage_in_run.end_time = event.timestamp
-                stage_in_run.status = StatusEnum.SUCCESS
-                stage_in_run.result_status = event.stage_result
-                log.info(f"stage '{event.event_type}' finished with result {event.stage_result}")
-                self.stage_in_run_id = -1
-            stage_in_run.sub_msg = event.stage_submessage
-            log.info(f"updated stage '{event.event_type}' in run {experiment_run.uuid}")
-            self._session.commit()
+            if group_event.stage_in_run:
+                # update stage in run
+                if event.status != StatusEnum.RUNNING:
+                    group_event.stage_in_run.end_time = event.timestamp
+                    group_event.stage_in_run.status = event.status
+                    group_event.stage_in_run.result_status = event.stage_result
+                    log.info(f"stage '{event.event_type}' finished with result {event.stage_result}")
+                group_event.stage_in_run.sub_msg = event.stage_submessage
+                log.info(f"updated stage '{event.event_type}' in run {experiment_run.uuid}")
+        self._session.commit()
 
     def update_events(self, experiment_run_uuid: str, eventsystem: EventSystemData):
         with lock:
@@ -117,6 +115,6 @@ class EventDbApi(ExperimentApi):
                     self._session.add(model_event)
                     log.info(f'added event {model_event.uuid} to experiment run {experiment_run_uuid}')
                     if model_event.stage:
-                        self.__update_stage(model_event, experiment_run)
+                        stage_in_run = self.__update_stage(model_event, experiment_run)
                 self._session.commit()
                 log.info(f'updated events for experiment run {experiment_run_uuid}')

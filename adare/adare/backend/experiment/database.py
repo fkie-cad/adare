@@ -122,7 +122,7 @@ def get_experiment_testfunction_files(project_path: Path, experiment_name: str):
         return testfunction_files
 
 
-def update_experiment_run_status(experiment_run_uuid: str, status: str):
+def update_experiment_run_status(experiment_run_uuid: str, status: int):
     with ExperimentApi() as api:
         api.update_experiment_run_status(experiment_run_uuid, status)
 

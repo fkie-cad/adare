@@ -152,4 +152,5 @@ class DataRetrievalApi(DatabaseApi):
 
     def get_run_details(self, run_uuid: str) -> pd.DataFrame:
         # execute query and return result as pandas dataframe excluding the id column
-        return pd.read_sql(self._session.query(ExperimentRun).filter_by(uuid=run_uuid).statement, self._session.bind).map(str)
+        #return pd.read_sql(self._session.query(ExperimentRun).filter_by(uuid=run_uuid).statement, self._session.bind).map(str)
+        return query_to_dataframe(self._session, self._session.query(ExperimentRun).filter_by(uuid=run_uuid))

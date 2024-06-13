@@ -32,7 +32,7 @@ def print_to_console(session: Session, console: ExperimentFlowConsole, target: S
 
         identifier = str(target.id)
         if target.sub_msg:
-            message = f'{stage.msg} - {target.sub_msg}'
+            message = f'{stage.msg}: {target.sub_msg}'
         else:
             message = stage.msg
         if target.finished:
@@ -50,6 +50,10 @@ def print_to_console(session: Session, console: ExperimentFlowConsole, target: S
                 console.log_error(identifier=identifier, message=message, level=level)
             elif target.status == StatusEnum.INTERRUPTED:
                 console.log_interrupted(identifier=identifier, message=message, level=level)
+            elif target.status == StatusEnum.FAILED:
+                console.log_failed(identifier=identifier, message=message, level=level)
+            elif target.status == StatusEnum.FINISHED:
+                console.log_finished(identifier=identifier, message=message, level=level)
         if target.in_progress:
             console.log_spinner(identifier=identifier, message=message, level=level)
 
