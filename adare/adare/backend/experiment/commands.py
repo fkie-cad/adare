@@ -36,6 +36,7 @@ from adarelib.types.stage import ExperimentIntegrityCheckStage, BoxRunStage, \
     ProjectIntegrityCheckStage, BoxDestroyStage, CleanupStage
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.backend.experiment.threadingevents import experiment_event_manager
+from adarelib.config import StatusEnum
 # keep this to activate the event listeners for the database
 import adare.database.events.stage
 
@@ -472,7 +473,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
         # wait for the box to finish
         box_thread.join()
 
-        experiment_database.update_experiment_run_status(experiment_run_uuid, 'done')
+        experiment_database.update_experiment_run_status(experiment_run_uuid, StatusEnum.FINISHED)
 
         # calculate duration of experiment run
         timestamp_end = datetime.now()
@@ -488,6 +489,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
 
     except KeyboardInterrupt:
         ctrlc_event.set()
+        experiment_database.update_experiment_run_status(experiment_run_uuid, StatusEnum.INTERRUPTED)
         log.info('keyboard interrupt received, stopping experiment run')
     finally:
         if box_thread and box_thread.is_alive():

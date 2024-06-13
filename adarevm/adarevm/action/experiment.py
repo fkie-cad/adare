@@ -13,7 +13,7 @@ from adarelib.helperfunctions.text import slugify
 from adarevm.shell import execute_on_shell
 import adarevm.config as config
 from adarevm.testset.testset import Testset
-from adarelib.event import EventSystem
+from adarelib.event import EventSystem, EventCtxManager
 from adarelib.config import StatusEnum
 from adarelib.types.event import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent, Event, ErrorEvent
 
@@ -145,29 +145,29 @@ class Experiment:
         :param similarity_steps: the steps to decrease the similarity by
         :return:
         """
-        self.log(
+        with EventCtxManager(
             GuiFindEvent(
                 objective=image_name, text=False, status=StatusEnum.RUNNING
-            )
-        )
-        match_objects = []
-        image = (self.img_folder/image_name)
-        if image.is_file():
-            # check if steps file does already exist
-            if image.suffix == 'steps':
-                match_objects = self.guibot.find(image_name)
-            elif image.suffix in ['.png', '.jpeg', 'jpg']:
-                steps_filepath = self.__create_steps_file_icon(image, minimal_similarity=minimal_similarity, step=similarity_steps)
-                with contextlib.suppress(guibot.errors.FindError):
-                    match_objects = self.guibot.find_all(steps_filepath.name)
-        else:
-            log.error(f'provided image {image} does not exits')
+            ), self.eventsystem
+        ) as event_ctx:
+            match_objects = []
+            image = (self.img_folder/image_name)
+            if image.is_file():
+                # check if steps file does already exist
+                if image.suffix == 'steps':
+                    match_objects = self.guibot.find(image_name)
+                elif image.suffix in ['.png', '.jpeg', 'jpg']:
+                    steps_filepath = self.__create_steps_file_icon(image, minimal_similarity=minimal_similarity, step=similarity_steps)
+                    with contextlib.suppress(guibot.errors.FindError):
+                        match_objects = self.guibot.find_all(steps_filepath.name)
+            else:
+                log.error(f'provided image {image} does not exits')
 
-        self.log(
-            GuiFindEvent(
-                objective=image_name, success=bool(match_objects), text=False, status=StatusEnum.FINISHED
+            event_ctx.update(
+                GuiFindEvent(
+                    objective=image_name, success=bool(match_objects), text=False, status=StatusEnum.FINISHED
+                )
             )
-        )
 
         return match_objects
 
@@ -177,28 +177,28 @@ class Experiment:
         :param text: string to be found
         :return:
         """
-        self.log(
+        with EventCtxManager(
             GuiFindEvent(
                 objective=text, text=True, status=StatusEnum.RUNNING
-            )
-        )
-        textfile = self.__create_textfile(text)
-        stepsfile = self.__create_steps_file_text(textfile)
-        try:
-            elements = self.guibot.find_all(stepsfile.name)
-            self.eventsystem.log(
-                GuiFindEvent(
-                    objective=text, success=bool(elements), text=True, status=StatusEnum.FINISHED
+            ), self.eventsystem
+        ) as event_ctx:
+            textfile = self.__create_textfile(text)
+            stepsfile = self.__create_steps_file_text(textfile)
+            try:
+                elements = self.guibot.find_all(stepsfile.name)
+                event_ctx.update(
+                    GuiFindEvent(
+                        objective=text, success=bool(elements), text=True, status=StatusEnum.FINISHED
+                    )
                 )
-            )
-            return elements
-        except guibot.errors.FindError:
-            self.eventsystem.log(
-                GuiFindEvent(
-                    objective=text, success=False, text=True, status=StatusEnum.FINISHED
+                return elements
+            except guibot.errors.FindError:
+                event_ctx.update(
+                    GuiFindEvent(
+                        objective=text, success=False, text=True, status=StatusEnum.FINISHED
+                    )
                 )
-            )
-            return None
+                return None
 
     def save_time(self, timestamp_var_name: str):
         """
@@ -317,19 +317,19 @@ class Experiment:
         )
 
     def idle(self, timeout: int):
-        self.eventsystem.log(
+        with EventCtxManager(
             GuiIdleEvent(
                 seconds=timeout,
                 status=StatusEnum.RUNNING
+            ), self.eventsystem
+        ) as event_ctx:
+            self.guibot.idle(timeout)
+            event_ctx.update(
+                GuiIdleEvent(
+                    seconds=timeout,
+                    status=StatusEnum.FINISHED
+                )
             )
-        )
-        self.guibot.idle(timeout)
-        self.eventsystem.log(
-            GuiIdleEvent(
-                seconds=timeout,
-                status=StatusEnum.FINISHED
-            )
-        )
 
     def exec_shellcommand(self, command: list, cwd: Path = None):
         """
@@ -338,4 +338,4 @@ class Experiment:
         :param cwd: current working directory where the command should be executed
         :return:
         """
-        return execute_on_shell(command, cwd=cwd, event_system=self.eventsystem)
+        return execute_on_shell(command, cwd=cwd)

@@ -287,6 +287,6 @@ class ExperimentApi(ProjectDbApi):
         command_list = self.__get_command_list(testset)
         return [self.__get_abstract_test(test, command_list) for test in testset.tests]
 
-    def update_experiment_run_status(self, experiment_run_uuid: str, status: str):
+    def update_experiment_run_status(self, experiment_run_uuid: str, status: int):
         experiment_run = self._session.query(ExperimentRun).filter_by(uuid=experiment_run_uuid).first()
         experiment_run.status = status

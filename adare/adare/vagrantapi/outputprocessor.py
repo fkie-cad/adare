@@ -7,7 +7,6 @@ import datetime
 from adarelib.types.stage import Stage
 from adare.database.api.stage import StageDbApi
 from adare.backend.experiment.threadingevents import experiment_event_manager
-from adare.config import TIMESTAMP_FORMAT
 from adarelib.config import StatusEnum
 
 # configure logging
@@ -69,7 +68,7 @@ class VagrantOutputProcessor(OutputProcessor):
                 stage.start_time = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
             if message == 'end':
                 stage.end_time = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
-                stage.status = StatusEnum.SUCCESS
+                stage.status = StatusEnum.FINISHED
 
             with StageDbApi() as api:
                 api.update_stage_in_run(stage, self.experiment_run_uuid)

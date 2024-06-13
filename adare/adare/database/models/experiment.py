@@ -522,9 +522,12 @@ class Event(SerializerMixin, Base):
     category = Column(String)
     experiment_run_id = Column(String, ForeignKey('experimentrun.uuid'))
     experiment_run = relationship("ExperimentRun", backref=backref("events", cascade="all, delete-orphan"))
-    status = Column(String)
+    status = Column(Integer, default=StatusEnum.PENDING)
     error = Column(String)
     stage = Column(Boolean, default=False)
+    group_id = Column(Integer)
+    stage_in_run_id = Column(Integer, ForeignKey('stageinrun.id'), nullable=True, default=None)
+    stage_in_run = relationship("StageInRun", backref=backref("events", cascade="all, delete-orphan"))
 
     timestamp = Column(DateTime)
 
@@ -542,18 +545,18 @@ class Event(SerializerMixin, Base):
     }
 
 
-class ActionEvent(Event):
-    __tablename__ = 'action_event'
-    __mapper_args__ = {
-        'polymorphic_identity': 'action_event',
-    }
-    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
-    name = Column(String)
-    description = Column(String)
-
-    @hybrid_property
-    def stage_submessage(self):
-        return f'{self.name}'
+# class ActionEvent(Event):
+#     __tablename__ = 'action_event'
+#     __mapper_args__ = {
+#         'polymorphic_identity': 'action_event',
+#     }
+#     id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
+#     name = Column(String)
+#     description = Column(String)
+#
+#     @hybrid_property
+#     def stage_submessage(self):
+#         return f'{self.name}'
 
 
 class CommandEvent(Event):
@@ -573,7 +576,7 @@ class CommandEvent(Event):
 
     @hybrid_property
     def stage_result(self):
-        return StatusEnum.SUCCESS if self.returncode == 0 else StatusEnum.FAILED
+        return None
 
 
 class TestEvent(Event):
@@ -645,7 +648,7 @@ class GuiFindEvent(Event):
 
     @hybrid_property
     def stage_result(self):
-        return StatusEnum.SUCCESS if self.success == 1 else StatusEnum.FAILED
+        return None
 
 
 class GuiClickEvent(Event):
@@ -667,7 +670,7 @@ class GuiClickEvent(Event):
 
     @hybrid_property
     def stage_result(self):
-        return StatusEnum.SUCCESS
+        return None
 
 
 class GuiKeypressEvent(Event):
@@ -684,7 +687,7 @@ class GuiKeypressEvent(Event):
 
     @hybrid_property
     def stage_result(self):
-        return StatusEnum.SUCCESS
+        return None
 
 
 class GuiIdleEvent(Event):
@@ -701,7 +704,7 @@ class GuiIdleEvent(Event):
 
     @hybrid_property
     def stage_result(self):
-        return StatusEnum.SUCCESS
+        return None
 
 
 class EventFactory:
@@ -709,9 +712,9 @@ class EventFactory:
     def create_event(category, **kwargs):
         # add category to kwargs
         kwargs['category'] = category
-        if category == 'action':
-            return ActionEvent(**kwargs)
-        elif category == 'command':
+        # if category == 'action':
+        #     return ActionEvent(**kwargs)
+        if category == 'command':
             return CommandEvent(**kwargs)
         elif category == 'test':
             return TestEvent(**kwargs)
@@ -829,6 +832,12 @@ class ExperimentRun(SerializerMixin, Base):
         if self.experiment_id and self.environment_id and self.files_id:
             return True
         return False
+
+    @hybrid_property
+    def experiment_name(self) -> str:
+        if self.experiment:
+            return self.experiment.name
+        return ''
 
     def __str__(self):
         return str(self.uuid)
