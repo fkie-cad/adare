@@ -16,8 +16,8 @@
 #     req_title: str
 #     req_description: str
 #
-#     input_scenario_uuid_shown: bool
-#     input_experiment_uuid_shown: bool
+#     input_scenario_ulid_shown: bool
+#     input_experiment_ulid_shown: bool
 #
 #     err_dialog: ErrorDialog = None
 #
@@ -27,7 +27,7 @@
 #
 #     def create_request(self):
 #         with RequestSessionApi() as session:
-#             req_uuid, error_msg = session.add_request(Storage.request_type, self.req_title, self.req_description,  Storage.request_experiment_uuid, Storage.request_scenario_uuid)
+#             req_ulid, error_msg = session.add_request(Storage.request_type, self.req_title, self.req_description,  Storage.request_experiment_ulid, Storage.request_scenario_ulid)
 #         if not error_msg:
 #             log.info(f'created request (type: {Storage.request_type}) with title {self.req_title}')
 #             toggle_request_table_modifypanel()
@@ -64,8 +64,8 @@
 #                             # add input field for request description
 #                             ui.textarea(label='description', placeholder='start typing').classes('q-mb-md shadow-1').props('square clearable outlined dense').bind_value(self, 'req_description')
 #
-#                             # add input field for request experiment uuid
-#                             ui.input(label='experiment uuid').classes('q-mb-md shadow-1').props('square clearable outlined dense').bind_value(Storage, 'request_experiment_uuid')
+#                             # add input field for request experiment ulid
+#                             ui.input(label='experiment ulid').classes('q-mb-md shadow-1').props('square clearable outlined dense').bind_value(Storage, 'request_experiment_ulid')
 #
 #                         with ui.tab_panel('scenario'):
 #                             # add input field for request title
@@ -76,8 +76,8 @@
 #                             ui.textarea(label='description', placeholder='start typing').classes(
 #                                 'q-mb-md shadow-1').props('square clearable outlined dense').bind_value(self, 'req_description')
 #
-#                             # add input field for request scenario uuid
-#                             ui.input(label='scenario uuid').classes('q-mb-md shadow-1').props('square clearable outlined dense').bind_value(Storage, 'request_scenario_uuid')
+#                             # add input field for request scenario ulid
+#                             ui.input(label='scenario ulid').classes('q-mb-md shadow-1').props('square clearable outlined dense').bind_value(Storage, 'request_scenario_ulid')
 #
 #                 ui.separator()
 #

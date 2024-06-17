@@ -14,7 +14,7 @@ class ExperimentTable(AdvancedTable):
     columns: list[dict] = [
         {'name': 'publish_status', 'label': 'publish status', 'field': 'publish_status', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
         {'name': 'name', 'label': 'name', 'field': 'name', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
-        {'name': 'uuid', 'label': 'uuid', 'field': 'uuid', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
+        {'name': 'ulid', 'label': 'ulid', 'field': 'ulid', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
         {'name': 'os', 'label': 'os', 'field': 'os', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
         {'name': 'os distribution', 'label': 'os distribution', 'field': 'os_distribution', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
         {'name': 'os version', 'label': 'os version', 'field': 'os_version', 'required': True, 'sortable': True,
@@ -39,11 +39,11 @@ class ExperimentTable(AdvancedTable):
                 {
                     'publish_status': e.publish_status.name,
                     'name': e.name,
-                    'uuid': e.uuid,
+                    'ulid': e.ulid,
                     'os': e.os_info.os,
                     'os_distribution': e.os_info.distribution,
                     'os_version': e.os_info.version,
-                    'experiment_link': e.uuid,
+                    'experiment_link': e.ulid,
                 } for e in experiments
             ]
 

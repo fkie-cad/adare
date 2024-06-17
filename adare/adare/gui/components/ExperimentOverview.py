@@ -29,23 +29,23 @@ def _publish_status(status: str) -> None:
             ui.tooltip(status)
 
 class ExperimentOverview:
-    experiment_uuid = None
+    experiment_ulid = None
     experiment_data = None
     data = None
 
-    def __init__(self, uuid: str):
-        self.experiment_uuid = uuid
+    def __init__(self, ulid: str):
+        self.experiment_ulid = ulid
 
     def __open_experiment_request(self):
-        show_request_modify_panel(uuid=self.experiment_uuid, req_type='experiment')
+        show_request_modify_panel(ulid=self.experiment_ulid, req_type='experiment')
 
     def load_data(self):
         with ExperimentApi() as db:
-            exp = db.get_experiment_by_uuid(self.experiment_uuid)
-            run_counts = db.get_experiment_run_counts_by_status(self.experiment_uuid)
+            exp = db.get_experiment_by_ulid(self.experiment_ulid)
+            run_counts = db.get_experiment_run_counts_by_status(self.experiment_ulid)
 
             self.experiment_data = {
-                'uuid': exp.uuid,
+                'ulid': exp.ulid,
                 'name': exp.name,
                 'description': exp.description,
                 'os': exp.os_info.os,
@@ -60,7 +60,7 @@ class ExperimentOverview:
             }
 
             # update publish status of experiment in a background task and update the experiment data
-            create_background_task(check_experiment_published(self.experiment_uuid, force_check=True, component_func=_publish_status))
+            create_background_task(check_experiment_published(self.experiment_ulid, force_check=True, component_func=_publish_status))
 
     def __check_if_experiment_is_not_published(self):
         return self.experiment_data['publish_status'] == 'not published'
@@ -71,18 +71,18 @@ class ExperimentOverview:
         with ui.element('div').classes('flex justify-center w-full'):
             with ui.element('div').classes('q-pa-sm w-full'):
                 with ui.card():
-                    # card section with experiment name and uuid
+                    # card section with experiment name and ulid
                     with ui.card_section().classes('w-full q-pa-none'):
                         with ui.element('div').classes('row text-gray-600'):
                             with ui.element('div').classes(STYLE_TEXT_MUTED_SMALL+' col'):
                                 ui.html('name')
                             with ui.element('div').classes(STYLE_TEXT_MUTED_SMALL+ ' col text-right'):
-                                ui.html('uuid')
+                                ui.html('ulid')
                         with ui.element('div').classes('row text-3xl'):
                             with ui.element('div').classes('col'):
                                 ui.html().bind_content(self.experiment_data, 'name')
                             with ui.element('div').classes('col text-right'):
-                                ui.html().bind_content(self.experiment_data, 'uuid')
+                                ui.html().bind_content(self.experiment_data, 'ulid')
                     ui.separator()
 
                     with ui.card_section().classes('row w-full justify-between'):
@@ -161,9 +161,9 @@ class ExperimentOverview:
                                                 ui.html().bind_content(self.experiment_data, 'os_language')
 
                     with ui.card_section().classes('row w-full justify-between'):
-                        abstract_test_table = AbstractTestTable(self.experiment_uuid)
+                        abstract_test_table = AbstractTestTable(self.experiment_ulid)
                         abstract_test_table.create()
 
                     with ui.card_section().classes('row w-full justify-between'):
-                        run_table = RunTable(self.experiment_uuid, disabled_columns=['experiment_link'])
+                        run_table = RunTable(self.experiment_ulid, disabled_columns=['experiment_link'])
                         run_table.create()

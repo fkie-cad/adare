@@ -14,9 +14,9 @@
 #
 # def _get_request_item_link(request, request_type: str):
 #     if request_type == 'experiment':
-#         return f'/experiment/{request.experiment.uuid}'
+#         return f'/experiment/{request.experiment.ulid}'
 #     elif request_type == 'scenario':
-#         return f'/scenario/{request.scenario.uuid}'
+#         return f'/scenario/{request.scenario.ulid}'
 #     else:
 #         log.error(f'unknown request type {request_type}')
 #         return None
@@ -65,7 +65,7 @@
 #     columns : list[dict] = [
 #         {'name': 'status', 'label': 'status', 'field': 'status', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
 #         {'name': 'title', 'label': 'title', 'field': 'title', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
-#         {'name': 'uuid', 'label': 'uuid', 'field': 'uuid', 'required': True, 'sortable': True, 'align': 'left', 'hide': True},
+#         {'name': 'ulid', 'label': 'ulid', 'field': 'ulid', 'required': True, 'sortable': True, 'align': 'left', 'hide': True},
 #         {'name': 'description', 'label': 'description', 'field': 'description', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
 #         {'name': 'type', 'label': 'type', 'field': 'type', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
 #         {'name': 'upload', 'label': 'upload', 'field': 'upload', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
@@ -80,13 +80,13 @@
 #     def __init__(self):
 #         super().__init__()
 #
-#     async def _publish(self, uuid: str):
-#         log.info(f'publishing request with uuid {uuid}')
+#     async def _publish(self, ulid: str):
+#         log.info(f'publishing request with ulid {ulid}')
 #         # send experiment request await it and get the result
 #         self.request_publish_dialog.set_msg('Publishing request...')
 #         self.request_publish_dialog.show_loading()
 #         self.request_publish_dialog.show()
-#         success, error_msg = await send_experiment_request(uuid)
+#         success, error_msg = await send_experiment_request(ulid)
 #         print(success, error_msg)
 #         if success:
 #             self.request_publish_dialog.set_msg('Request published successfully')
@@ -106,10 +106,10 @@
 #                 'status': req.status.name if req.status else '',
 #                 'title': req.title,
 #                 'description': req.description,
-#                 'uuid': req.uuid,
+#                 'ulid': req.ulid,
 #                 'type': req.type,
 #                 'link': _get_request_item_link(req, req.type),
-#                 'upload': req.uuid,
+#                 'upload': req.ulid,
 #             } for req in session.get_all_requests()]
 #         log.info(f'updated request table with {len(self.data)} entries')
 #

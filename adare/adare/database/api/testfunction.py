@@ -93,7 +93,7 @@ class TestfunctionDbApi(ExperimentApi):
             # check if testfunction is used in a test
             if self._session.query(sqlalchemy.exists().where(
                     AbstractTest.testfunction_id == testfunction_obj.id,
-                    AbstractTest.uuid == Test.abstracttest_id
+                    AbstractTest.ulid == Test.abstracttest_id
             )).scalar():
                 raise DatabaseTestfunctionRemovalError(
                     log,
@@ -129,7 +129,7 @@ class TestfunctionDbApi(ExperimentApi):
             # check if testfunction is used in a test
             if self._session.query(sqlalchemy.exists().where(
                     AbstractTest.testfunction_id == testfunction_obj.id,
-                    AbstractTest.uuid == Test.abstracttest_id
+                    AbstractTest.ulid == Test.abstracttest_id
             )).scalar():
                 raise DatabaseTestfunctionRemovalError(
                     log,
@@ -217,7 +217,7 @@ class TestfunctionDbApi(ExperimentApi):
             if (
                     self._session.query(sqlalchemy.exists().where(
                         AbstractTest.testfunction_id == testfunction_obj.id,
-                        AbstractTest.uuid == Test.abstracttest_id
+                        AbstractTest.ulid == Test.abstracttest_id
                     )).scalar()
 
             ):

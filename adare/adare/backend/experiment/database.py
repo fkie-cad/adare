@@ -10,6 +10,7 @@ from adare.database.api.stage import StageDbApi
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 from adare.backend.experiment.exceptions import NoEnvironmentError, MultipleEnvironmentsError
 from adarelib.types.stage import Stage as StageType
+from adarelib.config import StatusEnum
 
 # configure logging
 import logging
@@ -22,7 +23,7 @@ def get_experiment_by_project_and_name(project_path: Path, experiment_name: str)
         if experiment is None:
             log.error('experiment not found')
             return None
-        return experiment.uuid
+        return experiment.ulid
 
 
 def get_experiment_hashes(project_path: Path, experiment_name: str) -> dict:
@@ -54,42 +55,42 @@ def create_experiment(name: str, project_path: Path, experiment_directory: Exper
     return experiment
 
 
-def remove_experiment(experiment_uuid: str):
+def remove_experiment(experiment_ulid: str):
     with ExperimentApi() as api:
-        api.remove_experiment_by_uuid(experiment_uuid)
+        api.remove_experiment_by_ulid(experiment_ulid)
 
 
-def check_for_experiment_change(experiment_uuid: str, sha256: str) -> bool:
+def check_for_experiment_change(experiment_ulid: str, sha256: str) -> bool:
     with ExperimentApi() as api:
-        return not api.experiment_sha256_equals(experiment_uuid, sha256)
+        return not api.experiment_sha256_equals(experiment_ulid, sha256)
 
 
-def get_environment_installations(environment_uuid: str):
+def get_environment_installations(environment_ulid: str):
     with EnvironmentDbApi() as api:
-        return api.get_environment_installations(environment_uuid)
+        return api.get_environment_installations(environment_ulid)
 
 
-def get_environment_platform(environment_uuid: str):
+def get_environment_platform(environment_ulid: str):
     with EnvironmentDbApi() as api:
-        return api.get_environment_platform(environment_uuid)
+        return api.get_environment_platform(environment_ulid)
 
 
-def get_environment_uuid(project_path: Path, experiment_name: str):
+def get_environment_ulid(project_path: Path, experiment_name: str):
     with EnvironmentDbApi() as api:
-        return api.get_environment(experiment_name, project_path.name).uuid if api.get_environment(experiment_name, project_path.name) else None
+        return api.get_environment(experiment_name, project_path.name).ulid if api.get_environment(experiment_name, project_path.name) else None
 
 
-def get_environment_vagrant_box(environment_uuid: str):
+def get_environment_vagrant_box(environment_ulid: str):
     with EnvironmentDbApi() as api:
-        return api.get_environment_vagrant_box(environment_uuid)
+        return api.get_environment_vagrant_box(environment_ulid)
 
 
-def update_experiment_run(experiment_run_uuid: str, experiment_name: str, environment_name: str, project_name: str, experimentrun_directory: ExperimentRunDirectory) -> str:
+def update_experiment_run(experiment_run_ulid: str, experiment_name: str, environment_name: str, project_name: str, experimentrun_directory: ExperimentRunDirectory) -> str:
     with ExperimentApi() as api:
         environment = api.get_environment(environment_name, project_name)
         experiment = api.get_experiment(experiment_name, environment)
         experiment_run = api.update_experiment_run(
-            run_uuid=experiment_run_uuid,
+            run_ulid=experiment_run_ulid,
             experiment=experiment,
             environment=environment,
             path=experimentrun_directory.path,
@@ -97,19 +98,19 @@ def update_experiment_run(experiment_run_uuid: str, experiment_name: str, enviro
             logfile_run_experiment=experimentrun_directory.run_log,
             logfile_installed_packages=experimentrun_directory.packagedump_log,
             logfile_postsetup_installations=experimentrun_directory.install_log,
-            status='running',
+            status=StatusEnum.RUNNING,
         )
-        return experiment_run.uuid
+        return experiment_run.ulid
 
 
 def initialize_experiment_run():
     with ExperimentApi() as api:
-        return api.initialize_experiment_run().uuid
+        return api.initialize_experiment_run().ulid
 
 
-def update_experiment_run_start(experiment_run_uuid: str, timestamp: datetime):
+def update_experiment_run_start(experiment_run_ulid: str, timestamp: datetime):
     with ExperimentApi() as api:
-        api.update_experiment_run_start(experiment_run_uuid, timestamp)
+        api.update_experiment_run_start(experiment_run_ulid, timestamp)
 
 
 def get_experiment_testfunction_files(project_path: Path, experiment_name: str):
@@ -122,9 +123,9 @@ def get_experiment_testfunction_files(project_path: Path, experiment_name: str):
         return testfunction_files
 
 
-def update_experiment_run_status(experiment_run_uuid: str, status: int):
+def update_experiment_run_status(experiment_run_ulid: str, status: int):
     with ExperimentApi() as api:
-        api.update_experiment_run_status(experiment_run_uuid, status)
+        api.update_experiment_run_status(experiment_run_ulid, status)
 
 
 def get_experiment_environment(project_path: Path, experiment_name: str):
@@ -150,6 +151,6 @@ def get_experiment_environment(project_path: Path, experiment_name: str):
         return Path(experiment.environments[0].file)
 
 
-def update_stage_in_run(stage: StageType, experimentrun_uuid: str):
+def update_stage_in_run(stage: StageType, experimentrun_ulid: str):
     with StageDbApi() as db:
-        db.update_stage_in_run(stage, experimentrun_uuid)
+        db.update_stage_in_run(stage, experimentrun_ulid)

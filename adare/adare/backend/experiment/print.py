@@ -189,11 +189,11 @@ class FlowConsoleManager:
     def __init__(self):
         self.handlers = {}  # Dictionary to store experiment_id to handler mappings
 
-    def add_handler(self, experimentrun_uuid: str, handler: ExperimentFlowConsole):
-        self.handlers[experimentrun_uuid] = handler
+    def add_handler(self, experimentrun_ulid: str, handler: ExperimentFlowConsole):
+        self.handlers[experimentrun_ulid] = handler
 
-    def get_handler(self, experimentrun_uuid: str) -> ExperimentFlowConsole:
-        return self.handlers[experimentrun_uuid]
+    def get_handler(self, experimentrun_ulid: str) -> ExperimentFlowConsole:
+        return self.handlers[experimentrun_ulid]
 
 
 flowconsolemanager = FlowConsoleManager()

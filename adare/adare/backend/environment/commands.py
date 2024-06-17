@@ -86,8 +86,8 @@ def environment_create(project: Path, environment: str):
     log.info(f'environment file {environment_file} created')
 
 
-def environment_delete(environment_uuid: str, force: bool = False):
-    environment_database.delete_environment(environment_uuid, force=force)
+def environment_delete(environment_ulid: str, force: bool = False):
+    environment_database.delete_environment(environment_ulid, force=force)
     log.info('environment deleted')
 
 #

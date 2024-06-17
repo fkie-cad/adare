@@ -8,11 +8,11 @@ log = logging.getLogger(__name__)
 
 
 class AbstractTestTable(AdvancedTable):
-    experiment_uuid: str = None
+    experiment_ulid: str = None
 
     columns: list[dict] = [
         {'name': 'name', 'label': 'name', 'field': 'name', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
-        {'name': 'uuid', 'label': 'uuid', 'field': 'uuid', 'required': True, 'sortable': False, 'align': 'left', 'hide': True},
+        {'name': 'ulid', 'label': 'ulid', 'field': 'ulid', 'required': True, 'sortable': False, 'align': 'left', 'hide': True},
         {'name': 'description', 'label': 'description', 'field': 'description', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
         {'name': 'testfunction', 'label': 'testfunction', 'field': 'testfunction', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
         {'name': 'parameters', 'label': 'parameters', 'field': 'parameters', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
@@ -20,18 +20,18 @@ class AbstractTestTable(AdvancedTable):
         {'name': 'tool command', 'label': 'tool command', 'field': 'tool command', 'required': True, 'sortable': False, 'align': 'left', 'hide': False}
     ]
 
-    def __init__(self, experiment_uuid: str):
-        self.experiment_uuid = experiment_uuid
+    def __init__(self, experiment_ulid: str):
+        self.experiment_ulid = experiment_ulid
         super().__init__()
 
     def update_data(self):
         with ExperimentApi() as db:
-            tests = db.get_experiment_by_uuid(self.experiment_uuid).abstract_tests
+            tests = db.get_experiment_by_ulid(self.experiment_ulid).abstract_tests
 
             self.data = [
                 {
                     'name': t.name,
-                    'uuid': t.uuid,
+                    'ulid': t.ulid,
                     'description': t.description,
                     'testfunction': t.testfunction.name,
                     'testfunction_type': t.testfunction.type,

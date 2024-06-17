@@ -17,10 +17,10 @@ def read_event_file(event_file: Path) -> EventSystemData:
 
 
 class EventHandler(FileSystemEventHandler):
-    experimentrun_uuid: str
+    experimentrun_ulid: str
 
-    def __init__(self, experimentrun_uuid: str):
-        self.experimentrun_uuid = experimentrun_uuid
+    def __init__(self, experimentrun_ulid: str):
+        self.experimentrun_ulid = experimentrun_ulid
 
     def on_modified(self, event: FileSystemEvent) -> None:
         eventssystemdata = None
@@ -32,5 +32,5 @@ class EventHandler(FileSystemEventHandler):
                 log.error(e, exc_info=True)
         if eventssystemdata:
             with EventDbApi() as db:
-                db.update_events(self.experimentrun_uuid, eventssystemdata)
+                db.update_events(self.experimentrun_ulid, eventssystemdata)
 

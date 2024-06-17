@@ -5,7 +5,7 @@ from adare.gui.extensions.advanced_table.advanced_table import AdvancedTable
 
 
 class TestsTable(AdvancedTable):
-    experiment_uuid: str = None
+    experiment_ulid: str = None
     table = None
     checkbox_showhideall = None
     checkboxes_showhide_columns = []
@@ -20,7 +20,7 @@ class TestsTable(AdvancedTable):
     columns: list[dict] = [
         {'name': 'status', 'label': 'status', 'field': 'status', 'required': True, 'sortable': False, 'align': 'left'},
         {'name': 'name', 'label': 'name', 'field': 'name', 'required': True, 'sortable': True, 'align': 'left', 'hide': False, 'filter': [FilterEqual, FilterNotEqual, FilterContains]},
-        {'name': 'uuid', 'label': 'uuid', 'field': 'uuid', 'required': True, 'sortable': False, 'align': 'left', 'hide': False, 'filter': [FilterEqual, FilterNotEqual]},
+        {'name': 'ulid', 'label': 'ulid', 'field': 'ulid', 'required': True, 'sortable': False, 'align': 'left', 'hide': False, 'filter': [FilterEqual, FilterNotEqual]},
         {'name': 'description', 'label': 'description', 'field': 'description', 'required': True, 'sortable': False, 'align': 'left', 'hide': False, 'filter': [FilterEqual, FilterNotEqual, FilterContains]},
         {'name': 'testfunction', 'label': 'testfunction', 'field': 'testfunction', 'required': True, 'sortable': False, 'align': 'left', 'hide': False, 'filter': [FilterEqual, FilterNotEqual, FilterContains]},
         {'name': 'parameters', 'label': 'parameters', 'field': 'parameters', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
@@ -31,18 +31,18 @@ class TestsTable(AdvancedTable):
     data: list[dict] = None
     shown_rows: list[bool] = None
 
-    def __init__(self, experiment_uuid: str):
-        self.experiment_uuid = experiment_uuid
+    def __init__(self, experiment_ulid: str):
+        self.experiment_ulid = experiment_ulid
         super().__init__()
 
     def update_data(self):
         with ExperimentApi() as db:
-            tests = db.get_experiment_by_uuid(self.experiment_uuid).tests
+            tests = db.get_experiment_by_ulid(self.experiment_ulid).tests
             self.data = [
                 {
                     'status': t.result.status.name,
                     'name': t.name,
-                    'uuid': t.uuid,
+                    'ulid': t.ulid,
                     'description': t.description,
                     'testfunction': t.testfunction.name,
                     'parameters': {

@@ -36,7 +36,7 @@ class EventSystem:
             event.group_id = group_id
         self.data.events.append(event)
         self.save()
-        return event.uuid, event.group_id
+        return event.ulid, event.group_id
 
     def save(self):
         self.data.end_time = datetime.now().strftime(TIMESTAMP_FORMAT)
