@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, Boolean
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
-import uuid
+import ulid
 from datetime import datetime
 from sqlalchemy_serializer import SerializerMixin
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -11,21 +11,21 @@ Base = declarative_base()
 mapping_experimentrun_test = Table(
     "mapping_experimentrun_test",
     Base.metadata,
-    Column("experimentrun_uuid", ForeignKey("experimentrun.uuid")),
-    Column("test_uuid", ForeignKey("test.uuid")),
+    Column("experimentrun_ulid", ForeignKey("experimentrun.ulid")),
+    Column("test_ulid", ForeignKey("test.ulid")),
 )
 
 mapping_experiment_abstracttest = Table(
     "mapping_experiment_abstracttest",
     Base.metadata,
-    Column("experiment_uuid", ForeignKey("experiment.uuid")),
-    Column("abstracttest_uuid", ForeignKey("abstracttest.uuid")),
+    Column("experiment_ulid", ForeignKey("experiment.ulid")),
+    Column("abstracttest_ulid", ForeignKey("abstracttest.ulid")),
 )
 
 mapping_experiment_tag = Table(
     "mapping_experiment_tag",
     Base.metadata,
-    Column("experiment_uuid", ForeignKey("experiment.uuid")),
+    Column("experiment_ulid", ForeignKey("experiment.ulid")),
     Column("tag_id", ForeignKey("tag.id")),
 )
 
@@ -39,20 +39,20 @@ mapping_testfunction_testparameter = Table(
 mapping_abstracttest_testparameterentry = Table(
     "mapping_abstracttest_testparameterentry",
     Base.metadata,
-    Column("abstracttest_uuid", ForeignKey("abstracttest.uuid")),
+    Column("abstracttest_ulid", ForeignKey("abstracttest.ulid")),
     Column("testparameterentry_id", ForeignKey("testparameterentry.id")),
 )
 mapping_postsetupinstallation_environment = Table(
     "mapping_postsetupinstallation_environment",
     Base.metadata,
     Column("postsetupinstallation_id", ForeignKey("postsetupinstallation.id")),
-    Column("environment_id", ForeignKey("environment.uuid")),
+    Column("environment_id", ForeignKey("environment.ulid")),
 )
 mapping_usbdrive_experiment = Table(
     "mapping_usbdrive_experiment",
     Base.metadata,
     Column("usbdrive_id", ForeignKey("usbdrive.id")),
-    Column("experiment_uuid", ForeignKey("experiment.uuid")),
+    Column("experiment_ulid", ForeignKey("experiment.ulid")),
 )
 mapping_smbdrive_smbshare = Table(
     "mapping_smbdrive_smbshare",
@@ -75,13 +75,13 @@ mapping_nfsdrive_nfsshare = Table(
 mapping_experiment_environment = Table(
     "mapping_experiment_environment",
     Base.metadata,
-    Column("experiment_uuid", ForeignKey("experiment.uuid")),
-    Column("environment_id", ForeignKey("environment.uuid")),
+    Column("experiment_ulid", ForeignKey("experiment.ulid")),
+    Column("environment_id", ForeignKey("environment.ulid")),
 )
 mapping_abstracttest_tool = Table(
     "mapping_abstracttest_tool",
     Base.metadata,
-    Column("abstracttest_uuid", ForeignKey("abstracttest.uuid")),
+    Column("abstracttest_ulid", ForeignKey("abstracttest.ulid")),
     Column("tool_id", ForeignKey("tool.id")),
 )
 mapping_project_testfunctionfile = Table(
@@ -254,7 +254,7 @@ class AbstractTest(SerializerMixin, Base):
     __tablename__ = 'abstracttest'
     RELATIONSHIPS_TO_DICT = True
 
-    uuid = Column(CHAR(32), primary_key=True, default=lambda: str(uuid.uuid4()))
+    ulid = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
     name = Column(String)
     description = Column(String)
 
@@ -276,19 +276,19 @@ class Test(SerializerMixin, Base):
     __tablename__ = 'test'
     RELATIONSHIPS_TO_DICT = True
 
-    uuid = Column(CHAR(32), primary_key=True, default=lambda: str(uuid.uuid4()))
+    ulid = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
 
     result_id = Column(Integer, ForeignKey('result.id'))
-    abstracttest_id = Column(CHAR(32), ForeignKey('abstracttest.uuid'))
+    abstracttest_id = Column(CHAR(26), ForeignKey('abstracttest.ulid'))
 
     result = relationship(Result)
     abstracttest = relationship(AbstractTest, backref=backref("tests", cascade="all, delete-orphan"))
 
     def __str__(self):
-        return str(self.uuid)
+        return str(self.ulid)
 
     def __repr__(self):
-        return f"<Test(uuid='{self.uuid}',abstracttest='{self.abstracttest}')>"
+        return f"<Test(ulid='{self.ulid}',abstracttest='{self.abstracttest}')>"
 
 
 class OsInfo(SerializerMixin, Base):
@@ -317,7 +317,7 @@ class LogFile(SerializerMixin, Base):
     __tablename__ = 'logfile'
     RELATIONSHIPS_TO_DICT = True
 
-    uuid = Column(CHAR(32), primary_key=True, default=lambda: str(uuid.uuid4()))
+    ulid = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
     name = Column(String)
     path = Column(String, unique=True)
 
@@ -438,7 +438,7 @@ class Environment(SerializerMixin, Base):
     __tablename__ = 'environment'
     RELATIONSHIPS_TO_DICT = True
 
-    uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    ulid = Column(String, primary_key=True, default=lambda: str(ulid.ULID()))
     name = Column(String)
     vagrantbox = Column(String)
     description = Column(String)
@@ -470,7 +470,7 @@ class Experiment(SerializerMixin, Base):
     __tablename__ = 'experiment'
     RELATIONSHIPS_TO_DICT = True
 
-    uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    ulid = Column(String, primary_key=True, default=lambda: str(ulid.ULID()))
     name = Column(String)
     description = Column(String)
 
@@ -517,10 +517,10 @@ class Event(SerializerMixin, Base):
     __tablename__ = 'event'
     RELATIONSHIPS_TO_DICT = True
 
-    uuid = Column(CHAR(32), primary_key=True, default=lambda: str(uuid.uuid4()))
+    ulid = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
     event_type = Column(String)
     category = Column(String)
-    experiment_run_id = Column(String, ForeignKey('experimentrun.uuid'))
+    experiment_run_id = Column(String, ForeignKey('experimentrun.ulid'))
     experiment_run = relationship("ExperimentRun", backref=backref("events", cascade="all, delete-orphan"))
     status = Column(Integer, default=StatusEnum.PENDING)
     error = Column(String)
@@ -550,7 +550,7 @@ class Event(SerializerMixin, Base):
 #     __mapper_args__ = {
 #         'polymorphic_identity': 'action_event',
 #     }
-#     id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
+#     id = Column(CHAR(26), ForeignKey('event.ulid'), primary_key=True)
 #     name = Column(String)
 #     description = Column(String)
 #
@@ -564,7 +564,7 @@ class CommandEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'command_event',
     }
-    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(26), ForeignKey('event.ulid'), primary_key=True)
     name = Column(String)
     command = Column(String)
     returncode = Column(Integer)
@@ -584,7 +584,7 @@ class TestEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'test_event',
     }
-    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(26), ForeignKey('event.ulid'), primary_key=True)
     test_name = Column(String)
     result_id = Column(Integer, ForeignKey('result.id'), nullable=True)
     result = relationship(Result)
@@ -611,7 +611,7 @@ class ErrorEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'error_event',
     }
-    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(26), ForeignKey('event.ulid'), primary_key=True)
     error_name = Column(String)
     error_msg = Column(String)
 
@@ -635,7 +635,7 @@ class GuiFindEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'gui_find_event',
     }
-    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(26), ForeignKey('event.ulid'), primary_key=True)
     text = Column(Boolean)
     objective = Column(String)
     success = Column(Integer)
@@ -656,7 +656,7 @@ class GuiClickEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'gui_click_event',
     }
-    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(26), ForeignKey('event.ulid'), primary_key=True)
     clicktype = Column(String)
     modifiers = Column(String)
     target = Column(String)
@@ -678,7 +678,7 @@ class GuiKeypressEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'gui_keypress_event',
     }
-    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(26), ForeignKey('event.ulid'), primary_key=True)
     keys = Column(String)
 
     @hybrid_property
@@ -695,7 +695,7 @@ class GuiIdleEvent(Event):
     __mapper_args__ = {
         'polymorphic_identity': 'gui_idle_event',
     }
-    id = Column(CHAR(32), ForeignKey('event.uuid'), primary_key=True)
+    id = Column(CHAR(26), ForeignKey('event.ulid'), primary_key=True)
     seconds = Column(Integer)
 
     @hybrid_property
@@ -738,16 +738,16 @@ class ExperimentRunFiles(SerializerMixin, Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    log_vagrant_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    log_vagrant_id = Column(Integer, ForeignKey('logfile.ulid'), nullable=True)
     log_vagrant = relationship(LogFile, foreign_keys=[log_vagrant_id])
 
-    package_dump_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    package_dump_id = Column(Integer, ForeignKey('logfile.ulid'), nullable=True)
     package_dump = relationship(LogFile, foreign_keys=[package_dump_id])
 
-    log_installations_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    log_installations_id = Column(Integer, ForeignKey('logfile.ulid'), nullable=True)
     log_installations = relationship(LogFile, foreign_keys=[log_installations_id])
 
-    log_run_id = Column(Integer, ForeignKey('logfile.uuid'), nullable=True)
+    log_run_id = Column(Integer, ForeignKey('logfile.ulid'), nullable=True)
     log_run = relationship(LogFile, foreign_keys=[log_run_id])
 
 
@@ -779,7 +779,7 @@ class StageInRun(SerializerMixin, Base):
     sub_msg = Column(String, nullable=True)
     result_status = Column(Integer, nullable=True)
 
-    run_id = Column(String, ForeignKey('experimentrun.uuid'))
+    run_id = Column(String, ForeignKey('experimentrun.ulid'))
     run = relationship("ExperimentRun", backref=backref("stages", cascade="all, delete-orphan"))
 
     @hybrid_property
@@ -805,10 +805,10 @@ class ExperimentRun(SerializerMixin, Base):
     __tablename__ = 'experimentrun'
     RELATIONSHIPS_TO_DICT = True
 
-    uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    experiment_id = Column(String, ForeignKey('experiment.uuid'), nullable=True)
+    ulid = Column(String, primary_key=True, default=lambda: str(ulid.ULID()))
+    experiment_id = Column(String, ForeignKey('experiment.ulid'), nullable=True)
     experiment = relationship(Experiment, backref=backref("runs", cascade="all, delete-orphan"))
-    environment_id = Column(Integer, ForeignKey('environment.uuid'), nullable=True)
+    environment_id = Column(Integer, ForeignKey('environment.ulid'), nullable=True)
     environment = relationship(Environment, backref=backref("runs", cascade="all, delete-orphan"))
 
     path = Column(String, nullable=True)
@@ -839,8 +839,14 @@ class ExperimentRun(SerializerMixin, Base):
             return self.experiment.name
         return ''
 
+    @hybrid_property
+    def duration(self):
+        if self.timestamp_start and self.timestamp_end:
+            return self.timestamp_end - self.timestamp_start
+        return None
+
     def __str__(self):
-        return str(self.uuid)
+        return str(self.ulid)
 
     def __repr__(self):
-        return f"<ExperimentRun(uuid='{self.uuid}',experiment={self.experiment_id})>"
+        return f"<ExperimentRun(ulid='{self.ulid}',experiment={self.experiment_id})>"

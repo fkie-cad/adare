@@ -45,20 +45,20 @@ def _calc_timedelta_string(start: datetime, end: datetime):
 
 
 class ExperimentRunOverview:
-    experimentrun_uuid = None
+    experimentrun_ulid = None
     data = None
 
-    def __init__(self, uuid: str):
-        self.experimentrun_uuid = uuid
+    def __init__(self, ulid: str):
+        self.experimentrun_ulid = ulid
 
 
     def load_data(self):
         with ExperimentApi() as db:
-            exprun = db.get_experimentrun_by_uuid(self.experimentrun_uuid)
+            exprun = db.get_experimentrun_by_ulid(self.experimentrun_ulid)
 
             self.data = {
-                'uuid': exprun.uuid,
-                'experiment_uuid': exprun.experiment.uuid,
+                'ulid': exprun.ulid,
+                'experiment_ulid': exprun.experiment.ulid,
                 'experiment_name': exprun.experiment.name,
                 'timestamp_start': exprun.timestamp_start.strftime(TIMESTAMP_FORMAT_SECONDS),
                 'timestamp_end': exprun.timestamp_end.strftime(TIMESTAMP_FORMAT_SECONDS),
@@ -70,9 +70,9 @@ class ExperimentRunOverview:
                 'status_vagrant': exprun.status_vagrant.name,
 
                 # logfiles
-                'logfile_action': exprun.logfile_gui_automation.uuid,
-                'logfile_testset': exprun.logfile_parse_and_test.uuid,
-                'logfile_vagrant': exprun.logfile_vagrant.uuid,
+                'logfile_action': exprun.logfile_gui_automation.ulid,
+                'logfile_testset': exprun.logfile_parse_and_test.ulid,
+                'logfile_vagrant': exprun.logfile_vagrant.ulid,
 
                 # calculated values
                 'duration': _calc_timedelta_string(exprun.timestamp_start, exprun.timestamp_end)
@@ -80,12 +80,12 @@ class ExperimentRunOverview:
             }
 
 
-    def __open_experiment(self, experiment_uuid: str):
-        ui.open(f'/experiment/{experiment_uuid}/', new_tab=True)
+    def __open_experiment(self, experiment_ulid: str):
+        ui.open(f'/experiment/{experiment_ulid}/', new_tab=True)
 
 
-    def __open_logfile(self, logfile_uuid: str):
-        ui.open(f'/log/{logfile_uuid}/', new_tab=True)
+    def __open_logfile(self, logfile_ulid: str):
+        ui.open(f'/log/{logfile_ulid}/', new_tab=True)
 
 
     def create(self):
@@ -94,18 +94,18 @@ class ExperimentRunOverview:
         with ui.element('div').classes('flex justify-center w-full'):
             with ui.element('div').classes('q-pa-sm w-full'):
                 with ui.card():
-                    # card section with experimentrun uuid
+                    # card section with experimentrun ulid
                     with ui.card_section().classes('w-full q-pa-none'):
                         with ui.element('div').classes('row text-gray-600'):
                             with ui.element('div').classes(STYLE_TEXT_MUTED_SMALL+' col'):
                                 ui.html('')
                             with ui.element('div').classes(STYLE_TEXT_MUTED_SMALL+ ' col text-right'):
-                                ui.html('uuid')
+                                ui.html('ulid')
                         with ui.element('div').classes('row text-3xl'):
                             with ui.element('div').classes('col'):
                                 ui.html('Experiment Run')
                             with ui.element('div').classes('col text-right'):
-                                ui.html().bind_content(self.data, 'uuid')
+                                ui.html().bind_content(self.data, 'ulid')
                     ui.separator()
 
                     with ui.card_section().classes('row w-full justify-between'):
@@ -122,12 +122,12 @@ class ExperimentRunOverview:
                                             with ui.element('td').classes('text-right'):
                                                 with ui.element('div').classes('inline-block'):
                                                     ui.label().bind_text(self.data, 'experiment_name').classes('inline-block')
-                                                    ui.button(icon='open_in_new', color='secondary', on_click=lambda x: self.__open_experiment(self.data['experiment_uuid'])).props("round dense size='sm'").classes('q-ml-sm')
+                                                    ui.button(icon='open_in_new', color='secondary', on_click=lambda x: self.__open_experiment(self.data['experiment_ulid'])).props("round dense size='sm'").classes('q-ml-sm')
                                         with ui.element('tr'):
                                             with ui.element('td').classes('text-left'):
-                                                ui.html('experiment uuid')
+                                                ui.html('experiment ulid')
                                             with ui.element('td').classes('text-right'):
-                                                ui.label().bind_text(self.data, 'experiment_uuid')
+                                                ui.label().bind_text(self.data, 'experiment_ulid')
                                         with ui.element('tr'):
                                             with ui.element('td').classes('text-left'):
                                                 ui.html('start')
@@ -171,6 +171,6 @@ class ExperimentRunOverview:
 
                     # create a table with all tests and their results
                     with ui.card_section().classes('w-full q-pa-none'):
-                        test_table = TestTable(self.experimentrun_uuid)
+                        test_table = TestTable(self.experimentrun_ulid)
                         test_table.create()
 

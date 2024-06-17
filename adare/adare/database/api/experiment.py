@@ -14,6 +14,7 @@ from adare.backend.experiment.directory import ExperimentDirectory
 from adarelib.exceptions import TestSetFormatError
 from adare.database.exceptions import EnvironmentMissingError
 from adare.database.fixtures import fixture_stages, fixture_status
+from adarelib.config import StatusEnum
 
 # configure logging
 import logging
@@ -127,14 +128,14 @@ class ExperimentApi(ProjectDbApi):
                 experiment.abstract_tests.append(obj)
         self._session.add(experiment)
 
-        log.debug(f'added experiment {experiment.uuid} to database')
+        log.debug(f'added experiment {experiment.ulid} to database')
 
         return experiment
 
     def get_experiment(self, name: str, environment: Environment) -> Experiment:
         return (
             self._session.query(Experiment)
-            .filter(Experiment.name == name, Experiment.environments.any(uuid=environment.uuid))
+            .filter(Experiment.name == name, Experiment.environments.any(ulid=environment.ulid))
             .first()
         )
 
@@ -147,9 +148,9 @@ class ExperimentApi(ProjectDbApi):
         return logfile
 
     def update_experiment_run(
-            self, run_uuid: str, experiment: Experiment, environment: Environment, path: Path,
+            self, run_ulid: str, experiment: Experiment, environment: Environment, path: Path,
             logfile_vagrant: Path, logfile_installed_packages: Path, logfile_postsetup_installations: Path,
-            logfile_run_experiment: Path, status: str
+            logfile_run_experiment: Path, status: int
     ) -> ExperimentRun:
         experiment_run_files = ExperimentRunFiles(
             log_vagrant=self.__create_logfile(logfile_vagrant),
@@ -159,7 +160,7 @@ class ExperimentApi(ProjectDbApi):
 
         )
         self._session.add(experiment_run_files)
-        experiment_run = self._session.query(ExperimentRun).filter_by(uuid=run_uuid).first()
+        experiment_run = self._session.query(ExperimentRun).filter_by(ulid=run_ulid).first()
         experiment_run.environment = environment
         experiment_run.experiment = experiment
         experiment_run.path = path.as_posix()
@@ -174,23 +175,23 @@ class ExperimentApi(ProjectDbApi):
         self._session.commit()
         return experiment_run
 
-    def update_experiment_run_start(self, experiment_run_uuid: str, timestamp: datetime):
-        experiment_run = self._session.query(ExperimentRun).filter_by(uuid=experiment_run_uuid).first()
+    def update_experiment_run_start(self, experiment_run_ulid: str, timestamp: datetime):
+        experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
         experiment_run.timestamp_start = timestamp
 
-    def finish_experiment_run(self, experiment_run_uuid: str, timestamp: datetime):
-        experiment_run = self._session.query(ExperimentRun).filter_by(uuid=experiment_run_uuid).first()
+    def finish_experiment_run(self, experiment_run_ulid: str, timestamp: datetime):
+        experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
         experiment_run.timestamp_end = timestamp
 
-    def remove_experiment_by_uuid(self, experiment_uuid: str):
+    def remove_experiment_by_ulid(self, experiment_ulid: str):
         if (
                 experiment := self._session.query(Experiment)
-                        .filter_by(uuid=experiment_uuid)
+                        .filter_by(ulid=experiment_ulid)
                         .first()
         ):
             self.remove_experiment(experiment)
         else:
-            raise ValueError(f'experiment with uuid {experiment_uuid} not found')
+            raise ValueError(f'experiment with ulid {experiment_ulid} not found')
 
     def remove_experiment(self, experiment: Experiment):
         # delete all experiment runs
@@ -198,8 +199,8 @@ class ExperimentApi(ProjectDbApi):
             self._session.delete(run)
         self._session.delete(experiment)
 
-    def experiment_sha256_equals(self, experiment_uuid: str, sha256: str) -> bool:
-        experiment = self._session.query(Experiment).filter_by(uuid=experiment_uuid).first()
+    def experiment_sha256_equals(self, experiment_ulid: str, sha256: str) -> bool:
+        experiment = self._session.query(Experiment).filter_by(ulid=experiment_ulid).first()
         return experiment.sha256 == sha256
 
     def __get_abstract_test(self, test: FTest, command_list: list[Command]) -> AbstractTest or None:
@@ -287,6 +288,9 @@ class ExperimentApi(ProjectDbApi):
         command_list = self.__get_command_list(testset)
         return [self.__get_abstract_test(test, command_list) for test in testset.tests]
 
-    def update_experiment_run_status(self, experiment_run_uuid: str, status: int):
-        experiment_run = self._session.query(ExperimentRun).filter_by(uuid=experiment_run_uuid).first()
+    def update_experiment_run_status(self, experiment_run_ulid: str, status: int):
+        experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
         experiment_run.status = status
+        if status == StatusEnum.FINISHED or status == StatusEnum.INTERRUPTED:
+            experiment_run.timestamp_end = datetime.now()
+

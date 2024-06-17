@@ -30,30 +30,30 @@ def _publish_status(status: str) -> None:
 
 
 class ScenarioOverview:
-    scenario_uuid = None
+    scenario_ulid = None
     scenario_data = None
 
-    def __init__(self, uuid: str):
-        self.scenario_uuid = uuid
+    def __init__(self, ulid: str):
+        self.scenario_ulid = ulid
 
     def load_data(self):
         with ExperimentApi() as db:
-            sce = db.get_scenario_by_uuid(self.scenario_uuid)
+            sce = db.get_scenario_by_ulid(self.scenario_ulid)
 
             self.scenario_data = {
-                'uuid': sce.uuid,
+                'ulid': sce.ulid,
                 'name': sce.name,
                 'description': sce.description,
                 'experiments': [
                     {
-                        'uuid': exp.uuid,
+                        'ulid': exp.ulid,
                         'name': exp.name,
                     } for exp in sce.experiments.all()
                 ]
             }
 
             # update publish status of experiment in a background task and update the experiment data
-            # create_background_task(check_experiment_published(self.experiment_uuid, force_check=True, component_func=_publish_status))
+            # create_background_task(check_experiment_published(self.experiment_ulid, force_check=True, component_func=_publish_status))
 
     def __check_if_experiment_is_not_published(self):
         return self.scenario_data['publish_status'] == 'not published'
@@ -64,18 +64,18 @@ class ScenarioOverview:
         with ui.element('div').classes('flex justify-center w-full'):
             with ui.element('div').classes('q-pa-sm w-full'):
                 with ui.card():
-                    # card section with experiment name and uuid
+                    # card section with experiment name and ulid
                     with ui.card_section().classes('w-full q-pa-none'):
                         with ui.element('div').classes('row text-gray-600'):
                             with ui.element('div').classes(STYLE_TEXT_MUTED_SMALL+' col'):
                                 ui.html('name')
                             with ui.element('div').classes(STYLE_TEXT_MUTED_SMALL+ ' col text-right'):
-                                ui.html('uuid')
+                                ui.html('ulid')
                         with ui.element('div').classes('row text-3xl'):
                             with ui.element('div').classes('col'):
                                 ui.html().bind_content(self.experiment_data, 'name')
                             with ui.element('div').classes('col text-right'):
-                                ui.html().bind_content(self.experiment_data, 'uuid')
+                                ui.html().bind_content(self.experiment_data, 'ulid')
                     ui.separator()
 
                     with ui.card_section().classes('row w-full justify-between'):

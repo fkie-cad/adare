@@ -43,7 +43,7 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
             log.info(f'environment file {environment_file} has already been used for experiments -> deleting all runs')
             for run in latest_env.runs:
                 db.delete_experiment_run(run)
-                log.info(f'deleted run {run.uuid}')
+                log.info(f'deleted run {run.ulid}')
             # update the environment
             db.update_environment(environment_metadata, environment_file, sha256hash)
             log.info(f'environment {environment_metadata.name} updated')
@@ -52,29 +52,29 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
             db.update_environment(environment_metadata, environment_file, sha256hash)
 
 
-def delete_environment(environment_uuid: str, force: bool = False):
+def delete_environment(environment_ulid: str, force: bool = False):
     with EnvironmentDbApi() as db:
-        environment = db.get_environment_by_uuid(environment_uuid)
+        environment = db.get_environment_by_ulid(environment_ulid)
         if not environment:
             raise EnvironmentDoesNotExistInDatabase(
                 log,
-                f'environment with uuid {environment_uuid} does not exist in the database',
+                f'environment with ulid {environment_ulid} does not exist in the database',
             )
         if environment.runs:
             if not force:
                 raise EnvironmentDeletionError(
                     log,
-                    f'environment {environment.uuid} has already been used for experiments, so it cannot be deleted because this would invalidate the results',
+                    f'environment {environment.ulid} has already been used for experiments, so it cannot be deleted because this would invalidate the results',
                     possible_solutions=[
                         'run with --force to delete all runs and the environment',
                         'create a new environment with a new name',
                     ])
-            log.info(f'environment {environment.uuid} has already been used for experiments -> deleting all runs')
+            log.info(f'environment {environment.ulid} has already been used for experiments -> deleting all runs')
             for run in environment.runs:
                 db.delete_experiment_run(run)
-                log.info(f'deleted run {run.uuid}')
+                log.info(f'deleted run {run.ulid}')
         db.delete_environment(environment)
-        log.info(f'deleted environment {environment.uuid}')
+        log.info(f'deleted environment {environment.ulid}')
 
 
 def get_environments(project_path: Path = None) -> list[Environment]:

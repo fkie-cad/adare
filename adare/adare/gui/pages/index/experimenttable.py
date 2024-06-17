@@ -17,7 +17,7 @@ class ExperimentTable(AdvancedTable):
 
     columns: list[dict] = [
         {'name': 'name', 'label': 'name', 'field': 'name', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
-        {'name': 'uuid', 'label': 'uuid', 'field': 'uuid', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
+        {'name': 'ulid', 'label': 'ulid', 'field': 'ulid', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
         {'name': 'os', 'label': 'os', 'field': 'os', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
         {'name': 'os distribution', 'label': 'os distribution', 'field': 'os_distribution', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
         {'name': 'os version', 'label': 'os version', 'field': 'os_version', 'required': True, 'sortable': True,
@@ -41,7 +41,7 @@ class ExperimentTable(AdvancedTable):
             self.data = [
                 {
                     'name': e.name,
-                    'uuid': e.uuid,
+                    'ulid': e.ulid,
                     'os': e.os_info.os,
                     'os_distribution': e.os_info.distribution,
                     'os_version': e.os_info.version,
@@ -53,8 +53,8 @@ class ExperimentTable(AdvancedTable):
 
     def _publish_experiment(self, table_data):
         """ Publish an experiment to a specified server. """
-        experiment_uuid = table_data['args']['row']['uuid']
-        PublishExpIface.publish(experiment_uuid)
+        experiment_ulid = table_data['args']['row']['ulid']
+        PublishExpIface.publish(experiment_ulid)
 
     def update_publish_disabled(self):
         """
@@ -113,7 +113,7 @@ class ExperimentTable(AdvancedTable):
             # add buttons that links to the experiment page for each row
             table.add_slot('body-cell-btn', """
                  <q-td :props="props">
-                    <q-btn flat round icon="add_circle" v-bind:href="'/experiment/'+ props.row['uuid']" class="text-slate-700" />
+                    <q-btn flat round icon="add_circle" v-bind:href="'/experiment/'+ props.row['ulid']" class="text-slate-700" />
                  </q-td>
             """)
             table.add_slot('body-cell-publish', f"""

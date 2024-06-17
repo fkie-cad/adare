@@ -3,7 +3,7 @@ from typing import Literal, Optional
 import attrs
 import cattrs
 from datetime import datetime
-import uuid
+import ulid
 
 import adarelib.config as config
 
@@ -18,7 +18,7 @@ class Event:
     category: str
     timestamp: str
     status: int
-    uuid: str
+    ulid: str
     error: str
     stage: bool
 
@@ -29,7 +29,7 @@ class Event:
 #     description: str
 #     category: str = 'action'
 #     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-#     uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+#     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ulid4())))
 #     status: int = config.StatusEnum.RUNNING
 #     error: str = ''
 #     stage: bool = True
@@ -43,7 +43,7 @@ class CommandEvent(Event):
     returncode: int = -1
     stdout: str = ''
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ulid4())))
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
@@ -62,7 +62,7 @@ class TestEvent(Event):
     result: Optional[TestResult] = None
     category: str = 'test'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ulid4())))
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
@@ -74,7 +74,7 @@ class ErrorEvent(Event):
     error_name: str
     category: str = 'error'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ulid4())))
     status: int = config.StatusEnum.NONE
     stage: str = ''
     error: str = ''
@@ -95,7 +95,7 @@ class GuiFindEvent(GuiEvent):
     success: int = -1
     category: str = 'gui:find'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ulid4())))
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
@@ -109,7 +109,7 @@ class GuiClickEvent(GuiEvent):
     target: str
     category: str = 'gui:click'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ulid4())))
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
@@ -121,7 +121,7 @@ class GuiKeypressEvent(GuiEvent):
     keys: list[str]
     category: str = 'gui:keypress'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ulid4())))
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
@@ -133,7 +133,7 @@ class GuiIdleEvent(GuiEvent):
     seconds: int
     category: str = 'gui:idle'
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now().strftime(config.TIMESTAMP_FORMAT)))
-    uuid: str = attrs.field(default=attrs.Factory(lambda: str(uuid.uuid4())))
+    ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ulid4())))
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True

@@ -9,16 +9,16 @@ from adare.gui.pages.experiment.tests_table import TestsTable
 
 
 class BodyExperimentPage:
-    experiment_uuid = None
+    experiment_ulid = None
     experiment_data = None
     data = None
 
-    def __init__(self, uuid):
-        self.experiment_uuid = uuid
+    def __init__(self, ulid):
+        self.experiment_ulid = ulid
 
     def load_data(self):
         with ExperimentApi() as db:
-            exp = db.get_experiment_by_uuid(self.experiment_uuid)
+            exp = db.get_experiment_by_ulid(self.experiment_ulid)
             tests = []
             for test in exp.abstract_tests:
                 tests.append({
@@ -28,7 +28,7 @@ class BodyExperimentPage:
                     'parameters': [(p.parameter.name,p.value) for p in test.testparameterentry],
                 })
             self.experiment_data = {
-                'uuid': exp.uuid,
+                'ulid': exp.ulid,
                 'name': exp.name,
                 'description': exp.description,
                 'os': exp.os_info.os,
@@ -54,10 +54,10 @@ class BodyExperimentPage:
         with ui.card().classes('w-full leading-4').style('gap: 0'):
             with ui.row().classes('w-full items-center justify-between'):
                 ui.label(f'name').classes(STYLE_TEXT_MUTED_LARGE)
-                ui.label(f'uuid').classes(STYLE_TEXT_MUTED_LARGE)
+                ui.label(f'ulid').classes(STYLE_TEXT_MUTED_LARGE)
             with ui.row().classes('w-full items-center justify-between mb-6'):
                 ui.label(self.experiment_data['name']).classes('text-h5')
-                ui.label(self.experiment_uuid).classes('text-h5')
+                ui.label(self.experiment_ulid).classes('text-h5')
             ui.separator()
             with ui.element('div').classes('row mt-6 w-full'):
                 with ui.element('div').classes('col mx-5'):
@@ -122,5 +122,5 @@ class BodyExperimentPage:
                     table.create('further logs', dense=False)
 
             with ui.row().classes('mt-12 w-full'):
-                table = TestsTable(self.experiment_uuid)
+                table = TestsTable(self.experiment_ulid)
                 table.create()

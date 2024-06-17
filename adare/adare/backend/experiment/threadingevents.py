@@ -15,13 +15,13 @@ class ExperimentEventManager:
     def __init__(self):
         self.events = {}
 
-    def add_threading_event(self, experimentrun_uuid: str, event: threading.Event, event_name: str):
-        if experimentrun_uuid not in self.events:
-            self.events[experimentrun_uuid] = {}
-        self.events[experimentrun_uuid][event_name] = event
+    def add_threading_event(self, experimentrun_ulid: str, event: threading.Event, event_name: str):
+        if experimentrun_ulid not in self.events:
+            self.events[experimentrun_ulid] = {}
+        self.events[experimentrun_ulid][event_name] = event
 
-    def get_threading_event(self, experimentrun_uuid: str, event_name: str):
-        return self.events[experimentrun_uuid][event_name]
+    def get_threading_event(self, experimentrun_ulid: str, event_name: str):
+        return self.events[experimentrun_ulid][event_name]
 
 
 experiment_event_manager = ExperimentEventManager()

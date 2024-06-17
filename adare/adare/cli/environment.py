@@ -22,7 +22,7 @@ def exec_environment_create(arguments):
 
 
 def exec_environment_delete(arguments):
-    environment_delete(arguments.uuid, force=arguments.force)
+    environment_delete(arguments.ulid, force=arguments.force)
 
 
 

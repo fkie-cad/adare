@@ -21,7 +21,7 @@ class OutputProcessor(ABC):
 
 
 class VagrantOutputProcessor(OutputProcessor):
-    experiment_run_uuid: str
+    experiment_run_ulid: str
     machine: str
     provider: str
 
@@ -34,8 +34,8 @@ class VagrantOutputProcessor(OutputProcessor):
     stage_message_pattern = re.compile(r"stage (?P<stage>.+): (?P<message>.+) \((?P<timestamp>.+)\)")
     shutdown_message_pattern = re.compile(r"--- SHUTDOWN ---")
 
-    def __init__(self, experiment_run_uuid: str):
-        self.experiment_run_uuid = experiment_run_uuid
+    def __init__(self, experiment_run_ulid: str):
+        self.experiment_run_ulid = experiment_run_ulid
         self.machine = ''
         self.provider = ''
 
@@ -53,7 +53,7 @@ class VagrantOutputProcessor(OutputProcessor):
                     self._parse_stage_message(match)
                 elif match := self.shutdown_message_pattern.match(message):
                     log.info('shutdown message detected')
-                    experiment_event_manager.get_threading_event(self.experiment_run_uuid, 'shutdown').set()
+                    experiment_event_manager.get_threading_event(self.experiment_run_ulid, 'shutdown').set()
 
     def _parse_stage_message(self, match):
         stage_name = match.group('stage')
@@ -71,14 +71,14 @@ class VagrantOutputProcessor(OutputProcessor):
                 stage.status = StatusEnum.FINISHED
 
             with StageDbApi() as api:
-                api.update_stage_in_run(stage, self.experiment_run_uuid)
+                api.update_stage_in_run(stage, self.experiment_run_ulid)
 
 
 class VagrantDestroyOutputProcessor(OutputProcessor):
-    experiment_run_uuid: str
+    experiment_run_ulid: str
 
-    def __init__(self, experiment_run_uuid: str):
-        self.experiment_run_uuid = experiment_run_uuid
+    def __init__(self, experiment_run_ulid: str):
+        self.experiment_run_ulid = experiment_run_ulid
 
     def process(self, line: str):
         log.info(line[:-1])

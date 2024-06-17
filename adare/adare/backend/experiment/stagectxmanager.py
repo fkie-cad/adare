@@ -11,13 +11,13 @@ log = logging.getLogger(__name__)
 
 
 class StageCtxManager(contextlib.AbstractContextManager):
-    def __init__(self, stage: StageType, experimentrun_uuid: str):
+    def __init__(self, stage: StageType, experimentrun_ulid: str):
         self.stage = stage
-        self.experimentrun_uuid = experimentrun_uuid
+        self.experimentrun_ulid = experimentrun_ulid
 
     def __enter__(self):
         self.stage.start()
-        update_stage_in_run(self.stage, self.experimentrun_uuid)
+        update_stage_in_run(self.stage, self.experimentrun_ulid)
         return self
 
     def set_status(self, status: int):
@@ -25,4 +25,4 @@ class StageCtxManager(contextlib.AbstractContextManager):
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.stage.end()
-        update_stage_in_run(self.stage, self.experimentrun_uuid)
+        update_stage_in_run(self.stage, self.experimentrun_ulid)

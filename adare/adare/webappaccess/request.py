@@ -14,17 +14,17 @@ import logging
 log = logging.getLogger(__name__)
 
 
-async def check_request(request_uuid: str):
+async def check_request(request_ulid: str):
     """
     Check if the request is published to the webapp and if yes return information about the actual status of the request
 
-    :param request_uuid: uuid of the request
+    :param request_ulid: ulid of the request
     :return: dict with keys exists and status
     """
 
     aiohttp_session = aiohttp.ClientSession()
     try:
-        async with aiohttp_session.get(config_server.CHECK_REQUEST_URL + f"?uuid={request_uuid}", timeout=config_server.TIMEOUT_SECONDS) as response:
+        async with aiohttp_session.get(config_server.CHECK_REQUEST_URL + f"?ulid={request_ulid}", timeout=config_server.TIMEOUT_SECONDS) as response:
             if response.status == 200:
                 response_json = await response.json()
                 return response_json
@@ -40,11 +40,11 @@ async def check_request(request_uuid: str):
         return None
 
 
-async def send_experiment_request(request_uuid: str):
+async def send_experiment_request(request_ulid: str):
     """
     send an experiment request to the webapp
 
-    :param request_uuid: uuid of the request
+    :param request_ulid: ulid of the request
     :return: (bool, str) tuple with success boolean and error message to be displayed to the user
     """
     aiohttp_session = aiohttp.ClientSession()
@@ -60,11 +60,11 @@ async def send_experiment_request(request_uuid: str):
         # set token in header
         aiohttp_session.headers.update(get_authenticated_request_header(token))
 
-        request = db.get_request_by_uuid(request_uuid)
+        request = db.get_request_by_ulid(request_ulid)
 
         if not request:
-            log.error(f"Request with uuid {request_uuid} not found in database")
-            return False, f"Request with uuid {request_uuid} not found in database"
+            log.error(f"Request with ulid {request_ulid} not found in database")
+            return False, f"Request with ulid {request_ulid} not found in database"
 
         # get experiment action and testset file
         experiment = request.experiment
@@ -81,7 +81,7 @@ async def send_experiment_request(request_uuid: str):
 
         #
         experiment_data = {
-            'uuid': experiment.uuid,
+            'ulid': experiment.ulid,
             'name': experiment.name,
             'description': experiment.description,
             'tags': [
@@ -99,7 +99,7 @@ async def send_experiment_request(request_uuid: str):
             },
             'abstract_tests': [
                 {
-                    'uuid': abstract_test.uuid,
+                    'ulid': abstract_test.ulid,
                     'name': abstract_test.name,
                     'description': abstract_test.description,
                     'testfunction': {

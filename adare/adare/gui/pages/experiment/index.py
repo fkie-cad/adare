@@ -35,8 +35,8 @@ def page_experiment():
     log.info('experiment page loaded')
 
 
-@ui.page('/experiment/{uuid}')
-def page_experiment_details(uuid: str):
+@ui.page('/experiment/{ulid}')
+def page_experiment_details(ulid: str):
     # add bootstrap icons
     add_bootstrap_icons()
 
@@ -54,7 +54,7 @@ def page_experiment_details(uuid: str):
     header.create()
 
     # create experiment view
-    experiment_overview = ExperimentOverview(uuid)
+    experiment_overview = ExperimentOverview(ulid)
     experiment_overview.create()
 
-    log.info(f'experiment (uuid:{uuid}) page loaded')
+    log.info(f'experiment (ulid:{ulid}) page loaded')

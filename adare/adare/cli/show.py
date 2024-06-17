@@ -58,7 +58,7 @@ def exec_show_experiments(arguments):
         project_path = determine_projectdirectory(arguments.project)
         if project_path:
             project = project_path.name
-    print_experiment_list(project, arguments.environment, arguments.environment_uuid)
+    print_experiment_list(project, arguments.environment, arguments.environment_ulid)
 
 
 def exec_show_experiment(arguments):
@@ -69,7 +69,7 @@ def exec_show_experiment(arguments):
         project_path = determine_projectdirectory(arguments.project)
         if project_path:
             project = project_path.name
-    print_experiment_details(project, arguments.environment, arguments.experiment, arguments.experiment_uuid)
+    print_experiment_details(project, arguments.environment, arguments.experiment, arguments.experiment_ulid)
 
 
 def exec_show_runs(arguments):
@@ -77,4 +77,4 @@ def exec_show_runs(arguments):
 
 
 def exec_show_run(arguments):
-    print_run_details(arguments.run_uuid)
+    print_run_details(arguments.run_ulid)

@@ -13,14 +13,14 @@ log = logging.getLogger(__name__)
 
 
 class RunTable(AdvancedTable):
-    experiment_uuid: str = None
+    experiment_ulid: str = None
 
     columns: list[dict] = [
         {'name': 'status', 'label': 'status', 'field': 'status', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
         {'name': 'experiment', 'label': 'experiment', 'field': 'experiment_name', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
         {'name': 'experiment_link', 'label': 'experiment link', 'field': 'experiment_link', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
-        {'name': 'experiment uuid', 'label': 'experiment uuid', 'field': 'experiment_uuid', 'required': True, 'sortable': True, 'align': 'left', 'hide': True},
-        {'name': 'uuid', 'label': 'uuid', 'field': 'uuid', 'required': True, 'sortable': True, 'align': 'left',
+        {'name': 'experiment ulid', 'label': 'experiment ulid', 'field': 'experiment_ulid', 'required': True, 'sortable': True, 'align': 'left', 'hide': True},
+        {'name': 'ulid', 'label': 'ulid', 'field': 'ulid', 'required': True, 'sortable': True, 'align': 'left',
          'hide': False},
         {'name': 'timestamp start', 'label': 'timestamp start', 'field': 'timestamp_start', 'required': True, 'sortable': True, 'align': 'left', 'hide': True},
         {'name': 'timestamp end', 'label': 'timestamp end', 'field': 'timestamp_end', 'required': True, 'sortable': True, 'align': 'left', 'hide': True},
@@ -47,8 +47,8 @@ class RunTable(AdvancedTable):
         'logfile_vagrant': 'logfile',
     }
 
-    def __init__(self, experiment_uuid: str = None, disabled_columns: list = None):
-        self.experiment_uuid = experiment_uuid
+    def __init__(self, experiment_ulid: str = None, disabled_columns: list = None):
+        self.experiment_ulid = experiment_ulid
 
         if disabled_columns:
             # remove columns from the list of columns
@@ -59,27 +59,27 @@ class RunTable(AdvancedTable):
 
     def update_data(self):
         with ExperimentApi() as db:
-            if self.experiment_uuid:
-                experiment_runs = db.get_experiment_runs_by_experiment_uuid(self.experiment_uuid)
+            if self.experiment_ulid:
+                experiment_runs = db.get_experiment_runs_by_experiment_ulid(self.experiment_ulid)
             else:
                 experiment_runs = db.get_all_experiment_runs()
 
             self.data = [
                 {
                     'status': e.status.name,
-                    'uuid': e.uuid,
+                    'ulid': e.ulid,
                     'experiment_name': e.experiment.name,
                     'experiment_link': e.experiment.name,
-                    'experiment_uuid': e.experiment.uuid,
+                    'experiment_ulid': e.experiment.ulid,
                     'timestamp_start': e.timestamp_start,
                     'timestamp_end': e.timestamp_end,
                     'status_action': e.status_gui_automation.name,
                     'status_testset': e.status_parse_and_test.name,
                     'status_vagrant': e.status_vagrant.name,
-                    'details': e.uuid,
-                    'logfile_action': e.logfile_gui_automation.uuid,
-                    'logfile_testset': e.logfile_parse_and_test.uuid,
-                    'logfile_vagrant': e.logfile_vagrant.uuid,
+                    'details': e.ulid,
+                    'logfile_action': e.logfile_gui_automation.ulid,
+                    'logfile_testset': e.logfile_parse_and_test.ulid,
+                    'logfile_vagrant': e.logfile_vagrant.ulid,
                 }
                 for e in experiment_runs
             ]
@@ -131,6 +131,6 @@ class RunTable(AdvancedTable):
                     """)
                 else:
                     log.error(f'unknown slot type: {slot_type}')
-            table.on('open_experiment', lambda e: ui.open(f'/experiment/{e.args["row"]["experiment_uuid"]}', new_tab=True))
-            table.on('open_experimentrun', lambda e: ui.open(f'/run/{e.args["row"]["uuid"]}', new_tab=True))
+            table.on('open_experiment', lambda e: ui.open(f'/experiment/{e.args["row"]["experiment_ulid"]}', new_tab=True))
+            table.on('open_experimentrun', lambda e: ui.open(f'/run/{e.args["row"]["ulid"]}', new_tab=True))
             table.on('open_log', lambda e: ui.open(f'/log/{e.args}', new_tab=True))

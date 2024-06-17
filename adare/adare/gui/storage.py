@@ -10,15 +10,15 @@ class Storage:
     request_modify_panel_visible = False
     request_table_visible = True
     request_type = None
-    request_experiment_uuid = None
-    request_scenario_uuid = None
+    request_experiment_ulid = None
+    request_scenario_ulid = None
 
-def show_request_modify_panel(uuid: str = None, req_type: str = None):
+def show_request_modify_panel(ulid: str = None, req_type: str = None):
     Storage.request_type = req_type
     if req_type == 'experiment':
-        Storage.request_experiment_uuid = uuid
+        Storage.request_experiment_ulid = ulid
     elif req_type == 'scenario':
-        Storage.request_scenario_uuid = uuid
+        Storage.request_scenario_ulid = ulid
     Storage.request_modify_panel_visible = True
     Storage.request_table_visible = False
     ui.open('/request/')

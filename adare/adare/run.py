@@ -90,7 +90,7 @@ def main():
     environment_create.set_defaults(func=lambda args: exec_with_error_printing(exec_environment_create, args))
 
     environment_delete = environment_subparsers.add_parser('delete')
-    environment_delete.add_argument('uuid', help='uuid of the environment')
+    environment_delete.add_argument('ulid', help='ulid of the environment')
     environment_delete.add_argument('--force', '-f', action='store_true', help='force the deletion of the environment')
     environment_delete.set_defaults(func=lambda args: exec_with_error_printing(exec_environment_delete, args))
 
@@ -182,21 +182,21 @@ def main():
     show_experiments = show_subparsers.add_parser('experiments', help='show all experiments in an environment')
     show_experiments.add_argument('-proj', '--project', help='name of the project')
     show_experiments.add_argument('-env', '--environment', help='name of the environment')
-    show_experiments.add_argument('-env-id', '--environment-uuid', help='uuid of the environment')
+    show_experiments.add_argument('-env-id', '--environment-ulid', help='ulid of the environment')
     show_experiments.set_defaults(func=lambda args: exec_with_error_printing(exec_show_experiments, args))
 
     show_experiment = show_subparsers.add_parser('experiment', help='show an experiment')
     show_experiment.add_argument('-exp', '--experiment', help='name of the experiment')
     show_experiment.add_argument('-proj', '--project', help='name of the project')
     show_experiment.add_argument('-env', '--environment', help='name of the environment')
-    show_experiment.add_argument('-exp-id', '--experiment-uuid', help='uuid of the experiment')
+    show_experiment.add_argument('-exp-id', '--experiment-ulid', help='ulid of the experiment')
     show_experiment.set_defaults(func=lambda args: exec_with_error_printing(exec_show_experiment, args))
 
     show_runs = show_subparsers.add_parser('runs', help='show all runs')
     show_runs.set_defaults(func=lambda args: exec_with_error_printing(exec_show_runs, args))
 
     show_run = show_subparsers.add_parser('run', help='show a run')
-    show_run.add_argument('-run-id', '--run-uuid', help='uuid of the run')
+    show_run.add_argument('-run-id', '--run-ulid', help='ulid of the run')
     show_run.set_defaults(func=lambda args: exec_with_error_printing(exec_show_run, args))
 
 
@@ -269,7 +269,7 @@ def main():
     # show_runs.set_defaults(func=exec_show_runs)
     #
     # show_run_result = show_subparsers.add_parser('result', help='show the results of an experiment run')
-    # show_run_result.add_argument('uuid', help='uuid of the experiment run to show the results of')
+    # show_run_result.add_argument('ulid', help='ulid of the experiment run to show the results of')
     # show_run_result.set_defaults(func=exec_show_run_result)
     #
     # show_usb = show_subparsers.add_parser('usb', help='show the usb devices')

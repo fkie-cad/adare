@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 
 
 class TestTable(AdvancedTable):
-    experimentrun_uuid: str = None
+    experimentrun_ulid: str = None
 
     columns: list[dict] = [
         {'name': 'result_status', 'label': 'result_status', 'field': 'result_status', 'required': True,
@@ -16,7 +16,7 @@ class TestTable(AdvancedTable):
         {'name': 'result_details', 'label': 'result_details', 'field': 'result_details', 'required': True,
          'sortable': False, 'align': 'left', 'hide': False},
         {'name': 'name', 'label': 'name', 'field': 'name', 'required': True, 'sortable': True, 'align': 'left', 'hide': False},
-        {'name': 'uuid', 'label': 'uuid', 'field': 'uuid', 'required': True, 'sortable': False, 'align': 'left', 'hide': True},
+        {'name': 'ulid', 'label': 'ulid', 'field': 'ulid', 'required': True, 'sortable': False, 'align': 'left', 'hide': True},
         {'name': 'description', 'label': 'description', 'field': 'description', 'required': True, 'sortable': False, 'align': 'left', 'hide': True},
         {'name': 'testfunction', 'label': 'testfunction', 'field': 'testfunction', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
         {'name': 'parameters', 'label': 'parameters', 'field': 'parameters', 'required': True, 'sortable': False, 'align': 'left', 'hide': False},
@@ -29,18 +29,18 @@ class TestTable(AdvancedTable):
         'parameters': 'parameters',
     }
 
-    def __init__(self, experimentrun_uuid: str):
-        self.experimentrun_uuid = experimentrun_uuid
+    def __init__(self, experimentrun_ulid: str):
+        self.experimentrun_ulid = experimentrun_ulid
         super().__init__()
 
     def update_data(self):
         with ExperimentApi() as db:
-            tests = db.get_experimentrun_by_uuid(self.experimentrun_uuid).tests
+            tests = db.get_experimentrun_by_ulid(self.experimentrun_ulid).tests
 
             self.data = [
                 {
                     'name': t.abstracttest.name,
-                    'uuid': t.abstracttest.uuid,
+                    'ulid': t.abstracttest.ulid,
                     'description': t.abstracttest.description,
                     'testfunction': t.abstracttest.testfunction.name,
                     'testfunction_type': t.abstracttest.testfunction.type,

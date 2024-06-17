@@ -13,7 +13,7 @@ def print_environment_list(project: str):
     with DataRetrievalApi() as api:
         environments_data: pd.DataFrame = api.get_environments_by_project(project)
     visible_columns = [
-        'uuid',
+        'ulid',
         'name',
         'vagrantbox',
         'description',

@@ -22,8 +22,8 @@ class PublishExperimentInterface:
     def __init__(self):
         self.webapp_interface = WebappPublishExperiment()
 
-    def publish(self, experiment_uuid):
-        result = self.webapp_interface.publish(LoginInterface.user, experiment_uuid)
+    def publish(self, experiment_ulid):
+        result = self.webapp_interface.publish(LoginInterface.user, experiment_ulid)
         if result == 'success':
             for func in self.publish_trigger_functions:
                 func()

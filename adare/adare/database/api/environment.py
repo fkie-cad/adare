@@ -36,8 +36,8 @@ class EnvironmentDbApi(ExperimentApi):
         return self._session.query(Environment).filter(Environment.file == path.as_posix()).order_by(
             sqlalchemy.desc(Environment.created_at)).all()
 
-    def get_environment_by_uuid(self, uuid: str) -> Environment:
-        return self._session.query(Environment).filter(Environment.uuid == uuid).first()
+    def get_environment_by_ulid(self, ulid: str) -> Environment:
+        return self._session.query(Environment).filter(Environment.ulid == ulid).first()
 
     def __get_or_create_installations(self, installations: list[PostsetupInstallationsAttrs]) -> list[PostSetupInstallation]:
         installation_objects = []
@@ -108,7 +108,7 @@ class EnvironmentDbApi(ExperimentApi):
         experiment_per_env = {}
         for environment in environments:
             experiments = {run.experiment.name for run in environment.runs}
-            experiment_per_env[environment.uuid] = [
+            experiment_per_env[environment.ulid] = [
                 {
                     'name': experiment.name,
                     'runs': len([run for run in environment.runs if run.experiment.name == experiment.name])
@@ -125,15 +125,15 @@ class EnvironmentDbApi(ExperimentApi):
             {
                 'name': env.name,
                 'description': env.description,
-                'experiments': experiment_per_env[env.uuid],
+                'experiments': experiment_per_env[env.ulid],
             }
             for env in environments
         ]
 
-    def get_environment_installations(self, environment_uuid: str):
+    def get_environment_installations(self, environment_ulid: str):
         if (
             env := self._session.query(Environment)
-            .filter_by(uuid=environment_uuid)
+            .filter_by(ulid=environment_ulid)
             .first()
         ):
             return [
@@ -144,17 +144,17 @@ class EnvironmentDbApi(ExperimentApi):
                 ) for installation in env.installations
             ]
         else:
-            raise ValueError(f'environment {environment_uuid} not found in database')
+            raise ValueError(f'environment {environment_ulid} not found in database')
 
-    def get_environment_platform(self, environment_uuid: str):
+    def get_environment_platform(self, environment_ulid: str):
         if (
             env := self._session.query(Environment)
-            .filter_by(uuid=environment_uuid)
+            .filter_by(ulid=environment_ulid)
             .first()
         ):
             return env.osinfo.platform
         else:
-            raise ValueError(f'environment {environment_uuid} not found in database')
+            raise ValueError(f'environment {environment_ulid} not found in database')
 
     def get_environment(self, name: str, project_name: str) -> Environment:
         if (
@@ -168,15 +168,15 @@ class EnvironmentDbApi(ExperimentApi):
         log.error(f'environment {name} not found in database')
         raise None
 
-    def get_environment_vagrant_box(self, environment_uuid: str):
+    def get_environment_vagrant_box(self, environment_ulid: str):
         if (
             env := self._session.query(Environment)
-            .filter_by(uuid=environment_uuid)
+            .filter_by(ulid=environment_ulid)
             .first()
         ):
             return env.vagrantbox
         else:
-            raise ValueError(f'environment {environment_uuid} not found in database')
+            raise ValueError(f'environment {environment_ulid} not found in database')
 
     def get_environment_by_project_and_name(self, project_path: Path, environment_name: str) -> Environment:
         if (

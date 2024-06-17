@@ -17,8 +17,8 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def create_installations_script(experiment_run_directory: ExperimentRunDirectory, environment_uuid: str, template_directory: Path) -> PostsetupInstallationsScript:
-    installations: list[PostsetupInstallations] = experiment_database.get_environment_installations(environment_uuid)
+def create_installations_script(experiment_run_directory: ExperimentRunDirectory, environment_ulid: str, template_directory: Path) -> PostsetupInstallationsScript:
+    installations: list[PostsetupInstallations] = experiment_database.get_environment_installations(environment_ulid)
     return PostsetupInstallationsScript(
         name=experiment_run_directory.install_script.name,
         postsetup_installations=installations,

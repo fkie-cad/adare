@@ -34,8 +34,8 @@ def page_runs():
     return RedirectResponse(url='/runs')
 
 
-@ui.page('/run/{uuid}')
-def page_runs_details(uuid):
+@ui.page('/run/{ulid}')
+def page_runs_details(ulid):
     add_static_css_files()
     set_colors()
 
@@ -45,7 +45,7 @@ def page_runs_details(uuid):
     header = Header()
     header.create()
 
-    exprun_overview = ExperimentRunOverview(uuid)
+    exprun_overview = ExperimentRunOverview(ulid)
     exprun_overview.create()
 
-    log.debug(f'experiment run (uuid:{uuid}) page loaded')
+    log.debug(f'experiment run (ulid:{ulid}) page loaded')
