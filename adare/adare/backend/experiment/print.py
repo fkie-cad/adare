@@ -58,28 +58,11 @@ class ExperimentFlowConsole:
             self.stop_event.set()
             self.thread.join()
 
-    def __get_status_icon(self, status: int):
-        if status == StatusEnum.NONE:
-            return ''
-        elif status == StatusEnum.SUCCESS:
-            return '[green]:heavy_check_mark:[/green]'
-        elif status == StatusEnum.WARNING:
-            return '[yellow]:warning:[/yellow]'
-        elif status == StatusEnum.FAILED:
-            return '[red]:heavy_multiplication_x:[/red]'
-        elif status == StatusEnum.ERROR:
-            return '[red]:x:[/red]'
-        elif status == StatusEnum.FINISHED:
-            return '[green]:black_small_square:[/green]'
-        elif status == StatusEnum.INTERRUPTED:
-            return '[yellow]:high_voltage:[/yellow]'
-        else:
-            return ''
-
     def _generate_message(self, identifier: str, spinner_position: int = 0):
         message_object = self.messages[identifier]
         message = message_object['message']
-        message = f'{self.__get_status_icon(message_object["status"])} {message}'
+        icon = StatusEnum.get_icon(message_object['status'], color=True)
+        message = f'{icon} {message}'
 
         if message_object['spinner']:
             spinner = SPINNERS[message_object['spinner']]['frames']
@@ -94,7 +77,7 @@ class ExperimentFlowConsole:
             message = ' ' * 2 * message_object['level'] + message
 
         if message_object['result_status']:
-            message = f'{message} {self.__get_status_icon(message_object["result_status"])}'
+            message = f'{message} {StatusEnum.get_icon(message_object["result_status"], color=True)}'
 
         return message
 

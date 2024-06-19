@@ -50,7 +50,7 @@ class ExperimentRunDirectory(Directory):
     packagedump_log: Path
 
     def __init__(self, project_directory: ProjectDirectory, experiment: str, script_suffix: str = '.sh'):
-        super().__init__(project_directory.run / experiment / datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+        super().__init__(project_directory.run / experiment / datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S'))
         self.log_directory = self.path / 'logs'
         self.scripts_directory = self.path / 'scripts'
         self.breakpoint_directory = self.path / 'breakpoints'

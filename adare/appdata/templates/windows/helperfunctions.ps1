@@ -7,7 +7,7 @@ function WriteLog
         $LogContent = $LogString
     }
     $LogContent -Split "`r`n" | ForEach-Object {
-        $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
+        $Stamp = (Get-Date).ToUniversalTime().toString("yyyy-MM-ddTHH:mm:ss.ffffff")
         $LogMessage = "[$Stamp]: $_"
         Write-Host "$LogMessage"
     }
@@ -17,8 +17,8 @@ function StartStage {
     param (
         [string]$stage
     )
-    $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
-    $LogMessage = "stage $($stage): start ($($Stamp))"
+    $Stamp = (Get-Date).ToUniversalTime().toString("yyyy-MM-ddTHH:mm:ss.ffffff")
+    $LogMessage = "stage $($stage): start ($($Stamp)) (...)"
     Write-Host "$LogMessage"
 }
 
@@ -27,17 +27,32 @@ function StageMessage {
         [string]$stage,
         [string]$message
     )
-    $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
-    $LogMessage = "stage $($stage): $($message) ($($Stamp))"
+    $Stamp = (Get-Date).ToUniversalTime().toString("yyyy-MM-ddTHH:mm:ss.ffffff")
+    $LogMessage = "stage $($stage): $($message) ($($Stamp)) (...)"
     Write-Host "$LogMessage"
+}
+
+function ExitCodeToStatus {
+    param (
+        [int]$exitCode
+    )
+    if ($exitCode -eq 0) {
+        return "finished"
+    } else {
+        return "failed"
+    }
 }
 
 function EndStage {
     param (
-        [string]$stage
+        [string]$stage,
+        [string]$status = ""
     )
-    $Stamp = (Get-Date).toString("yyyy-MM-dd HH:mm:ss")
-    $LogMessage = "stage $($stage): end ($($Stamp))"
+    if ($status -eq "") {
+        $status = "(...)"
+    }
+    $Stamp = (Get-Date).ToUniversalTime().toString("yyyy-MM-ddTHH:mm:ss.ffffff")
+    $LogMessage = "stage $($stage): end ($($Stamp)) $($status)"
     Write-Host "$LogMessage"
 }
 
@@ -54,5 +69,23 @@ function Add-PathVariable {
         $env:Path = ($arrPath + $addPath) -join ';'
     } else {
         Throw "'$addPath' is not a valid path."
+    }
+}
+
+
+function checkExitCode {
+    param (
+        [string]$stage
+    )
+    # check if lastexitcode is not set
+    if ($LastExitCode -eq $null) {
+        Write-Host "LastExitCode is not set."
+    }
+    elseif ($LastExitCode -ne 0) {
+        $exit_code = $LastExitCode
+        $status = ExitCodeToStatus $exit_code
+        EndStage $stage $status
+        Write-Host "Exiting with code $exit_code"
+        exit $exit_code
     }
 }

@@ -292,5 +292,5 @@ class ExperimentApi(ProjectDbApi):
         experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
         experiment_run.status = status
         if status == StatusEnum.FINISHED or status == StatusEnum.INTERRUPTED:
-            experiment_run.timestamp_end = datetime.now()
+            experiment_run.timestamp_end = datetime.utcnow()
 

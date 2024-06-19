@@ -122,13 +122,8 @@ class VagrantBoxVM:
                 ],
             ) from e
 
-        try:
-            ret = self.up(ctrlc_event, shutdown_event, output_processor, ctx_manager_up)
-        except subprocess.CalledProcessError as e:
-            raise VagrantBoxRunError(
-                log,
-                f'vagrant up failed with return code {e.returncode}',
-            ) from e
+        ret = self.up(ctrlc_event, shutdown_event, output_processor, ctx_manager_up)
+
         if not disable_destroy:
             self.destroy(destroy_output_processor, ctx_manager_destroy)
         return ret
@@ -166,28 +161,33 @@ class VagrantBoxVM:
 
         return_value = 0
         with ctx_manager_up if ctx_manager_up else contextlib.nullcontext():
-            for line in self.vagrant.up(stream_output=True):
-                if ctrlc_event and ctrlc_event.is_set():
-                    log.info(f'vagrant box received a ctrl+c event')
-                    if output_processor:
-                        self._close_output_processor_thread(output_processor_thread, message_queue)
-                        log.info(f'output processor thread for vagrant box {self.vm_name} stopped')
-                    if ctx_manager_up:
-                        ctx_manager_up.set_status(StatusEnum.INTERRUPTED)
-                    return_value = -2
-                    break
-                if shutdown_event and shutdown_event.is_set():
-                    log.info(f'vagrant box received a shutdown event')
-                    if output_processor:
-                        self._close_output_processor_thread(output_processor_thread, message_queue)
-                        log.info(f'output processor thread for vagrant box {self.vm_name} stopped')
-                    return_value = -1
-                    break
-                if message_queue:
-                    message_queue.put(line.decode('utf-8'))
-                if self.log_file:
-                    log_file_handle.write(line.decode('utf-8'))
-                    log_file_handle.flush()
+            try:
+                for line in self.vagrant.up(stream_output=True):
+                    if ctrlc_event and ctrlc_event.is_set():
+                        log.info(f'vagrant box received a ctrl+c event')
+                        if output_processor:
+                            self._close_output_processor_thread(output_processor_thread, message_queue)
+                            log.info(f'output processor thread for vagrant box {self.vm_name} stopped')
+                        if ctx_manager_up:
+                            ctx_manager_up.set_status(StatusEnum.INTERRUPTED)
+                        return_value = -2
+                        break
+                    if shutdown_event and shutdown_event.is_set():
+                        log.info(f'vagrant box received a shutdown event')
+                        if output_processor:
+                            self._close_output_processor_thread(output_processor_thread, message_queue)
+                            log.info(f'output processor thread for vagrant box {self.vm_name} stopped')
+                        return_value = -1
+                        break
+                    if message_queue:
+                        message_queue.put(line.decode('utf-8'))
+                    if self.log_file:
+                        log_file_handle.write(line.decode('utf-8'))
+                        log_file_handle.flush()
+            except subprocess.CalledProcessError as e:
+                if ctx_manager_up:
+                    ctx_manager_up.set_status(StatusEnum.FAILED)
+                return_value = e.returncode
 
         if output_processor:
             self._close_output_processor_thread(output_processor_thread, message_queue)

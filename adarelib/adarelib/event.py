@@ -22,7 +22,7 @@ class EventSystem:
         self.data = EventSystemData(
             version='0.1',
             experiment=experiment_name,
-            start_time=datetime.now().strftime(TIMESTAMP_FORMAT),
+            start_time=datetime.utcnow().strftime(TIMESTAMP_FORMAT),
             end_time='',
             events=[]
         )
@@ -39,7 +39,7 @@ class EventSystem:
         return event.ulid, event.group_id
 
     def save(self):
-        self.data.end_time = datetime.now().strftime(TIMESTAMP_FORMAT)
+        self.data.end_time = datetime.utcnow().strftime(TIMESTAMP_FORMAT)
         data = attrs.asdict(self.data)
         dict_to_yaml(self.path, data, dumper=YAML_STATUS_DUMPER)
 

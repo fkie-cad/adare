@@ -12,7 +12,7 @@ class VagrantCtxManager(ABC):
         pass
 
     @abstractmethod
-    def set_status(self, status: str):
+    def set_status(self, status: int):
         pass
 
     @abstractmethod

@@ -29,7 +29,7 @@ class HtmlResultFormatter(ResultFormatter.ResultFormatter):
         self.outcome = outcome
 
     def format_result(self) -> str:
-        now = datetime.now()
+        now = datetime.utcnow()
         dateandtime = now.strftime('%Y-%m-%d %H:%M:%S')
         directory = pkg_resources.resource_filename('parseandtest.resultformatter', 'templates')
         outcome = self.outcome

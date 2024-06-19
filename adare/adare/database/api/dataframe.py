@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 
 # internal imports
-from adare.database.models.experiment import Project, Environment, Experiment, ExperimentRun, OsInfo
+from adare.database.models.experiment import Project, Environment, Experiment, ExperimentRun, OsInfo, StageInRun, Stage, Event, Status
 from adare.database.api.database import DatabaseApi
 import adare.config.database as config_database
 from adarelib.exceptions import EnvironmentNotFoundError, ProjectNotFoundError, ExperimentNotFoundError
@@ -159,6 +159,46 @@ class DataRetrievalApi(DatabaseApi):
         data['project_name'] = self._session.query(Project).filter(
             Project.environments.any(Environment.ulid == data['environment_id'].values[0])).one().name
         data['duration'] = run.duration
+        data['result_status'] = run.result_status
+        data['status'] = run.status
 
         return data
 
+    def get_run_stages(self, run_ulid: str) -> pd.DataFrame:
+        # execute query and return result as pandas dataframe excluding the id column
+        data = pd.read_sql(self._session.query(StageInRun).filter_by(run_id=run_ulid).statement, self._session.bind)
+        # enrich data by adding stage details (such as name, msg, description)
+        stages = pd.read_sql(self._session.query(Stage).statement, self._session.bind)
+        # query hybrid property level and add it to the dataframe
+        stages['level'] = stages['id'].apply(lambda x: self._session.query(Stage).filter_by(id=x).one().level)
+        data = data.merge(stages, left_on='stage_id', right_on='id', suffixes=('', '_stage'))
+        return data
+
+    def get_tests(self, run_ulid: str) -> dict:
+        tests_data = {}
+        test_events = self._session.query(Event).filter_by(experiment_run_id=run_ulid).filter(Event.category == 'test').all()
+        for event in test_events:
+            if event.abstract_test.name not in tests_data:
+                tests_data[event.abstract_test.name] = {
+                    'name': event.abstract_test.name,
+                    'description': event.abstract_test.description,
+                    'testfunction_name': event.abstract_test.testfunction.fullname,
+                    'testfunction_description': event.abstract_test.testfunction.description,
+                    'result_status': event.stage_result if event.result else None,
+                    'result_details': event.result.details if event.result else None,
+                    'result_status_name': self._session.query(Status).filter_by(id=event.result.status).one().name if event.result else None,
+                }
+                parameter_data = []
+                for parameter in event.abstract_test.parameters:
+                    parameter_data.append({
+                        'name': parameter.parameter.name,
+                        'dtype': parameter.parameter.dtype,
+                        'value': parameter.value,
+                    })
+                tests_data[event.abstract_test.name]['parameters'] = parameter_data
+            else:
+                # update results
+                tests_data[event.abstract_test.name]['result_status'] = event.stage_result
+                tests_data[event.abstract_test.name]['result_details'] = event.result.details
+                tests_data[event.abstract_test.name]['result_status_name'] = self._session.query(Status).filter_by(id=event.result.status).one().name
+        return tests_data
