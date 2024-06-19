@@ -56,10 +56,10 @@ class UserSessionApi(DatabaseApi):
 
     def remove_expired_user_sessions(self):
         for user_session in self._session.query(UserSession).all():
-            if user_session.gitea_token.expiration < datetime.now():
+            if user_session.gitea_token.expiration < datetime.utcnow():
                 self.remove_user_session(user_session.username)
                 log.info(f'deleted gitea token for user session ({user_session.username}), because it expired')
-            if user_session.django_token.expiration < datetime.now():
+            if user_session.django_token.expiration < datetime.utcnow():
                 self.remove_user_session(user_session.username)
                 log.info(f'deleted django token for user session ({user_session.username}), because it expired')
         self._session.commit()

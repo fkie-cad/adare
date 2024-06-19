@@ -46,7 +46,7 @@ class RedirectHandler(http.server.SimpleHTTPRequestHandler):
         # Shut down the HTTP server
         resp = exchange_code_for_token(GITEA_CLIENT_ID, authorization_code, self.code_verifier, self.redirect_uri)
         self.server.gitea_access_token = resp['access_token']
-        self.server.gitea_access_token_expiry = datetime.datetime.now() + datetime.timedelta(seconds=resp['expires_in'])
+        self.server.gitea_access_token_expiry = datetime.datetime.utcnow() + datetime.timedelta(seconds=resp['expires_in'])
         self.server.gitea_refresh_token = resp.get('refresh_token', None)
         log.info("Received access token")
 
@@ -63,7 +63,7 @@ class LoginHTTPServer(http.server.HTTPServer):
         super().__init__(server_address, RequestHandlerClass)
         self.server_activate()
         self.gitea_access_token = ''
-        self.gitea_access_token_expiry = datetime.datetime.now()
+        self.gitea_access_token_expiry = datetime.datetime.utcnow()
         self.gitea_refresh_token = ''
 
 

@@ -84,9 +84,67 @@ class StatusEnum(IntEnum):
     FINISHED = 9
 
     @staticmethod
-    def is_valid(value: int):
-        return value in StatusEnum.__members__
+    def from_string(status_string):
+        if status_string.lower() == 'success':
+            return StatusEnum.SUCCESS
+        elif status_string.lower() == 'failed':
+            return StatusEnum.FAILED
+        elif status_string.lower() == 'warning':
+            return StatusEnum.WARNING
+        elif status_string.lower() == 'error':
+            return StatusEnum.ERROR
+        elif status_string.lower() == 'running':
+            return StatusEnum.RUNNING
+        elif status_string.lower() == 'pending':
+            return StatusEnum.PENDING
+        elif status_string.lower() == 'interrupted':
+            return StatusEnum.INTERRUPTED
+        elif status_string.lower() == 'finished':
+            return StatusEnum.FINISHED
+        return StatusEnum.NONE
 
+
+    @staticmethod
+    def get_icon(value: int, color=False):
+        colorname = ''
+        if color:
+            colorname = StatusEnum.get_color(value)
+        icon = ''
+        if value == StatusEnum.SUCCESS:
+            icon = ':heavy_check_mark:'
+        elif value == StatusEnum.WARNING:
+            icon = ':warning:'
+        elif value == StatusEnum.FAILED:
+            icon = ':heavy_multiplication_x:'
+        elif value == StatusEnum.ERROR:
+            icon = ':x:'
+        elif value == StatusEnum.FINISHED:
+            icon = ':black_small_square:'
+        elif value == StatusEnum.INTERRUPTED:
+            icon = ':high_voltage:'
+        elif value == StatusEnum.RUNNING:
+            icon = ':arrow_forward:'
+        if colorname:
+            return f'[{colorname}]{icon}[/{colorname}]'
+        return icon
+
+    @staticmethod
+    def get_color(value: int):
+        if value == StatusEnum.SUCCESS:
+            return 'green'
+        elif value == StatusEnum.WARNING:
+            return 'yellow'
+        elif value == StatusEnum.FAILED:
+            return 'red'
+        elif value == StatusEnum.ERROR:
+            return 'red'
+        elif value == StatusEnum.FINISHED:
+            return 'green'
+        elif value == StatusEnum.INTERRUPTED:
+            return 'yellow'
+        elif value == StatusEnum.RUNNING:
+            return 'blue'
+        return ''
 
 
 

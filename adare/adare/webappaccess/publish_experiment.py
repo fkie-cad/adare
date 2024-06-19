@@ -50,5 +50,5 @@ class WebappPublishExperiment:
 
 # def send_experiment_request():
 #     request = {
-#         "ulid": ulid.ulid4(),
+#         "ulid": ulid.ULID(),
 #     }

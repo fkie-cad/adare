@@ -7,7 +7,7 @@ import datetime
 from adarelib.types.stage import Stage
 from adare.database.api.stage import StageDbApi
 from adare.backend.experiment.threadingevents import experiment_event_manager
-from adarelib.config import StatusEnum
+from adarelib.config import StatusEnum, TIMESTAMP_FORMAT
 
 # configure logging
 import logging
@@ -31,7 +31,7 @@ class VagrantOutputProcessor(OutputProcessor):
     vagrant_message_pattern = re.compile(r"==> (?P<machine>.+?): (?P<message>.+)")
     submessage_pattern = re.compile(r" {4}(?P<machine>.+?): (?P<message>.+)")
 
-    stage_message_pattern = re.compile(r"stage (?P<stage>.+): (?P<message>.+) \((?P<timestamp>.+)\)")
+    stage_message_pattern = re.compile(r"stage (?P<stage>.+): (?P<message>.+) \((?P<timestamp>.+)\) (?P<status>.*)")
     shutdown_message_pattern = re.compile(r"--- SHUTDOWN ---")
 
     def __init__(self, experiment_run_ulid: str):
@@ -59,16 +59,20 @@ class VagrantOutputProcessor(OutputProcessor):
         stage_name = match.group('stage')
         message = match.group('message')
         timestamp = match.group('timestamp')
+        status = match.group('status')
         if message not in ['start', 'end']:
             log.warning('so far only start and end messages are supported for stages')
         stage_class = Stage.get_subclass(f'box.{stage_name}')
         if stage_class:
             stage = stage_class()
+
             if message == 'start':
-                stage.start_time = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+                stage.start_time = datetime.datetime.strptime(timestamp, TIMESTAMP_FORMAT)
             if message == 'end':
-                stage.end_time = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+                stage.end_time = datetime.datetime.strptime(timestamp, TIMESTAMP_FORMAT)
                 stage.status = StatusEnum.FINISHED
+            if status != '(...)':
+                stage.status = StatusEnum.from_string(status)
 
             with StageDbApi() as api:
                 api.update_stage_in_run(stage, self.experiment_run_ulid)

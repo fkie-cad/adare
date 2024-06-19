@@ -25,16 +25,13 @@ class Stage:
         return f'{self.name}: {self.msg}'
 
     def start(self):
-        self.start_time = datetime.now()
+        self.start_time = datetime.utcnow()
 
     def set_status(self, status: int):
-        if StatusEnum.is_valid(status):
-            self.status = status
-        else:
-            raise ValueError(f'Invalid status: {status}')
+        self.status = status
 
     def end(self, status: int = StatusEnum.FINISHED):
-        self.end_time = datetime.now()
+        self.end_time = datetime.utcnow()
         if self.status == StatusEnum.NONE:
             self.status = status
 
@@ -96,9 +93,27 @@ class ProjectIntegrityCheckStage(Stage):
 
 
 @attrs.define
-class ExperimentStage(Stage):
-    name: typing.ClassVar[str] = 'box.experiment'
-    msg: typing.ClassVar[str] = 'perform experiment'
+class InstallationsStage(Stage):
+    name: typing.ClassVar[str] = 'box.installations'
+    msg: typing.ClassVar[str] = 'install additional software'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = BoxRunStage
+
+
+@attrs.define
+class ExperimentSetupStage(Stage):
+    name: typing.ClassVar[str] = 'box.experiment_setup'
+    msg: typing.ClassVar[str] = 'install adarevm and setup experiment'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = BoxRunStage
+
+
+@attrs.define
+class ExperimentRunStage(Stage):
+    name: typing.ClassVar[str] = 'box.experiment_run'
+    msg: typing.ClassVar[str] = 'run the experiment'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = BoxRunStage
@@ -106,53 +121,53 @@ class ExperimentStage(Stage):
 
 @attrs.define
 class ExperimentTestStage(Stage):
-    name: typing.ClassVar[str] = 'box.experiment.test'
+    name: typing.ClassVar[str] = 'box.experiment_run.test'
     msg: typing.ClassVar[str] = 'test'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
-    parent: typing.ClassVar["Stage"] = ExperimentStage
+    parent: typing.ClassVar["Stage"] = ExperimentRunStage
 
 
 @attrs.define
 class ExperimentGuiClickStage(Stage):
-    name: typing.ClassVar[str] = 'box.experiment.gui:click'
+    name: typing.ClassVar[str] = 'box.experiment_run.gui:click'
     msg: typing.ClassVar[str] = 'gui.click'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
-    parent: typing.ClassVar["Stage"] = ExperimentStage
+    parent: typing.ClassVar["Stage"] = ExperimentRunStage
 
 
 @attrs.define
 class ExperimentGuiIdleStage(Stage):
-    name: typing.ClassVar[str] = 'box.experiment.gui:idle'
+    name: typing.ClassVar[str] = 'box.experiment_run.gui:idle'
     msg: typing.ClassVar[str] = 'gui.idle'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
-    parent: typing.ClassVar["Stage"] = ExperimentStage
+    parent: typing.ClassVar["Stage"] = ExperimentRunStage
 
 
 @attrs.define
 class ExperimentGuiFindStage(Stage):
-    name: typing.ClassVar[str] = 'box.experiment.gui:find'
+    name: typing.ClassVar[str] = 'box.experiment_run.gui:find'
     msg: typing.ClassVar[str] = 'gui.find'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
-    parent: typing.ClassVar["Stage"] = ExperimentStage
+    parent: typing.ClassVar["Stage"] = ExperimentRunStage
 
 
 @attrs.define
 class ExperimentGuiKeypressStage(Stage):
-    name: typing.ClassVar[str] = 'box.experiment.gui:keypress'
+    name: typing.ClassVar[str] = 'box.experiment_run.gui:keypress'
     msg: typing.ClassVar[str] = 'gui.keypress'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
-    parent: typing.ClassVar["Stage"] = ExperimentStage
+    parent: typing.ClassVar["Stage"] = ExperimentRunStage
 
 
 @attrs.define
 class ExperimentCommandStage(Stage):
-    name: typing.ClassVar[str] = 'box.experiment.command'
+    name: typing.ClassVar[str] = 'box.experiment_run.command'
     msg: typing.ClassVar[str] = 'command'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
-    parent: typing.ClassVar["Stage"] = ExperimentStage
+    parent: typing.ClassVar["Stage"] = ExperimentRunStage

@@ -2,18 +2,19 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHA
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 import ulid
+from pathlib import Path
 from datetime import datetime
 from sqlalchemy_serializer import SerializerMixin
 from sqlalchemy.ext.hybrid import hybrid_property
 from adarelib.config import StatusEnum
 
 Base = declarative_base()
-mapping_experimentrun_test = Table(
-    "mapping_experimentrun_test",
-    Base.metadata,
-    Column("experimentrun_ulid", ForeignKey("experimentrun.ulid")),
-    Column("test_ulid", ForeignKey("test.ulid")),
-)
+# mapping_experimentrun_test = Table(
+#     "mapping_experimentrun_test",
+#     Base.metadata,
+#     Column("experimentrun_ulid", ForeignKey("experimentrun.ulid")),
+#     Column("test_ulid", ForeignKey("test.ulid")),
+# )
 
 mapping_experiment_abstracttest = Table(
     "mapping_experiment_abstracttest",
@@ -225,7 +226,7 @@ class TestFunction(SerializerMixin, Base):
 
     @hybrid_property
     def fullname(self):
-        return f"{self.file.name}.{self.name}"
+        return f"{Path(self.file.name).stem}.{self.name}"
 
     def __str__(self):
         return self.fullname
@@ -272,23 +273,23 @@ class AbstractTest(SerializerMixin, Base):
         return f"<AbstractTest(name='{self.name}',testfunction='{self.testfunction}')>"
 
 
-class Test(SerializerMixin, Base):
-    __tablename__ = 'test'
-    RELATIONSHIPS_TO_DICT = True
-
-    ulid = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
-
-    result_id = Column(Integer, ForeignKey('result.id'))
-    abstracttest_id = Column(CHAR(26), ForeignKey('abstracttest.ulid'))
-
-    result = relationship(Result)
-    abstracttest = relationship(AbstractTest, backref=backref("tests", cascade="all, delete-orphan"))
-
-    def __str__(self):
-        return str(self.ulid)
-
-    def __repr__(self):
-        return f"<Test(ulid='{self.ulid}',abstracttest='{self.abstracttest}')>"
+# class Test(SerializerMixin, Base):
+#     __tablename__ = 'test'
+#     RELATIONSHIPS_TO_DICT = True
+#
+#     ulid = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+#
+#     result_id = Column(Integer, ForeignKey('result.id'))
+#     abstracttest_id = Column(CHAR(26), ForeignKey('abstracttest.ulid'))
+#
+#     result = relationship(Result)
+#     abstracttest = relationship(AbstractTest, backref=backref("tests", cascade="all, delete-orphan"))
+#
+#     def __str__(self):
+#         return str(self.ulid)
+#
+#     def __repr__(self):
+#         return f"<Test(ulid='{self.ulid}',abstracttest='{self.abstracttest}')>"
 
 
 class OsInfo(SerializerMixin, Base):
@@ -585,19 +586,20 @@ class TestEvent(Event):
         'polymorphic_identity': 'test_event',
     }
     id = Column(CHAR(26), ForeignKey('event.ulid'), primary_key=True)
-    test_name = Column(String)
+    abstract_test_id = Column(CHAR(26), ForeignKey('abstracttest.ulid'), nullable=True)
+    abstract_test = relationship(AbstractTest, backref=backref("test_events", cascade="all, delete-orphan"))
     result_id = Column(Integer, ForeignKey('result.id'), nullable=True)
     result = relationship(Result)
 
     def __str__(self):
-        return str(self.test_name)
+        return str(self.abstract_test.name)
 
     def __repr__(self):
-        return f"<TestEvent(test_name='{self.test_name}',result='{self.result}')>"
+        return f"<TestEvent(test_name='{self.abstract_test.name}',result='{self.result}')>"
 
     @hybrid_property
     def stage_submessage(self):
-        return f'{self.test_name}'
+        return f'{self.abstract_test.name}' if self.abstract_test else ''
 
     @hybrid_property
     def stage_result(self):
@@ -764,6 +766,12 @@ class Stage(SerializerMixin, Base):
     parent_id = Column(Integer, ForeignKey('stage.id'), nullable=True)
     parent = relationship("Stage", remote_side=[id], backref=backref("children", cascade="all, delete-orphan"))
 
+    @hybrid_property
+    def level(self):
+        if self.parent:
+            return self.parent.level + 1
+        return 0
+
 
 class StageInRun(SerializerMixin, Base):
     __tablename__ = 'stageinrun'
@@ -815,11 +823,10 @@ class ExperimentRun(SerializerMixin, Base):
 
     timestamp_start = Column(DateTime, nullable=True)
     timestamp_end = Column(DateTime, nullable=True)
-    tests = relationship(Test, secondary=mapping_experimentrun_test)
-
-    published = Column(Boolean, default=False)
 
     status = Column(Integer, default=StatusEnum.PENDING)
+
+    published = Column(Boolean, default=False)
 
     files_id = Column(Integer, ForeignKey('experimentrunfiles.id'), nullable=True)
     files = relationship(ExperimentRunFiles, backref=backref("experimentrun", uselist=False))
@@ -844,6 +851,36 @@ class ExperimentRun(SerializerMixin, Base):
         if self.timestamp_start and self.timestamp_end:
             return self.timestamp_end - self.timestamp_start
         return None
+
+    # @hybrid_property
+    # def status(self):
+    #     status = StatusEnum.PENDING
+    #     for stage in self.stages:
+    #         if stage.status == StatusEnum.ERROR:
+    #             status = StatusEnum.ERROR
+    #             break
+    #     if status == StatusEnum.PENDING:
+    #         if self.timestamp_start:
+    #             status = StatusEnum.RUNNING
+    #         if self.timestamp_end:
+    #             status = StatusEnum.SUCCESS
+    #     return status
+
+    @hybrid_property
+    def tests(self):
+        return [
+            event for event in self.events
+            if isinstance(event, TestEvent)
+        ]
+
+    @hybrid_property
+    def result_status(self):
+        status = StatusEnum.SUCCESS
+        for test in self.tests:
+            if test.status == StatusEnum.ERROR:
+                status = StatusEnum.ERROR
+                break
+        return status
 
     def __str__(self):
         return str(self.ulid)

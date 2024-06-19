@@ -67,6 +67,7 @@ def main():
     parser.add_argument('config', type=Path, help='path to the config file')
     args = parser.parse_args()
 
+    exit_code = 0
     config_file = args.config
     # parse yaml config file
     config_dict = yaml_to_dict(config_file)
@@ -75,7 +76,7 @@ def main():
     except cattrs.ClassValidationError as e:
         print(f'config file {config_file} does not contain all required attributes')
         print(e)
-        sys.exit(1)
+        exit(1)
 
     setup_logging(args, sys.argv, Path(config.logfile))
 
@@ -83,7 +84,6 @@ def main():
             path=Path(config.eventfile),
             experiment_name=config.experiment,
     )
-    event_system.stage = 'init testset'
     try:
         BP_BOX_BEFORE_ACTION.trigger_on_guest_if_in_breakpoints(config.breakpoints, Path(config.breakpoint_directory))
         run_action(config, event_system)
@@ -94,6 +94,7 @@ def main():
                 error=e.message,
             )
         )
+        exit_code = 1
     finally:
         BP_BOX_BEFORE_BOX_STOP.trigger_on_guest_if_in_breakpoints(config.breakpoints, Path(config.breakpoint_directory))
-    sys.exit(0)
+    exit(exit_code)

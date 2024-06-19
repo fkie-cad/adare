@@ -15,6 +15,7 @@ pyautogui = "^0.9.54"
 opencv-python = "^4.9.0.80"
 pytesseract = "^0.3.10"
 cattrs = "^23.2.3"
+python-ulid = "^2.7.0"
 
 [tool.poetry.scripts]
 adarevm = "adarevm.run:main"

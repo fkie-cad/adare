@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import Lock
 
 # internal imports
-from adare.database.models.experiment import EventFactory, Event as ModelEvent, ExperimentRun, Result as ModelResult, Stage, StageInRun
+from adare.database.models.experiment import EventFactory, Event as ModelEvent, ExperimentRun, Result as ModelResult, Stage, StageInRun, AbstractTest
 from adare.database.api.experiment import ExperimentApi
 from adarelib.types.event import EventSystemData
 from adare.config import database as config_database
@@ -42,7 +42,7 @@ class EventDbApi(ExperimentApi):
         return test_result
 
     def __update_stage(self, event: ModelEvent, experiment_run: ExperimentRun):
-        if not (stage_db := self._session.query(Stage).filter(Stage.name == f'box.experiment.{event.category}').first()):
+        if not (stage_db := self._session.query(Stage).filter(Stage.name == f'box.experiment_run.{event.category}').first()):
             log.warning(f"Stage '{event.event_type}' not found in database")
             return
         # find stage in run in running events
@@ -111,10 +111,23 @@ class EventDbApi(ExperimentApi):
                             event_data['result'] = result
                         else:
                             log.fatal(f'could not create test result for event {event.ulid}')
+                    if event_data.get('test_name'):
+                        tname = event_data.pop('test_name')
+                        # get test with name and and where test in ExperimentRun.experiment.abstract_tests
+                        experiment = experiment_run.experiment
+                        test = self._session.query(AbstractTest).filter_by(name=tname)
+                        # check if test is more than once in experiment
+                        if test.count() > 1:
+                            test = test.filter(AbstractTest.ulid.in_([t.ulid for t in experiment.abstract_tests])).first()
+                        if test:
+                            event_data['abstract_test'] = test
+                        else:
+                            log.error(f'could not find test with name {tname}')
+
                     model_event: ModelEvent = EventFactory.create_event(category, **event_data)
                     self._session.add(model_event)
                     log.info(f'added event {model_event.ulid} to experiment run {experiment_run_ulid}')
                     if model_event.stage:
-                        stage_in_run = self.__update_stage(model_event, experiment_run)
+                        self.__update_stage(model_event, experiment_run)
                 self._session.commit()
                 log.info(f'updated events for experiment run {experiment_run_ulid}')

@@ -6,14 +6,14 @@ import ast
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.models.experiment import TestFunction, TestFunctionFile, TestParameter, Test, \
-    Base as ExperimentBase, AbstractTest
+from adare.database.models.experiment import TestFunction, TestFunctionFile, TestParameter, \
+    Base as ExperimentBase, AbstractTest, TestEvent
 from adare.database.api.experiment import ExperimentApi
 from adare.database.exceptions import DatabaseTestfunctionCreationError, DatabaseTestfunctionRemovalError, \
     DatabaseTestfunctionUpdateError, DatabaseTestValidationError
 from adarelib.helperfunctions.pyfileanalyze import PyModuleAnalyzer
 from adarelib.helperfunctions.hash import hash_file_sha256, hash_string_sha256
-from adarelib.exceptions import TestfunctionParameterClassMissingError, TestfunctionSyntaxError
+from adarelib.exceptions import TestfunctionParameterClassMissingError
 
 # configure logging
 import logging
@@ -27,34 +27,34 @@ class TestfunctionDbApi(ExperimentApi):
         super().__init__(db_path)
         ExperimentBase.metadata.create_all(self.engine)
 
-    def check_test_validity(self, testfunction_file: Path, testfunction: str):
-        testfunction_obj = self._session.query(TestFunction).filter(
-            TestFunction.file.path == testfunction_file.as_posix(), TestFunction.name == testfunction).first()
-        if not testfunction_obj:
-            raise DatabaseTestValidationError(
-                log,
-                message=f'testfunction {testfunction_file.name}.{testfunction} does not exist in database',
-            )
-        # get test method from testfunction_file
-        module_analyzer = PyModuleAnalyzer(testfunction_file)
-        test_class = module_analyzer.get_class(testfunction)
-        if not test_class:
-            raise DatabaseTestValidationError(
-                log,
-                message=f'test {testfunction} does not exist in testfunction file {testfunction_file}',
-            )
-        # check hash of test method
-        sha256_test = hash_string_sha256(test_class.get_attribute('test').get_value())
-        if testfunction_obj.sha256hash != sha256_test and self._session.query(Test).filter(
-                Test.abstracttest.has(TestFunction.id == testfunction_obj.id)).first():
-            raise DatabaseTestValidationError(
-                log,
-                message=f'test {testfunction} has been changed. It therefore cannot be used in a test because it would result in an inconsistent results',
-                possible_solutions=[
-                    'if the test is not used in a test, try to load the testfunction first',
-                    'otherwise, recover the old testfunction'
-                ]
-            )
+    # def check_test_validity(self, testfunction_file: Path, testfunction: str):
+    #     testfunction_obj = self._session.query(TestFunction).filter(
+    #         TestFunction.file.path == testfunction_file.as_posix(), TestFunction.name == testfunction).first()
+    #     if not testfunction_obj:
+    #         raise DatabaseTestValidationError(
+    #             log,
+    #             message=f'testfunction {testfunction_file.name}.{testfunction} does not exist in database',
+    #         )
+    #     # get test method from testfunction_file
+    #     module_analyzer = PyModuleAnalyzer(testfunction_file)
+    #     test_class = module_analyzer.get_class(testfunction)
+    #     if not test_class:
+    #         raise DatabaseTestValidationError(
+    #             log,
+    #             message=f'test {testfunction} does not exist in testfunction file {testfunction_file}',
+    #         )
+    #     # check hash of test method
+    #     sha256_test = hash_string_sha256(test_class.get_attribute('test').get_value())
+    #     if testfunction_obj.sha256hash != sha256_test and self._session.query(Test).filter(
+    #             Test.abstracttest.has(TestFunction.id == testfunction_obj.id)).first():
+    #         raise DatabaseTestValidationError(
+    #             log,
+    #             message=f'test {testfunction} has been changed. It therefore cannot be used in a test because it would result in an inconsistent results',
+    #             possible_solutions=[
+    #                 'if the test is not used in a test, try to load the testfunction first',
+    #                 'otherwise, recover the old testfunction'
+    #             ]
+    #         )
 
     def create_testfunction(self, testfunction_file, t_func_class, db_parameter_objects, sha256_testfunction: str):
         test_name = t_func_class.get_attribute('testname').get_value()
@@ -93,7 +93,7 @@ class TestfunctionDbApi(ExperimentApi):
             # check if testfunction is used in a test
             if self._session.query(sqlalchemy.exists().where(
                     AbstractTest.testfunction_id == testfunction_obj.id,
-                    AbstractTest.ulid == Test.abstracttest_id
+                    AbstractTest.ulid == TestEvent.abstract_test_id
             )).scalar():
                 raise DatabaseTestfunctionRemovalError(
                     log,
@@ -129,7 +129,7 @@ class TestfunctionDbApi(ExperimentApi):
             # check if testfunction is used in a test
             if self._session.query(sqlalchemy.exists().where(
                     AbstractTest.testfunction_id == testfunction_obj.id,
-                    AbstractTest.ulid == Test.abstracttest_id
+                    AbstractTest.ulid == TestEvent.abstract_test_id
             )).scalar():
                 raise DatabaseTestfunctionRemovalError(
                     log,
@@ -217,7 +217,7 @@ class TestfunctionDbApi(ExperimentApi):
             if (
                     self._session.query(sqlalchemy.exists().where(
                         AbstractTest.testfunction_id == testfunction_obj.id,
-                        AbstractTest.ulid == Test.abstracttest_id
+                        AbstractTest.ulid == TestEvent.abstract_test_id
                     )).scalar()
 
             ):
