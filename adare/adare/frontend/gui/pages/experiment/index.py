@@ -1,0 +1,60 @@
+from nicegui import ui
+
+from adare.frontend.gui.components.Header import Header
+from adare.frontend.gui.colors import set_colors
+from adare.frontend.gui import add_static_css_files, add_bootstrap_icons
+from adare.frontend.gui.components.ExperimentTable import ExperimentTable
+from adare.frontend.gui.components.ExperimentOverview import ExperimentOverview
+from adare.frontend.gui.storage import Storage
+
+import logging
+log = logging.getLogger(__name__)
+
+@ui.page('/experiment/')
+def page_experiment():
+    # add bootstrap icons
+    add_bootstrap_icons()
+
+    # add custom css to page
+    add_static_css_files()
+
+    # set colors
+    set_colors()
+
+    # set active tab in header to None
+    Storage.active_tab = 'Experiment'
+
+    # show experiment table
+    experiment_table = ExperimentTable()
+    experiment_table.create()
+
+    # create header
+    header = Header()
+    header.create()
+
+    log.info('experiment page loaded')
+
+
+@ui.page('/experiment/{ulid}')
+def page_experiment_details(ulid: str):
+    # add bootstrap icons
+    add_bootstrap_icons()
+
+    # add custom css to page
+    add_static_css_files()
+
+    # set colors
+    set_colors()
+
+    # set active tab in header to None
+    Storage.active_tab = 'None'
+
+    # create header
+    header = Header()
+    header.create()
+
+    # create experiment view
+    experiment_overview = ExperimentOverview(ulid)
+    experiment_overview.create()
+
+    log.info(f'experiment (ulid:{ulid}) page loaded')

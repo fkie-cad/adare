@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 
 # internal imports
-from adare.database.models.experiment import Project, Environment, Experiment, ExperimentRun, OsInfo, StageInRun, Stage, Event, Status
+from adare.database.models.experiment import Project, Environment, Experiment, ExperimentRun, OsInfo, StageInRun, Stage, Event, Status, TestFunction, TestFunctionFile
 from adare.database.api.database import DatabaseApi
 import adare.config.database as config_database
 from adarelib.exceptions import EnvironmentNotFoundError, ProjectNotFoundError, ExperimentNotFoundError
@@ -137,6 +137,21 @@ class DataRetrievalApi(DatabaseApi):
         # execute query and return result as pandas dataframe excluding the id column
         return pd.read_sql(self._session.query(ExperimentRun).filter_by(experiment_id=experiment_ulid).statement, self._session.bind).map(str)
 
+    def __enrich_run_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        data['experiment_name'] = self._session.query(Experiment).filter_by(ulid=data['experiment_id'].values[0]).one().name
+        data['environment_name'] = self._session.query(Environment).filter_by(ulid=data['environment_id'].values[0]).one().name
+        data['project_name'] = self._session.query(Project).filter(
+            Project.environments.any(Environment.ulid == data['environment_id'].values[0])).one().name
+        data['object_run'] = self._session.query(ExperimentRun).filter_by(ulid=data['ulid'].values[0]).one()
+        # access hybrid properties
+        data['duration'] = [obj.duration for obj in data['object_run']]
+        data['result_status'] = [obj.result_status for obj in data['object_run']]
+        data['status'] = [obj.status for obj in data['object_run']]
+        data['experiment_dotnotation'] = [obj.experiment_dotnotation for obj in data['object_run']]
+        # remove object_run column
+        data = data.drop(columns=['object_run'])
+        return data
+
     def get_runs(self, experiment_ulid: str = None, project_name: str = None, environment_name: str = None) -> pd.DataFrame:
         if experiment_ulid:
             return self.get_experiment_runs(experiment_ulid)
@@ -148,20 +163,13 @@ class DataRetrievalApi(DatabaseApi):
             query = query.filter(ExperimentRun.experiment.has(Experiment.environments.any(Environment.name == environment_name)))
 
         # execute query and return result as pandas dataframe excluding the id column
-        return pd.read_sql(query.statement, self._session.bind).map(str)
+        data = pd.read_sql(query.statement, self._session.bind).map(str)
+        data = self.__enrich_run_data(data)
+        return data
 
     def get_run_details(self, run_ulid: str) -> pd.DataFrame:
         data = pd.read_sql(self._session.query(ExperimentRun).filter_by(ulid=run_ulid).statement, self._session.bind).map(str)
-        # add fields
-        run = self._session.query(ExperimentRun).filter_by(ulid=run_ulid).one()
-        data['experiment_name'] = self._session.query(Experiment).filter_by(ulid=data['experiment_id'].values[0]).one().name
-        data['environment_name'] = self._session.query(Environment).filter_by(ulid=data['environment_id'].values[0]).one().name
-        data['project_name'] = self._session.query(Project).filter(
-            Project.environments.any(Environment.ulid == data['environment_id'].values[0])).one().name
-        data['duration'] = run.duration
-        data['result_status'] = run.result_status
-        data['status'] = run.status
-
+        data = self.__enrich_run_data(data)
         return data
 
     def get_run_stages(self, run_ulid: str) -> pd.DataFrame:
@@ -182,19 +190,20 @@ class DataRetrievalApi(DatabaseApi):
                 tests_data[event.abstract_test.name] = {
                     'name': event.abstract_test.name,
                     'description': event.abstract_test.description,
-                    'testfunction_name': event.abstract_test.testfunction.fullname,
+                    'testfunction_name': event.abstract_test.testfunction.dotnotation,
                     'testfunction_description': event.abstract_test.testfunction.description,
                     'result_status': event.stage_result if event.result else None,
                     'result_details': event.result.details if event.result else None,
                     'result_status_name': self._session.query(Status).filter_by(id=event.result.status).one().name if event.result else None,
                 }
-                parameter_data = []
-                for parameter in event.abstract_test.parameters:
-                    parameter_data.append({
+                parameter_data = [
+                    {
                         'name': parameter.parameter.name,
                         'dtype': parameter.parameter.dtype,
                         'value': parameter.value,
-                    })
+                    }
+                    for parameter in event.abstract_test.parameters
+                ]
                 tests_data[event.abstract_test.name]['parameters'] = parameter_data
             else:
                 # update results
@@ -202,3 +211,31 @@ class DataRetrievalApi(DatabaseApi):
                 tests_data[event.abstract_test.name]['result_details'] = event.result.details
                 tests_data[event.abstract_test.name]['result_status_name'] = self._session.query(Status).filter_by(id=event.result.status).one().name
         return tests_data
+
+    def __enrich_testfunction_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        data['object'] = [self._session.query(TestFunction).filter_by(id=id).one() for id in data['id']]
+        data['testfunction_file'] = [self._session.query(TestFunctionFile).filter_by(id=file_id).one() for file_id in data['file_id']]
+        data['dotnotation'] = [obj.dotnotation for obj in data['object']]
+        data['num_parameters'] = [obj.num_parameters for obj in data['object']]
+        data['file_path'] = [obj.path for obj in data['testfunction_file']]
+        data['file_name'] = [obj.name for obj in data['testfunction_file']]
+        data['file_sha256'] = [obj.sha256hash for obj in data['testfunction_file']]
+        data['file_description'] = [obj.description for obj in data['testfunction_file']]
+        # remove object and testfunction_file columns
+        data = data.drop(columns=['object', 'testfunction_file'])
+        return data
+
+    def get_testfunction_list(self) -> pd.DataFrame:
+        data = pd.read_sql(self._session.query(TestFunction).statement, self._session.bind).map(str)
+        data = self.__enrich_testfunction_data(data)
+        return data
+
+    def get_testfunction(self, testfunction_id: int) -> (pd.DataFrame, pd.DataFrame):
+        testfunction = pd.read_sql(self._session.query(TestFunction).filter_by(id=testfunction_id).statement, self._session.bind).map(str)
+        testfunction = self.__enrich_testfunction_data(testfunction)
+        parameters = pd.read_sql(self._session.query(TestFunction.parameters).filter_by(id=testfunction_id).statement, self._session.bind).map(str)
+        return testfunction, parameters
+
+    def testfunction_dotnotation_to_id(self, dotnotation: str) -> int:
+        return self._session.query(TestFunction).filter_by(dotnotation=dotnotation).one().id
+

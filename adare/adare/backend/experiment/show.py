@@ -109,8 +109,8 @@ class ExperimentRunHeader:
         else:
             duration_datetime: datetime.timedelta = duration.item()
             self.duration = f'{str(duration_datetime)}'
-        self.start_time = start_time if start_time else '...'
-        self.end_time = end_time if end_time else '...'
+        self.start_time = start_time or '...'
+        self.end_time = end_time or '...'
 
     def __rich__(self) -> Panel:
         title = f'[b gold3]{self.project_name}.{self.environment_name}.{self.experiment_name} - [i]{self.experiment_ulid}[/i][/b gold3]'
@@ -250,21 +250,15 @@ class ExperimentRunTestsPanel:
                 ),
             )
             if test_data['result_details']:
-                grid.add_row(
-                    f':pencil: [b]details[/b]:'
-                )
-                grid.add_row(
-                    f'  {test_data["result_details"]}'
-                )
-            grid.add_row(
-                f':gear: [b]parameters[/b]:'
-            )
+                grid.add_row(':pencil: [b]details[/b]:')
+                grid.add_row(f'  {test_data["result_details"]}')
+            grid.add_row(':gear: [b]parameters[/b]:')
             for parameter in test_data['parameters']:
                 grid.add_row(
                     f'  {parameter["name"]} ([i]{parameter["dtype"]}[/i]): [b]{parameter["value"]}[/b]'
                 )
 
-        title = f'[b light_steel_blue]tests[/b light_steel_blue]'
+        title = '[b light_steel_blue]tests[/b light_steel_blue]'
         title = f'{title} {StatusEnum.get_icon(self.test_overall_result, color=True)}'
         return Panel(grid, title=title, border_style="blue",
                      title_align='left', style='')

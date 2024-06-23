@@ -42,6 +42,7 @@ class VagrantOutputProcessor(OutputProcessor):
     def process(self, line: str):
         # debug output but remove the newline character
         log.debug(line[:-1])
+        line = line.rstrip(' ')
         if match := self.header_pattern.match(line):
             self.machine = match.group('machine')
             self.provider = match.group('provider')
@@ -62,16 +63,18 @@ class VagrantOutputProcessor(OutputProcessor):
         status = match.group('status')
         if message not in ['start', 'end']:
             log.warning('so far only start and end messages are supported for stages')
-        stage_class = Stage.get_subclass(f'box.{stage_name}')
-        if stage_class:
+        if stage_class := Stage.get_subclass(f'box.{stage_name}'):
             stage = stage_class()
-
             if message == 'start':
                 stage.start_time = datetime.datetime.strptime(timestamp, TIMESTAMP_FORMAT)
             if message == 'end':
                 stage.end_time = datetime.datetime.strptime(timestamp, TIMESTAMP_FORMAT)
                 stage.status = StatusEnum.FINISHED
             if status != '(...)':
+                # strip leading and trailing whitespace as well as \n and \r
+                status = status.strip()
+                status = status.strip('\n')
+                status = status.strip('\r')
                 stage.status = StatusEnum.from_string(status)
 
             with StageDbApi() as api:
