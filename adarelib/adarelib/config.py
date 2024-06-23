@@ -84,31 +84,29 @@ class StatusEnum(IntEnum):
     FINISHED = 9
 
     @staticmethod
-    def from_string(status_string):
-        if status_string.lower() == 'success':
+    def from_string(status_string: str):
+        status_string = status_string.strip().lower()
+        if status_string == 'success':
             return StatusEnum.SUCCESS
-        elif status_string.lower() == 'failed':
+        elif status_string == 'failed':
             return StatusEnum.FAILED
-        elif status_string.lower() == 'warning':
+        elif status_string == 'warning':
             return StatusEnum.WARNING
-        elif status_string.lower() == 'error':
+        elif status_string == 'error':
             return StatusEnum.ERROR
-        elif status_string.lower() == 'running':
+        elif status_string == 'running':
             return StatusEnum.RUNNING
-        elif status_string.lower() == 'pending':
+        elif status_string == 'pending':
             return StatusEnum.PENDING
-        elif status_string.lower() == 'interrupted':
+        elif status_string == 'interrupted':
             return StatusEnum.INTERRUPTED
-        elif status_string.lower() == 'finished':
+        elif status_string == 'finished':
             return StatusEnum.FINISHED
         return StatusEnum.NONE
 
-
     @staticmethod
     def get_icon(value: int, color=False):
-        colorname = ''
-        if color:
-            colorname = StatusEnum.get_color(value)
+        colorname = StatusEnum.get_color(value) if color else ''
         icon = ''
         if value == StatusEnum.SUCCESS:
             icon = ':heavy_check_mark:'
@@ -124,9 +122,7 @@ class StatusEnum(IntEnum):
             icon = ':high_voltage:'
         elif value == StatusEnum.RUNNING:
             icon = ':arrow_forward:'
-        if colorname:
-            return f'[{colorname}]{icon}[/{colorname}]'
-        return icon
+        return f'[{colorname}]{icon}[/{colorname}]' if colorname else icon
 
     @staticmethod
     def get_color(value: int):

@@ -26,7 +26,7 @@ checkExitCode "experiment_setup"
 Add-PathVariable (Split-Path $adarevmExecutable)
 checkExitCode "experiment_setup"
 
-EndStage "experiment_setup"
+EndStage "experiment_setup" "finished"
 
 # run the experiment
 StartStage "experiment_run"
@@ -34,4 +34,4 @@ StartStage "experiment_run"
 adarevm '{{ experiment_config_file }}'
 checkExitCode "experiment_run"
 
-EndStage "experiment_run"
+EndStage "experiment_run" "finished"

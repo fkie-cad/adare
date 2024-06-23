@@ -14,7 +14,7 @@ from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
 from adare.cli.help import exec_help_breakpoints
 from adare.cli.showversion import exec_show_version
-from adare.cli.show import exec_show_projects, exec_show_project, exec_show_environment, exec_show_environments, exec_show_experiments, exec_show_experiment, exec_show_runs, exec_show_run
+from adare.cli.show import exec_show_projects, exec_show_project, exec_show_environment, exec_show_environments, exec_show_experiments, exec_show_experiment, exec_show_runs, exec_show_run, exec_show_testfunctions
 from adare.cli.web import exec_web_login, exec_web_logout
 from adare.cli.testfunction import exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 from adare.setup_logging import setup_logging
@@ -193,11 +193,16 @@ def main():
     show_experiment.set_defaults(func=lambda args: exec_with_error_printing(exec_show_experiment, args))
 
     show_runs = show_subparsers.add_parser('runs', help='show all runs')
+    show_runs.add_argument('-proj', '--project', help='name of the project')
     show_runs.set_defaults(func=lambda args: exec_with_error_printing(exec_show_runs, args))
 
     show_run = show_subparsers.add_parser('run', help='show a run')
     show_run.add_argument('-run-id', '--run-ulid', help='ulid of the run')
     show_run.set_defaults(func=lambda args: exec_with_error_printing(exec_show_run, args))
+
+    show_testfunctions = show_subparsers.add_parser('testfunctions', help='show all testfunctions')
+    show_testfunctions.add_argument('-f', '--file-name', help='name of the file')
+    show_testfunctions.set_defaults(func=lambda args: exec_with_error_printing(exec_show_testfunctions, args))
 
 
 

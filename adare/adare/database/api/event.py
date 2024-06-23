@@ -118,9 +118,9 @@ class EventDbApi(ExperimentApi):
                         test = self._session.query(AbstractTest).filter_by(name=tname)
                         # check if test is more than once in experiment
                         if test.count() > 1:
-                            test = test.filter(AbstractTest.ulid.in_([t.ulid for t in experiment.abstract_tests])).first()
+                            test = test.filter(AbstractTest.ulid.in_([t.ulid for t in experiment.abstract_tests]))
                         if test:
-                            event_data['abstract_test'] = test
+                            event_data['abstract_test'] = test.first()
                         else:
                             log.error(f'could not find test with name {tname}')
 

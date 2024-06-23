@@ -1,7 +1,7 @@
 # internal imports
 from adare.config import PORT_WEBAPP
 from adarelib.helperfunctions.port import is_localhost_port_free
-from adare.gui.run import runserver as run_gui
+from adare.frontend.gui.run import runserver as run_gui
 
 # configure logging
 import logging

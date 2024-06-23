@@ -11,4 +11,4 @@ checkExitCode "installations"
 {% endfor %}
 
 Stop-Transcript
-EndStage "installations"
+EndStage "installations" "finished"

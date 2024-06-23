@@ -75,8 +75,6 @@ class EnvironmentMetadata:
     description: str = attrs.Factory(str)
 
 
-
-
 @attrs.define
 class Share:
     """

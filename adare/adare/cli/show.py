@@ -1,12 +1,15 @@
 # internal imports
 from adare.backend.project.show import print_project_list, print_project_details
 from adare.backend.environment.show import print_environment_list, print_environment_details
-from adare.backend.experiment.show import print_experiment_list, print_experiment_details, print_run_list, print_run_details
+from adare.backend.experiment.show import print_experiment_list, print_experiment_details, print_run_details
+from adare.frontend.terminal.testfunction_list import print_testfunction_list
 from adare.backend.basics import determine_projectdirectory
+from adare.frontend.terminal.run_list import print_run_list
 from adarelib.exceptions import NoProjectFoundError
 
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -73,8 +76,17 @@ def exec_show_experiment(arguments):
 
 
 def exec_show_runs(arguments):
-    print_run_list()
+    project = ''
+    if arguments.project:
+        project = arguments.project
+    elif project_path := determine_projectdirectory(arguments.project):
+        project = project_path.name
+    print_run_list(project)
 
 
 def exec_show_run(arguments):
     print_run_details(arguments.run_ulid)
+
+
+def exec_show_testfunctions(arguments):
+    print_testfunction_list(testfunction_file=arguments.file_name)

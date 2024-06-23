@@ -13,4 +13,4 @@ foreach($obj in $InstalledSoftware){
 }
 
 Stop-Transcript
-EndStage "dump_installed_software"
+EndStage "dump_installed_software" "finished"
