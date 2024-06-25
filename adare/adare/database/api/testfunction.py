@@ -71,7 +71,7 @@ class TestfunctionDbApi(ExperimentApi):
 
         testfunction_obj.type = t_func_class.name
         testfunction_obj.description = test_description
-        testfunction_obj.possible_parameters.extend(db_parameter_objects.values())
+        testfunction_obj.parameters.extend(db_parameter_objects.values())
         return testfunction_obj
 
     def remove_testfunction(self, testfunction_file: Path, name: str, safe=False):
@@ -143,7 +143,6 @@ class TestfunctionDbApi(ExperimentApi):
         self._session.delete(testfunction_file_obj)
         log.info(f'Removed testfunction file {path} from database')
         self._session.commit()
-
 
     def parse_and_create_testfunction(self, testfunction_class, module_analyzer: PyModuleAnalyzer,
                                       testfunction_file: TestFunctionFile):
@@ -268,13 +267,11 @@ class TestfunctionDbApi(ExperimentApi):
         testfunction_file.sha256hash = hash_file_sha256(path)
         self._session.commit()
 
-
-
     def __serialize_testfunction(self, testfunction: TestFunction):
         return {
             'name': testfunction.name,
             'description': testfunction.description,
-            'possible_parameters': ",".join([param.name for param in testfunction.possible_parameters])
+            'parameters': ",".join([param.name for param in testfunction.parameters])
         }
 
     def get_testfunctions_by_file(self):

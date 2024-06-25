@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 # internal imports
-from adare.database.api.dataframe import DataRetrievalApi
+from adare.database.api.frontend import DataRetrievalApi
 from adare.frontend.terminal.console import DefaultConsole
 
 import logging
@@ -25,7 +25,7 @@ class TestfunctionListPanel:
             title = '[b gold3]testfunctions[/b gold3]'
         else:
             title = f'[b gold3]testfunctions[/b gold3] from [b gold3]{self.testfunction_file}[/b gold3]'
-        table = Table()
+        table = Table(expand=True)
         table.add_column("testfunction", justify="left", style="cyan", no_wrap=True)
         table.add_column("description", justify="left", style="cyan", no_wrap=True)
         table.add_column("#parameters", justify="left", style="cyan", no_wrap=True)

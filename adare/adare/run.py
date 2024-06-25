@@ -4,8 +4,6 @@ import sys
 import time
 
 # internal imports
-# from adare.cli.environment import exec_env_create, exec_env_remove
-# from adare.cli.experiment import exec_exp_run, exec_exp_create, exec_exp_remove
 from adare.cli.project import exec_create_project, exec_remove_project, exec_list_projects
 from adare.cli.environment import exec_environment_load, exec_environment_create, \
     exec_environment_delete
@@ -14,7 +12,7 @@ from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
 from adare.cli.help import exec_help_breakpoints
 from adare.cli.showversion import exec_show_version
-from adare.cli.show import exec_show_projects, exec_show_project, exec_show_environment, exec_show_environments, exec_show_experiments, exec_show_experiment, exec_show_runs, exec_show_run, exec_show_testfunctions
+from adare.cli.show import exec_show_projects, exec_show_environment, exec_show_environments, exec_show_experiment, exec_show_runs, exec_show_run, exec_show_testfunctions, exec_show_testfunction, exec_show_experiments
 from adare.cli.web import exec_web_login, exec_web_logout
 from adare.cli.testfunction import exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 from adare.setup_logging import setup_logging
@@ -107,6 +105,7 @@ def main():
 
     experiment_load = experiment_subparsers.add_parser('load', help='load the experiment')
     experiment_load.add_argument('experiment', help='name of the experiment to load')
+    experiment_load.add_argument('-e', '--environment', help='name of the environment where the experiment should be loaded')
     experiment_load.add_argument('--force', '-f', action='store_true', help='force the update of the experiment')
     experiment_load.set_defaults(func=lambda args: exec_with_error_printing(exec_experiment_load, args))
 
@@ -166,30 +165,23 @@ def main():
     show_projects = show_subparsers.add_parser('projects', help='show a list of projects')
     show_projects.set_defaults(func=lambda args: exec_with_error_printing(exec_show_projects, args))
 
-    show_project = show_subparsers.add_parser('project', help='show a project')
-    show_project.add_argument('project', help='name of the project')
-    show_project.set_defaults(func=lambda args: exec_with_error_printing(exec_show_project, args))
-
     show_environments = show_subparsers.add_parser('environments', help='show all environments in a project')
-    show_environments.add_argument('-proj', '--project', help='name of the project')
     show_environments.set_defaults(func=lambda args: exec_with_error_printing(exec_show_environments, args))
 
     show_environment = show_subparsers.add_parser('environment', help='show an environment')
-    show_environment.add_argument('environment', help='name of the environment')
-    show_environment.add_argument('-proj', '--project', help='name of the project')
+    show_environment.add_argument('-env', '--environment-name', help='name of the environment')
+    show_environment.add_argument('-proj', '--project-name', help='name of the project')
+    show_environment.add_argument('-ulid', '--ulid', help='ulid of the environment')
     show_environment.set_defaults(func=lambda args: exec_with_error_printing(exec_show_environment, args))
 
     show_experiments = show_subparsers.add_parser('experiments', help='show all experiments in an environment')
-    show_experiments.add_argument('-proj', '--project', help='name of the project')
-    show_experiments.add_argument('-env', '--environment', help='name of the environment')
-    show_experiments.add_argument('-env-id', '--environment-ulid', help='ulid of the environment')
     show_experiments.set_defaults(func=lambda args: exec_with_error_printing(exec_show_experiments, args))
 
     show_experiment = show_subparsers.add_parser('experiment', help='show an experiment')
-    show_experiment.add_argument('-exp', '--experiment', help='name of the experiment')
-    show_experiment.add_argument('-proj', '--project', help='name of the project')
-    show_experiment.add_argument('-env', '--environment', help='name of the environment')
-    show_experiment.add_argument('-exp-id', '--experiment-ulid', help='ulid of the experiment')
+    show_experiment.add_argument('-env', '--environment-name', help='name of the environment')
+    show_experiment.add_argument('-proj', '--project-name', help='name of the project')
+    show_experiment.add_argument('-exp', '--experiment-name', help='name of the experiment')
+    show_experiment.add_argument('-ulid', '--ulid', help='ulid of the experiment')
     show_experiment.set_defaults(func=lambda args: exec_with_error_printing(exec_show_experiment, args))
 
     show_runs = show_subparsers.add_parser('runs', help='show all runs')
@@ -204,87 +196,10 @@ def main():
     show_testfunctions.add_argument('-f', '--file-name', help='name of the file')
     show_testfunctions.set_defaults(func=lambda args: exec_with_error_printing(exec_show_testfunctions, args))
 
+    show_testfunction = show_subparsers.add_parser('testfunction', help='show a testfunction')
+    show_testfunction.add_argument('dotnotation', help='dotnotation(name) of the testfunction')
+    show_testfunction.set_defaults(func=lambda args: exec_with_error_printing(exec_show_testfunction, args))
 
-
-    #
-    # environment_create = environment_subparsers.add_parser('create')
-    # environment_create.add_argument('config', help='path to the environment config file')
-    # environment_create.add_argument('--name', required=False, help='name of the environment')
-    # environment_create.add_argument('--project', '-p', required=False, help='name of the project to add the environment to')
-    # environment_create.set_defaults(func=exec_env_create)
-    #
-    # environment_remove = environment_subparsers.add_parser('remove')
-    # environment_remove.add_argument('environment', help='name of the environment to remove')
-    # environment_remove.add_argument('--project', '-p', required=False, help='name of the project to remove the environment from (if not given, the environment will be removed the current working directory project)')
-    # environment_remove.set_defaults(func=exec_env_remove)
-    #
-    #
-    # # commands: adare gui ...
-    # gui = subparsers.add_parser('gui', help='starts a webgui for adare')
-    # gui.add_argument('-p', '--port', type=int, required=False, help='port to run the webgui on')
-    # gui.set_defaults(func=exec_gui)
-    #
-    # # commands: adare exp ...
-    # experiment = subparsers.add_parser('exp', help='wrapper for needed experiment commands')
-    # experiment.add_argument('--project', '-p', required=False, help='name of the project to add the environment to')
-    # experiment.set_defaults(func=lambda args: experiment.print_help())
-    # experiment_subparsers = experiment.add_subparsers()
-    #
-    # experiment_run = experiment_subparsers.add_parser('run', help='run the experiment in a given environment')
-    # experiment_run.add_argument('experiment', help='name of the experiment to run')
-    # experiment_run.add_argument('environment', help='name of the environment where the experiment should be run')
-    # experiment_run.add_argument('--debugmode', action='store_true', help='run the experiment in debug mode')
-    # experiment_run.set_defaults(func=exec_exp_run)
-    #
-    # experiment_create = experiment_subparsers.add_parser('create', help='create the skeleton for new experiment to an environment')
-    # experiment_create.add_argument('experiment', help='name of the experiment to add')
-    # experiment_create.add_argument('environment', help='name of the environment to add the experiment to')
-    # experiment_create.add_argument('--networkdrive', '-nd', required=False, help='config yml file containing metadata for a network drive')
-    # experiment_create.add_argument('--usb', '-u', required=False, help='config yml file containing metadata for a usb device')
-    # experiment_create.set_defaults(func=exec_exp_create)
-    #
-    # experiment_remove = experiment_subparsers.add_parser('remove', help='delete an experiment from an environment')
-    # experiment_remove.add_argument('experiment', help='name of the experimenttestenv_windows10_new to remove')
-    # experiment_remove.add_argument('--environment', '-env', required=True, help='name of the environment to remove the experiment from')
-    # experiment_remove.set_defaults(func=exec_exp_remove)
-    #
-    # # commands: adare show ...
-    # show = subparsers.add_parser('show', help='wrapper for needed show commands')
-    # show.add_argument('--no-emoji', '-ne', action='store_true', help='disable emoji in output (for terminals that don\'t support it)')
-    # show.set_defaults(func=lambda args: show.print_help())
-    # show_subparsers = show.add_subparsers()
-    #
-    # show_project = show_subparsers.add_parser('project', help='show a list of projects')
-    # show_project.set_defaults(func=exec_show_project)
-    #
-    # show_env = show_subparsers.add_parser('env', help='show the environments of a project')
-    # show_env.add_argument('--project', '-p', required=False, help='name of the project to show the environments of')
-    # show_env.set_defaults(func=exec_show_env)
-    #
-    # show_exp = show_subparsers.add_parser('exp', help='show a list of experiments')
-    # show_exp.add_argument('experiment', help='name of the experiment to show the information of')
-    # show_exp.add_argument('environment', help='name of the environment to show the experiments of')
-    # show_exp.add_argument('--project', '-p', required=False, help='name of the project to show the experiments of')
-    # show_exp.set_defaults(func=exec_show_experiment)
-    #
-    # show_runs = show_subparsers.add_parser('runs', help='show a list of experiment runs')
-    # show_runs.add_argument('experiment', help='name of the experiment to show the information of')
-    # show_runs.add_argument('environment', help='name of the environment to show the experiments of')
-    # show_runs.add_argument('--project', '-p', required=False, help='name of the project to show the experiments of')
-    # show_runs.set_defaults(func=exec_show_runs)
-    #
-    # show_run_result = show_subparsers.add_parser('result', help='show the results of an experiment run')
-    # show_run_result.add_argument('ulid', help='ulid of the experiment run to show the results of')
-    # show_run_result.set_defaults(func=exec_show_run_result)
-    #
-    # show_usb = show_subparsers.add_parser('usb', help='show the usb devices')
-    # show_usb.set_defaults(func=exec_show_usb)
-    #
-    # show_nfs = show_subparsers.add_parser('nfs', help='show the nfs devices')
-    # show_nfs.set_defaults(func=exec_show_nfs)
-    #
-    # show_smb = show_subparsers.add_parser('smb', help='show the smb devices')
-    # show_smb.set_defaults(func=exec_show_smb)
 
     # parse arguments
     args = parser.parse_args()

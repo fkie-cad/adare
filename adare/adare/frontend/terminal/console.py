@@ -134,3 +134,19 @@ class TwoTitleRule(Rule):
     ) -> Measurement:
         return Measurement(1, 1)
 
+class TagsText:
+
+    def __init__(self, tags: str):
+        self.tags = tags.split(', ')
+
+    def __rich__(self) -> Table:
+        text = ''
+        for tag in self.tags:
+            text += f'[b deep_pink4]#{tag}[/b deep_pink4] '
+        text = text[:-1]
+        grid = Table.grid(expand=True)
+        grid.add_column(justify="left")
+        grid.add_row(
+            text,
+        )
+        return grid

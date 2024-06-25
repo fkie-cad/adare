@@ -58,19 +58,34 @@ function EndStage {
 
 function Add-PathVariable {
     param (
+        [Parameter(Mandatory=$true)]
         [string]$addPath
     )
-    if($MyInvocation.ExpectingInput){
-        $addPath = $input
-    }
-    if (Test-Path $addPath){
-        $regexAddPath = [regex]::Escape($addPath)
-        $arrPath = $env:Path -split ';' | Where-Object {$_ -notMatch "^$regexAddPath\\?"}
-        $env:Path = ($arrPath + $addPath) -join ';'
+
+    # First, check if the path is valid and is a directory
+    if (Test-Path $addPath -PathType Container) {
+        $normalizedAddPath = (Get-Item $addPath).FullName
+        $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+        $pathArray = $currentPath -split ';' | Where-Object { $_ }
+
+        # Check if the path already exists to avoid duplicates
+        if (-not ($pathArray -contains $normalizedAddPath)) {
+            $newPath = $currentPath + ';' + $normalizedAddPath
+
+            # Update the system environment variable using setx
+            setx PATH $newPath /M
+
+            # Update the environment variable for the current process
+            $env:Path += ";$normalizedAddPath"
+            Write-Output "Path added successfully. '$normalizedAddPath' added to current session and system-wide PATH."
+        } else {
+            Write-Output "$normalizedAddPath is already in the system PATH."
+        }
     } else {
-        Throw "'$addPath' is not a valid path."
+        Throw "'$addPath' is not a valid directory path."
     }
 }
+
 
 
 function checkExitCode {

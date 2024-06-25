@@ -11,7 +11,7 @@ import numpy as np
 
 # internal imports
 from adarelib.helperfunctions.cli import print_df, print_dict
-from adare.database.api.dataframe import DataRetrievalApi
+from adare.database.api.frontend import DataRetrievalApi
 from adarelib.exceptions import ArgumentsError
 from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, TwoTitleRule, timedelta_to_str
 from adarelib.config import TIMESTAMP_FORMAT, StatusEnum

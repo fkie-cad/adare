@@ -11,7 +11,7 @@ import numpy as np
 
 # internal imports
 from adarelib.helperfunctions.cli import print_df, print_dict
-from adare.database.api.dataframe import DataRetrievalApi
+from adare.database.api.frontend import DataRetrievalApi
 from adarelib.exceptions import ArgumentsError
 from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, timedelta_to_str
 from adarelib.config import TIMESTAMP_FORMAT, StatusEnum
@@ -30,9 +30,11 @@ class ExperimentRunHeader:
     duration: str
     start_time: str
     end_time: str
+    osinfo: str
+    box: str
 
     def __init__(self, experiment_name: str, experiment_ulid: str, environment_ulid: str, environment_name: str,
-                 project_name: str, duration: pd.Timedelta, start_time: str, end_time: str):
+                 project_name: str, duration: pd.Timedelta, start_time: str, end_time: str, box: str, osinfo: str):
         self.experiment_name = experiment_name
         self.experiment_ulid = experiment_ulid
         self.environment_ulid = environment_ulid
@@ -41,13 +43,14 @@ class ExperimentRunHeader:
         self.duration = f'{timedelta_to_str(duration)}' if duration else '...'
         self.start_time = start_time or '...'
         self.end_time = end_time or '...'
+        self.box = box
+        self.osinfo = osinfo
 
     def __rich__(self) -> Panel:
-        title = f'[b gold3]{self.project_name}.{self.environment_name}.{self.experiment_name} - [i]{self.experiment_ulid}[/i][/b gold3]'
+        title = f'[b medium_turquoise]info[/b medium_turquoise]'
         grid = Table.grid(expand=True)
         grid.add_column(justify="left", ratio=1)
         grid.add_column(justify="right")
-
         grid.add_row(
             f"{pad_string_to_length('experiment', 11)}: [b]{self.experiment_name}[/b] ([i]{self.experiment_ulid}[/i])",
             f"start: {self.start_time}",
@@ -59,6 +62,10 @@ class ExperimentRunHeader:
         grid.add_row(
             f"{pad_string_to_length('project', 11)}: [b]{self.project_name}[/b]",
             f"duration: {self.duration}",
+        )
+        grid.add_row(
+            f"{pad_string_to_length('osinfo', 11)}: [b]{self.osinfo}[/b]",
+            f"box: {self.box}",
         )
         return Panel(grid, title=title, border_style="blue", title_align='left', style='')
 
@@ -138,12 +145,12 @@ def print_run(run_ulid: str):
     console = DefaultConsole()
 
     with DataRetrievalApi() as api:
-        data: pd.DataFrame = api.get_run_details(run_ulid)
+        data: pd.DataFrame = api.get_run(run_ulid)
         stages: pd.DataFrame = api.get_run_stages(run_ulid)
         tests_data: dict = api.get_tests(run_ulid)
 
         layout = Layout(name='root')
-        header = Layout(name='header', size=5)
+        header = Layout(name='header', size=6)
         body = Layout(name='body')
         flow = Layout(name='flow', ratio=2)
         tests = Layout(name='tests', ratio=3)
@@ -157,18 +164,28 @@ def print_run(run_ulid: str):
             tests,
         )
 
+        project_name = data['project_name'].values[0]
+        environment_name = data['environment_name'].values[0]
+        experiment_name = data['experiment_name'].values[0]
+        experiment_ulid = run_ulid
         header.update(ExperimentRunHeader(
-            experiment_name=data['experiment_name'].values[0],
+            experiment_name=experiment_name,
             experiment_ulid=run_ulid,
-            environment_name=data['environment_name'].values[0],
+            environment_name=environment_name,
             environment_ulid=data['environment_id'].values[0],
-            project_name=data['project_name'].values[0],
-            duration=data['duration'].values[0],
+            project_name=project_name,
+            duration=data['duration'][0],
             start_time=data['timestamp_start'].values[0],
-            end_time=data['timestamp_end'].values[0]
+            end_time=data['timestamp_end'].values[0],
+            box=data['box'].values[0],
+            osinfo=data['osinfo'].values[0],
         ))
+
+        title = f'[b gold3]{project_name}.{environment_name}.{experiment_name} - [i]{experiment_ulid}[/i][/b gold3]'
+        panel = Panel(layout, title=title, border_style='blue', title_align='left')
 
         tests.update(ExperimentRunTestsPanel(data['result_status'].values[0], tests_data))
         flow.update(ExperimentRunFlowPanel(data['status'].values[0], stages))
 
-        console.print(layout)
+        console.print(panel)
+

@@ -82,6 +82,8 @@ class StatusEnum(IntEnum):
     PENDING = 7
     INTERRUPTED = 8
     FINISHED = 9
+    BREAKPOINT_HIT = 10
+    BREAKPOINT_RESOLVED = 11
 
     @staticmethod
     def from_string(status_string: str):
@@ -102,6 +104,10 @@ class StatusEnum(IntEnum):
             return StatusEnum.INTERRUPTED
         elif status_string == 'finished':
             return StatusEnum.FINISHED
+        elif status_string == 'breakpoint_hit':
+            return StatusEnum.BREAKPOINT_HIT
+        elif status_string == 'breakpoint_resolved':
+            return StatusEnum.BREAKPOINT_RESOLVED
         return StatusEnum.NONE
 
     @staticmethod
@@ -122,6 +128,12 @@ class StatusEnum(IntEnum):
             icon = ':high_voltage:'
         elif value == StatusEnum.RUNNING:
             icon = ':arrow_forward:'
+        elif value == StatusEnum.PENDING:
+            icon = ':hourglass:'
+        elif value == StatusEnum.BREAKPOINT_HIT:
+            icon = ':stop_sign:'
+        elif value == StatusEnum.BREAKPOINT_RESOLVED:
+            icon = ':checkered_flag:'
         return f'[{colorname}]{icon}[/{colorname}]' if colorname else icon
 
     @staticmethod
@@ -140,6 +152,12 @@ class StatusEnum(IntEnum):
             return 'yellow'
         elif value == StatusEnum.RUNNING:
             return 'blue'
+        elif value == StatusEnum.PENDING:
+            return 'yellow'
+        elif value == StatusEnum.BREAKPOINT_HIT:
+            return 'red'
+        elif value == StatusEnum.BREAKPOINT_RESOLVED:
+            return 'green'
         return ''
 
 

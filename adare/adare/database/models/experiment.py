@@ -9,12 +9,6 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from adarelib.config import StatusEnum
 
 Base = declarative_base()
-# mapping_experimentrun_test = Table(
-#     "mapping_experimentrun_test",
-#     Base.metadata,
-#     Column("experimentrun_ulid", ForeignKey("experimentrun.ulid")),
-#     Column("test_ulid", ForeignKey("test.ulid")),
-# )
 
 mapping_experiment_abstracttest = Table(
     "mapping_experiment_abstracttest",
@@ -27,6 +21,12 @@ mapping_experiment_tag = Table(
     "mapping_experiment_tag",
     Base.metadata,
     Column("experiment_ulid", ForeignKey("experiment.ulid")),
+    Column("tag_id", ForeignKey("tag.id")),
+)
+mapping_environment_tag = Table(
+    "mapping_environment_tag",
+    Base.metadata,
+    Column("environment_ulid", ForeignKey("environment.ulid")),
     Column("tag_id", ForeignKey("tag.id")),
 )
 
@@ -165,6 +165,8 @@ class TestParameter(SerializerMixin, Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
     dtype = Column(String)
+    description = Column(String, nullable=True)
+    optional = Column(Boolean, default=False)
 
     def __str__(self):
         return str(self.name)
@@ -226,7 +228,7 @@ class TestFunction(SerializerMixin, Base):
     file_id = Column(Integer, ForeignKey('testfunctionfile.id'))
     file = relationship(TestFunctionFile, backref=backref("testfunctions", cascade="all, delete-orphan"))
 
-    possible_parameters = relationship(TestParameter, secondary=mapping_testfunction_testparameter)
+    parameters = relationship(TestParameter, secondary=mapping_testfunction_testparameter, backref='testfunctions')
 
     @hybrid_property
     def dotnotation(self):
@@ -234,13 +236,13 @@ class TestFunction(SerializerMixin, Base):
 
     @hybrid_property
     def num_parameters(self):
-        return len(self.possible_parameters)
+        return len(self.parameters)
 
     def __str__(self):
         return self.dotnotation
 
     def __repr__(self):
-        return f"<TestFunction(name='{self.fullname}',description='{self.description}')>"
+        return f"<TestFunction(name='{self.dotnotation}',description='{self.description}')>"
 
 
 class Command(SerializerMixin, Base):
@@ -297,7 +299,11 @@ class OsInfo(SerializerMixin, Base):
     details = Column(String)
 
     def __str__(self):
-        return f'{self.os} - {self.distribution} {self.version} ({self.language, self.architecture})'
+        lang = self.language if self.language else '-'
+        arch = self.architecture if self.architecture else '-'
+        if lang != '-' or arch != '-':
+            return f'{self.os} - {self.distribution} {self.version} ({lang},{arch})'
+        return f'{self.os} - {self.distribution} {self.version}'
 
     def __repr__(self):
         return f"<OsInfo(os='{self.os}',distribution='{self.distribution}',version='{self.version}',language='{self.language}',architecture='{self.architecture}')>"
@@ -420,6 +426,10 @@ class Project(SerializerMixin, Base):
 
     testfunction_files = relationship(TestFunctionFile, secondary=mapping_project_testfunctionfile, backref='projects')
 
+    @hybrid_property
+    def environments_names(self):
+        return [env.name for env in self.environments]
+
     def __repr__(self):
         return f"<Project(name='{self.name}',description='{self.description}',path='{self.path}')>"
 
@@ -448,6 +458,12 @@ class Environment(SerializerMixin, Base):
     published = Column(Boolean, default=False)
 
     created_at = Column(DateTime, nullable=True, default=datetime.now)
+
+    tags = relationship(Tag, secondary=mapping_environment_tag)
+
+    @hybrid_property
+    def dotnotation(self):
+        return f'{self.project.name}.{self.name}'
 
     def __str__(self):
         return str(self.name)
@@ -490,10 +506,12 @@ class Experiment(SerializerMixin, Base):
     usbdrives = relationship(USBDrive, secondary=mapping_usbdrive_experiment)
 
     environments = relationship(Environment, secondary=mapping_experiment_environment, backref='experiments')
-    project_id = Column(Integer, ForeignKey('project.id'))
-    project = relationship(Project, backref=backref("experiments", cascade="all, delete-orphan"))
 
     created_at = Column(DateTime, nullable=True, default=datetime.now)
+
+    @hybrid_property
+    def environments_names(self):
+        return [env.name for env in self.environments]
 
     def __str__(self):
         return str(self.name)
@@ -532,20 +550,6 @@ class Event(SerializerMixin, Base):
         'polymorphic_identity': 'event',
         'polymorphic_on': event_type
     }
-
-
-# class ActionEvent(Event):
-#     __tablename__ = 'action_event'
-#     __mapper_args__ = {
-#         'polymorphic_identity': 'action_event',
-#     }
-#     id = Column(CHAR(26), ForeignKey('event.ulid'), primary_key=True)
-#     name = Column(String)
-#     description = Column(String)
-#
-#     @hybrid_property
-#     def stage_submessage(self):
-#         return f'{self.name}'
 
 
 class CommandEvent(Event):
@@ -828,7 +832,7 @@ class ExperimentRun(SerializerMixin, Base):
 
     @hybrid_property
     def experiment_dotnotation(self) -> str:
-        return f'{self.experiment.project.name}.{self.environment.name}.{self.experiment.name}'
+        return f'{self.environment.project.name}.{self.environment.name}.{self.experiment.name}'
 
     @hybrid_property
     def duration(self):

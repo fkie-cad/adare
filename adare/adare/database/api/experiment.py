@@ -11,7 +11,7 @@ from adare.database.models.experiment import ExperimentRunFiles, Tag, TestParame
 from adare.database.api.project import ProjectDbApi
 from adarelib.types.testset import TestsetFile as FTestsetFile, Test as FTest
 from adare.backend.experiment.directory import ExperimentDirectory
-from adarelib.exceptions import TestSetFormatError
+from adarelib.exceptions import TestSetFormatError, EnvironmentNotFoundError
 from adare.database.exceptions import EnvironmentMissingError
 from adare.database.fixtures import fixture_stages, fixture_status
 from adarelib.config import StatusEnum
@@ -49,12 +49,21 @@ class ExperimentApi(ProjectDbApi):
         """
         self._session.delete(experiment_run)
 
-    def get_experiment_by_project_and_name(self, project_path: Path, experiment_name: str) -> Experiment:
+    def get_experiment_by_project_and_name(self, project_path: Path, environment_name:str, experiment_name: str) -> Experiment:
         project = self.get_project_by_path(project_path)
-        experiments = self._session.query(Experiment).filter_by(
-            name=experiment_name,
-            project=project
-        )
+        environment = self._session.query(Environment).filter_by(name=environment_name, project=project).first()
+        if not environment:
+            raise EnvironmentNotFoundError(
+                log,
+                message=f'environment with name {environment_name} not found in project {project_path}',
+                possible_solutions=[
+                    'load the environment with [i]adare environment load[/i]',
+                    'create a new environment with [i]adare environment create[/i] and then load it'
+                ]
+            )
+        # filter the experiment and check that environment in experiment.environments
+        experiments = self._session.query(Experiment).filter_by(name=experiment_name).filter(Experiment.environments.any(ulid=environment.ulid))
+
         # check if multiple experiments with the same name exist
         if experiments.count() > 1:
             raise ValueError(f'multiple experiments with name {experiment_name} found')
@@ -87,8 +96,7 @@ class ExperimentApi(ProjectDbApi):
                 return []
         return environments
 
-    def create_experiment(self, name: str, project_path: Path, experiment_directory: ExperimentDirectory) -> Experiment:
-        project = self.get_project_by_path(project_path)
+    def create_experiment(self, name: str, experiment_directory: ExperimentDirectory) -> Experiment:
         testset = experiment_directory.load_testset()
         metadata = experiment_directory.load_metadata()
 
@@ -119,7 +127,6 @@ class ExperimentApi(ProjectDbApi):
             sha256_bibtex=experiment_directory.sha256_bibtex,
             sha256_markdown=experiment_directory.sha256_markdown,
             sha256=experiment_directory.sha256,
-            project=project,
         )
         experiment.environments = environments
         experiment.tags = tags

@@ -72,6 +72,7 @@ class EnvironmentMetadata:
     vagrantbox: str
     os: OsInfo
     postsetupinstallations: list[PostsetupInstallations] = attrs.Factory(list)
+    tags: list[str] = attrs.Factory(list)
     description: str = attrs.Factory(str)
 
 

@@ -171,3 +171,22 @@ class ExperimentCommandStage(Stage):
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = ExperimentRunStage
+
+
+@attrs.define
+class VagrantBoxExistCheckStage(Stage):
+    name: typing.ClassVar[str] = 'box_exist_check'
+    msg: typing.ClassVar[str] = 'check if vagrant box exists'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = None
+
+
+@attrs.define
+class RunDirectoryCreationStage(Stage):
+    name: typing.ClassVar[str] = 'run_dir_creation'
+    msg: typing.ClassVar[str] = 'create run directory'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = None
+

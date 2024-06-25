@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 def exec_experiment_load(arguments):
     if project_directory := determine_projectdirectory(arguments.project):
-        experiment_load(project_directory, arguments.experiment, force=arguments.force)
+        experiment_load(project_directory, arguments.environment, arguments.experiment, force=arguments.force)
     else:
         raise NoProjectFoundError(log, message='no project directory found')
 

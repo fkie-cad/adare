@@ -5,10 +5,10 @@ import pandas as pd
 from pathlib import Path
 
 # internal imports
-from adare.database.models.experiment import Project, Environment, Experiment, ExperimentRun, OsInfo, StageInRun, Stage, Event, Status, TestFunction, TestFunctionFile
+from adare.database.models.experiment import Project, Environment, Experiment, ExperimentRun, OsInfo, StageInRun, Stage, Event, Status, TestFunction, TestFunctionFile, TestParameter, AbstractTest
 from adare.database.api.database import DatabaseApi
 import adare.config.database as config_database
-from adarelib.exceptions import EnvironmentNotFoundError, ProjectNotFoundError, ExperimentNotFoundError
+from adarelib.exceptions import EnvironmentNotFoundError, ProjectNotFoundError, ExperimentNotFoundError, TestFunctionNotFoundError, ArgumentsError
 
 # configure logging
 import logging
@@ -45,9 +45,18 @@ class DataRetrievalApi(DatabaseApi):
         if not self._session.query(Experiment).filter_by(ulid=experiment_ulid).count():
             raise ExperimentNotFoundError(log, f'Experiment with ulid "{experiment_ulid}" not found')
 
+    def __enrich_project_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        data['object'] = [self._session.query(Project).filter_by(id=id).one() for id in data['id']]
+        data['environments'] = [self._session.query(Environment).filter_by(project_id=id).count() for id in data['id']]
+        data['environments_names'] = [', '.join([env.name for env in self._session.query(Environment).filter_by(project_id=id)]) for id in data['id']]
+        # remove object column
+        data = data.drop(columns=['object'])
+        return data
+
     def get_projects(self) -> pd.DataFrame:
-        # execute query and return result as pandas dataframe excluding the id column
-        return pd.read_sql(self._session.query(Project).statement, self._session.bind).map(str)
+        data = pd.read_sql(self._session.query(Project).statement, self._session.bind).map(str)
+        data = self.__enrich_project_data(data)
+        return data
 
     def get_project_details(self, project_name: str) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
         self.__check_project_exists(project_name)
@@ -74,49 +83,82 @@ class DataRetrievalApi(DatabaseApi):
         return pd.read_sql(self._session.query(Environment).filter(
             Environment.project.has(Project.name == project_name)).statement, self._session.bind).map(str)
 
-    def get_environment_details(self, project_name: str, environment_name: str) -> pd.DataFrame:
-        self.__check_project_exists(project_name)
-        self.__check_environment_exists_by_projenv(project_name, environment_name)
+    def __enrich_environment_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        data['object'] = [self._session.query(Environment).filter_by(ulid=id).one() for id in data['ulid']]
+        data['dotnotation'] = [obj.dotnotation for obj in data['object']]
+        data['osinfo'] = [str(obj.osinfo) for obj in data['object']]
+        data['osinfo_os'] = [obj.osinfo.os for obj in data['object']]
+        data['osinfo_distribution'] = [obj.osinfo.distribution for obj in data['object']]
+        data['osinfo_version'] = [obj.osinfo.version for obj in data['object']]
+        data['osinfo_language'] = [obj.osinfo.language for obj in data['object']]
+        data['osinfo_architecture'] = [obj.osinfo.architecture for obj in data['object']]
+        data['project_name'] = [obj.project.name for obj in data['object']]
+        data['tags'] = [', '.join([tag.name for tag in obj.tags]) for obj in data['object']]
+        # remove object column
+        data = data.drop(columns=['object'])
+        return data
 
-        environment_df = pd.read_sql(self._session.query(Environment).filter(
-            Environment.name == environment_name).filter(
-            Environment.project.has(Project.name == project_name)).statement, self._session.bind)
-        # convert all columns to string
-        environment_df = environment_df.map(str)
+    def get_environments(self) -> pd.DataFrame:
+        data = pd.read_sql(self._session.query(Environment).statement, self._session.bind).map(str)
+        data = self.__enrich_environment_data(data)
+        return data
+
+
+    def get_environment(self, project_name: str = None, environment_name: str = None, ulid: str = None) -> pd.DataFrame:
+        if ulid:
+            self.__check_environment_exists_by_ulid(ulid)
+            environment_df = pd.read_sql(self._session.query(Environment).filter_by(ulid=ulid).statement, self._session.bind).map(str)
+            self.__enrich_environment_data(environment_df)
+        elif project_name and environment_name:
+            self.__check_project_exists(project_name)
+            self.__check_environment_exists_by_projenv(project_name, environment_name)
+
+            environment_df = pd.read_sql(self._session.query(Environment).filter(
+                Environment.name == environment_name).filter(
+                Environment.project.has(Project.name == project_name)).statement, self._session.bind)
+            # convert all columns to string
+            environment_df = environment_df.map(str)
+            environment_df = self.__enrich_environment_data(environment_df)
+        else:
+            raise ArgumentsError(log, 'Either ulid or project_name and environment_name must be provided')
         return environment_df
 
-    def get_experiments_by_projectenvironment(self, project_name: str, environment_name: str) -> pd.DataFrame:
-        self.__check_project_exists(project_name)
-        self.__check_environment_exists_by_projenv(project_name, environment_name)
-        # execute query and return result as pandas dataframe excluding the id column
-        return pd.read_sql(self._session.query(Experiment).filter(
-            Experiment.environments.any(Environment.name == environment_name)).filter(
-            Experiment.environments.any(Environment.project.has(Project.name == project_name))).statement,
-                          self._session.bind).map(str)
+    def __enrich_experiment_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        data['object'] = [self._session.query(Experiment).filter_by(ulid=id).one() for id in data['ulid']]
+        data['environments'] = [', '.join([env.name for env in obj.environments]) for obj in data['object']]
+        data['environments_names'] = [', '.join([env.name for env in obj.environments]) for obj in data['object']]
+        data['tags'] = [', '.join([tag.name for tag in obj.tags]) for obj in data['object']]
+        # remove object column
+        data = data.drop(columns=['object'])
+        return data
 
-    def get_experiments_by_environmentulid(self, environment_ulid: str) -> pd.DataFrame:
-        self.__check_environment_exists_by_ulid(environment_ulid)
-        # execute query and return result as pandas dataframe excluding the id column
-        return pd.read_sql(self._session.query(Experiment).filter(
-            Experiment.environments.any(Environment.ulid == environment_ulid)).statement,
-                          self._session.bind).map(str)
+    def get_experiments(self):
+        data = pd.read_sql(self._session.query(Experiment).statement, self._session.bind).map(str)
+        data = self.__enrich_experiment_data(data)
+        return data
 
-    def get_experiment_details(self, project_name: str, environment_name: str, experiment_name: str) -> pd.DataFrame:
-        self.__check_project_exists(project_name)
-        self.__check_environment_exists_by_projenv(project_name, environment_name)
-        self.__check_experiment_exists_by_projenvexp(project_name, environment_name, experiment_name)
+    def get_experiment(self, project_name: str = None, environment_name: str = None, experiment_name: str = None, ulid: str = None) -> pd.DataFrame:
+        if ulid:
+            self.__check_experiment_exists_by_ulid(ulid)
+            experiment_df = pd.read_sql(self._session.query(Experiment).filter_by(ulid=ulid).statement, self._session.bind)
+            # convert all columns to string
+            experiment_df = experiment_df.map(str)
+            experiment_df = self.__enrich_experiment_data(experiment_df)
+        elif project_name and environment_name and experiment_name:
+            self.__check_project_exists(project_name)
+            self.__check_environment_exists_by_projenv(project_name, environment_name)
+            self.__check_experiment_exists_by_projenvexp(project_name, environment_name, experiment_name)
 
-        experiment_df = pd.read_sql(self._session.query(Experiment).filter(
-            Experiment.name == experiment_name).filter(
-            Experiment.environments.any(Environment.name == environment_name)).filter(
-            Experiment.environments.any(Environment.project.has(Project.name == project_name))).statement,
-                                     self._session.bind)
-        # convert all columns to string
-        experiment_df = experiment_df.map(str)
-        # add column environment and project
-        experiment_df['environment'] = environment_name
-        experiment_df['project'] = project_name
-
+            experiment_df = pd.read_sql(self._session.query(Experiment).filter(
+                Experiment.name == experiment_name).filter(
+                Experiment.environments.any(Environment.name == environment_name)).filter(
+                Experiment.environments.any(Environment.project.has(Project.name == project_name))).statement,
+                                         self._session.bind)
+            # convert all columns to string
+            experiment_df = experiment_df.map(str)
+            experiment_df = self.__enrich_experiment_data(experiment_df)
+        else:
+            raise ArgumentsError(log, 'Either ulid or project_name, environment_name and experiment_name must be provided')
         return experiment_df
 
     def get_experiment_details_by_ulid(self, experiment_ulid: str):
@@ -143,13 +185,16 @@ class DataRetrievalApi(DatabaseApi):
         data['project_name'] = self._session.query(Project).filter(
             Project.environments.any(Environment.ulid == data['environment_id'].values[0])).one().name
         data['object_run'] = self._session.query(ExperimentRun).filter_by(ulid=data['ulid'].values[0]).one()
+        data['object_environment'] = self._session.query(Environment).filter_by(ulid=data['environment_id'].values[0]).one()
         # access hybrid properties
         data['duration'] = [obj.duration for obj in data['object_run']]
         data['result_status'] = [obj.result_status for obj in data['object_run']]
         data['status'] = [obj.status for obj in data['object_run']]
         data['experiment_dotnotation'] = [obj.experiment_dotnotation for obj in data['object_run']]
+        data['box'] = [obj.vagrantbox for obj in data['object_environment']]
+        data['osinfo'] = [str(obj.osinfo) for obj in data['object_environment']]
         # remove object_run column
-        data = data.drop(columns=['object_run'])
+        data = data.drop(columns=['object_run', 'object_environment'])
         return data
 
     def get_runs(self, experiment_ulid: str = None, project_name: str = None, environment_name: str = None) -> pd.DataFrame:
@@ -167,7 +212,7 @@ class DataRetrievalApi(DatabaseApi):
         data = self.__enrich_run_data(data)
         return data
 
-    def get_run_details(self, run_ulid: str) -> pd.DataFrame:
+    def get_run(self, run_ulid: str) -> pd.DataFrame:
         data = pd.read_sql(self._session.query(ExperimentRun).filter_by(ulid=run_ulid).statement, self._session.bind).map(str)
         data = self.__enrich_run_data(data)
         return data
@@ -212,6 +257,27 @@ class DataRetrievalApi(DatabaseApi):
                 tests_data[event.abstract_test.name]['result_status_name'] = self._session.query(Status).filter_by(id=event.result.status).one().name
         return tests_data
 
+    def get_abstract_tests(self, experiment_ulid: str) -> dict:
+        experiment = self._session.query(Experiment).filter_by(ulid=experiment_ulid).one()
+        tests = experiment.abstract_tests
+        tests_data = {}
+        for test in tests:
+            tests_data[test.name] = {
+                'name': test.name,
+                'description': test.description,
+                'testfunction_name': test.testfunction.dotnotation,
+                'testfunction_description': test.testfunction.description,
+                'parameters': [
+                    {
+                        'name': parameter.parameter.name,
+                        'dtype': parameter.parameter.dtype,
+                        'value': parameter.value,
+                    }
+                    for parameter in test.parameters
+                ],
+            }
+        return tests_data
+
     def __enrich_testfunction_data(self, data: pd.DataFrame) -> pd.DataFrame:
         data['object'] = [self._session.query(TestFunction).filter_by(id=id).one() for id in data['id']]
         data['testfunction_file'] = [self._session.query(TestFunctionFile).filter_by(id=file_id).one() for file_id in data['file_id']]
@@ -231,11 +297,24 @@ class DataRetrievalApi(DatabaseApi):
         return data
 
     def get_testfunction(self, testfunction_id: int) -> (pd.DataFrame, pd.DataFrame):
-        testfunction = pd.read_sql(self._session.query(TestFunction).filter_by(id=testfunction_id).statement, self._session.bind).map(str)
-        testfunction = self.__enrich_testfunction_data(testfunction)
-        parameters = pd.read_sql(self._session.query(TestFunction.parameters).filter_by(id=testfunction_id).statement, self._session.bind).map(str)
-        return testfunction, parameters
+        try:
+            testfunction_data = pd.read_sql(self._session.query(TestFunction).filter_by(id=testfunction_id).statement, self._session.bind).map(str)
+        except sqlalchemy.orm.exc.NoResultFound:
+            raise TestFunctionNotFoundError(log, f'Testfunction with id "{testfunction_id}" not found')
+        testfunction_data = self.__enrich_testfunction_data(testfunction_data)
+        # get all parameters for the testfunction in a pandas dataframe (test parameters can be in multiple functions)
+        testfunction = self._session.query(TestFunction).filter_by(id=testfunction_id).one()
+        parameter_ids = [parameter.id for parameter in testfunction.parameters]
+        parameter_data = pd.read_sql(self._session.query(TestParameter).filter(TestParameter.id.in_(parameter_ids)).statement, self._session.bind).map(str)
+        return testfunction_data, parameter_data
 
     def testfunction_dotnotation_to_id(self, dotnotation: str) -> int:
-        return self._session.query(TestFunction).filter_by(dotnotation=dotnotation).one().id
+        file_name, function_name = dotnotation.split('.')
+        file_name_with_extension = file_name + '.py'
+        try:
+            testfunction_file = self._session.query(TestFunctionFile).filter_by(name=file_name_with_extension).one()
+            testfunction = self._session.query(TestFunction).filter_by(file_id=testfunction_file.id, name=function_name).one()
+        except sqlalchemy.orm.exc.NoResultFound:
+            raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found')
+        return testfunction.id
 
