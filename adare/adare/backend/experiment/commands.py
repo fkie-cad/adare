@@ -4,7 +4,6 @@ from datetime import datetime
 import threading
 from watchdog.observers import Observer
 import time
-import contextlib
 
 # internal imports
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
@@ -32,7 +31,7 @@ from adare.vagrantapi import vagrantutils
 from adarelib.breakpoint import BreakPoint
 from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
 from adarelib.types.stage import ExperimentIntegrityCheckStage, BoxRunStage, \
-    ProjectIntegrityCheckStage, BoxDestroyStage, CleanupStage
+    ProjectIntegrityCheckStage, BoxDestroyStage, CleanupStage, VagrantBoxExistCheckStage, RunDirectoryCreationStage
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.backend.experiment.threadingevents import experiment_event_manager
 from adarelib.config import StatusEnum
@@ -72,7 +71,7 @@ def __experiment_update(experiment_ulid, experiment_name, experiment_directory, 
     log.info(f'experiment {experiment_ulid} created')
 
 
-def experiment_load(project_path: Path, experiment_name: str, force: bool = False):
+def experiment_load(project_path: Path, environment_name, experiment_name: str, force: bool = False):
     experiment_directory = ExperimentDirectory(project_path, experiment_name)
     if not experiment_directory.exists():
         raise ExperimentDirectoryDoesNotExistError(
@@ -84,7 +83,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
     experiment_directory.check_for_missing_files()
 
     if experiment_ulid := experiment_database.get_experiment_by_project_and_name(
-            project_path, experiment_name
+            project_path, environment_name, experiment_name
     ):
         __experiment_update(
             experiment_ulid, experiment_name, experiment_directory, force, project_path
@@ -170,9 +169,9 @@ def __install_watchers(experimentrun_ulid: str, run_directory: Path, bp_director
     log.info('all watchers stopped')
 
 
-def __experiment_integrity_check(project_path: Path, experiment_name: str, experiment_directory: ExperimentDirectory):
-    experiment_hashes = experiment_database.get_experiment_hashes(project_path, experiment_name)
-    experiment_run_count = experiment_database.get_experiment_run_count(project_path, experiment_name)
+def __experiment_integrity_check(project_path: Path, experiment_name: str, environment_name:str, experiment_directory: ExperimentDirectory):
+    experiment_hashes = experiment_database.get_experiment_hashes(project_path, environment_name, experiment_name)
+    experiment_run_count = experiment_database.get_experiment_run_count(project_path, environment_name, experiment_name)
 
     file_changed = []
     if experiment_directory.sha256_action != experiment_hashes['action']:
@@ -286,162 +285,162 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
             project_path,
             experiment_name
         )
-
         # check integrity of the experiment and environment
         with StageCtxManager(ExperimentIntegrityCheckStage(), experiment_run_ulid):
-            __experiment_integrity_check(project_path, experiment_name, experiment_directory)
+            __experiment_integrity_check(project_path, experiment_name, environment_name, experiment_directory)
 
-        # get used testfunctions
-        testfunction_files = experiment_database.get_experiment_testfunction_files(project_path, experiment_name)
-        testfunction_files_names = ",".join([file.name for file in testfunction_files])
-        log.info(f'experiment {experiment_name} uses the following testfunction files: {testfunction_files_names}')
-
-        # get used environment
-        if environment_name:
-            environment_file = environment_database.get_environment_path_by_project_and_name(project_path,
-                                                                                             environment_name)
-        else:
-            environment_file = experiment_database.get_experiment_environment(project_path, experiment_name)
-            environment_name = environment_file.stem
+        with StageCtxManager(ProjectIntegrityCheckStage(),experiment_run_ulid):
+            # get used testfunctions
+            testfunction_files = experiment_database.get_experiment_testfunction_files(project_path, environment_name, experiment_name)
+            testfunction_files_names = ",".join([file.name for file in testfunction_files])
+            log.info(f'experiment {experiment_name} uses the following testfunction files: {testfunction_files_names}')
+            # get used environment
+            if environment_name:
+                environment_file = environment_database.get_environment_path_by_project_and_name(project_path,
+                                                                                                 environment_name)
+            else:
+                environment_file = experiment_database.get_experiment_environment(project_path,environment_name, experiment_name)
+                environment_name = environment_file.stem
 
         # check integrity of the project
-        with StageCtxManager(ProjectIntegrityCheckStage(),experiment_run_ulid):
             __project_integrity_check(project_path, project_directory, environments=[environment_file],
                                       testfunctions=testfunction_files)
 
         # get environment ulid
         environment_ulid = experiment_database.get_environment_ulid(project_path, environment_name)
 
-        # check if vagrant box is of the environment exists
-        vagrantbox_name = experiment_database.get_environment_vagrant_box(environment_ulid)
-        if not vagrantutils.is_box(vagrantbox_name):
-            raise VagrantBoxMissingError(
-                log,
-                f'vagrant box {vagrantbox_name} is missing',
-                possible_solutions=[
-                    'list all available boxes with `adare vagrant box list` to find the correct box',
-                    'add the missing box with `adare vagrant box add`'
-                ]
-            )
-        log.info(f'vagrant box {vagrantbox_name} found')
+        with StageCtxManager(VagrantBoxExistCheckStage(), experiment_run_ulid):
+            # check if vagrant box of the environment exists
+            vagrantbox_name = experiment_database.get_environment_vagrant_box(environment_ulid)
+            if not vagrantutils.is_box(vagrantbox_name):
+                raise VagrantBoxMissingError(
+                    log,
+                    f'vagrant box {vagrantbox_name} is missing',
+                    possible_solutions=[
+                        'list all available boxes with `adare vagrant box list` to find the correct box',
+                        'add the missing box with `adare vagrant box add`'
+                    ]
+                )
+            log.info(f'vagrant box {vagrantbox_name} found')
 
-        environment_platform = experiment_database.get_environment_platform(environment_ulid)
-        shared_root_directory_vm = Path(SHARE_POINT_VM[environment_platform])
-        shared_root_directory_host = project_path
+            environment_platform = experiment_database.get_environment_platform(environment_ulid)
+            shared_root_directory_vm = Path(SHARE_POINT_VM[environment_platform])
+            shared_root_directory_host = project_path
 
-        # get directory for templates
-        templates_experiment_scripts = TEMPLATES_DIR / environment_platform
-        script_suffix = SCRIPTS_SUFFIX[environment_platform]
+            # get directory for templates
+            templates_experiment_scripts = TEMPLATES_DIR / environment_platform
+            script_suffix = SCRIPTS_SUFFIX[environment_platform]
 
-        # create run project structure
-        experiment_run_directory = ExperimentRunDirectory(project_directory, experiment_name, script_suffix)
-        experiment_run_directory.create()
+            with StageCtxManager(RunDirectoryCreationStage(), experiment_run_ulid):
+                # create run project structure
+                experiment_run_directory = ExperimentRunDirectory(project_directory, experiment_name, script_suffix)
+                experiment_run_directory.create()
 
-        # create experiment config file
-        run_config_file = ExperimentConfig(
-            experiment=experiment_name,
-            action=experiment_directory.get_path_relative_to_shared_directory('actionfile', shared_root_directory_host,
-                                                                              shared_root_directory_vm).as_posix(),
-            testset=experiment_directory.get_path_relative_to_shared_directory('testsetfile',
-                                                                               shared_root_directory_host,
-                                                                               shared_root_directory_vm).as_posix(),
-            testfunction_directory=project_directory.get_path_relative_to_shared_directory('testfunctions',
-                                                                                           shared_root_directory_host,
-                                                                                           shared_root_directory_vm).as_posix(),
-            tessdata=project_directory.get_path_relative_to_shared_directory('tessdata', shared_root_directory_host,
-                                                                             shared_root_directory_vm).as_posix(),
-            img=experiment_directory.get_path_relative_to_shared_directory('img', shared_root_directory_host,
-                                                                           shared_root_directory_vm).as_posix(),
-            logfile=experiment_run_directory.get_path_relative_to_shared_directory('log_file',
+            # create experiment config file
+            run_config_file = ExperimentConfig(
+                experiment=experiment_name,
+                action=experiment_directory.get_path_relative_to_shared_directory('actionfile', shared_root_directory_host,
+                                                                                  shared_root_directory_vm).as_posix(),
+                testset=experiment_directory.get_path_relative_to_shared_directory('testsetfile',
                                                                                    shared_root_directory_host,
                                                                                    shared_root_directory_vm).as_posix(),
-            eventfile=experiment_run_directory.get_path_relative_to_shared_directory('event_file',
-                                                                                     shared_root_directory_host,
-                                                                                     shared_root_directory_vm).as_posix(),
-            statusfile=experiment_run_directory.get_path_relative_to_shared_directory('status_file',
-                                                                                      shared_root_directory_host,
-                                                                                      shared_root_directory_vm).as_posix(),
-            breakpoint_directory=experiment_run_directory.get_path_relative_to_shared_directory('breakpoint_directory',
-                                                                                                shared_root_directory_host,
-                                                                                                shared_root_directory_vm).as_posix(),
-            breakpoints=breakpoints or []
-        )
-        experiment_run_directory.create_run_config(run_config_file)
+                testfunction_directory=project_directory.get_path_relative_to_shared_directory('testfunctions',
+                                                                                               shared_root_directory_host,
+                                                                                               shared_root_directory_vm).as_posix(),
+                tessdata=project_directory.get_path_relative_to_shared_directory('tessdata', shared_root_directory_host,
+                                                                                 shared_root_directory_vm).as_posix(),
+                img=experiment_directory.get_path_relative_to_shared_directory('img', shared_root_directory_host,
+                                                                               shared_root_directory_vm).as_posix(),
+                logfile=experiment_run_directory.get_path_relative_to_shared_directory('log_file',
+                                                                                       shared_root_directory_host,
+                                                                                       shared_root_directory_vm).as_posix(),
+                eventfile=experiment_run_directory.get_path_relative_to_shared_directory('event_file',
+                                                                                         shared_root_directory_host,
+                                                                                         shared_root_directory_vm).as_posix(),
+                statusfile=experiment_run_directory.get_path_relative_to_shared_directory('status_file',
+                                                                                          shared_root_directory_host,
+                                                                                          shared_root_directory_vm).as_posix(),
+                breakpoint_directory=experiment_run_directory.get_path_relative_to_shared_directory('breakpoint_directory',
+                                                                                                    shared_root_directory_host,
+                                                                                                    shared_root_directory_vm).as_posix(),
+                breakpoints=breakpoints or []
+            )
+            experiment_run_directory.create_run_config(run_config_file)
 
-        # setup paths to add to the PATH variable on the VM
-        paths_to_add = [
-            project_directory.get_path_relative_to_shared_directory('adare', shared_root_directory_host,
-                                                                    shared_root_directory_vm),
-            project_directory.get_path_relative_to_shared_directory('shared_tools', shared_root_directory_host,
-                                                                    shared_root_directory_vm),
-        ]
+            # setup paths to add to the PATH variable on the VM
+            paths_to_add = [
+                project_directory.get_path_relative_to_shared_directory('adare', shared_root_directory_host,
+                                                                        shared_root_directory_vm),
+                project_directory.get_path_relative_to_shared_directory('shared_tools', shared_root_directory_host,
+                                                                        shared_root_directory_vm),
+            ]
 
-        # create scripts
-        installation_script = create_installations_script(experiment_run_directory, environment_ulid,
-                                                          templates_experiment_scripts)
-        packagedump_script = create_packagedump_script(experiment_run_directory, templates_experiment_scripts)
-        run_script = create_run_script(
-            experimentrun_directory=experiment_run_directory,
-            project_directory=project_directory,
-            path_directories=paths_to_add,
-            template_directory=templates_experiment_scripts,
-            script_suffix=script_suffix,
-            shared_root_directory_host=shared_root_directory_host,
-            shared_root_directory_vm=shared_root_directory_vm
-        )
-        shutdown_script = create_shutdown_script(experiment_run_directory, templates_experiment_scripts)
-        wrapper_template = templates_experiment_scripts / f'run_script_wrapper{script_suffix}'
+            # create scripts
+            installation_script = create_installations_script(experiment_run_directory, environment_ulid,
+                                                              templates_experiment_scripts)
+            packagedump_script = create_packagedump_script(experiment_run_directory, templates_experiment_scripts)
+            run_script = create_run_script(
+                experimentrun_directory=experiment_run_directory,
+                project_directory=project_directory,
+                path_directories=paths_to_add,
+                template_directory=templates_experiment_scripts,
+                script_suffix=script_suffix,
+                shared_root_directory_host=shared_root_directory_host,
+                shared_root_directory_vm=shared_root_directory_vm
+            )
+            shutdown_script = create_shutdown_script(experiment_run_directory, templates_experiment_scripts)
+            wrapper_template = templates_experiment_scripts / f'run_script_wrapper{script_suffix}'
 
-        script_manager = ScriptManager(experiment_run_directory, shared_root_directory_host, shared_root_directory_vm,
-                                       wrapper_template)
-        script_manager.add_script(installation_script)
-        script_manager.add_script(packagedump_script)
-        script_manager.add_script(run_script)
-        script_manager.add_script(shutdown_script)
+            script_manager = ScriptManager(experiment_run_directory, shared_root_directory_host, shared_root_directory_vm,
+                                           wrapper_template)
+            script_manager.add_script(installation_script)
+            script_manager.add_script(packagedump_script)
+            script_manager.add_script(run_script)
+            script_manager.add_script(shutdown_script)
 
-        if environment_platform == 'windows':
-            script_manager.add_script(Script(
-                name=f'helperfunctions{script_suffix}',
-                source_directory=templates_experiment_scripts
-            ))
+            if environment_platform == 'windows':
+                script_manager.add_script(Script(
+                    name=f'helperfunctions{script_suffix}',
+                    source_directory=templates_experiment_scripts
+                ))
 
-        script_manager.render(experiment_run_directory.scripts_directory)
+            script_manager.render(experiment_run_directory.scripts_directory)
 
-        # todo: add network drive and mount scripts
+            # todo: add network drive and mount scripts
 
-        # create Vagrantfile
-        vagrantfile_ulid_str = make_string_path_safe(experiment_run_ulid)
+            # create Vagrantfile
+            vagrantfile_ulid_str = make_string_path_safe(experiment_run_ulid)
 
-        vm_name = f'{environment_name}{experiment_name}{vagrantfile_ulid_str}'
-        vagrantfile: VagrantFile = __create_vagrantfile(
-            vm_name,
-            experiment_run_directory,
-            environment_ulid,
-            shared_root_directory_vm,
-            shared_root_directory_host,
-            templates_experiment_scripts,
-            script_suffix
-        )
-        BP_HOST_AFTER_VAGRANTFILE_CREATION.trigger_if_in_breakpoints(breakpoints)
+            vm_name = f'{environment_name}{experiment_name}{vagrantfile_ulid_str}'
+            vagrantfile: VagrantFile = __create_vagrantfile(
+                vm_name,
+                experiment_run_directory,
+                environment_ulid,
+                shared_root_directory_vm,
+                shared_root_directory_host,
+                templates_experiment_scripts,
+                script_suffix
+            )
+            BP_HOST_AFTER_VAGRANTFILE_CREATION.trigger_if_in_breakpoints(breakpoints)
 
-        # todo: add network drive vm to Vagrantfile if needed
+            # todo: add network drive vm to Vagrantfile if needed
 
-        # generate vagrant box vm object
-        box = VagrantBoxVM.fromVagrantFileObject(
-            experiment_run_directory.path,
-            vagrantfile,
-            log_file=experiment_run_directory.log_file,
-            vm_name=experiment_run_directory.path.name
-        )
+            # generate vagrant box vm object
+            box = VagrantBoxVM.fromVagrantFileObject(
+                experiment_run_directory.path,
+                vagrantfile,
+                log_file=experiment_run_directory.log_file,
+                vm_name=experiment_run_directory.path.name
+            )
 
-        # create experiment run in database
-        experiment_run_ulid = experiment_database.update_experiment_run(
-            experiment_run_ulid,
-            experiment_name,
-            environment_name,
-            project_path.name,
-            experiment_run_directory
-        )
+            # create experiment run in database
+            experiment_run_ulid = experiment_database.update_experiment_run(
+                experiment_run_ulid,
+                experiment_name,
+                environment_name,
+                project_path.name,
+                experiment_run_directory
+            )
 
         # update experiment run in database
         experiment_database.update_experiment_run_start(experiment_run_ulid, timestamp_start)
@@ -491,8 +490,12 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
         experiment_database.update_experiment_run_status(experiment_run_ulid, StatusEnum.INTERRUPTED)
         log.info('keyboard interrupt received, stopping experiment run')
     finally:
-        if box_thread and box_thread.is_alive():
-            box_thread.join()
-        time.sleep(1)
-        flowconsole.stop()
+        try:
+            if box_thread and box_thread.is_alive():
+                box_thread.join()
+            time.sleep(1)
+            flowconsole.stop()
+        except KeyboardInterrupt:
+            flowconsole.log_interrupted(f'interrupt_wait', f'wait for the box to fully shut down')
+
 

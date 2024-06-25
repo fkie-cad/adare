@@ -59,6 +59,7 @@ class EnvironmentDbApi(ExperimentApi):
                 log,
                 f"Project with path '{project_path}' not found in database -> cannot create environment"
             )
+        tags = self.get_or_create_tags(environment_metadata.tags)
         environment = Environment(
             name=environment_metadata.name,
             project=project,
@@ -67,6 +68,7 @@ class EnvironmentDbApi(ExperimentApi):
             osinfo=os_info,
             sha256hash=sha256hash,
             file=environment_file.as_posix(),
+            tags=tags
         )
         environment.installations = self.__get_or_create_installations(environment_metadata.postsetupinstallations)
         self._session.add(environment)

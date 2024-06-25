@@ -53,8 +53,8 @@ class Testset:
                 ), self.event_system
         ) as event_ctx:
             toolpath = command.command.split(' ')[0]
-            toolpath = f'./{toolpath}'
-            command_path = f'./{command.command}'
+            toolpath = f'{toolpath}'
+            command_path = f'{command.command}'
             if not shutil.which(toolpath):
                 log.error(f'tool with path {toolpath} does NOT exist')
                 event_ctx.update(

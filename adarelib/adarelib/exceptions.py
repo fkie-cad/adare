@@ -89,3 +89,7 @@ class ExperimentNotFoundError(LoggedErrorException):
 
 class ArgumentsError(LoggedErrorException):
     pass
+
+
+class TestFunctionNotFoundError(LoggedErrorException):
+    pass

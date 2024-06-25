@@ -6,6 +6,7 @@ import re
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 import attrs
 from typing import Optional
+from threading import Event
 
 from adarelib.config import BREAKPOINT_LIMIT_SECONDS
 
@@ -18,14 +19,14 @@ class BreakPoint:
     name: str
     description: str
     usage: list[str]
-    file: Optional[Path] = None
+    file: Optional[Path] = attrs.field(default=None)
+    active: Optional[bool] = attrs.field(default=False)
 
     def trigger(self):
-        continue_value = False
-        while not continue_value:
-            user_input = input(f'(Breakpoint: {self.name}) Press y to continue: ')
-            if user_input == 'y':
-                continue_value = True
+        self.active = True
+
+    def resolve(self):
+        self.active = False
         if self.file:
             self.file.unlink()
 

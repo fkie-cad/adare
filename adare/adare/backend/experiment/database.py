@@ -17,18 +17,18 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def get_experiment_by_project_and_name(project_path: Path, experiment_name: str) -> str | None:
+def get_experiment_by_project_and_name(project_path: Path, environment_name: str, experiment_name: str) -> str | None:
     with ExperimentApi() as api:
-        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+        experiment = api.get_experiment_by_project_and_name(project_path, environment_name, experiment_name)
         if experiment is None:
             log.error('experiment not found')
             return None
         return experiment.ulid
 
 
-def get_experiment_hashes(project_path: Path, experiment_name: str) -> dict:
+def get_experiment_hashes(project_path: Path, environment_name: str, experiment_name: str) -> dict:
     with ExperimentApi() as api:
-        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+        experiment = api.get_experiment_by_project_and_name(project_path, environment_name, experiment_name)
         if experiment is None:
             log.error('experiment not found')
             raise ValueError('experiment not found')
@@ -40,9 +40,9 @@ def get_experiment_hashes(project_path: Path, experiment_name: str) -> dict:
         }
 
 
-def get_experiment_run_count(project_path: Path, experiment_name: str) -> int:
+def get_experiment_run_count(project_path: Path, environment_name: str, experiment_name: str) -> int:
     with ExperimentApi() as api:
-        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+        experiment = api.get_experiment_by_project_and_name(project_path, environment_name,  experiment_name)
         if experiment is None:
             log.error('experiment not found')
             raise ValueError('experiment not found')
@@ -51,7 +51,7 @@ def get_experiment_run_count(project_path: Path, experiment_name: str) -> int:
 
 def create_experiment(name: str, project_path: Path, experiment_directory: ExperimentDirectory) -> Experiment:
     with ExperimentApi() as api:
-        experiment = api.create_experiment(name, project_path, experiment_directory)
+        experiment = api.create_experiment(name, experiment_directory)
     return experiment
 
 
@@ -113,10 +113,10 @@ def update_experiment_run_start(experiment_run_ulid: str, timestamp: datetime):
         api.update_experiment_run_start(experiment_run_ulid, timestamp)
 
 
-def get_experiment_testfunction_files(project_path: Path, experiment_name: str):
+def get_experiment_testfunction_files(project_path: Path, environment_name: str,  experiment_name: str):
     testfunction_files = []
     with ExperimentApi() as api:
-        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+        experiment = api.get_experiment_by_project_and_name(project_path, environment_name, experiment_name)
         for abs_test in experiment.abstract_tests:
             if abs_test.testfunction.file.name not in testfunction_files:
                 testfunction_files.append(Path(abs_test.testfunction.file.path))
@@ -128,9 +128,9 @@ def update_experiment_run_status(experiment_run_ulid: str, status: int):
         api.update_experiment_run_status(experiment_run_ulid, status)
 
 
-def get_experiment_environment(project_path: Path, experiment_name: str):
+def get_experiment_environment(project_path: Path, environment_name: str,  experiment_name: str):
     with ExperimentApi() as api:
-        experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+        experiment = api.get_experiment_by_project_and_name(project_path,environment_name,  experiment_name)
         if experiment is None:
             log.error('experiment not found')
             raise ValueError('experiment not found')
