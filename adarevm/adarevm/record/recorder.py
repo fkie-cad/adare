@@ -1,4 +1,6 @@
 import os
+import time
+
 import pyautogui
 from pynput import mouse, keyboard
 from datetime import datetime
@@ -31,11 +33,10 @@ class Recorder:
             file.write(f"{datetime.now()} - {key}\n")
 
     def __on_mouse_click(self, x, y, button, pressed):
-        if pressed:
-            timestamp = datetime.now().timestamp()
-            with open(self.logfile, "a") as file:
-                file.write(f"{timestamp} - {button} - {pressed} - {x} - {y}\n")
-            self.__screenshot(str(timestamp))
+        timestamp = datetime.now().timestamp()
+        with open(self.logfile, "a") as file:
+            file.write(f"{timestamp} - {button} - {pressed} - {x} - {y}\n")
+        self.__screenshot(str(timestamp))
 
     def __hide_cursor(self):
         if self.system == "Windows":
@@ -72,20 +73,10 @@ class Recorder:
 
 
 if __name__ == "__main__":
-
-    d = display.Display()
-    root = d.screen().root
-    root.grab_pointer(True, X.ButtonPressMask | X.ButtonReleaseMask | X.PointerMotionMask,
-                      X.GrabModeAsync, X.GrabModeAsync, X.NONE, X.NONE, X.CurrentTime)
-
-    while True:
-        event = d.next_event()
-        handle_event(event)
-
-    # screenshot_directory = Path("screenshots")
-    # logfile = Path("log.txt")
-    #
-    # recorder = Recorder(screenshot_directory, logfile)
-    # recorder.start()
-    #
-    # input("Press Enter to stop recording...")
+    screenshot_directory = Path("screenshots")
+    screenshot_directory.mkdir(exist_ok=True)
+    logfile = Path("log.txt")
+    recorder = Recorder(screenshot_directory, logfile)
+    recorder.start()
+    time.sleep(40)
+    recorder.stop()

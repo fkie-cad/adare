@@ -496,9 +496,6 @@ class Experiment(SerializerMixin, Base):
     sha256_markdown = Column(String, nullable=True)
     sha256 = Column(String, nullable=True)
 
-    in_request = Column(Boolean, default=False)
-    published = Column(Boolean, default=False)
-
     smbdrive_id = Column(Integer, ForeignKey('smbdrive.id'), nullable=True)
     smbdrive = relationship(SMBDrive)
     nfsdrive_id = Column(Integer, ForeignKey('nfsdrive.id'), nullable=True)
@@ -508,6 +505,11 @@ class Experiment(SerializerMixin, Base):
     environments = relationship(Environment, secondary=mapping_experiment_environment, backref='experiments')
 
     created_at = Column(DateTime, nullable=True, default=datetime.now)
+
+    # web app properties
+    in_request = Column(Boolean, default=False)
+    published = Column(Boolean, default=False)
+    remote_ulid = Column(String, nullable=True, default=None)
 
     @hybrid_property
     def environments_names(self):
@@ -533,8 +535,8 @@ class Event(SerializerMixin, Base):
     error = Column(String)
     stage = Column(Boolean, default=False)
     group_id = Column(Integer)
-    stage_in_run_id = Column(Integer, ForeignKey('stageinrun.id'), nullable=True, default=None)
-    stage_in_run = relationship("StageInRun", backref=backref("events", cascade="all, delete-orphan"))
+    #stage_in_run_id = Column(Integer, ForeignKey('stageinrun.id'), nullable=True, default=None)
+    #stage_in_run = relationship("StageInRun", backref=backref("events", cascade="all, delete-orphan"))
 
     timestamp = Column(DateTime)
 
