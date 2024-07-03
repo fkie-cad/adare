@@ -1,15 +1,19 @@
 from .configdirectory import APPDATA_DIR
 from .exceptions import ConfigDirectoryError
 
+import logging
+log = logging.getLogger(__name__)
+
 
 def get_cookie_file():
     if not APPDATA_DIR:
-        raise ConfigDirectoryError('the config directory could not be set')
+        raise ConfigDirectoryError(log, 'the config directory could not be set')
 
     return APPDATA_DIR / 'adare.cookies'
 
 
-WEBSERVER_URL = 'https://adare.seclab-bonn.de/'
+# WEBSERVER_URL = 'https://adare.seclab-bonn.de/'
+WEBSERVER_URL = 'http://localhost:8000/'
 API_URL = f'{WEBSERVER_URL}api/'
 LOGIN_URL = f'{WEBSERVER_URL}api/user/login/'
 LOGOUT_URL = f'{WEBSERVER_URL}api/user/logout/'
