@@ -2,12 +2,13 @@
 from datetime import datetime
 import aiohttp
 import asyncio
+import requests
 
 # internal imports
 import adare.config.server as config_server
 from adare.database.api.usersession import UserSessionApi
-from adare.webappaccess.request_header import get_authenticated_request_header
 from adare.webappaccess.webapp import check_webserver_availability
+from adare.webappaccess.exceptions import NotLoggedInError
 
 # configure logging
 import logging
@@ -60,7 +61,10 @@ class WebappLogin:
             else:
                 # expunge the user session from the sqlalchemy session to prevent errors
                 user_session_api._session.expunge(user_session)
-                return user_session
+                return {
+                    'django_token': user_session.django_token.token,
+                    'gitea_token': user_session.gitea_token.token,
+                }
 
     async def login(self, username, password):
         req_session = aiohttp.ClientSession()
@@ -99,12 +103,12 @@ class WebappLogin:
         req_session = aiohttp.ClientSession()
 
         url = config_server.LOGOUT_URL
-        token = self.get_user_session(username).token
-        if not token:
+        user_session = self.get_user_session(username)
+        if not user_session:
             log.error(f"user '{username}' is not logged in")
             await req_session.close()
             return False
-        header = get_authenticated_request_header(token)
+        header = self.get_django_authenticated_request_header()
         async with req_session.post(url, json={'username': username}, headers=header) as response:
             if response.status == 204:
                 log.debug("Logout successful")
@@ -115,3 +119,38 @@ class WebappLogin:
                 log.error("Logout failed")
                 await req_session.close()
                 return False
+
+    def get_django_authenticated_request_header(self):
+        user_session = self.get_user_session()
+        if not user_session:
+            raise NotLoggedInError(log, message='user is not logged in')
+        header = {
+            'Referer': config_server.WEBSERVER_URL,
+            'Authorization': f'Token {user_session["django_token"]}'
+        }
+        return header
+
+    def get_gitea_authenticated_request_header(self):
+        user_session = self.get_user_session()
+        if not user_session:
+            raise NotLoggedInError(log, message='user is not logged in')
+        user_session_token = user_session['gitea_token']
+        if not user_session_token:
+            return None
+        header = {
+            'Referer': config_server.WEBSERVER_URL,
+            'Authorization': f'token {user_session_token}'
+        }
+        return header
+
+    def get_django_session(self):
+        header = self.get_django_authenticated_request_header()
+        session = requests.Session()
+        session.headers.update(header)
+        return session
+
+    def get_gitea_session(self):
+        header = self.get_gitea_authenticated_request_header()
+        session = requests.Session()
+        session.headers.update(header)
+        return session

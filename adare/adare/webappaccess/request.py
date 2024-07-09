@@ -165,8 +165,6 @@ async def send_experiment_request(request_ulid: str):
                     log.error(f"request error ({resp.status}, {response_text})")
                     error_msg = f"request error ({resp.status}, {response_text})"
 
-
-
         except asyncio.exceptions.TimeoutError as e:
             log.error("request failed due to timeout")
             error_msg = f"server ({config_server.WEBSERVER_URL}) is not reachable (timeout)"

@@ -11,7 +11,7 @@ import adare.backend.experiment.database as experiment_database
 import adare.backend.project.database as project_database
 import adare.backend.environment.database as environment_database
 from adare.backend.experiment.exceptions import ExperimentDirectoryAlreadyExistsError, \
-    ExperimentDirectoryDoesNotExistError, VagrantBoxMissingError, ExperimentIntegrityError
+    ExperimentDirectoryDoesNotExistError, VagrantBoxMissingError, ExperimentIntegrityError, ExperimentAlreadyExistsError
 from adarelib.exceptions import LoggedException
 from adare.backend.project.directory import ProjectDirectory
 from adare.backend.experiment.scripts import create_installations_script, create_packagedump_script, create_run_script, create_shutdown_script
@@ -35,6 +35,7 @@ from adarelib.types.stage import ExperimentIntegrityCheckStage, BoxRunStage, \
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.backend.experiment.threadingevents import experiment_event_manager
 from adarelib.config import StatusEnum
+from adare.webappaccess.download import download_experiment
 # keep this to activate the event listeners for the database
 import adare.database.events.stage
 
@@ -497,5 +498,20 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
             flowconsole.stop()
         except KeyboardInterrupt:
             flowconsole.log_interrupted(f'interrupt_wait', f'wait for the box to fully shut down')
+
+
+def experiment_download(project: Path, experiment_ulid: str):
+    # check if experiment exists in database
+    exp = experiment_database.get_experiment_by_ulid(experiment_ulid)
+    if exp:
+        raise ExperimentAlreadyExistsError(
+            log,
+            f'experiment {exp} already exists',
+        )
+
+    # download experiment from webapp
+    project = ProjectDirectory(project)
+    download_experiment(experiment_ulid, project.experiments)
+    log.info(f'experiment {experiment_ulid} downloaded')
 
 

@@ -39,3 +39,6 @@ def list_testfunctions():
         return api.get_testfunctions_by_file()
 
 
+def testfunction_exists(name: str):
+    with TestfunctionDbApi() as api:
+        return api.testfunction_exists(name)

@@ -13,7 +13,7 @@ from adare.cli.gui import exec_gui
 from adare.cli.help import exec_help_breakpoints
 from adare.cli.showversion import exec_show_version
 from adare.cli.show import exec_show_projects, exec_show_environment, exec_show_environments, exec_show_experiment, exec_show_runs, exec_show_run, exec_show_testfunctions, exec_show_testfunction, exec_show_experiments
-from adare.cli.web import exec_web_login, exec_web_logout
+from adare.cli.web import exec_web_login, exec_web_logout, exec_download_experiment, exec_download_testfunction, exec_download_environment
 from adare.cli.testfunction import exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 from adare.setup_logging import setup_logging
 from adarelib.exceptions import LoggedException, LoggedErrorException
@@ -148,6 +148,24 @@ def main():
 
     web_logout = web_subparsers.add_parser('logout', help='logout from the web interface')
     web_logout.set_defaults(func=lambda args: exec_with_error_printing(exec_web_logout, args))
+
+    web_download = web_subparsers.add_parser('download', help='download an experiment or testfunction from the web interface')
+    web_download.add_argument('--project', '-p', required=False, help='name of the project')
+    web_download.set_defaults(func=lambda args: web_download.print_help())
+    web_download_subparsers = web_download.add_subparsers()
+
+    web_download_experiment = web_download_subparsers.add_parser('experiment', help='download an experiment')
+    web_download_experiment.add_argument('ulid', help='ulid of the experiment to download')
+    web_download_experiment.set_defaults(func=lambda args: exec_with_error_printing(exec_download_experiment, args))
+
+    web_download_testfunction = web_download_subparsers.add_parser('testfunction', help='download a testfunction')
+    web_download_testfunction.add_argument('name', help='name of the testfunction to download')
+    web_download_testfunction.set_defaults(func=lambda args: exec_with_error_printing(exec_download_testfunction, args))
+
+    web_download_environment = web_download_subparsers.add_parser('environment', help='download an environment')
+    web_download_environment.add_argument('name', help='name of the environment to download')
+    web_download_environment.set_defaults(func=lambda args: exec_with_error_printing(exec_download_environment, args))
+
 
     # commands: adare help
     help_sp = subparsers.add_parser('help', help='show help for special options')

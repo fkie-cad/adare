@@ -16,7 +16,7 @@ class LoginInterface:
     def __init__(self):
         self.login_interface = WebappLogin()
         session = self.login_interface.get_user_session(None)
-        self.user = session.username if session else None
+        # self.user = session.username if session else None
 
     async def login(self, username, password):
         result, error_msg  = await self.login_interface.login(username, password)
@@ -34,12 +34,13 @@ class LoginInterface:
 
 
     def update_login_status(self, username):
-        user_session = self.login_interface.get_user_session(username)
-        if not user_session:
-            self.logged_in = False
-            return
-        if not self.user:
-            self.user = user_session.username
-        self.logged_in = True
+        pass
+        # user_session = self.login_interface.get_user_session(username)
+        # if not user_session:
+        #     self.logged_in = False
+        #     return
+        # if not self.user:
+        #     self.user = user_session.username
+        # self.logged_in = True
 
 LoginIface = LoginInterface()
