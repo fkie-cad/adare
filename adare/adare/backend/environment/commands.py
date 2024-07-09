@@ -12,8 +12,8 @@ from adare.config.configdirectory import TEMPLATES_DIR
 from adarelib.helperfunctions.cli import print_df
 from adarelib.parsers import parse_environment_file
 from adarelib.exceptions import TemplateMissingError
-from adare.backend.environment.exceptions import EnvironmentLoadFailed, EnvironmentFileAlreadyExists
-
+from adare.backend.environment.exceptions import EnvironmentLoadFailed, EnvironmentFileAlreadyExists, EnvironmentDoesNotExistInDatabase
+from adare.webappaccess.download import download_environment
 
 # configure logging
 import logging
@@ -89,6 +89,25 @@ def environment_create(project: Path, environment: str):
 def environment_delete(environment_ulid: str, force: bool = False):
     environment_database.delete_environment(environment_ulid, force=force)
     log.info('environment deleted')
+
+
+def environment_download(project: Path, environment_name: str):
+    # check if environment exists in database
+    try:
+        env = environment_database.get_environment_path_by_project_and_name(project, environment_name)
+        raise EnvironmentFileAlreadyExists(
+            log,
+            f'environment file {env} already exists',
+        )
+    except EnvironmentDoesNotExistInDatabase:
+        pass
+
+    # download environment from webapp
+    project_directory = ProjectDirectory(project)
+    download_environment(environment_name, Path(f'{project_directory.environments}/{environment_name}.yml'))
+    log.info(f'environment {environment_name} downloaded')
+
+
 
 #
 # def environment_list(project: Path):

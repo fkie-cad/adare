@@ -146,6 +146,9 @@ class ExperimentApi(ProjectDbApi):
             .first()
         )
 
+    def get_experiment_by_ulid(self, experiment_ulid: str) -> Experiment:
+        return self._session.query(Experiment).filter_by(ulid=experiment_ulid).first()
+
     def __create_logfile(self, path: Path) -> LogFile:
         logfile = LogFile(
             name=path.name,

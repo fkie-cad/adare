@@ -48,3 +48,7 @@ class NoEnvironmentError(LoggedErrorException):
 
 class MultipleEnvironmentsError(LoggedErrorException):
     pass
+
+
+class ExperimentAlreadyExistsError(LoggedErrorException):
+    pass

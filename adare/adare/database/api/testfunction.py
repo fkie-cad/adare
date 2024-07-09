@@ -282,3 +282,6 @@ class TestfunctionDbApi(ExperimentApi):
             ]
             for testfunction_file in self._session.query(TestFunctionFile).all()
         }
+
+    def testfunction_exists(self, name: str):
+        return self._session.query(sqlalchemy.exists().where(TestFunction.name == name)).scalar()

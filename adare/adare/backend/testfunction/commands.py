@@ -7,7 +7,7 @@ import adare.backend.testfunction.database as testfunction_database
 from adare.backend.testfunction.directory import TestfunctionDirectory
 from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
 from adarelib.helperfunctions.cli import print_df
-
+from adare.webappaccess.download import download_testfunction
 
 # configure logging
 import logging
@@ -45,3 +45,22 @@ def testfunction_list():
     for file, data in testfunction_by_file.items():
         print_df(pd.DataFrame(data), title=str(file))
 
+
+def testfunction_download(project_path: Path, name: str):
+    # check if testfunction already exists
+    if testfunction_database.testfunction_exists(name):
+        raise TestfunctionMissingFileError(
+            log,
+            message=f'Testfunction {name} already exists',
+        )
+
+    testfunction_directory = TestfunctionDirectory(project_path, name)
+    if testfunction_directory.testfunction_exists():
+        raise TestfunctionMissingFileError(
+            log,
+            message=f'Testfunction {name} already exists',
+        )
+    # create testfunction directory
+    testfunction_directory.path.mkdir(parents=True, exist_ok=True)
+    download_testfunction(name, testfunction_directory.path)
+    log.info(f'Testfunction {name} downloaded')

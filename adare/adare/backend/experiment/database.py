@@ -26,6 +26,11 @@ def get_experiment_by_project_and_name(project_path: Path, environment_name: str
         return experiment.ulid
 
 
+def get_experiment_by_ulid(experiment_ulid: str) -> Experiment:
+    with ExperimentApi() as api:
+        return api.get_experiment_by_ulid(experiment_ulid)
+
+
 def get_experiment_hashes(project_path: Path, environment_name: str, experiment_name: str) -> dict:
     with ExperimentApi() as api:
         experiment = api.get_experiment_by_project_and_name(project_path, environment_name, experiment_name)
