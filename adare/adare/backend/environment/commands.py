@@ -9,15 +9,34 @@ from adarelib.types.backend import EnvironmentMetadata
 from adare.backend.project.directory import ProjectDirectory
 from adarelib.helperfunctions.hash import hash_file_sha256
 from adare.config.configdirectory import TEMPLATES_DIR
-from adarelib.helperfunctions.cli import print_df
 from adarelib.parsers import parse_environment_file
 from adarelib.exceptions import TemplateMissingError
 from adare.backend.environment.exceptions import EnvironmentLoadFailed, EnvironmentFileAlreadyExists, EnvironmentDoesNotExistInDatabase
-from adare.webappaccess.download import download_environment
+from adare.webappaccess.download import download_environment, sync
+from adare.webappaccess.login import is_logged_in
+from adarelib.exceptions import NotLoggedInError
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
+
+
+def environment_sync(environment_ulid: str):
+    if not is_logged_in():
+        log.info(f'sync not possible because user is not logged in')
+        return
+    # get environment from database
+    sha256 = environment_database.get_environment_hash(environment_ulid)
+    # download environment from webapp
+    metadata_remote = sync(sha256, 'environment')
+    if not metadata_remote:
+        log.info(f'environment {environment_ulid} does not exist remotely')
+        return
+    is_published = metadata_remote.get('published')
+    remote_url = metadata_remote.get('gitea_url')
+    remote_ulid = metadata_remote.get('ulid')
+    environment_database.sync_environment(environment_ulid, remote_ulid, remote_url, is_published)
+    log.info(f'environment {environment_ulid} synced')
 
 
 def environment_load(project: Path, environment: str, force: bool = False):
@@ -49,7 +68,11 @@ def environment_load(project: Path, environment: str, force: bool = False):
             ]
         )
 
-    environment_database.update_environment(project, environment_configuration, environment_file, environment_file_sha256, force=force)
+    environment_ulid = environment_database.update_environment(project, environment_configuration, environment_file, environment_file_sha256, force=force)
+    if not environment_ulid:
+        log.error(f'environment update failed')
+        return
+    environment_sync(environment_ulid)
     log.info(f'environment file {environment_file} loaded')
 
 
@@ -92,6 +115,8 @@ def environment_delete(environment_ulid: str, force: bool = False):
 
 
 def environment_download(project: Path, environment_name: str):
+    if not is_logged_in():
+        raise NotLoggedInError(log)
     # check if environment exists in database
     try:
         env = environment_database.get_environment_path_by_project_and_name(project, environment_name)
@@ -105,6 +130,7 @@ def environment_download(project: Path, environment_name: str):
     # download environment from webapp
     project_directory = ProjectDirectory(project)
     download_environment(environment_name, Path(f'{project_directory.environments}/{environment_name}.yml'))
+    print(f'environment {environment_name} downloaded successfully')
     log.info(f'environment {environment_name} downloaded')
 
 

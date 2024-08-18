@@ -93,3 +93,10 @@ class ArgumentsError(LoggedErrorException):
 
 class TestFunctionNotFoundError(LoggedErrorException):
     pass
+
+
+class NotLoggedInError(LoggedErrorException):
+    def __init__(self, log):
+        super().__init__(log, 'User is not logged in', possible_solutions=[
+            'Please login using the command `adare web login`'
+        ])

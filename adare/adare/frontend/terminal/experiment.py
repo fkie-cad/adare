@@ -76,7 +76,6 @@ class InfoPanel:
         return Panel(grid, title=title, border_style="blue", title_align="left")
 
 
-
 class ExperimentPanel:
     experiment: pd.DataFrame
     abstract_tests: dict
@@ -86,20 +85,20 @@ class ExperimentPanel:
         self.abstract_tests = abstract_tests
 
     def __rich__(self) -> Panel:
-        layout = Layout(name="exp")
-        layout.split_row(
+        layout = Layout()
+        layout.split(
+            Layout(name="tags", size=1),
+            Layout(name="data"),
+        )
+        layout["data"].split_row(
             Layout(name="info", ratio=1),
             Layout(name="tests", ratio=2)
         )
-        layout["info"].split(
-            Layout(name="tags", size=1),
-            Layout(name="info_panel")
-        )
         info = InfoPanel(self.experiment)
         tests = TestsPanel(self.abstract_tests)
-        layout["info"]["info_panel"].update(info)
-        layout["info"]["tags"].update(TagsText(self.experiment['tags'].values[0]))
-        layout["tests"].update(tests)
+        layout["data"]["info"].update(info)
+        layout["tags"].update(TagsText(self.experiment['tags'].values[0]))
+        layout["data"]["tests"].update(tests)
         title = f'[b gold3]{self.experiment["name"].values[0]}[/b gold3]'
         return Panel(layout, title=title, border_style="blue", title_align="left")
 

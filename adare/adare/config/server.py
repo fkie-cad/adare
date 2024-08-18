@@ -16,6 +16,7 @@ WEBSERVER_URL = 'https://adare.seclab-bonn.de/'
 # WEBSERVER_URL = 'http://localhost:8000/'
 API_URL = f'{WEBSERVER_URL}api/'
 DOWNLOAD_API_URL = f'{API_URL}download/'
+HASH_API_URL = f'{API_URL}hash/'
 LOGIN_URL = f'{WEBSERVER_URL}api/user/login/'
 LOGOUT_URL = f'{WEBSERVER_URL}api/user/logout/'
 CSRF_URL = f'{WEBSERVER_URL}api/csrf/'
@@ -23,6 +24,7 @@ ADD_EXPERIMENT_URL = f'{WEBSERVER_URL}api/experiment/add'
 CHECK_EXPERIMENT_URL = f'{WEBSERVER_URL}api/experiment/check'
 CHECK_REQUEST_URL = f'{WEBSERVER_URL}api/request/check'
 ADD_EXPERIMENT_REQUEST_URL = f'{WEBSERVER_URL}api/request/experiment/create/'
+PUBLISH_RUN_URL = f'{WEBSERVER_URL}api/run/publish/'
 
 TIMEOUT_SECONDS = 10
 

@@ -11,7 +11,7 @@ import adare.backend.experiment.database as experiment_database
 import adare.backend.project.database as project_database
 import adare.backend.environment.database as environment_database
 from adare.backend.experiment.exceptions import ExperimentDirectoryAlreadyExistsError, \
-    ExperimentDirectoryDoesNotExistError, VagrantBoxMissingError, ExperimentIntegrityError, ExperimentAlreadyExistsError
+    ExperimentDirectoryDoesNotExistError, VagrantBoxMissingError, ExperimentIntegrityError, ExperimentAlreadyExistsError, ExperimentNotChanged
 from adarelib.exceptions import LoggedException
 from adare.backend.project.directory import ProjectDirectory
 from adare.backend.experiment.scripts import create_installations_script, create_packagedump_script, create_run_script, create_shutdown_script
@@ -35,13 +35,34 @@ from adarelib.types.stage import ExperimentIntegrityCheckStage, BoxRunStage, \
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.backend.experiment.threadingevents import experiment_event_manager
 from adarelib.config import StatusEnum
-from adare.webappaccess.download import download_experiment
+from adare.webappaccess.download import download_experiment, sync
+from adare.webappaccess.login import is_logged_in
+from adarelib.exceptions import NotLoggedInError
 # keep this to activate the event listeners for the database
 import adare.database.events.stage
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
+
+
+def experiment_sync(experiment_ulid: str):
+    if not is_logged_in():
+        log.info(f'sync is not possible because user is not logged in')
+        return
+    # get experiment from database
+    sha256 = experiment_database.get_experiment_hash(experiment_ulid)
+    # download experiment from webapp
+    metadata_remote = sync(sha256, 'experiment')
+    if not metadata_remote:
+        log.info(f'experiment {experiment_ulid} does not exist remotely')
+        return
+    is_published = metadata_remote.get('published')
+    remote_url = metadata_remote.get('gitea_url')
+    remote_ulid = metadata_remote.get('ulid')
+    abstract_tests_ulids = metadata_remote.get('abstract_tests_ulids')
+    experiment_database.sync_experiment(experiment_ulid, remote_ulid, abstract_tests_ulids, remote_url, is_published)
+    log.info(f'experiment {experiment_ulid} synced')
 
 
 def experiment_create(project_path: Path, experiment: str):
@@ -56,7 +77,7 @@ def experiment_create(project_path: Path, experiment: str):
 
 def __experiment_update(experiment_ulid, experiment_name, experiment_directory, force, project_path):
     if not experiment_database.check_for_experiment_change(experiment_ulid, experiment_directory.sha256):
-        raise LoggedException(log, f'experiment [i]{experiment_ulid}[/i] has not changed')
+        raise ExperimentNotChanged(log, f'experiment [i]{experiment_ulid}[/i] has not changed')
     log.info(f'experiment {experiment_ulid} has changed')
     if not force:
         raise LoggedException(log,
@@ -66,7 +87,6 @@ def __experiment_update(experiment_ulid, experiment_name, experiment_directory, 
     log.info(f'experiment {experiment_ulid} removed')
     experiment_database.create_experiment(
         name=experiment_name,
-        project_path=project_path,
         experiment_directory=experiment_directory
     )
     log.info(f'experiment {experiment_ulid} created')
@@ -82,21 +102,25 @@ def experiment_load(project_path: Path, environment_name, experiment_name: str, 
             ]
         )
     experiment_directory.check_for_missing_files()
-
     if experiment_ulid := experiment_database.get_experiment_by_project_and_name(
             project_path, environment_name, experiment_name
     ):
-        __experiment_update(
-            experiment_ulid, experiment_name, experiment_directory, force, project_path
-        )
+        try:
+            __experiment_update(
+                experiment_ulid, experiment_name, experiment_directory, force, project_path
+            )
+        except ExperimentNotChanged as e:
+            experiment_sync(experiment_ulid)
+            raise e
     else:
         # create a new experiment in the database
-        experiment_database.create_experiment(
+        experiment_ulid = experiment_database.create_experiment(
             name=experiment_name,
-            project_path=project_path,
             experiment_directory=experiment_directory
         )
         log.info(f'experiment {experiment_name} created')
+
+    experiment_sync(experiment_ulid)
 
 
 def __create_vagrantfile(vg_vm_name: str, experiment_run_directory: ExperimentRunDirectory, environment_ulid: str,
@@ -212,22 +236,27 @@ def __experiment_integrity_check(project_path: Path, experiment_name: str, envir
 
 def __project_integrity_check(project_path: Path, project_directory: ProjectDirectory, environments: list[Path] = None,
                               testfunctions: list[Path] = None):
-    testfunctions_changed = []
-    hashes: dict = project_database.get_project_testfunction_hashes(project_path)
-    for file, hash_value in hashes.items():
+    testfunctions_changed: list = []
+    hashes: list = project_database.get_project_testfunction_hashes(project_path)
+    for hash_dict in hashes:
+        file = hash_dict['file']
+        requirements_file = hash_dict['requirements']
+        hash_value = hash_dict['hash']
         path = Path(file)
+        requirements_path = Path(requirements_file)
+
         if testfunctions and path not in testfunctions:
             continue
 
-        if project_directory.get_testfunction_hash(path) != hash_value:
+        if project_directory.get_testfunction_hash(path, requirements_path) != hash_value:
             testfunctions_changed.append(path)
-            log.info(f'integrity check for testfunction {path} failed')
+            log.info(f'integrity check for testfunction file {path} failed')
         else:
-            log.info(f'integrity check for testfunction {path} passed')
+            log.info(f'integrity check for testfunction file {path} passed')
 
     if testfunctions_changed:
         message = 'to ensure the integrity of a project, testfunctions are not allowed to be changed after they have been loaded\n'
-        testfunctions_changed = ",".join([file.name for file in testfunctions_changed])
+        testfunctions_changed = [file.name for file in testfunctions_changed]
         message += f'However, the following testfunctions have been changed: {testfunctions_changed}'
         solutions = [
             'if you want to change the testfunctions, you have to remove the testfunction with `adare testfunction remove` and then load the testfunction again with `adare testfunction load`',
@@ -238,7 +267,7 @@ def __project_integrity_check(project_path: Path, project_directory: ProjectDire
             possible_solutions=solutions
         )
 
-    environments_changed = []
+    environments_changed: list = []
     hashes: dict = project_database.get_project_environment_hashes(project_path)
     for file, hash_value in hashes.items():
         path = Path(file)
@@ -290,7 +319,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
         with StageCtxManager(ExperimentIntegrityCheckStage(), experiment_run_ulid):
             __experiment_integrity_check(project_path, experiment_name, environment_name, experiment_directory)
 
-        with StageCtxManager(ProjectIntegrityCheckStage(),experiment_run_ulid):
+        with StageCtxManager(ProjectIntegrityCheckStage(), experiment_run_ulid):
             # get used testfunctions
             testfunction_files = experiment_database.get_experiment_testfunction_files(project_path, environment_name, experiment_name)
             testfunction_files_names = ",".join([file.name for file in testfunction_files])
@@ -304,8 +333,8 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
                 environment_name = environment_file.stem
 
         # check integrity of the project
-            __project_integrity_check(project_path, project_directory, environments=[environment_file],
-                                      testfunctions=testfunction_files)
+        __project_integrity_check(project_path, project_directory, environments=[environment_file],
+                                  testfunctions=testfunction_files)
 
         # get environment ulid
         environment_ulid = experiment_database.get_environment_ulid(project_path, environment_name)
@@ -322,6 +351,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
                         'add the missing box with `adare vagrant box add`'
                     ]
                 )
+            vagrantbox_download_required = vagrantutils.is_box_download_required(vagrantbox_name)
             log.info(f'vagrant box {vagrantbox_name} found')
 
             environment_platform = experiment_database.get_environment_platform(environment_ulid)
@@ -352,7 +382,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
                                                                                  shared_root_directory_vm).as_posix(),
                 img=experiment_directory.get_path_relative_to_shared_directory('img', shared_root_directory_host,
                                                                                shared_root_directory_vm).as_posix(),
-                logfile=experiment_run_directory.get_path_relative_to_shared_directory('log_file',
+                logfile=experiment_run_directory.get_path_relative_to_shared_directory('adarevm_log_file',
                                                                                        shared_root_directory_host,
                                                                                        shared_root_directory_vm).as_posix(),
                 eventfile=experiment_run_directory.get_path_relative_to_shared_directory('event_file',
@@ -378,8 +408,8 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
 
             # create scripts
             installation_script = create_installations_script(experiment_run_directory, environment_ulid,
-                                                              templates_experiment_scripts)
-            packagedump_script = create_packagedump_script(experiment_run_directory, templates_experiment_scripts)
+                                                              templates_experiment_scripts, shared_root_directory_host, shared_root_directory_vm)
+            packagedump_script = create_packagedump_script(experiment_run_directory, templates_experiment_scripts, shared_root_directory_host, shared_root_directory_vm)
             run_script = create_run_script(
                 experimentrun_directory=experiment_run_directory,
                 project_directory=project_directory,
@@ -389,7 +419,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
                 shared_root_directory_host=shared_root_directory_host,
                 shared_root_directory_vm=shared_root_directory_vm
             )
-            shutdown_script = create_shutdown_script(experiment_run_directory, templates_experiment_scripts)
+            shutdown_script = create_shutdown_script(experiment_run_directory, templates_experiment_scripts, shared_root_directory_host, shared_root_directory_vm)
             wrapper_template = templates_experiment_scripts / f'run_script_wrapper{script_suffix}'
 
             script_manager = ScriptManager(experiment_run_directory, shared_root_directory_host, shared_root_directory_vm,
@@ -402,7 +432,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
             if environment_platform == 'windows':
                 script_manager.add_script(Script(
                     name=f'helperfunctions{script_suffix}',
-                    source_directory=templates_experiment_scripts
+                    source_directory=templates_experiment_scripts,
                 ))
 
             script_manager.render(experiment_run_directory.scripts_directory)
@@ -452,7 +482,10 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
         output_processor = VagrantOutputProcessor(experiment_run_ulid=experiment_run_ulid)
         destroy_output_processor = VagrantDestroyOutputProcessor(experiment_run_ulid=experiment_run_ulid)
 
-        ctx_manager_vagrant_up = StageCtxManager(BoxRunStage(), experiment_run_ulid)
+        box_run_stage = BoxRunStage()
+        if vagrantbox_download_required:
+            box_run_stage.sub_msg = 'required download slows down first boot'
+        ctx_manager_vagrant_up = StageCtxManager(box_run_stage, experiment_run_ulid)
         ctx_manager_vagrant_destroy = StageCtxManager(BoxDestroyStage(), experiment_run_ulid)
         kwargs = {
             'ctrlc_event': ctrlc_event,
@@ -501,6 +534,8 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
 
 
 def experiment_download(project: Path, experiment_ulid: str):
+    if not is_logged_in():
+        raise NotLoggedInError(log)
     # check if experiment exists in database
     exp = experiment_database.get_experiment_by_ulid(experiment_ulid)
     if exp:
@@ -511,7 +546,8 @@ def experiment_download(project: Path, experiment_ulid: str):
 
     # download experiment from webapp
     project = ProjectDirectory(project)
-    download_experiment(experiment_ulid, project.experiments)
+    experiment_name = download_experiment(experiment_ulid, project.experiments)
     log.info(f'experiment {experiment_ulid} downloaded')
+    print(f'experiment {experiment_name} ({experiment_ulid}) downloaded successfully')
 
 

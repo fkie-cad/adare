@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, Boolean
+from sqlalchemy.engine import TupleResult
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 import ulid
@@ -200,8 +201,15 @@ class TestFunctionFile(SerializerMixin, Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
     path = Column(String, unique=True)
+    requirements_path = Column(String, nullable=True)
     sha256hash = Column(String)
     description = Column(String, nullable=True, default=None)
+
+    # properties retrieved from the webapp
+    remote_id = Column(String, nullable=True, default=None)
+    remote_url = Column(String, nullable=True, default=None)
+    in_request = Column(Boolean, default=False)
+    published = Column(Boolean, default=False)
 
     @hybrid_property
     def num_functions(self):
@@ -275,6 +283,8 @@ class AbstractTest(SerializerMixin, Base):
     parameters = relationship(TestParameterEntry, secondary=mapping_abstracttest_testparameterentry)
 
     depends_on_tool = relationship(Command, secondary=mapping_abstracttest_tool)
+
+    remote_ulid = Column(String, nullable=True, default=None)
 
     def __str__(self):
         return str(self.name)
@@ -440,7 +450,8 @@ class Environment(SerializerMixin, Base):
 
     ulid = Column(String, primary_key=True, default=lambda: str(ulid.ULID()))
     name = Column(String)
-    vagrantbox = Column(String)
+    vagrantbox = Column(String, nullable=True)
+    vagrantbox_is_only_local = Column(Boolean, default=False)
     description = Column(String)
 
     osinfo_id = Column(Integer, ForeignKey('osinfo.id'))
@@ -454,12 +465,15 @@ class Environment(SerializerMixin, Base):
     file = Column(String)
     sha256hash = Column(String, unique=True)
 
-    in_request = Column(Boolean, default=False)
-    published = Column(Boolean, default=False)
-
     created_at = Column(DateTime, nullable=True, default=datetime.now)
 
     tags = relationship(Tag, secondary=mapping_environment_tag)
+
+    # properties retrieved from the webapp
+    remote_ulid = Column(String, nullable=True, default=None)
+    remote_url = Column(String, nullable=True, default=None)
+    in_request = Column(Boolean, default=False)
+    published = Column(Boolean, default=False)
 
     @hybrid_property
     def dotnotation(self):
@@ -481,7 +495,7 @@ class Experiment(SerializerMixin, Base):
     description = Column(String)
 
     tags = relationship(Tag, secondary=mapping_experiment_tag)
-    abstract_tests = relationship(AbstractTest, secondary=mapping_experiment_abstracttest)
+    abstract_tests = relationship(AbstractTest, secondary=mapping_experiment_abstracttest, backref='experiments')
 
     action_file = Column(String)
     testset_file = Column(String)
@@ -506,10 +520,11 @@ class Experiment(SerializerMixin, Base):
 
     created_at = Column(DateTime, nullable=True, default=datetime.now)
 
-    # web app properties
+    # properties retrieved from the webapp
+    remote_ulid = Column(String, nullable=True, default=None)
+    remote_url = Column(String, nullable=True, default=None)
     in_request = Column(Boolean, default=False)
     published = Column(Boolean, default=False)
-    remote_ulid = Column(String, nullable=True, default=None)
 
     @hybrid_property
     def environments_names(self):
@@ -535,8 +550,8 @@ class Event(SerializerMixin, Base):
     error = Column(String)
     stage = Column(Boolean, default=False)
     group_id = Column(Integer)
-    #stage_in_run_id = Column(Integer, ForeignKey('stageinrun.id'), nullable=True, default=None)
-    #stage_in_run = relationship("StageInRun", backref=backref("events", cascade="all, delete-orphan"))
+    stage_in_run_id = Column(Integer, ForeignKey('stageinrun.id'), nullable=True, default=None)
+    stage_in_run = relationship("StageInRun", backref=backref("events", cascade="all, delete-orphan"))
 
     timestamp = Column(DateTime)
 
@@ -567,7 +582,8 @@ class CommandEvent(Event):
 
     @hybrid_property
     def stage_submessage(self):
-        return f'{self.command}'
+        name, args = self.command.split(' ', 1)
+        return f'Running {self.name} with arguments {args}'
 
     @hybrid_property
     def stage_result(self):
@@ -636,9 +652,10 @@ class GuiFindEvent(Event):
 
     @hybrid_property
     def stage_submessage(self):
-        msg = '(text)' if self.text else '(img)'
-        msg += f' {self.objective}'
-        return msg
+        if self.text:
+            return f'Found text "{self.objective}" on screen'
+        else:
+            return f'Found image "{self.objective}" on screen'
 
     @hybrid_property
     def stage_result(self):
@@ -657,7 +674,16 @@ class GuiClickEvent(Event):
 
     @hybrid_property
     def stage_submessage(self):
-        msg = f'{self.clicktype} {self.target}'
+        if self.clicktype == 'left':
+            msg = f'Clicking left at coordinates {self.target}'
+        elif self.clicktype == 'right':
+            msg = f'Clicking right at coordinates {self.target}'
+        elif self.clicktype == 'double':
+            msg = f'Double clicking at coordinates {self.target}'
+        elif self.clicktype == 'double_right':
+            msg = f'Double right clicking at coordinates {self.target}'
+        else:
+            msg = f'Clicking at coordinates {self.target}'
         if self.modifiers:
             msg += f' (mod: {self.modifiers})'
         return msg
@@ -677,7 +703,7 @@ class GuiKeypressEvent(Event):
 
     @hybrid_property
     def stage_submessage(self):
-        return f'{self.keys}'
+        return f'Pressing keys {self.keys}'
 
     @hybrid_property
     def stage_result(self):
@@ -694,7 +720,7 @@ class GuiIdleEvent(Event):
 
     @hybrid_property
     def stage_submessage(self):
-        return f'{self.seconds} seconds'
+        return f'Wait idle for {self.seconds} seconds'
 
     @hybrid_property
     def stage_result(self):
@@ -743,6 +769,9 @@ class ExperimentRunFiles(SerializerMixin, Base):
 
     log_run_id = Column(Integer, ForeignKey('logfile.ulid'), nullable=True)
     log_run = relationship(LogFile, foreign_keys=[log_run_id])
+
+    log_adarevm_id = Column(Integer, ForeignKey('logfile.ulid'), nullable=True)
+    log_adarevm = relationship(LogFile, foreign_keys=[log_adarevm_id])
 
 
 class Stage(SerializerMixin, Base):
@@ -851,14 +880,20 @@ class ExperimentRun(SerializerMixin, Base):
 
     @hybrid_property
     def result_status(self):
-        return next(
-            (
-                StatusEnum.ERROR
-                for test in self.tests
-                if test.status == StatusEnum.ERROR
-            ),
-            StatusEnum.SUCCESS,
-        )
+        for test in self.experiment.abstract_tests:
+            found = False
+            for t in self.tests:
+                if t.abstract_test_id == test.ulid:
+                    if t.result and t.result.status == StatusEnum.SUCCESS:
+                        found = True
+                        break
+            if not found:
+                return StatusEnum.ERROR
+        return StatusEnum.SUCCESS
+
+
+
+
 
     def __str__(self):
         return str(self.ulid)

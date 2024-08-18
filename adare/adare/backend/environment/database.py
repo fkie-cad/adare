@@ -17,9 +17,9 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
     with EnvironmentDbApi() as db:
         environments = db.get_environments_by_path(environment_file)
         if not environments:
-            db.get_or_create_environment(project_path, environment_metadata, environment_file, sha256hash)
+            environment = db.get_or_create_environment(project_path, environment_metadata, environment_file, sha256hash)
             log.info(f'environment file {environment_file} loaded')
-            return
+            return environment.ulid
         for env in environments:
             if env.sha256hash == sha256hash:
                 raise EnvironmentAlreadyExists(
@@ -45,11 +45,17 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
                 db.delete_experiment_run(run)
                 log.info(f'deleted run {run.ulid}')
             # update the environment
-            db.update_environment(environment_metadata, environment_file, sha256hash)
+            environment = db.update_environment(environment_metadata, environment_file, sha256hash)
             log.info(f'environment {environment_metadata.name} updated')
+            print(environment)
         else:
             log.info(f'environment file {environment_file} has already been loaded -> updating')
-            db.update_environment(environment_metadata, environment_file, sha256hash)
+            environment = db.update_environment(environment_metadata, environment_file, sha256hash)
+            print(environment)
+
+        if not environment:
+            return None
+        return environment.ulid
 
 
 def delete_environment(environment_ulid: str, force: bool = False):
@@ -77,9 +83,33 @@ def delete_environment(environment_ulid: str, force: bool = False):
         log.info(f'deleted environment {environment.ulid}')
 
 
-def get_environments(project_path: Path = None) -> list[Environment]:
+def get_environments_ulids(project_path: Path = None) -> list[str]:
     with EnvironmentDbApi() as db:
-        return db.get_environments(project_path)
+        return [
+            environment.ulid
+            for environment in db.get_environments(project_path)
+        ]
+
+
+def get_environment_hash(ulid: str) -> str:
+    with EnvironmentDbApi() as db:
+        if environment := db.get_environment_by_ulid(ulid):
+            return environment.sha256hash
+        else:
+            raise EnvironmentDoesNotExistInDatabase(
+                log,
+                f'environment with ulid {ulid} does not exist in the database',
+            )
+
+
+def sync_environment(ulid: str, remote_ulid: str, remote_url: str, is_published: bool) -> dict:
+    with EnvironmentDbApi() as db:
+        return db.sync_environment(ulid, remote_ulid, remote_url, is_published)
+
+
+def sync_environments_all(project: str = None):
+    with EnvironmentDbApi() as db:
+        db.sync_environments_all(project)
 
 
 def get_environment_path_by_project_and_name(project_path: Path, environment_name: str) -> Path:

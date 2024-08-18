@@ -180,19 +180,38 @@ class DataRetrievalApi(DatabaseApi):
         return pd.read_sql(self._session.query(ExperimentRun).filter_by(experiment_id=experiment_ulid).statement, self._session.bind).map(str)
 
     def __enrich_run_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        data['experiment_name'] = self._session.query(Experiment).filter_by(ulid=data['experiment_id'].values[0]).one().name
-        data['environment_name'] = self._session.query(Environment).filter_by(ulid=data['environment_id'].values[0]).one().name
-        data['project_name'] = self._session.query(Project).filter(
-            Project.environments.any(Environment.ulid == data['environment_id'].values[0])).one().name
-        data['object_run'] = self._session.query(ExperimentRun).filter_by(ulid=data['ulid'].values[0]).one()
-        data['object_environment'] = self._session.query(Environment).filter_by(ulid=data['environment_id'].values[0]).one()
+        experiment_names = []
+        environment_names = []
+        project_names = []
+        object_runs = []
+        object_environments = []
+        for index, row in data.iterrows():
+            experiment_name = self._session.query(Experiment).filter_by(ulid=row['experiment_id']).one().name
+            environment_name = self._session.query(Environment).filter_by(ulid=row['environment_id']).one().name
+            project_name = self._session.query(Project).filter(
+                Project.environments.any(Environment.ulid == row['environment_id'])).one().name
+            object_run = self._session.query(ExperimentRun).filter_by(ulid=row['ulid']).one()
+            object_environment = self._session.query(Environment).filter_by(ulid=row['environment_id']).one()
+
+            experiment_names.append(experiment_name)
+            environment_names.append(environment_name)
+            project_names.append(project_name)
+            object_runs.append(object_run)
+            object_environments.append(object_environment)
+
+        data['experiment_name'] = experiment_names
+        data['environment_name'] = environment_names
+        data['project_name'] = project_names
+        data['object_run'] = object_runs
+        data['object_environment'] = object_environments
+
         # access hybrid properties
-        data['duration'] = [obj.duration for obj in data['object_run']]
-        data['result_status'] = [obj.result_status for obj in data['object_run']]
-        data['status'] = [obj.status for obj in data['object_run']]
-        data['experiment_dotnotation'] = [obj.experiment_dotnotation for obj in data['object_run']]
-        data['box'] = [obj.vagrantbox for obj in data['object_environment']]
-        data['osinfo'] = [str(obj.osinfo) for obj in data['object_environment']]
+        data['duration'] = data['object_run'].apply(lambda obj: obj.duration)
+        data['result_status'] = data['object_run'].apply(lambda obj: obj.result_status)
+        data['status'] = data['object_run'].apply(lambda obj: obj.status)
+        data['experiment_dotnotation'] = data['object_run'].apply(lambda obj: obj.experiment_dotnotation)
+        data['box'] = data['object_environment'].apply(lambda obj: obj.vagrantbox)
+        data['osinfo'] = data['object_environment'].apply(lambda obj: str(obj.osinfo))
         # remove object_run column
         data = data.drop(columns=['object_run', 'object_environment'])
         return data

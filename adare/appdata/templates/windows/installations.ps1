@@ -1,7 +1,10 @@
 . "{{ scripts_directory }}\helperfunctions.ps1"
 
+{% if log_file is defined %}
+Start-Transcript -Path "{{ log_file }}"
+{% endif %}
+
 StartStage "installations"
-Start-Transcript  "{{ log_directory }}/postsetup_installations.log"
 
 {% for installationline in installations %}
 # {{ installationline.0 }}: {{ installationline.1 }}
@@ -12,3 +15,7 @@ checkExitCode "installations"
 
 Stop-Transcript
 EndStage "installations" "finished"
+
+{% if log_file is defined %}
+Stop-Transcript
+{% endif %}

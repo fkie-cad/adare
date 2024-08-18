@@ -1,6 +1,10 @@
 # import helper functions (Add-PathVariable, WriteLog, Write-Status, ...)
 . "{{ scripts_directory }}/helperfunctions.ps1"
 
+{% if log_file is defined %}
+Start-Transcript -Path "{{ log_file }}"
+{% endif %}
+
 # setup experiment
 StartStage "experiment_setup"
 
@@ -35,3 +39,7 @@ adarevm '{{ experiment_config_file }}'
 checkExitCode "experiment_run"
 
 EndStage "experiment_run" "finished"
+
+{% if log_file is defined %}
+Stop-Transcript
+{% endif %}

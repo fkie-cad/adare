@@ -23,6 +23,7 @@ def hash_string_sha256(data: str, encoding='utf-8'):
     h.update(data.encode(encoding=encoding))
     return h.hexdigest()
 
+
 def combine_hashes(hashes: list):
     h = hashlib.sha256()
     for single_hash in hashes:

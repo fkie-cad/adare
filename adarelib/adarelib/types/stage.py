@@ -1,8 +1,6 @@
 import attrs
 from datetime import datetime
-import cattrs
 import typing
-import threading
 
 from adarelib.config import StatusEnum
 
@@ -50,7 +48,7 @@ class Stage:
 @attrs.define
 class BoxRunStage(Stage):
     name: typing.ClassVar[str] = 'box_run'
-    msg: typing.ClassVar[str] = 'run vagrant box'
+    msg: typing.ClassVar[str] = 'Running Vagrant box'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = None
@@ -59,7 +57,7 @@ class BoxRunStage(Stage):
 @attrs.define
 class BoxDestroyStage(Stage):
     name: typing.ClassVar[str] = 'box_destroy'
-    msg: typing.ClassVar[str] = 'destroy vagrant box'
+    msg: typing.ClassVar[str] = 'Destroying Vagrant box'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = None
@@ -68,7 +66,7 @@ class BoxDestroyStage(Stage):
 @attrs.define
 class CleanupStage(Stage):
     name: typing.ClassVar[str] = 'cleanup'
-    msg: typing.ClassVar[str] = 'cleanup'
+    msg: typing.ClassVar[str] = 'Performing cleanup tasks'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = None
@@ -77,7 +75,7 @@ class CleanupStage(Stage):
 @attrs.define
 class ExperimentIntegrityCheckStage(Stage):
     name: typing.ClassVar[str] = 'integrity_check_experiment'
-    msg: typing.ClassVar[str] = 'integrity check experiment'
+    msg: typing.ClassVar[str] = 'Performing integrity check on experiment'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = None
@@ -86,7 +84,7 @@ class ExperimentIntegrityCheckStage(Stage):
 @attrs.define
 class ProjectIntegrityCheckStage(Stage):
     name: typing.ClassVar[str] = 'integrity_check_project'
-    msg: typing.ClassVar[str] = 'integrity check project'
+    msg: typing.ClassVar[str] = 'Performing integrity check on project'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = None
@@ -95,7 +93,7 @@ class ProjectIntegrityCheckStage(Stage):
 @attrs.define
 class InstallationsStage(Stage):
     name: typing.ClassVar[str] = 'box.installations'
-    msg: typing.ClassVar[str] = 'install additional software'
+    msg: typing.ClassVar[str] = 'Installing additional software'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = BoxRunStage
@@ -104,7 +102,7 @@ class InstallationsStage(Stage):
 @attrs.define
 class ExperimentSetupStage(Stage):
     name: typing.ClassVar[str] = 'box.experiment_setup'
-    msg: typing.ClassVar[str] = 'install adarevm and setup experiment'
+    msg: typing.ClassVar[str] = 'Installing adarevm and setting up experiment'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = BoxRunStage
@@ -113,7 +111,7 @@ class ExperimentSetupStage(Stage):
 @attrs.define
 class ExperimentRunStage(Stage):
     name: typing.ClassVar[str] = 'box.experiment_run'
-    msg: typing.ClassVar[str] = 'run the experiment'
+    msg: typing.ClassVar[str] = 'Running the experiment'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = BoxRunStage
@@ -176,7 +174,7 @@ class ExperimentCommandStage(Stage):
 @attrs.define
 class VagrantBoxExistCheckStage(Stage):
     name: typing.ClassVar[str] = 'box_exist_check'
-    msg: typing.ClassVar[str] = 'check if vagrant box exists'
+    msg: typing.ClassVar[str] = 'Checking if Vagrant box exists'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = None
@@ -185,7 +183,7 @@ class VagrantBoxExistCheckStage(Stage):
 @attrs.define
 class RunDirectoryCreationStage(Stage):
     name: typing.ClassVar[str] = 'run_dir_creation'
-    msg: typing.ClassVar[str] = 'create run directory'
+    msg: typing.ClassVar[str] = 'Creating run directory'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = None

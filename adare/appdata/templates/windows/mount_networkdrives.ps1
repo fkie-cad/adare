@@ -1,7 +1,10 @@
 . "{{ scripts_directory }}\helperfunctions.ps1"
 
+{% if log_file is defined %}
+Start-Transcript -Path "{{ log_file }}"
+{% endif %}
+
 StartStage "mount_networkdrives"
-Start-Transcript {{ log_directory }}/mount_networkdrives.log
 
 {% if share %}
 {% if share.type == 'NFSShare' %}
@@ -18,5 +21,8 @@ Write-Host 'no share provided'
 {% for s in share %}
 {{ s.command }} 2>&1 | WriteLog
 {% endfor %}
-Stop-Transcript
 EndStage "mount_networkdrives"
+
+{% if log_file is defined %}
+Stop-Transcript
+{% endif %}

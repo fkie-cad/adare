@@ -54,10 +54,11 @@ def get_experiment_run_count(project_path: Path, environment_name: str, experime
         return len(experiment.runs)
 
 
-def create_experiment(name: str, project_path: Path, experiment_directory: ExperimentDirectory) -> Experiment:
+def create_experiment(name: str, experiment_directory: ExperimentDirectory) -> str:
     with ExperimentApi() as api:
         experiment = api.create_experiment(name, experiment_directory)
-    return experiment
+        print(experiment.ulid)
+        return experiment.ulid
 
 
 def remove_experiment(experiment_ulid: str):
@@ -103,6 +104,7 @@ def update_experiment_run(experiment_run_ulid: str, experiment_name: str, enviro
             logfile_run_experiment=experimentrun_directory.run_log,
             logfile_installed_packages=experimentrun_directory.packagedump_log,
             logfile_postsetup_installations=experimentrun_directory.install_log,
+            logfile_adarevm=experimentrun_directory.adarevm_log_file,
             status=StatusEnum.RUNNING,
         )
         return experiment_run.ulid
@@ -159,3 +161,22 @@ def get_experiment_environment(project_path: Path, environment_name: str,  exper
 def update_stage_in_run(stage: StageType, experimentrun_ulid: str):
     with StageDbApi() as db:
         db.update_stage_in_run(stage, experimentrun_ulid)
+
+
+def sync_experiment(ulid: str, remote_ulid: str, abstract_tests_ulids: dict, remote_url: str, is_published: bool):
+    with ExperimentApi() as api:
+        api.sync_experiment(ulid, remote_ulid, abstract_tests_ulids, remote_url, is_published)
+
+
+def get_experiment_hash(ulid: str):
+    with ExperimentApi() as api:
+        return api.get_experiment_by_ulid(ulid).sha256
+
+
+def get_experiments_ulids(project_path: Path):
+    with ExperimentApi() as api:
+        return [
+            experiment.ulid
+            for experiment in api.get_experiments(project_path)
+        ]
+

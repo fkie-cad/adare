@@ -47,13 +47,17 @@ def remove_project(project_path: Path):
         api.remove_project_by_path(project_path)
 
 
-def get_project_testfunction_hashes(project_path: Path) -> dict:
+def get_project_testfunction_hashes(project_path: Path) -> list:
     with ProjectDbApi() as api:
         project = api.get_project_by_path(project_path)
-        hashes = {
-            testfunction_file.path: testfunction_file.sha256hash
+        hashes = [
+            {
+                "hash": testfunction_file.sha256hash,
+                "file": testfunction_file.path,
+                "requirements": testfunction_file.requirements_path,
+            }
             for testfunction_file in project.testfunction_files
-        }
+        ]
     return hashes
 
 

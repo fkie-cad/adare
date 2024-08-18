@@ -52,3 +52,7 @@ class MultipleEnvironmentsError(LoggedErrorException):
 
 class ExperimentAlreadyExistsError(LoggedErrorException):
     pass
+
+
+class ExperimentNotChanged(LoggedException):
+    pass

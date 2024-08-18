@@ -8,7 +8,7 @@ from pathlib import Path
 from adare.database.models.experiment import Project, Result, Environment, Experiment, ExperimentRun, OsInfo, StageInRun, Stage, Event, Status, TestFunction, TestFunctionFile, TestParameter, AbstractTest
 from adare.database.api.database import DatabaseApi
 import adare.config.database as config_database
-from adarelib.config import TIMESTAMP_FORMAT
+from adarelib.config import TIMESTAMP_FORMAT, StatusEnum
 from adarelib.exceptions import EnvironmentNotFoundError, ProjectNotFoundError, ExperimentNotFoundError, TestFunctionNotFoundError, ArgumentsError
 
 # configure logging
@@ -42,11 +42,12 @@ class SerializeApi(DatabaseApi):
             'group_id': event.group_id,
         }
         if event_type == 'command_event':
+            event_dict['name'] = event.name
             event_dict['command'] = event.command
             event_dict['returncode'] = event.returncode
             event_dict['stdout'] = event.stdout
         elif event_type == 'test_event':
-            event_dict['abstract_test_ulid'] = event.abstract_test.ulid
+            event_dict['abstract_test_ulid'] = event.abstract_test.remote_ulid
             event_dict['result'] = self.serialize_result(event.result)
         elif event_type == 'error_event':
             event_dict['error_name'] = event.error_name
@@ -68,15 +69,23 @@ class SerializeApi(DatabaseApi):
 
         return event_dict
 
-    def serialize_run(self, run: ExperimentRun) -> dict:
+    def serialize_run(self, run: ExperimentRun) -> (dict, dict):
         run_dict = {
             'ulid': run.ulid,
             'status': run.status,
+            'result_status': run.result_status,
             'timestamp_start': run.timestamp_start.strftime(TIMESTAMP_FORMAT),
             'timestamp_end': run.timestamp_end.strftime(TIMESTAMP_FORMAT),
             'events': [self.serialize_event(event) for event in run.events],
+            'experiment_ulid': run.experiment.remote_ulid,
+            'environment_ulid': run.environment.remote_ulid,
         }
-        return run_dict
+        files_dict = {
+            'adarevm_log': run.files.log_adarevm.path,
+            'installations_log': run.files.log_installations.path,
+            'packagedump_log': run.files.package_dump.path,
+        }
+        return run_dict, files_dict
 
     def serialize_run_by_ulid(self, run_ulid: str) -> dict:
         run = self._session.query(ExperimentRun).filter(ExperimentRun.ulid == run_ulid).first()
