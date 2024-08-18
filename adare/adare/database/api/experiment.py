@@ -134,9 +134,9 @@ class ExperimentApi(ProjectDbApi):
             if obj:
                 experiment.abstract_tests.append(obj)
         self._session.add(experiment)
+        self._session.commit()
 
         log.debug(f'added experiment {experiment.ulid} to database')
-
         return experiment
 
     def get_experiment(self, name: str, environment: Environment) -> Experiment:
@@ -160,14 +160,14 @@ class ExperimentApi(ProjectDbApi):
     def update_experiment_run(
             self, run_ulid: str, experiment: Experiment, environment: Environment, path: Path,
             logfile_vagrant: Path, logfile_installed_packages: Path, logfile_postsetup_installations: Path,
-            logfile_run_experiment: Path, status: int
+            logfile_run_experiment: Path, logfile_adarevm: Path, status: int
     ) -> ExperimentRun:
         experiment_run_files = ExperimentRunFiles(
             log_vagrant=self.__create_logfile(logfile_vagrant),
             package_dump=self.__create_logfile(logfile_installed_packages),
             log_installations=self.__create_logfile(logfile_postsetup_installations),
             log_run=self.__create_logfile(logfile_run_experiment),
-
+            log_adarevm=self.__create_logfile(logfile_adarevm),
         )
         self._session.add(experiment_run_files)
         experiment_run = self._session.query(ExperimentRun).filter_by(ulid=run_ulid).first()
@@ -304,3 +304,34 @@ class ExperimentApi(ProjectDbApi):
         if status == StatusEnum.FINISHED or status == StatusEnum.INTERRUPTED:
             experiment_run.timestamp_end = datetime.utcnow()
 
+    def sync_experiment(self, ulid: str, remote_ulid: str, abstract_tests_ulids: dict, remote_url: str, is_published: bool):
+        # Retrieve the experiment by its ULID
+        experiment = self.get_experiment_by_ulid(ulid)
+
+        # Update the experiment properties
+        experiment.remote_ulid = remote_ulid
+        experiment.remote_url = remote_url
+        experiment.published = is_published
+
+        # Iterate through the abstract tests ULIDs and update each corresponding AbstractTest object
+        for test_name, test_ulid in abstract_tests_ulids.items():
+            abstract_test = (self._session.query(AbstractTest)
+                             .select_from(Experiment)
+                             .join(Experiment.abstract_tests)
+                             .filter(AbstractTest.name == test_name, Experiment.ulid == experiment.ulid)
+                             .first())
+            if abstract_test:
+                abstract_test.remote_ulid = test_ulid
+
+        # Commit the changes to the session
+        self._session.commit()
+
+        return experiment
+
+    def get_experiments(self, project_path: Path = None):
+        if project_path:
+            project = self.get_project_by_path(project_path)
+            environments = self._session.query(Environment).filter_by(project=project).all()
+            experiments = [experiment for environment in environments for experiment in environment.experiments]
+            return experiments
+        return self._session.query(Experiment).all()

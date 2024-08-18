@@ -76,15 +76,15 @@ class EnvironmentDbApi(ExperimentApi):
         return environment
 
     def update_environment(self, environment_metadata: EnvironmentMetadata, environment_file: Path,
-                           sha256hash: str) -> bool:
+                           sha256hash: str) -> Environment | None:
         environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
         if not environment:
             log.error(f"Environment with hash '{sha256hash}' not found in database -> cannot update")
-            return False
+            return None
         if environment.runs:
             log.error(
                 f"Environment with hash '{sha256hash}' has already been used for experiments, so it cannot be updated because this would invalidate the results")
-            return False
+            return None
         os_info, _ = self.get_or_create_os_info(environment_metadata.os)
         environment.name = environment_metadata.name
         environment.description = environment_metadata.description
@@ -93,44 +93,56 @@ class EnvironmentDbApi(ExperimentApi):
         environment.file = environment_file.as_posix()
         self._session.commit()
         log.info(f"Environment with hash '{sha256hash}' updated in database")
+        return environment
 
     def delete_environment(self, environment: Environment):
         self._delete_commit(environment)
         log.info(f"Environment with hash '{environment.sha256hash}' deleted from database")
 
-    def get_environments(self, project_path: Path = None) -> list:
+    def get_environments(self, project_path: Path = None) -> list[Environment]:
         # retrieve all environments and expunge them from the session
         if project_path:
             projects = self._session.query(Project).filter(Project.path == project_path.as_posix()).all()
             environments = [env for project in projects for env in project.environments]
         else:
             environments = self._session.query(Environment).all()
+        return environments
 
-        # get all experiment with at least one run in the environment.runs list
-        experiment_per_env = {}
-        for environment in environments:
-            experiments = {run.experiment.name for run in environment.runs}
-            experiment_per_env[environment.ulid] = [
-                {
-                    'name': experiment.name,
-                    'runs': len([run for run in environment.runs if run.experiment.name == experiment.name])
-                }
-                for experiment in experiments
-            ]
 
-        # get count of runs for each environment for each experiment
-        for env in environments:
-            self._expunge_multiple(env.runs)
-        self._expunge_multiple(environments)
 
-        return [
-            {
-                'name': env.name,
-                'description': env.description,
-                'experiments': experiment_per_env[env.ulid],
-            }
-            for env in environments
-        ]
+    # def get_environments(self, project_path: Path = None) -> list:
+    #     # retrieve all environments and expunge them from the session
+    #     if project_path:
+    #         projects = self._session.query(Project).filter(Project.path == project_path.as_posix()).all()
+    #         environments = [env for project in projects for env in project.environments]
+    #     else:
+    #         environments = self._session.query(Environment).all()
+    #
+    #     # get all experiment with at least one run in the environment.runs list
+    #     experiment_per_env = {}
+    #     for environment in environments:
+    #         experiments = {run.experiment.name for run in environment.runs}
+    #         experiment_per_env[environment.ulid] = [
+    #             {
+    #                 'name': experiment.name,
+    #                 'runs': len([run for run in environment.runs if run.experiment.name == experiment.name])
+    #             }
+    #             for experiment in experiments
+    #         ]
+    #
+    #     # get count of runs for each environment for each experiment
+    #     for env in environments:
+    #         self._expunge_multiple(env.runs)
+    #     self._expunge_multiple(environments)
+    #
+    #     return [
+    #         {
+    #             'name': env.name,
+    #             'description': env.description,
+    #             'experiments': experiment_per_env[env.ulid],
+    #         }
+    #         for env in environments
+    #     ]
 
     def get_environment_installations(self, environment_ulid: str):
         if (
@@ -192,3 +204,11 @@ class EnvironmentDbApi(ExperimentApi):
                 log,
                 f"Project with path '{project_path}' not found in database -> cannot get environment"
             )
+
+    def sync_environment(self, ulid: str, remote_ulid: str, remote_url: str, is_published: bool):
+        environment = self.get_environment_by_ulid(ulid)
+        environment.remote_ulid = remote_ulid
+        environment.remote_url = remote_url
+        environment.published = is_published
+        environment.in_request = True if not is_published else False
+        self._session.commit()

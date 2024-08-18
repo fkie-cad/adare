@@ -33,13 +33,21 @@ class ExperimentTablePanel:
         table.add_column("ulid", style="cyan", no_wrap=True)
         table.add_column("environments", style="cyan", no_wrap=True)
         table.add_column("description", style="cyan", no_wrap=True)
+        table.add_column("web status", style="cyan", no_wrap=True)
 
         for i, row in self.experiments.iterrows():
+            web_status = 'NOT published'
+            if row['in_request']:
+                web_status = 'in request'
+            elif row['published']:
+                web_status = 'published'
+
             table.add_row(
                 row['name'],
                 row['ulid'],
                 row['environments_names'],
-                row['description']
+                row['description'],
+                web_status,
             )
         return Panel(table, title="[b gold3]experiments[/b gold3]", border_style="blue", title_align="left")
 

@@ -1,6 +1,5 @@
 # external imports
 import sqlalchemy
-from sqlalchemy.orm import sessionmaker
 from pathlib import Path
 import ast
 
@@ -12,7 +11,7 @@ from adare.database.api.experiment import ExperimentApi
 from adare.database.exceptions import DatabaseTestfunctionCreationError, DatabaseTestfunctionRemovalError, \
     DatabaseTestfunctionUpdateError, DatabaseTestValidationError
 from adarelib.helperfunctions.pyfileanalyze import PyModuleAnalyzer
-from adarelib.helperfunctions.hash import hash_file_sha256, hash_string_sha256
+from adarelib.helperfunctions.hash import hash_file_sha256, hash_string_sha256, combine_hashes
 from adarelib.exceptions import TestfunctionParameterClassMissingError
 
 # configure logging
@@ -163,7 +162,7 @@ class TestfunctionDbApi(ExperimentApi):
                 message=f'parameter class for testfunction class {testfunction_class.name} is missing',
             )
 
-    def create_testfunction_file_obj(self, project_path: Path, path: Path):
+    def create_testfunction_file_obj(self, project_path: Path, path: Path, requirements: Path):
         if self.testfunction_file_obj_exists(path):
             raise DatabaseTestfunctionCreationError(
                 log,
@@ -176,10 +175,12 @@ class TestfunctionDbApi(ExperimentApi):
                 message=f'Project {project_path.name} does not exist in database',
             )
         module_analyzer = PyModuleAnalyzer(path)
+        sha256hash = combine_hashes([hash_file_sha256(path),hash_file_sha256(requirements)])
         testfunction_file = TestFunctionFile(
             name=path.name,
             path=path.as_posix(),
-            sha256hash=hash_file_sha256(path),
+            requirements_path=requirements.as_posix(),
+            sha256hash=sha256hash,
         )
         testfunction_file.projects.append(project)
         self._session.add(testfunction_file)
@@ -194,6 +195,7 @@ class TestfunctionDbApi(ExperimentApi):
                 )
 
         self._session.commit()
+        return testfunction_file
 
     def testfunction_file_obj_exists(self, path: Path) -> bool:
         return self._session.query(TestFunctionFile).filter(
@@ -236,7 +238,7 @@ class TestfunctionDbApi(ExperimentApi):
 
             log.info(f'Updated testfunction {testfunction_obj.name}')
 
-    def update_testfunction_file_obj(self, path: Path):
+    def update_testfunction_file_obj(self, path: Path, requirements_path: Path):
         if not self.testfunction_file_obj_exists(path):
             raise DatabaseTestfunctionRemovalError(
                 log,
@@ -263,9 +265,9 @@ class TestfunctionDbApi(ExperimentApi):
         for testfunction_obj in testfunction_file.testfunctions:
             if testfunction_obj.type not in class_names:
                 self.remove_testfunction(path, testfunction_obj.name, safe=True)
-
-        testfunction_file.sha256hash = hash_file_sha256(path)
+        testfunction_file.sha256hash = combine_hashes([hash_file_sha256(path), hash_file_sha256(requirements_path)])
         self._session.commit()
+        return testfunction_file
 
     def __serialize_testfunction(self, testfunction: TestFunction):
         return {
@@ -285,3 +287,25 @@ class TestfunctionDbApi(ExperimentApi):
 
     def testfunction_exists(self, name: str):
         return self._session.query(sqlalchemy.exists().where(TestFunction.name == name)).scalar()
+
+    def get_testfunction_file(self, testfunction_id: int):
+        return self._session.query(TestFunctionFile).filter(TestFunctionFile.id == testfunction_id).first()
+
+    def get_testfunction_file_hash(self, testfunction_id: int):
+        testfunction_file = self.get_testfunction_file(testfunction_id)
+        sha256 = testfunction_file.sha256hash
+        return sha256
+
+    def sync_testfunction_file(self, testfunction_id: int, remote_id: int, remote_url: str, is_published: bool):
+        testfunction_obj = self.get_testfunction_file(testfunction_id)
+        testfunction_obj.remote_id = remote_id
+        testfunction_obj.remote_url = remote_url
+        testfunction_obj.published = is_published
+        self._session.commit()
+        return testfunction_obj
+
+    def get_testfunction_files(self, project_path: Path = None):
+        if project_path:
+            project = self.get_project(project_path.name)
+            return self._session.query(TestFunctionFile).filter(TestFunctionFile.projects.contains(project)).all()
+        return self._session.query(TestFunctionFile).all()

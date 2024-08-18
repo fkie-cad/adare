@@ -7,11 +7,31 @@ import adare.backend.testfunction.database as testfunction_database
 from adare.backend.testfunction.directory import TestfunctionDirectory
 from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
 from adarelib.helperfunctions.cli import print_df
-from adare.webappaccess.download import download_testfunction
+from adare.webappaccess.download import download_testfunction, sync
+from adare.webappaccess.login import is_logged_in
+from adarelib.exceptions import NotLoggedInError
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
+
+
+def testfunction_sync(testfunction_id: int):
+    if not is_logged_in():
+        log.info(f'sync is not possible because user is not logged in')
+        return
+    # get testfunction from database
+    sha256 = testfunction_database.get_testfunction_file_hash(testfunction_id)
+    # download testfunction from webapp
+    metadata_remote = sync(sha256, 'testfunction')
+    if not metadata_remote:
+        log.info(f'testfunction {testfunction_id} does not exist remotely')
+        return
+    is_published = metadata_remote.get('published')
+    remote_url = metadata_remote.get('gitea_url')
+    remote_id = metadata_remote.get('id')
+    testfunction_database.sync_testfunction_file(testfunction_id, remote_id, remote_url, is_published)
+    log.info(f'testfunction {testfunction_id} synced')
 
 
 def testfunction_create(project_path: Path, name: str):
@@ -37,7 +57,8 @@ def testfunction_load(project_path: Path, name: str):
             log,
             message=f'Testfunction {name} does not exist',
         )
-    testfunction_database.load_testfunction_file(project_path, testfunction_directory.pythonfile)
+    testfunction_id = testfunction_database.load_testfunction_file(project_path, testfunction_directory.pythonfile, testfunction_directory.requirements)
+    testfunction_sync(testfunction_id)
 
 
 def testfunction_list():
@@ -47,6 +68,8 @@ def testfunction_list():
 
 
 def testfunction_download(project_path: Path, name: str):
+    if not is_logged_in():
+        raise NotLoggedInError(log)
     # check if testfunction already exists
     if testfunction_database.testfunction_exists(name):
         raise TestfunctionMissingFileError(

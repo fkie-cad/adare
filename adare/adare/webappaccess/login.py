@@ -154,3 +154,8 @@ class WebappLogin:
         session = requests.Session()
         session.headers.update(header)
         return session
+
+
+def is_logged_in() -> bool:
+    webapp = WebappLogin()
+    return webapp.get_user_session() is not None

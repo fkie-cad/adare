@@ -11,8 +11,8 @@ log = logging.getLogger(__name__)
 
 
 class PostsetupInstallationsScript(Script):
-    def __init__(self, name: str, source_directory: Path, postsetup_installations: list, render_wrapper: bool = False):
-        super().__init__(name, source_directory, render_wrapper=render_wrapper)
+    def __init__(self, name: str, source_directory: Path, log_directory: Path, postsetup_installations: list, render_wrapper: bool = False):
+        super().__init__(name, source_directory, log_directory=log_directory, render_wrapper=render_wrapper)
         if postsetup_installations:
             var = {
                 'installations': [[installation.name, installation.description, installation.command] for installation
@@ -33,7 +33,7 @@ class RunExperimentScript(Script):
                  experiment_config_file: Path,
                  render_wrapper: bool = False
                  ):
-        super().__init__(name, source_directory, render_wrapper=render_wrapper)
+        super().__init__(name, source_directory, log_directory=log_directory, render_wrapper=render_wrapper)
         var = {
             'log_directory': log_directory,
             'path_directories': path_directories,
@@ -43,11 +43,10 @@ class RunExperimentScript(Script):
         self.update_variables(var)
 
 
-
 class MountNetworkDriveScript(Script):
-    def __init__(self, name: str, source_directory: Path, share_information_list: list = None,
+    def __init__(self, name: str, source_directory: Path, log_directory:Path = None, share_information_list: list = None,
                  render_wrapper: bool = False):
-        super().__init__(name, source_directory, render_wrapper=render_wrapper)
+        super().__init__(name, source_directory, log_directory=log_directory, render_wrapper=render_wrapper)
         if share_information_list:
             var = {
                 'share': share_information_list,
@@ -58,13 +57,13 @@ class MountNetworkDriveScript(Script):
 
 
 class SaveInstalledPackagesScript(Script):
-    def __init__(self, name: str, source_directory: Path, render_wrapper: bool = False):
-        super().__init__(name, source_directory, render_wrapper=render_wrapper)
+    def __init__(self, name: str, source_directory: Path, log_directory: Path = None, render_wrapper: bool = False):
+        super().__init__(name, source_directory, log_directory=log_directory, render_wrapper=render_wrapper)
 
 
 class SetScreenResolutionScript(Script):
-    def __init__(self, name: str, source_directory: Path, resolution: tuple, render_wrapper: bool = False):
-        super().__init__(name, source_directory, render_wrapper=render_wrapper)
+    def __init__(self, name: str, source_directory: Path, resolution: tuple, log_directory: Path = None, render_wrapper: bool = False):
+        super().__init__(name, source_directory, log_directory=log_directory, render_wrapper=render_wrapper)
         var = {
             'x': resolution[0],
             'y': resolution[1]
@@ -73,5 +72,5 @@ class SetScreenResolutionScript(Script):
 
 
 class ShutdownScript(Script):
-    def __init__(self, name: str, source_directory: Path, render_wrapper: bool = False):
-        super().__init__(name, source_directory, render_wrapper=render_wrapper)
+    def __init__(self, name: str, source_directory: Path, log_directory: Path = None, render_wrapper: bool = False):
+        super().__init__(name, source_directory, log_directory=log_directory, render_wrapper=render_wrapper)

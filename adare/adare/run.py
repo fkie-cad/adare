@@ -13,7 +13,7 @@ from adare.cli.gui import exec_gui
 from adare.cli.help import exec_help_breakpoints
 from adare.cli.showversion import exec_show_version
 from adare.cli.show import exec_show_projects, exec_show_environment, exec_show_environments, exec_show_experiment, exec_show_runs, exec_show_run, exec_show_testfunctions, exec_show_testfunction, exec_show_experiments
-from adare.cli.web import exec_web_login, exec_web_logout, exec_download_experiment, exec_download_testfunction, exec_download_environment
+from adare.cli.web import exec_web_login, exec_web_logout, exec_download_experiment, exec_download_testfunction, exec_download_environment, exec_web_sync, exec_web_upload_experiment_run
 from adare.cli.testfunction import exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 from adare.setup_logging import setup_logging
 from adarelib.exceptions import LoggedException, LoggedErrorException
@@ -166,6 +166,13 @@ def main():
     web_download_environment.add_argument('name', help='name of the environment to download')
     web_download_environment.set_defaults(func=lambda args: exec_with_error_printing(exec_download_environment, args))
 
+    web_publish = web_subparsers.add_parser('publish', help='publish an experiment run to the web interface')
+    web_publish.add_argument('ulid', help='ulid of the experiment run to publish')
+    web_publish.set_defaults(func=lambda args: exec_with_error_printing(exec_web_upload_experiment_run, args))
+
+    web_sync = web_subparsers.add_parser('sync', help='sync all environments and experiments with the web interface')
+    web_sync.add_argument('--project', '-p', required=False, help='name of the project')
+    web_sync.set_defaults(func=lambda args: exec_with_error_printing(exec_web_sync, args))
 
     # commands: adare help
     help_sp = subparsers.add_parser('help', help='show help for special options')

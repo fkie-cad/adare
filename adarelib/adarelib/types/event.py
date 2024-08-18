@@ -76,7 +76,6 @@ class ErrorEvent(Event):
     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(config.TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
     status: int = config.StatusEnum.NONE
-    stage: str = ''
     error: str = ''
     error_msg: str = ''
     stage: bool = True
@@ -100,6 +99,8 @@ class GuiFindEvent(GuiEvent):
     error: str = ''
     stage: bool = True
     group_id: int = -1
+
+
 
 
 @attrs.define

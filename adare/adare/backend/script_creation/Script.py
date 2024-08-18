@@ -28,13 +28,15 @@ class Script:
     wrapper_template: Path = None
     only_copy: bool
 
-    def __init__(self, name: str, source_directory: Path, variables: dict or None = None, render_wrapper: bool = False, only_copy: bool = False):
+    def __init__(self, name: str, source_directory: Path, log_directory: Path = None, variables: dict or None = None, render_wrapper: bool = False, only_copy: bool = False):
         self.name = name
         self.variables = variables or {}
         self.is_template = True
         self.directory = source_directory
         self.render_wrapper = render_wrapper
         self.only_copy = only_copy
+        if log_directory:
+            self.variables['log_file'] = log_directory/f'{Path(name).stem}.log'
 
     def set_scripts_path_remote(self, path: Path):
         self.variables['scripts_directory'] = path.as_posix()

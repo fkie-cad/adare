@@ -4,6 +4,8 @@ from adare.backend.experiment.commands import experiment_download
 from adare.backend.testfunction.commands import testfunction_download
 from adarelib.exceptions import NoProjectFoundError
 from adare.web.login import login, logout
+from adare.backend.sync import sync
+from adare.webappaccess.upload import publish_experiment_run
 
 # configure logging
 import logging
@@ -37,3 +39,12 @@ def exec_download_testfunction(arguments):
     if not project_directory:
         raise NoProjectFoundError(log, message='project directory not found')
     testfunction_download(project_directory, arguments.name)
+
+
+def exec_web_sync(arguments):
+    project_directory = determine_projectdirectory(arguments.project)
+    sync(project_directory)
+
+
+def exec_web_upload_experiment_run(arguments):
+    publish_experiment_run(arguments.ulid)

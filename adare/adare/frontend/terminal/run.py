@@ -32,9 +32,10 @@ class ExperimentRunHeader:
     end_time: str
     osinfo: str
     box: str
+    published: bool
 
     def __init__(self, experiment_name: str, experiment_ulid: str, environment_ulid: str, environment_name: str,
-                 project_name: str, duration: pd.Timedelta, start_time: str, end_time: str, box: str, osinfo: str):
+                 project_name: str, duration: pd.Timedelta, start_time: str, end_time: str, box: str, osinfo: str, published: bool):
         self.experiment_name = experiment_name
         self.experiment_ulid = experiment_ulid
         self.environment_ulid = environment_ulid
@@ -45,6 +46,7 @@ class ExperimentRunHeader:
         self.end_time = end_time or '...'
         self.box = box
         self.osinfo = osinfo
+        self.published = published
 
     def __rich__(self) -> Panel:
         title = f'[b medium_turquoise]info[/b medium_turquoise]'
@@ -67,6 +69,8 @@ class ExperimentRunHeader:
             f"{pad_string_to_length('osinfo', 11)}: [b]{self.osinfo}[/b]",
             f"box: {self.box}",
         )
+        published_str = "published" if self.published else "not published"
+        grid.add_row("", published_str)
         return Panel(grid, title=title, border_style="blue", title_align='left', style='')
 
 
@@ -150,7 +154,7 @@ def print_run(run_ulid: str):
         tests_data: dict = api.get_tests(run_ulid)
 
         layout = Layout(name='root')
-        header = Layout(name='header', size=6)
+        header = Layout(name='header', size=7)
         body = Layout(name='body')
         flow = Layout(name='flow', ratio=2)
         tests = Layout(name='tests', ratio=3)
@@ -179,6 +183,7 @@ def print_run(run_ulid: str):
             end_time=data['timestamp_end'].values[0],
             box=data['box'].values[0],
             osinfo=data['osinfo'].values[0],
+            published=data['published'].values[0],
         ))
 
         title = f'[b gold3]{project_name}.{environment_name}.{experiment_name} - [i]{experiment_ulid}[/i][/b gold3]'
