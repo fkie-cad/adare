@@ -1,12 +1,9 @@
 # external imports
 from rich.layout import Layout
 from rich.console import Console
-from rich.panel import Panel
 from rich.table import Table
 from rich.rule import Rule, ConsoleOptions, RenderResult, cell_len, set_cell_size, Measurement
 from rich.text import Text
-import numpy as np
-import datetime
 import pandas as pd
 
 # logging

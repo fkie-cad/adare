@@ -56,6 +56,7 @@ class SerializeApi(DatabaseApi):
             event_dict['text'] = event.text
             event_dict['objective'] = event.objective
             event_dict['success'] = event.success
+            event_dict['positions'] = event.positions
         elif event_type == 'gui_click_event':
             event_dict['clicktype'] = event.clicktype
             event_dict['modifiers'] = event.modifiers

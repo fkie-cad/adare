@@ -189,7 +189,7 @@ class ExperimentApi(ProjectDbApi):
         experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
         experiment_run.timestamp_start = timestamp
 
-    def finish_experiment_run(self, experiment_run_ulid: str, timestamp: datetime):
+    def update_experiment_run_end(self, experiment_run_ulid: str, timestamp: datetime):
         experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
         experiment_run.timestamp_end = timestamp
 

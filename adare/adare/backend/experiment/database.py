@@ -119,6 +119,10 @@ def update_experiment_run_start(experiment_run_ulid: str, timestamp: datetime):
     with ExperimentApi() as api:
         api.update_experiment_run_start(experiment_run_ulid, timestamp)
 
+def update_experiment_run_end(experiment_run_ulid: str, timestamp: datetime):
+    with ExperimentApi() as api:
+        api.update_experiment_run_end(experiment_run_ulid, timestamp)
+
 
 def get_experiment_testfunction_files(project_path: Path, environment_name: str,  experiment_name: str):
     testfunction_files = []

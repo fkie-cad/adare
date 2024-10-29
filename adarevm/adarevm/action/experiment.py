@@ -7,6 +7,7 @@ import guibot.match
 import guibot.errors
 from guibot.finder import Finder, TemplateFinder, TextFinder
 from pathlib import Path
+from guibot.inputmap import PyAutoGUIKey
 
 # internal imports
 from adarelib.helperfunctions.text import slugify
@@ -21,6 +22,7 @@ from adarelib.types.event import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, 
 import logging
 log = logging.getLogger(__name__)
 
+KEYMAP = PyAutoGUIKey()
 
 class Experiment:
     description = None
@@ -46,6 +48,10 @@ class Experiment:
         self.testset = testset
         self.eventsystem = eventsystem
         self.variables = {}
+
+    @property
+    def name(self):
+        return type(self).__name__
 
     def prepare(self):
         """
@@ -145,6 +151,7 @@ class Experiment:
         :param similarity_steps: the steps to decrease the similarity by
         :return:
         """
+        positions = ''
         with EventCtxManager(
             GuiFindEvent(
                 objective=image_name, text=False, status=StatusEnum.RUNNING
@@ -160,12 +167,13 @@ class Experiment:
                     steps_filepath = self.__create_steps_file_icon(image, minimal_similarity=minimal_similarity, step=similarity_steps)
                     with contextlib.suppress(guibot.errors.FindError):
                         match_objects = self.guibot.find_all(steps_filepath.name)
+                positions = "[" + "|".join([f'({match.x},{match.y})' for match in match_objects]) + "]"
             else:
                 log.error(f'provided image {image} does not exits')
 
             event_ctx.update(
                 GuiFindEvent(
-                    objective=image_name, success=bool(match_objects), text=False, status=StatusEnum.FINISHED
+                    objective=image_name, success=bool(match_objects), text=False, status=StatusEnum.FINISHED, positions=positions
                 )
             )
 

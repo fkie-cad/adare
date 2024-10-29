@@ -36,11 +36,13 @@ class ExperimentTablePanel:
         table.add_column("web status", style="cyan", no_wrap=True)
 
         for i, row in self.experiments.iterrows():
+            published = True if row['published'] == 'True' else False
+            in_request = True if row['in_request'] == 'True' else False
             web_status = 'NOT published'
-            if row['in_request']:
-                web_status = 'in request'
-            elif row['published']:
+            if published:
                 web_status = 'published'
+            if in_request:
+                web_status = 'in request'
 
             table.add_row(
                 row['name'],

@@ -1,6 +1,6 @@
 # external imports
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import threading
 from watchdog.observers import Observer
 import time
@@ -93,11 +93,13 @@ def __experiment_update(experiment_ulid, experiment_name, experiment_directory, 
 
 
 def experiment_load(project_path: Path, environment_name, experiment_name: str, force: bool = False):
+    # todo: fix bug that we can have two identical experiments
     experiment_directory = ExperimentDirectory(project_path, experiment_name)
     if not experiment_directory.exists():
         raise ExperimentDirectoryDoesNotExistError(
             log, f'experiment directory [b]{experiment_directory.path}[/b] does not exist',
             possible_solutions=[
+                f'copy the experiment directory to [b]{experiment_directory.path.parent}[/b]',
                 'create the experiment directory with `adare experiment create`'
             ]
         )
@@ -306,7 +308,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     flowconsole.start()
 
     try:
-        timestamp_start = datetime.utcnow()
+        timestamp_start = datetime.now(timezone.utc)
 
         log.info(f'starting experiment run {experiment_name} in project {project_path}')
 
@@ -478,7 +480,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
 
         BP_HOST_BEFORE_BOX_START.trigger_if_in_breakpoints(breakpoints)
         # track time directly before box start
-        timestamp_before_box_start = datetime.utcnow()
+        timestamp_before_box_start = datetime.now(timezone.utc)
         output_processor = VagrantOutputProcessor(experiment_run_ulid=experiment_run_ulid)
         destroy_output_processor = VagrantDestroyOutputProcessor(experiment_run_ulid=experiment_run_ulid)
 
@@ -494,6 +496,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
             'destroy_output_processor': destroy_output_processor,
             'ctx_manager_up': ctx_manager_vagrant_up,
             'ctx_manager_destroy': ctx_manager_vagrant_destroy,
+            'disable_destroy': False,
         }
         box_thread = threading.Thread(target=box.run, kwargs=kwargs)
         box_thread.start()
@@ -508,7 +511,8 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
         experiment_database.update_experiment_run_status(experiment_run_ulid, StatusEnum.FINISHED)
 
         # calculate duration of experiment run
-        timestamp_end = datetime.utcnow()
+        timestamp_end = datetime.now(timezone.utc)
+        experiment_database.update_experiment_run_end(experiment_run_ulid, timestamp_end)
         duration_total = timestamp_end - timestamp_start
         duration_box = timestamp_end - timestamp_before_box_start
         log.info(

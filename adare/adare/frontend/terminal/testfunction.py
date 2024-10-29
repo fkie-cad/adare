@@ -4,7 +4,6 @@ import pandas as pd
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
-from rich.rule import Rule, ConsoleOptions, RenderResult, cell_len, set_cell_size, Measurement
 from rich.text import Text
 
 # internal imports

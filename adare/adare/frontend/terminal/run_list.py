@@ -1,21 +1,13 @@
 # external imports
-import datetime
 import pandas as pd
 from rich.layout import Layout
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.rule import Rule, ConsoleOptions, RenderResult, cell_len, set_cell_size, Measurement
-from rich.text import Text
-import numpy as np
 
 # internal imports
-from adarelib.helperfunctions.cli import print_df, print_dict
 from adare.database.api.frontend import DataRetrievalApi
-from adarelib.exceptions import ArgumentsError
-from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, TwoTitleRule, timedelta_to_str
-from adarelib.config import TIMESTAMP_FORMAT, StatusEnum
-from adare.frontend.terminal.console import TwoTitleRule
+from adare.frontend.terminal.console import DefaultConsole, timedelta_to_str
+from adarelib.config import StatusEnum
 
 import logging
 log = logging.getLogger(__name__)

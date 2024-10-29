@@ -7,7 +7,6 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.rule import Rule, ConsoleOptions, RenderResult, cell_len, set_cell_size, Measurement
 from rich.text import Text
-import numpy as np
 
 # internal imports
 from adarelib.helperfunctions.cli import print_df, print_dict
@@ -18,7 +17,6 @@ from adarelib.config import TIMESTAMP_FORMAT, StatusEnum
 from adare.frontend.terminal.console import TwoTitleRule
 
 import logging
-
 log = logging.getLogger(__name__)
 
 

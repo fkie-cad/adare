@@ -46,7 +46,7 @@ class RedirectHandler(http.server.SimpleHTTPRequestHandler):
         # Shut down the HTTP server
         resp = exchange_code_for_token(GITEA_CLIENT_ID, authorization_code, self.code_verifier, self.redirect_uri)
         self.server.gitea_access_token = resp['access_token']
-        self.server.gitea_access_token_expiry = datetime.datetime.utcnow() + datetime.timedelta(seconds=resp['expires_in'])
+        self.server.gitea_access_token_expiry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=resp['expires_in'])
         self.server.gitea_refresh_token = resp.get('refresh_token', None)
         log.info("Received access token")
 
@@ -63,7 +63,7 @@ class LoginHTTPServer(http.server.HTTPServer):
         super().__init__(server_address, RequestHandlerClass)
         self.server_activate()
         self.gitea_access_token = ''
-        self.gitea_access_token_expiry = datetime.datetime.utcnow()
+        self.gitea_access_token_expiry = datetime.datetime.now(datetime.timezone.utc)
         self.gitea_refresh_token = ''
 
 
@@ -114,6 +114,9 @@ def start_oauth_flow(redirect_uri, port):
         gitea_access_token_expiry = httpd.gitea_access_token_expiry
         gitea_refresh_token = httpd.gitea_refresh_token
 
+        # gitea_access_token_expiry has the wrong timezone since its data is timezone aware for Berlin and we want it to be UTC
+
+
     # access django api to retrieve django knox token
     try:
         response = requests.post(f'{WEBSERVER_URL}api/auth/gitea/', data={'access_token': gitea_access_token})
@@ -130,6 +133,7 @@ def start_oauth_flow(redirect_uri, port):
     django_username = response.json()['user']
     django_token = response.json()['token']
     django_expiry = datetime.datetime.strptime(response.json()['expiry'], '%Y-%m-%dT%H:%M:%S.%fZ')
+
 
     # Save the tokens to the database
     with UserSessionApi() as db:
@@ -189,6 +193,22 @@ def login():
 
     # Start the OAuth flow
     start_oauth_flow(redirect_uri, redirect_handler_port)
+
+
+def is_logged_in(username: str = None, silent:bool = False):
+    with UserSessionApi() as db:
+        db.remove_expired_user_sessions()
+        if not username:
+            if user_session := db.get_first_user_session():
+                username = user_session.username
+        if not username:
+            if not silent:
+                log_print(log, "No user is currently logged in")
+            return False
+        if not silent:
+            log_print(log, f"User [b]{username}[/b] is currently logged in")
+        return True
+
 
 
 def logout(username: str = None):
