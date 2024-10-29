@@ -1,5 +1,5 @@
 # external imports
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # internal imports
@@ -56,10 +56,12 @@ class UserSessionApi(DatabaseApi):
 
     def remove_expired_user_sessions(self):
         for user_session in self._session.query(UserSession).all():
-            if user_session.gitea_token.expiration < datetime.utcnow():
+            gitea_token_expiration = user_session.gitea_token.expiration.replace(tzinfo=timezone.utc)
+            if gitea_token_expiration <= datetime.now(timezone.utc):
                 self.remove_user_session(user_session.username)
                 log.info(f'deleted gitea token for user session ({user_session.username}), because it expired')
-            if user_session.django_token.expiration < datetime.utcnow():
+            django_token_expiration = user_session.django_token.expiration.replace(tzinfo=timezone.utc)
+            if django_token_expiration < datetime.now(timezone.utc):
                 self.remove_user_session(user_session.username)
                 log.info(f'deleted django token for user session ({user_session.username}), because it expired')
         self._session.commit()

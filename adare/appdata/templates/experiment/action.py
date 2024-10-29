@@ -1,5 +1,5 @@
 from adarevm.action.experiment import Experiment
-from guibot.guibot import GuiBot
+from pathlib import Path
 
 import logging
 log = logging.getLogger(__name__)
@@ -8,11 +8,11 @@ log = logging.getLogger(__name__)
 class {{ name }}(Experiment):
     description = 'place the description of your experiment here'
 
-    def __init__(self):
+    def __init__(self, img_folder: Path, tessdata_folder: Path, testset, eventsystem):
         """
             initialization function which in most cases should not be changed (except there is a need to use a different display controller or computer vision backend for guibot)
         """
-        super().__init__()
+        super().__init__(img_folder, tessdata_folder, testset, eventsystem)
 
     def prepare(self):
         """
@@ -24,9 +24,9 @@ class {{ name }}(Experiment):
         """
             this function should be used to execute the gui automation steps
         """
-        log.info(f'experiment {type(self).__name__} started')
+        log.info(f'experiment {self.name} started')
 
         # place the code to execute some stuff here
 
 
-        log.info(f'experiment {type(self).__name__} done')
+        log.info(f'experiment {self.name} done')

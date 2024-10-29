@@ -1,6 +1,5 @@
 # internal imports
 from adare.backend.basics import determine_projectdirectory
-from adare.backend.experiment.commands import experiment_create, experiment_load, experiment_run
 from adarelib.exceptions import NoProjectFoundError, ArgumentsError
 from adarelib.breakpoint import BREAKPOINTS
 from adarelib.breakpoint import resolve_breakpoints
@@ -11,6 +10,7 @@ log = logging.getLogger(__name__)
 
 
 def exec_experiment_load(arguments):
+    from adare.backend.experiment.commands import experiment_load
     if not arguments.environment:
         raise ArgumentsError(log, message='no environment given', possible_solutions=['use -e to specify the environment'])
     if project_directory := determine_projectdirectory(arguments.project):
@@ -20,6 +20,7 @@ def exec_experiment_load(arguments):
 
 
 def exec_experiment_create(arguments):
+    from adare.backend.experiment.commands import experiment_create
     if project_directory := determine_projectdirectory(arguments.project):
         experiment_create(project_directory, arguments.experiment)
     else:
@@ -27,6 +28,7 @@ def exec_experiment_create(arguments):
 
 
 def exec_experiment_run(arguments):
+    from adare.backend.experiment.commands import experiment_run
     if arguments.debug:
         breakpoints = BREAKPOINTS
     else:

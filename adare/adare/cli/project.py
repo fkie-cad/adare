@@ -3,7 +3,6 @@ from pathlib import Path
 
 # internal imports
 from adare.backend.basics import determine_projectdirectory
-from adare.backend.project.commands import project_create, project_remove, project_add_tessdata, project_list
 
 # configure logging
 import logging
@@ -16,6 +15,7 @@ def exec_create_project(arguments):
 
     :param arguments: arguments parsed via input
     """
+    from adare.backend.project.commands import project_create
     path = Path.cwd() / arguments.name
     description = arguments.description or ""
     project_create(path, path.name, description)
@@ -27,6 +27,7 @@ def exec_remove_project(arguments):
 
     :param arguments: arguments parsed via input
     """
+    from adare.backend.project.commands import project_remove
     path = determine_projectdirectory(arguments.name)
     if not path:
         log.error("no valid project directory provided")
@@ -43,6 +44,7 @@ def exec_download_tessdata(arguments):
 
     :param arguments: arguments parsed via input
     """
+    from adare.backend.project.commands import project_add_tessdata
     path = determine_projectdirectory(arguments.name)
     if not path:
         log.error("no valid project directory provided")
@@ -51,6 +53,7 @@ def exec_download_tessdata(arguments):
 
 
 def exec_list_projects(arguments):
+    from adare.backend.project.commands import project_list
     """
     lists all projects
 

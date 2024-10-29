@@ -31,13 +31,23 @@ class EnvironmentTablePanel:
         table.add_column("ulid", style="cyan", no_wrap=True)
         table.add_column("box", style="cyan", no_wrap=True)
         table.add_column("os", style="cyan", no_wrap=True)
+        table.add_column("web status", style="cyan", no_wrap=True)
 
         for i, row in self.projects.iterrows():
+            published = True if row['published'] == 'True' else False
+            in_request = True if row['in_request'] == 'True' else False
+            web_status = 'NOT published'
+            if published:
+                web_status = 'published'
+            if in_request:
+                web_status = 'in request'
+
             table.add_row(
                 row['dotnotation'],
                 row['ulid'],
                 row['vagrantbox'],
-                row['osinfo']
+                row['osinfo'],
+                web_status,
             )
         return Panel(table, title="[b gold3]environments[/b gold3]", border_style="blue", title_align="left")
 

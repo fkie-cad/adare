@@ -1,8 +1,4 @@
-# external imports
-from pathlib import Path
-
 # internal imports
-from adare.backend.testfunction.commands import testfunction_create, testfunction_remove, testfunction_load, testfunction_list
 from adare.backend.basics import determine_projectdirectory
 from adarelib.exceptions import NoProjectFoundError
 
@@ -12,6 +8,7 @@ log = logging.getLogger(__name__)
 
 
 def exec_create_testfunction(arguments):
+    from adare.backend.testfunction.commands import testfunction_create
     if project_directory := determine_projectdirectory(arguments.project):
         testfunction_create(
             project_directory,
@@ -22,6 +19,7 @@ def exec_create_testfunction(arguments):
 
 
 def exec_remove_testfunction(arguments):
+    from adare.backend.testfunction.commands import testfunction_remove
     if project_directory := determine_projectdirectory(arguments.project):
         testfunction_remove(
             project_directory,
@@ -32,6 +30,7 @@ def exec_remove_testfunction(arguments):
 
 
 def exec_load_testfunction(arguments):
+    from adare.backend.testfunction.commands import testfunction_load
     if project_directory := determine_projectdirectory(arguments.project):
         testfunction_load(
             project_directory,
@@ -42,4 +41,5 @@ def exec_load_testfunction(arguments):
 
 
 def exec_list_testfunctions(arguments):
+    from adare.backend.testfunction.commands import testfunction_list
     testfunction_list()

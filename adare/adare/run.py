@@ -5,15 +5,14 @@ import time
 
 # internal imports
 from adare.cli.project import exec_create_project, exec_remove_project, exec_list_projects
-from adare.cli.environment import exec_environment_load, exec_environment_create, \
-    exec_environment_delete
+from adare.cli.environment import exec_environment_load, exec_environment_create, exec_environment_delete
 from adare.cli.experiment import exec_experiment_create, exec_experiment_load, exec_experiment_run
 from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
 from adare.cli.help import exec_help_breakpoints
 from adare.cli.showversion import exec_show_version
 from adare.cli.show import exec_show_projects, exec_show_environment, exec_show_environments, exec_show_experiment, exec_show_runs, exec_show_run, exec_show_testfunctions, exec_show_testfunction, exec_show_experiments
-from adare.cli.web import exec_web_login, exec_web_logout, exec_download_experiment, exec_download_testfunction, exec_download_environment, exec_web_sync, exec_web_upload_experiment_run
+from adare.cli.web import exec_web_login, exec_web_logout, exec_web_status, exec_download_experiment, exec_download_testfunction, exec_download_environment, exec_web_sync, exec_web_upload_experiment_run
 from adare.cli.testfunction import exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 from adare.setup_logging import setup_logging
 from adarelib.exceptions import LoggedException, LoggedErrorException
@@ -149,6 +148,9 @@ def main():
     web_logout = web_subparsers.add_parser('logout', help='logout from the web interface')
     web_logout.set_defaults(func=lambda args: exec_with_error_printing(exec_web_logout, args))
 
+    web_status = web_subparsers.add_parser('status', help='show the login status')
+    web_status.set_defaults(func=lambda args: exec_with_error_printing(exec_web_status, args))
+
     web_download = web_subparsers.add_parser('download', help='download an experiment or testfunction from the web interface')
     web_download.add_argument('--project', '-p', required=False, help='name of the project')
     web_download.set_defaults(func=lambda args: web_download.print_help())
@@ -214,7 +216,7 @@ def main():
     show_runs.set_defaults(func=lambda args: exec_with_error_printing(exec_show_runs, args))
 
     show_run = show_subparsers.add_parser('run', help='show a run')
-    show_run.add_argument('-run-id', '--run-ulid', help='ulid of the run')
+    show_run.add_argument('ulid', help='ulid of the run')
     show_run.set_defaults(func=lambda args: exec_with_error_printing(exec_show_run, args))
 
     show_testfunctions = show_subparsers.add_parser('testfunctions', help='show all testfunctions')

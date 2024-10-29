@@ -99,6 +99,7 @@ class GuiFindEvent(GuiEvent):
     error: str = ''
     stage: bool = True
     group_id: int = -1
+    positions: str = ''
 
 
 

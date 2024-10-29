@@ -4,7 +4,8 @@ from adare.backend.testfunction.database import get_testfunction_files_ids
 from adare.backend.environment.commands import environment_sync
 from adare.backend.experiment.commands import experiment_sync
 from adare.backend.testfunction.commands import testfunction_sync
-
+from adare.web.login import is_logged_in
+from adarelib.console import log_print
 
 from pathlib import Path
 
@@ -32,13 +33,17 @@ def sync_testfunctions_all(project: Path = None):
 
 
 def sync(project: Path = None):
+    if not is_logged_in(silent=True):
+        log_print(log, 'You need to be logged in to sync')
+        return
     log.info(f'syncing environments ...')
     sync_environments_all(project)
     log.info(f'syncing experiments ...')
     sync_experiments_all(project)
     log.info(f'syncing testfunctions ...')
     sync_testfunctions_all(project)
-    log.info(f'syncing done')
+
+    log_print(log, 'Sync done')
 
 
 
