@@ -1,9 +1,6 @@
 # external imports
 from pathlib import Path
 
-# internal imports
-from adare.database.api.project import ProjectDbApi
-
 # configure logging
 import logging
 log = logging.getLogger(__name__)
@@ -26,6 +23,7 @@ def __check_project_directory(project_directory: Path) -> bool:
 
 
 def determine_projectdirectory(project_name: str) -> Path or None:
+    from adare.database.api.project import ProjectDbApi
     if project_name:
         with ProjectDbApi() as db:
             if project := db.get_project(project_name):

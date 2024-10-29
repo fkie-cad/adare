@@ -1,5 +1,4 @@
 from adare.backend.basics import determine_projectdirectory
-from adare.backend.environment.commands import environment_load, environment_create, environment_delete
 from adarelib.exceptions import NoProjectFoundError
 
 # configure logging
@@ -8,6 +7,7 @@ log = logging.getLogger(__name__)
 
 
 def exec_environment_load(arguments):
+    from adare.backend.environment.commands import environment_load
     project_directory = determine_projectdirectory(arguments.project)
     if not project_directory:
         raise NoProjectFoundError(log, message='project directory not found')
@@ -15,6 +15,7 @@ def exec_environment_load(arguments):
 
 
 def exec_environment_create(arguments):
+    from adare.backend.environment.commands import environment_create
     project_directory = determine_projectdirectory(arguments.project)
     if not project_directory:
         raise NoProjectFoundError(log, message='project directory not found')
@@ -22,6 +23,7 @@ def exec_environment_create(arguments):
 
 
 def exec_environment_delete(arguments):
+    from adare.backend.environment.commands import environment_delete
     environment_delete(arguments.ulid, force=arguments.force)
 
 

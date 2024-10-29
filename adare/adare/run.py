@@ -5,8 +5,7 @@ import time
 
 # internal imports
 from adare.cli.project import exec_create_project, exec_remove_project, exec_list_projects
-from adare.cli.environment import exec_environment_load, exec_environment_create, \
-    exec_environment_delete
+from adare.cli.environment import exec_environment_load, exec_environment_create, exec_environment_delete
 from adare.cli.experiment import exec_experiment_create, exec_experiment_load, exec_experiment_run
 from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
