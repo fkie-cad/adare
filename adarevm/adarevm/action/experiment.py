@@ -7,6 +7,7 @@ import guibot.match
 import guibot.errors
 from guibot.finder import Finder, TemplateFinder, TextFinder
 from pathlib import Path
+from guibot.inputmap import PyAutoGUIKey
 
 # internal imports
 from adarelib.helperfunctions.text import slugify
@@ -21,6 +22,7 @@ from adarelib.types.event import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, 
 import logging
 log = logging.getLogger(__name__)
 
+KEYMAP = PyAutoGUIKey()
 
 class Experiment:
     description = None

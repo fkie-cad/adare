@@ -306,7 +306,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
     flowconsole.start()
 
     try:
-        timestamp_start = datetime.utcnow()
+        timestamp_start = datetime.now()
 
         log.info(f'starting experiment run {experiment_name} in project {project_path}')
 
@@ -478,7 +478,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
 
         BP_HOST_BEFORE_BOX_START.trigger_if_in_breakpoints(breakpoints)
         # track time directly before box start
-        timestamp_before_box_start = datetime.utcnow()
+        timestamp_before_box_start = datetime.now()
         output_processor = VagrantOutputProcessor(experiment_run_ulid=experiment_run_ulid)
         destroy_output_processor = VagrantDestroyOutputProcessor(experiment_run_ulid=experiment_run_ulid)
 
@@ -494,6 +494,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
             'destroy_output_processor': destroy_output_processor,
             'ctx_manager_up': ctx_manager_vagrant_up,
             'ctx_manager_destroy': ctx_manager_vagrant_destroy,
+            'disable_destroy': False,
         }
         box_thread = threading.Thread(target=box.run, kwargs=kwargs)
         box_thread.start()
@@ -508,7 +509,7 @@ def experiment_run(project_path: Path, experiment_name: str, environment_name: s
         experiment_database.update_experiment_run_status(experiment_run_ulid, StatusEnum.FINISHED)
 
         # calculate duration of experiment run
-        timestamp_end = datetime.utcnow()
+        timestamp_end = datetime.now()
         duration_total = timestamp_end - timestamp_start
         duration_box = timestamp_end - timestamp_before_box_start
         log.info(

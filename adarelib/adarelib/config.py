@@ -84,6 +84,8 @@ class StatusEnum(IntEnum):
     FINISHED = 9
     BREAKPOINT_HIT = 10
     BREAKPOINT_RESOLVED = 11
+    TEST_MISSING = 12
+    TEST_FAILED = 13
 
     @staticmethod
     def from_string(status_string: str):
@@ -108,6 +110,10 @@ class StatusEnum(IntEnum):
             return StatusEnum.BREAKPOINT_HIT
         elif status_string == 'breakpoint_resolved':
             return StatusEnum.BREAKPOINT_RESOLVED
+        elif status_string == 'test_missing':
+            return StatusEnum.TEST_MISSING
+        elif status_string == 'test_failed':
+            return StatusEnum.TEST_FAILED
         return StatusEnum.NONE
 
     @staticmethod
@@ -134,6 +140,10 @@ class StatusEnum(IntEnum):
             icon = ':stop_sign:'
         elif value == StatusEnum.BREAKPOINT_RESOLVED:
             icon = ':checkered_flag:'
+        elif value == StatusEnum.TEST_MISSING:
+            icon = ':question:'
+        elif value == StatusEnum.TEST_FAILED:
+            icon = ':no_entry_sign:'
         return f'[{colorname}]{icon}[/{colorname}]' if colorname else icon
 
     @staticmethod
@@ -158,6 +168,10 @@ class StatusEnum(IntEnum):
             return 'red'
         elif value == StatusEnum.BREAKPOINT_RESOLVED:
             return 'green'
+        elif value == StatusEnum.TEST_MISSING:
+            return 'blue'
+        elif value == StatusEnum.TEST_FAILED:
+            return 'red'
         return ''
 
 

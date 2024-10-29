@@ -884,15 +884,17 @@ class ExperimentRun(SerializerMixin, Base):
             found = False
             for t in self.tests:
                 if t.abstract_test_id == test.ulid:
-                    if t.result and t.result.status == StatusEnum.SUCCESS:
+                    if t.result:
                         found = True
                         break
             if not found:
-                return StatusEnum.ERROR
+                return StatusEnum.TEST_MISSING
+        for t in self.tests:
+            if not t.result:
+                continue
+            if t.result.status != StatusEnum.SUCCESS:
+                return StatusEnum.FAILED
         return StatusEnum.SUCCESS
-
-
-
 
 
     def __str__(self):
