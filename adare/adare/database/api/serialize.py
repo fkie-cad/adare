@@ -39,7 +39,7 @@ class SerializeApi(DatabaseApi):
             'category': event.category,
             'status': event.status,
             'error': event.error,
-            'group_id': event.group_id,
+            'group_key': event.group_key,
         }
         if event_type == 'command_event':
             event_dict['name'] = event.name

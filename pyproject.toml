@@ -12,6 +12,7 @@ adarevm = {path="adarevm"}
 adare = {path="adare"}
 pyautogui = "^0.9.54"
 pillow = "^10.3.0"
+websockets = "^15.0"
 
 
 [build-system]

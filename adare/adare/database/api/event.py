@@ -9,7 +9,7 @@ from threading import Lock
 # internal imports
 from adare.database.models.experiment import EventFactory, Event as ModelEvent, ExperimentRun, Result as ModelResult, Stage, StageInRun, AbstractTest
 from adare.database.api.experiment import ExperimentApi
-from adarelib.types.event import EventSystemData
+from adarelib.types.event import EventSystemData, Event
 from adare.config import database as config_database
 from adarelib.config import TIMESTAMP_FORMAT, StatusEnum
 
@@ -45,9 +45,8 @@ class EventDbApi(ExperimentApi):
         if not (stage_db := self._session.query(Stage).filter(Stage.name == f'box.experiment_run.{event.category}').first()):
             log.warning(f"Stage '{event.event_type}' not found in database")
             return
-        # find stage in run in running events
         group_event = self._session.query(ModelEvent) \
-            .filter(ModelEvent.group_id == event.group_id,
+            .filter(ModelEvent.group_key == event.group_key,
                     ModelEvent.experiment_run_id == experiment_run.ulid,
                     ModelEvent.ulid != event.ulid) \
             .first()
@@ -68,6 +67,7 @@ class EventDbApi(ExperimentApi):
             event.stage_in_run = stage_in_run
             log.info(f"added stage '{event.event_type}' to run {experiment_run.ulid}")
         else:
+            log.info(f"found group event {group_event.ulid} for event {event.ulid}")
             if group_event.stage_in_run:
                 # update stage in run
                 if event.status != StatusEnum.RUNNING:
@@ -131,3 +131,39 @@ class EventDbApi(ExperimentApi):
                         self.__update_stage(model_event, experiment_run)
                 self._session.commit()
                 log.info(f'updated events for experiment run {experiment_run_ulid}')
+
+    def add_event(self, event: Event, experiment_run_ulid: str):
+        with lock:
+            experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
+            event_data = attrs.asdict(event)
+            # rename category to event_type
+            category = event_data.pop('category')
+            replace_list_recursive_in_dict(event_data)
+            # convert string to datetime object
+            event_data['timestamp'] = datetime.strptime(event_data['timestamp'], TIMESTAMP_FORMAT)
+            event_data['experiment_run_id'] = experiment_run_ulid
+            if event_data.get('result'):
+                result = self.get_or_create_test_result(event_data.pop('result'))
+                if result:
+                    event_data['result'] = result
+                else:
+                    log.fatal(f'could not create test result for event {event.ulid}')
+            if event_data.get('test_name'):
+                tname = event_data.pop('test_name')
+                # get test with name and where test in ExperimentRun.experiment.abstract_tests
+                experiment = experiment_run.experiment
+                test = self._session.query(AbstractTest).filter_by(name=tname)
+                # check if test is more than once in experiment
+                if test.count() > 1:
+                    test = test.filter(AbstractTest.ulid.in_([t.ulid for t in experiment.abstract_tests]))
+                if test:
+                    event_data['abstract_test'] = test.first()
+                else:
+                    log.error(f'could not find test with name {tname}')
+            model_event: ModelEvent = EventFactory.create_event(category, **event_data)
+            self._session.add(model_event)
+            self._session.commit()
+            log.info(f'added event {model_event.ulid} to experiment run {experiment_run_ulid}')
+            if model_event.stage:
+                self.__update_stage(model_event, experiment_run)
+            self._session.commit()

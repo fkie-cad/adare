@@ -18,3 +18,11 @@ class ExperimentConfig:
     logfile: str
     eventfile: str
     statusfile: str
+
+
+@attrs.define
+class RecordConfig:
+    directory: str
+    logfile: str
+    start_stop_key_combination: list[str]
+

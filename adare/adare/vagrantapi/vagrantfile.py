@@ -370,9 +370,21 @@ class VagrantMachine:
         self.synced_folders.append(
             {
                 'source': path_on_host.as_posix(),
-                'destination': path_in_guest.as_posix()
+                'destination': path_in_guest.as_posix(),
+                'disabled': False
             }
         )
+
+    def disable_default_synced_folder(self, platform: str):
+        destination = r'/vagrant' if platform == 'linux' else r'C:/vagrant'
+        self.synced_folders.append(
+            {
+                'source': '.',
+                'destination': destination,
+                'disabled': True
+            }
+        )
+
 
 
 

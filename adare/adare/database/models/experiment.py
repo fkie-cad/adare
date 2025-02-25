@@ -131,6 +131,8 @@ class PostSetupInstallation(SerializerMixin, Base):
     name = Column(String)
     description = Column(String, nullable=True)
     command = Column(String)
+    shell = Column(Boolean, default=False)
+    cwd = Column(String, nullable=True, default=None)
 
     def __str__(self):
         return str(self.name)
@@ -549,7 +551,7 @@ class Event(SerializerMixin, Base):
     status = Column(Integer, default=StatusEnum.PENDING)
     error = Column(String)
     stage = Column(Boolean, default=False)
-    group_id = Column(Integer)
+    group_key = Column(String)
     stage_in_run_id = Column(Integer, ForeignKey('stageinrun.id'), nullable=True, default=None)
     stage_in_run = relationship("StageInRun", backref=backref("events", cascade="all, delete-orphan"))
 
@@ -762,15 +764,6 @@ class ExperimentRunFiles(SerializerMixin, Base):
     log_vagrant_id = Column(Integer, ForeignKey('logfile.ulid'), nullable=True)
     log_vagrant = relationship(LogFile, foreign_keys=[log_vagrant_id])
 
-    package_dump_id = Column(Integer, ForeignKey('logfile.ulid'), nullable=True)
-    package_dump = relationship(LogFile, foreign_keys=[package_dump_id])
-
-    log_installations_id = Column(Integer, ForeignKey('logfile.ulid'), nullable=True)
-    log_installations = relationship(LogFile, foreign_keys=[log_installations_id])
-
-    log_run_id = Column(Integer, ForeignKey('logfile.ulid'), nullable=True)
-    log_run = relationship(LogFile, foreign_keys=[log_run_id])
-
     log_adarevm_id = Column(Integer, ForeignKey('logfile.ulid'), nullable=True)
     log_adarevm = relationship(LogFile, foreign_keys=[log_adarevm_id])
 
@@ -903,3 +896,4 @@ class ExperimentRun(SerializerMixin, Base):
 
     def __repr__(self):
         return f"<ExperimentRun(ulid='{self.ulid}',experiment={self.experiment_id})>"
+

@@ -11,7 +11,7 @@ Vagrant.configure("2") do |config|
     {% endif %}
     {% endfor %}
     {% for s_folder in synced_folders %}
-    config.vm.synced_folder "{{ s_folder.source }}", "{{ s_folder.destination }}"
+    config.vm.synced_folder "{{ s_folder.source }}", "{{ s_folder.destination }}"{% if s_folder.disabled %}, disabled: true{% endif %}
     {% endfor %}
 
     {% if virtualbox_name %}config.vm.define "{{ virtualbox_name }}"{% endif %}

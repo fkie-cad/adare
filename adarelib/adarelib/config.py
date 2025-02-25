@@ -66,6 +66,11 @@ DEFAULT_NFS_CONF = {
 
 }
 
+SHARE_POINT_VM = {
+    'linux': '/adare/',
+    'windows': 'C:/adare/'
+}
+
 DEFAULT_NETWORKDRIVE_SHARENAME = "share"
 
 # maximum time for a breakpoint to be active

@@ -6,7 +6,7 @@ import time
 # internal imports
 from adare.cli.project import exec_create_project, exec_remove_project, exec_list_projects
 from adare.cli.environment import exec_environment_load, exec_environment_create, exec_environment_delete
-from adare.cli.experiment import exec_experiment_create, exec_experiment_load, exec_experiment_run
+from adare.cli.experiment import exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test
 from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
 from adare.cli.help import exec_help_breakpoints
@@ -110,11 +110,16 @@ def main():
 
     experiment_run = experiment_subparsers.add_parser('run', help='run the experiment in a given environment')
     experiment_run.add_argument('experiment', help='name of the experiment to run')
-    experiment_run.add_argument('-e', '--environment', help='name of the environment where the experiment should be run')
+    experiment_run.add_argument('-e', '--environment', help='name of the environment where the experiment should be run', required=True)
     experiment_run.add_argument('--breakpoints', '-b', nargs='*', default=[],
                                 help='name of the breakpoints to stop the experiment at')
     experiment_run.add_argument('--debug', '-d', action='store_true', help='run the experiment in debug mode (stop at all breakpoints)')
     experiment_run.set_defaults(func=lambda args: exec_with_error_printing(exec_experiment_run, args))
+
+    experiment_test = experiment_subparsers.add_parser('test', help='run the experiment in a given environment in test mode')
+    experiment_test.add_argument('experiment', help='name of the experiment to run')
+    experiment_test.add_argument('-e', '--environment', help='name of the environment where the experiment should be run', required=True)
+    experiment_test.set_defaults(func=lambda args: exec_with_error_printing(exec_experiment_test, args))
 
     # commands: adare testfunction ...
     testfunction = subparsers.add_parser('testfunction', help='wrapper for needed testfunction commands')

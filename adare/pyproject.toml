@@ -26,6 +26,7 @@ sphinx-rtd-theme = "^2.0.0"
 watchdog = "^4.0.0"
 keyboard = "^0.13.5"
 python-ulid = "^2.7.0"
+websockets = "^15.0"
 
 
 [tool.poetry.scripts]

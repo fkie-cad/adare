@@ -11,10 +11,10 @@ log = logging.getLogger(__name__)
 
 def exec_experiment_load(arguments):
     from adare.backend.experiment.commands import experiment_load
-    if not arguments.environment:
-        raise ArgumentsError(log, message='no environment given', possible_solutions=['use -e to specify the environment'])
+    # if not arguments.environment:
+    #     raise ArgumentsError(log, message='no environment given', possible_solutions=['use -e to specify the environment'])
     if project_directory := determine_projectdirectory(arguments.project):
-        experiment_load(project_directory, arguments.environment, arguments.experiment, force=arguments.force)
+        experiment_load(project_directory, arguments.experiment, force=arguments.force)
     else:
         raise NoProjectFoundError(log, message='no project directory found')
 
@@ -29,12 +29,16 @@ def exec_experiment_create(arguments):
 
 def exec_experiment_run(arguments):
     from adare.backend.experiment.commands import experiment_run
-    if arguments.debug:
-        breakpoints = BREAKPOINTS
-    else:
-        breakpoints = resolve_breakpoints(arguments.breakpoints)
+
+    disable_printing = False
+    if arguments.verbose or arguments.very_verbose:
+        disable_printing = True
 
     if project_directory := determine_projectdirectory(arguments.project):
-        experiment_run(project_directory, arguments.experiment, arguments.environment, breakpoints)
+        experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing)
     else:
         raise NoProjectFoundError(log, message='no project directory found')
+
+
+def exec_experiment_test(arguments):
+    raise NotImplementedError('exec_experiment_test not implemented yet')

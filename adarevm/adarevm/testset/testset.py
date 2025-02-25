@@ -1,11 +1,13 @@
+from collections.abc import Callable
 from pathlib import Path
 import shutil
+from typing import Awaitable
 
 from adarelib.parsers import parse_testsetfile
 from adarelib.types.testset import TestsetFile
 from adarelib.testfunction import import_basictest_subclasses, get_missing_testfunctions, structure_tests
-from adarelib.event import EventSystem, EventCtxManager
 from adarelib.types.event import TestEvent, CommandEvent
+from adarevm.event import EventCtxManager
 from adarelib.config import StatusEnum
 from adarevm.shell import execute_on_shell
 from adarelib.exceptions import LoggedErrorException
@@ -22,14 +24,14 @@ class Testset:
     supported_tests: dict
     testsetfile: TestsetFile
     tests: dict
+    log_func: Callable[[str], Awaitable[None]]
+    executed_commands: list
 
-    event_system: EventSystem
-
-    def __init__(self, testfunctions_directory: Path, testsetfile: Path, event_system: EventSystem):
+    def __init__(self, testfunctions_directory: Path, testsetfile: Path, log_func: Callable[[str], Awaitable[None]]):
         self.supported_tests = import_basictest_subclasses(testfunctions_directory)
         self.testsetfile: TestsetFile = parse_testsetfile(testsetfile)
 
-        if unsupported_testfunctions := get_missing_testfunctions(
+        if get_missing_testfunctions(
                 self.testsetfile, self.supported_tests
         ):
             raise TestsetExecutionError(log, 'testset contains tests that are not supported by the testfunction collection')
@@ -38,7 +40,8 @@ class Testset:
         if self.structure_error_dict:
             raise TestsetExecutionError(log, 'testset contains tests that are not supported by the testfunction collection')
 
-        self.event_system = event_system
+        self.log_func = log_func
+        self.executed_commands = []
 
     def execute_command(self, command_name: str):
         available_commands = [com.name for com in self.testsetfile.commands]
@@ -50,7 +53,8 @@ class Testset:
         with EventCtxManager(
                 CommandEvent(
                     name=command_name, command=command.command, status=StatusEnum.RUNNING,
-                ), self.event_system
+                ),
+                self.log_func
         ) as event_ctx:
             toolpath = command.command.split(' ')[0]
             toolpath = f'{toolpath}'
@@ -72,10 +76,10 @@ class Testset:
                     returncode=ret['returncode'], stdout=ret['stdout']
                 )
             )
+            self.executed_commands.append(command_name)
 
     def __check_if_command_already_executed(self, command_name: str) -> bool:
-        command_events = [event for event in self.event_system.data.events if isinstance(event, CommandEvent)]
-        return any(event.name == command_name for event in command_events)
+        return any(event.name == command_name for event in self.executed_commands)
 
     def test(self, name: str, variables: dict):
         if name not in self.tests:
@@ -93,7 +97,7 @@ class Testset:
                 TestEvent(
                     test_name=name, status=StatusEnum.RUNNING
                 ),
-                self.event_system
+                self.log_func
         ) as event_ctx:
             test_result = test.test()
             event_ctx.update(
@@ -101,8 +105,6 @@ class Testset:
                     test_name=name, status=StatusEnum.FINISHED, result=test_result
                 )
             )
-
-        self.event_system.save()
 
     def testall(self, variables: dict):
         for test in self.tests:

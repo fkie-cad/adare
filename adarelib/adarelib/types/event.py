@@ -47,7 +47,7 @@ class CommandEvent(Event):
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
-    group_id: int = -1
+    group_key: str = ''
 
 
 @attrs.define
@@ -66,7 +66,7 @@ class TestEvent(Event):
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
-    group_id: int = -1
+    group_key: str = ''
 
 
 @attrs.define
@@ -79,7 +79,7 @@ class ErrorEvent(Event):
     error: str = ''
     error_msg: str = ''
     stage: bool = True
-    group_id: int = -1
+    group_key: str = ''
 
 
 @attrs.define
@@ -98,7 +98,7 @@ class GuiFindEvent(GuiEvent):
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
-    group_id: int = -1
+    group_key: str = ''
     positions: str = ''
 
 
@@ -115,7 +115,7 @@ class GuiClickEvent(GuiEvent):
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
-    group_id: int = -1
+    group_key: str = ''
 
 
 @attrs.define
@@ -127,7 +127,7 @@ class GuiKeypressEvent(GuiEvent):
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
-    group_id: int = -1
+    group_key: str = ''
 
 
 @attrs.define
@@ -139,7 +139,7 @@ class GuiIdleEvent(GuiEvent):
     status: int = config.StatusEnum.RUNNING
     error: str = ''
     stage: bool = True
-    group_id: int = -1
+    group_key: str = ''
 
 
 @attrs.define
@@ -175,3 +175,19 @@ class EventSystemData:
 
 
 
+def transform_data_to_event(data: dict) -> Event:
+    supported_events = {
+        'test': TestEvent,
+        'gui:find': GuiFindEvent,
+        'gui:click': GuiClickEvent,
+        'gui:keypress': GuiKeypressEvent,
+        'gui:idle': GuiIdleEvent,
+        'command': CommandEvent,
+        'error': ErrorEvent
+    }
+    if data['category'] in supported_events:
+        event_class = supported_events[data['category']]
+        return cattrs.structure(data, event_class)
+    else:
+        log.warning(f'event category {data["category"]} is not supported')
+        raise ValueError(f'event category {data["category"]} is not supported')
