@@ -2,7 +2,7 @@
 from pathlib import Path
 import shutil
 import jinja2
-from datetime import datetime
+from datetime import datetime, timezone
 import attrs
 
 # internal imports
@@ -27,69 +27,21 @@ log = logging.getLogger(__name__)
 class ExperimentRunDirectory(Directory):
     path: Path
     log_directory: Path
-    scripts_directory: Path
-    breakpoint_directory: Path
-    # testsetfile: Path
-    # actionfile: Path
-    # testfunction_directory: Path
-    log_file: Path
-    event_file: Path
-    status_file: Path
-    run_config_file: Path
+    vagrant_log_file: Path
+    adarevm_log_file: Path
 
-    install_script: Path
-    wrapper_install_script: Path
-    run_script: Path
-    wrapper_run_script: Path
-    packagedump_script: Path
-    wrapper_packagedump_script: Path
-
-    vagrant_log: Path
-    install_log: Path
-    run_log: Path
-    packagedump_log: Path
-
-    def __init__(self, project_directory: ProjectDirectory, experiment: str, script_suffix: str = '.sh'):
-        super().__init__(project_directory.run / experiment / datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S'))
+    def __init__(self, project_directory: ProjectDirectory, experiment: str):
+        super().__init__(project_directory.run / experiment / datetime.now(timezone.utc).strftime('%Y-%m-%d_%H-%M-%S'))
         self.log_directory = self.path / 'logs'
-        self.scripts_directory = self.path / 'scripts'
-        self.breakpoint_directory = self.path / 'breakpoints'
-        self.status_directory = self.path / 'status'
-        # self.testfunction_directory = self.path / 'testfunctions'
-        # self.testsetfile = self.path / 'testset.yml'
-        # self.actionfile = self.path / 'action.py'
-        self.log_file = self.log_directory / 'vagrant.log'
+        self.vagrant_log_file = self.log_directory / 'vagrant.log'
         self.adarevm_log_file = self.log_directory / 'adarevm.log'
-        self.event_file = self.path / 'events.yml'
-        self.status_file = self.path / 'status.yml'
-        self.run_config_file = self.path / 'config.yml'
 
-        self.install_script = self.scripts_directory / f'installations{script_suffix}'
-        self.wrapper_install_script = self.scripts_directory / f'wrapper_installations{script_suffix}'
-        self.run_script = self.scripts_directory / f'run{script_suffix}'
-        self.wrapper_run_script = self.scripts_directory / f'wrapper_run{script_suffix}'
-        self.packagedump_script = self.scripts_directory / f'packagedump{script_suffix}'
-        self.wrapper_packagedump_script = self.scripts_directory / f'wrapper_packagedump{script_suffix}'
-        self.shutdown_script = self.scripts_directory / f'shutdown{script_suffix}'
-        self.wrapper_shutdown_script = self.scripts_directory / f'wrapper_shutdown{script_suffix}'
-
-        self.vagrant_log = self.log_directory / 'vagrant.log'
-        self.install_log = self.log_directory / 'installations.log'
-        self.run_log = self.log_directory / 'run.log'
-        self.packagedump_log = self.log_directory / 'packagedump.log'
 
     def create(self):
         self.path.parent.mkdir(parents=False, exist_ok=True)
         self.path.mkdir(parents=False)
-        self.scripts_directory.mkdir(parents=False)
         self.log_directory.mkdir(parents=False)
-        self.breakpoint_directory.mkdir(parents=False)
-        self.status_directory.mkdir(parents=False)
-        # self.testfunction_directory.mkdir(parents=False)
 
-    def create_run_config(self, experiment_config: ExperimentConfig):
-        data = attrs.asdict(experiment_config)
-        dict_to_yaml(self.run_config_file, data)
 
     def clean(self):
         # todo: implement clean method (think what needs to be cleaned)
@@ -220,8 +172,3 @@ class ExperimentDirectory(Directory):
             self.sha256_action,
             self.sha256_testset,
         ])
-
-    # def copy_to_run_directory(self, run_directory: ExperimentRunDirectory):
-    #     # copy action and testset file to run directory
-    #     shutil.copy(self.actionfile, run_directory.actionfile)
-    #     shutil.copy(self.testsetfile, run_directory.testsetfile)

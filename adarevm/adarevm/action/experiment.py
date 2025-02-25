@@ -8,13 +8,14 @@ import guibot.errors
 from guibot.finder import Finder, TemplateFinder, TextFinder
 from pathlib import Path
 from guibot.inputmap import PyAutoGUIKey
+from typing import Callable, Awaitable
 
 # internal imports
 from adarelib.helperfunctions.text import slugify
 from adarevm.shell import execute_on_shell
 import adarevm.config as config
 from adarevm.testset.testset import Testset
-from adarelib.event import EventSystem, EventCtxManager
+from adarevm.event import EventCtxManager
 from adarelib.config import StatusEnum
 from adarelib.types.event import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent, Event, ErrorEvent
 
@@ -34,9 +35,9 @@ class Experiment:
     text_match_file: Path
     tessdata_path: Path
     testset: Testset
-    eventsystem: EventSystem
+    log_func: Callable[[str], Awaitable[None]]
 
-    def __init__(self, img_folder: Path, tessdata_folder: Path, testset: Testset, eventsystem: EventSystem):
+    def __init__(self, img_folder: Path, tessdata_folder: Path, testset: Testset, log_func: Callable[[str], Awaitable[None]]):
         self.img_folder = img_folder
         self.guibot = GuiBot()
         log.info(f'GuiBot Object created with display controller(dc) backend {str(type(self.guibot.dc_backend).__name__)} and  computer vision (cv) backend  {str(type(self.guibot.cv_backend).__name__)}')
@@ -46,29 +47,30 @@ class Experiment:
         self.text_match_files = None
         self.tessdata_folder = tessdata_folder
         self.testset = testset
-        self.eventsystem = eventsystem
+        self.log_func = log_func
         self.variables = {}
 
     @property
     def name(self):
         return type(self).__name__
 
-    def prepare(self):
+    def prepare(self) -> tuple[bool, str]:
         """
         This method can be used in child classes to do stuff before running the gui automation experiment.
         This can include creating/removing/changing a file or other.
-        In cases where a shell/powershell command should be run the method exec_shellcommand.
+        In cases where a shell/powershell command should be run the method exec_command.
         """
         pass
 
-    def run(self):
+    def run(self) -> tuple[bool, str]:
         """
         This method should be overwritten in child classes.
         """
         pass
 
     def log(self, event: Event):
-        self.eventsystem.log(event)
+        with EventCtxManager(event, self.log_func):
+            pass
 
     def create_match_file_from_finder(self, name: str, finder: Finder):
         """
@@ -155,7 +157,7 @@ class Experiment:
         with EventCtxManager(
             GuiFindEvent(
                 objective=image_name, text=False, status=StatusEnum.RUNNING
-            ), self.eventsystem
+            ), self.log_func
         ) as event_ctx:
             match_objects = []
             image = (self.img_folder/image_name)
@@ -188,7 +190,7 @@ class Experiment:
         with EventCtxManager(
             GuiFindEvent(
                 objective=text, text=True, status=StatusEnum.RUNNING
-            ), self.eventsystem
+            ), self.log_func
         ) as event_ctx:
             textfile = self.__create_textfile(text)
             stepsfile = self.__create_steps_file_text(textfile)
@@ -285,7 +287,7 @@ class Experiment:
         if not modifiers:
             modifiers = []
         match = self.guibot.click(target_or_location, modifiers=modifiers)
-        self.eventsystem.log(
+        self.log(
             GuiClickEvent(
                 clicktype='left', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status=StatusEnum.FINISHED
             )
@@ -296,7 +298,7 @@ class Experiment:
         if not modifiers:
             modifiers = []
         match = self.guibot.right_click(target_or_location, modifiers=modifiers)
-        self.eventsystem.log(
+        self.log(
             GuiClickEvent(
                 clicktype='right', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status=StatusEnum.FINISHED
             )
@@ -307,7 +309,7 @@ class Experiment:
         if not modifiers:
             modifiers = []
         match = self.guibot.double_click(target_or_location, modifiers=modifiers)
-        self.eventsystem.log(
+        self.log(
             GuiClickEvent(
                 clicktype='double', modifiers=modifiers, target=self.__target_or_location_to_str(target_or_location), status=StatusEnum.FINISHED
             )
@@ -318,7 +320,7 @@ class Experiment:
         self.guibot.press_keys(keys)
         if type(keys) is not list:
             keys = [keys]
-        self.eventsystem.log(
+        self.log(
             GuiKeypressEvent(
                 keys=keys, status=StatusEnum.FINISHED
             )
@@ -329,7 +331,7 @@ class Experiment:
             GuiIdleEvent(
                 seconds=timeout,
                 status=StatusEnum.RUNNING
-            ), self.eventsystem
+            ), self.log_func
         ) as event_ctx:
             self.guibot.idle(timeout)
             event_ctx.update(
@@ -339,7 +341,7 @@ class Experiment:
                 )
             )
 
-    def exec_shellcommand(self, command: list, cwd: Path = None):
+    def exec_command(self, command: list, cwd: Path = None):
         """
         executes a shell command
         :param command: list of command and arguments

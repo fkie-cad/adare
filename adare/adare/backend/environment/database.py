@@ -90,11 +90,24 @@ def get_environments_ulids(project_path: Path = None) -> list[str]:
             for environment in db.get_environments(project_path)
         ]
 
+def get_environment_by_ulid(ulid: str) -> Environment:
+    with EnvironmentDbApi() as db:
+        return db.get_environment_by_ulid(ulid)
 
 def get_environment_hash(ulid: str) -> str:
     with EnvironmentDbApi() as db:
         if environment := db.get_environment_by_ulid(ulid):
             return environment.sha256hash
+        else:
+            raise EnvironmentDoesNotExistInDatabase(
+                log,
+                f'environment with ulid {ulid} does not exist in the database',
+            )
+
+def get_environment_installations(ulid: str) -> list:
+    with EnvironmentDbApi() as db:
+        if environment := db.get_environment_by_ulid(ulid):
+            return environment.installations
         else:
             raise EnvironmentDoesNotExistInDatabase(
                 log,

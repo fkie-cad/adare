@@ -7,7 +7,7 @@ from datetime import datetime
 from adare.config.configdirectory import PROG_PARSEANDTEST_DIR
 import adare.config.database as config_database
 from adare.database.models.experiment import ExperimentRunFiles, Tag, TestParameter, TestParameterEntry, Experiment, \
-    ExperimentRun, TestFunction, AbstractTest, Command, LogFile, Environment, Base as ExperimentsBase
+    ExperimentRun, TestFunction, AbstractTest, Command, LogFile, Environment, Base as ExperimentsBase, TestFunctionFile
 from adare.database.api.project import ProjectDbApi
 from adarelib.types.testset import TestsetFile as FTestsetFile, Test as FTest
 from adare.backend.experiment.directory import ExperimentDirectory
@@ -49,24 +49,22 @@ class ExperimentApi(ProjectDbApi):
         """
         self._session.delete(experiment_run)
 
-    def get_experiment_by_project_and_name(self, project_path: Path, environment_name:str, experiment_name: str) -> Experiment:
+    def get_experiment_by_project_and_name(self, project_path: Path, experiment_name: str) -> Experiment:
         project = self.get_project_by_path(project_path)
-        environment = self._session.query(Environment).filter_by(name=environment_name, project=project).first()
-        if not environment:
+        environments = self._session.query(Environment).filter_by( project=project).all()
+        if not environments:
             raise EnvironmentNotFoundError(
                 log,
-                message=f'environment with name {environment_name} not found in project {project_path}',
+                message='no environment found for experiment',
                 possible_solutions=[
                     'load the environment with [i]adare environment load[/i]',
                     'create a new environment with [i]adare environment create[/i] and then load it'
                 ]
             )
-        # filter the experiment and check that environment in experiment.environments
-        experiments = self._session.query(Experiment).filter_by(name=experiment_name).filter(Experiment.environments.any(ulid=environment.ulid))
+        experiments = self._session.query(Experiment).filter_by(name=experiment_name).filter(
+            Experiment.environments.any(Environment.ulid.in_([env.ulid for env in environments]))
+        )
 
-        # check if multiple experiments with the same name exist
-        if experiments.count() > 1:
-            raise ValueError(f'multiple experiments with name {experiment_name} found')
         return experiments.first()
 
     def get_or_create_tags(self, tags: list[str]) -> list:
@@ -159,14 +157,10 @@ class ExperimentApi(ProjectDbApi):
 
     def update_experiment_run(
             self, run_ulid: str, experiment: Experiment, environment: Environment, path: Path,
-            logfile_vagrant: Path, logfile_installed_packages: Path, logfile_postsetup_installations: Path,
-            logfile_run_experiment: Path, logfile_adarevm: Path, status: int
+            logfile_vagrant: Path, logfile_adarevm: Path, status: int
     ) -> ExperimentRun:
         experiment_run_files = ExperimentRunFiles(
             log_vagrant=self.__create_logfile(logfile_vagrant),
-            package_dump=self.__create_logfile(logfile_installed_packages),
-            log_installations=self.__create_logfile(logfile_postsetup_installations),
-            log_run=self.__create_logfile(logfile_run_experiment),
             log_adarevm=self.__create_logfile(logfile_adarevm),
         )
         self._session.add(experiment_run_files)
@@ -223,7 +217,16 @@ class ExperimentApi(ProjectDbApi):
                 message='test [b]{test.name}[/b] mentions a command that does not exist in the database.',
             )
 
-        testfunction = self._session.query(TestFunction).filter_by(name=test.type).first()
+        if '.' in test.type:
+            testfunction_set, testfunction_type = test.type.split('.', maxsplit=1)
+        else:
+            testfunction_set = 'standard'
+            testfunction_type = test.type
+
+        testfunction_set_file = f'{testfunction_set}.py'
+        testfunction_set = self._session.query(TestFunctionFile).filter_by(name=testfunction_set_file).first()
+
+        testfunction = self._session.query(TestFunction).filter_by(name=testfunction_type, file=testfunction_set).first()
         if not testfunction:
             raise TestSetFormatError(
                 log,

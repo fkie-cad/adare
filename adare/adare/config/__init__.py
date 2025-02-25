@@ -76,10 +76,6 @@ SCRIPTS_SUFFIX = {
     'linux': '.sh',
     'windows': '.ps1'
 }
-SHARE_POINT_VM = {
-    'linux': '/vagrant/',
-    'windows': 'C:/vagrant/'
-}
 
 
 # WEBAPP

@@ -1,5 +1,5 @@
 import attrs
-from datetime import datetime
+from datetime import datetime, timezone
 import typing
 
 from adarelib.config import StatusEnum
@@ -23,13 +23,13 @@ class Stage:
         return f'{self.name}: {self.msg}'
 
     def start(self):
-        self.start_time = datetime.utcnow()
+        self.start_time = datetime.now(timezone.utc)
 
     def set_status(self, status: int):
         self.status = status
 
     def end(self, status: int = StatusEnum.FINISHED):
-        self.end_time = datetime.utcnow()
+        self.end_time = datetime.now(timezone.utc)
         if self.status == StatusEnum.NONE:
             self.status = status
 
@@ -91,22 +91,28 @@ class ProjectIntegrityCheckStage(Stage):
 
 
 @attrs.define
+class InstallAdareVMStage(Stage):
+    name: typing.ClassVar[str] = 'box.install_adare_vm'
+    msg: typing.ClassVar[str] = 'Waiting until adarevm is installed in the VM'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = BoxRunStage
+
+@attrs.define
+class ConnectToVMStage(Stage):
+    name: typing.ClassVar[str] = 'box.connect_to_vm'
+    msg: typing.ClassVar[str] = 'Connecting to the VM via Websocket'
+    description: typing.ClassVar[str] = 'todo ...'
+    optional: typing.ClassVar[bool] = False
+    parent: typing.ClassVar["Stage"] = BoxRunStage
+
+@attrs.define
 class InstallationsStage(Stage):
     name: typing.ClassVar[str] = 'box.installations'
     msg: typing.ClassVar[str] = 'Installing additional software'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = BoxRunStage
-
-
-@attrs.define
-class ExperimentSetupStage(Stage):
-    name: typing.ClassVar[str] = 'box.experiment_setup'
-    msg: typing.ClassVar[str] = 'Installing adarevm and setting up experiment'
-    description: typing.ClassVar[str] = 'todo ...'
-    optional: typing.ClassVar[bool] = False
-    parent: typing.ClassVar["Stage"] = BoxRunStage
-
 
 @attrs.define
 class ExperimentRunStage(Stage):

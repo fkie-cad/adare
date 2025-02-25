@@ -30,6 +30,8 @@ class PostsetupInstallations:
     name: str
     command: str
     description: Optional[str] = ''
+    cwd: Optional[str] = ''
+    shell: bool = attrs.field(default=False)
 
 
 @attrs.define
