@@ -10,6 +10,7 @@ from adare.database.api.frontend import DataRetrievalApi
 from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, timedelta_to_str
 from adarelib.config import TIMESTAMP_FORMAT, StatusEnum
 from adare.frontend.terminal.console import TwoTitleRule
+from rich.emoji import Emoji
 
 import logging
 log = logging.getLogger(__name__)
@@ -137,6 +138,42 @@ class ExperimentRunFlowPanel:
         title = '[b honeydew2]flow[/b honeydew2]'
         title = f'{title} {StatusEnum.get_icon(self.status, color=True)}'
         return Panel(grid, title=title, border_style="blue", title_align='left', style='')
+
+# from textual.widget import Widget
+# from textual.geometry import Size
+# from textual.app import RenderResult
+#
+# class ExperimentRunFlowWidget(Widget):
+#     stages: pd.DataFrame
+#
+#     def __init__(self, stages: pd.DataFrame, *children: Widget):
+#         super().__init__(*children)
+#         self.stages = stages
+#
+#     @staticmethod
+#     def __generate_line(row: pd.Series) -> str:
+#         from rich.text import Text
+#         icon = StatusEnum.get_icon(row['status'], color=True)
+#         message = row['msg']
+#         if row['sub_msg']:
+#             message = f"{message}: {row['sub_msg']}"
+#         level_offset = 2 * ' ' * row['level']
+#         line = f"{level_offset}{icon} {message}"
+#         if row['result_status'] != 'nan':
+#             line = f"{line} {StatusEnum.get_icon(row['result_status'], color=True)}"
+#         return line
+#
+#     def render(self) -> RenderResult:
+#         grid = Table.grid(expand=True)
+#         grid.add_column(justify="left", ratio=1)
+#         for index, row in self.stages.iterrows():
+#             grid.add_row(self.__generate_line(row))
+#         grid.add_row('')  # extra row if needed
+#         return grid
+#
+#     def get_content_height(self, container: Size, viewport: Size, width: int) -> int:
+#         # Return height based on number of rows in the dataframe plus one extra line.
+#         return len(self.stages.index) + 1
 
 
 def print_run(run_ulid: str):

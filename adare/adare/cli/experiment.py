@@ -1,8 +1,7 @@
 # internal imports
 from adare.backend.basics import determine_projectdirectory
 from adarelib.exceptions import NoProjectFoundError, ArgumentsError
-from adarelib.breakpoint import BREAKPOINTS
-from adarelib.breakpoint import resolve_breakpoints
+
 
 # configure logging
 import logging
@@ -35,10 +34,21 @@ def exec_experiment_run(arguments):
         disable_printing = True
 
     if project_directory := determine_projectdirectory(arguments.project):
-        experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing)
+        import asyncio
+        try:
+            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing))
+        except KeyboardInterrupt:
+            log.info("Keyboard interrupt received, shutting down gracefully...")
     else:
         raise NoProjectFoundError(log, message='no project directory found')
 
 
 def exec_experiment_test(arguments):
-    raise NotImplementedError('exec_experiment_test not implemented yet')
+    from adare.backend.experiment.commands import experiment_test
+    if project_directory := determine_projectdirectory(arguments.project):
+        try:
+            experiment_test(project_directory, arguments.experiment, arguments.environment)
+        except KeyboardInterrupt:
+            log.info("Keyboard interrupt received, shutting down gracefully...")
+    else:
+        raise NoProjectFoundError(log, message='no project directory found')

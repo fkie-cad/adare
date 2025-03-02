@@ -1,7 +1,9 @@
 # external imports
+import asyncio
 from pathlib import Path
 from datetime import datetime, timezone
 import time
+import threading
 
 # internal imports
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
@@ -30,6 +32,8 @@ from adarelib.exceptions import NotLoggedInError
 from adare.backend.wsclient.client import WebSocketClient
 from adare.virtualbox.api import run_command_in_vm
 from adarelib.types.ws import EXEC, EXPERIMENT, DONE, WsCommand, EVENT
+from adare.backend.experiment.runctx import ExperimentRunCtx
+import concurrent.futures
 # keep this to activate the event listeners for the database
 import adare.database.events.stage
 
@@ -37,6 +41,7 @@ import adare.database.events.stage
 import logging
 log = logging.getLogger(__name__)
 
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 def experiment_sync(experiment_ulid: str):
     if not is_logged_in():
@@ -251,256 +256,7 @@ def __project_integrity_check(project_path: Path, project_directory: ProjectDire
         )
 
 
-# def experiment_run2(project_path: Path, experiment_name: str, environment_name: str,
-#                    breakpoints: list[BreakPoint] = None, disable_printing: bool = False, test_mode: bool = False):
-#     box_thread = None
-#     experiment_run_ulid: str = experiment_database.initialize_experiment_run()
-#     ctrlc_event = threading.Event()
-#     shutdown_event = threading.Event()
-#     experiment_event_manager.add_threading_event(experiment_run_ulid, ctrlc_event, 'ctrlc')
-#     experiment_event_manager.add_threading_event(experiment_run_ulid, shutdown_event, 'shutdown')
-#     flowconsole = ExperimentFlowConsole(disable_printing)
-#     flowconsolemanager.add_handler(experiment_run_ulid, flowconsole)
-#     flowconsole.start()
-#
-#     try:
-#         timestamp_start = datetime.now(timezone.utc)
-#
-#         log.info(f'starting experiment run {experiment_name} in project {project_path}')
-#
-#         project_directory = ProjectDirectory(project_path)
-#         experiment_directory: ExperimentDirectory = ExperimentDirectory(
-#             project_path,
-#             experiment_name
-#         )
-#         # check integrity of the experiment and environment
-#         with StageCtxManager(ExperimentIntegrityCheckStage(), experiment_run_ulid):
-#             __experiment_integrity_check(project_path, experiment_name, environment_name, experiment_directory)
-#
-#         with StageCtxManager(ProjectIntegrityCheckStage(), experiment_run_ulid):
-#             # get used testfunctions
-#             testfunction_files = experiment_database.get_experiment_testfunction_files(project_path, environment_name, experiment_name)
-#             testfunction_files_names = ",".join([file.name for file in testfunction_files])
-#             log.info(f'experiment {experiment_name} uses the following testfunction files: {testfunction_files_names}')
-#             # get used environment
-#             if environment_name:
-#                 environment_file = environment_database.get_environment_path_by_project_and_name(project_path,
-#                                                                                                  environment_name)
-#             else:
-#                 environment_file = experiment_database.get_experiment_environment(project_path,environment_name, experiment_name)
-#                 environment_name = environment_file.stem
-#
-#         # check integrity of the project
-#         __project_integrity_check(project_path, project_directory, environments=[environment_file],
-#                                   testfunctions=testfunction_files)
-#
-#         # get environment ulid
-#         environment_ulid = experiment_database.get_environment_ulid(project_path, environment_name)
-#
-#         with StageCtxManager(VagrantBoxExistCheckStage(), experiment_run_ulid):
-#             # check if vagrant box of the environment exists
-#             vagrantbox_name = experiment_database.get_environment_vagrant_box(environment_ulid)
-#             if not vagrantutils.is_box(vagrantbox_name):
-#                 raise VagrantBoxMissingError(
-#                     log,
-#                     f'vagrant box {vagrantbox_name} is missing',
-#                     possible_solutions=[
-#                         'list all available boxes with `adare vagrant box list` to find the correct box',
-#                         'add the missing box with `adare vagrant box add`'
-#                     ]
-#                 )
-#             vagrantbox_download_required = vagrantutils.is_box_download_required(vagrantbox_name)
-#             log.info(f'vagrant box {vagrantbox_name} found')
-#
-#             environment_platform = experiment_database.get_environment_platform(environment_ulid)
-#             shared_root_directory_vm = Path(SHARE_POINT_VM[environment_platform])
-#             shared_root_directory_host = project_path
-#
-#             # get directory for templates
-#             templates_experiment_scripts = TEMPLATES_DIR / environment_platform
-#             script_suffix = SCRIPTS_SUFFIX[environment_platform]
-#
-#             with StageCtxManager(RunDirectoryCreationStage(), experiment_run_ulid):
-#                 # create run project structure
-#                 experiment_run_directory = ExperimentRunDirectory(project_directory, experiment_name, script_suffix)
-#                 experiment_run_directory.create()
-#
-#             # create experiment config file
-#             run_config_file = ExperimentConfig(
-#                 experiment=experiment_name,
-#                 action=experiment_directory.get_path_relative_to_shared_directory('actionfile', shared_root_directory_host,
-#                                                                                   shared_root_directory_vm).as_posix(),
-#                 testset=experiment_directory.get_path_relative_to_shared_directory('testsetfile',
-#                                                                                    shared_root_directory_host,
-#                                                                                    shared_root_directory_vm).as_posix(),
-#                 testfunction_directory=project_directory.get_path_relative_to_shared_directory('testfunctions',
-#                                                                                                shared_root_directory_host,
-#                                                                                                shared_root_directory_vm).as_posix(),
-#                 tessdata=project_directory.get_path_relative_to_shared_directory('tessdata', shared_root_directory_host,
-#                                                                                  shared_root_directory_vm).as_posix(),
-#                 img=experiment_directory.get_path_relative_to_shared_directory('img', shared_root_directory_host,
-#                                                                                shared_root_directory_vm).as_posix(),
-#                 logfile=experiment_run_directory.get_path_relative_to_shared_directory('adarevm_log_file',
-#                                                                                        shared_root_directory_host,
-#                                                                                        shared_root_directory_vm).as_posix(),
-#                 eventfile=experiment_run_directory.get_path_relative_to_shared_directory('event_file',
-#                                                                                          shared_root_directory_host,
-#                                                                                          shared_root_directory_vm).as_posix(),
-#                 statusfile=experiment_run_directory.get_path_relative_to_shared_directory('status_file',
-#                                                                                           shared_root_directory_host,
-#                                                                                           shared_root_directory_vm).as_posix(),
-#                 breakpoint_directory=experiment_run_directory.get_path_relative_to_shared_directory('breakpoint_directory',
-#                                                                                                     shared_root_directory_host,
-#                                                                                                     shared_root_directory_vm).as_posix(),
-#                 breakpoints=breakpoints or []
-#             )
-#             experiment_run_directory.create_run_config(run_config_file)
-#
-#             # setup paths to add to the PATH variable on the VM
-#             paths_to_add = [
-#                 project_directory.get_path_relative_to_shared_directory('adare', shared_root_directory_host,
-#                                                                         shared_root_directory_vm),
-#                 project_directory.get_path_relative_to_shared_directory('shared_tools', shared_root_directory_host,
-#                                                                         shared_root_directory_vm),
-#             ]
-#
-#             # create scripts
-#             installation_script = create_installations_script(experiment_run_directory, environment_ulid,
-#                                                               templates_experiment_scripts, shared_root_directory_host, shared_root_directory_vm)
-#             packagedump_script = create_packagedump_script(experiment_run_directory, templates_experiment_scripts, shared_root_directory_host, shared_root_directory_vm)
-#             run_script = create_run_script(
-#                 experimentrun_directory=experiment_run_directory,
-#                 project_directory=project_directory,
-#                 path_directories=paths_to_add,
-#                 template_directory=templates_experiment_scripts,
-#                 script_suffix=script_suffix,
-#                 shared_root_directory_host=shared_root_directory_host,
-#                 shared_root_directory_vm=shared_root_directory_vm
-#             )
-#             shutdown_script = create_shutdown_script(experiment_run_directory, templates_experiment_scripts, shared_root_directory_host, shared_root_directory_vm)
-#             wrapper_template = templates_experiment_scripts / f'run_script_wrapper{script_suffix}'
-#
-#             script_manager = ScriptManager(experiment_run_directory, shared_root_directory_host, shared_root_directory_vm,
-#                                            wrapper_template)
-#             script_manager.add_script(installation_script)
-#             script_manager.add_script(packagedump_script)
-#             script_manager.add_script(run_script)
-#             script_manager.add_script(shutdown_script)
-#
-#             if environment_platform == 'windows':
-#                 script_manager.add_script(Script(
-#                     name=f'helperfunctions{script_suffix}',
-#                     source_directory=templates_experiment_scripts,
-#                 ))
-#
-#             script_manager.render(experiment_run_directory.scripts_directory)
-#
-#             # todo: add network drive and mount scripts
-#
-#             # create Vagrantfile
-#             vagrantfile_ulid_str = make_string_path_safe(experiment_run_ulid)
-#
-#             vm_name = f'{environment_name}{experiment_name}{vagrantfile_ulid_str}'
-#             vagrantfile: VagrantFile = __create_vagrantfile(
-#                 vm_name,
-#                 experiment_run_directory,
-#                 environment_ulid,
-#                 shared_root_directory_vm,
-#                 shared_root_directory_host,
-#                 templates_experiment_scripts,
-#                 script_suffix
-#             )
-#             BP_HOST_AFTER_VAGRANTFILE_CREATION.trigger_if_in_breakpoints(breakpoints)
-#
-#             # todo: add network drive vm to Vagrantfile if needed
-#
-#             # generate vagrant box vm object
-#             box = VagrantBoxVM.fromVagrantFileObject(
-#                 experiment_run_directory.path,
-#                 vagrantfile,
-#                 log_file=experiment_run_directory.log_file,
-#                 vm_name=experiment_run_directory.path.name
-#             )
-#
-#             # create experiment run in database
-#             if not test_mode:
-#                 experiment_run_ulid = experiment_database.update_experiment_run(
-#                     experiment_run_ulid,
-#                     experiment_name,
-#                     environment_name,
-#                     project_path.name,
-#                     experiment_run_directory
-#                 )
-#             else:
-#                 from ulid import ULID
-#                 experiment_run_ulid = str(ULID())
-#
-#         # update experiment run in database
-#         if not test_mode:
-#             experiment_database.update_experiment_run_start(experiment_run_ulid, timestamp_start)
-#
-#         BP_HOST_BEFORE_BOX_START.trigger_if_in_breakpoints(breakpoints)
-#         # track time directly before box start
-#         timestamp_before_box_start = datetime.now(timezone.utc)
-#         output_processor = VagrantOutputProcessor(experiment_run_ulid=experiment_run_ulid)
-#         destroy_output_processor = VagrantDestroyOutputProcessor(experiment_run_ulid=experiment_run_ulid)
-#
-#         box_run_stage = BoxRunStage()
-#         if vagrantbox_download_required:
-#             box_run_stage.sub_msg = 'required download slows down first boot'
-#         ctx_manager_vagrant_up = StageCtxManager(box_run_stage, experiment_run_ulid)
-#         ctx_manager_vagrant_destroy = StageCtxManager(BoxDestroyStage(), experiment_run_ulid)
-#         kwargs = {
-#             'ctrlc_event': ctrlc_event,
-#             'shutdown_event': shutdown_event,
-#             'output_processor': output_processor,
-#             'destroy_output_processor': destroy_output_processor,
-#             'ctx_manager_up': ctx_manager_vagrant_up,
-#             'ctx_manager_destroy': ctx_manager_vagrant_destroy,
-#             'disable_destroy': False,
-#         }
-#         box_thread = threading.Thread(target=box.run, kwargs=kwargs)
-#         box_thread.start()
-#
-#         # start the watchers that watches for events and breakpoints
-#         __install_watchers(experiment_run_ulid, experiment_run_directory.path,
-#                            experiment_run_directory.breakpoint_directory, ctrlc_event, shutdown_event)
-#
-#         # wait for the box to finish
-#         box_thread.join()
-#
-#         if not test_mode:
-#             experiment_database.update_experiment_run_status(experiment_run_ulid, StatusEnum.FINISHED)
-#
-#         # calculate duration of experiment run
-#         timestamp_end = datetime.now(timezone.utc)
-#         if not test_mode:
-#             experiment_database.update_experiment_run_end(experiment_run_ulid, timestamp_end)
-#         duration_total = timestamp_end - timestamp_start
-#         duration_box = timestamp_end - timestamp_before_box_start
-#         log.info(
-#             f'experiment run {experiment_run_ulid} finished after {duration_total} seconds (box run time: {duration_box})')
-#
-#         # clean up the experiment run directory
-#         BP_HOST_BEFORE_CLEANUP.trigger_if_in_breakpoints(breakpoints)
-#         with StageCtxManager(CleanupStage(), experiment_run_ulid):
-#             __cleanup_experiment_run(experiment_run_directory)
-#
-#     except KeyboardInterrupt:
-#         ctrlc_event.set()
-#         experiment_database.update_experiment_run_status(experiment_run_ulid, StatusEnum.INTERRUPTED)
-#         log.info('keyboard interrupt received, stopping experiment run')
-#     finally:
-#         try:
-#             if box_thread and box_thread.is_alive():
-#                 box_thread.join()
-#             time.sleep(1)
-#             flowconsole.stop()
-#         except KeyboardInterrupt:
-#             flowconsole.log_interrupted(f'interrupt_wait', f'wait for the box to fully shut down')
-
-
-def install_and_run_adare_vm(vm_name: str, guest_platform: str):
+def install_and_run_adare_vm(vm_name: str, guest_platform: str, stop_event: threading.Event):
     if guest_platform == 'windows':
         firewall_rule = 'New-NetFirewallRule -DisplayName "adarevm" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 18765'
         run_command_in_vm(vm_name, firewall_rule, guest_platform)
@@ -511,9 +267,9 @@ def install_and_run_adare_vm(vm_name: str, guest_platform: str):
         set_path_command = 'export PATH=$PATH:/adare/shared/tools'
         install_command = 'cd /adare/app/adarevm && poetry install'
         run_command = 'cd /adare/app/adarevm && poetry run adarevm /adare/run/logs/adarevm.log'
-    run_command_in_vm(vm_name, set_path_command, guest_platform)
-    run_command_in_vm(vm_name, install_command, guest_platform)
-    run_command_in_vm(vm_name, run_command, guest_platform, background=True)
+    run_command_in_vm(vm_name, set_path_command, guest_platform, stop_event=stop_event)
+    run_command_in_vm(vm_name, install_command, guest_platform, stop_event=stop_event)
+    run_command_in_vm(vm_name, run_command, guest_platform, background=True, stop_event=stop_event)
 
 
 def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool):
@@ -528,208 +284,421 @@ def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: 
     flow_console.start()
     return flow_console
 
-def __wait_until_receive_done_msg(ws_client: WebSocketClient, experiment_run_ulid: str):
+async def __wait_until_receive_done_msg(ws_client: WebSocketClient, experiment_run_ulid: str):
     received_done = False
     while not received_done:
-        messages = ws_client.fetch_messages()
-        for message in messages:
-            decoded_msg = message.decode('utf-8')
-            wscommand = WsCommand.decode(decoded_msg)
-            if type(wscommand) == EVENT:
-                event = wscommand.event
-                with EventDbApi() as api:
-                    api.add_event(event, experiment_run_ulid)
-            if type(wscommand) == DONE:
-                received_done = True
+        message = await ws_client.fetch_message()
+        decoded_msg = message.decode('utf-8')
+        wscommand = WsCommand.decode(decoded_msg)
+        if type(wscommand) == EVENT:
+            event = wscommand.event
+            with EventDbApi() as api:
+                api.add_event(event, experiment_run_ulid)
+        if type(wscommand) == DONE:
+            received_done = True
 
 
-def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False):
-    log.info(f'starting experiment run {experiment_name} in project {project_path}')
+def step_initialize(context: ExperimentRunCtx, fake: bool = False):
+    context.experiment_run_ulid = experiment_database.initialize_experiment_run(fake)
+    context.timestamp_start = datetime.now(timezone.utc)
+    log.info(f'initialized experiment run {context.experiment_run_ulid}')
 
-    experiment_run_ulid: str = experiment_database.initialize_experiment_run()
-    client = None
+def step_setup_directories(context: ExperimentRunCtx):
+    context.project_directory = ProjectDirectory(context.project_path)
+    context.experiment_directory = ExperimentDirectory(context.project_path, context.experiment_name)
+    context.experiment_directory.check_for_missing_files()
+    log.info(f'checked experiment directory {context.experiment_directory.path}')
 
-    flow_console = __create_and_start_flow_console(experiment_run_ulid, disable_printing)
+def step_resolve_environment(context: ExperimentRunCtx):
+    if context.environment_name:
+        context.environment_file = environment_database.get_environment_path_by_project_and_name(
+            context.project_path, context.environment_name
+        )
+    else:
+        context.environment_file = experiment_database.get_experiment_environment(
+            context.project_path, context.environment_name, context.experiment_name
+        )
+        # update environment_name based on file stem
+        context.environment_name = context.environment_file.stem
+    context.environment_ulid = experiment_database.get_environment_ulid(context.project_path, context.environment_name)
+    log.info(f'found environment {context.environment_name}')
 
-    try:
-        timestamp_start = datetime.now(timezone.utc)
-
-        project_directory = ProjectDirectory(project_path)
-        experiment_directory: ExperimentDirectory = ExperimentDirectory(
-            project_path,
-            experiment_name
+def step_check_integrity_experiment(context: ExperimentRunCtx):
+    with StageCtxManager(ExperimentIntegrityCheckStage(), context.experiment_run_ulid, event=context.stop_event):
+        __experiment_integrity_check(
+            context.project_path,
+            context.experiment_name,
+            context.environment_name,
+            context.experiment_directory
         )
 
-        testfunction_files = experiment_database.get_experiment_testfunction_files(project_path, environment_name,
-                                                                                   experiment_name)
+def step_check_integrity_project(context: ExperimentRunCtx):
+    with StageCtxManager(ProjectIntegrityCheckStage(), context.experiment_run_ulid, event=context.stop_event):
+        testfunction_files = experiment_database.get_experiment_testfunction_files(
+            context.project_path, context.environment_name, context.experiment_name
+        )
         testfunction_files_names = ",".join([file.name for file in testfunction_files])
-        log.info(f'experiment {experiment_name} uses the following testfunction files: {testfunction_files_names}')
-        if environment_name:
-            environment_file = environment_database.get_environment_path_by_project_and_name(project_path,
-                                                                                             environment_name)
-        else:
-            environment_file = experiment_database.get_experiment_environment(project_path, environment_name,
-                                                                              experiment_name)
-            environment_name = environment_file.stem
+        log.info(f'experiment {context.experiment_name} uses the following testfunction files: {testfunction_files_names}')
+        __project_integrity_check(
+            context.project_path,
+            context.project_directory,
+            environments=[context.environment_file],
+            testfunctions=testfunction_files
+        )
 
-        with StageCtxManager(ExperimentIntegrityCheckStage(), experiment_run_ulid):
-            __experiment_integrity_check(project_path, experiment_name, environment_name, experiment_directory)
+def step_check_vagrant_box(context: ExperimentRunCtx):
+    with StageCtxManager(VagrantBoxExistCheckStage(), context.experiment_run_ulid, event=context.stop_event):
+        vg_box_name = experiment_database.get_environment_vagrant_box(context.environment_ulid)
+        if not vagrantutils.is_box(vg_box_name):
+            raise VagrantBoxMissingError(
+                log,
+                f"Vagrant box {vg_box_name} is missing",
+                possible_solutions=[
+                    "List available boxes with `adare vagrant box list`",
+                    "Add the missing box with `adare vagrant box add`"
+                ]
+            )
+        # Save the download requirement and guest platform in context
+        context.vagrantbox_download_required = vagrantutils.is_box_download_required(vg_box_name)
+        log.info(f"Vagrant box {vg_box_name} found")
+        context.guest_platform = experiment_database.get_environment_platform(context.environment_ulid)
 
-        with StageCtxManager(ProjectIntegrityCheckStage(), experiment_run_ulid):
-            __project_integrity_check(project_path, project_directory, environments=[environment_file],
-                                      testfunctions=testfunction_files)
+def step_create_run_directory(context: ExperimentRunCtx):
+    with StageCtxManager(RunDirectoryCreationStage(), context.experiment_run_ulid, event=context.stop_event):
+        run_dir = ExperimentRunDirectory(context.project_directory, context.experiment_name)
+        run_dir.create()
+        context.experiment_run_directory = run_dir
 
-        environment_ulid = experiment_database.get_environment_ulid(project_path, environment_name)
+def step_prepare_vagrant_configuration(context: ExperimentRunCtx):
+    vagrantfile_ulid_str = make_string_path_safe(context.experiment_run_ulid)
+    context.vm_name = f"{context.environment_name}{context.experiment_name}{vagrantfile_ulid_str}"
+    shared_root_vm = Path(SHARE_POINT_VM[context.guest_platform])
+    shared_run_dir_host = context.experiment_run_directory.path
+    shared_directories = {
+        'run': {'host': shared_run_dir_host, 'vm': shared_root_vm / 'run'},
+        'app': {'host': context.project_directory.adare, 'vm': shared_root_vm / 'app'},
+        'experiment': {'host': context.experiment_directory.path, 'vm': shared_root_vm / 'experiment'},
+        'testfunctions': {'host': context.project_directory.testfunctions, 'vm': shared_root_vm / 'testfunctions'},
+        'tessdata': {'host': context.project_directory.tessdata, 'vm': shared_root_vm / 'tessdata'},
+        'shared': {'host': context.project_directory.shared, 'vm': shared_root_vm / 'shared'},
+    }
+    context.vagrantfile = __create_vagrantfile(
+        vg_vm_name=context.vm_name,
+        guest_platform=context.guest_platform,
+        environment_ulid=context.environment_ulid,
+        shared_directories=shared_directories
+    )
 
-        with StageCtxManager(VagrantBoxExistCheckStage(), experiment_run_ulid):
-            vg_box_name = experiment_database.get_environment_vagrant_box(environment_ulid)
-            if not vagrantutils.is_box(vg_box_name):
-                raise VagrantBoxMissingError(
-                    log,
-                    f'vagrant box {vg_box_name} is missing',
-                    possible_solutions=[
-                        'list all available boxes with `adare vagrant box list` to find the correct box',
-                        'add the missing box with `adare vagrant box add`'
-                    ]
-                )
-            vagrantbox_download_required = vagrantutils.is_box_download_required(vg_box_name)
-            log.info(f'vagrant box {vg_box_name} found')
+def step_create_vagrant_box(context: ExperimentRunCtx):
+    context.box = VagrantBoxVM.fromVagrantFileObject(
+        context.experiment_run_directory.path,
+        context.vagrantfile,
+        log_file=context.experiment_run_directory.vagrant_log_file,
+        vm_name=context.vm_name
+    )
+    # Update experiment run in database (could be a separate step if needed)
+    context.experiment_run_ulid = experiment_database.update_experiment_run(
+        context.experiment_run_ulid,
+        context.experiment_name,
+        context.environment_name,
+        context.project_path.name,
+        context.experiment_run_directory
+    )
+    experiment_database.update_experiment_run_start(context.experiment_run_ulid, context.timestamp_start)
+    context.timestamp_before_box_start = datetime.now(timezone.utc)
 
-            guest_platform = experiment_database.get_environment_platform(environment_ulid)
+def step_run_box(context: ExperimentRunCtx):
+    box_run_stage = BoxRunStage()
+    if context.vagrantbox_download_required:
+        box_run_stage.sub_msg = 'required download slows down first boot'
+    ctx_manager_vagrant_up = StageCtxManager(box_run_stage, context.experiment_run_ulid)
+    context.box.run(ctx_manager_up=ctx_manager_vagrant_up, stop_event=context.stop_event)
 
-            with StageCtxManager(RunDirectoryCreationStage(), experiment_run_ulid):
-                # create run project structure
-                experiment_run_directory = ExperimentRunDirectory(project_directory, experiment_name)
-                experiment_run_directory.create()
+def step_install_adare_vm(context: ExperimentRunCtx):
+    with StageCtxManager(InstallAdareVMStage(), context.experiment_run_ulid, event=context.stop_event):
+        install_and_run_adare_vm(context.box.vm_name, context.guest_platform, stop_event=context.stop_event)
 
-            # todo: add network drive and mount scripts
+async def step_connect_websocket(context: ExperimentRunCtx):
+    with StageCtxManager(ConnectToVMStage(), context.experiment_run_ulid, event=context.stop_event):
+        client = WebSocketClient('ws://localhost:18765', 'adare')
+        await client.wait_until_server_ready(ping_timeout=8, max_retries=60, retry_interval=2)
+        log.info("Websocket Server is ready")
+        context.client = client
 
-            # create Vagrantfile
-            vagrantfile_ulid_str = make_string_path_safe(experiment_run_ulid)
+async def step_execute_installations(context: ExperimentRunCtx):
+    with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.stop_event):
+        installations = environment_database.get_environment_installations(context.environment_ulid)
+        for installation in installations:
+            msg = EXEC(
+                command=installation.command,
+                shell=installation.shell,
+                cwd=installation.cwd
+            ).encode()
+            await context.client.send_message(msg)
+            await __wait_until_receive_done_msg(context.client, context.experiment_run_ulid)
 
-            vm_name = f'{environment_name}{experiment_name}{vagrantfile_ulid_str}'
+async def step_execute_experiment(context: ExperimentRunCtx):
+    with StageCtxManager(ExperimentRunStage(), context.experiment_run_ulid, event=context.stop_event):
+        msg = EXPERIMENT(context.experiment_name).encode()
+        await context.client.send_message(msg)
+        await __wait_until_receive_done_msg(context.client, context.experiment_run_ulid)
 
-            shared_root_directory_vm = Path(SHARE_POINT_VM[guest_platform])
-            shared_run_directory_host = experiment_run_directory.path
-            shared_directories = {
-                'run': {
-                    'host': shared_run_directory_host,
-                    'vm': shared_root_directory_vm/'run',
-                },
-                'app': {
-                    'host': project_directory.adare,
-                    'vm': shared_root_directory_vm/'app',
-                },
-                'experiment': {
-                    'host': experiment_directory.path,
-                    'vm': shared_root_directory_vm/'experiment',
-                },
-                'testfunctions': {
-                    'host': project_directory.testfunctions,
-                    'vm': shared_root_directory_vm/'testfunctions',
-                },
-                'tessdata': {
-                    'host': project_directory.tessdata,
-                    'vm': shared_root_directory_vm/'tessdata',
-                },
-                'shared': {
-                    'host': project_directory.shared,
-                    'vm': shared_root_directory_vm / 'shared',
-                },
-            }
+def step_finalize(context: ExperimentRunCtx):
+    timestamp_end = datetime.now(timezone.utc)
+    experiment_database.update_experiment_run_end(context.experiment_run_ulid, timestamp_end)
+    duration_total = timestamp_end - context.timestamp_start
+    duration_box = timestamp_end - context.timestamp_before_box_start
+    log.info(f"Experiment run {context.experiment_run_ulid} finished after {duration_total} seconds (box run time: {duration_box})")
+    with StageCtxManager(CleanupStage(), context.experiment_run_ulid, event=context.stop_event):
+        __cleanup_experiment_run(context.experiment_run_directory)
 
-            vagrantfile: VagrantFile = __create_vagrantfile(
-                vg_vm_name=vm_name,
-                guest_platform=guest_platform,
-                environment_ulid=environment_ulid,
-                shared_directories=shared_directories
+async def step_shutdown_ws(context: ExperimentRunCtx):
+    log.info('stopping websocket client')
+    if context.client:
+        await context.client.close()
+
+def step_shutdown_vagrant(context: ExperimentRunCtx):
+    ctx_manager_vagrant_destroy = StageCtxManager(BoxDestroyStage(), context.experiment_run_ulid)
+    log.info('destroying vagrant box')
+    if context.box:
+        context.box.destroy(ctx_manager_vagrant_destroy)
+
+def step_remove_fake_experiment_run(context: ExperimentRunCtx):
+    # todo remove associated stuff as well (e.g. stages/files/...)
+    experiment_database.remove_fake_experiment_run(context.experiment_run_ulid)
+    log.info(f'fake experiment run {context.experiment_run_ulid} removed')
+
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False):
+    """
+    Run an experiment by initializing context, executing a series of setup steps,
+    running the main 'box' task, and finally executing post-run steps and shutdown.
+    A stop event (triggered by Ctrl-C) will cancel long-running tasks.
+    """
+    import signal
+    import asyncio
+
+    log.info(f"Starting experiment run {experiment_name} in project {project_path}")
+
+    # Create the experiment context and initialize it.
+    experiment_run_context = ExperimentRunCtx(project_path, experiment_name, environment_name)
+    step_initialize(experiment_run_context, fake=True)
+
+    # Create an asyncio Event to signal shutdown.
+    stop_event = asyncio.Event()
+
+    def handle_sigint():
+        log.info("Ctrl-C detected. Stopping experiment run...")
+        experiment_run_context.stop_event.set()  # Signal the context's stop event.
+        stop_event.set()  # Signal the asyncio stop event.
+        log.info('hanlde: send stop events')
+
+    # Register the signal handler for SIGINT.
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGINT, handle_sigint)
+
+    # Create and start the flow console.
+    flow_console = __create_and_start_flow_console(experiment_run_context.experiment_run_ulid, disable_printing)
+
+    # --- Helper Functions ---
+
+    async def run_blocking_step(step_func):
+        """Run a blocking step in a separate thread if not cancelled."""
+        if not stop_event.is_set():
+            await asyncio.to_thread(step_func, experiment_run_context)
+
+    async def run_async_step(step_func):
+        """
+        Run an asynchronous step and wait for its completion or for a stop event.
+        The step function must return a coroutine.
+        """
+        if not stop_event.is_set():
+            task = step_func(experiment_run_context)
+            await asyncio.wait(
+                [task, stop_event.wait()],
+                return_when=asyncio.FIRST_COMPLETED
             )
 
-            # todo: add network drive vm to Vagrantfile if needed
 
-            # generate vagrant box vm object
-            box = VagrantBoxVM.fromVagrantFileObject(
-                experiment_run_directory.path,
-                vagrantfile,
-                log_file=experiment_run_directory.vagrant_log_file,
-                vm_name=vm_name
-            )
+    # --- Execution Flow ---
 
-            # create experiment run in database
-            experiment_run_ulid = experiment_database.update_experiment_run(
-                experiment_run_ulid,
-                experiment_name,
-                environment_name,
-                project_path.name,
-                experiment_run_directory
-            )
+    try:
+        # Sequentially run initial blocking setup steps.
+        initial_steps = [
+            step_setup_directories,
+            step_resolve_environment,
+            step_check_integrity_experiment,
+            step_check_integrity_project,
+            step_check_vagrant_box,
+            step_create_run_directory,
+            step_prepare_vagrant_configuration,
+            step_create_vagrant_box,
+        ]
+        for step in initial_steps:
+            await run_blocking_step(step)
 
-        experiment_database.update_experiment_run_start(experiment_run_ulid, timestamp_start)
+        await run_blocking_step(step_run_box)
 
-        timestamp_before_box_start = datetime.now(timezone.utc)
+        # Execute additional steps (mix of blocking and asynchronous).
+        await run_blocking_step(step_install_adare_vm)
+        await run_async_step(step_connect_websocket)
+        await run_async_step(step_execute_installations)
+        await run_async_step(step_execute_experiment)
+        await run_blocking_step(step_finalize)
+        await run_async_step(step_shutdown_ws)
+        await run_blocking_step(step_shutdown_vagrant)
 
-        box_run_stage = BoxRunStage()
-        if vagrantbox_download_required:
-            box_run_stage.sub_msg = 'required download slows down first boot'
-        ctx_manager_vagrant_up = StageCtxManager(box_run_stage, experiment_run_ulid)
-
-        box.run(ctx_manager_up=ctx_manager_vagrant_up)
-
-        with StageCtxManager(InstallAdareVMStage(), experiment_run_ulid):
-            install_and_run_adare_vm(
-                box.vm_name,
-                guest_platform,
-            )
-
-        with StageCtxManager(ConnectToVMStage(), experiment_run_ulid):
-            client = WebSocketClient(f'ws://localhost:18765', 'adare')
-            client.wait_until_ready()
-            log.info('Websocket Server is ready')
-            client.start()
-            log.info('Started Websocket Client')
-
-        with StageCtxManager(InstallationsStage(), experiment_run_ulid):
-            installations = environment_database.get_environment_installations(environment_ulid)
-            for installation in installations:
-                msg = EXEC(command=installation.command, shell=installation.shell, cwd=installation.cwd).encode()
-                client.send_message(msg)
-                __wait_until_receive_done_msg(client, experiment_run_ulid)
-
-        with StageCtxManager(ExperimentRunStage(), experiment_run_ulid):
-            msg = EXPERIMENT(experiment_name).encode()
-            client.send_message(msg)
-            __wait_until_receive_done_msg(client, experiment_run_ulid)
-
-        experiment_database.update_experiment_run_status(experiment_run_ulid, StatusEnum.FINISHED)
-
-        # calculate duration of experiment run
-        timestamp_end = datetime.now(timezone.utc)
-        experiment_database.update_experiment_run_end(experiment_run_ulid, timestamp_end)
-        duration_total = timestamp_end - timestamp_start
-        duration_box = timestamp_end - timestamp_before_box_start
-        log.info(
-            f'experiment run {experiment_run_ulid} finished after {duration_total} seconds (box run time: {duration_box})')
-
-        # clean up the experiment run directory
-        with StageCtxManager(CleanupStage(), experiment_run_ulid):
-            __cleanup_experiment_run(experiment_run_directory)
-
-    except KeyboardInterrupt:
-        experiment_database.update_experiment_run_status(experiment_run_ulid, StatusEnum.INTERRUPTED)
-        log.info('keyboard interrupt received, stopping experiment run')
+    except Exception as e:
+        log.error(f"An error occurred: {e}")
+        experiment_run_context.stop_event.set()
+        log.info("exception: send stop events")
+        experiment_database.update_experiment_run_status(
+            experiment_run_context.experiment_run_ulid,
+            StatusEnum.INTERRUPTED,
+        )
     finally:
+        # Ensure shutdown procedures are executed.
+        if not stop_event.is_set():
+            experiment_run_context.stop_event.set()
+            log.info("finally: send stop events")
         try:
-            log.info('stopping websocket client')
-            if client:
-                client.stop()
-            ctx_manager_vagrant_destroy = StageCtxManager(BoxDestroyStage(), experiment_run_ulid)
-            log.info('destroying vagrant box')
-            box.destroy(ctx_manager_vagrant_destroy)
-            time.sleep(1)
-            log.info('stopping flow console')
+            log.info("Stopping websocket client and flow console...")
+            await step_shutdown_ws(experiment_run_context)
+            step_shutdown_vagrant(experiment_run_context)
+            await asyncio.sleep(1)  # Allow time for CLI rendering.
             flow_console.stop()
-        except KeyboardInterrupt:
-            flow_console.log_interrupted(f'interrupt_wait', f'wait for the box to fully shut down')
+        except Exception as e:
+            log.error(f"Error during shutdown: {e}")
+
+
+def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
+    from adare.frontend.terminal.textualize.experiment_interactive import ExperimentApp
+    from adare.backend.types import Step
+
+    steps = [
+        Step(
+            label='Setup Directories',
+            func=step_setup_directories,
+            thread=True,
+            description='Check and create necessary directories',
+        ),
+        Step(
+            label='Resolve Environment',
+            func=step_resolve_environment,
+            thread=True,
+            description='Resolve the environment file',
+        ),
+        Step(
+            label='Check Integrity Experiment',
+            func=step_check_integrity_experiment,
+            thread=True,
+            description='Check the integrity of the experiment',
+        ),
+        Step(
+            label='Check Integrity Project',
+            func=step_check_integrity_project,
+            thread=True,
+            description='Check the integrity of the project',
+        ),
+        Step(
+            label='Check Vagrant Box',
+            func=step_check_vagrant_box,
+            thread=True,
+            description='Check if the Vagrant box exists',
+        ),
+        Step(
+            label='Create Run Directory',
+            func=step_create_run_directory,
+            thread=True,
+            description='Create the experiment run directory',
+        ),
+        Step(
+            label='Prepare Vagrant Configuration',
+            func=step_prepare_vagrant_configuration,
+            thread=True,
+            description='Prepare the Vagrant configuration',
+        ),
+        Step(
+            label='Create Vagrant Box',
+            func=step_create_vagrant_box,
+            thread=True,
+            description='Create the Vagrant box',
+        ),
+        Step(
+            label='Run Box',
+            func=step_run_box,
+            thread=True,
+            description='Run the Vagrant box',
+        ),
+        Step(
+            label='Install Adare VM',
+            func=step_install_adare_vm,
+            thread=True,
+            description='Install and run the Adare VM',
+        ),
+        Step(
+            label='Connect WebSocket',
+            func=step_connect_websocket,
+            thread=False,
+            description='Connect to the Adare VM via WebSocket',
+        ),
+        Step(
+            label='Execute Installations',
+            func=step_execute_installations,
+            thread=False,
+            description='Execute environment installations',
+        ),
+        Step(
+            label='Execute Experiment',
+            func=step_execute_experiment,
+            thread=False,
+            description='Execute the experiment',
+        ),
+        Step(
+            label='Finalize',
+            func=step_finalize,
+            thread=True,
+            description='Finalize the experiment run',
+        ),
+        Step(
+            label='Shutdown',
+            func=step_shutdown_ws,
+            thread=False,
+            description='Shutdown the WebSocket client',
+        ),
+        Step(
+            label='Shutdown Vagrant',
+            func=step_shutdown_vagrant,
+            thread=True,
+            description='Shutdown the Vagrant box',
+        )
+    ]
+
+    shutdown_steps = [
+        Step(
+            label='Shutdown',
+            func=step_shutdown_ws,
+            thread=False,
+            description='Shutdown the WebSocket client',
+        ),
+        Step(
+            label='Shutdown Vagrant',
+            func=step_shutdown_vagrant,
+            thread=True,
+            description='Shutdown the Vagrant box',
+        ),
+        Step(
+            label='Remove Fake Experiment Run',
+            func=step_remove_fake_experiment_run,
+            thread=True,
+            description='Remove the fake experiment run',
+        ),
+    ]
+    run_ctx = ExperimentRunCtx(project_path, experiment_name, environment_name)
+    step_initialize(run_ctx, fake=True)
+    from adare.frontend.terminal.textualize.experiment_flow_console_widget import ExperimentRunFlowConsoleWidget, flowwidgetmanager
+    flowwidgetmanager.add_handler(run_ctx.experiment_run_ulid, ExperimentRunFlowConsoleWidget())
+    app = ExperimentApp(run_ctx, steps=steps, shutdown_steps=shutdown_steps)
+    app.run()
 
 
 def experiment_download(project: Path, experiment_ulid: str):

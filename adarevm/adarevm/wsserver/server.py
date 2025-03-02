@@ -29,7 +29,7 @@ class WebSocketServer:
             try:
                 await websocket.send(msg.encode())
                 log.info(f"Sent to {identifier}: {msg}")
-            except websockets.exceptions.ConnectionClosedError:
+            except websockets.exceptions.ConnectionClosed:
                 log.warning(f"Connection closed while sending to {identifier}.")
                 break
             except Exception as e:
@@ -53,7 +53,7 @@ class WebSocketServer:
             def send_callback(msg):
                 if identifier not in self.send_queues:
                     self.send_queues[identifier] = asyncio.Queue()
-                # Use run_coroutine_threadsafe to schedule the coroutine in the running loop.
+                # Schedule the coroutine in the running loop.
                 asyncio.run_coroutine_threadsafe(
                     self.send_queues[identifier].put(msg), self.loop
                 )
@@ -62,8 +62,14 @@ class WebSocketServer:
             async for message in websocket:
                 await self.process_message(identifier, message, send_callback)
 
-        except websockets.exceptions.ConnectionClosedError:
-            log.info(f"Client {identifier} disconnected unexpectedly.")
+        except websockets.exceptions.ConnectionClosed as e:
+            # e.code == 1000 is a normal close.
+            if identifier is None:
+                log.info("Connection closed before client identifier was received.")
+            elif e.rcvd.code == 1000:
+                log.info(f"Client {identifier} closed connection normally.")
+            else:
+                log.error(f"Connection closed for client {identifier} with code: {e.code}")
         except Exception as e:
             log.error(f"Error handling client {identifier}: {e}")
         finally:
@@ -90,7 +96,7 @@ class WebSocketServer:
         if websocket:
             try:
                 await websocket.send(message)
-            except websockets.exceptions.ConnectionClosedError:
+            except websockets.exceptions.ConnectionClosed:
                 log.warning(f"Failed to send to {identifier}: connection closed.")
             except Exception as e:
                 log.error(f"Failed to send to {identifier}: {e}")
@@ -108,11 +114,6 @@ class WebSocketServer:
         asyncio.set_event_loop(self.loop)
         self.loop.run_until_complete(self._start_server())
         self.loop.run_forever()
-
-    def start_in_thread(self):
-        """Starts the WebSocket server in a background thread."""
-        self.server_thread = threading.Thread(target=self.start, daemon=True)
-        self.server_thread.start()
 
 def get_ws_server(*args, **kwargs):
     global ws_server

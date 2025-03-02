@@ -149,7 +149,8 @@ class StatusEnum(IntEnum):
             icon = ':question:'
         elif value == StatusEnum.TEST_FAILED:
             icon = ':no_entry_sign:'
-        return f'[{colorname}]{icon}[/{colorname}]' if colorname else icon
+        from rich.text import Text
+        return f'[{colorname}]{Text.from_markup(icon)}[/{colorname}]' if colorname else icon
 
     @staticmethod
     def get_color(value: int):
