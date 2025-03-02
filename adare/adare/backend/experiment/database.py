@@ -107,10 +107,13 @@ def update_experiment_run(experiment_run_ulid: str, experiment_name: str, enviro
         return experiment_run.ulid
 
 
-def initialize_experiment_run():
+def initialize_experiment_run(fake: bool = False):
     with ExperimentApi() as api:
-        return api.initialize_experiment_run().ulid
+        return api.initialize_experiment_run(fake).ulid
 
+def remove_fake_experiment_run(experiment_run_ulid: str):
+    with ExperimentApi() as api:
+        api.remove_fake_experiment_run(experiment_run_ulid)
 
 def update_experiment_run_start(experiment_run_ulid: str, timestamp: datetime):
     with ExperimentApi() as api:

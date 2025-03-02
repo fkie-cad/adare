@@ -31,11 +31,11 @@ class DatabaseApi:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._session:
-            self.__stop_sqlalchemy_session()
-            # log.debug('Stopped sqlalchemy session.')
+        if exc_type:
+            self._session.rollback()
         else:
-            log.error('Could not stop sqlalchemy session, because session was not created.')
+            self._session.commit()
+        self._session.close()
 
     def expunge(self, obj):
         self._session.expunge(obj)
@@ -43,10 +43,6 @@ class DatabaseApi:
     def __start_sqlalchemy_session(self):
         self._session = self.session_starter()
         self._session.begin()
-
-    def __stop_sqlalchemy_session(self):
-        self._session.commit()
-        self._session.close()
 
     def _add_commit(self, obj):
         self._session.add(obj)

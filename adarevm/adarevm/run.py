@@ -32,5 +32,5 @@ def main():
         log.info('Starting WebSocket server...')
         ws_server.start()
     except KeyboardInterrupt:
-        log.info('Shutting down WebSocket server...')
-        ws_server.stop()
+        pass
+    log.info('Stopping WebSocket server...')

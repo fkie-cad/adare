@@ -846,6 +846,8 @@ class ExperimentRun(SerializerMixin, Base):
 
     # currently not used
     sha256_validation_hash = Column(String, nullable=True)
+    # used for test runs
+    fake = Column(Boolean, default=False)
 
     @hybrid_property
     def is_valid(self):

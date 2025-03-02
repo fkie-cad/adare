@@ -1,5 +1,6 @@
 from adare.database.models.experiment import StageInRun, Stage
 from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
+from adare.frontend.terminal.textualize.experiment_flow_console_widget import flowwidgetmanager, ExperimentRunFlowConsoleWidget
 from adarelib.config import StatusEnum
 
 from sqlalchemy import event
@@ -62,6 +63,8 @@ def print_to_console(session: Session, console: ExperimentFlowConsole, target: S
 def receive_after_insert(mapper, connection, target):
     session = Session(bind=connection)
     console = flowconsolemanager.get_handler(target.run_id)
+    if not console:
+        console = flowwidgetmanager.get_handler(target.run_id)
     print_to_console(session, console, target)
 
 
@@ -69,4 +72,6 @@ def receive_after_insert(mapper, connection, target):
 def receive_after_update(mapper, connection, target):
     session = Session(bind=connection)
     console = flowconsolemanager.get_handler(target.run_id)
+    if not console:
+        console = flowwidgetmanager.get_handler(target.run_id)
     print_to_console(session, console, target)

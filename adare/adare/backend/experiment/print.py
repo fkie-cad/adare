@@ -7,7 +7,6 @@ from rich.layout import Layout
 from rich.spinner import SPINNERS
 
 from adarelib.config import StatusEnum
-from adarelib.breakpoint import BreakPoint, BREAKPOINTS
 
 # configure logging
 import logging
@@ -21,7 +20,6 @@ class ExperimentFlowConsole:
     disable: bool
 
     messages: dict
-    breakpoint: BreakPoint
     ticks_per_second: int = 12
 
     layout: Text
@@ -30,7 +28,6 @@ class ExperimentFlowConsole:
         self.console = Console()
         self.stop_event = threading.Event()
         self.messages = {}
-        self.breakpoint = None
         self.thread = None
         self.disable = disable
 
@@ -44,20 +41,9 @@ class ExperimentFlowConsole:
     def _start_live_in_thread(self):
         tick_count = 0
         with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second) as live:
-            if tick_count % 10:
-                for bp in BREAKPOINTS:
-                    if bp.active:
-                        self.log_breakpoint(bp)
             while not self.stop_event.is_set():
                 messages_as_str = '\n'.join([self._generate_message(identifier, spinner_position=tick_count) for identifier in self.messages.keys()])
                 live.update(messages_as_str)
-                if self.breakpoint:
-                    breakpoint_icon = StatusEnum.get_icon(StatusEnum.BREAKPOINT_HIT, color=True)
-                    messages_as_str += f'{breakpoint_icon} breakpoint {self.breakpoint.name} hit. press c to continue'
-                    live.update(messages_as_str)
-                    while input() != 'c':
-                        time.sleep(0.1)
-                    self.log_breakpoint_done(self.breakpoint.name, f'breakpoint {self.breakpoint.name} resolved')
                 tick_count += 1
                 time.sleep(0.1)
         log.debug('rich live thread stopped')
@@ -178,9 +164,6 @@ class ExperimentFlowConsole:
             'result_status': None,
         }
 
-    def log_breakpoint(self, bp: BreakPoint):
-        self.breakpoint = bp
-
     def log_spinner_done(self, identifier: str, status: int, message: str = None, result_status: int = None):
         updated_msg = self.messages[identifier]
         updated_msg['spinner'] = None
@@ -202,8 +185,8 @@ class FlowConsoleManager:
     def add_handler(self, experimentrun_ulid: str, handler: ExperimentFlowConsole):
         self.handlers[experimentrun_ulid] = handler
 
-    def get_handler(self, experimentrun_ulid: str) -> ExperimentFlowConsole:
-        return self.handlers[experimentrun_ulid]
+    def get_handler(self, experimentrun_ulid: str) -> ExperimentFlowConsole or None:
+        return self.handlers.get(experimentrun_ulid, None)
 
 
 flowconsolemanager = FlowConsoleManager()

@@ -173,8 +173,8 @@ class ExperimentApi(ProjectDbApi):
         self._session.commit()
         return experiment_run
 
-    def initialize_experiment_run(self) -> ExperimentRun:
-        experiment_run = ExperimentRun()
+    def initialize_experiment_run(self, fake: bool = False) -> ExperimentRun:
+        experiment_run = ExperimentRun(fake=fake)
         self._session.add(experiment_run)
         self._session.commit()
         return experiment_run
@@ -202,6 +202,13 @@ class ExperimentApi(ProjectDbApi):
         for run in experiment.runs:
             self._session.delete(run)
         self._session.delete(experiment)
+
+    def remove_fake_experiment_run(self, experiment_run_ulid: str):
+        experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid, fake=True).first()
+        if experiment_run.fake:
+            self._session.delete(experiment_run)
+        else:
+            raise ValueError(f'experiment run with ulid {experiment_run_ulid} is not fake')
 
     def experiment_sha256_equals(self, experiment_ulid: str, sha256: str) -> bool:
         experiment = self._session.query(Experiment).filter_by(ulid=experiment_ulid).first()

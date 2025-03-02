@@ -27,6 +27,8 @@ watchdog = "^4.0.0"
 keyboard = "^0.13.5"
 python-ulid = "^2.7.0"
 websockets = "^15.0"
+textual-dev = "^1.7.0"
+textual = "^2.1.1"
 
 
 [tool.poetry.scripts]
