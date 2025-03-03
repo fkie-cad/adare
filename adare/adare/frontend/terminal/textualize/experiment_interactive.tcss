@@ -1,22 +1,78 @@
-StepGroup {
-    background: $boost;
+StepPanel {
     height: 3;
-    margin: 1;
-    min-width: 50;
+    margin: 0 1 1 1;
     padding: 0;
+}
+
+
+StepListPanel {
+    margin: 1;
+    padding: 1;
+    border: round $primary;
+}
+
+FlowPanel {
+    margin: 1;
+    padding: 1;
+    border: round $primary;
+}
+
+
+MachinePanel {
+    margin: 1;
+    padding: 1;
+    border: round $primary;
 }
 
 LogView {
     background: $boost;
     margin: 1;
-    min-width: 50;
     padding: 1;
 }
 
-Button {
-    width: 16;
+.verticalbuttonlist {
+    width: 26;
+    margin: 0;
+    padding: 0;
+    dock: right;
 }
 
-.playbutton {
-    dock: right;
+CustomIconizedButton {
+    text-align: left;
+    width: 20;
+    margin: 0 1;
+    padding: 0;
+    border: none;
+}
+
+PlayButton {
+    text-align: left;
+    width: 20;
+    margin: 0 1;
+    padding: 0;
+    border: none;
+}
+
+.box {
+    border: round $primary;
+    padding: 1;
+}
+
+.box2 {
+    border: round $primary;
+    padding: 0;
+}
+
+.box2done {
+    border: round $success;
+    padding: 0;
+}
+
+.box2running {
+    border: round $warning;
+    padding: 0;
+}
+
+#machine-panel {
+    height: 11;
 }

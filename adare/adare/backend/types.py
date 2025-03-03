@@ -7,3 +7,4 @@ class Step:
     description: str
     thread: bool
     func: Callable
+    repeatable: bool = attrs.field(default=False)
