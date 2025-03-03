@@ -426,7 +426,7 @@ async def step_connect_websocket(context: ExperimentRunCtx):
         context.client = client
 
 async def step_execute_installations(context: ExperimentRunCtx):
-    with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.stop_event):
+    with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.stop_event) as stage:
         installations = environment_database.get_environment_installations(context.environment_ulid)
         for installation in installations:
             msg = EXEC(
@@ -438,10 +438,11 @@ async def step_execute_installations(context: ExperimentRunCtx):
             await __wait_until_receive_done_msg(context.client, context.experiment_run_ulid)
 
 async def step_execute_experiment(context: ExperimentRunCtx):
-    with StageCtxManager(ExperimentRunStage(), context.experiment_run_ulid, event=context.stop_event):
+    with StageCtxManager(ExperimentRunStage(), context.experiment_run_ulid, event=context.stop_event) as stage:
         msg = EXPERIMENT(context.experiment_name).encode()
         await context.client.send_message(msg)
         await __wait_until_receive_done_msg(context.client, context.experiment_run_ulid)
+
 
 def step_finalize(context: ExperimentRunCtx):
     timestamp_end = datetime.now(timezone.utc)
@@ -467,6 +468,18 @@ def step_remove_fake_experiment_run(context: ExperimentRunCtx):
     # todo remove associated stuff as well (e.g. stages/files/...)
     experiment_database.remove_fake_experiment_run(context.experiment_run_ulid)
     log.info(f'fake experiment run {context.experiment_run_ulid} removed')
+
+
+def callback_vagrant_box_exists(context: ExperimentRunCtx):
+    if not context.box:
+        return False
+    return context.box.exists()
+
+def callback_vagrant_box_status(context: ExperimentRunCtx):
+    if not context.box:
+        return 'not_created'
+    return context.box.status()
+
 
 async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False):
     """
@@ -570,58 +583,29 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             log.error(f"Error during shutdown: {e}")
 
 
+
 def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
     from adare.frontend.terminal.textualize.experiment_interactive import ExperimentApp
     from adare.backend.types import Step
 
+
+    setup_adare = lambda ctx: [
+        step_setup_directories(ctx),
+        step_resolve_environment(ctx),
+        step_check_integrity_experiment(ctx),
+        step_check_integrity_project(ctx),
+        step_check_vagrant_box(ctx),
+        step_create_run_directory(ctx),
+        step_prepare_vagrant_configuration(ctx),
+        step_create_vagrant_box(ctx),
+    ]
+
     steps = [
         Step(
-            label='Setup Directories',
-            func=step_setup_directories,
+            label='Setup Adare to run experiment',
+            func=setup_adare,
             thread=True,
-            description='Check and create necessary directories',
-        ),
-        Step(
-            label='Resolve Environment',
-            func=step_resolve_environment,
-            thread=True,
-            description='Resolve the environment file',
-        ),
-        Step(
-            label='Check Integrity Experiment',
-            func=step_check_integrity_experiment,
-            thread=True,
-            description='Check the integrity of the experiment',
-        ),
-        Step(
-            label='Check Integrity Project',
-            func=step_check_integrity_project,
-            thread=True,
-            description='Check the integrity of the project',
-        ),
-        Step(
-            label='Check Vagrant Box',
-            func=step_check_vagrant_box,
-            thread=True,
-            description='Check if the Vagrant box exists',
-        ),
-        Step(
-            label='Create Run Directory',
-            func=step_create_run_directory,
-            thread=True,
-            description='Create the experiment run directory',
-        ),
-        Step(
-            label='Prepare Vagrant Configuration',
-            func=step_prepare_vagrant_configuration,
-            thread=True,
-            description='Prepare the Vagrant configuration',
-        ),
-        Step(
-            label='Create Vagrant Box',
-            func=step_create_vagrant_box,
-            thread=True,
-            description='Create the Vagrant box',
+            description='Setup Adare to run the experiment',
         ),
         Step(
             label='Run Box',
@@ -634,33 +618,38 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
             func=step_install_adare_vm,
             thread=True,
             description='Install and run the Adare VM',
+            repeatable=True,
         ),
         Step(
             label='Connect WebSocket',
             func=step_connect_websocket,
             thread=False,
             description='Connect to the Adare VM via WebSocket',
+            repeatable=True,
         ),
         Step(
             label='Execute Installations',
             func=step_execute_installations,
             thread=False,
             description='Execute environment installations',
+            repeatable=True,
         ),
         Step(
             label='Execute Experiment',
             func=step_execute_experiment,
             thread=False,
             description='Execute the experiment',
+            repeatable=True,
         ),
         Step(
             label='Finalize',
             func=step_finalize,
             thread=True,
             description='Finalize the experiment run',
+            repeatable=False,
         ),
         Step(
-            label='Shutdown',
+            label='Shutdown WebSocket Client',
             func=step_shutdown_ws,
             thread=False,
             description='Shutdown the WebSocket client',
@@ -693,11 +682,17 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
             description='Remove the fake experiment run',
         ),
     ]
+
+    callbacks = {
+        'vagrant_box_exists': callback_vagrant_box_exists,
+        'vagrant_box_status': callback_vagrant_box_status,
+    }
+
     run_ctx = ExperimentRunCtx(project_path, experiment_name, environment_name)
     step_initialize(run_ctx, fake=True)
     from adare.frontend.terminal.textualize.experiment_flow_console_widget import ExperimentRunFlowConsoleWidget, flowwidgetmanager
     flowwidgetmanager.add_handler(run_ctx.experiment_run_ulid, ExperimentRunFlowConsoleWidget())
-    app = ExperimentApp(run_ctx, steps=steps, shutdown_steps=shutdown_steps)
+    app = ExperimentApp(run_ctx, steps=steps, shutdown_steps=shutdown_steps, callbacks=callbacks)
     app.run()
 
 

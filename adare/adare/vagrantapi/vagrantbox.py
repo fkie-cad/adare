@@ -55,12 +55,13 @@ class CustomVagrant(vagrant.Vagrant):
 
 
 class VagrantBoxVM:
-    vagrant: CustomVagrant
+    vagrant: CustomVagrant or None
     vm_name: str = 'ADARE'
     vagrantdirectory_path: Path
     log_file: Optional[Path]
 
     def __init__(self, vagrantdirectory_path: Path, log_file: Optional[Path] = None, vm_name: Optional[str] = None):
+        self.vagrant = None
         self.log_file = log_file
         self.vagrantfile_path = vagrantdirectory_path
         if vm_name:
@@ -202,6 +203,16 @@ class VagrantBoxVM:
         log.info(f'Vagrant box ({self.vagrantfile_path}) up finished')
         return return_value
 
+    def exists(self):
+        if not self.vagrant:
+            return False
+        return self.vagrant.status()[0].state != 'not_created'
+
+    def status(self):
+        if not self.vagrant:
+            return 'not_created'
+        return self.vagrant.status()[0].state
+
     @retry(subprocess.CalledProcessError, tries=10, delay=1, backoff=2)
     def __destroy_box(self):
         with self.log_file.open('a') if self.log_file else contextlib.nullcontext() as log_file_handle:
@@ -211,6 +222,9 @@ class VagrantBoxVM:
                     log_file_handle.flush()
 
     def destroy(self, ctx_manager_destroy: VagrantCtxManager = None):
+        if not self.vagrant:
+            log.info(f'Vagrant box ({self.vagrantfile_path}) does not exist')
+            return
         with ctx_manager_destroy if ctx_manager_destroy else contextlib.nullcontext():
             try:
                 self.__destroy_box()
