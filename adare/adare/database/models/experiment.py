@@ -662,7 +662,9 @@ class GuiFindEvent(Event):
 
     @hybrid_property
     def stage_result(self):
-        return None
+        if self.success <= 0:
+            return StatusEnum.ERROR
+        return StatusEnum.SUCCESS
 
 
 class GuiClickEvent(Event):

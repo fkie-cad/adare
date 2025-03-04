@@ -19,13 +19,12 @@ class StageDbApi(DatabaseApi):
         super().__init__(db_path)
         ExperimentBase.metadata.create_all(self.engine)
 
-    def update_stage_in_run(self, stage: StageType, run_id: str) -> StageInRun:
+    def update_stage_in_run(self, stage: StageType, run_id: str, stage_id: int = -1) -> int:
         if not (stage_db := self._session.query(Stage).filter(Stage.name == stage.name).first()):
             raise sqlalchemy.orm.exc.NoResultFound(f"Stage '{stage.name}' not found in database")
 
-        # check if stage already exists in run
-        if stage_in_run := self._session.query(StageInRun).filter(StageInRun.stage_id == stage_db.id).filter(StageInRun.run_id == run_id).first():
-            # update stage if corresponding value is set
+        if stage_id != -1:
+            stage_in_run = self._session.query(StageInRun).filter(StageInRun.stage_id == stage_db.id).filter(StageInRun.run_id == run_id).filter(StageInRun.id == stage_id).first()
             if stage.start_time:
                 stage_in_run.start_time = stage.start_time
             if stage.end_time:
@@ -43,7 +42,7 @@ class StageDbApi(DatabaseApi):
             self._session.add(stage_in_run)
 
         self._session.commit()
-        return stage_in_run
+        return stage_in_run.id
 
     def get_stages(self) -> list[Stage]:
         stages = self._session.query(Stage).all()

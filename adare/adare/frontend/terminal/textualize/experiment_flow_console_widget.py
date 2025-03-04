@@ -5,10 +5,13 @@ from rich.text import Text
 from rich.spinner import SPINNERS
 from textual.app import App, ComposeResult, RenderResult
 from textual.widget import Widget
+from textual.containers import VerticalGroup
+from textual.widgets import Static
 from textual.reactive import reactive
 from adarelib.config import StatusEnum
 
-class ExperimentRunFlowConsoleWidget(Widget):
+
+class ExperimentRunFlowConsoleWidget(VerticalGroup):
     """
     A Textual widget that displays log messages with an animated spinner.
     """
@@ -17,10 +20,12 @@ class ExperimentRunFlowConsoleWidget(Widget):
     # A reactive tick counter (used to cycle spinner frames)
     tick: reactive[int] = reactive(0)
     ticks_per_second: int = 12
+    lines: list
 
     def __init__(self):
         super().__init__()
         self.tick = 0
+        self.lines = []
 
     def on_mount(self) -> None:
         # Set an interval to update the tick, which triggers re-rendering.
@@ -28,7 +33,7 @@ class ExperimentRunFlowConsoleWidget(Widget):
 
     def _update_tick(self) -> None:
         self.tick += 1
-        self.refresh(layout=True)
+        self.refresh(recompose=True)
 
     def _generate_message(self, identifier: str, spinner_position: int = 0) -> str:
         msg_obj = self.messages[identifier]
@@ -54,11 +59,10 @@ class ExperimentRunFlowConsoleWidget(Widget):
             message = f"{message} {StatusEnum.get_icon(msg_obj['result_status'], color=True)}"
         return message
 
-    def render(self) -> RenderResult:
-        # Build a single Text renderable from all messages.
-        lines = [self._generate_message(key, spinner_position=self.tick)
-                 for key in self.messages]
-        return Text.from_markup("\n".join(lines))
+    def compose(self) -> ComposeResult:
+        self.lines = [self._generate_message(identifier, self.tick) for identifier in self.messages]
+        for line in self.lines:
+            yield Static(Text.from_markup(line))
 
     @property
     def n_lines(self):
@@ -74,7 +78,7 @@ class ExperimentRunFlowConsoleWidget(Widget):
             "status": StatusEnum.BREAKPOINT_RESOLVED,
             "result_status": None,
         }
-        self.refresh(layout=True)
+        self.refresh(layout=True, recompose=True)
 
     def log_success(self, identifier: str, message: str, level: int = 0) -> None:
         self.messages[identifier] = {
@@ -85,7 +89,7 @@ class ExperimentRunFlowConsoleWidget(Widget):
             "status": StatusEnum.SUCCESS,
             "result_status": None,
         }
-        self.refresh(layout=True)
+        self.refresh(layout=True, recompose=True)
 
     def log_warning(self, identifier: str, message: str, level: int = 0) -> None:
         self.messages[identifier] = {
@@ -96,7 +100,7 @@ class ExperimentRunFlowConsoleWidget(Widget):
             "status": StatusEnum.WARNING,
             "result_status": None,
         }
-        self.refresh(layout=True)
+        self.refresh(layout=True, recompose=True)
 
     def log_error(self, identifier: str, message: str, level: int = 0) -> None:
         self.messages[identifier] = {
@@ -107,7 +111,7 @@ class ExperimentRunFlowConsoleWidget(Widget):
             "status": StatusEnum.ERROR,
             "result_status": None,
         }
-        self.refresh(layout=True)
+        self.refresh(layout=True, recompose=True)
 
     def log_interrupted(self, identifier: str, message: str, level: int = 0) -> None:
         self.messages[identifier] = {
@@ -118,7 +122,7 @@ class ExperimentRunFlowConsoleWidget(Widget):
             "status": StatusEnum.INTERRUPTED,
             "result_status": None,
         }
-        self.refresh(layout=True)
+        self.refresh(layout=True, recompose=True)
 
     def log_failed(self, identifier: str, message: str, level: int = 0) -> None:
         self.messages[identifier] = {
@@ -129,7 +133,7 @@ class ExperimentRunFlowConsoleWidget(Widget):
             "status": StatusEnum.FAILED,
             "result_status": None,
         }
-        self.refresh(layout=True)
+        self.refresh(layout=True, recompose=True)
 
     def log_finished(self, identifier: str, message: str, level: int = 0) -> None:
         self.messages[identifier] = {
@@ -140,20 +144,20 @@ class ExperimentRunFlowConsoleWidget(Widget):
             "status": StatusEnum.FINISHED,
             "result_status": None,
         }
-        self.refresh(layout=True)
+        self.refresh(layout=True, recompose=True)
 
     def change_log_message(self, identifier: str, message: str) -> None:
         if identifier in self.messages:
             self.messages[identifier]["message"] = message
-            self.refresh(layout=True)
+            self.refresh(layout=True, recompose=True)
 
     def log_spinner(
-        self,
-        identifier: str,
-        message: str,
-        level: int = 0,
-        spinner: str = "dots",
-        spinner_style: str = "bold blue",
+            self,
+            identifier: str,
+            message: str,
+            level: int = 0,
+            spinner: str = "dots",
+            spinner_style: str = "bold blue",
     ) -> None:
         self.messages[identifier] = {
             "message": message,
@@ -163,14 +167,14 @@ class ExperimentRunFlowConsoleWidget(Widget):
             "status": StatusEnum.NONE,
             "result_status": None,
         }
-        self.refresh(layout=True)
+        self.refresh(layout=True, recompose=True)
 
     def log_spinner_done(
-        self,
-        identifier: str,
-        status: str,
-        message: str = None,
-        result_status: str = None
+            self,
+            identifier: str,
+            status: str,
+            message: str = None,
+            result_status: str = None
     ) -> None:
         if identifier in self.messages:
             updated = self.messages[identifier]
@@ -181,7 +185,7 @@ class ExperimentRunFlowConsoleWidget(Widget):
             if message:
                 updated["message"] = message
             self.messages[identifier] = updated
-            self.refresh(layout=True)
+            self.refresh(layout=True, recompose=True)
 
     def exists(self, identifier: str) -> bool:
         return identifier in self.messages
@@ -196,6 +200,9 @@ class FlowWidgetManager:
 
     def get_handler(self, experimentrun_ulid: str) -> ExperimentRunFlowConsoleWidget:
         return self.handlers[experimentrun_ulid]
+
+    def remove_handler(self, experimentrun_ulid: str):
+        del self.handlers[experimentrun_ulid]
 
 
 flowwidgetmanager = FlowWidgetManager()
