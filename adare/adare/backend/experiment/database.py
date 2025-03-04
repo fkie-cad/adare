@@ -163,9 +163,9 @@ def get_experiment_environment(project_path: Path, environment_name: str,  exper
         return Path(experiment.environments[0].file)
 
 
-def update_stage_in_run(stage: StageType, experimentrun_ulid: str):
+def update_stage_in_run(stage: StageType, experimentrun_ulid: str, stage_id: int = -1) -> int:
     with StageDbApi() as db:
-        db.update_stage_in_run(stage, experimentrun_ulid)
+        return db.update_stage_in_run(stage, experimentrun_ulid, stage_id)
 
 
 def sync_experiment(ulid: str, remote_ulid: str, abstract_tests_ulids: dict, remote_url: str, is_published: bool):

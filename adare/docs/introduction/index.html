@@ -5,9 +5,9 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>About ADARE &mdash; ADARE  documentation</title>
-      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=19f00094" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=f8038ea7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=903d06c1" />
 
   
   <!--[if lt IE 9]>
@@ -34,8 +34,9 @@
 
           
           
-          <a href="../index.html" class="icon icon-home">
-            ADARE
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -82,18 +83,12 @@
              
   <section id="about-adare">
 <h1>About ADARE<a class="headerlink" href="#about-adare" title="Link to this heading"></a></h1>
-<p>ADARE is a desktop forensic analysis tool.
-It’s main purpose is to monitor artifact changes over different os and software version in an automated way.</p>
-<p>ADARE on one side uses virtual machines via vagrant, in which the experiment will take place.
-On a high level a desktop forensic experiment is divided into two main phases:</p>
-<ol class="arabic simple">
-<li><p>action phase (sequence of gui actions such as mouse clicks and key presses)</p></li>
-<li><p>parsing phase (parsing of forensic artifacts)</p></li>
-<li><p>analysis phase (analysis of parsed artifacts as well as the state of the virtual machine)</p></li>
-</ol>
-<p>Users can use ADARE to reproduce already existing experiments or write their own experiments.
-To view the results of an experiment run ADARE’s web interface as well as CLI can be used.</p>
-<p>It is recommended to read the <span class="xref std std-ref">introduction/index:Walkthrough</span> chapter first, which shows how to use create and run experiments.</p>
+<p>ADARE (Automated <span class="boldprimary">D</span>esktop <span class="boldprimary">A</span>nalysis framework for <span class="boldprimary">R</span>eproducible <span class="boldprimary">E</span>xperiments) is a framework designed to detect changes in forensic artifacts or forensic tools across different software and operating system versions.
+By combining automated GUI actions that mimic user behavior with structured tests to validate expected artifact behavior, ADARE enables comprehensive forensic experimentation within a virtual machine environment.
+To manage virtual machines, ADARE utilizes Vagrant in combination with the VirtualBox hypervisor.</p>
+<p>Users can leverage ADARE to reproduce and validate existing experiments or create their own forensic experiments.
+Additionally,  <a class="reference external" href="https://adare.seclab-bonn.de/">Adare Web</a> provides a platform for sharing experiments and results with the community.</p>
+<p>For a step-by-step guide on using ADARE, it is recommended to start with the <span class="xref std std-ref">introduction/index:Walkthrough</span> chapter, which explains how to create and run experiments.</p>
 </section>
 
 

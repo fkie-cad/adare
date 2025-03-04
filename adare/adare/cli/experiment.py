@@ -1,6 +1,6 @@
 # internal imports
 from adare.backend.basics import determine_projectdirectory
-from adarelib.exceptions import NoProjectFoundError, ArgumentsError
+from adarelib.exceptions import NoProjectFoundError
 
 
 # configure logging

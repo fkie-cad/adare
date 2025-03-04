@@ -618,21 +618,21 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
             func=step_install_adare_vm,
             thread=True,
             description='Install and run the Adare VM',
-            repeatable=True,
+            repeatable=False,
         ),
         Step(
             label='Connect WebSocket',
             func=step_connect_websocket,
             thread=False,
             description='Connect to the Adare VM via WebSocket',
-            repeatable=True,
+            repeatable=False,
         ),
         Step(
             label='Execute Installations',
             func=step_execute_installations,
             thread=False,
             description='Execute environment installations',
-            repeatable=True,
+            repeatable=False,
         ),
         Step(
             label='Execute Experiment',
@@ -688,12 +688,17 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
         'vagrant_box_status': callback_vagrant_box_status,
     }
 
-    run_ctx = ExperimentRunCtx(project_path, experiment_name, environment_name)
-    step_initialize(run_ctx, fake=True)
-    from adare.frontend.terminal.textualize.experiment_flow_console_widget import ExperimentRunFlowConsoleWidget, flowwidgetmanager
-    flowwidgetmanager.add_handler(run_ctx.experiment_run_ulid, ExperimentRunFlowConsoleWidget())
-    app = ExperimentApp(run_ctx, steps=steps, shutdown_steps=shutdown_steps, callbacks=callbacks)
-    app.run()
+    exit_code = 99
+    while exit_code == 99:
+        run_ctx = ExperimentRunCtx(project_path, experiment_name, environment_name)
+        step_initialize(run_ctx, fake=True)
+        exp_run_ulid = run_ctx.experiment_run_ulid
+        from adare.frontend.terminal.textualize.experiment_flow_console_widget import ExperimentRunFlowConsoleWidget, flowwidgetmanager
+        flowwidgetmanager.add_handler(exp_run_ulid, ExperimentRunFlowConsoleWidget())
+        app = ExperimentApp(run_ctx, steps=steps, shutdown_steps=shutdown_steps, callbacks=callbacks)
+        app.run()
+        exit_code = app.return_code
+        flowwidgetmanager.remove_handler(exp_run_ulid)
 
 
 def experiment_download(project: Path, experiment_ulid: str):

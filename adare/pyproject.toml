@@ -29,6 +29,7 @@ python-ulid = "^2.7.0"
 websockets = "^15.0"
 textual-dev = "^1.7.0"
 textual = "^2.1.1"
+trogon = "^0.6.0"
 
 
 [tool.poetry.scripts]
