@@ -3,7 +3,7 @@ Installation Guide
 ******************
 To install adare, make sure to install make as well as the python packaging tool `poetry <https://python-poetry.org/docs/#installing-with-the-official-installer>`_.
 Afterwards clone the `repository <https://github.com/fkie-cad/Adare>`_, navigate into the directory and run ``make install``.
-To check whether the tool is successfully installed and ready to use run ``adare -v``.
+To check whether the tool is successfully installed and ready to use run ``adare --version``.
 
 
 Requirements
@@ -26,7 +26,7 @@ The tool was tested with the following versions of Python, Vagrant, and VirtualB
    * - program
      - versions
    * - Python
-     - ``3.10``
+     - ``3.10.2``
    * - Vagrant
      - ``2.3.2``
    * - VirtualBox

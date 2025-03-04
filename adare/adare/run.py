@@ -17,7 +17,6 @@ from adare.cli.experiment import (
 )
 from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
-from adare.cli.help import exec_help_breakpoints
 from adare.cli.showversion import exec_show_version
 from adare.cli.show import (
     exec_show_projects, exec_show_environment, exec_show_environments,
@@ -120,7 +119,7 @@ def list_projects():
 # ------------------------------
 # Environment commands
 # ------------------------------
-@cli.group(name='env')
+@cli.group(name='environment')
 def environment():
     """Environment-related commands."""
     pass
@@ -154,7 +153,7 @@ def delete(ulid, force):
 # ------------------------------
 # Experiment commands
 # ------------------------------
-@cli.group(name='exp')
+@cli.group(name='experiment')
 def experiment():
     """Experiment-related commands."""
     pass
@@ -328,13 +327,6 @@ def sync(project):
 def help():
     """Show help for special options."""
     pass
-
-@help.command(name='breakpoints')
-@click.option('--breakpoint', '-b', help='Name of the breakpoint')
-def help_breakpoints(breakpoint):
-    """Show help for breakpoints."""
-    args = SimpleNamespace(breakpoint=breakpoint)
-    exec_with_error_printing(exec_help_breakpoints, args)
 
 
 # ------------------------------
