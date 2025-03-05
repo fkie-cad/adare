@@ -36,4 +36,4 @@ else
 endif
 
 docs:
-	cd adare && poetry run sphinx-build -b html docsrc/source docs
+	poetry run sphinx-build -b html docsrc/source docs

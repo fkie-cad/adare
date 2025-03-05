@@ -27,7 +27,7 @@ def exec_experiment_create(arguments):
 
 
 def exec_experiment_run(arguments):
-    from adare.backend.experiment.commands import experiment_run
+    from adare.backend.experiment.commands import experiment_run, experiment_load
 
     disable_printing = False
     if arguments.verbose or arguments.very_verbose:
@@ -36,6 +36,7 @@ def exec_experiment_run(arguments):
     if project_directory := determine_projectdirectory(arguments.project):
         import asyncio
         try:
+            experiment_load(project_directory, arguments.experiment, force=False)
             asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing))
         except KeyboardInterrupt:
             log.info("Keyboard interrupt received, shutting down gracefully...")
@@ -44,9 +45,10 @@ def exec_experiment_run(arguments):
 
 
 def exec_experiment_test(arguments):
-    from adare.backend.experiment.commands import experiment_test
+    from adare.backend.experiment.commands import experiment_test, experiment_load
     if project_directory := determine_projectdirectory(arguments.project):
         try:
+            experiment_load(project_directory, arguments.experiment, force=False)
             experiment_test(project_directory, arguments.experiment, arguments.environment)
         except KeyboardInterrupt:
             log.info("Keyboard interrupt received, shutting down gracefully...")

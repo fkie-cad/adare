@@ -1,7 +1,6 @@
 import asyncio
 import threading
 
-from textual import events
 from textual.app import App, ComposeResult, RenderResult
 from textual.containers import HorizontalGroup, VerticalScroll, Vertical, Horizontal, VerticalGroup
 from textual.widgets import Button, Footer, Header, Static, LoadingIndicator, Rule
@@ -41,21 +40,18 @@ class PlayButton(Button):
         self.btn_id = btn_id
 
     def compose(self) -> ComposeResult:
-        btn_label = ''
-
         if self.state == 'not_started':
-            btn_label = Text.from_markup('Play :play_button:')
+            yield Button(Text.from_markup('Play :play_button:'), id=self.btn_id, classes='playbtn')
         elif self.state == 'running':
-            btn_label = Text.from_markup('Running :hourglass:')
+            yield Static(Text.from_markup('Running :hourglass:'), classes='center', id=self.btn_id)
         elif self.state == 'replay':
-            btn_label = Text.from_markup('Replay :repeat:')
+            yield Button( Text.from_markup('Replay :repeat:'), id=self.btn_id, classes='playbtn')
         elif self.state == 'done':
-            yield Static(Text.from_markup('Done :white_check_mark:'))
+            yield Static(Text.from_markup('Done :white_check_mark:'), classes='center', id=self.btn_id)
         elif self.state == 'in_queue':
-            btn_label = Text.from_markup('In Queue :hourglass_flowing_sand:')
+            yield Static(Text.from_markup('In Queue :hourglass_flowing_sand:'), classes='center', id=self.btn_id)
         else:
             yield Static('Not implemented')
-        yield Button(btn_label, id=self.btn_id, classes='playbtn')
 
 
 class StepPanel(VerticalGroup):
@@ -104,6 +100,8 @@ class CustomIconizedButton(Button):
 
 class MachinePanel(Vertical):
     BORDER_TITLE = Text.from_markup(f'Machine :laptop_computer:')
+    interrupted: reactive[bool] = reactive(False, recompose=True)
+    DEFAULT_CLASSES = 'interruptable'
 
     def __init__(self, experiment: str, environment: str):
         super().__init__()
@@ -120,7 +118,8 @@ class MachinePanel(Vertical):
                 yield Static(f'Environment: {self.environment}')
             with Vertical(classes='verticalbuttonlist boxnopadding', id='actionspanel') as box:
                 box.border_title = Text.from_markup('actions :hammer_and_wrench: ')
-                yield CustomIconizedButton(icon=':red_square:', label='Stop', width=20, btn_id='btn-stop-vm')
+                if not self.interrupted:
+                    yield CustomIconizedButton(icon=':red_square:', label='Stop', width=20, btn_id='btn-stop-vm')
                 yield CustomIconizedButton(icon=':rocket:', label='Restart', width=20, btn_id='btn-restart')
                 yield CustomIconizedButton(icon=':door:', label='Quit', width=20, btn_id='btn-quit')
 
@@ -129,15 +128,22 @@ class StepListPanel(Vertical):
     """ A widget that displays multiple StepGroups vertically. """
     steps: List[Step]
     BORDER_TITLE = Text.from_markup('Steps Panel :rocket:')
+    interrupted: reactive[bool] = reactive(False, recompose=True)
+    DEFAULT_CLASSES = 'interruptable'
 
     def __init__(self, steps: List[Step]):
         super().__init__()
         self.steps = steps
 
     def compose(self) -> ComposeResult:
-        with VerticalScroll():
-            for index, step in enumerate(self.steps):
-                yield StepPanel(step_index=index, step=step)
+        if not self.interrupted:
+            with VerticalScroll():
+                for index, step in enumerate(self.steps):
+                    yield StepPanel(step_index=index, step=step)
+        else:
+            with VerticalScroll():
+                yield Static(Text.from_markup('Run interrupted :high_voltage: \n\n\n'), classes='center')
+                yield Static(Text.from_markup('Please Quit :door: or Restart :rocket: the experiment'), classes='center')
 
 
 class MessageScreen(Screen):
@@ -167,6 +173,7 @@ class ExperimentApp(App):
     stop_event: asyncio.Event  # using asyncio.Event consistently
     callbacks: dict[str, Callable]
     AUTO_FOCUS = None
+    interrupted: bool = False
 
     CSS_PATH = "experiment_interactive.tcss"
 
@@ -242,6 +249,8 @@ class ExperimentApp(App):
 
 
     def __update_step_panel(self, index: int, state: str = '', disabled: bool = False):
+        if self.interrupted:
+            return
         play_btn = self.query_one(f"#play-{str(index)}")
         play_btn_wrapper = play_btn.parent
         step_panel = self.query_one(f'#step-{index}').parent.parent
@@ -272,13 +281,16 @@ class ExperimentApp(App):
             for step_index in indices_to_run[1:]:
                 self.__update_step_panel(step_index, 'in_queue', disabled=True)
 
+            for index in range(0, self.last_executed_index + 1):
+                self.__update_step_panel(index, 'done', disabled=True)
+
             for step, step_index in zip(steps_to_run, indices_to_run):
                 self.__update_step_panel(step_index, 'running', disabled=True)
                 await self.run_step(step)
                 if step.repeatable and step_index == target_index:
                     self.__update_step_panel(step_index, 'replay', disabled=False)
                 else:
-                    self.__update_step_panel(step_index, 'done', disabled=False)
+                    self.__update_step_panel(step_index, 'done', disabled=True)
             self.last_executed_index = target_index
 
         self.step_queue.task_done()
@@ -290,20 +302,23 @@ class ExperimentApp(App):
         await self.run_step(step, stop_on_stop=False)
         self.shutdown_queue.task_done()
 
+    async def propagate_interrupt(self):
+        self.interrupted = True
+        interruptable_elements = self.query('.interruptable')
+        for element in interruptable_elements:
+            element.interrupted = True
+
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Footer()
-        # Create a horizontal group to split the screen into two columns.
         with HorizontalGroup():
-            # Left column: all steps in a vertical scroll.
             with Vertical():
                 yield MachinePanel(
                     experiment=self.run_ctx.experiment_name,
                     environment=self.run_ctx.environment_name,
                 )
                 yield StepListPanel(self.steps)
-            # Right column: the log view in its own vertical scroll.
             with Vertical():
                 yield FlowPanel(self.run_ctx.experiment_run_ulid)
 
@@ -314,10 +329,13 @@ class ExperimentApp(App):
             step_index = int(button_id.split("-")[1])
             await self.step_queue.put(step_index)
         elif button_id == 'btn-stop-vm':
+            await self.propagate_interrupt()
             await self.__shutdown_experiment_run()
         elif button_id == 'btn-restart':
+            await self.propagate_interrupt()
             await self.__quit(99)
         elif button_id == 'btn-quit':
+            await self.propagate_interrupt()
             await self.action_quit()
         else:
             log.warning(f'Unknown button pressed: {button_id}')
