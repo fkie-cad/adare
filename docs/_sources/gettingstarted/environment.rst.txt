@@ -1,0 +1,26 @@
+Create an Environment
+**********************
+
+DEPRECATED: This section is deprecated and needs to be updated.
+
+This file contains the configuration for the environment.
+It contains the name of the vagrant box, information about the guest OS as well as potentially additional information such as installations to be performed on the guest OS, before the experiment.
+A minimal configuration file just needs to contain the vagrant box name as well as the platform of the guest OS as shown below:
+
+.. code-block:: yaml
+
+    vagrantbox: "win10vagrantbox"
+    os_platform: "windows"
+    os: "Windows 10"
+    os_distribution: "Home"
+
+Additionally, the configuration file can contain the following fields:
+
+.. csv-table::
+    :file: /_static/tables/environment_configuration_fields.csv
+    :delim: |
+    :widths: 30, 70
+    :header-rows: 1
+
+
+

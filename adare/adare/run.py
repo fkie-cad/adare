@@ -184,15 +184,13 @@ def load(experiment, environment, force, project):
 @experiment.command()
 @click.argument('experiment')
 @click.option('-e', '--environment', required=True, help='Name of the environment')
-@click.option('--breakpoints', '-b', multiple=True, help='Breakpoints to stop the experiment at')
 @click.option('--debug', '-d', is_flag=True, help='Run the experiment in debug mode')
 @click.option('--project', '-p', help='Name of the project')
-def run(experiment, environment, breakpoints, debug, project):
+def run(experiment, environment, debug, project):
     """Run an experiment in a given environment."""
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
-        breakpoints=list(breakpoints),
         debug=debug,
         project=project
     )

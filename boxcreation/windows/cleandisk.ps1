@@ -4,7 +4,7 @@
 Write-Host "Disabling hibernation..."
 powercfg -h off
 
-# Clean temporary files using Disk Cleanup. This may require manual intervention or can be automated with sageset/sagerun
+# Clean temporary files using Disk Cleanup. This may require manual intervention!
 Write-Host "Cleaning temporary files..."
 cleanmgr /sagerun:1
 

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Action Set File &mdash; &#39;ADARE&#39;  documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+    <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            'ADARE'
+          </a>
+              <div class="version">
+                0.0.1
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../about_adare/index.html">About ADARE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">Walkthrough</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Structure and Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gui/index.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">'ADARE'</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Action Set File</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/structure/actionsetfile.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="action-set-file">
+<h1>Action Set File<a class="headerlink" href="#action-set-file" title="Permalink to this heading"></a></h1>
+<p>The action file is a python file containing all actions that mimic user behaviour.
+To create a skeleton for a new action file, as shown below, run the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">exp</span> <span class="n">create</span> <span class="o">&lt;</span><span class="n">experiment_name</span><span class="o">&gt;</span> <span class="o">--</span><span class="n">env</span> <span class="o">&lt;</span><span class="n">environment_name</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">from</span> <span class="nn">guiautomation.Experiment.Experiment</span> <span class="kn">import</span> <span class="n">Experiment</span>
+<span class="kn">from</span> <span class="nn">guiautomation.run</span> <span class="kn">import</span> <span class="n">run</span>
+
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">TestExperiment</span><span class="p">(</span><span class="n">Experiment</span><span class="p">):</span>
+    <span class="n">description</span> <span class="o">=</span> <span class="s1">&#39;place the description of your experiment here&#39;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">prepare</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s1"> started&#39;</span><span class="p">)</span>
+
+        <span class="c1"># place the code to execute some stuff here</span>
+
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s1"> done&#39;</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;missing file for config path&#39;</span><span class="p">)</span>
+        <span class="n">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">run</span><span class="p">(</span><span class="n">TestExperiment</span><span class="p">,</span> <span class="n">config_file</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+</pre></div>
+</div>
+<p>The created skeleton is a python file containing a class named by the experiment name, which inherits from the class <code class="docutils literal notranslate"><span class="pre">experiment</span></code>.
+It contains multiple three parts, which should be adjusted to the needs of the experiment.
+The first one is the description attribute of the class, which should contain a telling description for the experiment.
+The second one is the <code class="docutils literal notranslate"><span class="pre">prepare</span></code> method, which is called before the experiment is executed and can be used to prepare the experiment (e.g. create necessary files).
+The third one is the <code class="docutils literal notranslate"><span class="pre">run</span></code> method, which contains the action done in the experiment.
+This can include executing commands in the shell, clicking on specific text or icons.
+The gui actions are performed using GuiBot, which provide methods to find matches of images or text on the screen.
+These have the type <code class="docutils literal notranslate"><span class="pre">guibot.match.Match</span></code> and contain the position of the match and the image or text that was matched.
+Additionally those are used within GuiBot methods, which perform actions, such as clicking on match.
+Here is a list of all available methods as well as the corresponding description taken from the <a class="reference external" href="https://github.com/intra2net/guibot/blob/fb3c26ce5b678aee76b1d93c7d76017122f04a64/guibot/region.py">GuiBot source code</a>:
+For further details on the methods as well as their parameters, please refer to the source code.</p>
+<table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Method</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>hover</p></td>
+<td><p>Hover the mouse over a target or location</p></td>
+</tr>
+<tr class="row-odd"><td><p>click</p></td>
+<td><p>Click on a target or location using the left mouse button and optionally holding special keys.</p></td>
+</tr>
+<tr class="row-even"><td><p>right_click</p></td>
+<td><p>Click on a target or location using the right mouse button and optionally holding special keys.</p></td>
+</tr>
+<tr class="row-odd"><td><p>middle_click</p></td>
+<td><p>Click on a target or location using the middle mouse button and optionally holding special keys.</p></td>
+</tr>
+<tr class="row-even"><td><p>double_click</p></td>
+<td><p>Double click on a target or location using the left mouse button and optionally holding special keys.</p></td>
+</tr>
+<tr class="row-odd"><td><p>multi_click</p></td>
+<td><p>Click N times on a target or location using the left mouse button and optionally holding special keys.</p></td>
+</tr>
+<tr class="row-even"><td><p>click_expect</p></td>
+<td><p>Click on an image or location and wait for another one to appear.</p></td>
+</tr>
+<tr class="row-odd"><td><p>click_vanish</p></td>
+<td><p>Click on an image or location and wait for another one to disappear.</p></td>
+</tr>
+<tr class="row-even"><td><p>click_at_index</p></td>
+<td><p>Find all instances of an anchor image and click on the one with the desired index given that they are horizontally then vertically sorted.</p></td>
+</tr>
+<tr class="row-odd"><td><p>click_at</p></td>
+<td><p>Clicks on a relative location using a displacement from an anchor.</p></td>
+</tr>
+<tr class="row-even"><td><p>select_at</p></td>
+<td><p>Select an option at a dropdown list using either an integer index or an option image if the order cannot be easily inferred.</p></td>
+</tr>
+<tr class="row-odd"><td><p>mouse_down</p></td>
+<td><p>Hold down an arbitrary mouse button on a target or location.</p></td>
+</tr>
+<tr class="row-even"><td><p>mouse_up</p></td>
+<td><p>Release an arbitrary mouse button on a target or location.</p></td>
+</tr>
+<tr class="row-odd"><td><p>mouse_scroll</p></td>
+<td><p>Scroll the mouse for a number of clicks.</p></td>
+</tr>
+<tr class="row-even"><td><p>drag_drop</p></td>
+<td><p>Drag from and drop at a target or location optionally holding special keys.</p></td>
+</tr>
+<tr class="row-odd"><td><p>drag_from</p></td>
+<td><p>Drag from a target or location optionally holding special keys.</p></td>
+</tr>
+<tr class="row-even"><td><p>drag_at</p></td>
+<td><p>Drop at a target or location optionally holding special keys.</p></td>
+</tr>
+<tr class="row-odd"><td><p>press_keys</p></td>
+<td><p>Press a single key or a list of keys simultaneously.</p></td>
+</tr>
+<tr class="row-even"><td><p>press_at</p></td>
+<td><p>Press a single key or a list of keys simultaneously at a specified target or location.</p></td>
+</tr>
+<tr class="row-odd"><td><p>press_expect</p></td>
+<td><p>Press a key and wait for a target to appear.</p></td>
+</tr>
+<tr class="row-even"><td><p>press_vanish</p></td>
+<td><p>Press a key and wait for a target to disappear.</p></td>
+</tr>
+<tr class="row-odd"><td><p>type_text</p></td>
+<td><p>Type a list of consecutive character keys (without special keys).</p></td>
+</tr>
+<tr class="row-even"><td><p>type_at</p></td>
+<td><p>Type a list of consecutive character keys (without special keys) at a specified target or location.</p></td>
+</tr>
+<tr class="row-odd"><td><p>fill_at</p></td>
+<td><p>Fills a new text at a text box using a displacement from an anchor.</p></td>
+</tr>
+</tbody>
+</table>
+<p>To find matches of images or text on the screen, one can use the methods provided by GuiBot.
+However to simplify usage, the <code class="docutils literal notranslate"><span class="pre">Experiment</span></code> class provides some methods that wrap GuiBot functions for more robust text and image finding.
+For the find methods it is needed that the file is placed within the <code class="docutils literal notranslate"><span class="pre">img</span></code> directory within the experiment directory, which is also created when creating the skeleton.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="find">
+<span class="sig-name descname"><span class="pre">find</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_name:</span> <span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minimal_similarity:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.6</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">similarity_steps.</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list[guibot.match.Match]</span> <span class="pre">or</span> <span class="pre">None</span></span></span><a class="headerlink" href="#find" title="Permalink to this definition"></a></dt>
+<dd><p>Finds the image in the current screen and returns a list of matches or None if no match was found.
+Therefore, creates a chain of searches starting with a 90% similarity and decreasing the similarity by 10% until the image is found.
+If the image is not found with a similarity of the minimal similarity parameter the search is aborted and None is returned.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image_name</strong> (<em>str</em>) – the name of the image to find</p></li>
+<li><p><strong>minimal_similarity</strong> (<em>float</em>) – the minimal similarity to find the image with</p></li>
+<li><p><strong>similarity_steps</strong> (<em>float</em>) – the steps to decrease the similarity by</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>a list of matches or None if no match was found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="find_text">
+<span class="sig-name descname"><span class="pre">find_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list[guibot.match.Match]</span> <span class="pre">or</span> <span class="pre">None</span></span></span><a class="headerlink" href="#find_text" title="Permalink to this definition"></a></dt>
+<dd><p>Finds the text in the current screen and returns a list of matches or None if no match was found.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>text</strong> (<em>str</em>) – the text to find</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>a list of matches or None if no match was found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Additionally to that the <code class="docutils literal notranslate"><span class="pre">Experiment</span></code> class provides a few methods to perform other actions.
+A list of those methods can be found below.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">exec_shellcommand(command:</span> <span class="pre">list,</span> <span class="pre">cwd=None):</span></span></dt>
+<dd><p>Executes the given command in the shell.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>command</strong> (<em>list</em>) – the command to execute</p></li>
+<li><p><strong>cwd</strong> (<em>str</em>) – the working directory to execute the command in</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<p>In some cases it might be necessary to save certain data during the action phase that may be needed later on in the preformed tests (such as timestamps).
+Therefore the <code class="docutils literal notranslate"><span class="pre">Experiment</span></code> class offers the two methods described below.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="save_variable">
+<span class="sig-name descname"><span class="pre">save_variable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#save_variable" title="Permalink to this definition"></a></dt>
+<dd><p>Saves the given value under the given name in the variables file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – the name to save the value under</p></li>
+<li><p><strong>value</strong> (<em>str</em>) – the value to save</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="save_time">
+<span class="sig-name descname"><span class="pre">save_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timestamp_var_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#save_time" title="Permalink to this definition"></a></dt>
+<dd><p>Saves the current timestamp under the given name in the variables file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>timestamp_var_name</strong> (<em>str</em>) – the name to save the timestamp under</p>
+</dd>
+</dl>
+</dd></dl>
+
+<section id="action-file-example">
+<h2>Action File Example<a class="headerlink" href="#action-file-example" title="Permalink to this heading"></a></h2>
+<p>One example for an action file, which deletes a file is shown below.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">from</span> <span class="nn">guiautomation.Experiment.Experiment</span> <span class="kn">import</span> <span class="n">Experiment</span>
+<span class="kn">from</span> <span class="nn">guiautomation.run</span> <span class="kn">import</span> <span class="n">run</span>
+<span class="kn">from</span> <span class="nn">guibot.guibot</span> <span class="kn">import</span> <span class="n">GuiBot</span>
+
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">deletefile</span><span class="p">(</span><span class="n">Experiment</span><span class="p">):</span>
+    <span class="n">description</span> <span class="o">=</span> <span class="s2">&quot;Delete file from home folder to Trash Bin (Ubuntu)&quot;</span>
+    <span class="n">guibot</span><span class="p">:</span> <span class="n">GuiBot</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">prepare</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">file</span> <span class="o">=</span> <span class="s2">&quot;C:/Users/vagrant/Documents/testfile&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;create the file </span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s1">.&#39;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;GEHEIM!&quot;</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;file </span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s1"> created.&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">guibot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">guibot</span>
+
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s1"> started&#39;</span><span class="p">)</span>
+
+        <span class="n">match</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;files.png&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="n">match</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">idle</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;files.png button does not exist&#39;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="s1">&#39;failed&#39;</span>
+
+        <span class="n">match</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_text</span><span class="p">(</span><span class="s1">&#39;Documents&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="n">match</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">idle</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;documents text does not exist&#39;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="s1">&#39;failed&#39;</span>
+
+        <span class="n">match</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_text</span><span class="p">(</span><span class="s1">&#39;testfile&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="n">match</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">idle</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">press_keys</span><span class="p">(</span><span class="n">guibot</span><span class="o">.</span><span class="n">dc_backend</span><span class="o">.</span><span class="n">keymap</span><span class="o">.</span><span class="n">DELETE</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">save_time</span><span class="p">(</span><span class="s2">&quot;DELETIONDATE&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;testfile text cant be found&#39;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="s1">&#39;failed&#39;</span>
+
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s1"> done&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">status</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;missing file for config path&#39;</span><span class="p">)</span>
+        <span class="n">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">run</span><span class="p">(</span><span class="n">deletefile</span><span class="p">,</span> <span class="n">config_file</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

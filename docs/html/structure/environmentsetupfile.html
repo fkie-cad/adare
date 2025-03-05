@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Environment Setup File &mdash; &#39;ADARE&#39;  documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+    <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            'ADARE'
+          </a>
+              <div class="version">
+                0.0.1
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../about_adare/index.html">About ADARE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">Walkthrough</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Structure and Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gui/index.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">'ADARE'</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Environment Setup File</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/structure/environmentsetupfile.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="environment-setup-file">
+<h1>Environment Setup File<a class="headerlink" href="#environment-setup-file" title="Permalink to this heading"></a></h1>
+<p>This file contains the configuration for the environment.
+It contains the name of the vagrant box, information about the guest OS as well as potentially additional information such as installations to be performed on the guest OS, before the experiment.
+A minimal configuration file just needs to contain the vagrant box name as well as the platform of the guest OS as shown below:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vagrantbox</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;win10vagrantbox&quot;</span>
+<span class="nt">os_platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span>
+<span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">10&quot;</span>
+<span class="nt">os_distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Home&quot;</span>
+</pre></div>
+</div>
+<p>Additionally, the configuration file can contain the following fields:</p>
+<table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>vagrantbox</p></td>
+<td><p>The name of the vagrant box to use</p></td>
+</tr>
+<tr class="row-odd"><td><p>postsetupinstallations</p></td>
+<td><p>A list of installations to run before the experiment</p></td>
+</tr>
+<tr class="row-even"><td><p>name</p></td>
+<td><p>The name of the VM</p></td>
+</tr>
+<tr class="row-odd"><td><p>os_platform</p></td>
+<td><p>The OS platform to use (e.g. windows, linux)</p></td>
+</tr>
+<tr class="row-even"><td><p>os</p></td>
+<td><p>The OS to use (e.g. windows 10, ubuntu 20.04)</p></td>
+</tr>
+<tr class="row-odd"><td><p>os_distribution</p></td>
+<td><p>The OS distribution to use (e.g. Home, Pro, Enterprise)</p></td>
+</tr>
+<tr class="row-even"><td><p>os_version</p></td>
+<td><p>The OS version to use (e.g. 10, 16.04)</p></td>
+</tr>
+<tr class="row-odd"><td><p>os_architecture</p></td>
+<td><p>The OS architecture to use (e.g. x86, x64)</p></td>
+</tr>
+<tr class="row-even"><td><p>os_language</p></td>
+<td><p>The OS language to use (e.g. en-US, en-GB)</p></td>
+</tr>
+<tr class="row-odd"><td><p>os_details</p></td>
+<td><p>further details about the OS</p></td>
+</tr>
+</tbody>
+</table>
+<section id="environment-configuration-file-examples">
+<h2>Environment Configuration File Examples<a class="headerlink" href="#environment-configuration-file-examples" title="Permalink to this heading"></a></h2>
+<p>Below you can find further examples of environment configuration files.</p>
+<p>An extended configuration file for a Windows 10 guest OS with a custom vagrant box:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testenv&quot;</span>
+<span class="nt">vagrantbox</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;win10home21H1_english&quot;</span>
+<span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1920x1080&quot;</span>
+<span class="nt">os_platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span>
+<span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">10&quot;</span>
+<span class="nt">os_distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Home&quot;</span>
+<span class="nt">os_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;21H1&quot;</span>
+<span class="nt">os_language</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;English&quot;</span>
+<span class="nt">postsetupinstallations</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;jinja2&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">jinja2&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tool</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">use</span><span class="nv"> </span><span class="s">templating</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">python&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;datefinder&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">datefinder&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;guibot&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">guibot&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pyautogui&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">pyautogui&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tool</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">change</span><span class="nv"> </span><span class="s">resolution&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;opencv&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">opencv-python&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tesseract&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;choco</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">--no-progress</span><span class="nv"> </span><span class="s">-y</span><span class="nv"> </span><span class="s">tesseract&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tesseract</span><span class="nv"> </span><span class="s">python&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">pytesseract&quot;</span>
+</pre></div>
+</div>
+<p>An example for an Ubuntu 20.04 guest OS:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testenv&quot;</span>
+<span class="nt">vagrantbox</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ubuntu20043_gnome&quot;</span>
+<span class="nt">resolution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1920x1080&quot;</span>
+<span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;linux&quot;</span>
+<span class="nt">postsetupinstallations</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;jinja2&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">jinja2&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tool</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">use</span><span class="nv"> </span><span class="s">templating</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">python&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;datefinder&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip3</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">datefinder&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;update&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;apt-get</span><span class="nv"> </span><span class="s">update&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;&#39;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nfs</span><span class="nv"> </span><span class="s">client&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;apt-get</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">nfs-common&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;smb&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;apt-get</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">cifs-utils&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;&#39;</span>
+<span class="nt">settings</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;gsettings</span><span class="nv"> </span><span class="s">set</span><span class="nv"> </span><span class="s">org.gnome.desktop.lockdown</span><span class="nv"> </span><span class="s">disable-lock-screen</span><span class="nv"> </span><span class="s">&#39;true&#39;&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

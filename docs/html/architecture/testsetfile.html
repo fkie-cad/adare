@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test Set File &mdash; &#39;ADARE&#39;  documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+    <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            'ADARE'
+          </a>
+              <div class="version">
+                0.0.1
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">Walkthrough</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Structure and Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gui/index.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">'ADARE'</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Test Set File</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/testsetfile.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="test-set-file">
+<h1>Test Set File<a class="headerlink" href="#test-set-file" title="Permalink to this heading"></a></h1>
+<p>The testset file is a yaml file, which tells the tests to be executed after the gui automation took place.
+The file is structured as follows:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;experiment_name&gt;</span>
+<span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;test_name&gt;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;test_description&gt;</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;test_function&gt;</span>
+<span class="w">    </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">&lt;test_parameter_0&gt;</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;test_value_0&gt;</span>
+<span class="w">      </span><span class="nt">&lt;test_parameter_1&gt;</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;test_value_1&gt;</span>
+<span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+</pre></div>
+</div>
+<p>The file contains the name of the experiment (<cite>&lt;experiment_name&gt;</cite>) and a list of tests (<cite>tests</cite>).
+Each test has a name (<cite>&lt;test_name&gt;</cite>), a description (<cite>&lt;test_description&gt;</cite>), a type (<cite>&lt;test_function&gt;</cite>) and a list of parameters (<cite>params</cite>).
+In some cases it is required to first run a tool before executing the test, since those tool might parse the forensic artifact.
+Therefore it is possible to, instead of a test place a tool block as shown below.
+This tool block contains the name of the tool (<cite>&lt;tool_name&gt;</cite>) and the command to be executed (<cite>&lt;tool_command&gt;</cite>).
+After the tool is executed, the tests in the <cite>tests</cite> list are executed.
+Additionally it is worth noting, that all tests get executed in the order they are defined in the testset file.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;experiment_name&gt;</span>
+<span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;test_name&gt;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;test_description&gt;</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;test_function&gt;</span>
+<span class="w">    </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">&lt;test_parameter_0&gt;</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;test_value_0&gt;</span>
+<span class="w">      </span><span class="nt">&lt;test_parameter_1&gt;</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;test_value_1&gt;</span>
+<span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;tool_name&gt;</span>
+<span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">command</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;tool_command&gt;</span>
+<span class="w">        </span><span class="l l-Scalar l-Scalar-Plain">tests</span><span class="p p-Indicator">:</span>
+<span class="w">            </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+</pre></div>
+</div>
+<section id="testfunctions">
+<h2>Testfunctions<a class="headerlink" href="#testfunctions" title="Permalink to this heading"></a></h2>
+<p>Adare offers a variety of testfunctions listed below.
+Additionally it is possible to write your own testfunctions as described in <a class="reference internal" href="../advanced/testfunction.html#write-your-own-testfunction"><span class="std std-ref">Write your own Testfunction</span></a>.
+Additionally to the classic types in yaml (str, int, float, bool, list, dict) within the parameters of the testfunction additional types are used.
+These types are used within yaml by setting a prefix before the value, such as <cite>!re &lt;str&gt;</cite> for a regular expression.</p>
+<table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 15%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Type</p></th>
+<th class="head"><p>Prefix</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>regex</p></td>
+<td><p>!re &lt;str&gt;</p></td>
+<td><p>arbitrary regex expression</p></td>
+</tr>
+<tr class="row-odd"><td><p>regexALL</p></td>
+<td><p>!reALL</p></td>
+<td><p>regex expression ‘.*’</p></td>
+</tr>
+<tr class="row-even"><td><p>timestamp</p></td>
+<td><p>!timestamp &lt;dict&gt;</p></td>
+<td><p>timestamp with tolerance</p></td>
+</tr>
+</tbody>
+</table>
+<p>Some examples how to use this types is shown in the yaml file below.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">example_regex</span><span class="p">:</span><span class="w"> </span><span class="kt">!re</span><span class="w"> </span><span class="s">&#39;[a-zA-Z]*&#39;</span>
+<span class="nt">example_regex_all</span><span class="p">:</span><span class="w"> </span><span class="kt">!reALL</span>
+<span class="nt">example_timestamp</span><span class="p">:</span><span class="w"> </span><span class="kt">!timestamp</span>
+<span class="w">  </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1699381083</span>
+<span class="w">  </span><span class="nt">tolerance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+</pre></div>
+</div>
+<p>Below the testfunctions are listed with their parameters and a short description.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="is_file">
+<span class="sig-name descname"><span class="pre">is_file</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#is_file" title="Permalink to this definition"></a></dt>
+<dd><p>tests if a file with path destination(dst) is existing</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>dst</strong> (<em>str</em>) – path to the file to be tested</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="is_not_file">
+<span class="sig-name descname"><span class="pre">is_not_file</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#is_not_file" title="Permalink to this definition"></a></dt>
+<dd><p>tests if a file with path destination(dst) is NOT existing</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>dst</strong> (<em>str</em>) – path to the file to be tested</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="is_dir">
+<span class="sig-name descname"><span class="pre">is_dir</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#is_dir" title="Permalink to this definition"></a></dt>
+<dd><p>tests if a directory with path destination(dst) is existing</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>dst</strong> (<em>str</em>) – path to the directory to be tested</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="is_not_dir">
+<span class="sig-name descname"><span class="pre">is_not_dir</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#is_not_dir" title="Permalink to this definition"></a></dt>
+<dd><p>tests if a directory with path destination(dst) is NOT existing</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>dst</strong> (<em>str</em>) – path to the directory to be tested</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dir_content">
+<span class="sig-name descname"><span class="pre">dir_content</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#dir_content" title="Permalink to this definition"></a></dt>
+<dd><p>tests if a directory has the expected files/folders</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dst</strong> (<em>str</em>) – path to the directory to be tested</p></li>
+<li><p><strong>expected</strong> (<em>list</em>) – list of expected files/folders</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="regex_match">
+<span class="sig-name descname"><span class="pre">regex_match</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#regex_match" title="Permalink to this definition"></a></dt>
+<dd><p>tests if file content matches a given regex expression</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dst</strong> (<em>str</em>) – path to the file to be tested</p></li>
+<li><p><strong>regex</strong> (<em>regex</em><em>,</em><em>regexALL</em>) – regex expression to be matched</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="csv_entry_exists">
+<span class="sig-name descname"><span class="pre">csv_entry_exists</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#csv_entry_exists" title="Permalink to this definition"></a></dt>
+<dd><p>tests if row in a given csv file (dst) exists, which matches the given layout provided (entry)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dst</strong> (<em>str</em>) – path to the csv file to be tested</p></li>
+<li><p><strong>entry</strong> (<em>list</em><em>[</em><em>str</em><em>,</em><em>regex</em><em>,</em><em>regexALL</em><em>,</em><em>timestamp</em><em>]</em>) – list of strings and regex expressions to be matched</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="testset-file-example">
+<h2>Testset File Example<a class="headerlink" href="#testset-file-example" title="Permalink to this heading"></a></h2>
+<p>An example testset file to test whether the windows trash bin work as expected is provided below.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deletefile</span>
+<span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">existencefile</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">exists&#39;</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">is_not_file</span>
+<span class="w">    </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/testfile&#39;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RBCmd.exe</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;RBCmd.exe</span><span class="nv"> </span><span class="s">-d</span><span class="nv"> </span><span class="s">C:\</span><span class="nv"> </span><span class="s">--csv</span><span class="nv"> </span><span class="s">C:/Users/vagrant/Documents/test&#39;</span>
+<span class="w">    </span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deletedfileInfo</span>
+<span class="w">        </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">metadata</span><span class="nv"> </span><span class="s">exists&#39;</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csv_entry_exists</span>
+<span class="w">        </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/test/*.csv&#39;</span>
+<span class="w">          </span><span class="nt">entry</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!re</span><span class="w"> </span><span class="s">&#39;.*&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;$I&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;C:\Users\vagrant\Documents\testfile&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!re</span><span class="w"> </span><span class="s">&#39;.*&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!timestamp</span>
+<span class="w">              </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{</span><span class="nv"> </span><span class="s">TIMESTAMP.DELETIONDATE</span><span class="nv"> </span><span class="s">}}&#39;</span>
+<span class="w">              </span><span class="nt">tolerance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deletedfileData</span>
+<span class="w">        </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">data</span><span class="nv"> </span><span class="s">exists&#39;</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csv_entry_exists</span>
+<span class="w">        </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/test/*.csv&#39;</span>
+<span class="w">          </span><span class="nt">entry</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!reALL</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;$R&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;C:\Users\vagrant\Documents\testfile&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!re</span><span class="w"> </span><span class="s">&#39;.*&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!reALL</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

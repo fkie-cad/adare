@@ -1,4 +1,4 @@
-<img src="adare/docsrc/source/logo.png" alt="Logo" width="150">
+<img src="docsrc/source/logo.png" alt="Logo" width="150">
 
 # ADARE
 

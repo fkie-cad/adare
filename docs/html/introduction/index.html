@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Walkthrough &mdash; &#39;ADARE&#39;  documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+    <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Installation Guide" href="../installation/index.html" />
+    <link rel="prev" title="Welcome to ADARE’s documentation!" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            'ADARE'
+          </a>
+              <div class="version">
+                0.0.1
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Walkthrough</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Structure and Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gui/index.html">Graphical User Interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">'ADARE'</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Walkthrough</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/introduction/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="walkthrough">
+<h1>Walkthrough<a class="headerlink" href="#walkthrough" title="Permalink to this heading"></a></h1>
+<p>This is a walkthrough providing information how to setup ADARE to run downloaded experiments and to create new experiments.
+To use ADARE you must setup a project, which is basically a directory containing data used for the experiments.
+This can be simply done by navigating to the directory where you want to create the project and run the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">proj</span> <span class="n">create</span> <span class="o">&lt;</span><span class="n">project_name</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p>This will create a directory with the name &lt;project_name&gt; and within it data, such as data used for the text recognition within the experiemnts.</p>
+<p>Within this project a user must create an environment, dedicated to contain experiments related to one specific virtual machine.
+This can be done by running the following command, when providing an environment config file:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">env</span> <span class="n">create</span>  <span class="o">&lt;</span><span class="n">environment_config_file</span><span class="o">&gt;.</span><span class="n">yml</span>
+</pre></div>
+</div>
+<p>The environment config file is a yaml file containing information about the environment that is to be created.
+It contains the vagrant box that should be used along with the operating system, telling Adare whether the box is a Windows or Linux box.
+Additionally to that it is also possible to provide a list installations to be done after the box is started to install further applications needed to run the experiment.
+An example of such a file is provided below.
+In section <span class="xref std std-ref">basics/envconfig:Environment Configuration File</span> you can find a detailed description of the environment config file and it possible configurations.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;environment_name&gt;</span>
+<span class="nt">vagrantbox</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;vagrant_box_name&gt;</span>
+<span class="nt">os_platform</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;os_platform&gt; (Windows or Linux)</span>
+<span class="nn">...</span>
+</pre></div>
+</div>
+<p>As soon as the environment is created, it is possible to run experiments on it.
+Therefore a user can execute the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">exp</span> <span class="n">create</span> <span class="o">&lt;</span><span class="n">experiment_name</span><span class="o">&gt;</span> <span class="o">--</span><span class="n">env</span> <span class="o">&lt;</span><span class="n">environment_name</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p>This will create a directory within the environments experiment directory containing two templates for the so called action as well as testset file.</p>
+<p>The action file is a python file that contains the user action performed within the experiment, such as mouse clicks or keyboard inputs.
+Additionally to that it can also contains a prepare function, which can be used to create files or directories needed for the user actions.
+An simple example could be an action file containing user actions to delete a file.
+The action file would then contain a sequence of commands to open the file explorer, navigate to the file and delete it.
+Additionally to that the action file would also contain a prepare function to create the file to be deleted.
+The action file would then look like this:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">from</span> <span class="nn">guiautomation.Experiment.Experiment</span> <span class="kn">import</span> <span class="n">Experiment</span>
+<span class="kn">from</span> <span class="nn">guiautomation.run</span> <span class="kn">import</span> <span class="n">run</span>
+<span class="kn">from</span> <span class="nn">guibot.guibot</span> <span class="kn">import</span> <span class="n">GuiBot</span>
+
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">deletefile</span><span class="p">(</span><span class="n">Experiment</span><span class="p">):</span>
+    <span class="n">description</span> <span class="o">=</span> <span class="s2">&quot;Delete file from home folder to Trash Bin (Ubuntu)&quot;</span>
+    <span class="n">guibot</span><span class="p">:</span> <span class="n">GuiBot</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">prepare</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">file</span> <span class="o">=</span> <span class="s2">&quot;C:/Users/vagrant/Documents/testfile&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;create the file </span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s1">.&#39;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;GEHEIM!&quot;</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;file </span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s1"> created.&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">guibot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">guibot</span>
+
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s1"> started&#39;</span><span class="p">)</span>
+
+        <span class="n">match</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;files.png&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="n">match</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">idle</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;files.png button does not exist&#39;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="s1">&#39;failed&#39;</span>
+
+        <span class="n">match</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_text</span><span class="p">(</span><span class="s1">&#39;Documents&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="n">match</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">idle</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;documents text does not exist&#39;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="s1">&#39;failed&#39;</span>
+
+        <span class="n">match</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_text</span><span class="p">(</span><span class="s1">&#39;testfile&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="n">match</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">idle</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+            <span class="n">guibot</span><span class="o">.</span><span class="n">press_keys</span><span class="p">(</span><span class="n">guibot</span><span class="o">.</span><span class="n">dc_backend</span><span class="o">.</span><span class="n">keymap</span><span class="o">.</span><span class="n">DELETE</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">save_time</span><span class="p">(</span><span class="s2">&quot;DELETIONDATE&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;testfile text cant be found&#39;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="s1">&#39;failed&#39;</span>
+
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s1"> done&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">status</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;missing file for config path&#39;</span><span class="p">)</span>
+        <span class="n">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">run</span><span class="p">(</span><span class="n">deletefile</span><span class="p">,</span> <span class="n">config_file</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+</pre></div>
+</div>
+<p>The testset file is a yaml file performing tests after the user action is performed.
+The testset file would then contain a test to check whether the file was deleted and a test whether the trash bin contains the deleted file.
+It would then look like this:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deletefile</span>
+<span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">existencefile</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">exists&#39;</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">is_not_file</span>
+<span class="w">    </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/testfile&#39;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RBCmd.exe</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;RBCmd.exe</span><span class="nv"> </span><span class="s">-d</span><span class="nv"> </span><span class="s">C:\</span><span class="nv"> </span><span class="s">--csv</span><span class="nv"> </span><span class="s">C:/Users/vagrant/Documents/test&#39;</span>
+<span class="w">    </span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deletedfileInfo</span>
+<span class="w">        </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">metadata</span><span class="nv"> </span><span class="s">exists&#39;</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csv_entry_exists</span>
+<span class="w">        </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/test/*.csv&#39;</span>
+<span class="w">          </span><span class="nt">entry</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!re</span><span class="w"> </span><span class="s">&#39;.*&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;$I&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;C:\Users\vagrant\Documents\testfile&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!re</span><span class="w"> </span><span class="s">&#39;.*&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!timestamp</span>
+<span class="w">              </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{</span><span class="nv"> </span><span class="s">TIMESTAMP.DELETIONDATE</span><span class="nv"> </span><span class="s">}}&#39;</span>
+<span class="w">              </span><span class="nt">tolerance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deletedfileData</span>
+<span class="w">        </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">data</span><span class="nv"> </span><span class="s">exists&#39;</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csv_entry_exists</span>
+<span class="w">        </span><span class="nt">params</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/test/*.csv&#39;</span>
+<span class="w">          </span><span class="nt">entry</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!reALL</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;$R&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;C:\Users\vagrant\Documents\testfile&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!re</span><span class="w"> </span><span class="s">&#39;.*&#39;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!reALL</span>
+</pre></div>
+</div>
+<p>More detailed explanation as well as details how to create both files can be found in section <span class="xref std std-ref">basics/actionfile:Action File</span> and <span class="xref std std-ref">basics/testsetfile:Testset File</span> respectively.</p>
+<p>After the action and testset file are created, the experiment can be executed by running the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">exp</span> <span class="n">run</span> <span class="o">&lt;</span><span class="n">experiment_name</span><span class="o">&gt;</span> <span class="o">--</span><span class="n">env</span> <span class="o">&lt;</span><span class="n">environment_name</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p>This will start the vagrant box and execute the experiment on it.
+Depending on the experiment, the experiment can take a while to finish.
+After the experiment is finished, the results are shown to the user.
+Additionally to that the results can be viewed via the gui as described in section <a class="reference internal" href="../gui/index.html#graphical-user-interface"><span class="std std-ref">Graphical User Interface</span></a>.</p>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="Welcome to ADARE’s documentation!" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../installation/index.html" class="btn btn-neutral float-right" title="Installation Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

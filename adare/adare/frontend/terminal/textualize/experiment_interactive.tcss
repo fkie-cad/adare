@@ -74,6 +74,10 @@ PlayButton {
     padding: 1;
 }
 
+.center {
+    text-align: center;
+}
+
 .boxnopadding {
     border: round $primary;
     padding: 0;
