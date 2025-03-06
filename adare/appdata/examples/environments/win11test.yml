@@ -1,8 +1,10 @@
-name: win11
-vagrantbox: win11
+name: win11test
+vagrantbox: mikue/adare_win11
 description: "Windows 11 Test Environment"
 os:
   os: Windows
   platform: windows
   distribution: Windows 11
   version: 11H2.0.2403
+tags:
+  - test

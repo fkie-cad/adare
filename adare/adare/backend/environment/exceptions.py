@@ -24,3 +24,7 @@ class EnvironmentDoesNotExistInDatabase(LoggedErrorException):
 
 class EnvironmentAlreadyExists(LoggedErrorException):
     pass
+
+
+class ExampleEnvironmentDoesNotExist(LoggedErrorException):
+    pass

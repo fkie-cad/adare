@@ -1,3 +1,0 @@
-name: "ubuserver"
-vagrantbox: "ubuntu20043server"
-gui: False

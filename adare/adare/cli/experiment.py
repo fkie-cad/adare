@@ -25,6 +25,13 @@ def exec_experiment_create(arguments):
     else:
         raise NoProjectFoundError(log, message='no project directory found')
 
+def exec_experiment_example(arguments):
+    from adare.backend.experiment.commands import experiment_example
+    if project_directory := determine_projectdirectory(arguments.project):
+        experiment_example(project_directory, arguments.experiment)
+    else:
+        raise NoProjectFoundError(log, message='no project directory found')
+
 
 def exec_experiment_run(arguments):
     from adare.backend.experiment.commands import experiment_run, experiment_load
@@ -37,12 +44,11 @@ def exec_experiment_run(arguments):
         import asyncio
         try:
             experiment_load(project_directory, arguments.experiment, force=False)
-            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing))
+            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test))
         except KeyboardInterrupt:
             log.info("Keyboard interrupt received, shutting down gracefully...")
     else:
         raise NoProjectFoundError(log, message='no project directory found')
-
 
 def exec_experiment_test(arguments):
     from adare.backend.experiment.commands import experiment_test, experiment_load
