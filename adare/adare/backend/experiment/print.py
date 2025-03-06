@@ -101,6 +101,16 @@ class ExperimentFlowConsole:
             'result_status': None,
         }
 
+    def log_ulid(self, ulid: str, level: int = 0):
+        self.messages['ULID'] = {
+            'message': f'ULID: {ulid}',
+            'spinner': None,
+            'spinner_style': None,
+            'level': level,
+            'status': StatusEnum.NONE,
+            'result_status': None,
+        }
+
     def log_warning(self, identifier: str, message: str, level: int = 0):
         self.messages[identifier] = {
             'message': message,

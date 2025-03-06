@@ -11,7 +11,8 @@ from adarelib.helperfunctions.hash import hash_file_sha256
 from adare.config.configdirectory import TEMPLATES_DIR
 from adarelib.parsers import parse_environment_file
 from adarelib.exceptions import TemplateMissingError
-from adare.backend.environment.exceptions import EnvironmentLoadFailed, EnvironmentFileAlreadyExists, EnvironmentDoesNotExistInDatabase
+from adare.backend.environment.exceptions import EnvironmentLoadFailed, EnvironmentFileAlreadyExists, \
+    EnvironmentDoesNotExistInDatabase, ExampleEnvironmentDoesNotExist
 from adare.webappaccess.download import download_environment, sync
 from adare.webappaccess.login import is_logged_in
 from adarelib.exceptions import NotLoggedInError
@@ -107,6 +108,25 @@ def environment_create(project: Path, environment: str):
     environment_file_content = jinja2.Template(environment_file_template_content).render(environment=environment)
     environment_file.write_text(environment_file_content)
     log.info(f'environment file {environment_file} created')
+
+
+def environment_example(project: Path, environment: str):
+    from adare.config.configdirectory import EXAMPLES_DIR
+    import shutil
+
+    project_directory = ProjectDirectory(project)
+
+    environment_file_src = EXAMPLES_DIR / 'environments' / f'{environment}.yml'
+
+    if not environment_file_src.exists():
+        raise ExampleEnvironmentDoesNotExist(
+            log,
+            f'example environment file {environment_file_src} does not exist',
+            possible_solutions=[]
+        )
+    environment_file_dst = project_directory.environments
+    shutil.copy(environment_file_src, environment_file_dst)
+
 
 
 def environment_delete(environment_ulid: str, force: bool = False):

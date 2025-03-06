@@ -72,6 +72,15 @@ def experiment_create(project_path: Path, experiment: str):
     log.info(f'experiment directory {experiment_directory.path} created')
 
 
+def experiment_example(project_path: Path, experiment: str):
+    experiment_directory = ExperimentDirectory(project_path, experiment)
+    if experiment_directory.exists():
+        raise ExperimentDirectoryAlreadyExistsError(
+            log, f'experiment directory [b]{experiment_directory.path}[/b] already exists'
+        )
+    experiment_directory.retrieve_example(experiment)
+    log.info(f'experiment directory {experiment_directory.path} created')
+
 
 def __experiment_update(experiment_ulid, experiment_name, experiment_directory, force):
     if not experiment_database.check_for_experiment_change(experiment_ulid, experiment_directory.sha256):
@@ -111,9 +120,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
             )
         except ExperimentNotChanged as e:
             experiment_sync(experiment_ulid)
-            raise e
     else:
-        # create a new experiment in the database
         experiment_ulid = experiment_database.create_experiment(
             name=experiment_name,
             experiment_directory=experiment_directory
@@ -284,8 +291,9 @@ def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: 
     flow_console.start()
     return flow_console
 
-async def __wait_until_receive_done_msg(ws_client: WebSocketClient, experiment_run_ulid: str):
+async def __wait_until_receive_done_msg(ws_client: WebSocketClient, experiment_run_ulid: str) -> DONE or None:
     received_done = False
+    wscommand = None
     while not received_done:
         message = await ws_client.fetch_message()
         decoded_msg = message.decode('utf-8')
@@ -296,6 +304,7 @@ async def __wait_until_receive_done_msg(ws_client: WebSocketClient, experiment_r
                 api.add_event(event, experiment_run_ulid)
         if type(wscommand) == DONE:
             received_done = True
+    return wscommand
 
 
 def step_initialize(context: ExperimentRunCtx, fake: bool = False):
@@ -441,7 +450,12 @@ async def step_execute_experiment(context: ExperimentRunCtx):
     with StageCtxManager(ExperimentRunStage(), context.experiment_run_ulid, event=context.stop_event) as stage:
         msg = EXPERIMENT(context.experiment_name).encode()
         await context.client.send_message(msg)
-        await __wait_until_receive_done_msg(context.client, context.experiment_run_ulid)
+        done_msg = await __wait_until_receive_done_msg(context.client, context.experiment_run_ulid)
+        if done_msg:
+            if done_msg.error:
+                log.error(f"Experiment run failed: {done_msg.err_msg}")
+                stage.set_status(StatusEnum.FAILED)
+
 
 
 def step_finalize(context: ExperimentRunCtx):
@@ -481,7 +495,7 @@ def callback_vagrant_box_status(context: ExperimentRunCtx):
     return context.box.status()
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = False):
     """
     Run an experiment by initializing context, executing a series of setup steps,
     running the main 'box' task, and finally executing post-run steps and shutdown.
@@ -494,7 +508,10 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
     # Create the experiment context and initialize it.
     experiment_run_context = ExperimentRunCtx(project_path, experiment_name, environment_name)
-    step_initialize(experiment_run_context, fake=True)
+    if test:
+        step_initialize(experiment_run_context, fake=True)
+    else:
+        step_initialize(experiment_run_context)
 
     # Create an asyncio Event to signal shutdown.
     stop_event = asyncio.Event()
@@ -577,7 +594,11 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             log.info("Stopping websocket client and flow console...")
             await step_shutdown_ws(experiment_run_context)
             step_shutdown_vagrant(experiment_run_context)
-            await asyncio.sleep(1)  # Allow time for CLI rendering.
+            if not test:
+                flow_console.log_ulid(experiment_run_context.experiment_run_ulid)
+            else:
+                step_remove_fake_experiment_run(experiment_run_context)
+            await asyncio.sleep(1)
             flow_console.stop()
         except Exception as e:
             log.error(f"Error during shutdown: {e}")

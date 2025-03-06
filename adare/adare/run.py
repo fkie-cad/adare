@@ -1,6 +1,7 @@
 import sys
 import time
 import logging
+from email.policy import default
 from types import SimpleNamespace
 import click
 from trogon import tui
@@ -10,10 +11,10 @@ from adare.cli.project import (
     exec_create_project, exec_remove_project, exec_list_projects
 )
 from adare.cli.environment import (
-    exec_environment_load, exec_environment_create, exec_environment_delete
+    exec_environment_load, exec_environment_create, exec_environment_delete, exec_environment_example
 )
 from adare.cli.experiment import (
-    exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test
+    exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example
 )
 from adare.cli.manage import exec_manage_reset
 from adare.cli.gui import exec_gui
@@ -58,17 +59,17 @@ START_TIME = time.time()
 @click.option('--very-verbose', is_flag=True, help='Very verbose output (loglevel=DEBUG)')
 @click.option('--log-level', help='Log level for logfile')
 @click.version_option()  # Uses the package version if configured
-def cli(logfile, verbose, very_verbose, log_level):
+@click.pass_context
+def cli(ctx, logfile, verbose, very_verbose, log_level):
     """
     Adare - A tool to run experiments in virtual environments.
     """
-    options = SimpleNamespace(
-        logfile=logfile,
-        verbose=verbose,
-        very_verbose=very_verbose,
-        log_level=log_level
-    )
-    setup_logging(options, sys.argv)
+    ctx.ensure_object(SimpleNamespace)
+    ctx.obj.logfile = logfile
+    ctx.obj.verbose = verbose
+    ctx.obj.very_verbose = very_verbose
+    ctx.obj.log_level = log_level
+    setup_logging(ctx.obj, sys.argv)
 
 
 # ------------------------------
@@ -149,6 +150,17 @@ def delete(ulid, force):
     args = SimpleNamespace(ulid=ulid, force=force)
     exec_with_error_printing(exec_environment_delete, args)
 
+@environment.command()
+@click.argument('name', default='win11test', required=False)
+@click.option('--project', '-p', help='Name of the project')
+def example(name, project):
+    """Create the example environment. (default: win11test)"""
+    args = SimpleNamespace(
+        project=project,
+        environment=name,
+    )
+    exec_with_error_printing(exec_environment_example, args)
+
 
 # ------------------------------
 # Experiment commands
@@ -184,15 +196,18 @@ def load(experiment, environment, force, project):
 @experiment.command()
 @click.argument('experiment')
 @click.option('-e', '--environment', required=True, help='Name of the environment')
-@click.option('--debug', '-d', is_flag=True, help='Run the experiment in debug mode')
+@click.option('--test', '-t', is_flag=True, help='Run the experiment in test mode - delete results afterwards and do not block changes')
 @click.option('--project', '-p', help='Name of the project')
-def run(experiment, environment, debug, project):
+@click.pass_context
+def run(ctx, experiment, environment, test, project):
     """Run an experiment in a given environment."""
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
-        debug=debug,
-        project=project
+        test=test,
+        project=project,
+        verbose=ctx.obj.verbose,
+        very_verbose=ctx.obj.very_verbose
     )
     exec_with_error_printing(exec_experiment_run, args)
 
@@ -208,6 +223,17 @@ def test(experiment, environment, project):
         project=project
     )
     exec_with_error_printing(exec_experiment_test, args)
+
+@experiment.command()
+@click.argument('name', default='TrashBinDeleteFile', required=False)
+@click.option('--project', '-p', help='Name of the project')
+def example(name, project):
+    """Create the example experiment."""
+    args = SimpleNamespace(
+        experiment=name,
+        project=project
+    )
+    exec_with_error_printing(exec_experiment_example, args)
 
 
 # ------------------------------

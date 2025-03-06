@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import attrs
 
 # internal imports
-from adare.config.configdirectory import TEMPLATES_DIR
+from adare.config.configdirectory import TEMPLATES_DIR, EXAMPLES_DIR
 from adarelib.helperfunctions.hash import hash_file_sha256, combine_hashes, hash_dict_sha256
 from adarelib.types.backend import ExperimentMetadata
 from adarelib.types.testset import TestsetFile
@@ -104,7 +104,7 @@ class ExperimentDirectory(Directory):
                 message=f'Failed to create metadata file for experiment {self.experiment}: {e.strerror}'
             ) from e
 
-    def create(self):
+    def create(self, empty: bool = False):
         try:
             self.path.mkdir()
             self.img.mkdir()
@@ -139,6 +139,10 @@ class ExperimentDirectory(Directory):
                 log,
                 f'experiment [b]{self.path.name}[/b] is missing the following files: {missing_files_str}',
             )
+
+    def retrieve_example(self, experiment: str):
+        example_dir = EXAMPLES_DIR/'experiments'/experiment
+        shutil.copytree(example_dir, self.path)
 
     def load_metadata(self) -> ExperimentMetadata:
         return parse_metadata_file(self.metadatafile)
