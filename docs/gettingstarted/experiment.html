@@ -46,12 +46,10 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">About ADARE</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="index.html">Getting Started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Structure and Concepts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../gui/index.html">Graphical User Interface</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
 </ul>
 
@@ -81,15 +79,285 @@
              
   <section id="create-an-experiment">
 <h1>Create an Experiment<a class="headerlink" href="#create-an-experiment" title="Link to this heading"></a></h1>
+<p>When an experiment is created via <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">create</span> <span class="pre">&lt;experiment_name&gt;</span></code>, the following files are created within the experiments directory of our project.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>&lt;project&gt;/
+├── experiments/
+│   ├── ...
+│   └── &lt;experiment_name&gt;/
+│       ├── action.py
+│       ├── testset.yml
+│       ├── metadata.yml
+│       └── img/
+└── ...
+</pre></div>
+</div>
 <section id="testset-file">
 <h2>Testset File<a class="headerlink" href="#testset-file" title="Link to this heading"></a></h2>
 </section>
 <section id="action-file">
 <h2>Action File<a class="headerlink" href="#action-file" title="Link to this heading"></a></h2>
+<p>When creating an experiment, an action file skeleton is created, looking like the following:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adarevm.action.experiment</span><span class="w"> </span><span class="kn">import</span> <span class="n">Experiment</span><span class="p">,</span> <span class="n">KEYMAP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Awaitable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adarevm.testset.testset</span><span class="w"> </span><span class="kn">import</span> <span class="n">Testset</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ExperimentExample</span><span class="p">(</span><span class="n">Experiment</span><span class="p">):</span>
+    <span class="n">description</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img_folder</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">tessdata_folder</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">testset</span><span class="p">:</span> <span class="n">Testset</span><span class="p">,</span>
+                 <span class="n">log_func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Awaitable</span><span class="p">[</span><span class="kc">None</span><span class="p">]]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            initialization function which in most cases should not be changed (except there is a need to use a different display controller or computer vision backend for guibot)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">img_folder</span><span class="p">,</span> <span class="n">tessdata_folder</span><span class="p">,</span> <span class="n">testset</span><span class="p">,</span> <span class="n">log_func</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">prepare</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            this function can be used to execute some commands before the clicks happen (e.g. creating a file)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            this function should be used to execute the gui automation steps</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> started&#39;</span><span class="p">)</span>
+
+        <span class="k">pass</span>
+
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> done&#39;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;&#39;</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">Experiment</span></code> base class provides some methods to enable gui automation as well as the execution from tests.</p>
+<section id="gui-automation-methods">
+<h3>Gui Automation Methods<a class="headerlink" href="#gui-automation-methods" title="Link to this heading"></a></h3>
+<dl class="py function">
+<dt class="sig sig-object py" id="find">
+<span class="sig-name descname"><span class="pre">find</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_name:</span> <span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minimal_similarity:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.6</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">similarity_steps.</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list[guibot.match.Match]</span> <span class="pre">or</span> <span class="pre">None</span></span></span><a class="headerlink" href="#find" title="Link to this definition"></a></dt>
+<dd><p>Finds the image in the current screen and returns a list of matches or None if no match was found.
+Therefore, creates a chain of searches starting with a 90% similarity and decreasing the similarity by 10% until the image is found.
+If the image is not found with a similarity of the minimal similarity parameter the search is aborted and None is returned.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image_name</strong> (<em>str</em>) – the name of the image to find</p></li>
+<li><p><strong>minimal_similarity</strong> (<em>float</em>) – the minimal similarity to find the image with</p></li>
+<li><p><strong>similarity_steps</strong> (<em>float</em>) – the steps to decrease the similarity by</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a list of matches or None if no match was found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="find_text">
+<span class="sig-name descname"><span class="pre">find_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list[guibot.match.Match]</span> <span class="pre">or</span> <span class="pre">None</span></span></span><a class="headerlink" href="#find_text" title="Link to this definition"></a></dt>
+<dd><p>Finds the text in the current screen and returns a list of matches or None if no match was found.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>text</strong> (<em>str</em>) – the text to find</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a list of matches or None if no match was found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="click">
+<span class="sig-name descname"><span class="pre">click</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_or_location</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">guibot.match.Match</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modifiers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#click" title="Link to this definition"></a></dt>
+<dd><p>Left Click on the given match, previously found with the find method or manually created.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>target_or_location</strong> – the match to click on (or an object with x and y coordinates)</p></li>
+<li><p><strong>modifiers</strong> – special keys to hold during clicking (e.g. [‘ctrl’, ‘shift’])</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="right_click">
+<span class="sig-name descname"><span class="pre">right_click</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_or_location</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">guibot.match.Match</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modifiers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#right_click" title="Link to this definition"></a></dt>
+<dd><p>Right Click on the given match, previously found with the find method or manually created.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>target_or_location</strong> – the match to click on (or an object with x and y coordinates)</p></li>
+<li><p><strong>modifiers</strong> – special keys to hold during clicking (e.g. [‘ctrl’, ‘shift’])</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="double_click">
+<span class="sig-name descname"><span class="pre">double_click</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_or_location</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">guibot.match.Match</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modifiers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#double_click" title="Link to this definition"></a></dt>
+<dd><p>Double Click on the given match, previously found with the find method or manually created.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>target_or_location</strong> – the match to click on (or an object with x and y coordinates)</p></li>
+<li><p><strong>modifiers</strong> – special keys to hold during clicking (e.g. [‘ctrl’, ‘shift’])</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="drag_and_drop">
+<span class="sig-name descname"><span class="pre">drag_and_drop</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">guibot.match.Match</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">guibot.match.Match</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modifiers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#drag_and_drop" title="Link to this definition"></a></dt>
+<dd><p>Drags the source match to the target match.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source</strong> (<em>guibot.match.Match</em>) – the match to drag</p></li>
+<li><p><strong>target</strong> (<em>guibot.match.Match</em>) – the match to drop the source on</p></li>
+<li><p><strong>modifiers</strong> – special keys to hold during dragging (e.g. [‘ctrl’, ‘shift’])</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="press_keys">
+<span class="sig-name descname"><span class="pre">press_keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list[str]</span> <span class="pre">or</span> <span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#press_keys" title="Link to this definition"></a></dt>
+<dd><p>Presses the given key or keys</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>keys</strong> (<em>list</em><em>[</em><em>str</em><em>] or </em><em>str</em>) – the keys to press</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="idle">
+<span class="sig-name descname"><span class="pre">idle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#idle" title="Link to this definition"></a></dt>
+<dd><p>Idles the experiment for the given amount of time.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>timeout</strong> (<em>int</em>) – the time to idle in seconds</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="exec_command">
+<span class="sig-name descname"><span class="pre">exec_command</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">command</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cwd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#exec_command" title="Link to this definition"></a></dt>
+<dd><p>Executes the given command in the shell.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>command</strong> (<em>list</em>) – the command to execute</p></li>
+<li><p><strong>cwd</strong> (<em>str</em>) – the working directory to execute the command in</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="test-methods">
+<h3>Test Methods<a class="headerlink" href="#test-methods" title="Link to this heading"></a></h3>
+<dl class="py function">
+<dt class="sig sig-object py" id="run_test">
+<span class="sig-name descname"><span class="pre">run_test</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#run_test" title="Link to this definition"></a></dt>
+<dd><p>Runs the test with the given name.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>name</strong> (<em>str</em>) – the name of the test to run</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="run_tests">
+<span class="sig-name descname"><span class="pre">run_tests</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#run_tests" title="Link to this definition"></a></dt>
+<dd><p>Runs a list of tests with the given names.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>names</strong> – the names of the tests to run</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="error">
+<span class="sig-name descname"><span class="pre">error</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#error" title="Link to this definition"></a></dt>
+<dd><p>Logs an error message with the given name and message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – the name of the error</p></li>
+<li><p><strong>message</strong> (<em>str</em>) – the message of the error</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="other-methods">
+<h3>Other Methods<a class="headerlink" href="#other-methods" title="Link to this heading"></a></h3>
+<p>In some cases it might be necessary to save certain data during the action phase that may be needed later on in the preformed tests (such as timestamps).
+Therefore the <code class="docutils literal notranslate"><span class="pre">Experiment</span></code> class offers the two methods described below.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="save_variable">
+<span class="sig-name descname"><span class="pre">save_variable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#save_variable" title="Link to this definition"></a></dt>
+<dd><p>Saves the given value under the given name in the variables file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – the name to save the value under</p></li>
+<li><p><strong>value</strong> (<em>str</em>) – the value to save</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="save_time">
+<span class="sig-name descname"><span class="pre">save_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timestamp_var_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#save_time" title="Link to this definition"></a></dt>
+<dd><p>Saves the current timestamp under the given name in the variables file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>timestamp_var_name</strong> (<em>str</em>) – the name to save the timestamp under</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
 </section>
 <section id="metadata-file">
 <h2>Metadata File<a class="headerlink" href="#metadata-file" title="Link to this heading"></a></h2>
 </section>
+</section>
+<section id="develop-and-run-an-experiment">
+<h1>Develop and Run an Experiment<a class="headerlink" href="#develop-and-run-an-experiment" title="Link to this heading"></a></h1>
+<p>To run an experiment the following command is used:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="o">&lt;</span><span class="n">experiment_name</span><span class="o">&gt;</span> <span class="o">-</span><span class="n">e</span> <span class="o">&lt;</span><span class="n">environment_name</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p>Note, that this loads the experiment before running it in case it is not already loaded.
+An loaded experiment should not be modified, and ADARE will reject loading an experiment, where already runs exist to ensure the integrity of the experiment.
+This behavior may be annoying within the development of an experiment, where the experiment is modified and rerun multiple times to test it is working as expected.
+We therefore provide the option <code class="docutils literal notranslate"><span class="pre">--fake</span></code> to run an experiment without loading it.
+This deletes all run related information from the run from the database.</p>
+<p>Since developing an experiment often requires to manually test steps inside the virtual machine, we provide the develop command.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">develop</span> <span class="o">&lt;</span><span class="n">experiment_name</span><span class="o">&gt;</span> <span class="o">-</span><span class="n">e</span> <span class="o">&lt;</span><span class="n">environment_name</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p>This command open a terminal gui, that allows to run the experiment step by step.
+It also allows the user to rerun the action multiple times with in between modifications of the action and testset files.</p>
 </section>
 
 

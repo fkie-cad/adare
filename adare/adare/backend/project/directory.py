@@ -103,6 +103,20 @@ class ProjectDirectory(Directory):
         download(tessdata_github_link, tessdata_file, quiet=True)
         log.info('download of tessdata training data for text recognition in gui automation was successful')
 
+    def download_tool(self, url: str, zipped: bool):
+        log.info('download tool from url into shared tools directory')
+        file = self.shared_tools / Path(url).name
+        if file.exists():
+            log.info('tool already exists in shared tools directory')
+            return
+        download(url, file, quiet=True)
+        if zipped:
+            log.info('unzip tool')
+            shutil.unpack_archive(file, self.shared_tools)
+            file.unlink()
+        log.info('download of tool was successful')
+
+
     def copy_adare_to_adare_dir(self):
         try:
             shutil.copytree(ADARE_DIR.as_posix(), self.adare, dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.pyc', '__pycache__'))

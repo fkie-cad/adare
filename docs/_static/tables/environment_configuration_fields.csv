@@ -1,11 +1,17 @@
-Field|Description
-vagrantbox|The name of the vagrant box to use
-postsetupinstallations|A list of installations to run before the experiment
-name|The name of the VM
-os_platform|The OS platform to use (e.g. windows, linux)
-os|The OS to use (e.g. windows 10, ubuntu 20.04)
-os_distribution|The OS distribution to use (e.g. Home, Pro, Enterprise)
-os_version|The OS version to use (e.g. 10, 16.04)
-os_architecture|The OS architecture to use (e.g. x86, x64)
-os_language|The OS language to use (e.g. en-US, en-GB)
-os_details|further details about the OS
+Field|Type|Description
+name|str|The name of the environment
+vagrantbox|str|Either the name of a local vagrant box OR the name of an vagrant box from vagrant cloud (format: user/boxname)
+os|dict|information about the guest OS
+os.os|str|The OS to use (e.g. windows 10, ubuntu 20.04)
+os.platform|str|the guest os platform (e.g. windows, linux)
+os.distribution|str|The OS distribution to use (e.g. Home, Pro, Enterprise)
+os.version*|str|The OS version to use (e.g. 10, 16.04)
+os.architecture*|str|The OS architecture to use (e.g. x86, x64)
+os.language*|str|The OS language to use (e.g. en-US, en-GB)
+os.details*|str|further details about the OS
+postsetupinstallations*|dict|A list of installations to run before the experiment
+postsetupinstallations.name|str|The name of the installation (e.g. install python3)
+postsetupinstallations.command|str|The command to run (e.g. apt-get install -y python3)
+postsetupinstallations.description*|str|A description of the installation
+postsetupinstallations.cwd*|str|The directory to run the command in
+postsetupinstallations.shell*|bool|value to indicate if the command should be run in a dedicated shell (default: false)

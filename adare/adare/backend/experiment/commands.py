@@ -1,8 +1,6 @@
 # external imports
-import asyncio
 from pathlib import Path
 from datetime import datetime, timezone
-import time
 import threading
 
 # internal imports
@@ -80,13 +78,17 @@ def experiment_example(project_path: Path, experiment: str):
         )
     experiment_directory.retrieve_example(experiment)
     log.info(f'experiment directory {experiment_directory.path} created')
+    # todo: make this available in metadata of the experiment (or user need to manually download it)
+    project_directory = ProjectDirectory(project_path)
+    project_directory.download_tool('https://download.ericzimmermanstools.com/RBCmd.zip', zipped=True)
 
 
 def __experiment_update(experiment_ulid, experiment_name, experiment_directory, force):
     if not experiment_database.check_for_experiment_change(experiment_ulid, experiment_directory.sha256):
         raise ExperimentNotChanged(log, f'experiment [i]{experiment_ulid}[/i] has not changed')
     log.info(f'experiment {experiment_ulid} has changed')
-    if not force:
+    num_runs = experiment_database.get_experiment_run_count(experiment_ulid)
+    if not force and num_runs > 0:
         raise LoggedException(log,
                               f'experiment [i]{experiment_ulid}[/i] has changed, use --force to overwrite and delete all related experiment runs')
     # delete the experiment and all related experiment runs
@@ -166,7 +168,8 @@ def __cleanup_experiment_run(experiment_run_directory: ExperimentRunDirectory):
 
 def __experiment_integrity_check(project_path: Path, experiment_name: str, environment_name:str, experiment_directory: ExperimentDirectory):
     experiment_hashes = experiment_database.get_experiment_hashes(project_path, environment_name, experiment_name)
-    experiment_run_count = experiment_database.get_experiment_run_count(project_path, environment_name, experiment_name)
+    experiment_ulid = experiment_database.get_experiment_by_project_and_name(project_path, experiment_name)
+    experiment_run_count = experiment_database.get_experiment_run_count(experiment_ulid)
 
     file_changed = []
     if experiment_directory.sha256_action != experiment_hashes['action']:
@@ -268,13 +271,17 @@ def install_and_run_adare_vm(vm_name: str, guest_platform: str, stop_event: thre
         firewall_rule = 'New-NetFirewallRule -DisplayName "adarevm" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 18765'
         run_command_in_vm(vm_name, firewall_rule, guest_platform)
         set_path_command = r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\shared\tools", "User")'
+        set_path_command_experiment_tools = r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\experiment\shared\tools", "User")'
         install_command = f'cd C:/adare/app/adarevm; poetry install'
         run_command = f'cd C:/adare/app/adarevm; poetry run adarevm C:/adare/run/logs/adarevm.log'
     else:
         set_path_command = 'export PATH=$PATH:/adare/shared/tools'
+        set_path_command_experiment_tools = 'export PATH=$PATH:/adare/experiment/shared/tools'
         install_command = 'cd /adare/app/adarevm && poetry install'
         run_command = 'cd /adare/app/adarevm && poetry run adarevm /adare/run/logs/adarevm.log'
+
     run_command_in_vm(vm_name, set_path_command, guest_platform, stop_event=stop_event)
+    run_command_in_vm(vm_name, set_path_command_experiment_tools, guest_platform, stop_event=stop_event)
     run_command_in_vm(vm_name, install_command, guest_platform, stop_event=stop_event)
     run_command_in_vm(vm_name, run_command, guest_platform, background=True, stop_event=stop_event)
 
@@ -575,7 +582,6 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         await run_async_step(step_execute_experiment)
         await run_blocking_step(step_finalize)
         await run_async_step(step_shutdown_ws)
-        await run_blocking_step(step_shutdown_vagrant)
 
     except Exception as e:
         log.error(f"An error occurred: {e}")
@@ -680,7 +686,13 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
             func=step_shutdown_vagrant,
             thread=True,
             description='Shutdown the Vagrant box',
-        )
+        ),
+        Step(
+            label='Remove Fake Experiment Run',
+            func=step_remove_fake_experiment_run,
+            thread=True,
+            description='Remove the fake experiment run',
+        ),
     ]
 
     shutdown_steps = [

@@ -45,9 +45,9 @@ def get_experiment_hashes(project_path: Path, environment_name: str, experiment_
         }
 
 
-def get_experiment_run_count(project_path: Path, environment_name: str, experiment_name: str) -> int:
+def get_experiment_run_count(experiment_ulid: str) -> int:
     with ExperimentApi() as api:
-        experiment = api.get_experiment_by_project_and_name(project_path,  experiment_name)
+        experiment = api.get_experiment_by_ulid(experiment_ulid)
         if experiment is None:
             log.error('experiment not found')
             raise ValueError('experiment not found')

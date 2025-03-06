@@ -143,6 +143,19 @@ class GuiIdleEvent(GuiEvent):
 
 
 @attrs.define
+class GuiDragAndDropEvent(GuiEvent):
+    source: str
+    target: str
+    category: str = 'gui:draganddrop'
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(config.TIMESTAMP_FORMAT)))
+    ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
+    status: int = config.StatusEnum.RUNNING
+    error: str = ''
+    stage: bool = True
+    group_key: str = ''
+
+
+@attrs.define
 class EventSystemData:
     version: str
     experiment: str

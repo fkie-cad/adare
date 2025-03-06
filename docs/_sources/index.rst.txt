@@ -3,12 +3,22 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
+.. role:: boldprimary
+   :class: boldprimary
+
 Welcome to ADARE's documentation!
 ==================================
 
-Welcome to the documentation of *ADARE* - a desktop forensic framework for automatic and reproducible experiments.
-The tool provides a way to analyze forensic artifacts over various os versions automated.
-In order to do so the user needs to provide a vagrant box of the os.
+Welcome to the documentation of *ADARE* - the :boldprimary:`A`\ utomated :boldprimary:`D`\ esktop :boldprimary:`A`\ nalysis framework for :boldprimary:`R`\ eproducible :boldprimary:`E`\ xperiments.
+
+ADARE is a framework designed to detect changes in forensic artifacts or forensic tools across different software and operating system versions.
+By combining automated GUI actions that mimic user behavior with structured tests to validate expected artifact behavior, ADARE enables comprehensive forensic experimentation within a virtual machine environment.
+To manage virtual machines, ADARE utilizes Vagrant in combination with the VirtualBox hypervisor.
+
+Users can leverage ADARE to reproduce and validate existing experiments or create their own forensic experiments.
+Additionally,  `Adare Web <https://adare.seclab-bonn.de/>`_ provides a platform for sharing experiments and results with the community.
+
+For a step-by-step guide on using ADARE, it is recommended to start with the :ref:`gettingstarted/index:Walkthrough: Quick Start Guide` chapter, which explains how to create and run experiments.
 
 
 .. toctree::
@@ -16,10 +26,8 @@ In order to do so the user needs to provide a vagrant box of the os.
    :maxdepth: 2
    :caption: Contents:
 
-   introduction/index
    installation/index
    gettingstarted/index
    architecture/index
    cli/index
-   gui/index
    advanced/index

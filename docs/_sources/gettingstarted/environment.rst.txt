@@ -1,26 +1,21 @@
 Create an Environment
 **********************
 
-DEPRECATED: This section is deprecated and needs to be updated.
+An environment defines the vagrant box to be used combined with metadata about the guest OS.
+Additionally it can contain a list of installations to run before the experiment.
+This data is specified in a YAML file we call the environment configuration file.
 
-This file contains the configuration for the environment.
-It contains the name of the vagrant box, information about the guest OS as well as potentially additional information such as installations to be performed on the guest OS, before the experiment.
-A minimal configuration file just needs to contain the vagrant box name as well as the platform of the guest OS as shown below:
+To load an environment into an project, we can run the ``adare environment load <environment_name>`` command.
+Therefore the environment configuration file must be located in the ``environments`` directory within the project directory.
 
-.. code-block:: yaml
+All options allowed in the environment configuration file are listed in the table below:
 
-    vagrantbox: "win10vagrantbox"
-    os_platform: "windows"
-    os: "Windows 10"
-    os_distribution: "Home"
-
-Additionally, the configuration file can contain the following fields:
-
-.. csv-table::
+.. csv-table:: potential options in the environment configuration file
     :file: /_static/tables/environment_configuration_fields.csv
     :delim: |
-    :widths: 30, 70
+    :widths: 30, 20, 50
     :header-rows: 1
-
+.. note::
+    Fields marked with an asterisk (*) are optional.
 
 
