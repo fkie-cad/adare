@@ -1,7 +1,6 @@
 import sys
 import time
 import logging
-from email.policy import default
 from types import SimpleNamespace
 import click
 from trogon import tui
@@ -17,8 +16,6 @@ from adare.cli.experiment import (
     exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example
 )
 from adare.cli.manage import exec_manage_reset
-from adare.cli.gui import exec_gui
-from adare.cli.showversion import exec_show_version
 from adare.cli.show import (
     exec_show_projects, exec_show_environment, exec_show_environments,
     exec_show_experiment, exec_show_runs, exec_show_run,
@@ -62,7 +59,7 @@ START_TIME = time.time()
 @click.pass_context
 def cli(ctx, logfile, verbose, very_verbose, log_level):
     """
-    Adare - A tool to run experiments in virtual environments.
+    ADARE - the Automated Desktop Analysis framework for Reproducible Experiments.
     """
     ctx.ensure_object(SimpleNamespace)
     ctx.obj.logfile = logfile
@@ -215,7 +212,7 @@ def run(ctx, experiment, environment, test, project):
 @click.argument('experiment')
 @click.option('-e', '--environment', required=True, help='Name of the environment')
 @click.option('--project', '-p', help='Name of the project')
-def test(experiment, environment, project):
+def develop(experiment, environment, project):
     """Run an experiment in test mode."""
     args = SimpleNamespace(
         experiment=experiment,

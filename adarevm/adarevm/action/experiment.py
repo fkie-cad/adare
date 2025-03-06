@@ -17,7 +17,8 @@ import adarevm.config as config
 from adarevm.testset.testset import Testset
 from adarevm.event import EventCtxManager
 from adarelib.config import StatusEnum
-from adarelib.types.event import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent, Event, ErrorEvent
+from adarelib.types.event import GuiClickEvent, GuiFindEvent, GuiKeypressEvent, GuiIdleEvent, Event, ErrorEvent, \
+    GuiDragAndDropEvent
 
 # logging
 import logging
@@ -340,6 +341,16 @@ class Experiment:
                     status=StatusEnum.FINISHED
                 )
             )
+
+    def drag_and_drop(self, start, end, modifiers=None):
+        with EventCtxManager(
+            GuiDragAndDropEvent(
+                source=self.__target_or_location_to_str(start),
+                target=self.__target_or_location_to_str(end),
+                status=StatusEnum.RUNNING
+            ), self.log_func):
+            self.guibot.drag_drop(start, end, modifiers=modifiers)
+
 
     def exec_command(self, command: list, cwd: Path = None):
         """

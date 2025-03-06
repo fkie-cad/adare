@@ -56,6 +56,9 @@ class ExperimentDirectory(Directory):
     metadatafile: Path
     bibtexfile: Path
     markdownfile: Path
+    shared: Path
+    shared_tools: Path
+    shared_data: Path
 
     experiment: str
 
@@ -63,6 +66,9 @@ class ExperimentDirectory(Directory):
         self.experiment = experiment
         super().__init__(project / 'experiments' / experiment)
         self.img = self.path / 'img'
+        self.shared = self.path / 'shared'
+        self.shared_tools = self.shared / 'tools'
+        self.shared_data = self.shared / 'data'
         self.actionfile = self.path / 'action.py'
         self.testsetfile = self.path / 'testset.yml'
         self.metadatafile = self.path / 'metadata.yml'
@@ -108,6 +114,9 @@ class ExperimentDirectory(Directory):
         try:
             self.path.mkdir()
             self.img.mkdir()
+            self.shared.mkdir()
+            self.shared_tools.mkdir()
+            self.shared_data.mkdir()
         except OSError as e:
             raise ExperimentDirectoryCreationError(
                 log,

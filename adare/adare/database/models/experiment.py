@@ -233,7 +233,7 @@ class TestFunction(SerializerMixin, Base):
     type = Column(String)
     name = Column(String)
     description = Column(String)
-    sha256hash = Column(String, unique=True)
+    sha256hash = Column(String)
 
     file_id = Column(Integer, ForeignKey('testfunctionfile.id'))
     file = relationship(TestFunctionFile, backref=backref("testfunctions", cascade="all, delete-orphan"))
@@ -465,7 +465,7 @@ class Environment(SerializerMixin, Base):
     installations = relationship(PostSetupInstallation, secondary=mapping_postsetupinstallation_environment)
 
     file = Column(String)
-    sha256hash = Column(String, unique=True)
+    sha256hash = Column(String)
 
     created_at = Column(DateTime, nullable=True, default=datetime.now)
 
@@ -656,9 +656,9 @@ class GuiFindEvent(Event):
     @hybrid_property
     def stage_submessage(self):
         if self.text:
-            return f'Found text "{self.objective}" on screen'
+            return f'Find text "{self.objective}" on screen'
         else:
-            return f'Found image "{self.objective}" on screen'
+            return f'Find image "{self.objective}" on screen'
 
     @hybrid_property
     def stage_result(self):

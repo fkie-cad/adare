@@ -4,31 +4,34 @@ from typing import Callable, Awaitable
 from adarevm.testset.testset import Testset
 
 import logging
+
 log = logging.getLogger(__name__)
 
 
 class {{ name }}(Experiment):
-    description = 'place the description of your experiment here'
+    description = ''
 
-    def __init__(self, img_folder: Path, tessdata_folder: Path, testset: Testset, log_func: Callable[[str], Awaitable[None]]):
+    def __init__(self, img_folder: Path, tessdata_folder: Path, testset: Testset,
+                 log_func: Callable[[str], Awaitable[None]]):
         """
             initialization function which in most cases should not be changed (except there is a need to use a different display controller or computer vision backend for guibot)
         """
         super().__init__(img_folder, tessdata_folder, testset, log_func)
 
-    async def prepare(self):
+    def prepare(self) -> tuple[bool, str]:
         """
             this function can be used to execute some commands before the clicks happen (e.g. creating a file)
         """
         pass
 
-    async def run(self):
+    def run(self) -> tuple[bool, str]:
         """
             this function should be used to execute the gui automation steps
         """
         log.info(f'experiment {self.name} started')
 
-        # place the code to execute some stuff here
-
+        pass
 
         log.info(f'experiment {self.name} done')
+
+        return True, ''

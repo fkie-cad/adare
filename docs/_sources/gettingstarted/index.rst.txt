@@ -6,6 +6,7 @@ Getting Started
 The following sections will help you get started with using ADARE.
 
 
+
 Walkthrough: Quick Start Guide
 ******************************
 
@@ -28,7 +29,7 @@ This can be done by running the following command, when providing an environment
 The environment config file is a yaml file containing information about the environment that is to be created.
 It contains the vagrant box that should be used along with the operating system, telling ADARE whether the box is a Windows or Linux box.
 An minimal example of a file is provided below.
-In section :ref:`architecture/envconfig:Environment Configuration File` you can find a detailed description of the environment config file and it possible configurations.
+In the section :ref:`gettingstarted/environment:Create an Environment` you can find a detailed description of the environment config file and it possible configurations.
 
 
 .. code-block:: yaml
@@ -45,7 +46,7 @@ In section :ref:`architecture/envconfig:Environment Configuration File` you can 
 Notably ``<vagrant_box_name>`` can be the name of local vagrant box or the name of a box from the vagrant cloud, which has format ``<username>/<box_name>``.
 To list your local vagrant boxes you can run ``vagrant box list``.
 We provide a list of vagrant boxes that can be used with ADARE under our `Vagrant Cloud Account <https://portal.cloud.hashicorp.com/vagrant/discover/mikue>`_.
-For Windows 11 exemplary he yaml file would look like this:
+For Windows 11 with our provided box a yaml file would look like this:
 
 .. code-block:: yaml
 
@@ -67,7 +68,20 @@ Therefore a user can create an experiment template with the following command::
 
     adare experiment create <experiment_name>
 
-This will create a directory (``experiments/<experiment_name>``) within the project's experiment directory containing three files and one directory.
+This will create a directory project's experiment directory of the following structure
+
+::
+
+    <project>/
+    ├── experiments/
+    │   ├── ...
+    │   └── <experiment_name>/
+    │       ├── action.py
+    │       ├── testset.yml
+    │       ├── metadata.yml
+    │       └── img/
+    └── ...
+
 The metadata.yml file contains information about the experiment, especially the names of the environments it can be run on.
 The testset.yml file contains all tests, that can be run within the experiment.
 The action.py file contains the user action performed within the experiment, such as mouse clicks or keyboard inputs, as well as the calls to the tests specified in the testset file.
@@ -213,7 +227,7 @@ An example action file in our example would look like this:
 
 As you have noticed, the action file can use images to find elements on the screen.
 To provide these images, you must place them in the img folder within the experiment directory.
-For this example you can download the images from GitHub TODO.
+For this example you can download the images from `GitHub <https://github.com/fkie-cad/adare/tree/dev/adare/appdata/examples/experiments/TrashBinDeleteFile/img>`_.
 More detailed explanation as well as details on creating an experiment can be found in :ref:`gettingstarted/experiment:Create an Experiment`.
 
 Now that we have created the experiment, we can finally run it::

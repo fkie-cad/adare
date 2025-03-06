@@ -17,10 +17,9 @@ def exec_environment_example(arguments):
     from adare.backend.environment.commands import environment_example, environment_load
     project_directory = determine_projectdirectory(arguments.project)
     if not project_directory:
-        raise NoProjectFoundError(log, message='project directory not found')
+        raise NoProjectFoundError(log, message='project directory not found', possible_solutions=['use -p to specify the project directory', 'navigate to a project directory with cd'])
     environment_example(project_directory, arguments.environment)
     environment_load(project_directory, arguments.environment, force=False)
-
 
 
 def exec_environment_create(arguments):

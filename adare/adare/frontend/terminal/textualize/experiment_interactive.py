@@ -42,6 +42,8 @@ class PlayButton(Button):
     def compose(self) -> ComposeResult:
         if self.state == 'not_started':
             yield Button(Text.from_markup('Play :play_button:'), id=self.btn_id, classes='playbtn')
+        elif self.state == 'waiting':
+            yield Button(Text.from_markup('Play :play_button:'), id=self.btn_id, classes='playbtn')
         elif self.state == 'running':
             yield Static(Text.from_markup('Running :hourglass:'), classes='center', id=self.btn_id)
         elif self.state == 'replay':
@@ -276,6 +278,8 @@ class ExperimentApp(App):
                 await self.run_step(step)
                 self.__update_step_panel(target_index, 'replay', disabled=False)
         else:
+            for index in range(target_index, len(self.steps)):
+                self.__update_step_panel(index, 'not_started', disabled=True)
             steps_to_run = self.steps[self.last_executed_index + 1 : target_index + 1]
             indices_to_run = range(self.last_executed_index + 1, target_index + 1)
             for step_index in indices_to_run[1:]:
@@ -292,6 +296,8 @@ class ExperimentApp(App):
                 else:
                     self.__update_step_panel(step_index, 'done', disabled=True)
             self.last_executed_index = target_index
+            for index in range(target_index + 1, len(self.steps)):
+                self.__update_step_panel(index, 'not_started', disabled=False)
 
         self.step_queue.task_done()
 

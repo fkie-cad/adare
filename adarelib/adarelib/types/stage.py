@@ -48,7 +48,7 @@ class Stage:
 @attrs.define
 class BoxRunStage(Stage):
     name: typing.ClassVar[str] = 'box_run'
-    msg: typing.ClassVar[str] = 'Running Vagrant box'
+    msg: typing.ClassVar[str] = 'Starting Vagrant box'
     description: typing.ClassVar[str] = 'todo ...'
     optional: typing.ClassVar[bool] = False
     parent: typing.ClassVar["Stage"] = None

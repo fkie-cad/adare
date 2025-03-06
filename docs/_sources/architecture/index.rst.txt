@@ -53,12 +53,6 @@ Below is a list of terms that are used throughout the documentation and their me
    experiment run
       An experiment run is a single execution of an experiment.
 
-   scenario
-      A scenario encapsulates a set of experiments that aim to investigate the same forensic artifact.
-      It is not represented by a file or a table in the database.
-      Experiments can be assigned to multiple scenarios.
-      However, whether an experiment is part of a scenario plays no role in the execution of the experiment.
-
    action
       An action is a single simulated interaction between a user and the virtual machine.
       This can be, for example, clicking on a file or pressing a key.
@@ -87,6 +81,10 @@ Below is a list of terms that are used throughout the documentation and their me
    cli
       The cli is the command line interface of the ADARE framework.
       It can be used to execute experiments and view the results of experiment runs.
+
+   tag
+        A tag is a label that can be assigned to environments, and experiments.
+        It can be used to group related environments and experiments.
 
 
 Files and Directories

@@ -47,10 +47,12 @@ class EnvironmentDbApi(ExperimentApi):
         return installation_objects
 
     def get_or_create_environment(self, project_path: Path, environment_metadata: EnvironmentMetadata, environment_file:Path,
-                                  sha256hash: str) -> Environment:
-        environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
+                                  sha256hash: str) -> tuple[Environment, bool]:
+        environment = self._session.query(Environment).join(Project).filter(Environment.sha256hash == sha256hash,
+                                                                            Project.path == project_path.as_posix()).first()
         if environment:
-            return environment
+            log.info(f'Environment with hash {sha256hash} already exists in database')
+            return environment, False
         log.info(f"Environment with hash '{sha256hash}' not found in database -> creating new entry")
         os_info, _ = self.get_or_create_os_info(environment_metadata.os)
         project = self._session.query(Project).filter(Project.path == project_path.as_posix()).first()
@@ -73,7 +75,7 @@ class EnvironmentDbApi(ExperimentApi):
         environment.installations = self.__get_or_create_installations(environment_metadata.postsetupinstallations)
         self._session.add(environment)
         self._session.commit()
-        return environment
+        return environment, True
 
     def update_environment(self, environment_metadata: EnvironmentMetadata, environment_file: Path,
                            sha256hash: str) -> Environment | None:
