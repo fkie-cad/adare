@@ -3,32 +3,159 @@ from pathlib import Path
 from datetime import datetime
 
 # internal imports
-from adare.database.models.experiment import Project, Experiment, StageInRun
+from adare.database.models.experiment import Experiment
 from adare.database.api.experiment import ExperimentApi
 from adare.database.api.environment import EnvironmentDbApi
 from adare.database.api.stage import StageDbApi
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 from adare.backend.experiment.exceptions import NoEnvironmentError, MultipleEnvironmentsError
-from adarelib.types.stage import Stage as StageType
-from adarelib.config import StatusEnum
+from adare.types.stages import Stage
+from adarelib.constants import StatusEnum
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
 
 
-def get_experiment_by_project_and_name(project_path: Path, experiment_name: str) -> str | None:
+def get_experiment_by_project_and_name(project_path: Path, experiment_name: str, trigger_error: bool = True) -> str | None:
     with ExperimentApi() as api:
         experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
         if experiment is None:
-            log.error('experiment not found')
+            if trigger_error:
+                log.error('experiment not found')
             return None
         return experiment.ulid
 
 
-def get_experiment_by_ulid(experiment_ulid: str) -> Experiment:
+def get_experiment_by_ulid(experiment_ulid: str, fields: list[str] = None) -> Experiment | dict | None:
+    """
+    Get experiment by ULID with intelligent relationship loading.
+    
+    Args:
+        experiment_ulid: Experiment ULID
+        fields: Optional list of fields to extract. If None, returns full object.
+                Available fields: 'id', 'name', 'description', 'sha256', 'sha256_playbook', 
+                'sha256_testset', 'sha256_metadata', 'ulid', 'project_id'
+                Relationship fields: 'environments', 'environment_names', 'runs_count', 'tags'
+    
+    Returns:
+        Experiment: Full object if fields=None
+        dict: Experiment data if fields specified
+        None: If experiment not found
+    """
+    from sqlalchemy.orm import joinedload, selectinload
+    
+    # Define which fields require which relationships
+    RELATIONSHIP_REQUIREMENTS = {
+        'environments': 'environments',
+        'environment_names': 'environments',
+        'environment_count': 'environments',
+        'runs_count': 'runs',
+        'runs': 'runs',
+        'tags': 'tags',
+        'abstract_tests': 'abstract_tests',
+        'test_count': 'abstract_tests'
+    }
+    
     with ExperimentApi() as api:
-        return api.get_experiment_by_ulid(experiment_ulid)
+        if fields and any(field in RELATIONSHIP_REQUIREMENTS for field in fields):
+            # Build query with eager loading
+            needed_relationships = set()
+            for field in fields:
+                if field in RELATIONSHIP_REQUIREMENTS:
+                    needed_relationships.add(RELATIONSHIP_REQUIREMENTS[field])
+            
+            # Start with base query
+            query = api._session.query(Experiment).filter_by(id=experiment_ulid)
+            
+            # Apply eager loading selectively
+            if 'environments' in needed_relationships:
+                query = query.options(selectinload(Experiment.environments))
+            if 'runs' in needed_relationships:
+                query = query.options(selectinload(Experiment.runs))
+            if 'tags' in needed_relationships:
+                query = query.options(selectinload(Experiment.tags))
+            if 'abstract_tests' in needed_relationships:
+                query = query.options(selectinload(Experiment.abstract_tests))
+            
+            experiment = query.first()
+        else:
+            # Simple query for backward compatibility
+            experiment = api.get_experiment_by_ulid(experiment_ulid)
+        
+        if not experiment:
+            return None
+        
+        # Return full object for backward compatibility
+        if fields is None:
+            return experiment
+        
+        # Extract requested fields safely
+        result = {}
+        for field in fields:
+            try:
+                if field == 'id':
+                    result['id'] = experiment.id
+                elif field == 'name':
+                    result['name'] = experiment.name
+                elif field == 'description':
+                    result['description'] = experiment.description
+                elif field == 'sha256':
+                    result['sha256'] = experiment.sha256
+                elif field == 'sha256_playbook':
+                    result['sha256_playbook'] = experiment.sha256_playbook
+                elif field == 'sha256_testset':
+                    result['sha256_testset'] = experiment.sha256_testset
+                elif field == 'sha256_metadata':
+                    result['sha256_metadata'] = experiment.sha256_metadata
+                elif field == 'ulid':
+                    result['ulid'] = experiment.ulid
+                elif field == 'project_id':
+                    result['project_id'] = experiment.project_id
+                # Foreign key relationship fields
+                elif field == 'environments':
+                    result['environments'] = [env.name for env in experiment.environments] if hasattr(experiment, 'environments') else []
+                elif field == 'environment_names':
+                    result['environment_names'] = [env.name for env in experiment.environments] if hasattr(experiment, 'environments') else []
+                elif field == 'environment_count':
+                    result['environment_count'] = len(experiment.environments) if hasattr(experiment, 'environments') else 0
+                elif field == 'runs_count':
+                    result['runs_count'] = len(experiment.runs) if hasattr(experiment, 'runs') else 0
+                elif field == 'runs':
+                    result['runs'] = [run.id for run in experiment.runs] if hasattr(experiment, 'runs') else []
+                elif field == 'tags':
+                    result['tags'] = [tag.name for tag in experiment.tags] if hasattr(experiment, 'tags') else []
+                elif field == 'abstract_tests':
+                    result['abstract_tests'] = [test.name for test in experiment.abstract_tests] if hasattr(experiment, 'abstract_tests') else []
+                elif field == 'test_count':
+                    result['test_count'] = len(experiment.abstract_tests) if hasattr(experiment, 'abstract_tests') else 0
+                else:
+                    log.warning(f'Unknown field requested: {field}. Available: id, name, description, sha256, sha256_playbook, sha256_testset, sha256_metadata, ulid, project_id, environments, environment_names, runs_count, tags, test_count')
+            except AttributeError as e:
+                log.warning(f"Could not access field '{field}': {e}")
+                result[field] = None
+        
+        return result
+
+
+def get_experiment_data(experiment_ulid: str) -> dict | None:
+    """Get full experiment data with relationships - convenience function for common case."""
+    return get_experiment_by_ulid(experiment_ulid, fields=['id', 'name', 'description', 'sha256', 'sha256_playbook', 'sha256_testset', 'sha256_metadata', 'ulid', 'environment_names', 'runs_count', 'test_count'])
+
+
+def get_experiment_summary(experiment_ulid: str) -> dict | None:
+    """Get basic experiment info with key relationships - lighter version."""
+    return get_experiment_by_ulid(experiment_ulid, fields=['id', 'name', 'description', 'ulid', 'environment_names'])
+
+
+def get_experiment_with_relationships(experiment_ulid: str) -> dict | None:
+    """Get experiment with all relationships loaded."""
+    return get_experiment_by_ulid(experiment_ulid, fields=['id', 'name', 'description', 'environments', 'runs_count', 'tags', 'test_count'])
+
+
+def get_experiment_stats(experiment_ulid: str) -> dict | None:
+    """Get experiment statistics - counts only."""
+    return get_experiment_by_ulid(experiment_ulid, fields=['id', 'name', 'environment_count', 'runs_count', 'test_count'])
 
 
 def get_experiment_hashes(project_path: Path, environment_name: str, experiment_name: str) -> dict:
@@ -39,7 +166,7 @@ def get_experiment_hashes(project_path: Path, environment_name: str, experiment_
             raise ValueError('experiment not found')
         return {
             'experiment': experiment.sha256,
-            'action': experiment.sha256_action,
+            'playbook': experiment.sha256_playbook,
             'testset': experiment.sha256_testset,
             'metadata': experiment.sha256_metadata,
         }
@@ -57,7 +184,6 @@ def get_experiment_run_count(experiment_ulid: str) -> int:
 def create_experiment(name: str, experiment_directory: ExperimentDirectory) -> str:
     with ExperimentApi() as api:
         experiment = api.create_experiment(name, experiment_directory)
-        print(experiment.ulid)
         return experiment.ulid
 
 
@@ -163,7 +289,7 @@ def get_experiment_environment(project_path: Path, environment_name: str,  exper
         return Path(experiment.environments[0].file)
 
 
-def update_stage_in_run(stage: StageType, experimentrun_ulid: str, stage_id: int = -1) -> int:
+def update_stage_in_run(stage: Stage, experimentrun_ulid: str, stage_id: str) -> int:
     with StageDbApi() as db:
         return db.update_stage_in_run(stage, experimentrun_ulid, stage_id)
 

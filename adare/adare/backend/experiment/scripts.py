@@ -5,7 +5,7 @@ from pathlib import Path
 from adare.backend.script_creation.scripts import PostsetupInstallationsScript, SaveInstalledPackagesScript, \
     RunExperimentScript, ShutdownScript
 import adare.backend.experiment.database as experiment_database
-from adarelib.types.backend import PostsetupInstallations
+from adare.types.environment import PostsetupInstallations
 from adare.backend.experiment.directory import ExperimentRunDirectory
 from adare.backend.project.directory import ProjectDirectory
 

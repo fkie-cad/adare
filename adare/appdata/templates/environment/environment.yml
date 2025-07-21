@@ -1,14 +1,14 @@
 name: {{ environment }}
-vagrantbox: "win10home21H1_english"
+vm: {% if vm_name %}"{{ vm_name }}"{% else %}"path/to/your/vm"{% endif %}
 os:
   os: "Windows 10"
   platform: "windows"
   distribution: "Home"
   version: "21H1"
   language: "English"
-postsetupinstallations:
-  - name: "jinja2"
-    command: "pip3 install jinja2"
-    description: "tool to use templating in python"
-  - name: "datefinder"
-    command: "pip3 install datefinder"
+# postsetupinstallations:
+#   - name: "jinja2"
+#     command: "pip3 install jinja2"
+#     description: "tool to use templating in python"
+#   - name: "datefinder"
+#     command: "pip3 install datefinder"

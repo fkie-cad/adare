@@ -5,10 +5,10 @@ import pandas as pd
 from pathlib import Path
 
 # internal imports
-from adare.database.models.experiment import Project, Environment, Experiment, ExperimentRun, OsInfo, StageInRun, Stage, Event, Status, TestFunction, TestFunctionFile, TestParameter, AbstractTest
+from adare.database.models.experiment import Vm, Project, Environment, Experiment, ExperimentRun, OsInfo, StageInRun, Stage, Event, Status, TestFunction, TestFunctionFile, TestParameter, AbstractTest
 from adare.database.api.database import DatabaseApi
 import adare.config.database as config_database
-from adarelib.exceptions import EnvironmentNotFoundError, ProjectNotFoundError, ExperimentNotFoundError, TestFunctionNotFoundError, ArgumentsError
+from adare.exceptions import EnvironmentNotFoundError, ProjectNotFoundError, ExperimentNotFoundError, TestFunctionNotFoundError, ArgumentsError
 
 # configure logging
 import logging
@@ -31,7 +31,7 @@ class DataRetrievalApi(DatabaseApi):
             raise EnvironmentNotFoundError(log, f'Environment "{environment_name}" not found in project "{project_name}"')
 
     def __check_environment_exists_by_ulid(self, environment_ulid: str):
-        if not self._session.query(Environment).filter_by(ulid=environment_ulid).count():
+        if not self._session.query(Environment).filter_by(id=environment_ulid).count():
             raise EnvironmentNotFoundError(log, f'Environment with ulid "{environment_ulid}" not found')
 
     def __check_experiment_exists_by_projenvexp(self, project_name: str, environment_name: str, experiment_name: str):
@@ -42,7 +42,7 @@ class DataRetrievalApi(DatabaseApi):
             raise ExperimentNotFoundError(log, f'Experiment "{experiment_name}" not found in project "{project_name}" and environment "{environment_name}"')
 
     def __check_experiment_exists_by_ulid(self, experiment_ulid: str):
-        if not self._session.query(Experiment).filter_by(ulid=experiment_ulid).count():
+        if not self._session.query(Experiment).filter_by(id=experiment_ulid).count():
             raise ExperimentNotFoundError(log, f'Experiment with ulid "{experiment_ulid}" not found')
 
     def __enrich_project_data(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -58,7 +58,7 @@ class DataRetrievalApi(DatabaseApi):
         data = self.__enrich_project_data(data)
         return data
 
-    def get_project_details(self, project_name: str) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
+    def get_project_details(self, project_name: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         self.__check_project_exists(project_name)
         project_df = pd.read_sql(self._session.query(Project).filter_by(name=project_name).statement,
                                  self._session.bind)
@@ -84,16 +84,25 @@ class DataRetrievalApi(DatabaseApi):
             Environment.project.has(Project.name == project_name)).statement, self._session.bind).map(str)
 
     def __enrich_environment_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        data['object'] = [self._session.query(Environment).filter_by(ulid=id).one() for id in data['ulid']]
+        data['object'] = [self._session.query(Environment).filter_by(id=id).one() for id in data['id']]
         data['dotnotation'] = [obj.dotnotation for obj in data['object']]
-        data['osinfo'] = [str(obj.osinfo) for obj in data['object']]
-        data['osinfo_os'] = [obj.osinfo.os for obj in data['object']]
-        data['osinfo_distribution'] = [obj.osinfo.distribution for obj in data['object']]
-        data['osinfo_version'] = [obj.osinfo.version for obj in data['object']]
-        data['osinfo_language'] = [obj.osinfo.language for obj in data['object']]
-        data['osinfo_architecture'] = [obj.osinfo.architecture for obj in data['object']]
+        # Get VM information
+        data['vm'] = [self._session.query(Vm).filter_by(id=obj.vm_id).one() if obj.vm_id else None for obj in data['object']]
+        data['vm_name'] = [obj.name for obj in data['vm']]
+        data['vm_id'] = [obj.id if obj else '' for obj in data['vm']]
+        # Get osinfo from the VM attached to the environment - fix osinfo access
+        data['osinfo_object'] = [self._session.query(OsInfo).filter_by(id=vm.osinfo_id).one() if vm and hasattr(vm, 'osinfo_id') else None for vm in data['vm']]
+        data['osinfo'] = [str(osinfo) if osinfo else '' for osinfo in data['osinfo_object']]
+        data['osinfo_os'] = [osinfo.os if osinfo else '' for osinfo in data['osinfo_object']]
+        data['osinfo_distribution'] = [osinfo.distribution if osinfo else '' for osinfo in data['osinfo_object']]
+        data['osinfo_version'] = [osinfo.version if osinfo else '' for osinfo in data['osinfo_object']]
+        data['osinfo_language'] = [osinfo.language if osinfo else '' for osinfo in data['osinfo_object']]
+        data['osinfo_architecture'] = [osinfo.architecture if osinfo else '' for osinfo in data['osinfo_object']]
         data['project_name'] = [obj.project.name for obj in data['object']]
         data['tags'] = [', '.join([tag.name for tag in obj.tags]) for obj in data['object']]
+        # Add fields for web status through sync_metadata if available
+        data['published'] = [str(obj.sync_metadata.is_synced) if hasattr(obj, 'sync_metadata') and obj.sync_metadata else 'False' for obj in data['object']]
+        data['in_request'] = [str(obj.sync_metadata.needs_sync) if hasattr(obj, 'sync_metadata') and obj.sync_metadata else 'False' for obj in data['object']]
         # remove object column
         data = data.drop(columns=['object'])
         return data
@@ -107,7 +116,7 @@ class DataRetrievalApi(DatabaseApi):
     def get_environment(self, project_name: str = None, environment_name: str = None, ulid: str = None) -> pd.DataFrame:
         if ulid:
             self.__check_environment_exists_by_ulid(ulid)
-            environment_df = pd.read_sql(self._session.query(Environment).filter_by(ulid=ulid).statement, self._session.bind).map(str)
+            environment_df = pd.read_sql(self._session.query(Environment).filter_by(id=ulid).statement, self._session.bind).map(str)
             self.__enrich_environment_data(environment_df)
         elif project_name and environment_name:
             self.__check_project_exists(project_name)
@@ -124,10 +133,15 @@ class DataRetrievalApi(DatabaseApi):
         return environment_df
 
     def __enrich_experiment_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        data['object'] = [self._session.query(Experiment).filter_by(ulid=id).one() for id in data['ulid']]
+        data['object'] = [self._session.query(Experiment).filter_by(id=id).one() for id in data['id']]
         data['environments'] = [', '.join([env.name for env in obj.environments]) for obj in data['object']]
         data['environments_names'] = [', '.join([env.name for env in obj.environments]) for obj in data['object']]
         data['tags'] = [', '.join([tag.name for tag in obj.tags]) for obj in data['object']]
+        # Add ulid field (which is same as id for experiments)
+        data['ulid'] = data['id']
+        # Add fields for web status through sync_metadata if available
+        data['published'] = [str(obj.sync_metadata.is_synced) if hasattr(obj, 'sync_metadata') and obj.sync_metadata else 'False' for obj in data['object']]
+        data['in_request'] = [str(obj.sync_metadata.needs_sync) if hasattr(obj, 'sync_metadata') and obj.sync_metadata else 'False' for obj in data['object']]
         # remove object column
         data = data.drop(columns=['object'])
         return data
@@ -140,7 +154,7 @@ class DataRetrievalApi(DatabaseApi):
     def get_experiment(self, project_name: str = None, environment_name: str = None, experiment_name: str = None, ulid: str = None) -> pd.DataFrame:
         if ulid:
             self.__check_experiment_exists_by_ulid(ulid)
-            experiment_df = pd.read_sql(self._session.query(Experiment).filter_by(ulid=ulid).statement, self._session.bind)
+            experiment_df = pd.read_sql(self._session.query(Experiment).filter_by(id=ulid).statement, self._session.bind)
             # convert all columns to string
             experiment_df = experiment_df.map(str)
             experiment_df = self.__enrich_experiment_data(experiment_df)
@@ -164,14 +178,14 @@ class DataRetrievalApi(DatabaseApi):
     def get_experiment_details_by_ulid(self, experiment_ulid: str):
         self.__check_experiment_exists_by_ulid(experiment_ulid)
         experiment_df = pd.read_sql(self._session.query(Experiment).filter(
-            Experiment.ulid == experiment_ulid).statement, self._session.bind)
+            Experiment.id == experiment_ulid).statement, self._session.bind)
         # convert all columns to string
         experiment_df = experiment_df.map(str)
         # add column environment and project
         experiment_df['environment'] = self._session.query(Environment).filter(
-            Environment.experiments.any(Experiment.ulid == experiment_ulid)).one().name
+            Environment.experiments.any(Experiment.id == experiment_ulid)).one().name
         experiment_df['project'] = self._session.query(Project).filter(
-            Project.environments.any(Environment.experiments.any(Experiment.ulid == experiment_ulid))).one().name
+            Project.environments.any(Environment.experiments.any(Experiment.id == experiment_ulid))).one().name
         return experiment_df
 
     def get_experiment_runs(self, experiment_ulid: str) -> pd.DataFrame:
@@ -187,12 +201,12 @@ class DataRetrievalApi(DatabaseApi):
         object_environments = []
 
         for index, row in data.iterrows():
-            experiment_name = self._session.query(Experiment).filter_by(ulid=row['experiment_id']).one().name
-            environment_name = self._session.query(Environment).filter_by(ulid=row['environment_id']).one().name
+            experiment_name = self._session.query(Experiment).filter_by(id=row['experiment_id']).one().name
+            environment_name = self._session.query(Environment).filter_by(id=row['environment_id']).one().name
             project_name = self._session.query(Project).filter(
-                Project.environments.any(Environment.ulid == row['environment_id'])).one().name
-            object_run = self._session.query(ExperimentRun).filter_by(ulid=row['ulid']).one()
-            object_environment = self._session.query(Environment).filter_by(ulid=row['environment_id']).one()
+                Project.environments.any(Environment.id == row['environment_id'])).one().name
+            object_run = self._session.query(ExperimentRun).filter_by(id=row['id']).one()
+            object_environment = self._session.query(Environment).filter_by(id=row['environment_id']).one()
 
             experiment_names.append(experiment_name)
             environment_names.append(environment_name)
@@ -211,8 +225,14 @@ class DataRetrievalApi(DatabaseApi):
         data['result_status'] = data['object_run'].apply(lambda obj: obj.result_status)
         data['status'] = data['object_run'].apply(lambda obj: obj.status)
         data['experiment_dotnotation'] = data['object_run'].apply(lambda obj: obj.experiment_dotnotation)
-        data['box'] = data['object_environment'].apply(lambda obj: obj.vagrantbox)
-        data['osinfo'] = data['object_environment'].apply(lambda obj: str(obj.osinfo))
+        data['vm'] = data['object_environment'].apply(lambda obj: obj.vm)
+        data['vm_name'] = data['object_environment'].apply(lambda obj: obj.vm.name if obj.vm else '')
+        data['osinfo'] = data['object_environment'].apply(lambda obj: str(obj.vm.osinfo) if obj.vm and hasattr(obj.vm, 'osinfo') and obj.vm.osinfo else '')
+        # Add missing timestamp fields
+        data['timestamp_start'] = data['object_run'].apply(lambda obj: getattr(obj, 'timestamp_start', ''))
+        data['timestamp_end'] = data['object_run'].apply(lambda obj: getattr(obj, 'timestamp_end', ''))
+        # Add published field through sync_metadata if available
+        data['published'] = data['object_run'].apply(lambda obj: obj.sync_metadata.is_synced if hasattr(obj, 'sync_metadata') and obj.sync_metadata else False)
         # remove object_run column
         data = data.drop(columns=['object_run', 'object_environment'])
         return data
@@ -233,7 +253,7 @@ class DataRetrievalApi(DatabaseApi):
         return data
 
     def get_run(self, run_ulid: str) -> pd.DataFrame:
-        data = pd.read_sql(self._session.query(ExperimentRun).filter_by(ulid=run_ulid).statement, self._session.bind).map(str)
+        data = pd.read_sql(self._session.query(ExperimentRun).filter_by(id=run_ulid).statement, self._session.bind).map(str)
         data = self.__enrich_run_data(data)
         return data
 
@@ -278,7 +298,7 @@ class DataRetrievalApi(DatabaseApi):
         return tests_data
 
     def get_abstract_tests(self, experiment_ulid: str) -> dict:
-        experiment = self._session.query(Experiment).filter_by(ulid=experiment_ulid).one()
+        experiment = self._session.query(Experiment).filter_by(id=experiment_ulid).one()
         tests = experiment.abstract_tests
         tests_data = {}
         for test in tests:
@@ -316,7 +336,7 @@ class DataRetrievalApi(DatabaseApi):
         data = self.__enrich_testfunction_data(data)
         return data
 
-    def get_testfunction(self, testfunction_id: int) -> (pd.DataFrame, pd.DataFrame):
+    def get_testfunction(self, testfunction_id: int) -> tuple[pd.DataFrame, pd.DataFrame]:
         try:
             testfunction_data = pd.read_sql(self._session.query(TestFunction).filter_by(id=testfunction_id).statement, self._session.bind).map(str)
         except sqlalchemy.orm.exc.NoResultFound:

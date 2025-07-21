@@ -5,7 +5,7 @@ log = logging.getLogger(__name__)
 
 def exec_gui(arguments):
     from adare.config import PORT_WEBAPP
-    from adarelib.helperfunctions.port import is_localhost_port_free
+    from adare.helperfunctions.port import is_localhost_port_free
     from adare.frontend.gui.run import runserver as run_gui
 
     port = PORT_WEBAPP

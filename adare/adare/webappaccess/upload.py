@@ -4,7 +4,7 @@ import requests
 import adare.config.server as config_server
 from adare.webappaccess.exceptions import NotLoggedInError, ExperimentPublishFailedError
 from adare.webappaccess.login import WebappLogin, is_logged_in
-from adarelib.helperfunctions.web.download import download_from_session
+from adare.helperfunctions.web.download import download_from_session
 from adare.database.api.serialize import SerializeApi
 
 # configure logging

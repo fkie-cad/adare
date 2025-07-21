@@ -5,9 +5,8 @@ from pathlib import Path
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.models.experiment import Environment, OsInfo, Experiment, ExperimentRun, Project, PostSetupInstallation
-from adare.database.api.database import DatabaseApi
-from adarelib.types.backend import EnvironmentMetadata, OsInfo as OsInfoAttrs, PostsetupInstallations as PostsetupInstallationsAttrs
+from adare.database.models.experiment import Environment, OsInfo, Project, PostSetupInstallation
+from adare.types.environment import EnvironmentMetadata, OsInfo as OsInfoAttrs, PostsetupInstallations as PostsetupInstallationsAttrs
 from adare.database.api.experiment import ExperimentApi
 from adare.database.exceptions import DatabaseProjectNotFoundError
 
@@ -22,7 +21,7 @@ class EnvironmentDbApi(ExperimentApi):
     def __init__(self, db_path: Path = config_database.get_database_location()):
         super().__init__(db_path)
 
-    def get_or_create_os_info(self, os_info_attrs: OsInfoAttrs) -> (OsInfo, bool):
+    def get_or_create_os_info(self, os_info_attrs: OsInfoAttrs) -> tuple[OsInfo, bool]:
         os_info_dict = attrs.asdict(os_info_attrs)
         os_info = self._session.query(OsInfo).filter_by(**os_info_dict).first()
         if os_info:
@@ -37,7 +36,10 @@ class EnvironmentDbApi(ExperimentApi):
             sqlalchemy.desc(Environment.created_at)).all()
 
     def get_environment_by_ulid(self, ulid: str) -> Environment:
-        return self._session.query(Environment).filter(Environment.ulid == ulid).first()
+        return self._session.query(Environment).filter(Environment.id == ulid).first()
+    
+    def get_environment_by_hash(self, sha256hash: str) -> Environment:
+        return self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
 
     def __get_or_create_installations(self, installations: list[PostsetupInstallationsAttrs]) -> list[PostSetupInstallation]:
         installation_objects = []
@@ -46,7 +48,9 @@ class EnvironmentDbApi(ExperimentApi):
             installation_objects.append(installation_obj)
         return installation_objects
 
-    def get_or_create_environment(self, project_path: Path, environment_metadata: EnvironmentMetadata, environment_file:Path,
+    def get_or_create_environment(self, project_path: Path, name: str, description: str, 
+                                  vm_id: str, tags: list[str],
+                                  installations: list[dict], environment_file: Path,
                                   sha256hash: str) -> tuple[Environment, bool]:
         environment = self._session.query(Environment).join(Project).filter(Environment.sha256hash == sha256hash,
                                                                             Project.path == project_path.as_posix()).first()
@@ -54,31 +58,34 @@ class EnvironmentDbApi(ExperimentApi):
             log.info(f'Environment with hash {sha256hash} already exists in database')
             return environment, False
         log.info(f"Environment with hash '{sha256hash}' not found in database -> creating new entry")
-        os_info, _ = self.get_or_create_os_info(environment_metadata.os)
+        # OS info is now stored in the VM, not separately
         project = self._session.query(Project).filter(Project.path == project_path.as_posix()).first()
         if not project:
             raise DatabaseProjectNotFoundError(
                 log,
                 f"Project with path '{project_path}' not found in database -> cannot create environment"
             )
-        tags = self.get_or_create_tags(environment_metadata.tags)
+        tag_objects = self.get_or_create_tags(tags)
         environment = Environment(
-            name=environment_metadata.name,
+            name=name,
             project=project,
-            description=environment_metadata.description,
-            vagrantbox=environment_metadata.vagrantbox,
-            osinfo=os_info,
+            description=description,
+            vm_id=vm_id,
             sha256hash=sha256hash,
             file=environment_file.as_posix(),
-            tags=tags
+            tags=tag_objects
         )
-        environment.installations = self.__get_or_create_installations(environment_metadata.postsetupinstallations)
+        installation_objects = []
+        for install_dict in installations:
+            install_obj, _ = self.get_or_create(PostSetupInstallation, **install_dict)
+            installation_objects.append(install_obj)
+        environment.installations = installation_objects
         self._session.add(environment)
         self._session.commit()
         return environment, True
 
-    def update_environment(self, environment_metadata: EnvironmentMetadata, environment_file: Path,
-                           sha256hash: str) -> Environment | None:
+    def update_environment(self, name: str, description: str, vm_id: str, 
+                          environment_file: Path, sha256hash: str) -> Environment | None:
         environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
         if not environment:
             log.error(f"Environment with hash '{sha256hash}' not found in database -> cannot update")
@@ -87,11 +94,10 @@ class EnvironmentDbApi(ExperimentApi):
             log.error(
                 f"Environment with hash '{sha256hash}' has already been used for experiments, so it cannot be updated because this would invalidate the results")
             return None
-        os_info, _ = self.get_or_create_os_info(environment_metadata.os)
-        environment.name = environment_metadata.name
-        environment.description = environment_metadata.description
-        environment.vagrantbox = environment_metadata.vagrantbox
-        environment.osinfo = os_info
+        # OS info is now stored in the VM, not separately
+        environment.name = name
+        environment.description = description
+        environment.vm_id = vm_id
         environment.file = environment_file.as_posix()
         self._session.commit()
         log.info(f"Environment with hash '{sha256hash}' updated in database")
@@ -124,7 +130,7 @@ class EnvironmentDbApi(ExperimentApi):
     #     experiment_per_env = {}
     #     for environment in environments:
     #         experiments = {run.experiment.name for run in environment.runs}
-    #         experiment_per_env[environment.ulid] = [
+    #         experiment_per_env[environment.id] = [
     #             {
     #                 'name': experiment.name,
     #                 'runs': len([run for run in environment.runs if run.experiment.name == experiment.name])
@@ -141,7 +147,7 @@ class EnvironmentDbApi(ExperimentApi):
     #         {
     #             'name': env.name,
     #             'description': env.description,
-    #             'experiments': experiment_per_env[env.ulid],
+    #             'experiments': experiment_per_env[env.id],
     #         }
     #         for env in environments
     #     ]
@@ -184,13 +190,13 @@ class EnvironmentDbApi(ExperimentApi):
         log.error(f'environment {name} not found in database')
         raise None
 
-    def get_environment_vagrant_box(self, environment_ulid: str):
+    def get_environment_vm(self, environment_ulid: str) -> str:
         if (
             env := self._session.query(Environment)
             .filter_by(ulid=environment_ulid)
             .first()
         ):
-            return env.vagrantbox
+            return env.vm.name if env.vm else None
         else:
             raise ValueError(f'environment {environment_ulid} not found in database')
 

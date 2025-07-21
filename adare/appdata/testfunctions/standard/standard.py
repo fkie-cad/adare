@@ -7,9 +7,9 @@ from typing import ClassVar, Optional
 
 # internal imports
 from adarevm.testset.basictest import BasicTest, Parameter
-from adarelib.types.event import TestResult
-from adarelib.config import StatusEnum
-import adarelib.customyaml.customtags as yml
+from adare.types.event import TestResult
+from adarelib.constants import StatusEnum
+import adare.customyaml.customtags as yml
 
 # configure logging
 import logging

@@ -1,5 +1,5 @@
 # internal imports
-from adarelib.exceptions import LoggedException, LoggedErrorException
+from adare.exceptions import LoggedException, LoggedErrorException
 
 
 class DatabaseProjectCreationError(LoggedErrorException):
@@ -31,4 +31,30 @@ class DatabaseProjectNotFoundError(LoggedErrorException):
 
 
 class EnvironmentMissingError(LoggedErrorException):
+    pass
+
+
+# New enhanced exception classes for improved database API
+class DatabaseError(LoggedErrorException):
+    """Base class for database-related errors."""
+    pass
+
+
+class DatabaseConnectionError(DatabaseError):
+    """Error connecting to or initializing database."""
+    pass
+
+
+class EntityNotFoundError(DatabaseError):
+    """Entity not found in database."""
+    pass
+
+
+class ValidationError(DatabaseError):
+    """Input validation error."""
+    pass
+
+
+class SyncError(DatabaseError):
+    """Synchronization-related error."""
     pass

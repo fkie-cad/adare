@@ -8,7 +8,7 @@ from rich.table import Table
 # internal imports
 from adare.database.api.frontend import DataRetrievalApi
 from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, timedelta_to_str
-from adarelib.config import TIMESTAMP_FORMAT, StatusEnum
+from adare.config import TIMESTAMP_FORMAT, StatusEnum
 from adare.frontend.terminal.console import TwoTitleRule
 from rich.emoji import Emoji
 

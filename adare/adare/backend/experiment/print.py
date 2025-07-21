@@ -6,7 +6,7 @@ from rich.text import Text
 from rich.layout import Layout
 from rich.spinner import SPINNERS
 
-from adarelib.config import StatusEnum
+from adarelib.constants import StatusEnum
 
 # configure logging
 import logging
@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 class ExperimentFlowConsole:
     console: Console
     stop_event: threading.Event
-    thread: threading.Thread or None
+    thread: threading.Thread | None
     disable: bool
 
     messages: dict
@@ -190,13 +190,21 @@ class ExperimentFlowConsole:
 
 class FlowConsoleManager:
     def __init__(self):
-        self.handlers = {}  # Dictionary to store experiment_id to handler mappings
+        self._handlers = {}
+        self._lock = threading.Lock()
 
     def add_handler(self, experimentrun_ulid: str, handler: ExperimentFlowConsole):
-        self.handlers[experimentrun_ulid] = handler
+        with self._lock:
+            self._handlers[experimentrun_ulid] = handler
 
-    def get_handler(self, experimentrun_ulid: str) -> ExperimentFlowConsole or None:
-        return self.handlers.get(experimentrun_ulid, None)
+    def get_handler(self, experimentrun_ulid: str) -> ExperimentFlowConsole | None:
+        with self._lock:
+            return self._handlers.get(experimentrun_ulid)
+
+    def remove_handler(self, experimentrun_ulid: str):
+        with self._lock:
+            self._handlers.pop(experimentrun_ulid, None)
+
 
 
 flowconsolemanager = FlowConsoleManager()

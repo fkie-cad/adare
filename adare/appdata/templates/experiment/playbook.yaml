@@ -1,0 +1,284 @@
+# ADARE Experiment Playbook Template
+# Pure YAML GUI automation with test execution - no Python coding required!
+
+settings:
+  # Default pause between actions (seconds)
+  idle: 1.0
+  
+  # Overall timeout for the experiment (seconds)
+  timeout: 300
+  
+  # Default screenshot settings
+  screenshot:
+    format: "png"
+    quality: 95
+
+# Variables that can be used throughout the playbook
+variables:
+  app_name: "{{ name }}"
+  test_data: "Sample test data"
+  test_file: "C:/Users/vagrant/Documents/testfile.txt"
+  output_dir: "C:/test/output"
+
+actions:
+  # Step 1: Initial setup and screenshot
+  - screenshot:
+      description: "Take initial desktop screenshot"
+  
+  # Step 2: Pre-test validation
+  - test:
+      name: "existencefile"
+      description: "Verify test file doesn't exist before starting"
+  
+  # Step 3: GUI interactions to create/manipulate files
+  
+  # Click using image recognition (most reliable)
+  - click:
+      target:
+        image: "start_button.png"
+      description: "Click the start button"
+  
+  # Wait for UI to respond
+  - idle:
+      duration: 2.0
+      description: "Wait for application to load"
+  
+  # Open file creation dialog
+  - click:
+      target:
+        text: "File"
+      description: "Click File menu"
+  
+  - click:
+      target:
+        text: "New"
+      description: "Click New to create file"
+  
+  # Create test file content
+  - keyboard:
+      keys: "{{ test_data }}"
+      description: "Enter test data into file"
+  
+  # Save the file
+  - keyboard:
+      combination: ["ctrl", "s"]
+      description: "Save file with Ctrl+S"
+  
+  # Enter filename in save dialog
+  - keyboard:
+      keys: "{{ test_file }}"
+      description: "Enter file path"
+  
+  - keyboard:
+      combination: ["enter"]
+      description: "Confirm save"
+  
+  # Wait for file to be saved
+  - idle:
+      duration: 1.0
+      description: "Wait for file save to complete"
+  
+  # Step 4: Post-action validation - verify file was created
+  - test:
+      name: "fileexists"
+      description: "Verify test file was created successfully"
+  
+  # Step 5: Additional GUI automation examples
+  
+  # Use keyboard shortcuts for file operations
+  - keyboard:
+      combination: ["ctrl", "a"]
+      description: "Select all text in file"
+  
+  # Click at specific coordinates (fallback option)
+  - click:
+      target:
+        position: [100, 200]
+      description: "Click at specific coordinates"
+  
+  # Mouse operations
+  - drag:
+      source:
+        image: "file_icon.png"
+      destination:
+        image: "folder_icon.png"
+      description: "Drag file to folder"
+  
+  - right_click:
+      target:
+        image: "document.png"
+      description: "Right-click on document"
+  
+  - double_click:
+      target:
+        text: "Open"
+      description: "Double-click to open"
+  
+  # Scroll operations
+  - scroll:
+      direction: "down"
+      amount: 3
+      description: "Scroll down 3 times"
+  
+  # Step 3: Conditional logic and error handling
+  
+  # Handle success case
+  - block:
+      description: "Process successful completion"
+      when:
+        - exists:
+            text: "Complete"
+        - exists:
+            image: "success_icon.png"
+      actions:
+        - screenshot:
+            description: "Screenshot success state"
+        - click:
+            target:
+              text: "OK"
+            description: "Acknowledge success"
+  
+  # Handle error case
+  - block:
+      description: "Handle error conditions"
+      when:
+        - exists:
+            text: "Error"
+      actions:
+        - screenshot:
+            description: "Screenshot error for debugging"
+        - click:
+            target:
+              text: "Retry"
+            description: "Retry on error"
+  
+  # Wait for long-running operations
+  - block:
+      description: "Wait for processing to complete"
+      when:
+        - exists:
+            text: "Processing"
+      actions:
+        - idle:
+            duration: 10.0
+            description: "Wait for processing"
+        - block:
+            when:
+              - exists:
+                  text: "Processing"
+            actions:
+              - idle:
+                  duration: 5.0
+                  description: "Wait longer if still processing"
+  
+  # Step 4: Advanced features
+  
+  # Execute system commands
+  - command:
+      name: "SetTimestamp"
+      description: "Save current timestamp"
+      action: "set_variable"
+      params:
+        name: "TIMESTAMP.ACTION_TIME"
+        value: "{{ current_timestamp }}"
+  
+  # Take targeted screenshots
+  - screenshot:
+      x: 100
+      y: 100
+      width: 400
+      height: 300
+      description: "Screenshot specific area"
+  
+  # Window-specific screenshot
+  - screenshot_window:
+      window: "{{ app_name }}"
+      description: "Screenshot application window"
+  
+  # Step 5: Cleanup and final actions
+  
+  # Close application
+  - keyboard:
+      combination: ["alt", "f4"]
+      description: "Close application"
+  
+  # Take final screenshot
+  - screenshot:
+      description: "Take final desktop screenshot"
+
+# Error handling and recovery strategies
+error_handling:
+  # If main button not found, try alternative
+  - when:
+      - not_exists:
+          image: "start_button.png"
+    actions:
+      - click:
+          target:
+            text: "Start"
+          description: "Try text-based start button"
+  
+  # If application doesn't respond, try keyboard shortcut
+  - when:
+      - not_exists:
+          text: "File"
+    actions:
+      - keyboard:
+          combination: ["alt", "f"]
+          description: "Try Alt+F for File menu"
+
+# Post-execution validation (run after GUI automation)
+post_actions:
+  # Final test validation - ensure experiment succeeded
+  - test:
+      name: "final_validation"
+      description: "Final validation that test file still exists"
+  
+  # Additional forensic tests
+  - test:
+      name: "cleanup_validation"
+      description: "Verify no unwanted files were created"
+  
+  # Set final experiment status
+  - command:
+      name: "SetFinalStatus"
+      description: "Mark experiment as completed"
+      action: "set_variable"
+      params:
+        name: "EXPERIMENT.STATUS"
+        value: "COMPLETED"
+        
+  # Take final forensic screenshot
+  - screenshot:
+      description: "Final forensic screenshot for analysis"
+
+# Available target types:
+# 
+# image: "filename.png"        - Use image recognition
+# text: "Button Text"          - Use OCR text recognition  
+# position: [x, y]             - Use exact coordinates
+#
+# Available actions:
+#
+# click, right_click, double_click  - Mouse clicks
+# drag                              - Mouse drag operations
+# keyboard                          - Text input and key combinations
+# scroll                            - Scroll up/down
+# goto                              - Move mouse to position
+# idle                              - Wait/pause
+# screenshot                        - Take full or partial screenshots
+# screenshot_window                 - Screenshot specific window
+# command                           - Execute system commands
+# block                             - Conditional action groups
+#
+# Conditional logic:
+#
+# when:                            - Execute block only if conditions met
+#   - exists: {image/text}         - Element exists on screen
+#   - not_exists: {image/text}     - Element does not exist
+#
+# Variables:
+#
+# {{ variable_name }}              - Reference variables
+# {{ current_timestamp }}          - Current timestamp
+# set_variable action              - Set variables for tests

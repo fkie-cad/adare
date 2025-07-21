@@ -6,10 +6,10 @@ import pandas as pd
 import adare.backend.testfunction.database as testfunction_database
 from adare.backend.testfunction.directory import TestfunctionDirectory
 from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
-from adarelib.helperfunctions.cli import print_df
+from adare.helperfunctions.cli import print_df
 from adare.webappaccess.download import download_testfunction, sync
 from adare.webappaccess.login import is_logged_in
-from adarelib.exceptions import NotLoggedInError
+from adare.exceptions import NotLoggedInError
 
 # configure logging
 import logging

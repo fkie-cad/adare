@@ -6,26 +6,15 @@ authors = ["miqsoft <mksaxhandball@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-adarelib = {path = "../adarelib",develop=true}
+adarelib = {path = "../adarelib", develop=true}
 python = "^3.10"
-guibot = "^0.50.1"
-pytest-mock = "^3.12.0"
-datefinder = "^0.7.3"
 pyautogui = "^0.9.54"
-opencv-python = "^4.9.0.80"
-pytesseract = "^0.3.10"
-cattrs = "^23.2.3"
-python-ulid = "^2.7.0"
-pynput = "^1.7.7"
 websockets = "^15.0"
+cattrs = "^23.2.3"
+attrs = "^24.0.0"
 
 [tool.poetry.scripts]
-adarevm = "adarevm.run:main"
-adarerecord = "adarevm.record:main"
-
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0.1"
+adarevm = "adarevm.core.server:main"
 
 [build-system]
 requires = ["poetry-core"]

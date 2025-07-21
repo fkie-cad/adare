@@ -5,7 +5,7 @@ from adare.backend.environment.commands import environment_sync
 from adare.backend.experiment.commands import experiment_sync
 from adare.backend.testfunction.commands import testfunction_sync
 from adare.web.login import is_logged_in
-from adarelib.console import log_print
+from adare.console import log_print
 
 from pathlib import Path
 

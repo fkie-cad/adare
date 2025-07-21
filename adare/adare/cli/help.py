@@ -1,5 +1,5 @@
-from adarelib.console import console
-from adarelib.breakpoint import BREAKPOINTS, resolve_breakpoints, BreakPoint
+from adare.console import console
+from adare.breakpoint import BREAKPOINTS, resolve_breakpoints, BreakPoint
 
 
 def print_breakpoint_info(bp: BreakPoint, index: int, prefix_whitespace_count: int = 3):

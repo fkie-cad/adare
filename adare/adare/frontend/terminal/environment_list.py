@@ -10,11 +10,11 @@ from rich.text import Text
 import numpy as np
 
 # internal imports
-from adarelib.helperfunctions.cli import print_df, print_dict
+from adare.helperfunctions.cli import print_df, print_dict
 from adare.database.api.frontend import DataRetrievalApi
-from adarelib.exceptions import ArgumentsError
+from adare.exceptions import ArgumentsError
 from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, timedelta_to_str
-from adarelib.config import TIMESTAMP_FORMAT, StatusEnum
+from adare.config import TIMESTAMP_FORMAT, StatusEnum
 from adare.frontend.terminal.console import TwoTitleRule
 
 import logging
@@ -22,18 +22,18 @@ log = logging.getLogger(__name__)
 
 
 class EnvironmentTablePanel:
-    def __init__(self, projects: pd.DataFrame):
-        self.projects = projects
+    def __init__(self, environments: pd.DataFrame):
+        self.environments = environments
 
     def __rich__(self) -> Panel:
         table = Table(expand=True)
         table.add_column("name", style="cyan", no_wrap=True)
         table.add_column("ulid", style="cyan", no_wrap=True)
-        table.add_column("box", style="cyan", no_wrap=True)
+        table.add_column("vm", style="cyan", no_wrap=True)
         table.add_column("os", style="cyan", no_wrap=True)
         table.add_column("web status", style="cyan", no_wrap=True)
 
-        for i, row in self.projects.iterrows():
+        for i, row in self.environments.iterrows():
             published = True if row['published'] == 'True' else False
             in_request = True if row['in_request'] == 'True' else False
             web_status = 'NOT published'
@@ -44,9 +44,9 @@ class EnvironmentTablePanel:
 
             table.add_row(
                 row['dotnotation'],
-                row['ulid'],
-                row['vagrantbox'],
-                row['osinfo'],
+                row['id'],
+                row['vm_name'] if 'vm_name' in row and row['vm_name'] else 'No VM',
+                row['osinfo'] if 'osinfo' in row and row['osinfo'] else 'Unknown',
                 web_status,
             )
         return Panel(table, title="[b gold3]environments[/b gold3]", border_style="blue", title_align="left")
@@ -55,8 +55,8 @@ class EnvironmentTablePanel:
 def print_environment_list():
     with DataRetrievalApi() as db:
         console = DefaultConsole()
-        projects = db.get_environments()
+        environments = db.get_environments()
         layout = Layout(name="root")
-        panel = EnvironmentTablePanel(projects)
+        panel = EnvironmentTablePanel(environments)
         layout.update(panel)
         console.print(layout)

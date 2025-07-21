@@ -1,4 +1,4 @@
-from adarelib.exceptions import LoggedErrorException, LoggedException
+from adare.exceptions import LoggedErrorException, LoggedException
 
 # configure logging
 import logging

@@ -30,7 +30,7 @@ from adare.cli.testfunction import (
     exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 )
 from adare.setup_logging import setup_logging
-from adarelib.exceptions import LoggedException, LoggedErrorException
+from adare.exceptions import LoggedException, LoggedErrorException
 
 
 def exec_with_error_printing(func, args):
@@ -134,9 +134,10 @@ def load(environment, project, force):
 @environment.command()
 @click.argument('name')
 @click.option('--project', '-p', help='Name of the project')
-def create(name, project):
+@click.option('--with-vm', type=click.Path(exists=True), help='VM file path (OVA) to load automatically during environment creation')
+def create(name, project, with_vm):
     """Create an environment."""
-    args = SimpleNamespace(name=name, project=project)
+    args = SimpleNamespace(name=name, project=project, with_vm=with_vm)
     exec_with_error_printing(exec_environment_create, args)
 
 @environment.command()

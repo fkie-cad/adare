@@ -8,7 +8,7 @@ from textual.widget import Widget
 from textual.containers import VerticalGroup
 from textual.widgets import Static
 from textual.reactive import reactive
-from adarelib.config import StatusEnum
+from adarelib.constants import StatusEnum
 
 
 class ExperimentRunFlowConsoleWidget(VerticalGroup):

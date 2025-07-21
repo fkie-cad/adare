@@ -10,9 +10,9 @@ from adare.database.models.experiment import TestFunction, TestFunctionFile, Tes
 from adare.database.api.experiment import ExperimentApi
 from adare.database.exceptions import DatabaseTestfunctionCreationError, DatabaseTestfunctionRemovalError, \
     DatabaseTestfunctionUpdateError, DatabaseTestValidationError
-from adarelib.helperfunctions.pyfileanalyze import PyModuleAnalyzer
-from adarelib.helperfunctions.hash import hash_file_sha256, hash_string_sha256, combine_hashes
-from adarelib.exceptions import TestfunctionParameterClassMissingError
+from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
+from adare.helperfunctions.hash import hash_file_sha256, hash_string_sha256, combine_hashes
+from adare.exceptions import TestfunctionParameterClassMissingError
 
 # configure logging
 import logging
@@ -124,7 +124,7 @@ class TestfunctionDbApi(ExperimentApi):
                 log,
                 message=f'Testfunction file {path} does not exist in database',
             )
-        for testfunction_obj in testfunction_file_obj.testfunctions:
+        for testfunction_obj in testfunction_file_obj.test_functions:
             # check if testfunction is used in a test
             if self._session.query(sqlalchemy.exists().where(
                     AbstractTest.testfunction_id == testfunction_obj.id,
@@ -148,10 +148,16 @@ class TestfunctionDbApi(ExperimentApi):
         parameter_attr_type = testfunction_class.get_attribute('params').get_type()
         if matching_parameter_class := module_analyzer.get_class(parameter_attr_type):
             attribute_dict = matching_parameter_class.get_attributes_as_dict()
-            db_parameter_objects = {
-                attr['name']: self.get_or_create(TestParameter, name=attr['name'], dtype=attr['type'])[0]
-                for attr in attribute_dict.values()
-            }
+            db_parameter_objects = {}
+            
+            # Create or get parameters sequentially to avoid race conditions
+            for attr in attribute_dict.values():
+                param_obj, created = self.get_or_create(TestParameter, defaults={'dtype': attr['type']}, name=attr['name'])
+                if created:
+                    # Flush immediately to make the parameter visible to subsequent get_or_create calls
+                    self._session.flush()
+                db_parameter_objects[attr['name']] = param_obj
+            
             sha256_testfunction = self.__get_testfunction_hash(testfunction_class)
             testfunction_obj = self.create_testfunction(testfunction_file, testfunction_class, db_parameter_objects,
                                                         sha256_testfunction)
@@ -262,7 +268,7 @@ class TestfunctionDbApi(ExperimentApi):
                 self.parse_and_create_testfunction(t_func_class, module_analyzer, testfunction_file)
 
         class_names = [t_func_class.name for t_func_class in module_analyzer.get_classes(parent='BasicTest')]
-        for testfunction_obj in testfunction_file.testfunctions:
+        for testfunction_obj in testfunction_file.test_functions:
             if testfunction_obj.type not in class_names:
                 self.remove_testfunction(path, testfunction_obj.name, safe=True)
         testfunction_file.sha256hash = combine_hashes([hash_file_sha256(path), hash_file_sha256(requirements_path)])
@@ -280,7 +286,7 @@ class TestfunctionDbApi(ExperimentApi):
         return {
             testfunction_file.name: [
                 self.__serialize_testfunction(testfunction)
-                for testfunction in testfunction_file.testfunctions
+                for testfunction in testfunction_file.test_functions
             ]
             for testfunction_file in self._session.query(TestFunctionFile).all()
         }

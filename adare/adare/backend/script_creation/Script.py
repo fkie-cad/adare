@@ -5,7 +5,7 @@ import jinja2
 import os
 
 # internal imports
-from adarelib.helperfunctions.jinja import jinjafeatures
+from adare.helperfunctions.jinja import jinjafeatures
 
 # configure logging
 import logging

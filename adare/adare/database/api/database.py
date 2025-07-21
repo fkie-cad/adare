@@ -19,7 +19,7 @@ class DatabaseApi:
         self.engine = sqlalchemy.create_engine(f'sqlite:///{db_path.as_posix()}')
         self.conn = self.engine.connect()
         self.metadata = sqlalchemy.MetaData()
-        self.session_starter = sessionmaker(autoflush=False)
+        self.session_starter = sessionmaker(autoflush=False, expire_on_commit=False)
         self.session_starter.configure(bind=self.engine)
 
     def __enter__(self):

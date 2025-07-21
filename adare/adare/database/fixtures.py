@@ -1,7 +1,7 @@
 import sqlalchemy
-from adarelib.types.stage import Stage as StageType
+from adare.types.stages import Stage as StageType
 from adare.database.models.experiment import Stage, Status
-from adarelib.config import StatusEnum
+from adarelib.constants import StatusEnum
 
 # configure logging
 import logging
@@ -22,7 +22,7 @@ def fixture_stages(session: sqlalchemy.orm.Session):
         if stage.parent:
             if (
                 parent := session.query(Stage)
-                .filter(Stage.name == stage.parent.name)
+                .filter(Stage.name == stage.parent)
                 .first()
             ):
                 kwargs['parent_id'] = parent.id

@@ -132,7 +132,6 @@ class TwoTitleRule(Rule):
         return Measurement(1, 1)
 
 class TagsText:
-
     def __init__(self, tags: str):
         self.tags = tags.split(', ')
 

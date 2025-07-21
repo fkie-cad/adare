@@ -1,4 +1,4 @@
-from adarelib.exceptions import LoggedErrorException
+from adare.exceptions import LoggedErrorException
 
 
 class NotLoggedInError(LoggedErrorException):

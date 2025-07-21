@@ -5,17 +5,16 @@ import pandas as pd
 
 # internal imports
 import adare.backend.environment.database as environment_database
-from adarelib.types.backend import EnvironmentMetadata
+from adare.types.environment import EnvironmentMetadata, parse_environment_file
 from adare.backend.project.directory import ProjectDirectory
-from adarelib.helperfunctions.hash import hash_file_sha256
+from adare.helperfunctions.hash import hash_file_sha256
 from adare.config.configdirectory import TEMPLATES_DIR
-from adarelib.parsers import parse_environment_file
-from adarelib.exceptions import TemplateMissingError
+from adare.exceptions import TemplateMissingError
 from adare.backend.environment.exceptions import EnvironmentLoadFailed, EnvironmentFileAlreadyExists, \
     EnvironmentDoesNotExistInDatabase, ExampleEnvironmentDoesNotExist
 from adare.webappaccess.download import download_environment, sync
 from adare.webappaccess.login import is_logged_in
-from adarelib.exceptions import NotLoggedInError
+from adare.exceptions import NotLoggedInError
 
 # configure logging
 import logging
@@ -28,7 +27,7 @@ def environment_sync(environment_ulid: str):
         return
     # get environment from database
     sha256 = environment_database.get_environment_hash(environment_ulid)
-    # download environment from webapp
+    # download environment from webappclea
     metadata_remote = sync(sha256, 'environment')
     if not metadata_remote:
         log.info(f'environment {environment_ulid} does not exist remotely')
@@ -43,41 +42,65 @@ def environment_sync(environment_ulid: str):
 def environment_load(project: Path, environment: str, force: bool = False):
     project_directory = ProjectDirectory(project)
 
-    environment_file = project_directory.environments / f'{environment}.yml'
-    if not environment_file.exists():
-        environment_file = project_directory.environments / f'{environment}.yaml'
-        if not environment_file.exists():
-            raise EnvironmentLoadFailed(
-                log,
-                f'environment file {environment_file} does not exist',
-                possible_solutions=[
-                    'Did you create the environment file?',
-                    'If not, try to create the environment file via [i]adare env create[/i].',
-                ]
-            )
-
-    environment_file_sha256 = hash_file_sha256(environment_file)
-    environment_configuration: EnvironmentMetadata = parse_environment_file(environment_file)
-
-    # check if file name equals environment name
-    if environment != environment_configuration.name:
+    for ext in ('.yml', '.yaml'):
+        environment_file = project_directory.environments / f'{environment}{ext}'
+        if environment_file.exists():
+            break
+    else:
         raise EnvironmentLoadFailed(
             log,
-            f'environment name in file {environment_configuration.name} does not match the file name {environment}',
+            f'environment file {project_directory.environments / f"{environment}.yml"} or .yaml does not exist',
+            possible_solutions=[
+                'Did you create the environment file?',
+                'If not, try to create the environment file via [i]adare env create[/i].',
+            ]
+        )
+
+    environment_file_sha256 = hash_file_sha256(environment_file)
+
+    # checks if environment with same hash already exists in the database
+    existing_environment_id = environment_database.get_environment_by_hash(environment_file_sha256, trigger_exception=False)
+    if existing_environment_id:
+        if not force:
+            log.info(f'Environment with hash {environment_file_sha256} already exists in database')
+            return existing_environment_id
+        else:
+            log.info(f'Environment with hash {environment_file_sha256} exists, but force=True, so updating')
+
+    if not existing_environment_id:
+        log.info(f'Environment with hash {environment_file_sha256} not found, creating new one')
+    
+    environment_metadata: EnvironmentMetadata = parse_environment_file(environment_file)
+
+    # todo: maybe add validation for environment configuration semantic 
+
+    # check if file name equals environment name
+    if environment != environment_metadata.name:
+        raise EnvironmentLoadFailed(
+            log,
+            f'environment name in file {environment_metadata.name} does not match the file name {environment}',
             possible_solutions=[
                 'rename the file or change the environment name in the file and try again',
             ]
         )
 
-    environment_ulid = environment_database.update_environment(project, environment_configuration, environment_file, environment_file_sha256, force=force)
+    # check if vm is available for environment
+    from adare.backend.vm.commands import ensure_vm_available_for_environment
+    vm_id = ensure_vm_available_for_environment(
+        project_path=project,
+        environment_metadata=environment_metadata,
+    )
+
+    environment_ulid = environment_database.update_environment(project, environment_metadata, environment_file, environment_file_sha256, vm_id, force=force)
     if not environment_ulid:
         log.error(f'environment update failed')
         return
+    
     environment_sync(environment_ulid)
     log.info(f'environment file {environment_file} loaded')
 
 
-def environment_create(project: Path, environment: str):
+def environment_create(project: Path, environment: str, vm_path: Path = None):
     project_directory = ProjectDirectory(project)
     environment_file = project_directory.environments / f'{environment}.yml'
     environment_file2 = project_directory.environments / f'{environment}.yaml'
@@ -104,8 +127,53 @@ def environment_create(project: Path, environment: str):
             ]
         )
 
+    # Prepare template variables
+    template_vars = {'environment': environment}
+    
+    # Handle VM loading if --with-vm was provided
+    if vm_path:
+        from adare.database.api.vm import load_vm_from_file
+        from adare.database.api.project import ProjectDbApi
+        from rich import print as rprint
+        
+        # Get project ID for VM loading
+        project_id = None
+        if project:
+            project_api = ProjectDbApi()
+            project_obj = project_api.get_project_by_directory(project)
+            if project_obj:
+                project_id = project_obj.id
+        
+        # Load VM into database
+        vm_name = vm_path.stem
+        rprint(f"[blue]Loading VM into database: {vm_name}[/blue]")
+        
+        try:
+            scope = 'project' if project_id else 'global'
+            load_vm_from_file(
+                project_path=project,
+                file_path=vm_path,
+                name=vm_name,
+                description=f'Loaded via environment create --with-vm',
+                scope=scope,
+                project_id=project_id,
+                silent=False
+            )
+            rprint(f"[green]VM loaded successfully: {vm_name}[/green]")
+            
+            # Use the VM name in the template instead of placeholder
+            template_vars['vm_name'] = vm_name
+            
+        except Exception as e:
+            log.error(f'Failed to load VM {vm_name}: {e}')
+            rprint(f"[red]Failed to load VM {vm_name}: {e}[/red]")
+            # Continue with placeholder if VM loading fails
+            template_vars['vm_name'] = None
+    else:
+        template_vars['vm_name'] = None
+    
     environment_file_template_content = environment_file_template.read_text()
-    environment_file_content = jinja2.Template(environment_file_template_content).render(environment=environment)
+    environment_file_content = jinja2.Template(environment_file_template_content).render(**template_vars)
     environment_file.write_text(environment_file_content)
     log.info(f'environment file {environment_file} created')
 
@@ -152,30 +220,4 @@ def environment_download(project: Path, environment_name: str):
     download_environment(environment_name, Path(f'{project_directory.environments}/{environment_name}.yml'))
     print(f'environment {environment_name} downloaded successfully')
     log.info(f'environment {environment_name} downloaded')
-
-
-
-#
-# def environment_list(project: Path):
-#
-#     environments = environment_database.get_environments(project)
-#
-#     columns = ['name', 'description', 'experiments']
-#     env_data = []
-#     if environments:
-#         env_data.extend(
-#             [
-#                 env.get('name'),
-#                 env.get('description'),
-#                 "\n".join(
-#                     [
-#                         f"{exp.get('name')} ({exp.get('runs')} runs)"
-#                         for exp in env.get('experiments')
-#                     ]),
-#             ]
-#             for env in environments
-#         )
-#     df_env = pd.DataFrame(env_data, columns=columns)
-#
-#     title = f'Environments (project {project})' if project else 'Environments'
-#     print_df(df_env, title)
+    
