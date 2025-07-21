@@ -40,6 +40,8 @@ def __get_default_appdata_directory(create_if_missing: bool = False, program_nam
 
 APPDATA_DIR: Path = __get_default_appdata_directory(create_if_missing=True)
 ADARE_DIR = APPDATA_DIR/'adare'
+ADAREVM_DIR = APPDATA_DIR/'adare'/'adarevm'
+ADARELIB_DIR = ADARE_DIR/'adarelib'
 WEBAPP_FILES: Path = APPDATA_DIR/'webapp'
 WEBAPP_STATIC_FILES: Path = WEBAPP_FILES/'static'
 
@@ -50,4 +52,7 @@ PROG_PARSEANDTEST_DIR: Path = PROGRAMS_DIR/'ParseAndTest'
 TEMPLATES_DIR: Path = APPDATA_DIR/'templates'
 NETWORKDRIVE_TEMPLATES_DIR: Path = APPDATA_DIR/'networkdrive'/'templates'
 VAGRANTFILE_TEMPLATE: Path = APPDATA_DIR/'VagrantfileTemplate'/'VagrantfileMultiMachine'
+
+# VM storage directories
+VMS_DIR: Path = APPDATA_DIR/'vms'  # Global VM storage
 

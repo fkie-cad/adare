@@ -5,7 +5,7 @@ import pandas as pd
 # internal imports
 import adare.backend.project.database as project_database
 from adare.backend.project.directory import ProjectDirectory
-from adarelib.helperfunctions.cli import print_df
+from adare.helperfunctions.cli import print_df
 from adare.backend.project.exceptions import ProjectDirectoryCreationError, ProjectDirectoryRemovalError, \
     ProjectDirectoryCopyError, ProjectDirectoryMissingError, ProjectMissingInDatabaseError, NoProjectsFoundMessage
 from adare.database.exceptions import DatabaseProjectCreationError
@@ -28,7 +28,7 @@ def project_create(path: Path, name: str, description: str = ''):
         raise e
 
     try:
-        project_directory.copy_adare_to_adare_dir()
+        project_directory.copy_adarevm_to_adare_dir()
     except ProjectDirectoryCopyError as e:
         project_directory.remove()
         project_database.remove_project(path)
@@ -42,8 +42,6 @@ def project_create(path: Path, name: str, description: str = ''):
         project_database.remove_project(path)
         log.info(f'project directory {path} removed, since standard testfunction could not be copied')
         raise e
-
-    project_directory.download_tessdata('eng')
 
     log.info(f'project in path {path} created')
 
@@ -59,19 +57,6 @@ def project_remove(path: Path):
     project_directory.remove()
 
     project_database.remove_project(path)
-
-
-def project_add_tessdata(path: Path, abbreviation: str):
-    project = project_database.get_project_by_path(path)
-
-    if not project:
-        raise ProjectMissingInDatabaseError(log, message=f'project in path [i]{path}[/i] does not exist in database')
-
-    project_directory = ProjectDirectory(path)
-    if not project_directory.exists():
-        raise ProjectDirectoryMissingError(log, message=f'project directory [i]{path}[/i] does not exist')
-
-    project_directory.download_tessdata(abbreviation)
 
 
 def project_list():

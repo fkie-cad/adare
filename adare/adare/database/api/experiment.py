@@ -1,20 +1,20 @@
 # external imports
 import sqlalchemy
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # internal imports
 from adare.config.configdirectory import PROG_PARSEANDTEST_DIR
 import adare.config.database as config_database
 from adare.database.models.experiment import ExperimentRunFiles, Tag, TestParameter, TestParameterEntry, Experiment, \
-    ExperimentRun, TestFunction, AbstractTest, Command, LogFile, Environment, Base as ExperimentsBase, TestFunctionFile
+    ExperimentRun, TestFunction, AbstractTest, Tool, LogFile, Environment, Base as ExperimentsBase, TestFunctionFile
 from adare.database.api.project import ProjectDbApi
-from adarelib.types.testset import TestsetFile as FTestsetFile, Test as FTest
+from adarelib.testset.type import TestsetFile as FTestsetFile, Test as FTest
 from adare.backend.experiment.directory import ExperimentDirectory
-from adarelib.exceptions import TestSetFormatError, EnvironmentNotFoundError
+from adare.exceptions import TestSetFormatError, EnvironmentNotFoundError
 from adare.database.exceptions import EnvironmentMissingError
 from adare.database.fixtures import fixture_stages, fixture_status
-from adarelib.config import StatusEnum
+from adarelib.constants import StatusEnum
 
 # configure logging
 import logging
@@ -114,12 +114,12 @@ class ExperimentApi(ProjectDbApi):
         experiment = Experiment(
             name=name,
             description=metadata.description,
-            action_file=experiment_directory.actionfile.as_posix(),
+            playbook_file=experiment_directory.playbookfile.as_posix(),
             testset_file=experiment_directory.testsetfile.as_posix(),
             metadata_file=experiment_directory.metadatafile.as_posix(),
             bibtex_file=experiment_directory.bibtexfile.as_posix(),
             markdown_file=experiment_directory.markdownfile.as_posix(),
-            sha256_action=experiment_directory.sha256_action,
+            sha256_playbook=experiment_directory.sha256_playbook,
             sha256_testset=experiment_directory.sha256_testset,
             sha256_metadata=experiment_directory.sha256_metadata,
             sha256_bibtex=experiment_directory.sha256_bibtex,
@@ -145,7 +145,7 @@ class ExperimentApi(ProjectDbApi):
         )
 
     def get_experiment_by_ulid(self, experiment_ulid: str) -> Experiment:
-        return self._session.query(Experiment).filter_by(ulid=experiment_ulid).first()
+        return self._session.query(Experiment).filter(Experiment.id == experiment_ulid).first()
 
     def __create_logfile(self, path: Path) -> LogFile:
         logfile = LogFile(
@@ -164,7 +164,7 @@ class ExperimentApi(ProjectDbApi):
             log_adarevm=self.__create_logfile(logfile_adarevm),
         )
         self._session.add(experiment_run_files)
-        experiment_run = self._session.query(ExperimentRun).filter_by(ulid=run_ulid).first()
+        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == run_ulid).first()
         experiment_run.environment = environment
         experiment_run.experiment = experiment
         experiment_run.path = path.as_posix()
@@ -180,17 +180,21 @@ class ExperimentApi(ProjectDbApi):
         return experiment_run
 
     def update_experiment_run_start(self, experiment_run_ulid: str, timestamp: datetime):
-        experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
-        experiment_run.timestamp_start = timestamp
+        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_ulid).first()
+        if experiment_run:
+            experiment_run.timestamp_start = timestamp
+            self._session.commit()
 
     def update_experiment_run_end(self, experiment_run_ulid: str, timestamp: datetime):
-        experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
-        experiment_run.timestamp_end = timestamp
+        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_ulid).first()
+        if experiment_run:
+            experiment_run.timestamp_end = timestamp
+            self._session.commit()
 
     def remove_experiment_by_ulid(self, experiment_ulid: str):
         if (
                 experiment := self._session.query(Experiment)
-                        .filter_by(ulid=experiment_ulid)
+                        .filter(Experiment.id == experiment_ulid)
                         .first()
         ):
             self.remove_experiment(experiment)
@@ -204,17 +208,17 @@ class ExperimentApi(ProjectDbApi):
         self._session.delete(experiment)
 
     def remove_fake_experiment_run(self, experiment_run_ulid: str):
-        experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid, fake=True).first()
+        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_ulid, ExperimentRun.fake == True).first()
         if experiment_run.fake:
             self._session.delete(experiment_run)
         else:
             raise ValueError(f'experiment run with ulid {experiment_run_ulid} is not fake')
 
     def experiment_sha256_equals(self, experiment_ulid: str, sha256: str) -> bool:
-        experiment = self._session.query(Experiment).filter_by(ulid=experiment_ulid).first()
-        return experiment.sha256 == sha256
+        experiment = self._session.query(Experiment).filter(Experiment.id == experiment_ulid).first()
+        return experiment.sha256 == sha256 if experiment else False
 
-    def __get_abstract_test(self, test: FTest, command_list: list[Command]) -> AbstractTest or None:
+    def __get_abstract_test(self, test: FTest, command_list: list[Tool]) -> AbstractTest | None:
         all_commands_exist = all(
             cmd for cmd in test.depends_on if cmd in [cmd.name for cmd in command_list]
         )
@@ -224,11 +228,11 @@ class ExperimentApi(ProjectDbApi):
                 message='test [b]{test.name}[/b] mentions a command that does not exist in the database.',
             )
 
-        if '.' in test.type:
-            testfunction_set, testfunction_type = test.type.split('.', maxsplit=1)
+        if '.' in test.function:
+            testfunction_set, testfunction_type = test.function.split('.', maxsplit=1)
         else:
             testfunction_set = 'standard'
-            testfunction_type = test.type
+            testfunction_type = test.function
 
         testfunction_set_file = f'{testfunction_set}.py'
         testfunction_set = self._session.query(TestFunctionFile).filter_by(name=testfunction_set_file).first()
@@ -237,14 +241,14 @@ class ExperimentApi(ProjectDbApi):
         if not testfunction:
             raise TestSetFormatError(
                 log,
-                message=f'testfunction [b]{test.type}[/b] mentioned in test [b]{test.name}[/b] does not exist in the database.',
+                message=f'testfunction [b]{test.function}[/b] mentioned in test [b]{test.name}[/b] does not exist in the database.',
                 possible_solutions=[
-                    'ensure spelling and check if the testfunction is loaded by running: [i]adare testfunction list --filter type={test.type}[/i]',
+                    'ensure spelling and check if the testfunction is loaded by running: [i]adare testfunction list --filter type={test.function}[/i]',
                 ]
             )
 
         parameter_entries = []
-        for p_key, p_val in test.params.items():
+        for p_key, p_val in test.parameters.items():
             parameter = self._session.query(TestParameter).filter_by(name=p_key).first()
             # check if TestParameterEntry already exists
             test_parameter_entry_q = self._session.query(TestParameterEntry).filter_by(parameter=parameter,
@@ -267,7 +271,7 @@ class ExperimentApi(ProjectDbApi):
                 AbstractTest.name == test.name,
                 AbstractTest.description == test.description,
                 AbstractTest.testfunction == testfunction,
-                Command.id.in_([c.id for c in commands]),
+                Tool.id.in_([c.id for c in commands]),
                 TestParameterEntry.id.in_(parameter_entry_ids_data)
             )
             .first()
@@ -286,15 +290,15 @@ class ExperimentApi(ProjectDbApi):
 
         return abstract_test_obj
 
-    def __get_command_list(self, testset: FTestsetFile) -> list[Command]:
+    def __get_command_list(self, testset: FTestsetFile) -> list[Tool]:
         command_list = []
         for cmd in testset.commands:
-            command = self._session.query(Command).filter_by(
+            command = self._session.query(Tool).filter_by(
                 name=cmd.name,
                 command=cmd.command
             ).first()
             if not command:
-                command = Command(
+                command = Tool(
                     name=cmd.name,
                     command=cmd.command)
                 self._session.add(command)
@@ -309,10 +313,12 @@ class ExperimentApi(ProjectDbApi):
         return [self.__get_abstract_test(test, command_list) for test in testset.tests]
 
     def update_experiment_run_status(self, experiment_run_ulid: str, status: int):
-        experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
-        experiment_run.status = status
-        if status == StatusEnum.FINISHED or status == StatusEnum.INTERRUPTED:
-            experiment_run.timestamp_end = datetime.utcnow()
+        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_ulid).first()
+        if experiment_run:
+            experiment_run.status = status
+            if status == StatusEnum.FINISHED or status == StatusEnum.INTERRUPTED:
+                experiment_run.timestamp_end = datetime.now(timezone.utc)
+            self._session.commit()
 
     def sync_experiment(self, ulid: str, remote_ulid: str, abstract_tests_ulids: dict, remote_url: str, is_published: bool):
         # Retrieve the experiment by its ULID

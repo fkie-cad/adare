@@ -114,15 +114,15 @@ An example testset file in our example would look like this:
     tests:
       - name: existencefile
         description: 'check if file exists'
-        type: file_does_not_exist
-        params:
+        function: file_does_not_exist
+        parameters:
           dst: 'C:/Users/vagrant/Documents/testfile'
       - name: deletedfileInfo
         description: 'check if file metadata exists'
-        type: csv_contains_line_matching_regex
+        function: csv_contains_line_matching_regex
         depends_on:
           - RBCmd
-        params:
+        parameters:
           dst: 'C:/Users/vagrant/Documents/test/*.csv'
           entry:
             - !re '.*'

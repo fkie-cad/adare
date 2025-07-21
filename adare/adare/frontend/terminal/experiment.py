@@ -10,11 +10,11 @@ from rich.text import Text
 import numpy as np
 
 # internal imports
-from adarelib.helperfunctions.cli import print_df, print_dict
+from adare.helperfunctions.cli import print_df, print_dict
 from adare.database.api.frontend import DataRetrievalApi
-from adarelib.exceptions import ArgumentsError
+from adare.exceptions import ArgumentsError
 from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, timedelta_to_str, TagsText
-from adarelib.config import TIMESTAMP_FORMAT, StatusEnum
+from adare.config import TIMESTAMP_FORMAT, StatusEnum
 from adare.frontend.terminal.console import TwoTitleRule
 
 import logging

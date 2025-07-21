@@ -1,5 +1,5 @@
 from adare.backend.basics import determine_projectdirectory
-from adarelib.exceptions import NoProjectFoundError
+from adare.exceptions import NoProjectFoundError
 
 # configure logging
 import logging

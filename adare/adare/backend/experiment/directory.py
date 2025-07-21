@@ -3,20 +3,22 @@ from pathlib import Path
 import shutil
 import jinja2
 from datetime import datetime, timezone
-import attrs
+import cattrs
+
 
 # internal imports
+from adarelib.testset.type import TestsetFile
+from adarelib.testset.parser import parse_testsetfile
 from adare.config.configdirectory import TEMPLATES_DIR, EXAMPLES_DIR
-from adarelib.helperfunctions.hash import hash_file_sha256, combine_hashes, hash_dict_sha256
-from adarelib.types.backend import ExperimentMetadata
-from adarelib.types.testset import TestsetFile
+import adare
+from adare.helperfunctions.hash import hash_file_sha256, combine_hashes
+from adare.types.experiment import ExperimentMetadata
 from adare.backend.experiment.exceptions import ExperimentFileCreationError, ExperimentDirectoryCreationError, \
     ExperimentRemovalError, ExperimentFileMissingError
-from adarelib.parsers import parse_metadata_file, parse_testsetfile
+from adare.parsers import parse_metadata_file
 from adare.backend.project.directory import ProjectDirectory
 from adare.backend.directory import Directory
-from adarelib.experimentconfig import ExperimentConfig
-from adarelib.helperfunctions.yaml import dict_to_yaml
+from adare.exceptions import DataStructuringError
 
 # configure logging
 import logging
@@ -51,7 +53,7 @@ class ExperimentRunDirectory(Directory):
 class ExperimentDirectory(Directory):
     path: Path
     img: Path
-    actionfile: Path
+    playbookfile: Path
     testsetfile: Path
     metadatafile: Path
     bibtexfile: Path
@@ -69,28 +71,20 @@ class ExperimentDirectory(Directory):
         self.shared = self.path / 'shared'
         self.shared_tools = self.shared / 'tools'
         self.shared_data = self.shared / 'data'
-        self.actionfile = self.path / 'action.py'
+        self.playbookfile = self.path / 'playbook.yaml'
         self.testsetfile = self.path / 'testset.yml'
         self.metadatafile = self.path / 'metadata.yml'
         self.bibtexfile = self.path / 'bibtext.bib'
         self.markdownfile = self.path / 'details.md'
 
     def __create_experiment_files(self):
-        actionfile_template = TEMPLATES_DIR / 'experiment' / 'action.py'
-        testsetfile_template = TEMPLATES_DIR / 'experiment' / 'testset.yml'
-        metadatafile_template = TEMPLATES_DIR / 'experiment' / 'metadata.yml'
+        # Use YAML-first templates from package directory
+        package_templates_dir = Path(adare.__file__).parent.parent / 'appdata' / 'templates'
+        playbookfile_template = package_templates_dir / 'experiment' / 'playbook.yaml'
+        testsetfile_template = package_templates_dir / 'experiment' / 'testset.yml'
+        metadatafile_template = package_templates_dir / 'experiment' / 'metadata.yml'
 
-        try:
-            with open(self.actionfile, 'w') as f:
-                f.write(jinja2.Template(actionfile_template.read_text()).render(
-                    name=f'{self.experiment.capitalize()}',
-                ))
-        except OSError as e:
-            raise ExperimentFileCreationError(
-                log,
-                message=f'Failed to create action file for experiment {self.experiment}: {e.strerror}'
-            ) from e
-
+        # Create testset configuration (define all tests here)
         try:
             with open(self.testsetfile, 'w') as f:
                 f.write(jinja2.Template(testsetfile_template.read_text()).render(
@@ -101,6 +95,36 @@ class ExperimentDirectory(Directory):
                 log,
                 message=f'Failed to create testset file for experiment {self.experiment}: {e.strerror}'
             ) from e
+
+        # Create YAML playbook file (reference tests from testset)
+        # NOTE: The playbook template must be updated to only reference tests by name/ID, not define them.
+        # For example, it could use: tests: [test1, test2, ...] and the actual definitions are in testset.yml
+        try:
+            # Optionally, parse testset to get test names/IDs to pass to the playbook template
+            try:
+                testset = parse_testsetfile(self.testsetfile)
+            except cattrs.BaseValidationError as e:
+                error_msg = "\n".join(cattrs.transform_error(e))
+                raise DataStructuringError(
+                    log,
+                    message=f'parsing errors while parsing testset file {self.testsetfile}:{error_msg}',
+                    possible_solutions=[
+                        'fix the structure of the testset file',
+                    ]
+                ) from e
+            test_names = [test.name for test in getattr(testset, 'tests', [])] if hasattr(testset, 'tests') else []
+            with open(self.playbookfile, 'w') as f:
+                f.write(jinja2.Template(playbookfile_template.read_text()).render(
+                    name=f'{self.experiment}',
+                    test_names=test_names,
+                ))
+        except OSError as e:
+            raise ExperimentFileCreationError(
+                log,
+                message=f'Failed to create playbook file for experiment {self.experiment}: {e.strerror}'
+            ) from e
+
+        # Create metadata
         try:
             with open(self.metadatafile, 'w') as f:
                 f.write(jinja2.Template(metadatafile_template.read_text()).render(experiment=self.experiment))
@@ -112,17 +136,19 @@ class ExperimentDirectory(Directory):
 
     def create(self, empty: bool = False):
         try:
-            self.path.mkdir()
-            self.img.mkdir()
-            self.shared.mkdir()
-            self.shared_tools.mkdir()
-            self.shared_data.mkdir()
+            self.path.mkdir(parents=True, exist_ok=True)
+            self.img.mkdir(exist_ok=True)
+            self.shared.mkdir(exist_ok=True)
+            self.shared_tools.mkdir(exist_ok=True)
+            self.shared_data.mkdir(exist_ok=True)
         except OSError as e:
             raise ExperimentDirectoryCreationError(
                 log,
                 message=f'Failed to create experiment directory {self.path}: {e.strerror}'
             ) from e
-        self.__create_experiment_files()
+        
+        if not empty:
+            self.__create_experiment_files()
 
     def remove(self) -> bool:
         try:
@@ -140,7 +166,7 @@ class ExperimentDirectory(Directory):
     def check_for_missing_files(self):
         if missing_files := [
             f.name
-            for f in [self.actionfile, self.testsetfile, self.metadatafile]
+            for f in [self.testsetfile, self.metadatafile]
             if not f.exists()
         ]:
             missing_files_str = ','.join(missing_files)
@@ -159,9 +185,7 @@ class ExperimentDirectory(Directory):
     def load_testset(self) -> TestsetFile:
         return parse_testsetfile(self.testsetfile)
 
-    @property
-    def sha256_action(self) -> str:
-        return hash_file_sha256(self.actionfile)
+
 
     @property
     def sha256_testset(self) -> str:
@@ -180,8 +204,12 @@ class ExperimentDirectory(Directory):
         return hash_file_sha256(self.markdownfile) if self.markdownfile.exists() else ''
 
     @property
+    def sha256_playbook(self) -> str:
+        return hash_file_sha256(self.playbookfile)
+
+    @property
     def sha256(self) -> str:
         return combine_hashes([
-            self.sha256_action,
             self.sha256_testset,
+            self.sha256_playbook,
         ])

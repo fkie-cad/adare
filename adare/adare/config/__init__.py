@@ -81,3 +81,13 @@ SCRIPTS_SUFFIX = {
 # WEBAPP
 PORT_WEBAPP = 8000
 
+# maximum time for a breakpoint to be active
+BREAKPOINT_LIMIT_SECONDS = 60*5
+
+
+# Additional constants needed by adarevm
+SHARE_POINT_VM = {
+    'linux': '/adare/',
+    'windows': 'C:/adare/'
+}
+

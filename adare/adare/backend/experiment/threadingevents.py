@@ -1,7 +1,7 @@
 import time
 import threading
 
-from adarelib.types.stage import Stage
+from adare.types.stage import Stage
 from adare.backend.experiment.database import update_stage_in_run
 
 # configure logging

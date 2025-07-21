@@ -4,7 +4,7 @@ import os
 import platform
 
 
-def __get_default_appdata_directory(create_if_missing: bool = False, program_name: str = 'adare') -> Path or None:
+def __get_default_appdata_directory(create_if_missing: bool = False, program_name: str = 'adare') -> Path | None:
     """
     get the default config directory for the tool
 

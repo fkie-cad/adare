@@ -1,0 +1,423 @@
+"""
+Database API for VM management.
+
+This module provides functions for managing VMs in both global and project scopes,
+including loading, validation, and database operations.
+"""
+
+# external imports
+from pathlib import Path
+from typing import List, Optional
+
+# internal imports
+from adare.database.api.base import EnhancedDatabaseApi
+from adare.database.models.experiment import Vm, OsInfo
+from adare.exceptions import LoggedErrorException
+from adare.helperfunctions.file.hash import file_sha256_with_progress
+from adare.helperfunctions.file.validation import validate_tarfile_with_progress
+from adare.config.configdirectory import VMS_DIR
+
+# configure logging
+import logging
+log = logging.getLogger(__name__)
+
+
+class VMNotFoundError(LoggedErrorException):
+    """VM not found in database or filesystem."""
+    pass
+
+
+class VMValidationError(LoggedErrorException):
+    """VM validation failed."""
+    pass
+
+
+class VMLoadError(LoggedErrorException):
+    """Failed to load VM into database."""
+    pass
+
+
+class VMDatabaseApi(EnhancedDatabaseApi):
+    """
+    Database API for VM management operations.
+    
+    Handles both global and project-scoped VMs with validation and loading capabilities.
+    """
+    
+    def __init__(self, db_path: Optional[Path] = None):
+        super().__init__(db_path)
+        # Ensure VM table exists
+        from adare.database.models import Base
+        Base.metadata.create_all(self._engine)
+    
+    def create_osinfo(self, platform: str = '', os: str = '', distribution: str = '', 
+                     version: str = '', language: str = '', architecture: str = 'x86_64') -> OsInfo:
+        """
+        Create a new OSInfo entry in the database.
+        
+        Args:
+            platform: OS platform (windows, linux, etc.)
+            os: OS type
+            distribution: OS distribution
+            version: OS version
+            language: OS language
+            architecture: Architecture (default: x86_64)
+            
+        Returns:
+            Created OSInfo instance
+            
+        Raises:
+            VMLoadError: If OSInfo creation fails
+        """
+        osinfo = OsInfo(
+            platform=platform,
+            os=os,
+            distribution=distribution,
+            version=version,
+            language=language,
+            architecture=architecture
+        )
+        
+        try:
+            with self:
+                self._session.add(osinfo)
+                self._session.commit()
+                self._session.refresh(osinfo)
+                osinfo_id = osinfo.id
+                log.info(f"Successfully created OSInfo (ID: {osinfo_id})")
+                return osinfo
+        except Exception as e:
+            raise VMLoadError(log, f"Failed to create OSInfo: {e}")
+    
+    def create_vm(self, project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '', 
+                  os_platform: str = '', os_type: str = '', os_distribution: str = '', 
+                  os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64', 
+                  silent: bool = False) -> Vm:
+        """
+        Create a new VM entry in the database with file operations.
+        
+        Args:
+            name: Unique name for the VM
+            file_path: Path to the VM file (OVA)
+            description: Optional description
+            os_platform: OS platform (windows, linux, etc.)
+            os_type: OS type 
+            os_distribution: OS distribution
+            os_version: OS version
+            os_language: OS language
+            os_architecture: Architecture (default: x86_64)
+            quiet: If True, suppress progress bars
+            
+        Returns:
+            Created VM instance
+            
+        Raises:
+            ValidationError: If validation fails
+            VMLoadError: If VM creation fails
+        """
+        # Validate and process VM file
+        self.validate_vm_file(file_path, name, quiet=silent)
+        
+        # Copy VM file to storage location
+        target_file_path = self._copy_vm_file(file_path, project_path, name, silent=silent)
+        
+        # Create OsInfo first using the dedicated method
+        osinfo = self.create_osinfo(
+            platform=os_platform,
+            os=os_type,
+            distribution=os_distribution,
+            version=os_version,
+            language=os_language,
+            architecture=os_architecture
+        )
+        
+        # Create VM with OSInfo relationship
+        vm = Vm(
+            name=name,
+            file=str(target_file_path),
+            hash=file_hash,
+            description=description,
+            osinfo_id=osinfo.id
+        )
+        
+        try:
+            with self:
+                self._session.add(vm)
+                self._session.commit()
+                # Refresh to get the VM with its database-generated values
+                self._session.refresh(vm)
+                vm_id = vm.id
+                log.info(f"Successfully created VM '{name}' (ID: {vm_id})")
+                
+            # Return a new instance by querying it back to avoid session issues
+            return self.get_vm_by_name(name)
+        except Exception as e:
+            raise VMLoadError(log, f"Failed to create VM '{name}': {e}")
+    
+    
+    def get_vm_by_name(self, name: str) -> Optional[Vm]:
+        """
+        Get VM by name.
+        
+        Args:
+            name: VM name
+            
+        Returns:
+            VM instance or None if not found
+        """
+        with self:
+            vm = self._session.query(Vm).filter_by(name=name).first()
+            if vm:
+                self._session.expunge(vm)
+            return vm
+    
+    def get_vm_by_hash(self, file_hash: str) -> Optional[Vm]:
+        """
+        Get VM by file hash.
+        
+        Args:
+            file_hash: SHA256 hash of the VM file
+            
+        Returns:
+            VM instance if found, None otherwise
+        """
+        with self:
+            vm = self._session.query(Vm).filter_by(hash=file_hash).first()
+            if vm:
+                self._session.expunge(vm)
+            return vm
+    
+    def get_all_vms(self) -> List[Vm]:
+        """
+        Get all VMs.
+        
+        Returns:
+            List of VM instances
+        """
+        with self:
+            vms = self._session.query(Vm).all()
+            # Expunge objects from session to make them detached
+            for vm in vms:
+                self._session.expunge(vm)
+            return vms
+    
+    def get_available_vms(self) -> List[Vm]:
+        """
+        Get all VMs available for use.
+        
+        Returns:
+            List of available VM instances
+        """
+        with self:
+            vms = self._session.query(Vm).all()
+            # Expunge objects from session to make them detached
+            for vm in vms:
+                self._session.expunge(vm)
+            return vms
+    
+    def delete_vm(self, vm_id: str) -> bool:
+        """
+        Delete VM from database.
+        
+        Args:
+            vm_id: VM ID to delete
+            
+        Returns:
+            True if deleted successfully
+            
+        Raises:
+            VMNotFoundError: If VM not found
+        """
+        with self:
+            vm = self._session.query(Vm).filter_by(id=vm_id).first()
+            if not vm:
+                raise VMNotFoundError(log, f"VM with id {vm_id} not found")
+                
+            self._session.delete(vm)
+            self._session.commit()
+            log.info(f"Successfully deleted VM '{vm.name}' (id: {vm_id})")
+            return True
+    
+    
+    def validate_vm_file(self, file_path: Path, name: str = None, quiet: bool = False) -> dict:
+        """
+        Internal method to validate VM file with progress indication.
+        
+        Args:
+            file_path: Path to VM file
+            name: Optional name for better error messages
+            quiet: If True, suppress progress bars
+            
+        Returns:
+            Dictionary with file_size and file_hash
+            
+        Raises:
+            VMValidationError: If validation fails
+        """
+        if not file_path.exists():
+            raise VMValidationError(log, f"VM file {file_path} does not exist")
+            
+        if not file_path.suffix.lower() == '.ova':
+            raise VMValidationError(log, f"VM file {file_path} is not an OVA file")
+            
+        # Validate OVA format with progress indication
+        if not validate_tarfile_with_progress(
+            file_path=file_path,
+            description=f"Validating OVA format for {file_path.name}",
+            quiet=quiet
+        ):
+            raise VMValidationError(log, f"VM file {file_path} is not a valid OVA file")
+        
+        log.info(f"VM file validation successful: {file_path}")
+    
+    def _calculate_file_hash(self, file_path: Path, quiet: bool = False) -> str:
+        """
+        Calculate SHA256 hash of file with progress indication.
+        
+        Args:
+            file_path: Path to file
+            quiet: If True, suppress progress bar
+            
+        Returns:
+            SHA256 hash string
+        """
+        return file_sha256_with_progress(
+            file_path=file_path,
+            description=f"Calculating hash for {file_path.name}",
+            quiet=quiet
+        )
+    
+    
+    def _copy_vm_file(self, source_path: Path, project_path: Path, name: str, silent: bool = False) -> Path:
+        """
+        Copy VM file to global storage location.
+        
+        Args:
+            source_path: Original VM file path
+            name: VM name
+            quiet: If True, suppress progress indicators
+            
+        Returns:
+            Path to copied VM file
+            
+        Raises:
+            VMLoadError: If file copying fails
+        """
+        try:
+            target_dir = project_path / 'vm'
+            
+            # Generate target filename with VM name
+            target_filename = f"{name}{source_path.suffix}"
+            target_path = target_dir / target_filename
+            
+            # Check if target already exists
+            if target_path.exists():
+                if target_path.samefile(source_path):
+                    # Source and target are the same file, no need to copy
+                    log.info(f"VM file already in target location: {target_path}")
+                    return target_path
+                else:
+                    raise VMLoadError(log, f"Target VM file {target_path} already exists and is different from source {source_path}")
+            
+            log.info(f"Copying VM file to {target_path}")
+            from adare.helperfunctions.file.copy import copy
+            copy(
+                src=source_path,
+                dst=target_path,
+                silent=silent
+            )
+            log.info(f"Successfully copied VM file to {target_path}")
+            
+            return target_path
+            
+        except Exception as e:
+            raise VMLoadError(log, f"Failed to copy VM file: {e}")
+    
+    def suggest_similar_vms(self, vm_name: str, max_suggestions: int = 5):
+        """
+        Get VM suggestions based on name similarity.
+        
+        Args:
+            vm_name: The VM name to find suggestions for
+            max_suggestions: Maximum number of suggestions
+            
+        Returns:
+            List of VMSuggestion objects
+        """
+        from adare.helperfunctions.vm_suggestions import suggest_similar_vm_names
+        
+        # Get all available VMs
+        all_vms = self.get_all_vms()
+        vm_names = [vm.name for vm in all_vms]
+        
+        # Get name-based suggestions
+        suggestions = suggest_similar_vm_names(vm_name, vm_names, max_suggestions)
+        
+        # Fill in additional VM metadata for suggestions
+        vm_lookup = {vm.name: vm for vm in all_vms}
+        for suggestion in suggestions:
+            if suggestion.name in vm_lookup:
+                vm_obj = vm_lookup[suggestion.name]
+                suggestion.description = vm_obj.description
+        
+        return suggestions
+
+
+
+
+def ensure_vm_directories():
+    """
+    Ensure VM storage directories exist.
+    
+    Creates the global VM directory if it doesn't exist.
+    """
+    VMS_DIR.mkdir(parents=True, exist_ok=True)
+    log.info(f"Ensured global VM directory exists: {VMS_DIR}")
+
+
+def load_vm_from_file(project_path: Path, file_path: Path, name: str = None, description: str = '',
+                     os_platform: str = '', os_type: str = '', os_distribution: str = '', 
+                     os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
+                     silent: bool = False) -> Vm:
+    """
+    Load a VM from file into the database.
+    
+    Args:
+        file_path: Path to VM file
+        name: VM name (defaults to filename without extension)
+        description: VM description
+        os_platform: OS platform (windows, linux, etc.)
+        os_type: OS type
+        os_distribution: OS distribution
+        os_version: OS version
+        os_language: OS language
+        os_architecture: Architecture (default: x86_64)
+        silent: If True, suppress progress bars during validation
+        
+    Returns:
+        Created VM instance
+        
+    Raises:
+        VMLoadError: If loading fails
+    """
+    if not name:
+        name = file_path.stem
+        
+    api = VMDatabaseApi()
+    return api.create_vm(
+        project_path=project_path,
+        name=name,
+        file_path=file_path,
+        description=description,
+        os_platform=os_platform,
+        os_type=os_type,
+        os_distribution=os_distribution,
+        os_version=os_version,
+        os_language=os_language,
+        os_architecture=os_architecture,
+        silent=silent
+    )
+
+
+# Convenience alias for backward compatibility
+VmApi = VMDatabaseApi

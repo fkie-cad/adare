@@ -13,7 +13,7 @@ from retry import retry
 from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.vagrantapi.exceptions import VagrantBoxCreationError, VagrantBoxRunError
 from adare.vagrantapi.ctxmanager import VagrantCtxManager
-from adarelib.config import StatusEnum
+from adarelib.constants import StatusEnum
 
 import logging
 log = logging.getLogger(__name__)

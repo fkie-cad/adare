@@ -1,32 +1,44 @@
-import attrs
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 import threading
-from adare.vagrantapi.vagrantbox import VagrantBoxVM
+from typing import Optional, Tuple, Dict
+from adare.virtualbox.api import VirtualBoxVM
 from adare.backend.project.directory import ProjectDirectory
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.backend.wsclient.client import WebSocketClient
 
-@attrs.define
-class ExperimentRunCtx:
+@dataclass
+class ExperimentConfig:
     project_path: Path
     experiment_name: str
     environment_name: str
-    experiment_run_ulid: str = attrs.field(default=None)
-    client: WebSocketClient = attrs.field(default=None)
-    box: VagrantBoxVM = attrs.field(default=None)
-    project_directory: ProjectDirectory = attrs.field(default=None)
-    experiment_directory: ExperimentDirectory = attrs.field(default=None)
-    environment_file: Path = attrs.field(default=None)
-    environment_ulid: str = attrs.field(default=None)
-    guest_platform: str = attrs.field(default=None)
-    experiment_run_directory: ExperimentRunDirectory = attrs.field(default=None)
-    vm_name: str = attrs.field(default=None)
-    timestamp_start: datetime = attrs.field(default=None)
-    timestamp_before_box_start: datetime = attrs.field(default=None)
-    timestamp_end: datetime = attrs.field(default=None)
-    vagrantbox_download_required: bool = attrs.field(default=None)
-    vagrantfile: VagrantFile = attrs.field(default=None)
-    stop_event: threading.Event = attrs.field(default=threading.Event())
-    lock: threading.Lock = attrs.field(default=threading.Lock())
+    disable_printing: bool = False
+    test_mode: bool = False
+    vm_cpus: int = 4
+    vm_memory: int = 4096
+    vm_resolution: Tuple[int, int] = (1920, 1080)
+    websocket_port: int = 18765
+    shared_directories: Dict[str, Dict[str, Path]] = field(default_factory=dict)
+
+@dataclass
+class ExperimentRunCtx:
+    config: ExperimentConfig
+    experiment_run_ulid: Optional[str] = None
+    client: Optional[WebSocketClient] = None
+    adarevm: Optional[Path] = None
+    vm: Optional[VirtualBoxVM] = None
+    vm_file: Optional[Path] = None
+    project_directory: Optional[ProjectDirectory] = None
+    experiment_directory: Optional[ExperimentDirectory] = None
+    environment_file: Optional[Path] = None
+    environment_ulid: Optional[str] = None
+    guest_platform: Optional[str] = None
+    experiment_run_directory: Optional[ExperimentRunDirectory] = None
+    vm_name: Optional[str] = None
+    timestamp_start: Optional[datetime] = None
+    timestamp_before_box_start: Optional[datetime] = None
+    timestamp_end: Optional[datetime] = None
+    stop_event: threading.Event = field(default_factory=threading.Event)
+    lock: threading.Lock = field(default_factory=threading.Lock)

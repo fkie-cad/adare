@@ -4,10 +4,10 @@ import shutil
 
 # internal imports
 from adare.config.configdirectory import ADARE_DIR, APPDATA_DIR
-from adarelib.helperfunctions.web.download import download
+from adare.helperfunctions.web.download import download
 from adare.backend.project.exceptions import ProjectDirectoryCreationError, ProjectDirectoryRemovalError, ProjectDirectoryCopyError
 from adare.backend.directory import Directory
-from adarelib.helperfunctions.hash import hash_file_sha256, combine_hashes
+from adare.helperfunctions.hash import hash_file_sha256, combine_hashes
 
 # configure logging
 import logging
@@ -15,30 +15,44 @@ log = logging.getLogger(__name__)
 
 
 class ProjectDirectory(Directory):
-    path: Path
-    tessdata: Path
-    environments: Path
-    experiments: Path
-    testfunctions: Path
-    shared: Path
-    shared_tools: Path
-    shared_data: Path
-    adare: Path
-    adarevm: Path
-    run: Path
-
     def __init__(self, path: Path):
         super().__init__(path)
-        self.environments = path / 'environments'
-        self.experiments = path / 'experiments'
-        self.testfunctions = path / 'testfunctions'
-        self.shared = path / 'shared'
-        self.shared_tools = self.shared / 'tools'
-        self.shared_data = self.shared / 'data'
-        self.adare = path / 'adare'
-        self.adarevm = self.adare / 'adarevm'
-        self.tessdata = path / 'tessdata'
-        self.run = path / 'run'
+
+    @property
+    def environments(self) -> Path:
+        return self.path / 'environments'
+
+    @property
+    def experiments(self) -> Path:
+        return self.path / 'experiments'
+
+    @property
+    def testfunctions(self) -> Path:
+        return self.path / 'testfunctions'
+
+    @property
+    def shared(self) -> Path:
+        return self.path / 'shared'
+
+    @property
+    def shared_tools(self) -> Path:
+        return self.shared / 'tools'
+
+    @property
+    def shared_data(self) -> Path:
+        return self.shared / 'data'
+
+    @property
+    def adarevm(self) -> Path:
+        return self.path / 'adarevm'
+    
+    @property
+    def vm(self) -> Path:
+        return self.path / 'vm'
+    
+    @property
+    def run(self) -> Path:
+        return self.path / 'run'
 
     def create(self):
         try:
@@ -77,7 +91,7 @@ class ProjectDirectory(Directory):
         # check if all paths exist
         return all(
             [self.path.exists(), self.environments.exists(), self.experiments.exists(), self.testfunctions.exists(),
-             self.shared.exists(), self.adare.exists(), self.tessdata.exists(), self.run.exists()])
+             self.shared.exists(), self.adarevm.exists(), self.vm.exists(), self.run.exists()])
 
     def _create_project_directories(self):
         self.path.mkdir()
@@ -87,21 +101,10 @@ class ProjectDirectory(Directory):
         self.shared.mkdir()
         self.shared_tools.mkdir()
         self.shared_data.mkdir()
-        self.adare.mkdir()
-        self.tessdata.mkdir()
+        self.adarevm.mkdir()
+        self.vm.mkdir()
         self.run.mkdir()
 
-    def download_tessdata(self, abbreviation: str):
-        log.info('download tessdata training data for text recognition in gui automation')
-        tessdata_github_link = fr'https://github.com/tesseract-ocr/tessdata/blob/main/{abbreviation}.traineddata?raw=true'
-        tessdata_file = self.tessdata / f'{abbreviation}.traineddata'
-        if tessdata_file.exists():
-            log.info(
-                'tessdata training data for text recognition in gui automation already exists in project directory'
-            )
-            return
-        download(tessdata_github_link, tessdata_file, quiet=True)
-        log.info('download of tessdata training data for text recognition in gui automation was successful')
 
     def download_tool(self, url: str, zipped: bool):
         log.info('download tool from url into shared tools directory')
@@ -117,18 +120,33 @@ class ProjectDirectory(Directory):
         log.info('download of tool was successful')
 
 
-    def copy_adare_to_adare_dir(self):
+    def copy_adarevm_to_adare_dir(self):
         try:
-            shutil.copytree(ADARE_DIR.as_posix(), self.adare, dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.pyc', '__pycache__'))
+            adarevm = ADARE_DIR / 'adarevm'
+            from adare.helperfunctions.file.copy import copytree_with_progress
+            from shutil import ignore_patterns
+            copytree_with_progress(
+                src=adarevm,
+                dst=self.adarevm,
+                preserve_metadata=True,
+                dirs_exist_ok=True,
+                ignore=ignore_patterns('*.pyc', '__pycache__')
+            )
         except OSError as e:
             raise ProjectDirectoryCopyError(
                 log,
-                message=f'adare directory ([i]{ADARE_DIR}[/i]) could not be copied to project directory ({self.adare}): {e.strerror}',
+                message=f'adare directory ([i]{adarevm}[/i]) could not be copied to project directory ({self.adarevm}): {e.strerror}',
             ) from e
 
     def copy_standard_testfunction(self):
         try:
-            shutil.copytree(APPDATA_DIR/'testfunctions'/'standard', self.testfunctions/'standard')
+            from adare.helperfunctions.file.copy import copytree_with_progress
+            copytree_with_progress(
+                src=APPDATA_DIR/'testfunctions'/'standard',
+                dst=self.testfunctions/'standard',
+                preserve_metadata=True,
+                dirs_exist_ok=True,
+            )
         except OSError as e:
             raise ProjectDirectoryCopyError(
                 log,

@@ -46,21 +46,21 @@ class ProjectDbApi(DatabaseApi):
         self._expunge_all()
         return projects
 
-    def get_project(self, name: str) -> Project or None:
+    def get_project(self, name: str) -> Project | None:
         project = self._session.query(Project).filter(Project.name == name).first()
         if not project:
             log.error(f"Project '{name}' not found in database")
             return None
         return project
 
-    def get_project_by_path(self, path: Path) -> Project or None:
+    def get_project_by_path(self, path: Path) -> Project | None:
         project = self._session.query(Project).filter(Project.path == path.as_posix()).first()
         if not project:
             log.error(f"Project with path '{path}' not found in database")
             return None
         return project
 
-    def get_environment(self, name: str, project_name: str) -> Environment or None:
+    def get_environment(self, name: str, project_name: str) -> Environment | None:
         project = self._session.query(Project).filter(Project.name == project_name).first()
         if not project:
             raise sqlalchemy.orm.exc.NoResultFound(f"Project '{project_name}' not found in database")

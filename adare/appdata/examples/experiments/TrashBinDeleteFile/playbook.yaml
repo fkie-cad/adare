@@ -1,0 +1,141 @@
+# TrashBinDeleteFile Experiment - Pure YAML Automation
+# This playbook demonstrates complete GUI automation without Python code
+
+settings:
+  # Default pause between actions
+  idle: 1.0
+  # Overall timeout for the experiment
+  timeout: 300
+
+# Variables that can be used throughout the playbook
+variables:
+  test_file_path: "C:/Users/vagrant/Documents/testfile"
+  documents_path: "C:/Users/vagrant/Documents"
+
+actions:
+  # Step 1: Take initial screenshot for debugging
+  - screenshot:
+      description: "Take initial desktop screenshot"
+  
+  # Step 2: Open File Explorer
+  - click:
+      target:
+        image: "files.png"
+      description: "Click File Explorer icon in taskbar"
+  
+  # Step 3: Wait for File Explorer to open
+  - idle:
+      duration: 2.0
+      description: "Wait for File Explorer to load"
+  
+  # Step 4: Navigate to Documents folder
+  - click:
+      target:
+        image: "documents.png"
+      description: "Click Documents folder in sidebar"
+  
+  # Step 5: Wait for Documents folder to load
+  - idle:
+      duration: 2.0
+      description: "Wait for Documents folder to load"
+  
+  # Step 6: Take screenshot of Documents folder
+  - screenshot:
+      description: "Screenshot Documents folder before deletion"
+  
+  # Step 7: Find and select the test file
+  - click:
+      target:
+        image: "testfile.png"
+      description: "Select the test file"
+  
+  # Step 8: Wait to ensure file is selected
+  - idle:
+      duration: 1.0
+      description: "Wait for file selection"
+  
+  # Step 9: Record deletion timestamp and delete file
+  - block:
+      description: "Delete file and record timestamp"
+      actions:
+        # Save current timestamp for forensic validation
+        - command:
+            name: "SaveTimestamp"
+            description: "Save deletion timestamp"
+            action: "set_variable"
+            params:
+              name: "TIMESTAMP.DELETIONDATE"
+              value: "{{ current_timestamp }}"
+        
+        # Delete the file using DELETE key
+        - keyboard:
+            combination: ["delete"]
+            description: "Delete the selected file"
+  
+  # Step 10: Wait for deletion to complete
+  - idle:
+      duration: 1.0
+      description: "Wait for file deletion"
+  
+  # Step 11: Handle potential confirmation dialog
+  - block:
+      description: "Handle delete confirmation if shown"
+      when:
+        - exists:
+            text: "Are you sure"
+      actions:
+        - click:
+            target:
+              text: "Yes"
+            description: "Confirm deletion"
+        - idle:
+            duration: 1.0
+            description: "Wait for confirmation"
+  
+  # Step 12: Verify file is no longer visible
+  - block:
+      description: "Verify file no longer appears in folder"
+      when:
+        - not_exists:
+            image: "testfile.png"
+      actions:
+        - screenshot:
+            description: "Screenshot showing file deleted"
+  
+  # Step 13: Close File Explorer (optional)
+  - keyboard:
+      combination: ["alt", "f4"]
+      description: "Close File Explorer"
+  
+  # Step 14: Take final screenshot
+  - screenshot:
+      description: "Take final desktop screenshot"
+
+# Optional: Error handling and recovery
+error_handling:
+  # If File Explorer doesn't open
+  - when:
+      - not_exists:
+          image: "documents.png"
+    action:
+      - keyboard:
+          combination: ["win", "e"]
+          description: "Try Windows+E to open File Explorer"
+  
+  # If file is not found
+  - when:
+      - not_exists:
+          image: "testfile.png"
+    action:
+      - screenshot:
+          description: "File not found - take screenshot for debugging"
+
+# Post-execution commands for forensic analysis
+post_actions:
+  # These will be executed automatically after GUI actions
+  - description: "Run forensic analysis tools"
+    commands:
+      - name: "RBCmd"
+        description: "Analyze recycle bin"
+        tool: "RBCmd.exe"
+        command: "RBCmd.exe -d C:\\ --csv C:/Users/vagrant/Documents/test"

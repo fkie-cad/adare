@@ -1,5 +1,6 @@
 # internal imports
-from adarelib.exceptions import LoggedException, LoggedErrorException
+from adare.exceptions import LoggedException, LoggedErrorException
+import logging
 
 
 class ExperimentFileCreationError(LoggedErrorException):
@@ -23,10 +24,6 @@ class ExperimentDirectoryDoesNotExistError(LoggedErrorException):
 
 
 class ExperimentFileMissingError(LoggedErrorException):
-    pass
-
-
-class VagrantBoxMissingError(LoggedErrorException):
     pass
 
 
@@ -56,3 +53,9 @@ class ExperimentAlreadyExistsError(LoggedErrorException):
 
 class ExperimentNotChanged(LoggedException):
     pass
+
+
+class ExperimentCommandError(LoggedErrorException):
+    def __init__(self, log: logging.Logger, command: str, exit_code: int, stdout: str = '', stderr: str = ''):
+        msg = f'Command "{command}" failed with exit code {exit_code}.\nstdout: {stdout}\nstderr: {stderr}'
+        super().__init__(log, msg)

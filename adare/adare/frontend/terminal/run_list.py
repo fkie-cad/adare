@@ -7,7 +7,7 @@ from rich.table import Table
 # internal imports
 from adare.database.api.frontend import DataRetrievalApi
 from adare.frontend.terminal.console import DefaultConsole, timedelta_to_str
-from adarelib.config import StatusEnum
+from adarelib.constants import StatusEnum
 
 import logging
 log = logging.getLogger(__name__)

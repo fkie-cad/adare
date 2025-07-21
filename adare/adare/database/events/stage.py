@@ -1,7 +1,7 @@
 from adare.database.models.experiment import StageInRun, Stage
 from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
 from adare.frontend.terminal.textualize.experiment_flow_console_widget import flowwidgetmanager, ExperimentRunFlowConsoleWidget
-from adarelib.config import StatusEnum
+from adarelib.constants import StatusEnum
 
 from sqlalchemy import event
 from sqlalchemy.orm import Session

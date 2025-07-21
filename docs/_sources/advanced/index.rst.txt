@@ -8,4 +8,5 @@ Advanced
    :caption: Contents:
 
    testfunction
+   actionfile_methods
    vagrantboxcreation

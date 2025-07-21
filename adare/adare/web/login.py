@@ -9,11 +9,11 @@ import secrets
 import datetime
 import webbrowser
 
-from adarelib.helperfunctions.port import is_localhost_port_free
+from adare.helperfunctions.port import is_localhost_port_free
 from adare.config.server import GITEA_URL, GITEA_CLIENT_ID, PORT_OAUTH2_REDIRECT, WEBSERVER_URL
 from adare.web.exceptions import LoginFailedError, AlreadyLoggedIn, NoUserLoggedIn
 from adare.database.api.usersession import UserSessionApi
-from adarelib.console import console_print, log_print
+from adare.console import console_print, log_print
 
 import logging
 

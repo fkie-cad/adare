@@ -4,7 +4,7 @@ import requests
 import adare.config.server as config_server
 from adare.webappaccess.exceptions import NotLoggedInError, ExperimentWithNameAlreadyExistsError, DownloadError, MissingDataError
 from adare.webappaccess.login import WebappLogin
-from adarelib.helperfunctions.web.download import download_from_session
+from adare.helperfunctions.web.download import download_from_session
 from adare.database.api.experiment import ExperimentApi
 
 # configure logging

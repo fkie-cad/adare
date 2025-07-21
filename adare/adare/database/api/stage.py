@@ -1,13 +1,12 @@
 # external imports
 import sqlalchemy
-from sqlalchemy.orm import sessionmaker
 from pathlib import Path
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.models.experiment import Stage, StageInRun, Base as ExperimentBase
+from adare.database.models.experiment import Stage as StageModel, StageInRun as StageInRunModel, Base as ExperimentBase
 from adare.database.api.database import DatabaseApi
-from adarelib.types.stage import Stage as StageType
+from adare.types.stages import Stage
 
 # configure logging
 import logging
@@ -19,12 +18,13 @@ class StageDbApi(DatabaseApi):
         super().__init__(db_path)
         ExperimentBase.metadata.create_all(self.engine)
 
-    def update_stage_in_run(self, stage: StageType, run_id: str, stage_id: int = -1) -> int:
-        if not (stage_db := self._session.query(Stage).filter(Stage.name == stage.name).first()):
+    def update_stage_in_run(self, stage: Stage, run_id: str, stage_id: str) -> int:
+        if not (stage_db := self._session.query(StageModel).filter(StageModel.name == stage.name).first()):
             raise sqlalchemy.orm.exc.NoResultFound(f"Stage '{stage.name}' not found in database")
+    
+        stage_in_run = self._session.query(StageInRunModel).filter(StageInRunModel.stage_id == stage_db.id).filter(StageInRunModel.run_id == run_id).filter(StageInRunModel.id == stage_id).first()
 
-        if stage_id != -1:
-            stage_in_run = self._session.query(StageInRun).filter(StageInRun.stage_id == stage_db.id).filter(StageInRun.run_id == run_id).filter(StageInRun.id == stage_id).first()
+        if stage_in_run:
             if stage.start_time:
                 stage_in_run.start_time = stage.start_time
             if stage.end_time:
@@ -32,7 +32,8 @@ class StageDbApi(DatabaseApi):
             if stage.status:
                 stage_in_run.status = stage.status
         else:
-            stage_in_run = StageInRun(
+            stage_in_run = StageInRunModel(
+                id=stage_id,
                 stage_id=stage_db.id,
                 run_id=run_id,
                 start_time=stage.start_time,
@@ -44,8 +45,8 @@ class StageDbApi(DatabaseApi):
         self._session.commit()
         return stage_in_run.id
 
-    def get_stages(self) -> list[Stage]:
-        stages = self._session.query(Stage).all()
+    def get_stages(self) -> list[StageModel]:
+        stages = self._session.query(StageModel).all()
         self._expunge_multiple(stages)
         return stages
 

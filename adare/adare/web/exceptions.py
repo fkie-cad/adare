@@ -1,4 +1,4 @@
-from adarelib.exceptions import LoggedException, LoggedErrorException
+from adare.exceptions import LoggedException, LoggedErrorException
 
 
 class LoginFailedError(LoggedErrorException):

@@ -1,5 +1,5 @@
 from adare.backend.basics import determine_projectdirectory
-from adarelib.exceptions import NoProjectFoundError
+from adare.exceptions import NoProjectFoundError
 
 # configure logging
 import logging
@@ -24,10 +24,18 @@ def exec_environment_example(arguments):
 
 def exec_environment_create(arguments):
     from adare.backend.environment.commands import environment_create
+    from pathlib import Path
+    
     project_directory = determine_projectdirectory(arguments.project)
     if not project_directory:
-        raise NoProjectFoundError(log, message='project directory not found')
-    environment_create(project_directory, arguments.name)
+        raise NoProjectFoundError(log, specified_project=getattr(arguments, 'project', None))
+    
+    # Handle --with-vm option
+    vm_path = None
+    if hasattr(arguments, 'with_vm') and arguments.with_vm:
+        vm_path = Path(arguments.with_vm)
+    
+    environment_create(project_directory, arguments.name, vm_path=vm_path)
 
 
 def exec_environment_delete(arguments):
