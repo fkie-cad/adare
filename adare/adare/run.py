@@ -195,14 +195,16 @@ def load(experiment, environment, force, project):
 @click.argument('experiment')
 @click.option('-e', '--environment', required=True, help='Name of the environment')
 @click.option('--test', '-t', is_flag=True, help='Run the experiment in test mode - delete results afterwards and do not block changes')
+@click.option('--debug-screenshots', is_flag=True, help='Save screenshots to experiment run directory for debugging')
 @click.option('--project', '-p', help='Name of the project')
 @click.pass_context
-def run(ctx, experiment, environment, test, project):
+def run(ctx, experiment, environment, test, debug_screenshots, project):
     """Run an experiment in a given environment."""
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
         test=test,
+        debug_screenshots=debug_screenshots,
         project=project,
         verbose=ctx.obj.verbose,
         very_verbose=ctx.obj.very_verbose

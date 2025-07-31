@@ -5,7 +5,7 @@ import cattrs
 from datetime import datetime
 import ulid
 
-from adarelib.constants import StatusEnum
+from adarelib.constants import StatusEnum, TIMESTAMP_FORMAT
 
 # configure logging
 import logging
@@ -28,7 +28,7 @@ class Event:
 #     name: str
 #     description: str
 #     category: str = 'action'
-#     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(config.TIMESTAMP_FORMAT)))
+#     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
 #     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
 #     status: int = StatusEnum.RUNNING
 #     error: str = ''
@@ -42,7 +42,7 @@ class CommandEvent(Event):
     category: str = 'command'
     returncode: int = -1
     stdout: str = ''
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(config.TIMESTAMP_FORMAT)))
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
     status: int = StatusEnum.RUNNING
     error: str = ''
@@ -61,7 +61,7 @@ class TestEvent(Event):
     test_name: str
     result: Optional[TestResult] = None
     category: str = 'test'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(config.TIMESTAMP_FORMAT)))
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
     status: int = StatusEnum.RUNNING
     error: str = ''
@@ -73,7 +73,7 @@ class TestEvent(Event):
 class ErrorEvent(Event):
     error_name: str
     category: str = 'error'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(config.TIMESTAMP_FORMAT)))
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
     status: int = StatusEnum.NONE
     error: str = ''
@@ -93,7 +93,7 @@ class GuiFindEvent(GuiEvent):
     objective: str
     success: int = -1
     category: str = 'gui:find'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(config.TIMESTAMP_FORMAT)))
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
     status: int = StatusEnum.RUNNING
     error: str = ''
@@ -110,7 +110,7 @@ class GuiClickEvent(GuiEvent):
     modifiers: list[str]
     target: str
     category: str = 'gui:click'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(config.TIMESTAMP_FORMAT)))
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
     status: int = StatusEnum.RUNNING
     error: str = ''
@@ -122,7 +122,7 @@ class GuiClickEvent(GuiEvent):
 class GuiKeypressEvent(GuiEvent):
     keys: list[str]
     category: str = 'gui:keypress'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(config.TIMESTAMP_FORMAT)))
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
     status: int = StatusEnum.RUNNING
     error: str = ''
@@ -134,7 +134,7 @@ class GuiKeypressEvent(GuiEvent):
 class GuiIdleEvent(GuiEvent):
     seconds: int
     category: str = 'gui:idle'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(config.TIMESTAMP_FORMAT)))
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
     status: int = StatusEnum.RUNNING
     error: str = ''
@@ -147,7 +147,7 @@ class GuiDragAndDropEvent(GuiEvent):
     source: str
     target: str
     category: str = 'gui:draganddrop'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(config.TIMESTAMP_FORMAT)))
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
     status: int = StatusEnum.RUNNING
     error: str = ''

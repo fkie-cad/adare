@@ -63,7 +63,7 @@ actions:
             name: "SaveTimestamp"
             description: "Save deletion timestamp"
             action: "set_variable"
-            params:
+            parameter:
               name: "TIMESTAMP.DELETIONDATE"
               value: "{{ current_timestamp }}"
         

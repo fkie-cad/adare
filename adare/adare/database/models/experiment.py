@@ -640,6 +640,7 @@ class Experiment(SerializerMixin, Base):
 
     tags = relationship(Tag, secondary=mapping_experiment_tag)
     abstract_tests = relationship(AbstractTest, secondary=mapping_experiment_abstracttest, backref='experiments')
+    playbook = relationship("Playbook", back_populates="experiment", uselist=False, cascade="all, delete-orphan")
 
     playbook_file = Column(String, nullable=True)
     testset_file = Column(String, nullable=True)

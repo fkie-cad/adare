@@ -41,45 +41,6 @@ class Testset:
             raise TestsetExecutionError(log, 'testset contains tests that are not supported by the testfunction collection')
 
         self.log_func = log_func
-        self.executed_commands = []
-
-    def execute_command(self, command_name: str):
-        available_commands = [com.name for com in self.testsetfile.commands]
-        if command_name not in available_commands:
-            raise TestsetExecutionError(log, f'command {command_name} is not available')
-        # retrieve the command from the testsetfile
-        command = next(com for com in self.testsetfile.commands if com.name == command_name)
-
-        with EventCtxManager(
-                CommandEvent(
-                    name=command_name, command=command.command, status=StatusEnum.RUNNING,
-                ),
-                self.log_func
-        ) as event_ctx:
-            toolpath = command.command.split(' ')[0]
-            toolpath = f'{toolpath}'
-            command_path = f'{command.command}'
-            if not shutil.which(toolpath):
-                log.error(f'tool with path {toolpath} does NOT exist')
-                event_ctx.update(
-                    CommandEvent(
-                        name=command_name, command=command.command, status=StatusEnum.FAILED,
-                        error=f'tool with path {toolpath} does NOT exist'
-                    )
-                )
-                raise TestsetExecutionError(log, f'tool with path {toolpath} does NOT exist')
-
-            ret = execute_on_shell(command_path.split(" "))
-            event_ctx.update(
-                CommandEvent(
-                    name=command_name, command=command.command, status=StatusEnum.FINISHED,
-                    returncode=ret['returncode'], stdout=ret['stdout']
-                )
-            )
-            self.executed_commands.append(command_name)
-
-    def __check_if_command_already_executed(self, command_name: str) -> bool:
-        return any(event.name == command_name for event in self.executed_commands)
 
     def test(self, name: str, variables: dict):
         if name not in self.tests:
@@ -87,11 +48,6 @@ class Testset:
             raise TestsetExecutionError(log, f'test with name {name} does NOT exist')
         test = self.tests[name]
 
-        test_in_testsetfile = next(t for t in self.testsetfile.tests if t.name == name)
-        if test_in_testsetfile.depends_on:
-            for dependency in test_in_testsetfile.depends_on:
-                if not self.__check_if_command_already_executed(dependency):
-                    self.execute_command(dependency)
         test.variables = variables
         with EventCtxManager(
                 TestEvent(

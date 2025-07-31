@@ -7,7 +7,8 @@ from adare.virtualbox.api import VirtualBoxVM
 from adare.backend.project.directory import ProjectDirectory
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 from adare.vagrantapi.vagrantfile import VagrantFile
-from adare.backend.wsclient.client import WebSocketClient
+from adare.backend.experiment.websocket_client import AdareVMClient
+from adare.backend.experiment.mcp_server_manager import MCPServerManager
 
 @dataclass
 class ExperimentConfig:
@@ -26,7 +27,6 @@ class ExperimentConfig:
 class ExperimentRunCtx:
     config: ExperimentConfig
     experiment_run_ulid: Optional[str] = None
-    client: Optional[WebSocketClient] = None
     adarevm: Optional[Path] = None
     vm: Optional[VirtualBoxVM] = None
     vm_file: Optional[Path] = None
@@ -37,8 +37,11 @@ class ExperimentRunCtx:
     guest_platform: Optional[str] = None
     experiment_run_directory: Optional[ExperimentRunDirectory] = None
     vm_name: Optional[str] = None
+    client: Optional[AdareVMClient] = None
     timestamp_start: Optional[datetime] = None
     timestamp_before_box_start: Optional[datetime] = None
     timestamp_end: Optional[datetime] = None
     stop_event: threading.Event = field(default_factory=threading.Event)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    mcp_server: Optional[MCPServerManager] = None
+    debug_screenshots: bool = False

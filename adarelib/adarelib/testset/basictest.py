@@ -84,7 +84,7 @@ class BasicTest:
     testdescription: ClassVar[str] = ''
 
     name: str
-    params: Parameter
+    parameter: Parameter
     description: Optional[str]
     variables: Optional[dict]
 

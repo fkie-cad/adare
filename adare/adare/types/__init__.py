@@ -53,13 +53,10 @@ from .playbook import (
     BlockAction,
     ExistsCondition,
     NotExistsCondition,
-    parse_config,
+    parse_playbook,
 )
 
 from .stages import *
-
-# WebSocket types (moved from adare)
-from .ws import *
 
 __all__ = [
     # Environment types
@@ -103,5 +100,5 @@ __all__ = [
     'BlockAction',
     'ExistsCondition',
     'NotExistsCondition',
-    'parse_config',
+    'parse_playbook',
 ]

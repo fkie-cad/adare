@@ -1,5 +1,8 @@
 from enum import IntEnum
 
+# timestamp format
+TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%f'
+
 class StatusEnum(IntEnum):
     NONE = 1
     SUCCESS = 2

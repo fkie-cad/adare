@@ -16,7 +16,7 @@ import base64
 import zipfile
 import io
 
-from adare.types.websocket import (
+from adarelib.websocket.protocol import (
     parse_message, create_tool_call, create_tool_result, create_event,
     MessageType, EventType, ToolRegistry, 
     ToolCallMessage, ToolResultMessage, EventMessage
@@ -38,8 +38,8 @@ class AdareVMClient:
     and receiving real-time events and results.
     """
     
-    def __init__(self, server_url: str = "ws://localhost:13108"):
-        self.server_url = server_url
+    def __init__(self, host: str = 'localhost', port: int = 18765):
+        self.server_url = f'ws://{host}:{port}'
         self.websocket: Optional[websockets.WebSocketClientProtocol] = None
         self.connected = False
         
@@ -337,9 +337,18 @@ class AdareVMClient:
         """List available tests."""
         return await self.call_tool(ToolRegistry.LIST_TESTS)
     
-    async def execute_command(self, command_name: str) -> Dict[str, Any]:
-        """Execute a predefined command."""
-        return await self.call_tool(ToolRegistry.EXECUTE_COMMAND, {"command_name": command_name})
+    async def execute_shell(self, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False) -> Dict[str, Any]:
+        """Execute a raw shell command with advanced options."""
+        params = {"shell_command": shell_command}
+        if cwd is not None:
+            params["cwd"] = cwd
+        if env is not None:
+            params["env"] = env
+        if timeout is not None:
+            params["timeout"] = timeout
+        if shell is not None:
+            params["shell"] = shell
+        return await self.call_tool(ToolRegistry.EXECUTE_SHELL, params)
     
     async def get_status(self) -> Dict[str, Any]:
         """Get current server status."""
@@ -378,19 +387,3 @@ class AdareVMClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         await self.disconnect()
-
-
-# Convenience function for creating a client
-async def create_client(server_url: str = "ws://localhost:13108") -> AdareVMClient:
-    """
-    Create and connect an AdareVM client.
-    
-    Args:
-        server_url: WebSocket server URL
-        
-    Returns:
-        Connected client instance
-    """
-    client = AdareVMClient(server_url)
-    await client.connect()
-    return client

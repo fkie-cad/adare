@@ -4,18 +4,18 @@ log = logging.getLogger(__name__)
 
 
 
-def __setup_logging():
-    import platform
-    if platform.system() == "Windows":
-        logfile = 'C:/adare/run/adarevm.log'
-    else:
-        logfile = '/adare/run/adarevm.log'
+def __setup_logging(logfile: str = None):
+    if not logfile:
+        import platform
+        if platform.system() == "Windows":
+            logfile = 'C:/adare/run/adarevm.log'
+        else:
+            logfile = '/adare/run/adarevm.log'
     logging.basicConfig(
         filename=logfile,
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     )
-
 
 async def main():
     from adarevm.core.server import AdareVMServer
@@ -33,6 +33,8 @@ async def main():
         log.info("Server shut down successfully.")
 
 
-if __name__ == "__main__":
-    __setup_logging()
+def run():
+    import sys
+    logfile = sys.argv[1] if len(sys.argv) > 1 else None
+    __setup_logging(logfile=logfile)
     asyncio.run(main())

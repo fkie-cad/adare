@@ -12,9 +12,11 @@ pyautogui = "^0.9.54"
 websockets = "^15.0"
 cattrs = "^23.2.3"
 attrs = "^24.0.0"
+python-dateutil = "^2.9.0.post0"
+python-ulid = "^2.7.0"
 
 [tool.poetry.scripts]
-adarevm = "adarevm.core.server:main"
+adarevm = "adarevm.main:run"
 
 [build-system]
 requires = ["poetry-core"]

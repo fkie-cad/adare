@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "adare-mcp-server"
+version = "0.1.0"
+description = "MCP server for computer vision and OCR capabilities for Adare"
+authors = ["miqsoft <mksaxhandball@gmail.com>"]
+readme = "README.md"
+packages = [{include = "adare_mcp_server"}]
+
+[tool.poetry.scripts]
+adare-mcp-server = "adare_mcp_server.server:main"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastmcp = "^2.9.2"
+click = "^8.1.7"
+opencv-python = "^4.10.0"
+paddleocr = "^2.8.1"
+paddlepaddle = { version = "3.0.0", source = "paddlepaddle" }
+numpy = "^1.26.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+black = "^24.0.0"
+ruff = "^0.5.0"
+
+[[tool.poetry.source]]
+name = "paddlepaddle"
+url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
+priority = "explicit"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
