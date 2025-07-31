@@ -8,6 +8,8 @@ from pathlib import Path
 @attrs.define
 class Settings:
     idle: float
+    timeout: Optional[float] = None
+    screenshot: Optional[dict] = None
 
 @attrs.define
 class Target:
@@ -77,8 +79,11 @@ class ActionTestAction:
 
 @attrs.define
 class CommandAction:
-    command: str
+    name: Optional[str] = None
     description: str = ''
+    cmd: Optional[str] = None
+    command: Optional[str] = None
+    tool: Optional[str] = None
     cwd: Optional[str] = None
     env: Optional[dict] = None
     timeout: Optional[float] = None
@@ -91,6 +96,12 @@ class ScreenshotAction:
     y: Optional[int] = None
     width: Optional[int] = None
     height: Optional[int] = None
+
+@attrs.define
+class SaveTimestampAction:
+    variable: str
+    description: str = ''
+
 
 @attrs.define  
 class ActionResult:
@@ -108,15 +119,16 @@ class BlockAction:
 ActionType = Union[
     ClickAction, RightClickAction, DoubleClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, ActionTestAction, 
-    CommandAction, ScreenshotAction, BlockAction
+    CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction
 ]
 
 @attrs.define
 class Config:
     settings: Settings
     actions: List[ActionType]
+    variables: Optional[dict] = None
 
-def parse_config(yaml_path: Union[str, Path]) -> Config:  # Accept Path or str
+def parse_playbook(yaml_path: Union[str, Path]) -> Config:  # Accept Path or str
     yaml_path = Path(yaml_path)  # Ensure it's a Path object
     with yaml_path.open('r') as f:
         data = yaml.safe_load(f)
@@ -152,11 +164,18 @@ def _structure_action(obj, converter):
     if 'block' in obj:
         return converter.structure(obj['block'], BlockAction)
     if 'test' in obj:
-        return converter.structure(obj['test'], ActionTestAction)
+        if isinstance(obj['test'], str):
+            # Handle inline test format: - test: testname
+            return ActionTestAction(name=obj['test'])
+        else:
+            # Handle full test format with description
+            return converter.structure(obj['test'], ActionTestAction)
     if 'command' in obj:
         return converter.structure(obj['command'], CommandAction)
     if 'screenshot' in obj:
         return converter.structure(obj['screenshot'], ScreenshotAction)
+    if 'save_timestamp' in obj:
+        return converter.structure(obj['save_timestamp'], SaveTimestampAction)
     raise ValueError(f"Unknown action: {obj}")
 
 def _structure_condition(obj, converter):

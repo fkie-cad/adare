@@ -44,7 +44,7 @@ def exec_experiment_run(arguments):
         import asyncio
         try:
             experiment_load(project_directory, arguments.experiment, force=False)
-            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test))
+            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots))
         except KeyboardInterrupt:
             log.info("Keyboard interrupt received, shutting down gracefully...")
     else:

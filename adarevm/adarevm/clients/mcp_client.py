@@ -3,9 +3,12 @@ from fastmcp.resources import FileResource, TextResource, DirectoryResource
 import asyncio
 import base64
 import json
+import httpx
 
 async def main():
-    async with Client("http://localhost:13109/mcp") as client:
+    # Configure client with longer timeout for PaddleOCR operations
+    timeout = httpx.Timeout(120.0)  # 2 minute timeout
+    async with Client("http://localhost:13109/mcp", timeout=timeout) as client:
         # result = await client.call_tool("find_icon", {"icon": "mglass.png", "window": "nautilus"})
         # data = result[0].text
         # locations = json.loads(data)["locations"]

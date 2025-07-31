@@ -2,6 +2,10 @@
 from pathlib import Path
 from datetime import datetime, timezone
 import threading
+import subprocess
+import sys
+import time
+import asyncio
 
 # internal imports
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
@@ -10,7 +14,6 @@ import adare.backend.project.database as project_database
 import adare.backend.environment.database as environment_database
 from adare.backend.experiment.exceptions import ExperimentDirectoryAlreadyExistsError, \
     ExperimentDirectoryDoesNotExistError, ExperimentIntegrityError, ExperimentAlreadyExistsError, ExperimentNotChanged
-from adare.database.api.event import EventDbApi
 from adare.exceptions import LoggedException
 from adare.backend.project.directory import ProjectDirectory
 from adare.config import SHARE_POINT_VM
@@ -25,14 +28,17 @@ from adare.config.configdirectory import ADAREVM_DIR, ADARELIB_DIR
 from adare.webappaccess.download import download_experiment, sync
 from adare.webappaccess.login import is_logged_in
 from adare.exceptions import NotLoggedInError
-from adare.backend.wsclient.client import WebSocketClient
-from adare.types.ws import EXEC, EXPERIMENT, DONE, WsCommand, EVENT
 from adare.backend.experiment.runctx import ExperimentRunCtx, ExperimentConfig
 from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager, VMAlreadyRunningException, VMNotFoundException
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
+
+# Disable verbose MCP client logging to prevent base64 image flooding
+logging.getLogger('mcp.client.streamable_http').setLevel(logging.WARNING)
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
 
 
 def experiment_sync(experiment_ulid: str):
@@ -96,6 +102,64 @@ def __experiment_update(experiment_ulid, experiment_name, experiment_directory, 
     print(f'Experiment {experiment_name} (ulid: {ulid}) was loaded successfully')
 
 
+def __validate_testset_compatibility(project_path: Path, experiment_directory: ExperimentDirectory):
+    """Validate testset against available testfunctions during experiment loading."""
+    testset_path = experiment_directory.path / "testset.yml"
+    if not testset_path.exists():
+        log.info("No testset.yml found - skipping testset validation")
+        return  # No testset to validate
+    
+    project_directory = ProjectDirectory(project_path)
+    testfunctions_dir = project_directory.testfunctions
+    
+    if not testfunctions_dir.exists():
+        log.warning(f"Testfunctions directory {testfunctions_dir} does not exist - skipping validation")
+        return
+    
+    try:
+        from adarelib.testset.parser import parse_testsetfile
+        from adarelib.testset.testfunction import import_basictest_subclasses, get_missing_testfunctions
+        
+        log.info("Validating testset compatibility with available testfunctions...")
+        
+        # Parse testset configuration
+        testsetfile = parse_testsetfile(testset_path)
+        
+        # Import available testfunctions from project
+        supported_tests = import_basictest_subclasses(testfunctions_dir)
+        
+        # Check for missing testfunctions
+        missing = get_missing_testfunctions(testsetfile, supported_tests)
+        
+        if missing:
+            raise ExperimentIntegrityError(
+                log,
+                f"Testset contains unsupported testfunctions: {missing}",
+                possible_solutions=[
+                    "Add missing testfunction implementations to testfunctions/ directory",
+                    "Remove invalid tests from testset.yml", 
+                    "Check testfunction naming matches class names",
+                    "Ensure testfunction files are properly structured"
+                ]
+            )
+        
+        log.info(f"Testset validation passed - all {len(testsetfile.tests)} tests have valid testfunctions")
+        
+    except ImportError as e:
+        log.warning(f"Could not import testset validation modules: {e}")
+        log.warning("Skipping testset validation - validation will occur at runtime")
+    except Exception as e:
+        raise ExperimentIntegrityError(
+            log,
+            f"Testset validation failed: {str(e)}",
+            possible_solutions=[
+                "Check testset.yml syntax and structure",
+                "Verify testfunctions directory structure",
+                "Ensure all required testfunction dependencies are available"
+            ]
+        )
+
+
 def experiment_load(project_path: Path, experiment_name: str, force: bool = False):
     # todo: fix bug that we can have two identical experiments
     experiment_directory = ExperimentDirectory(project_path, experiment_name)
@@ -108,6 +172,9 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
             ]
         )
     experiment_directory.check_for_missing_files()
+    
+    # Validate testset compatibility with available testfunctions
+    __validate_testset_compatibility(project_path, experiment_directory)
     if experiment_ulid := experiment_database.get_experiment_by_project_and_name(
             project_path, experiment_name, trigger_error=False
     ):
@@ -231,15 +298,17 @@ def __project_integrity_check(project_path: Path, project_directory: ProjectDire
         )
 
 
-async def install_and_run_adare_vm(vm: VirtualBoxVM, vm_name: str, guest_platform: str, stop_event: threading.Event):
+async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: threading.Event):
+    vm = context.vm
     # TODO: maybe speed up by queuing the commands and running them as a single command to avoid VBoxManager overhead
-    if guest_platform == 'windows':
-        firewall_rule = 'New-NetFirewallRule -DisplayName "adarevm" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 18765'
-        await vm.run_command(firewall_rule)
+    if context.guest_platform == 'windows':
+        firewall_rule = f'New-NetFirewallRule -DisplayName "adarevm" -Direction Inbound -Action Allow -Protocol TCP -LocalPort {context.config.websocket_port}'
+        await vm.run_command(firewall_rule, stop_event=stop_event)
         set_path_command = r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\shared\tools", "User")'
         set_path_command_experiment_tools = r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\experiment\shared\tools", "User")'
-        install_command = 'cd Z:/adarevm; poetry install'
-        run_command = 'cd Z:/adarevm; poetry run adarevm'
+        # TODO: need to manually remount here - unclear why but it just fixes hours of trying to get it to work?! Windows I love you <3
+        install_command = r'cd \\vboxsvr\adare\adarevm; poetry install'
+        run_command = r'cd \\vboxsvr\adare\adarevm; poetry run adarevm'
     else:
         set_path_command = "grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc && source ~/.bashrc"
         set_path_command_experiment_tools = "grep -qxF 'export PATH=$PATH:/adare/experiment/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/experiment/shared/tools' >> ~/.bashrc && source ~/.bashrc"
@@ -264,20 +333,20 @@ def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: 
     flow_console.start()
     return flow_console
 
-async def __wait_until_receive_done_msg(ws_client: WebSocketClient, experiment_run_ulid: str) -> DONE | None:
-    received_done = False
-    wscommand = None
-    while not received_done:
-        message = await ws_client.fetch_message()
-        decoded_msg = message.decode('utf-8')
-        wscommand = WsCommand.decode(decoded_msg)
-        if type(wscommand) == EVENT:
-            event = wscommand.event
-            with EventDbApi() as api:
-                api.add_event(event, experiment_run_ulid)
-        if type(wscommand) == DONE:
-            received_done = True
-    return wscommand
+# async def __wait_until_receive_done_msg(ws_client: WebSocketClient, experiment_run_ulid: str) -> DONE | None:
+#     received_done = False
+#     wscommand = None
+#     while not received_done:
+#         message = await ws_client.fetch_message()
+#         decoded_msg = message.decode('utf-8')
+#         wscommand = WsCommand.decode(decoded_msg)
+#         if type(wscommand) == EVENT:
+#             event = wscommand.event
+#             with EventDbApi() as api:
+#                 api.add_event(event, experiment_run_ulid)
+#         if type(wscommand) == DONE:
+#             received_done = True
+#     return wscommand
 
 
 def step_initialize(context: ExperimentRunCtx, fake: bool = False):
@@ -350,14 +419,18 @@ def step_create_run_directory(context: ExperimentRunCtx):
         run_dir = ExperimentRunDirectory(context.project_directory, context.config.experiment_name)
         run_dir.create()
         context.experiment_run_directory = run_dir
+        
+        # Initialize MCP server with log file
+        from adare.backend.experiment.mcp_server_manager import MCPServerManager
+        context.mcp_server = MCPServerManager(log_file=run_dir.mcp_gui_log_file)
 
 async def step_create_virtualbox_machine(context: ExperimentRunCtx):
         context.vm_name = f"{context.config.environment_name}-{context.config.experiment_name}-{make_string_path_safe(context.experiment_run_ulid)}"
         
         shared_root = Path(SHARE_POINT_VM[context.guest_platform])
-        context.shared_directories = {
+        context.config.shared_directories = {
             'run': {'host': context.experiment_run_directory.path, 'vm': shared_root / 'run'},
-            'adare': {'host': context.adarelib.parent, 'vm': 'Z:'},
+            'adare': {'host': context.adarevm.parent, 'vm': 'Z:'},
             'experiment': {'host': context.experiment_directory.path, 'vm': shared_root / 'experiment'},
             'testfunctions': {'host': context.project_directory.testfunctions, 'vm': shared_root / 'testfunctions'},
             'shared': {'host': context.project_directory.shared, 'vm': shared_root / 'shared'},
@@ -378,7 +451,7 @@ async def step_create_virtualbox_machine(context: ExperimentRunCtx):
         await context.vm.create_from_ovf_or_ova(context.vm_file, ctx_manager=ctx_manager_vm_create, stop_event=context.stop_event)
 
         if not context.stop_event.is_set():
-            for name, paths in context.shared_directories.items():
+            for name, paths in context.config.shared_directories.items():
                 await context.vm.add_shared_folder(name, host_path=paths['host'], mountpoint=paths['vm'], stop_event=context.stop_event)
 
         if not context.stop_event.is_set():
@@ -391,6 +464,18 @@ async def step_create_virtualbox_machine(context: ExperimentRunCtx):
                 context.experiment_run_directory
             )
 
+        # maybe extra step
+        # add port forwarding for the websocket server
+        if not context.stop_event.is_set():
+            await context.vm.add_port_forwarding(
+                name='adarevm',
+                protocol='tcp',
+                host_port=context.config.websocket_port,
+                guest_port=context.config.websocket_port,
+                stop_event=context.stop_event
+            )
+            log.info(f'added port forwarding for websocket server on port {context.config.websocket_port}')
+
         experiment_database.update_experiment_run_start(context.experiment_run_ulid, context.timestamp_start)
         context.timestamp_before_box_start = datetime.now(timezone.utc)
 
@@ -398,12 +483,13 @@ async def step_create_virtualbox_machine(context: ExperimentRunCtx):
 async def step_mount_shared_directories(context: ExperimentRunCtx):
     with StageCtxManager(VMMountSharedDirectoriesStage(), context.experiment_run_ulid, event=context.stop_event):
         folders = {
-            name: paths['vm'] for name, paths in context.shared_directories.items()
+            name: paths['vm'] for name, paths in context.config.shared_directories.items()
         }
         await context.vm.mount_multiple_shared_folders(
             folders=folders,
             stop_event=context.stop_event
         )
+        #
 
 async def step_run_vm(context: ExperimentRunCtx):
     vm_run_stage = VMRunStage()
@@ -420,37 +506,129 @@ async def step_wait_till_vm_is_ready(context: ExperimentRunCtx):
 
 async def step_install_and_run_websocket_server(context: ExperimentRunCtx):
     with StageCtxManager(InstallAdareVMStage(), context.experiment_run_ulid, event=context.stop_event):
-        await install_and_run_adare_vm(context.vm, context.vm_name, context.guest_platform, stop_event=context.stop_event)
+        await install_and_run_adare_vm(context, stop_event=context.stop_event)
 
 async def step_connect_websocket(context: ExperimentRunCtx):
     with StageCtxManager(ConnectToVMStage(), context.experiment_run_ulid, event=context.stop_event):
-        client = WebSocketClient('ws://localhost:18765', 'adare')
-        await client.wait_until_server_ready(ping_timeout=8, max_retries=60, retry_interval=2)
-        log.info("Websocket Server is ready")
-        context.client = client
+        from adare.backend.experiment.websocket_client import AdareVMClient
+        from retry import retry
+        import asyncio
+        from websockets.exceptions import ConnectionClosed, WebSocketException
+        
+        # Create websocket client with host port forwarding
+        context.client = AdareVMClient(host='localhost', port=context.config.websocket_port)
+        
+        # Set up event handlers for logging
+        def log_event_handler(event_type: str, data: dict):
+            message = data.get('message', '')
+            log.info(f"AdareVM Event [{event_type}]: {message}")
+        
+        def error_event_handler(event_type: str, data: dict):
+            error = data.get('error', '')
+            log.error(f"AdareVM Error: {error}")
+        
+        context.client.add_event_handler('log', log_event_handler)
+        context.client.add_event_handler('error', error_event_handler)
+        
+        @retry(
+            exceptions=(
+                asyncio.TimeoutError,
+                ConnectionClosed,
+                WebSocketException,
+                ConnectionRefusedError,
+                OSError
+            ),
+            tries=10,
+            delay=2,
+            backoff=1.2,
+            jitter=(1, 3)
+        )
+        async def connect_with_retry():
+            if context.stop_event.is_set():
+                log.info("Connection cancelled by stop event")
+                return False
+                
+            log.info("Attempting to connect to AdareVM server")
+            connected = await context.client.connect(timeout=60.0)
+            
+            if not connected:
+                raise ConnectionRefusedError("Failed to establish websocket connection")
+            
+            return True
+        
+        # Attempt connection with retry logic
+        try:
+            await connect_with_retry()
+            log.info("Successfully connected to AdareVM WebSocket server")
+            
+            # Test the connection with ping
+            ping_success = await context.client.ping()
+            if ping_success:
+                log.info("Ping test successful - WebSocket connection is working")
+            else:
+                log.warning("Ping test failed but connection established")
+            
+            # Get server status
+            try:
+                status = await context.client.get_status()
+                log.info(f"AdareVM server status: {status}")
+            except (asyncio.TimeoutError, ConnectionClosed) as e:
+                log.warning(f"Could not get server status: {e}")
+                
+        except (asyncio.TimeoutError, WebSocketException, ConnectionRefusedError, OSError) as e:
+            from adare.exceptions import LoggedException
+            log.error(e, exc_info=True)
+            raise LoggedException(log, f"Failed to connect to AdareVM server: {e}") from e
 
 async def step_execute_installations(context: ExperimentRunCtx):
     with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.stop_event) as stage:
         installations = environment_database.get_environment_installations(context.environment_ulid)
-        for installation in installations:
-            msg = EXEC(
-                command=installation.command,
-                shell=installation.shell,
-                cwd=installation.cwd
-            ).encode()
-            await context.client.send_message(msg)
-            await __wait_until_receive_done_msg(context.client, context.experiment_run_ulid)
+        
+        if not installations:
+            log.info("No installations to execute")
+            return
+        
+        pass
+
+async def step_start_mcp_server(context: ExperimentRunCtx):
+    """Start the MCP GUI server for target detection."""
+    log.info("Starting MCP GUI server for target detection...")
+    
+    success = await context.mcp_server.start()
+    if success:
+        log.info("MCP GUI server started successfully")
+    else:
+        from adare.exceptions import LoggedException
+        raise LoggedException(log, "MCP GUI server failed to start - cannot proceed without target detection capabilities")
+
 
 async def step_execute_experiment(context: ExperimentRunCtx):
+    """Execute the experiment using the playbook controller."""
     with StageCtxManager(ExperimentRunStage(), context.experiment_run_ulid, event=context.stop_event) as stage:
-        msg = EXPERIMENT(context.config.experiment_name).encode()
-        await context.client.send_message(msg)
-        done_msg = await __wait_until_receive_done_msg(context.client, context.experiment_run_ulid)
-        if done_msg:
-            if done_msg.error:
-                log.error(f"Experiment run failed: {done_msg.err_msg}")
-                stage.set_status(StatusEnum.FAILED)
-
+        from adare.backend.experiment.playbook_controller import PlaybookController
+        
+        if not context.client:
+            log.error("WebSocket client not available for experiment execution")
+            return
+        
+        # Create playbook controller
+        controller = PlaybookController(
+            websocket_client=context.client,
+            experiment_dir=context.experiment_directory.path,
+            project_dir=context.project_directory.path,
+            debug_screenshots=context.debug_screenshots,
+            screenshots_dir=context.experiment_run_directory.screenshots_directory if context.debug_screenshots else None
+        )
+        
+        # Execute complete experiment (playbook + tests)
+        log.info(f"Starting experiment execution for {context.config.experiment_name}")
+        result = await controller.execute_experiment(context.experiment_directory.path)
+        
+        if result.success:
+            log.info(f"Experiment completed successfully: {result.successful_actions}/{result.total_actions} actions succeeded")
+        else:
+            log.error(f"Experiment failed: {result.error_message}")
+            log.error(f"Action results: {result.successful_actions}/{result.total_actions} succeeded")
 
 
 def step_finalize(context: ExperimentRunCtx):
@@ -462,10 +640,16 @@ def step_finalize(context: ExperimentRunCtx):
     with StageCtxManager(CleanupStage(), context.experiment_run_ulid, event=context.stop_event):
         __cleanup_experiment_run(context.experiment_run_directory)
 
+async def step_shutdown_mcp_server(context: ExperimentRunCtx):
+    """Stop the MCP GUI server."""
+    log.info('stopping MCP GUI server')
+    await context.mcp_server.stop()
+
+
 async def step_shutdown_ws(context: ExperimentRunCtx):
     log.info('stopping websocket client')
     if context.client:
-        await context.client.close()
+        await context.client.disconnect()
 
 async def step_shutdown_virtualbox_vm(context: ExperimentRunCtx):
     ctx_manager_vm_stop= StageCtxManager(VMStopStage(), context.experiment_run_ulid)
@@ -506,7 +690,7 @@ def __start_event_listeners(experiment_run_ulid: str):
     return cli_thread, db_thread
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = False):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = False, debug_screenshots: bool = False):
     import signal
     import asyncio
 
@@ -515,6 +699,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     # Create the experiment context and initialize it.
     config = ExperimentConfig(project_path, experiment_name, environment_name)
     experiment_run_context = ExperimentRunCtx(config)
+    experiment_run_context.debug_screenshots = debug_screenshots
     if test:
         step_initialize(experiment_run_context, fake=True)
     else:
@@ -592,17 +777,6 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                     if not task.done():
                         task.cancel()
 
-    def run_step(step_func):
-        """
-        Run a step function in a blocking manner.
-        This is used for steps that do not need to be awaited.
-        """
-
-        if not stop_event.is_set():
-            log.info(f"Running step: {step_func.__name__}")
-            step_func(experiment_run_context)
-            log.info(f"Step {step_func.__name__} completed")
-
     # --- Execution Flow ---
 
     try:
@@ -618,29 +792,23 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         for step in initial_steps:
             await run_blocking_step(step)
 
+        # Start MCP server early (independent of VM)
+        await run_async_step(step_start_mcp_server)
+
         # VirtualBox operations are now async for responsive ctrl-c handling
         await run_async_step(step_create_virtualbox_machine)
         await run_async_step(step_run_vm)
         await run_async_step(step_wait_till_vm_is_ready)
         await run_async_step(step_mount_shared_directories)
 
-                # only continue after input
-        if not stop_event.is_set():
-            log.info("Press Enter to continue with WebSocket connection...")
-            input()
-
         # Execute additional steps (mix of blocking and asynchronous).
         await run_async_step(step_install_and_run_websocket_server)
-
-        # only continue after input
-        if not stop_event.is_set():
-            log.info("Press Enter to continue with WebSocket connection...")
-            input()
 
         await run_async_step(step_connect_websocket)
         await run_async_step(step_execute_installations)
         await run_async_step(step_execute_experiment)
         await run_blocking_step(step_finalize)
+        await run_async_step(step_shutdown_mcp_server)
         await run_async_step(step_shutdown_ws)
 
     except LoggedException as e:
@@ -671,6 +839,8 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             experiment_run_context.stop_event.set()
             log.info("finally: send stop events")
         try:
+            input("Press Enter to finalize and shutdown the experiment run...")
+
             log.info("Stopping websocket client and flow console...")
             await step_shutdown_ws(experiment_run_context)
             await step_shutdown_virtualbox_vm(experiment_run_context)
@@ -686,125 +856,125 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
 
 
-def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
-    from adare.frontend.terminal.textualize.experiment_interactive import ExperimentApp
-    from adare.backend.types import Step
+# def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
+#     from adare.frontend.terminal.textualize.experiment_interactive import ExperimentApp
+#     from adare.backend.types import Step
 
 
-    setup_adare = lambda ctx: [
-        step_setup_directories(ctx),
-        step_resolve_environment(ctx),
-        step_check_integrity_experiment(ctx),
-        step_check_integrity_project(ctx),
-        step_create_run_directory(ctx),
-        step_create_virtualbox_machine(ctx),
-    ]
+#     setup_adare = lambda ctx: [
+#         step_setup_directories(ctx),
+#         step_resolve_environment(ctx),
+#         step_check_integrity_experiment(ctx),
+#         step_check_integrity_project(ctx),
+#         step_create_run_directory(ctx),
+#         step_create_virtualbox_machine(ctx),
+#     ]
 
-    steps = [
-        Step(
-            label='Setup Adare to run experiment',
-            func=setup_adare,
-            thread=True,
-            description='Setup Adare to run the experiment',
-        ),
-        Step(
-            label='Run Box',
-            func=step_run_vm,
-            thread=True,
-            description='Run the Vagrant box',
-        ),
-        Step(
-            label='Install Adare VM',
-            func=step_install_adare_vm,
-            thread=True,
-            description='Install and run the Adare VM',
-            repeatable=False,
-        ),
-        Step(
-            label='Connect WebSocket',
-            func=step_connect_websocket,
-            thread=False,
-            description='Connect to the Adare VM via WebSocket',
-            repeatable=False,
-        ),
-        Step(
-            label='Execute Installations',
-            func=step_execute_installations,
-            thread=False,
-            description='Execute environment installations',
-            repeatable=False,
-        ),
-        Step(
-            label='Execute Experiment',
-            func=step_execute_experiment,
-            thread=False,
-            description='Execute the experiment',
-            repeatable=True,
-        ),
-        Step(
-            label='Finalize',
-            func=step_finalize,
-            thread=True,
-            description='Finalize the experiment run',
-            repeatable=False,
-        ),
-        Step(
-            label='Shutdown WebSocket Client',
-            func=step_shutdown_ws,
-            thread=False,
-            description='Shutdown the WebSocket client',
-        ),
-        Step(
-            label='Shutdown Vagrant',
-            func=step_shutdown_vagrant,
-            thread=True,
-            description='Shutdown the Vagrant box',
-        ),
-        Step(
-            label='Remove Fake Experiment Run',
-            func=step_remove_fake_experiment_run,
-            thread=True,
-            description='Remove the fake experiment run',
-        ),
-    ]
+#     steps = [
+#         Step(
+#             label='Setup Adare to run experiment',
+#             func=setup_adare,
+#             thread=True,
+#             description='Setup Adare to run the experiment',
+#         ),
+#         Step(
+#             label='Run Box',
+#             func=step_run_vm,
+#             thread=True,
+#             description='Run the Vagrant box',
+#         ),
+#         Step(
+#             label='Install Adare VM',
+#             func=step_install_adare_vm,
+#             thread=True,
+#             description='Install and run the Adare VM',
+#             repeatable=False,
+#         ),
+#         Step(
+#             label='Connect WebSocket',
+#             func=step_connect_websocket,
+#             thread=False,
+#             description='Connect to the Adare VM via WebSocket',
+#             repeatable=False,
+#         ),
+#         Step(
+#             label='Execute Installations',
+#             func=step_execute_installations,
+#             thread=False,
+#             description='Execute environment installations',
+#             repeatable=False,
+#         ),
+#         Step(
+#             label='Execute Experiment',
+#             func=step_execute_experiment,
+#             thread=False,
+#             description='Execute the experiment',
+#             repeatable=True,
+#         ),
+#         Step(
+#             label='Finalize',
+#             func=step_finalize,
+#             thread=True,
+#             description='Finalize the experiment run',
+#             repeatable=False,
+#         ),
+#         Step(
+#             label='Shutdown WebSocket Client',
+#             func=step_shutdown_ws,
+#             thread=False,
+#             description='Shutdown the WebSocket client',
+#         ),
+#         Step(
+#             label='Shutdown Vagrant',
+#             func=step_shutdown_vagrant,
+#             thread=True,
+#             description='Shutdown the Vagrant box',
+#         ),
+#         Step(
+#             label='Remove Fake Experiment Run',
+#             func=step_remove_fake_experiment_run,
+#             thread=True,
+#             description='Remove the fake experiment run',
+#         ),
+#     ]
 
-    shutdown_steps = [
-        Step(
-            label='Shutdown',
-            func=step_shutdown_ws,
-            thread=False,
-            description='Shutdown the WebSocket client',
-        ),
-        Step(
-            label='Shutdown Vagrant',
-            func=step_shutdown_vagrant,
-            thread=True,
-            description='Shutdown the Vagrant box',
-        ),
-        Step(
-            label='Remove Fake Experiment Run',
-            func=step_remove_fake_experiment_run,
-            thread=True,
-            description='Remove the fake experiment run',
-        ),
-    ]
+#     shutdown_steps = [
+#         Step(
+#             label='Shutdown',
+#             func=step_shutdown_ws,
+#             thread=False,
+#             description='Shutdown the WebSocket client',
+#         ),
+#         Step(
+#             label='Shutdown Vagrant',
+#             func=step_shutdown_vagrant,
+#             thread=True,
+#             description='Shutdown the Vagrant box',
+#         ),
+#         Step(
+#             label='Remove Fake Experiment Run',
+#             func=step_remove_fake_experiment_run,
+#             thread=True,
+#             description='Remove the fake experiment run',
+#         ),
+#     ]
 
-    callbacks = {
-        'vagrant_box_exists': callback_vagrant_box_exists,
-        'vagrant_box_status': callback_vagrant_box_status,
-    }
+#     callbacks = {
+#         'vagrant_box_exists': callback_vagrant_box_exists,
+#         'vagrant_box_status': callback_vagrant_box_status,
+#     }
 
-    exit_code = 99
-    while exit_code == 99:
-        run_ctx = ExperimentRunCtx(project_path, experiment_name, environment_name)
-        step_initialize(run_ctx, fake=True)
-        exp_run_ulid = run_ctx.experiment_run_ulid
-        from adare.frontend.terminal.textualize.experiment_flow_console_widget import ExperimentRunFlowConsoleWidget, flowwidgetmanager
-        flowwidgetmanager.add_handler(exp_run_ulid, ExperimentRunFlowConsoleWidget())
-        app = ExperimentApp(run_ctx, steps=steps, shutdown_steps=shutdown_steps, callbacks=callbacks)
-        app.run()
-        exit_code = app.return_code
-        flowwidgetmanager.remove_handler(exp_run_ulid)
+#     exit_code = 99
+#     while exit_code == 99:
+#         run_ctx = ExperimentRunCtx(project_path, experiment_name, environment_name)
+#         step_initialize(run_ctx, fake=True)
+#         exp_run_ulid = run_ctx.experiment_run_ulid
+#         from adare.frontend.terminal.textualize.experiment_flow_console_widget import ExperimentRunFlowConsoleWidget, flowwidgetmanager
+#         flowwidgetmanager.add_handler(exp_run_ulid, ExperimentRunFlowConsoleWidget())
+#         app = ExperimentApp(run_ctx, steps=steps, shutdown_steps=shutdown_steps, callbacks=callbacks)
+#         app.run()
+#         exit_code = app.return_code
+#         flowwidgetmanager.remove_handler(exp_run_ulid)
 
 
 def experiment_download(project: Path, experiment_ulid: str):

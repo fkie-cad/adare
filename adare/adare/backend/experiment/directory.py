@@ -37,6 +37,8 @@ class ExperimentRunDirectory(Directory):
         self.log_directory = self.path / 'logs'
         self.vagrant_log_file = self.log_directory / 'vagrant.log'
         self.adarevm_log_file = self.log_directory / 'adarevm.log'
+        self.mcp_gui_log_file = self.log_directory / 'mcp_gui.log'
+        self.screenshots_directory = self.path / 'screenshots'
 
 
     def create(self):

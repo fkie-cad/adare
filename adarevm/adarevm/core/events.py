@@ -2,11 +2,10 @@ from typing import Callable, Awaitable, Optional
 import contextlib
 import uuid
 import asyncio
-import json
 import time
 
-from adare.types.event import Event
-from adare.types.ws import EVENT
+from adarelib.event.event import Event
+from adarelib.event.ws import EVENT
 
 import logging
 log = logging.getLogger(__name__)

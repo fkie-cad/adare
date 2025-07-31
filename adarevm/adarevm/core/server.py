@@ -28,7 +28,7 @@ import logging
 log = logging.getLogger(__name__)
 
 # Import our WebSocket protocol
-from adarevm.core.protocol import (
+from adarelib.websocket.protocol import (
     parse_message, create_tool_result, create_event, create_status,
     MessageType, EventType, ToolRegistry,
     ToolResultMessage, EventMessage
@@ -38,7 +38,7 @@ import base64
 class AdareVMServer:
     """WebSocket server for adarevm GUI automation and test execution."""
     
-    def __init__(self, host="0.0.0.0", port=13108):
+    def __init__(self, host="0.0.0.0", port=18765):
         self.host = host
         self.port = port
         self.clients: Set[websockets.WebSocketServerProtocol] = set()
@@ -66,7 +66,7 @@ class AdareVMServer:
             "run_test": self._run_test,
             "run_all_tests": self._run_all_tests,
             "list_tests": self._list_tests,
-            "execute_command": self._execute_command,
+            "execute_shell": self._execute_shell,
             "get_status": self._get_status,
         }
     
@@ -74,14 +74,27 @@ class AdareVMServer:
         """Start the WebSocket server."""
         log.info(f"Starting AdareVM WebSocket server on {self.host}:{self.port}")
         
-        async def handler(websocket, path):
-            await self.handle_client(websocket, path)
+        # Log screen size and initialize mouse position
+        import pyautogui
+        screen_width, screen_height = pyautogui.size()
+        log.info(f"Screen size: {screen_width}x{screen_height}")
         
-        server = await websockets.serve(handler, self.host, self.port)
+        # Initialize mouse to center to avoid fail-safe issues
+        center_x = screen_width // 2
+        center_y = screen_height // 2
+        
+        # Temporarily disable fail-safe for initialization
+        original_failsafe = pyautogui.FAILSAFE
+        pyautogui.FAILSAFE = False
+        pyautogui.moveTo(center_x, center_y)
+        pyautogui.FAILSAFE = original_failsafe
+        log.info(f"Initialized mouse position to center: ({center_x}, {center_y})")
+        
+        server = await websockets.serve(self.handle_client, self.host, self.port)
         log.info(f"Server started successfully")
         return server
     
-    async def handle_client(self, websocket, path):
+    async def handle_client(self, websocket):
         """Handle a new client connection."""
         self.clients.add(websocket)
         client_address = websocket.remote_address
@@ -494,29 +507,49 @@ class AdareVMServer:
             await self.send_event(websocket, EventType.ERROR, {"message": f"Failed to list tests: {e}"})
             return {"status": "error", "message": str(e)}
     
-    async def _execute_command(self, websocket, command_name: str):
-        """Execute a predefined command."""
-        log.info(f"Executing command: {command_name}")
+    async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False):
+        """Execute a raw shell command with advanced options."""
+        log.info(f"Executing shell command: {shell_command}")
         try:
-            if not self.testset_instance:
-                return {"status": "error", "message": "No testset loaded"}
+            await self.send_event(websocket, EventType.COMMAND_START, {"shell_command": shell_command})
             
-            await self.send_event(websocket, EventType.COMMAND_START, {"command_name": command_name})
+            # Prepare options for execute_on_shell
+            from pathlib import Path
+            options = {}
+            if cwd:
+                options['cwd'] = Path(cwd)
+            if env:
+                options['env'] = env
+            if timeout:
+                options['timeout'] = timeout
+            if shell is not None:
+                options['shell'] = shell
             
-            self.testset_instance.execute_command(command_name)
+            # Execute shell command directly using execute_on_shell
+            result = execute_on_shell(shell_command.split(" "), **options)
             
-            await self.send_event(websocket, EventType.COMMAND_COMPLETE, {"command_name": command_name})
-            log.info(f"Command completed: {command_name}")
+            if result['returncode'] == 0:
+                await self.send_event(websocket, EventType.COMMAND_COMPLETE, {"shell_command": shell_command})
+                log.info(f"Shell command completed successfully: {shell_command}")
+                return {
+                    "status": "success", 
+                    "message": f"Shell command executed successfully",
+                    "returncode": result['returncode'],
+                    "stdout": result['stdout']
+                }
+            else:
+                await self.send_event(websocket, EventType.ERROR, {"message": f"Shell command failed: {shell_command}"})
+                log.error(f"Shell command failed with return code {result['returncode']}: {shell_command}")
+                return {
+                    "status": "error", 
+                    "message": f"Shell command failed with return code {result['returncode']}",
+                    "returncode": result['returncode'],
+                    "stdout": result['stdout']
+                }
             
-            return {"status": "success", "message": f"Command '{command_name}' executed successfully"}
-            
-        except TestsetExecutionError as e:
-            log.error(f"Command execution error: {command_name}: {e}")
-            await self.send_event(websocket, EventType.ERROR, {"message": f"Command '{command_name}' failed: {e}"})
-            return {"status": "error", "message": f"Command execution failed: {e}"}
         except Exception as e:
-            log.error(f"Unexpected command error: {command_name}: {e}")
-            await self.send_event(websocket, EventType.ERROR, {"message": f"Command '{command_name}' failed: {e}"})
+            log.error(f"Unexpected shell command error: {shell_command}: {e}")
+            await self.send_event(websocket, EventType.ERROR, {"message": f"Shell command '{shell_command}' failed: {e}"})
             return {"status": "error", "message": str(e)}
     
     async def _get_status(self, websocket):

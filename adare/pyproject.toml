@@ -30,12 +30,12 @@ websockets = "^15.0"
 textual-dev = "^1.7.0"
 textual = "^2.1.1"
 trogon = "^0.6.0"
-fastmcp = "^2.9.2"
 opencv-python = "^4.8.0"
-paddleocr = "^2.7.0"
 numpy = "^1.24.0"
 redis = "^6.2.0"
 pandas = "^2.3.1"
+fastmcp = "^2.9.2"
+
 
 [tool.poetry.group.test.dependencies]
 pytest = "^7.4.0"

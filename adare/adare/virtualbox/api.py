@@ -601,7 +601,9 @@ class VirtualBoxVM:
         stop_event: Optional[threading.Event] = None,
         cwd: Optional[str] = None,
         ctx_manager=None,
-        log_file: Optional[Path] = None
+        log_file: Optional[Path] = None,
+        win_noprofile: bool = True,
+        use_cmd: bool = False
     ) -> 'CommandResult':
         """
         Run a command in the guest with streaming output.
@@ -612,7 +614,7 @@ class VirtualBoxVM:
             start_time = time.time()
             
             try:
-                args = self._build_guest_command_args(command, background, cwd)
+                args = self._build_guest_command_args(command, background, cwd, win_noprofile, use_cmd)
                 log.debug(f"Running command in VM '{self.vm_name}': {' '.join(args)}")
                 
                 # Execute command and capture output
@@ -691,7 +693,8 @@ class VirtualBoxVM:
         command: str,
         background: bool = False,
         silent: bool = False,
-        timeout: Optional[int] = None
+        timeout: Optional[int] = None,
+        win_noprofile: bool = True,
     ) -> CommandResult:
         import asyncio, time
         start_time = time.time()
@@ -701,10 +704,14 @@ class VirtualBoxVM:
                 log.debug(f"Preparing Windows command for VM '{self.vm_name}': {command}")
                 command_bytes = command.encode('utf-16le')
                 encoded_command = base64.b64encode(command_bytes).decode('ascii')
-                if background:
-                    command_args = f"-NoProfile -ExecutionPolicy Bypass -Command \"Start-Process -WindowStyle Hidden -PassThru -FilePath powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', '{encoded_command}'\""
+                if win_noprofile:
+                    command_args = "-NoProfile "
                 else:
-                    command_args = f"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded_command}"
+                    command_args = ""
+                if background:
+                    command_args += f"-ExecutionPolicy Bypass -Command \"Start-Process -WindowStyle Hidden -PassThru -FilePath powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', '{encoded_command}'\""
+                else:
+                    command_args += f"-ExecutionPolicy Bypass -EncodedCommand {encoded_command}"
             else:
                 command_exe = "/bin/bash"
                 background_addon = " &" if background else ""
@@ -717,14 +724,14 @@ class VirtualBoxVM:
                 "--", command_exe, command_args
             ]
 
-            if hasattr(self, "_guest_session_id") and self._guest_session_id:
-                vbox_command.insert(3, "--session-id")
-                vbox_command.insert(4, self._guest_session_id)
-            else:
-                vbox_command.insert(3, "--username")
-                vbox_command.insert(4, self.username)
-                vbox_command.insert(5, "--password")
-                vbox_command.insert(6, self.password)
+            # if hasattr(self, "_guest_session_id") and self._guest_session_id:
+            #     vbox_command.insert(3, "--session-id")
+            #     vbox_command.insert(4, self._guest_session_id)
+            # else:
+            vbox_command.insert(3, "--username")
+            vbox_command.insert(4, self.username)
+            vbox_command.insert(5, "--password")
+            vbox_command.insert(6, self.password)
 
             if not silent:
                 log.debug(f"Running async command in VM '{self.vm_name}': {' '.join(vbox_command)}")
@@ -882,7 +889,7 @@ class VirtualBoxVM:
         
         return await self.manager.run_async(_stop_async)
 
-    def _build_guest_command_args(self, command: str, background: bool = False, cwd: Optional[str] = None) -> List[str]:
+    def _build_guest_command_args(self, command: str, background: bool = False, cwd: Optional[str] = None, win_noprofile: bool = True, use_cmd: bool = False) -> List[str]:
         """
         Build VBoxManage guestcontrol command arguments for running guest commands.
         """
@@ -895,19 +902,26 @@ class VirtualBoxVM:
         
         if 'windows' in self.guest_os.lower():
             command_exe = r"C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe"
+            noprofile_arg = "-NoProfile" if win_noprofile else ""
+            
+            # If use_cmd is True, wrap the command in cmd /c from within PowerShell
+            if use_cmd:
+                cmd_to_run = f"cmd /c '{cmd_to_run}'"
+            
             if background:
+                noprofile_inner = "'-NoProfile'," if win_noprofile else ""
                 ps_cmd = (
                     f"$p=Start-Process -WindowStyle Hidden -PassThru -FilePath powershell.exe "
-                    f"-ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','{cmd_to_run}';"
+                    f"-ArgumentList {noprofile_inner}'-ExecutionPolicy','Bypass','-Command','{cmd_to_run}';"
                     f"$p.Id"
                 )
                 command_bytes = ps_cmd.encode('utf-16le')
                 encoded_command = base64.b64encode(command_bytes).decode('ascii')
-                command_args = f"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded_command}"
+                command_args = f"{noprofile_arg} -ExecutionPolicy Bypass -EncodedCommand {encoded_command}".strip()
             else:
                 command_bytes = cmd_to_run.encode('utf-16le')
                 encoded_command = base64.b64encode(command_bytes).decode('ascii')
-                command_args = f"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded_command}"
+                command_args = f"{noprofile_arg} -ExecutionPolicy Bypass -EncodedCommand {encoded_command}".strip()
         else:
             command_exe = "/bin/bash"
             if background:
@@ -933,7 +947,7 @@ class VirtualBoxVM:
         
         return args
 
-    def __create_from_ova_by_extract(self, file_path: Path):
+    async def __create_from_ova_by_extract(self, file_path: Path):
         """
         Extracts the OVA file and imports the OVF.
         This is a workaround for VirtualBox not supporting OVA import directly.
@@ -950,7 +964,7 @@ class VirtualBoxVM:
             log.error(f"No OVF file found after extracting '{file_path}'")
             raise VMImportException(f"No OVF file found in extracted OVA '{file_path}'")
 
-        self.create_from_ovf_or_ova(ovf_file, try_extract=False)
+        await self.create_from_ovf_or_ova(ovf_file, try_extract=False)
         log.info(f"OVA file '{file_path}' extracted and imported successfully.")
     
 
@@ -993,7 +1007,7 @@ class VirtualBoxVM:
                     if try_extract and file_path.suffix.lower() == '.ova':
                         log.warning(f"Failed to import OVA directly, trying extraction: {e}")
                         try:
-                            return self.__create_from_ova_by_extract(file_path)
+                            return await self.__create_from_ova_by_extract(file_path)
                         except subprocess.CalledProcessError as e:
                             log.error(f"Failed to import VM '{self.vm_name}' from extracted OVF: {e}")
                             raise VMImportException(f"Failed to import VM '{self.vm_name}' from '{file_path}': {e}")
@@ -1134,7 +1148,8 @@ class VirtualBoxVM:
                         silent=silent,
                         stop_event=stop_event,
                         ctx_manager=ctx_manager,
-                        log_file=log_file
+                        log_file=log_file,
+                        use_cmd=True
                     )
                     
                     if mount_result.returncode == 0:
@@ -1225,8 +1240,10 @@ class VirtualBoxVM:
             if len(mountpoint_str) == 2 and mountpoint_str[1] == ':' and mountpoint_str[0].isalpha():
                 # Queue net use command for drive letter mounting
                 drive_letter = mountpoint_str.upper()
+                mount_cmd = f'net use {drive_letter} "{unc_path}"'
+
                 self.queue_command(
-                    f'net use {drive_letter} "{unc_path}" /persistent:yes',
+                    mount_cmd,
                     f"Mount shared folder {name} to drive {drive_letter}"
                 )
             else:
@@ -1268,7 +1285,7 @@ class VirtualBoxVM:
                 f"Mount shared folder {name}"
             )
 
-    async def execute_queued_commands(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+    async def execute_queued_commands(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False, win_noprofile: bool = False):
         """
         Execute all queued commands in a single batch.
         
@@ -1301,7 +1318,8 @@ class VirtualBoxVM:
                 silent=silent,
                 stop_event=stop_event,
                 ctx_manager=ctx_manager,
-                log_file=log_file
+                log_file=log_file,
+                win_noprofile=win_noprofile
             )
             
             # Clear the queue after execution
@@ -1341,7 +1359,7 @@ class VirtualBoxVM:
             self.queue_mount_shared_folder(name, mountpoint)
         
         # Execute all queued commands
-        return await self.execute_queued_commands(ctx_manager, stop_event, log_file, silent)
+        return await self.execute_queued_commands(ctx_manager, stop_event, log_file, silent, win_noprofile=True)
 
     async def remove_shared_folder(self, name: str, mountpoint: Optional[str] = None, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
         """
@@ -1578,30 +1596,87 @@ class VirtualBoxVM:
         else:
             return _get_vm_info()
 
-    def open_guest_session(self):
-        def _open_guest_session():
-            cmd = [
-                self.vboxmanage_exe, "guestcontrol", self.vm_name, "start",
-                "--username", self.username,
-                "--password", self.password
-            ]
-            try:
-                log.info(f"Opening guest session for VM '{self.vm_name}'.")
-                result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True)
-                for line in result.stdout.splitlines():
-                    if "Session ID:" in line:
-                        session_id = line.split(":", 1)[1].strip()
-                        self._guest_session_id = session_id
-                        log.info(f"Guest session opened for VM '{self.vm_name}', session ID: {session_id}")
-                        return session_id
-                log.error(f"Session ID not found in VBoxManage output for VM '{self.vm_name}'.")
-                return None
-            except Exception as e:
-                log.error(f"Failed to open guest session for VM '{self.vm_name}': {e}")
-                return None
-        return self.manager.run(_open_guest_session)
+    # def open_guest_session(self):
+    #     def _open_guest_session():
+    #         cmd = [
+    #             self.vboxmanage_exe, "guestcontrol", self.vm_name, "start",
+    #             "--username", self.username,
+    #             "--password", self.password
+    #         ]
+    #         try:
+    #             log.info(f"Opening guest session for VM '{self.vm_name}'.")
+    #             result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True)
+    #             for line in result.stdout.splitlines():
+    #                 if "Session ID:" in line:
+    #                     session_id = line.split(":", 1)[1].strip()
+    #                     self._guest_session_id = session_id
+    #                     log.info(f"Guest session opened for VM '{self.vm_name}', session ID: {session_id}")
+    #                     return session_id
+    #             log.error(f"Session ID not found in VBoxManage output for VM '{self.vm_name}'.")
+    #             return None
+    #         except Exception as e:
+    #             log.error(f"Failed to open guest session for VM '{self.vm_name}': {e}")
+    #             return None
+    #     return self.manager.run(_open_guest_session)
 
-    def ensure_initial_snapshot(
+    async def add_port_forwarding(
+        self,
+        name: str,
+        protocol: str,
+        host_port: int,
+        guest_port: int,
+        host_ip: str = "",
+        guest_ip: str = "",
+        ctx_manager=None,
+        stop_event=None,
+        log_file: Optional[Path] = None,
+        silent: bool = False
+    ):
+        """
+        Add a port forwarding rule to the VM's NAT adapter.
+        
+        Args:
+            name: Name of the port forwarding rule
+            protocol: Protocol (tcp or udp)
+            host_ip: Host IP address to bind to (use "" for all interfaces)
+            host_port: Host port number
+            guest_ip: Guest IP address (usually "" for any)
+            guest_port: Guest port number
+            ctx_manager: Context manager for status updates
+            stop_event: Event to signal stop
+            log_file: Log file for output
+            silent: Whether to suppress logging
+        """
+        async def _add_port_forward_async():
+            args = [
+                "modifyvm", self.vm_name,
+                "--natpf1", f"{name},{protocol},{host_ip},{host_port},{guest_ip},{guest_port}"
+            ]
+            
+            try:
+                log.info(f"Adding port forward '{name}' ({protocol}) {host_ip}:{host_port} -> {guest_ip}:{guest_port} for VM '{self.vm_name}'")
+                return_value, _, _ = await self._execute_streaming_command_async(
+                    args,
+                    log_file=log_file,
+                    stop_event=stop_event,
+                    silent=silent,
+                    ctx_manager=ctx_manager,
+                    operation_name="port forward addition"
+                )
+                
+                if return_value == 0:
+                    log.info(f"Port forward '{name}' added successfully to VM '{self.vm_name}'")
+                else:
+                    log.error(f"Failed to add port forward '{name}' to VM '{self.vm_name}': return code {return_value}")
+                
+                return return_value
+            except Exception as e:
+                log.error(f"Error adding port forward '{name}' to VM '{self.vm_name}': {e}")
+                return 1
+        
+        return await self.manager.run_async(_add_port_forward_async)
+
+    async def ensure_initial_snapshot(
         self,
         ovf_path: str,
         snapshot_name: str,
@@ -1614,7 +1689,7 @@ class VirtualBoxVM:
         """
         if not self.vm_exists():
             log.info(f"VM '{self.vm_name}' does not exist. Importing from OVF and creating initial snapshot.")
-            self.create_from_ovf_or_ova(file_path=ovf_path)
+            await self.create_from_ovf_or_ova(file_path=ovf_path)
             self.create_snapshot(snapshot_name=snapshot_name, description=snapshot_description)
             log.info(f"VM '{self.vm_name}' created and initial snapshot '{snapshot_name}' taken.")
         else:

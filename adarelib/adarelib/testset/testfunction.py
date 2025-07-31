@@ -4,7 +4,7 @@ import cattrs
 import attrs
 
 from adarelib.testset.basictest import BasicTest
-from adarelib.testset.testfunction import TestsetFile
+from adarelib.testset.type import TestsetFile
 from adarelib.helper.module import import_module_from_pyfile
 
 import logging
@@ -38,13 +38,21 @@ def get_testclass_from_testfunction(testfunction: str, testfunction_collection: 
 
 
 def get_missing_testfunctions(testset: TestsetFile, testfunction_collection: dict):
-    return [
-        test.type
-        for test in testset.tests
-        if not get_testclass_from_testfunction(
-            test.type, testfunction_collection
-        )
-    ]
+    missing = []
+    for test in testset.tests:
+        testclass = get_testclass_from_testfunction(test.function, testfunction_collection)
+        if not testclass:
+            missing.append(test.function)
+            log.error(f"Missing testfunction: {test.function}")
+            log.debug(f"Available testfunctions: {testfunction_collection}")
+    
+    if missing:
+        log.error(f"Missing testfunctions: {missing}")
+        log.debug(f"Available testfunction collections: {list(testfunction_collection.keys())}")
+        for collection_name, functions in testfunction_collection.items():
+            log.debug(f"Collection '{collection_name}': {list(functions.keys())}")
+    
+    return missing
 
 
 def structure_tests(testset: TestsetFile, testfunction_collection: dict) -> tuple[dict, dict]:
@@ -55,13 +63,13 @@ def structure_tests(testset: TestsetFile, testfunction_collection: dict) -> tupl
     tests = {}
 
     for test in testset.tests:
-        testclass = get_testclass_from_testfunction(test.type, testfunction_collection)
+        testclass = get_testclass_from_testfunction(test.function, testfunction_collection)
         try:
             testclass_instance = cattrs.structure(attrs.asdict(test), testclass)
         except cattrs.errors.ClassValidationError as e:
             log.error('an test has missing/wrong parameters in the testset file -> see exception below')
             log.error(e, exc_info=True)
-            structure_error_dict[test.type] = e.message
+            structure_error_dict[test.function] = e.message
             continue
         tests[test.name] = testclass_instance
 

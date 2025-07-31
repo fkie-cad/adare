@@ -18,8 +18,10 @@ def take_screenshot(x: int = None, y: int = None, width: int = None, height: int
     """
     # Take screenshot (full or region)
     if x is not None and y is not None and width is not None and height is not None:
+        log.info(f"Taking screenshot with x={x}, y={y}, width={width}, height={height}")
         screenshot = pyautogui.screenshot(region=(x, y, width, height))
     else:
+        log.info("Taking screenshot")
         screenshot = pyautogui.screenshot()
 
     # Convert to bytes
@@ -74,6 +76,7 @@ def click(x: int, y: int) -> Dict[str, str]:
     """
     Simulate a mouse click at the specified coordinates.
     """
+    log.info(f"GUI click called with x={x}, y={y}")
     pyautogui.click(x, y)
     return {"status": "success", "message": f"Clicked at ({x}, {y})"}
 
@@ -82,6 +85,7 @@ def right_click(x: int, y: int) -> Dict[str, str]:
     """
     Simulate a right mouse click at the specified coordinates.
     """
+    log.info(f"GUI right_click called with x={x}, y={y}")
     pyautogui.rightClick(x, y)
     return {"status": "success", "message": f"Right clicked at ({x}, {y})"}
 
@@ -90,6 +94,7 @@ def double_click(x: int, y: int) -> Dict[str, str]:
     """
     Simulate a double mouse click at the specified coordinates.
     """
+    log.info(f"GUI double_click called with x={x}, y={y}")
     pyautogui.doubleClick(x, y)
     return {"status": "success", "message": f"Double clicked at ({x}, {y})"}
 
@@ -98,6 +103,7 @@ def drag(x1: int, y1: int, x2: int, y2: int) -> Dict[str, str]:
     """
     Simulate a mouse drag from (x1, y1) to (x2, y2).
     """
+    log.info(f"GUI drag called from ({x1}, {y1}) to ({x2}, {y2})")
     pyautogui.dragTo(x2, y2, duration=0.5)
     return {"status": "success", "message": f"Dragged from ({x1}, {y1}) to ({x2}, {y2})"}
 
@@ -107,10 +113,13 @@ def keyboard_action(action_type: str, key: str) -> Dict[str, str]:
     Simulate a keyboard action.
     """
     if action_type == "press":
+        log.info(f"GUI keyboard press called with key={key}")
         pyautogui.press(key)
     elif action_type == "type":
+        log.info(f"GUI keyboard type called with key={key}")
         pyautogui.typewrite(key)
     elif action_type == "hotkey":
+        log.info(f"GUI keyboard hotkey called with key={key}")
         pyautogui.hotkey(*key.split("+"))
     return {"status": "success", "message": f"Keyboard action {action_type} on {key}"}
 
@@ -120,8 +129,10 @@ def scroll(direction: str, amount: int) -> Dict[str, str]:
     Simulate a scroll action.
     """
     if direction == "up":
+        log.info(f"GUI scroll up called with amount={amount}")
         pyautogui.scroll(amount)
     elif direction == "down":
+        log.info(f"GUI scroll down called with amount={amount}")
         pyautogui.scroll(-amount)
     return {"status": "success", "message": f"Scrolled {direction} by {amount}"}
 
@@ -130,6 +141,7 @@ def move_mouse(x: int, y: int) -> Dict[str, str]:
     """
     Move the mouse to the specified coordinates.
     """
+    log.info(f"GUI move_mouse called with x={x}, y={y}")
     pyautogui.moveTo(x, y)
     return {"status": "success", "message": f"Moved to ({x}, {y})"}
 
@@ -139,6 +151,7 @@ def idle(duration: float) -> Dict[str, str]:
     Simulate an idle action for the specified duration.
     Note: This should not be used in async contexts - use asyncio.sleep() instead.
     """
+    log.info(f"GUI idle called for {duration} seconds")
     import time
     time.sleep(duration)
     return {"status": "success", "message": f"Idle for {duration} seconds"}

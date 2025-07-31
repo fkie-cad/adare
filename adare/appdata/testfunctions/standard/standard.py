@@ -6,10 +6,10 @@ import re
 from typing import ClassVar, Optional
 
 # internal imports
-from adarevm.testset.basictest import BasicTest, Parameter
-from adare.types.event import TestResult
+from adarelib.testset.basictest import BasicTest, Parameter
+from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
-import adare.customyaml.customtags as yml
+import adarelib.testset.yaml.customtags as yml
 
 # configure logging
 import logging
@@ -27,12 +27,12 @@ class FileExists(BasicTest):
     testdescription: ClassVar[str] = 'tests if a file with path destination(dst)  is existing'
 
     name: str
-    params: FileExistsParameter
+    parameter: FileExistsParameter
     description: Optional[str] = ''
     variables: Optional[dict] = None
 
     def test(self):
-        if Path(self.params.dst).is_file():
+        if Path(self.parameter.dst).is_file():
             result = TestResult(
                 status=StatusEnum.SUCCESS,
             )
@@ -40,7 +40,7 @@ class FileExists(BasicTest):
         else:
             result = TestResult(
                 status=StatusEnum.FAILED,
-                details=[f'file with path {self.params.dst} does not exist']
+                details=[f'file with path {self.parameter.dst} does not exist']
             )
         return result
 
@@ -56,19 +56,19 @@ class FileDoesNotExist(BasicTest):
     testdescription: ClassVar[str] = 'tests if a file with path destination(dst) is NOT existing'
 
     name: str
-    params: FileDoesNotExistParameter
+    parameter: FileDoesNotExistParameter
     description: Optional[str] = ''
     variables: Optional[dict] = None
 
     def test(self):
-        if not Path(self.params.dst).is_file():
+        if not Path(self.parameter.dst).is_file():
             result = TestResult(
                 status=StatusEnum.SUCCESS,
             )
         else:
             result = TestResult(
                 status=StatusEnum.FAILED,
-                details=[f'file with path {self.params.dst} does exist']
+                details=[f'file with path {self.parameter.dst} does exist']
             )
         return result
 
@@ -85,19 +85,19 @@ class DirExists(BasicTest):
     testdescription: ClassVar[str] = 'tests if a directory with path destination(dst) is existing'
 
     name: str
-    params: DirExistsParameter
+    parameter: DirExistsParameter
     description: Optional[str] = ''
     variables: Optional[dict] = None
 
     def test(self):
-        if Path(self.params.dst).is_dir():
+        if Path(self.parameter.dst).is_dir():
             result = TestResult(
                 status=StatusEnum.SUCCESS,
             )
         else:
             result = TestResult(
                 status=StatusEnum.FAILED,
-                details=[f'directory with path {self.params.dst} does not exist']
+                details=[f'directory with path {self.parameter.dst} does not exist']
             )
         return result
 
@@ -113,19 +113,19 @@ class DirDoesNotExist(BasicTest):
     testdescription: ClassVar[str] = 'tests if a directory with path destination(dst) is NOT existing'
 
     name: str
-    params: DirDoesNotExistParameter
+    parameter: DirDoesNotExistParameter
     description: Optional[str] = ''
     variables: Optional[dict] = None
 
     def test(self):
-        if not Path(self.params.dst).is_dir():
+        if not Path(self.parameter.dst).is_dir():
             result = TestResult(
                 status=StatusEnum.SUCCESS,
             )
         else:
             result = TestResult(
                 status=StatusEnum.FAILED,
-                details=[f'directory with path {self.params.dst} does exist']
+                details=[f'directory with path {self.parameter.dst} does exist']
             )
         return result
 
@@ -142,26 +142,26 @@ class DirContent(BasicTest):
     testdescription: ClassVar[str] = 'tests if a directory has the expected files/folders'
 
     name: str
-    params: DirContentParameter
+    parameter: DirContentParameter
     description: Optional[str] = ''
     variables: Optional[dict] = None
 
     def test(self):
-        dst, status = self.resolve_globfilepath(self.params.dst)
+        dst, status = self.resolve_globfilepath(self.parameter.dst)
         if not dst:
             result = TestResult(
                 status=StatusEnum.FAILED,
-                details=[f'directory with path {self.params.dst} can\'t be used, because no unambiguous directory could be identified (because {status})']
+                details=[f'directory with path {self.parameter.dst} can\'t be used, because no unambiguous directory could be identified (because {status})']
             )
             return result
         log.debug(f'dst directory {dst} will be used for test {self.name}')
 
         dir_content = [str(p) for p in Path(dst).iterdir()]
         expected_missing_files = [
-            file for file in self.params.files if file not in dir_content
+            file for file in self.parameter.files if file not in dir_content
         ]
         additional_files = [
-            file for file in dir_content if file not in self.params.files
+            file for file in dir_content if file not in self.parameter.files
         ]
         if expected_missing_files:
             details = [f'expected missing files: {expected_missing_files}']
@@ -191,16 +191,16 @@ class FileContentMatchesRegex(BasicTest):
     testdescription: ClassVar[str] = 'tests if file content matches a given regex expression'
 
     name: str
-    params: FileContentMatchesRegexParameter
+    parameter: FileContentMatchesRegexParameter
     description: Optional[str] = ''
     variables: Optional[dict] = None
 
     def test(self):
-        dst, status = self.resolve_globfilepath(self.params.dst)
+        dst, status = self.resolve_globfilepath(self.parameter.dst)
         if not dst:
             result = TestResult(
                 status=StatusEnum.FAILED,
-                details=[f'file with path {self.params.dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+                details=[f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})']
             )
             return result
         log.debug(f'dst file {dst} will be used for test {self.name}')
@@ -210,10 +210,10 @@ class FileContentMatchesRegex(BasicTest):
         except FileNotFoundError:
             result = TestResult(
                 status=StatusEnum.FAILED,
-                details=[f'file with path {self.params.dst} does not exist']
+                details=[f'file with path {self.parameter.dst} does not exist']
             )
             return result
-        if re.search(self.params.regex, data):
+        if re.search(self.parameter.regex, data):
             result = TestResult(
                 status=StatusEnum.SUCCESS
             )
@@ -250,22 +250,22 @@ class CsvContainsLineMatchingRegex(BasicTest):
     testdescription: ClassVar[str] = 'tests if row in a csv file exists that matches the given entry layout'
 
     name: str
-    params: CsvContainsLineMatchingRegexParameter
+    parameter: CsvContainsLineMatchingRegexParameter
     description: Optional[str] = ''
     variables: Optional[dict] = None
 
     def test(self):
-        dst, status = self.resolve_globfilepath(self.params.dst)
+        dst, status = self.resolve_globfilepath(self.parameter.dst)
         if not dst:
             result = TestResult(
                 status=StatusEnum.FAILED,
-                details=[f'file with path {self.params.dst} can\'t be used, because no unambiguous file could be identified']
+                details=[f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified']
             )
             return result
 
         log.debug(f'dst file {dst} will be used for test {self.name}')
         comparison_list = []
-        for entry in self.params.entry:
+        for entry in self.parameter.entry:
             if entry is str:
                 comparison_list.append(yml.YamlString(entry))
             else:
@@ -282,12 +282,12 @@ class CsvContainsLineMatchingRegex(BasicTest):
                         return result
             result = TestResult(
                 status=StatusEnum.FAILED,
-                details=[f'entry {self.params.entry} does not exist in file']
+                details=[f'entry {self.parameter.entry} does not exist in file']
             )
             return result
         except FileNotFoundError:
             result = TestResult(
                 status=StatusEnum.FAILED,
-                details=[f'file with path {self.params.dst} does not exist']
+                details=[f'file with path {self.parameter.dst} does not exist']
             )
             return result

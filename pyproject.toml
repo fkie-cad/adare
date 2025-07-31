@@ -12,6 +12,61 @@ adarevm = {path="adarevm"}
 adare = {path="adare"}
 adarelib = {path="adarelib"}
 
+[tool.poetry.group.test.dependencies]
+pytest = "^7.4.0"
+pytest-asyncio = "^0.21.0"
+pytest-mock = "^3.11.0"
+pytest-cov = "^4.0.0"
+
+[tool.poetry.scripts]
+adare = "adare.run:main"
+adareexp = "adare.example:main"
+mcp_gui = "adare.mcp_gui:main"
+
+[tool.poetry.extras]
+docs = ["Sphinx", "sphinx-rtd-theme"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--strict-markers --disable-warnings"
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests"
+]
+
+[tool.coverage.run]
+source = ["adare"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/venv/*",
+    "*/.venv/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:"
+]
+show_missing = true
+precision = 2
+
+[tool.coverage.html]
+directory = "htmlcov"
+
 
 [build-system]
 requires = ["poetry-core"]

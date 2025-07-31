@@ -1,0 +1,57 @@
+settings:
+  # Default pause between actions (seconds) -> make this also configurable to be randomized in a specific range
+  idle: 1.0
+  
+  # Overall timeout for the experiment (seconds)
+  timeout: 300
+  
+  # Default screenshot settings
+  screenshot:
+    format: "png"
+    quality: 95
+
+# Variables that can be used throughout the playbook
+variables:
+  username: "vagrant"
+  filepath: "C:/Users/{{ username }}/Documents/testfile.txt"
+
+actions:
+  - command:
+      name: "Create Test File"
+      description: "create the to deleted file"
+      cmd: "echo 'This is a test file.' > {{ filepath }}"
+  - test: testfile_created
+  - click:
+      target:
+        image: "explorer.png"
+      description: "Open File Explorer"
+  - idle:
+      duration: 2.0
+      description: "Wait additional time for File Explorer to open since some systems are slow"
+  - click:
+      target:
+        text: "Documents"
+      description: "Navigate to Documents folder"
+  - click:
+      target:
+        text: "testfile.txt"
+      description: "Select the test file to delete it with shortcut"
+  - keyboard:
+      combination: ["delete"]
+      description: "Delete the test file using keyboard shortcut"
+  - save_timestamp:
+      description: "Save the timestamp of file deletion for later verification"
+      variable: TIMESTAMP.DELETIONDATE
+  - idle:
+      duration: 1.0
+      description: "Wait for file deletion to complete"
+  - test: testfile_deleted
+  - block:
+      description: "Check if file metadata exists in trash bin"
+      actions:
+        - command:
+            name: "RBCmd"
+            description: "Run RBCmd.exe to check file metadata"
+            tool: RBCmd.exe
+            command: 'RBCmd.exe -d C:\ --csv C:/Users/vagrant/Documents/trashbin'
+        - test: trashbin_check

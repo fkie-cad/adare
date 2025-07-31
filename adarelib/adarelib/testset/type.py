@@ -10,16 +10,7 @@ log = logging.getLogger(__name__)
 class Test:
     name: str
     function: str
-    parameters: dict = {}
-    description: str = ''
-    depends_on: list[str] = []
-
-
-@attrs.define
-class Command:
-    name: str
-    command: str
-    tool: str
+    parameter: dict = {}
     description: str = ''
 
 
@@ -27,5 +18,4 @@ class Command:
 class TestsetFile:
     name: str
     tests: list[Test]
-    commands: list[Command] = attrs.Factory(list)
     description: str = ''

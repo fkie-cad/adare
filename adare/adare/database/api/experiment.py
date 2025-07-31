@@ -134,6 +134,16 @@ class ExperimentApi(ProjectDbApi):
         self._session.add(experiment)
         self._session.commit()
 
+        # Populate playbook models from YAML file
+        if experiment_directory.playbookfile.exists():
+            from adare.database.api.playbook import PlaybookApi
+            playbook_api = PlaybookApi(self._session)
+            try:
+                playbook_api.populate_playbook_from_file(experiment, experiment_directory.playbookfile)
+                log.debug(f'populated playbook models for experiment {experiment.ulid}')
+            except Exception as e:
+                log.warning(f'failed to populate playbook models for experiment {experiment.ulid}: {e}')
+
         log.debug(f'added experiment {experiment.ulid} to database')
         return experiment
 
@@ -218,16 +228,7 @@ class ExperimentApi(ProjectDbApi):
         experiment = self._session.query(Experiment).filter(Experiment.id == experiment_ulid).first()
         return experiment.sha256 == sha256 if experiment else False
 
-    def __get_abstract_test(self, test: FTest, command_list: list[Tool]) -> AbstractTest | None:
-        all_commands_exist = all(
-            cmd for cmd in test.depends_on if cmd in [cmd.name for cmd in command_list]
-        )
-        if not all_commands_exist:
-            raise TestSetFormatError(
-                log,
-                message='test [b]{test.name}[/b] mentions a command that does not exist in the database.',
-            )
-
+    def __get_abstract_test(self, test: FTest) -> AbstractTest | None:
         if '.' in test.function:
             testfunction_set, testfunction_type = test.function.split('.', maxsplit=1)
         else:
@@ -248,7 +249,7 @@ class ExperimentApi(ProjectDbApi):
             )
 
         parameter_entries = []
-        for p_key, p_val in test.parameters.items():
+        for p_key, p_val in test.parameter.items():
             parameter = self._session.query(TestParameter).filter_by(name=p_key).first()
             # check if TestParameterEntry already exists
             test_parameter_entry_q = self._session.query(TestParameterEntry).filter_by(parameter=parameter,
@@ -261,17 +262,14 @@ class ExperimentApi(ProjectDbApi):
                 self._session.commit()
             parameter_entries.append(test_parameter_entry_obj)
 
-        commands = [cmd for cmd in command_list if cmd.name in test.depends_on]
         parameter_entry_ids_data = [p.id for p in parameter_entries]
         abstract_test_obj = (
             self._session.query(AbstractTest)
             .join(AbstractTest.parameters)
-            .join(AbstractTest.depends_on_tool)
             .filter(
                 AbstractTest.name == test.name,
                 AbstractTest.description == test.description,
                 AbstractTest.testfunction == testfunction,
-                Tool.id.in_([c.id for c in commands]),
                 TestParameterEntry.id.in_(parameter_entry_ids_data)
             )
             .first()
@@ -282,35 +280,18 @@ class ExperimentApi(ProjectDbApi):
             abstract_test_obj = AbstractTest(
                 name=test.name,
                 description=test.description,
-                testfunction=testfunction,
-                depends_on_tool=commands
+                testfunction=testfunction
             )
             abstract_test_obj.parameters = parameter_entries
             self._session.add(abstract_test_obj)
 
         return abstract_test_obj
 
-    def __get_command_list(self, testset: FTestsetFile) -> list[Tool]:
-        command_list = []
-        for cmd in testset.commands:
-            command = self._session.query(Tool).filter_by(
-                name=cmd.name,
-                command=cmd.command
-            ).first()
-            if not command:
-                command = Tool(
-                    name=cmd.name,
-                    command=cmd.command)
-                self._session.add(command)
-            command_list.append(command)
-        return command_list
-
     def __get_abstracttests_from_testsetfile(self, testset: FTestsetFile) -> list[AbstractTest]:
         """
             Get/Creates the tests from the testset file.
         """
-        command_list = self.__get_command_list(testset)
-        return [self.__get_abstract_test(test, command_list) for test in testset.tests]
+        return [self.__get_abstract_test(test) for test in testset.tests]
 
     def update_experiment_run_status(self, experiment_run_ulid: str, status: int):
         experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_ulid).first()

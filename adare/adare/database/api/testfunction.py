@@ -145,7 +145,7 @@ class TestfunctionDbApi(ExperimentApi):
 
     def parse_and_create_testfunction(self, testfunction_class, module_analyzer: PyModuleAnalyzer,
                                       testfunction_file: TestFunctionFile):
-        parameter_attr_type = testfunction_class.get_attribute('params').get_type()
+        parameter_attr_type = testfunction_class.get_attribute('parameter').get_type()
         if matching_parameter_class := module_analyzer.get_class(parameter_attr_type):
             attribute_dict = matching_parameter_class.get_attributes_as_dict()
             db_parameter_objects = {}
@@ -192,7 +192,7 @@ class TestfunctionDbApi(ExperimentApi):
         self._session.add(testfunction_file)
 
         for t_func_class in module_analyzer.get_classes(parent='BasicTest'):
-            if t_func_class.has_attribute('params'):
+            if t_func_class.has_attribute('parameter'):
                 self.parse_and_create_testfunction(t_func_class, module_analyzer, testfunction_file)
             else:
                 raise TestfunctionParameterClassMissingError(
