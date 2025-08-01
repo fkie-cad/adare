@@ -9,6 +9,7 @@ from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRu
 from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.backend.experiment.websocket_client import AdareVMClient
 from adare.backend.experiment.mcp_server_manager import MCPServerManager
+from adare.types.playbook import Playbook
 
 @dataclass
 class ExperimentConfig:
@@ -45,3 +46,4 @@ class ExperimentRunCtx:
     lock: threading.Lock = field(default_factory=threading.Lock)
     mcp_server: Optional[MCPServerManager] = None
     debug_screenshots: bool = False
+    playbook: Optional[Playbook] = None

@@ -18,15 +18,17 @@ class ExperimentFlowConsole:
     stop_event: threading.Event
     thread: threading.Thread | None
     disable: bool
+    external_stop_event: threading.Event | None
 
     messages: dict
     ticks_per_second: int = 12
 
     layout: Text
 
-    def __init__(self, disable: bool = False):
+    def __init__(self, disable: bool = False, external_stop_event: threading.Event = None):
         self.console = Console()
         self.stop_event = threading.Event()
+        self.external_stop_event = external_stop_event
         self.messages = {}
         self.thread = None
         self.disable = disable
@@ -42,6 +44,14 @@ class ExperimentFlowConsole:
         tick_count = 0
         with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second) as live:
             while not self.stop_event.is_set():
+                # Check for external interruption (Ctrl-C)
+                if self.external_stop_event and self.external_stop_event.is_set():
+                    # Add interruption message and break
+                    self.log_interrupted('INTERRUPT', 'Experiment interrupted by user (Ctrl-C)')
+                    messages_as_str = '\n'.join([self._generate_message(identifier, spinner_position=tick_count) for identifier in self.messages.keys()])
+                    live.update(messages_as_str)
+                    break
+                    
                 messages_as_str = '\n'.join([self._generate_message(identifier, spinner_position=tick_count) for identifier in self.messages.keys()])
                 live.update(messages_as_str)
                 tick_count += 1

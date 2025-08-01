@@ -52,10 +52,14 @@ def _run_paddle_ocr(screenshot_path: str):
     
     try:
         log.info("Initializing PaddleOCR...")
-        ocr = PaddleOCR(use_doc_orientation_classify=False, use_doc_unwarping=False, use_textline_orientation=False)
+        ocr = PaddleOCR(
+            use_doc_orientation_classify=False, 
+            use_doc_unwarping=False, 
+            use_textline_orientation=False
+        )
         
         log.info("Running OCR prediction...")
-        result = ocr.predict(input=screenshot_path)[0]
+        result = ocr.ocr(screenshot_path)[0]
         
         log.info("OCR prediction completed")
         return result
@@ -105,13 +109,17 @@ async def find_text(text: str, screenshot_base64: str, offset_x: int = 0, offset
             "locations": []
         }
     
-    # find all indices in rec_texts that contain the text
+    # find all detections that contain the text
     locations = []
-    for i, (text_rec, box) in enumerate(zip(result['rec_texts'], result['rec_boxes'])):
+    for detection in result:
+        box, (text_rec, confidence) = detection
         if text.lower() in text_rec.lower():
-            x, y, x2, y2 = box
-            center_x = int((x + x2) // 2) + offset_x
-            center_y = int((y + y2) // 2) + offset_y
+            # box is a list of 4 corner points [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+            # Calculate center from bounding box
+            x_coords = [point[0] for point in box]
+            y_coords = [point[1] for point in box]
+            center_x = int(sum(x_coords) / len(x_coords)) + offset_x
+            center_y = int(sum(y_coords) / len(y_coords)) + offset_y
             locations.append({
                 "text": text_rec,
                 "location": {

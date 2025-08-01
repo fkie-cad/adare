@@ -17,7 +17,7 @@ import jinja2
 
 # Playbook and test imports
 from adare.types.playbook import (
-    parse_playbook, Config, ActionType, Target, SaveTimestampAction,
+    parse_playbook, Playbook, ActionType, Target, SaveTimestampAction,
     ClickAction, RightClickAction, DoubleClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, 
     CommandAction, ScreenshotAction, BlockAction, ActionTestAction,
@@ -65,7 +65,7 @@ class PlaybookController:
     execution order with timing and conditional logic.
     """
     
-    def __init__(self, websocket_client: AdareVMClient, experiment_dir: Path, project_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp", debug_screenshots: bool = False, screenshots_dir: Path = None):
+    def __init__(self, websocket_client: AdareVMClient, experiment_dir: Path, project_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp", debug_screenshots: bool = False, screenshots_dir: Path = None, playbook: Optional[Playbook] = None):
         """
         Initialize the playbook controller.
         
@@ -76,6 +76,7 @@ class PlaybookController:
             mcp_gui_url: URL of the MCP GUI server for CV/OCR
             debug_screenshots: Whether to save screenshots for debugging
             screenshots_dir: Directory to save debug screenshots
+            playbook: Pre-parsed playbook (optional, will parse if not provided)
         """
         self.client = websocket_client
         self.experiment_dir = experiment_dir
@@ -85,6 +86,7 @@ class PlaybookController:
         self.debug_screenshots = debug_screenshots
         self.screenshots_dir = screenshots_dir
         self.screenshot_counter = 0
+        self.playbook = playbook  # Pre-parsed playbook
         
         # Target resolution using MCP GUI server
         self.target_resolver = MCPTargetResolver(experiment_dir, mcp_gui_url)
@@ -161,21 +163,26 @@ class PlaybookController:
         Returns:
             PlaybookExecutionResult with execution details
         """
-        log.info(f"Parsing playbook: {playbook_path}")
-        config = parse_playbook(playbook_path)
+        # Use pre-parsed playbook if available, otherwise parse now
+        if self.playbook:
+            log.info("Using pre-parsed playbook")
+            playbook = self.playbook
+        else:
+            log.info(f"Parsing playbook: {playbook_path}")
+            playbook = parse_playbook(playbook_path)
         
-        # Set up experiment variables and config access
-        self.execution_context['config'] = config
-        if hasattr(config, 'variables') and config.variables:
+        # Set up experiment variables and playbook access
+        self.execution_context['playbook'] = playbook
+        if hasattr(playbook, 'variables') and playbook.variables:
             log.info("Setting experiment variables...")
-            await self.client.set_variables(config.variables)
-            self.execution_context.update(config.variables)
+            await self.client.set_variables(playbook.variables)
+            self.execution_context.update(playbook.variables)
         
         # Execute actions sequentially
-        total_actions = len(config.actions)
+        total_actions = len(playbook.actions)
         log.info(f"Executing {total_actions} playbook actions...")
         
-        for i, action in enumerate(config.actions):
+        for i, action in enumerate(playbook.actions):
             action_name = type(action).__name__
             log.info(f"Executing action {i+1}/{total_actions}: {action_name}")
             
@@ -194,8 +201,8 @@ class PlaybookController:
                 break
             
             # Apply global idle setting
-            if hasattr(config, 'settings') and config.settings and config.settings.idle:
-                await self.client.idle(config.settings.idle)
+            if hasattr(playbook, 'settings') and playbook.settings and playbook.settings.idle:
+                await self.client.idle(playbook.settings.idle)
         
         successful = sum(1 for r in self.action_results if r.success)
         failed = len(self.action_results) - successful
@@ -416,6 +423,19 @@ class PlaybookController:
             Coordinates if found, None otherwise
         """
         try:
+            # Apply smart defaults if no strategy specified
+            if target.strategy is None:
+                from adare.types.playbook import BestConfidenceStrategy, TopLeftStrategy
+                if target.image:
+                    target.strategy = BestConfidenceStrategy()  # Images: best visual match
+                    log.debug("Applied default BestConfidence strategy for image target")
+                elif target.text:
+                    target.strategy = TopLeftStrategy()  # Text: natural reading order
+                    log.debug("Applied default TopLeft strategy for text target")
+                else:
+                    target.strategy = TopLeftStrategy()  # Fallback
+                    log.debug("Applied fallback TopLeft strategy for position target")
+            
             # Get fresh screenshot for image/text targets
             screenshot_base64 = None
             if target.image or target.text:

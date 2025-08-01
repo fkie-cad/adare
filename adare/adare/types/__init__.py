@@ -36,7 +36,7 @@ from .experiment import (
 
 # Playbook/Action types
 from .playbook import (
-    Config,
+    Playbook,
     Settings,
     Target,
     ActionType,
@@ -83,7 +83,7 @@ __all__ = [
     'ExperimentMetadata',
     
     # Playbook types
-    'Config',
+    'Playbook',
     'Settings',
     'Target',
     'ActionType',

@@ -13,7 +13,7 @@ import json
 import base64
 
 from fastmcp import Client
-from adare.types.playbook import Target
+from adare.types.playbook import Target, SweepStrategy, BestConfidenceStrategy, ClosestToStrategy, TopLeftStrategy, TopRightStrategy, BottomLeftStrategy, BottomRightStrategy, LargestStrategy, SmallestStrategy
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ class TargetMatch:
     confidence: float
     method: str  # 'image', 'text', 'position'
     region: Optional[Tuple[int, int, int, int]] = None  # x, y, width, height
+    text: Optional[str] = None  # Original text for text matches
 
 
 class MCPTargetResolver:
@@ -48,6 +49,121 @@ class MCPTargetResolver:
         self.mcp_gui_url = mcp_gui_url
         self._connection_tested = False
         self._connection_available = False
+    
+    def _select_match_by_strategy(self, matches: List[TargetMatch], strategy) -> Optional[TargetMatch]:
+        """
+        Select a single match from multiple matches based on strategy.
+        
+        Args:
+            matches: List of found matches
+            strategy: Strategy object for selection
+            
+        Returns:
+            Selected match or None if no valid match
+        """
+        if not matches:
+            return None
+        
+        # If only one match, return it directly without applying strategy
+        if len(matches) == 1:
+            return matches[0]
+        
+        if strategy is None:
+            # Should not happen - playbook controller sets smart defaults
+            log.warning("No strategy provided, using first match")
+            return matches[0]
+        
+        elif isinstance(strategy, SweepStrategy):
+            # Sort matches spatially: top-to-bottom, left-to-right (reading order)
+            sorted_matches = sorted(matches, key=lambda m: (m.coordinates[1], m.coordinates[0]))
+            index = strategy.index
+            if 1 <= index <= len(sorted_matches):
+                return sorted_matches[index - 1]  # Convert to 0-based
+            else:
+                log.warning(f"Sweep index {index} out of range (1-{len(sorted_matches)}), using first match")
+                return sorted_matches[0]
+        
+        elif isinstance(strategy, BestConfidenceStrategy):
+            best_confidence = max(m.confidence for m in matches)
+            best_matches = [m for m in matches if m.confidence == best_confidence]
+            if len(best_matches) > 1:
+                log.warning(f"BestConfidenceStrategy: {len(best_matches)} matches tied with confidence {best_confidence}, using first")
+            return best_matches[0]
+        
+        elif isinstance(strategy, ClosestToStrategy):
+            def distance(match):
+                x, y = match.coordinates
+                return ((x - strategy.x) ** 2 + (y - strategy.y) ** 2) ** 0.5
+            
+            min_distance = min(distance(m) for m in matches)
+            closest_matches = [m for m in matches if distance(m) == min_distance]
+            if len(closest_matches) > 1:
+                log.warning(f"ClosestToStrategy: {len(closest_matches)} matches tied at distance {min_distance:.1f}, using first")
+            return closest_matches[0]
+        
+        elif isinstance(strategy, TopLeftStrategy):
+            # Sort by y (top), then x (left) - deterministic order
+            sorted_matches = sorted(matches, key=lambda m: (m.coordinates[1], m.coordinates[0]))
+            top_y = sorted_matches[0].coordinates[1]
+            top_matches = [m for m in sorted_matches if m.coordinates[1] == top_y]
+            if len(top_matches) > 1:
+                log.warning(f"TopLeftStrategy: {len(top_matches)} matches at same top row y={top_y}, using leftmost")
+            return top_matches[0]
+        
+        elif isinstance(strategy, TopRightStrategy):
+            # Sort by y (top), then -x (right)
+            sorted_matches = sorted(matches, key=lambda m: (m.coordinates[1], -m.coordinates[0]))
+            top_y = sorted_matches[0].coordinates[1]
+            top_matches = [m for m in sorted_matches if m.coordinates[1] == top_y]
+            if len(top_matches) > 1:
+                log.warning(f"TopRightStrategy: {len(top_matches)} matches at same top row y={top_y}, using rightmost")
+            return top_matches[0]
+        
+        elif isinstance(strategy, BottomLeftStrategy):
+            # Sort by -y (bottom), then x (left)
+            sorted_matches = sorted(matches, key=lambda m: (-m.coordinates[1], m.coordinates[0]))
+            bottom_y = sorted_matches[0].coordinates[1]
+            bottom_matches = [m for m in sorted_matches if m.coordinates[1] == bottom_y]
+            if len(bottom_matches) > 1:
+                log.warning(f"BottomLeftStrategy: {len(bottom_matches)} matches at same bottom row y={bottom_y}, using leftmost")
+            return bottom_matches[0]
+        
+        elif isinstance(strategy, BottomRightStrategy):
+            # Sort by -y (bottom), then -x (right)
+            sorted_matches = sorted(matches, key=lambda m: (-m.coordinates[1], -m.coordinates[0]))
+            bottom_y = sorted_matches[0].coordinates[1]
+            bottom_matches = [m for m in sorted_matches if m.coordinates[1] == bottom_y]
+            if len(bottom_matches) > 1:
+                log.warning(f"BottomRightStrategy: {len(bottom_matches)} matches at same bottom row y={bottom_y}, using rightmost")
+            return bottom_matches[0]
+        
+        elif isinstance(strategy, LargestStrategy):
+            def area(match):
+                if match.region:
+                    return match.region[2] * match.region[3]  # width * height
+                return 0  # No region info, treat as zero area
+            
+            max_area = max(area(m) for m in matches)
+            largest_matches = [m for m in matches if area(m) == max_area]
+            if len(largest_matches) > 1:
+                log.warning(f"LargestStrategy: {len(largest_matches)} matches tied with area {max_area}, using first")
+            return largest_matches[0]
+        
+        elif isinstance(strategy, SmallestStrategy):
+            def area(match):
+                if match.region:
+                    return match.region[2] * match.region[3]  # width * height
+                return float('inf')  # No region info, treat as infinite
+            
+            min_area = min(area(m) for m in matches)
+            smallest_matches = [m for m in matches if area(m) == min_area]
+            if len(smallest_matches) > 1:
+                log.warning(f"SmallestStrategy: {len(smallest_matches)} matches tied with area {min_area}, using first")
+            return smallest_matches[0]
+        
+        else:
+            log.warning(f"Unknown strategy type: {type(strategy)}, using first match")
+            return matches[0]
     
     async def test_mcp_connection(self) -> bool:
         """
@@ -137,18 +253,47 @@ class MCPTargetResolver:
                         })
                         
                         # Parse response
-                        data = result[0].text
-                        locations_data = json.loads(data)
+                        if result.data is not None:
+                            locations_data = result.data
+                        elif result.content and len(result.content) > 0:
+                            data = result.content[0].text
+                            locations_data = json.loads(data)
+                        else:
+                            log.error("No data found in MCP result")
+                            return None
                         locations = locations_data.get("locations", [])
                         
                         if locations:
-                            x, y = locations[0]
-                            log.info(f"Found image '{target.image}' at ({x}, {y}) via MCP")
-                            return TargetMatch(
-                                coordinates=(x, y),
-                                confidence=0.8,
-                                method='image'
-                            )
+                            # Create matches for all found locations
+                            matches = []
+                            for x, y in locations:
+                                matches.append(TargetMatch(
+                                    coordinates=(x, y),
+                                    confidence=0.8,  # Could be enhanced to get actual confidence from CV
+                                    method='image'
+                                ))
+                            
+                            # Log all found matches
+                            log.info(f"Found {len(matches)} matches for image '{target.image}':")
+                            for i, match in enumerate(matches):
+                                log.info(f"  Match {i+1}: at {match.coordinates}")
+                            
+                            # Apply strategy to select from multiple matches
+                            strategy_name = target.strategy.__class__.__name__ if target.strategy else "default"
+                            strategy_params = ""
+                            if target.strategy and hasattr(target.strategy, '__dict__'):
+                                import attrs
+                                if attrs.has(target.strategy):
+                                    params = attrs.asdict(target.strategy)
+                                    if params:
+                                        strategy_params = f" with params {params}"
+                            log.info(f"Applying {strategy_name} strategy{strategy_params} to select from {len(matches)} matches")
+                            
+                            selected_match = self._select_match_by_strategy(matches, target.strategy)
+                            if selected_match:
+                                selected_index = matches.index(selected_match) + 1
+                                log.info(f"Selected match {selected_index}: image '{target.image}' at {selected_match.coordinates} via MCP")
+                                return selected_match
                         else:
                             log.warning(f"Image '{target.image}' not found via MCP")
                             return None
@@ -165,22 +310,51 @@ class MCPTargetResolver:
                         })
                         
                         # Parse response
-                        data = result[0].text
-                        locations_data = json.loads(data)
+                        if result.data is not None:
+                            locations_data = result.data
+                        elif result.content and len(result.content) > 0:
+                            data = result.content[0].text
+                            locations_data = json.loads(data)
+                        else:
+                            log.error("No data found in MCP result")
+                            return None
                         locations = locations_data.get("locations", [])
                         
                         if locations:
-                            location_info = locations[0]
-                            x = location_info["location"]["x"]
-                            y = location_info["location"]["y"]
-                            found_text = location_info["text"]
+                            # Create matches for all found text locations
+                            matches = []
+                            for location_info in locations:
+                                x = location_info["location"]["x"]
+                                y = location_info["location"]["y"]
+                                found_text = location_info["text"]
+                                matches.append(TargetMatch(
+                                    coordinates=(x, y),
+                                    confidence=0.8,  # Could use OCR confidence if available
+                                    method='text',
+                                    text=found_text
+                                ))
                             
-                            log.info(f"Found text '{target.text}' (matched: '{found_text}') at ({x}, {y}) via MCP")
-                            return TargetMatch(
-                                coordinates=(x, y),
-                                confidence=0.8,
-                                method='text'
-                            )
+                            # Log all found matches
+                            log.info(f"Found {len(matches)} matches for text '{target.text}':")
+                            for i, match in enumerate(matches):
+                                log.info(f"  Match {i+1}: '{match.text}' at {match.coordinates}")
+                            
+                            # Apply strategy to select from multiple matches
+                            strategy_name = target.strategy.__class__.__name__ if target.strategy else "default"
+                            strategy_params = ""
+                            if target.strategy and hasattr(target.strategy, '__dict__'):
+                                import attrs
+                                if attrs.has(target.strategy):
+                                    params = attrs.asdict(target.strategy)
+                                    if params:
+                                        strategy_params = f" with params {params}"
+                            log.info(f"Applying {strategy_name} strategy{strategy_params} to select from {len(matches)} matches")
+                            
+                            selected_match = self._select_match_by_strategy(matches, target.strategy)
+                            if selected_match:
+                                selected_index = matches.index(selected_match) + 1
+                                log.info(f"Selected match {selected_index}: '{selected_match.text}' at {selected_match.coordinates} via MCP")
+                                return selected_match
                         else:
                             log.warning(f"Text '{target.text}' not found via MCP")
                             return None

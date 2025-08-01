@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
 from adare.database.models.playbook import Playbook, PlaybookItem
-from adare.types.playbook import parse_playbook, Config, ActionType
+from adare.types.playbook import parse_playbook, Playbook as PlaybookType, ActionType
 from adare.database.models.experiment import Experiment
 
 log = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class PlaybookApi:
             log.error(f"Failed to populate playbook from {playbook_file_path}: {e}", exc_info=True)
             raise
     
-    def _get_or_create_playbook(self, experiment: Experiment, config: Config) -> Playbook:
+    def _get_or_create_playbook(self, experiment: Experiment, config: PlaybookType) -> Playbook:
         """Get existing playbook or create new one."""
         playbook = self._session.query(Playbook).filter(
             Playbook.experiment_id == experiment.id
@@ -102,7 +102,7 @@ class PlaybookApi:
         self._session.add(item)
         return item
     
-    def _config_to_settings_json(self, config: Config) -> Dict[str, Any]:
+    def _config_to_settings_json(self, config: PlaybookType) -> Dict[str, Any]:
         """Convert Config.settings to JSON."""
         if not config.settings:
             return {}
@@ -120,7 +120,28 @@ class PlaybookApi:
             result["text"] = target.text  
         if target.position:
             result["position"] = target.position
+        if target.strategy:
+            result["strategy"] = self._strategy_to_json(target.strategy)
         return result
+    
+    def _strategy_to_json(self, strategy) -> Dict[str, Any]:
+        """Convert strategy object to JSON."""
+        import attrs
+        from adare.types.playbook import SweepStrategy, BestConfidenceStrategy, ClosestToStrategy
+        
+        strategy_class = strategy.__class__.__name__
+        
+        if isinstance(strategy, SweepStrategy):
+            return {strategy_class: {"index": strategy.index}}
+        elif attrs.has(strategy):
+            # For attrs-defined strategies, use attrs.asdict()
+            return {strategy_class: attrs.asdict(strategy)}
+        elif hasattr(strategy, '__dict__'):
+            # For regular classes with attributes, serialize all fields
+            return {strategy_class: strategy.__dict__}
+        else:
+            # For simple strategies with no attributes
+            return {strategy_class: {}}
     
     def _condition_to_json(self, condition) -> Dict[str, Any]:
         """Convert condition object to JSON."""
