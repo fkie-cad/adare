@@ -22,7 +22,7 @@ def __check_project_directory(project_directory: Path) -> bool:
     return True
 
 
-def determine_projectdirectory(project_name: str) -> Path or None:
+def determine_projectdirectory(project_name: str) -> Path | None:
     from adare.database.api.project import ProjectDbApi
     if project_name:
         with ProjectDbApi() as db:

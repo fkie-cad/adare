@@ -5,6 +5,65 @@ import yaml
 import cattrs
 from pathlib import Path
 
+# Target selection strategies
+@attrs.define
+class SweepStrategy:
+    """Select the nth match when scanning left-to-right, top-to-bottom."""
+    index: int = 1  # 1-based index (1 = first, 2 = second, etc.)
+
+@attrs.define
+class BestConfidenceStrategy:
+    """Select match with highest confidence score."""
+    pass
+
+@attrs.define
+class ClosestToStrategy:
+    """Select match closest to specified coordinates."""
+    x: int
+    y: int
+
+@attrs.define
+class TopLeftStrategy:
+    """Select topmost-leftmost match."""
+    pass
+
+@attrs.define
+class TopRightStrategy:
+    """Select topmost-rightmost match."""
+    pass
+
+@attrs.define
+class BottomLeftStrategy:
+    """Select bottommost-leftmost match."""
+    pass
+
+@attrs.define
+class BottomRightStrategy:
+    """Select bottommost-rightmost match."""
+    pass
+
+@attrs.define
+class LargestStrategy:
+    """Select match with largest bounding box area."""
+    pass
+
+@attrs.define
+class SmallestStrategy:
+    """Select match with smallest bounding box area."""
+    pass
+
+TargetStrategyType = Union[
+    SweepStrategy,
+    BestConfidenceStrategy, 
+    ClosestToStrategy,
+    TopLeftStrategy,
+    TopRightStrategy,
+    BottomLeftStrategy,
+    BottomRightStrategy,
+    LargestStrategy,
+    SmallestStrategy
+]
+
 @attrs.define
 class Settings:
     idle: float
@@ -16,6 +75,7 @@ class Target:
     image: Optional[str] = None
     text: Optional[str] = None
     position: Optional[List[int]] = None
+    strategy: Optional[TargetStrategyType] = None
 
 @attrs.define
 class ExistsCondition:
@@ -123,16 +183,20 @@ ActionType = Union[
 ]
 
 @attrs.define
-class Config:
+class Playbook:
     settings: Settings
     actions: List[ActionType]
     variables: Optional[dict] = None
 
-def parse_playbook(yaml_path: Union[str, Path]) -> Config:  # Accept Path or str
+def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or str
     yaml_path = Path(yaml_path)  # Ensure it's a Path object
     with yaml_path.open('r') as f:
         data = yaml.safe_load(f)
     converter = cattrs.Converter()
+    
+    # Configure converter to forbid extra keys - fail on unknown fields
+    converter.forbid_extra_keys = True
+    
     # Register structure hooks for Union types if needed
     converter.register_structure_hook(
         ActionType,
@@ -142,7 +206,15 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Config:  # Accept Path or str
         Union[ExistsCondition, NotExistsCondition],
         lambda obj, _: _structure_condition(obj, converter)
     )
-    return converter.structure(data, Config)
+    converter.register_structure_hook(
+        Optional[TargetStrategyType],
+        lambda obj, _: _structure_strategy(obj, converter) if obj is not None else None
+    )
+    
+    # Register strict structure hooks for all main classes to validate fields
+    _register_strict_hooks(converter)
+    
+    return converter.structure(data, Playbook)
 
 def _structure_action(obj, converter):
     if 'click' in obj:
@@ -184,3 +256,75 @@ def _structure_condition(obj, converter):
     if 'not_exists' in obj:
         return converter.structure(obj['not_exists'], NotExistsCondition)
     raise ValueError(f"Unknown condition: {obj}")
+
+def _structure_strategy(obj, converter):
+    if 'SweepStrategy' in obj:
+        return converter.structure(obj['SweepStrategy'], SweepStrategy)
+    if 'BestConfidenceStrategy' in obj:
+        return converter.structure(obj['BestConfidenceStrategy'], BestConfidenceStrategy)
+    if 'ClosestToStrategy' in obj:
+        return converter.structure(obj['ClosestToStrategy'], ClosestToStrategy)
+    if 'TopLeftStrategy' in obj:
+        return converter.structure(obj['TopLeftStrategy'], TopLeftStrategy)
+    if 'TopRightStrategy' in obj:
+        return converter.structure(obj['TopRightStrategy'], TopRightStrategy)
+    if 'BottomLeftStrategy' in obj:
+        return converter.structure(obj['BottomLeftStrategy'], BottomLeftStrategy)
+    if 'BottomRightStrategy' in obj:
+        return converter.structure(obj['BottomRightStrategy'], BottomRightStrategy)
+    if 'LargestStrategy' in obj:
+        return converter.structure(obj['LargestStrategy'], LargestStrategy)
+    if 'SmallestStrategy' in obj:
+        return converter.structure(obj['SmallestStrategy'], SmallestStrategy)
+    raise ValueError(f"Unknown strategy: {obj}")
+
+def _register_strict_hooks(converter):
+    """Register strict structure hooks that validate all fields."""
+    
+    def _validate_attrs_class(cls):
+        """Create a strict structure hook for an attrs class."""
+        def strict_structure_hook(obj, _):
+            # Get expected field names from the attrs class
+            if not attrs.has(cls):
+                # Use cattrs default structure for non-attrs classes
+                return cattrs.structure(obj, cls)
+                
+            expected_fields = {field.name for field in attrs.fields(cls)}
+            
+            # Check for unexpected fields
+            if isinstance(obj, dict):
+                extra_fields = set(obj.keys()) - expected_fields
+                if extra_fields:
+                    raise ValueError(
+                        f"Unexpected field(s) in {cls.__name__}: {', '.join(sorted(extra_fields))}. "
+                        f"Expected fields: {', '.join(sorted(expected_fields))}"
+                    )
+            
+            # Use cattrs default structure with a fresh converter to avoid recursion
+            fresh_converter = cattrs.Converter()
+            # Copy union hooks to fresh converter to handle nested unions
+            fresh_converter.register_structure_hook(
+                ActionType,
+                lambda obj, _: _structure_action(obj, fresh_converter)
+            )
+            fresh_converter.register_structure_hook(
+                Union[ExistsCondition, NotExistsCondition],
+                lambda obj, _: _structure_condition(obj, fresh_converter)
+            )
+            fresh_converter.register_structure_hook(
+                Optional[TargetStrategyType],
+                lambda obj, _: _structure_strategy(obj, fresh_converter) if obj is not None else None
+            )
+            return fresh_converter.structure(obj, cls)
+        return strict_structure_hook
+    
+    # Register hooks for all main attrs classes
+    for cls in [Target, Settings, ClickAction, RightClickAction, DoubleClickAction, 
+                DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,
+                ActionTestAction, CommandAction, ScreenshotAction, BlockAction,
+                SaveTimestampAction, ExistsCondition, NotExistsCondition,
+                SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
+                TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
+                BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook]:
+        if attrs.has(cls):
+            converter.register_structure_hook(cls, _validate_attrs_class(cls))

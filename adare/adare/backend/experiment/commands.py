@@ -321,14 +321,15 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     await vm.run_command(run_command, background=True, stop_event=stop_event)
 
 
-def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool):
+def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool, external_stop_event: threading.Event = None):
     """
     creates a flow_console and starts it
     :param experiment_run_ulid: used to reference the console if multiple runs at the same time (can be fake)
     :param disable_printing: if true, the console will not print anything
+    :param external_stop_event: event to monitor for external interruption (Ctrl-C)
     :return: the flow_console
     """
-    flow_console = ExperimentFlowConsole(disable_printing)
+    flow_console = ExperimentFlowConsole(disable_printing, external_stop_event)
     flowconsolemanager.add_handler(experiment_run_ulid, flow_console)
     flow_console.start()
     return flow_console
@@ -361,6 +362,22 @@ def step_setup_directories(context: ExperimentRunCtx):
     context.experiment_directory = ExperimentDirectory(context.config.project_path, context.config.experiment_name)
     context.experiment_directory.check_for_missing_files()
     log.info(f'checked experiment directory {context.experiment_directory.path}')
+
+def step_validate_playbook(context: ExperimentRunCtx):
+    """Parse and validate playbook early to catch syntax errors before VM startup."""
+    from adare.types.playbook import parse_playbook
+    
+    playbook_path = context.experiment_directory.path / "playbook.yaml"
+    if not playbook_path.exists():
+        log.info("No playbook.yaml found - experiment will run without GUI actions")
+        return
+    
+    try:
+        log.info(f"Parsing and validating playbook: {playbook_path}")
+        context.playbook = parse_playbook(playbook_path)
+        log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
+    except Exception as e:
+        raise LoggedException(log, f"Playbook validation failed: {str(e)}")
 
 def step_resolve_environment(context: ExperimentRunCtx):
     if context.config.environment_name:
@@ -617,7 +634,8 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             experiment_dir=context.experiment_directory.path,
             project_dir=context.project_directory.path,
             debug_screenshots=context.debug_screenshots,
-            screenshots_dir=context.experiment_run_directory.screenshots_directory if context.debug_screenshots else None
+            screenshots_dir=context.experiment_run_directory.screenshots_directory if context.debug_screenshots else None,
+            playbook=context.playbook  # Pass pre-parsed playbook
         )
         
         # Execute complete experiment (playbook + tests)
@@ -722,7 +740,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
     # Create and start the flow console.
     print(experiment_run_context.experiment_run_ulid)
-    flow_console = __create_and_start_flow_console(experiment_run_context.experiment_run_ulid, disable_printing)
+    flow_console = __create_and_start_flow_console(experiment_run_context.experiment_run_ulid, disable_printing, experiment_run_context.stop_event)
 
     # 
     __start_event_listeners(experiment_run_context.experiment_run_ulid)
@@ -783,6 +801,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         # Sequentially run initial blocking setup steps.
         initial_steps = [
             step_setup_directories,
+            step_validate_playbook,
             step_resolve_environment,
             step_check_integrity_experiment,
             step_check_integrity_project,
