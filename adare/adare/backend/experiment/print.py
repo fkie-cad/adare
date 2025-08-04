@@ -22,6 +22,7 @@ class ExperimentFlowConsole:
 
     messages: dict
     ticks_per_second: int = 12
+    _lock: threading.Lock
 
     layout: Text
 
@@ -32,6 +33,7 @@ class ExperimentFlowConsole:
         self.messages = {}
         self.thread = None
         self.disable = disable
+        self._lock = threading.Lock()
 
         terminal_size = self.console.size
         # Set the height as terminal height minus 10
@@ -44,15 +46,12 @@ class ExperimentFlowConsole:
         tick_count = 0
         with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second) as live:
             while not self.stop_event.is_set():
-                # Check for external interruption (Ctrl-C)
-                if self.external_stop_event and self.external_stop_event.is_set():
-                    # Add interruption message and break
-                    self.log_interrupted('INTERRUPT', 'Experiment interrupted by user (Ctrl-C)')
-                    messages_as_str = '\n'.join([self._generate_message(identifier, spinner_position=tick_count) for identifier in self.messages.keys()])
-                    live.update(messages_as_str)
-                    break
+                # Check for external interruption (Ctrl-C) - no need to add separate message
+                # The interrupted stages will show "(interrupted by user)" inline
                     
                 messages_as_str = '\n'.join([self._generate_message(identifier, spinner_position=tick_count) for identifier in self.messages.keys()])
+                #log.debug(f"Rich Live rendering (tick {tick_count}, msg count: {len(self.messages)}): {repr(messages_as_str[:100])}")
+
                 live.update(messages_as_str)
                 tick_count += 1
                 time.sleep(0.1)
@@ -69,133 +68,175 @@ class ExperimentFlowConsole:
             self.thread.join()
 
     def _generate_message(self, identifier: str, spinner_position: int = 0):
-        message_object = self.messages[identifier]
-        message = message_object['message']
-        icon = StatusEnum.get_icon(message_object['status'], color=True)
-        message = f'{icon} {message}'
+        with self._lock:
+            if identifier not in self.messages:
+                return ""
+            message_object = self.messages[identifier]
+            message = message_object['message']
+            icon = StatusEnum.get_icon(message_object['status'], color=True)
+            message = f'{icon} {message}'
 
-        if message_object['spinner']:
-            spinner = SPINNERS[message_object['spinner']]['frames']
-            spinner_position %= len(spinner)
-            if message_object['spinner_style']:
-                style = message_object['spinner_style']
-                message = f'[{style}]{spinner[spinner_position]}[/{style}] {message}'
-            else:
-                message = f'{spinner[spinner_position]} {message}'
+            if message_object['spinner']:
+                spinner = SPINNERS[message_object['spinner']]['frames']
+                spinner_position %= len(spinner)
+                if message_object['spinner_style']:
+                    style = message_object['spinner_style']
+                    message = f'[{style}]{spinner[spinner_position]}[/{style}] {message}'
+                else:
+                    message = f'{spinner[spinner_position]} {message}'
 
-        if message_object['level'] > 0:
-            message = ' ' * 2 * message_object['level'] + message
+            if message_object['level'] > 0:
+                message = ' ' * 2 * message_object['level'] + message
 
-        if message_object['result_status']:
-            message = f'{message} {StatusEnum.get_icon(message_object["result_status"], color=True)}'
+            if message_object['result_status']:
+                message = f'{message} {StatusEnum.get_icon(message_object["result_status"], color=True)}'
 
-        return message
+            return message
 
     def log_breakpoint_done(self, identifier: str, message: str):
-        self.messages[identifier] = {
-            'message': message,
-            'spinner': None,
-            'spinner_style': None,
-            'level': 0,
-            'status': StatusEnum.BREAKPOINT_RESOLVED,
-            'result_status': None,
-        }
+        with self._lock:
+            self.messages[identifier] = {
+                'message': message,
+                'spinner': None,
+                'spinner_style': None,
+                'level': 0,
+                'status': StatusEnum.BREAKPOINT_RESOLVED,
+                'result_status': None,
+            }
 
     def log_success(self, identifier: str, message: str, level: int = 0):
-        self.messages[identifier] = {
-            'message': message,
-            'spinner': None,
-            'spinner_style': None,
-            'level': level,
-            'status': StatusEnum.SUCCESS,
-            'result_status': None,
-        }
+        with self._lock:
+            self.messages[identifier] = {
+                'message': message,
+                'spinner': None,
+                'spinner_style': None,
+                'level': level,
+                'status': StatusEnum.SUCCESS,
+                'result_status': None,
+            }
 
     def log_ulid(self, ulid: str, level: int = 0):
-        self.messages['ULID'] = {
-            'message': f'ULID: {ulid}',
-            'spinner': None,
-            'spinner_style': None,
-            'level': level,
-            'status': StatusEnum.NONE,
-            'result_status': None,
-        }
+        with self._lock:
+            self.messages['ULID'] = {
+                'message': f'ULID: {ulid}',
+                'spinner': None,
+                'spinner_style': None,
+                'level': level,
+                'status': StatusEnum.NONE,
+                'result_status': None,
+            }
 
     def log_warning(self, identifier: str, message: str, level: int = 0):
-        self.messages[identifier] = {
-            'message': message,
-            'spinner': None,
-            'spinner_style': None,
-            'level': level,
-            'status': StatusEnum.WARNING,
-            'result_status': None,
-        }
+        with self._lock:
+            self.messages[identifier] = {
+                'message': message,
+                'spinner': None,
+                'spinner_style': None,
+                'level': level,
+                'status': StatusEnum.WARNING,
+                'result_status': None,
+            }
 
     def log_error(self, identifier: str, message: str, level: int = 0):
-        self.messages[identifier] = {
-            'message': message,
-            'spinner': None,
-            'spinner_style': None,
-            'level': level,
-            'status': StatusEnum.ERROR,
-            'result_status': None,
-        }
+        with self._lock:
+            self.messages[identifier] = {
+                'message': message,
+                'spinner': None,
+                'spinner_style': None,
+                'level': level,
+                'status': StatusEnum.ERROR,
+                'result_status': None,
+            }
 
     def log_interrupted(self, identifier: str, message: str, level: int = 0):
-        self.messages[identifier] = {
-            'message': message,
-            'spinner': None,
-            'spinner_style': None,
-            'level': level,
-            'status': StatusEnum.INTERRUPTED,
-            'result_status': None,
-        }
+        with self._lock:
+            self.messages[identifier] = {
+                'message': message,
+                'spinner': None,
+                'spinner_style': None,
+                'level': level,
+                'status': StatusEnum.INTERRUPTED,
+                'result_status': None,
+            }
 
     def log_failed(self, identifier: str, message: str, level: int = 0):
-        self.messages[identifier] = {
-            'message': message,
-            'spinner': None,
-            'spinner_style': None,
-            'level': level,
-            'status': StatusEnum.FAILED,
-            'result_status': None,
-        }
+        with self._lock:
+            self.messages[identifier] = {
+                'message': message,
+                'spinner': None,
+                'spinner_style': None,
+                'level': level,
+                'status': StatusEnum.FAILED,
+                'result_status': None,
+            }
 
     def log_finished(self, identifier: str, message: str, level: int = 0):
-        self.messages[identifier] = {
-            'message': message,
-            'spinner': None,
-            'spinner_style': None,
-            'level': level,
-            'status': StatusEnum.FINISHED,
-            'result_status': None,
-        }
+        with self._lock:
+            self.messages[identifier] = {
+                'message': message,
+                'spinner': None,
+                'spinner_style': None,
+                'level': level,
+                'status': StatusEnum.FINISHED,
+                'result_status': None,
+            }
 
     def change_log_message(self, identifier: str, message: str):
-        self.messages[identifier]['message'] = message
+        with self._lock:
+            if identifier in self.messages:
+                self.messages[identifier]['message'] = message
 
     def log_spinner(self, identifier: str, message: str, level: int = 0, spinner: str = 'dots', spinner_style: str = 'bold blue'):
-        self.messages[identifier] = {
-            'message': message,
-            'spinner': spinner,
-            'spinner_style': spinner_style,
-            'level': level,
-            'status': StatusEnum.NONE,
-            'result_status': None,
-        }
+        with self._lock:
+            self.messages[identifier] = {
+                'message': message,
+                'spinner': spinner,
+                'spinner_style': spinner_style,
+                'level': level,
+                'status': StatusEnum.NONE,
+                'result_status': None,
+            }
 
     def log_spinner_done(self, identifier: str, status: int, message: str = None, result_status: int = None):
-        updated_msg = self.messages[identifier]
-        updated_msg['spinner'] = None
-        updated_msg['spinner_style'] = None
-        updated_msg['status'] = status
-        updated_msg['result_status'] = result_status
-        if message:
-            updated_msg['message'] = message
-        self.messages[identifier] = updated_msg
+        with self._lock:
+            if identifier not in self.messages:
+                log.warning(f"Attempted to update non-existent spinner message: {identifier}")
+                return
+            updated_msg = self.messages[identifier]
+            updated_msg['spinner'] = None
+            updated_msg['spinner_style'] = None
+            updated_msg['status'] = status
+            updated_msg['result_status'] = result_status
+            if message:
+                updated_msg['message'] = message
+            self.messages[identifier] = updated_msg
 
     def exists(self, identifier: str):
-        return identifier in self.messages.keys()
+        with self._lock:
+            return identifier in self.messages
+
+    def print_debug_flow_messages(self):
+        """Print all flow messages for debugging purposes."""
+        with self._lock:
+            if not self.messages:
+                print("\n=== EXPERIMENT FLOW DEBUG: No messages to display ===")
+                return
+            
+            print("\n" + "="*60)
+            print("EXPERIMENT FLOW DEBUG MESSAGES")
+            print("="*60)
+            
+            for identifier, message_object in self.messages.items():
+                status_icon = StatusEnum.get_icon(message_object['status'], color=False)
+                print(f"[{identifier}] {status_icon} {message_object['message']}")
+                
+                if message_object['result_status']:
+                    result_icon = StatusEnum.get_icon(message_object['result_status'], color=False)
+                    print(f"    └─ Result: {result_icon}")
+            
+            print("="*60)
+            print(f"Total messages: {len(self.messages)}")
+            print("="*60 + "\n")
 
 
 class FlowConsoleManager:

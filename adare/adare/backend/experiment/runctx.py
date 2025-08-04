@@ -40,7 +40,7 @@ class ExperimentRunCtx:
     vm_name: Optional[str] = None
     client: Optional[AdareVMClient] = None
     timestamp_start: Optional[datetime] = None
-    timestamp_before_box_start: Optional[datetime] = None
+    timestamp_before_vm_start: Optional[datetime] = None
     timestamp_end: Optional[datetime] = None
     stop_event: threading.Event = field(default_factory=threading.Event)
     lock: threading.Lock = field(default_factory=threading.Lock)
