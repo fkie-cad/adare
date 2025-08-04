@@ -110,11 +110,13 @@ def _configure_root_logger(console_level: int) -> None:
     """
     root_logger = logging.getLogger()
     
-    # Clear any existing handlers
-    _clear_existing_handlers(root_logger)
+    # Clear only console handlers to avoid removing file handlers
+    _clear_console_handlers(root_logger)
     
-    # Set level and add our console handler
-    root_logger.setLevel(console_level)
+    # Don't override root logger level if it's already been set lower by file handler
+    current_level = root_logger.level
+    if current_level == logging.NOTSET or current_level > console_level:
+        root_logger.setLevel(console_level)
     
     console_handler = logging.StreamHandler()
     console_handler.setLevel(console_level)
@@ -130,3 +132,18 @@ def _clear_existing_handlers(logger_instance: logging.Logger) -> None:
     """
     while logger_instance.handlers:
         logger_instance.handlers.pop()
+
+
+def _clear_console_handlers(logger_instance: logging.Logger) -> None:
+    """Remove only console handlers from a logger, preserving file handlers.
+    
+    Args:
+        logger_instance: Logger to clear console handlers from
+    """
+    handlers_to_remove = []
+    for handler in logger_instance.handlers:
+        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+            handlers_to_remove.append(handler)
+    
+    for handler in handlers_to_remove:
+        logger_instance.removeHandler(handler)

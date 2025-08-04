@@ -1,5 +1,4 @@
 # external imports
-import datetime
 import pandas as pd
 from rich.layout import Layout
 from rich.panel import Panel
@@ -8,9 +7,8 @@ from rich.table import Table
 # internal imports
 from adare.database.api.frontend import DataRetrievalApi
 from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, timedelta_to_str
-from adare.config import TIMESTAMP_FORMAT, StatusEnum
+from adarelib.constants import StatusEnum
 from adare.frontend.terminal.console import TwoTitleRule
-from rich.emoji import Emoji
 
 import logging
 log = logging.getLogger(__name__)
@@ -212,7 +210,7 @@ def print_run(run_ulid: str):
             duration=data['duration'][0],
             start_time=data['timestamp_start'].values[0],
             end_time=data['timestamp_end'].values[0],
-            box=data['box'].values[0],
+            box=data['vm'].values[0],
             osinfo=data['osinfo'].values[0],
             published=data['published'].values[0],
         ))

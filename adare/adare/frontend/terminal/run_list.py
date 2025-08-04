@@ -29,7 +29,7 @@ class RunListPanel:
 
         for index, row in self.runs.iterrows():
             table.add_row(
-                row['ulid'],
+                row['id'],
                 row['experiment_dotnotation'],
                 StatusEnum.get_icon(row['status'], color=True),
                 StatusEnum.get_icon(row['result_status'], color=True),

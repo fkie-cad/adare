@@ -12,6 +12,10 @@ from adarelib.constants import StatusEnum
 import logging
 log = logging.getLogger(__name__)
 
+# Thread-local storage to track active parent stages
+import contextvars
+_active_parent_stage = contextvars.ContextVar('active_parent_stage', default=None)
+
 
 class StageCtxManager(contextlib.AbstractContextManager):
     stage: Stage = None
@@ -25,6 +29,19 @@ class StageCtxManager(contextlib.AbstractContextManager):
         self.event = event
 
     def __enter__(self):
+        # Validate parent-child relationship for child stages
+        if hasattr(self.stage, 'parent') and self.stage.parent:
+            current_parent = _active_parent_stage.get()
+            if current_parent is None:
+                raise ValueError(f"Child stage '{self.stage.name}' requires parent '{self.stage.parent}' but no parent stage is active")
+            if current_parent != self.stage.parent:
+                raise ValueError(f"Child stage '{self.stage.name}' expects parent '{self.stage.parent}' but active parent is '{current_parent}'")
+        
+        # Set this stage as active parent if it's a parent stage (has no parent itself)
+        is_parent_stage = not (hasattr(self.stage, 'parent') and self.stage.parent)
+        if is_parent_stage:
+            self._parent_token = _active_parent_stage.set(self.stage.name)
+        
         self.stage.start()
         if not self.stage_id:
             self.stage_id = str(ULID())
@@ -37,8 +54,13 @@ class StageCtxManager(contextlib.AbstractContextManager):
         emit_stage(self.experimentrun_ulid, stage=self.stage, stage_id=self.stage_id)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.event and self.event.is_set():
+        # Only mark as interrupted if the event is set AND the stage hasn't already completed successfully
+        if self.event and self.event.is_set() and self.stage.status != StatusEnum.SUCCESS:
             self.stage.status = StatusEnum.INTERRUPTED
         self.stage.end()
         if self.experimentrun_ulid:
             emit_stage(self.experimentrun_ulid, stage=self.stage, stage_id=self.stage_id)
+        
+        # Reset parent context if this was a parent stage
+        if hasattr(self, '_parent_token'):
+            _active_parent_stage.reset(self._parent_token)

@@ -2,10 +2,6 @@
 from pathlib import Path
 from datetime import datetime, timezone
 import threading
-import subprocess
-import sys
-import time
-import asyncio
 
 # internal imports
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
@@ -19,9 +15,18 @@ from adare.backend.project.directory import ProjectDirectory
 from adare.config import SHARE_POINT_VM
 from adare.helperfunctions.string import make_string_path_safe
 from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
-from adare.types.stages import ExperimentIntegrityCheckStage, VMRunStage, VMStopStage, VMDestroyStage, VMWaitTillReadyStage, VMCreateStage, VMMountSharedDirectoriesStage, \
-    ProjectIntegrityCheckStage, CleanupStage, RunDirectoryCreationStage, \
-    InstallAdareVMStage, ConnectToVMStage, InstallationsStage, ExperimentRunStage
+from adare.types.stages import (
+    # Top-level parent stages
+    ExperimentPreparationStage, VirtualMachineSetupStage, SoftwareInstallationStage, 
+    ExperimentExecutionStage, CleanupShutdownStage,
+    # Sub-stages
+    SetupDirectoriesStage, ValidatePlaybookStage, ResolveEnvironmentStage, CheckAppdataStage,
+    ExperimentIntegrityCheckStage, ProjectIntegrityCheckStage, RunDirectoryCreationStage, StartMCPServerStage,
+    VMCreateStage, VMRunStage, VMWaitTillReadyStage, VMMountSharedDirectoriesStage,
+    InstallAdareVMStage, ConnectToVMStage, InstallationsStage,
+    ExperimentRunStage,
+    FinalizeStage, ShutdownMCPServerStage, ShutdownWebSocketStage, VMStopStage, VMDestroyStage,
+)
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adarelib.constants import StatusEnum
 from adare.config.configdirectory import ADAREVM_DIR, ADARELIB_DIR
@@ -353,52 +358,56 @@ def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: 
 def step_initialize(context: ExperimentRunCtx, fake: bool = False):
     context.experiment_run_ulid = experiment_database.initialize_experiment_run(fake)
     context.timestamp_start = datetime.now(timezone.utc)
+    context.timestamp_before_vm_start = datetime.now(timezone.utc)
     context.adarevm = ADAREVM_DIR
     context.adarelib = ADARELIB_DIR
     log.info(f'initialized experiment run {context.experiment_run_ulid}')
 
 def step_setup_directories(context: ExperimentRunCtx):
-    context.project_directory = ProjectDirectory(context.config.project_path)
-    context.experiment_directory = ExperimentDirectory(context.config.project_path, context.config.experiment_name)
-    context.experiment_directory.check_for_missing_files()
-    log.info(f'checked experiment directory {context.experiment_directory.path}')
+    with StageCtxManager(SetupDirectoriesStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        context.project_directory = ProjectDirectory(context.config.project_path)
+        context.experiment_directory = ExperimentDirectory(context.config.project_path, context.config.experiment_name)
+        context.experiment_directory.check_for_missing_files()
+        log.info(f'checked experiment directory {context.experiment_directory.path}')
 
 def step_validate_playbook(context: ExperimentRunCtx):
     """Parse and validate playbook early to catch syntax errors before VM startup."""
-    from adare.types.playbook import parse_playbook
-    
-    playbook_path = context.experiment_directory.path / "playbook.yaml"
-    if not playbook_path.exists():
-        log.info("No playbook.yaml found - experiment will run without GUI actions")
-        return
-    
-    try:
-        log.info(f"Parsing and validating playbook: {playbook_path}")
-        context.playbook = parse_playbook(playbook_path)
-        log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
-    except Exception as e:
-        raise LoggedException(log, f"Playbook validation failed: {str(e)}")
+    with StageCtxManager(ValidatePlaybookStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        from adare.types.playbook import parse_playbook
+        
+        playbook_path = context.experiment_directory.path / "playbook.yaml"
+        if not playbook_path.exists():
+            log.info("No playbook.yaml found - experiment will run without GUI actions")
+            return
+        
+        try:
+            log.info(f"Parsing and validating playbook: {playbook_path}")
+            context.playbook = parse_playbook(playbook_path)
+            log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
+        except Exception as e:
+            raise LoggedException(log, f"Playbook validation failed: {str(e)}")
 
 def step_resolve_environment(context: ExperimentRunCtx):
-    if context.config.environment_name:
-        context.environment_file = environment_database.get_environment_path_by_project_and_name(
-            context.config.project_path, context.config.environment_name
-        )
-    else:
-        context.environment_file = experiment_database.get_experiment_environment(
-            context.config.project_path, context.config.environment_name, context.config.experiment_name
-        )
-        # update environment_name based on file stem
-        context.config.environment_name = context.environment_file.stem
-    context.environment_ulid = experiment_database.get_environment_ulid(context.config.project_path, context.config.environment_name)
+    with StageCtxManager(ResolveEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        if context.config.environment_name:
+            context.environment_file = environment_database.get_environment_path_by_project_and_name(
+                context.config.project_path, context.config.environment_name
+            )
+        else:
+            context.environment_file = experiment_database.get_experiment_environment(
+                context.config.project_path, context.config.environment_name, context.config.experiment_name
+            )
+            # update environment_name based on file stem
+            context.config.environment_name = context.environment_file.stem
+        context.environment_ulid = experiment_database.get_environment_ulid(context.config.project_path, context.config.environment_name)
 
-    context.vm_file = environment_database.get_environment_vm_file(context.environment_ulid)
-    context.guest_platform = environment_database.get_environment_os(context.environment_ulid)
+        context.vm_file = environment_database.get_environment_vm_file(context.environment_ulid)
+        context.guest_platform = environment_database.get_environment_os(context.environment_ulid)
 
-    log.info(f'found environment {context.config.environment_name}')
+        log.info(f'found environment {context.config.environment_name}')
 
 def step_check_integrity_experiment(context: ExperimentRunCtx):
-    with StageCtxManager(ExperimentIntegrityCheckStage(), context.experiment_run_ulid, event=context.stop_event):
+    with StageCtxManager(ExperimentIntegrityCheckStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         __experiment_integrity_check(
             context.config.project_path,
             context.config.experiment_name,
@@ -407,7 +416,7 @@ def step_check_integrity_experiment(context: ExperimentRunCtx):
         )
 
 def step_check_integrity_project(context: ExperimentRunCtx):
-    with StageCtxManager(ProjectIntegrityCheckStage(), context.experiment_run_ulid, event=context.stop_event):
+    with StageCtxManager(ProjectIntegrityCheckStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         testfunction_files = experiment_database.get_experiment_testfunction_files(
             context.config.project_path, context.config.environment_name, context.config.experiment_name
         )
@@ -421,18 +430,19 @@ def step_check_integrity_project(context: ExperimentRunCtx):
         )
 
 def step_check_appdata(context: ExperimentRunCtx):
-    # ensure that poetry.lock does not exist for adarevm and adarelib
-    adarevm_poetry_lock = ADAREVM_DIR / 'poetry.lock'
-    adarelib_poetry_lock = ADARELIB_DIR / 'poetry.lock'
-    if adarevm_poetry_lock.exists():
-        log.info(f'removing {adarevm_poetry_lock} to ensure that adarevm is installed correctly')
-        adarevm_poetry_lock.unlink()
-    if adarelib_poetry_lock.exists():
-        log.info(f'removing {adarelib_poetry_lock} to ensure that adarelib is installed correctly')
-        adarelib_poetry_lock.unlink()
+    with StageCtxManager(CheckAppdataStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        # ensure that poetry.lock does not exist for adarevm and adarelib
+        adarevm_poetry_lock = ADAREVM_DIR / 'poetry.lock'
+        adarelib_poetry_lock = ADARELIB_DIR / 'poetry.lock'
+        if adarevm_poetry_lock.exists():
+            log.info(f'removing {adarevm_poetry_lock} to ensure that adarevm is installed correctly')
+            adarevm_poetry_lock.unlink()
+        if adarelib_poetry_lock.exists():
+            log.info(f'removing {adarelib_poetry_lock} to ensure that adarelib is installed correctly')
+            adarelib_poetry_lock.unlink()
 
 def step_create_run_directory(context: ExperimentRunCtx):
-    with StageCtxManager(RunDirectoryCreationStage(), context.experiment_run_ulid, event=context.stop_event):
+    with StageCtxManager(RunDirectoryCreationStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         run_dir = ExperimentRunDirectory(context.project_directory, context.config.experiment_name)
         run_dir.create()
         context.experiment_run_directory = run_dir
@@ -440,6 +450,7 @@ def step_create_run_directory(context: ExperimentRunCtx):
         # Initialize MCP server with log file
         from adare.backend.experiment.mcp_server_manager import MCPServerManager
         context.mcp_server = MCPServerManager(log_file=run_dir.mcp_gui_log_file)
+        
 
 async def step_create_virtualbox_machine(context: ExperimentRunCtx):
         context.vm_name = f"{context.config.environment_name}-{context.config.experiment_name}-{make_string_path_safe(context.experiment_run_ulid)}"
@@ -462,14 +473,13 @@ async def step_create_virtualbox_machine(context: ExperimentRunCtx):
             ram=context.config.vm_memory
         )
 
-        # maybe extra step 
-        vm_create_stage = VMCreateStage()
-        ctx_manager_vm_create = StageCtxManager(vm_create_stage, context.experiment_run_ulid)
-        await context.vm.create_from_ovf_or_ova(context.vm_file, ctx_manager=ctx_manager_vm_create, stop_event=context.stop_event)
+        # Create VM with stage management
+        with StageCtxManager(VMCreateStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+            await context.vm.create_from_ovf_or_ova(context.vm_file, stop_event=context.user_interrupt_event)
 
         if not context.stop_event.is_set():
             for name, paths in context.config.shared_directories.items():
-                await context.vm.add_shared_folder(name, host_path=paths['host'], mountpoint=paths['vm'], stop_event=context.stop_event)
+                await context.vm.add_shared_folder(name, host_path=paths['host'], mountpoint=paths['vm'], stop_event=context.user_interrupt_event)
 
         if not context.stop_event.is_set():
             # Update experiment run in database (could be a separate step if needed)
@@ -489,44 +499,43 @@ async def step_create_virtualbox_machine(context: ExperimentRunCtx):
                 protocol='tcp',
                 host_port=context.config.websocket_port,
                 guest_port=context.config.websocket_port,
-                stop_event=context.stop_event
+                stop_event=context.user_interrupt_event
             )
             log.info(f'added port forwarding for websocket server on port {context.config.websocket_port}')
 
         experiment_database.update_experiment_run_start(context.experiment_run_ulid, context.timestamp_start)
-        context.timestamp_before_box_start = datetime.now(timezone.utc)
+        context.timestamp_before_vm_start = datetime.now(timezone.utc)
 
 
 async def step_mount_shared_directories(context: ExperimentRunCtx):
-    with StageCtxManager(VMMountSharedDirectoriesStage(), context.experiment_run_ulid, event=context.stop_event):
+    with StageCtxManager(VMMountSharedDirectoriesStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         folders = {
             name: paths['vm'] for name, paths in context.config.shared_directories.items()
         }
         await context.vm.mount_multiple_shared_folders(
             folders=folders,
-            stop_event=context.stop_event
+            stop_event=context.user_interrupt_event
         )
         #
 
 async def step_run_vm(context: ExperimentRunCtx):
-    vm_run_stage = VMRunStage()
-    ctx_manager_vm_run = StageCtxManager(vm_run_stage, context.experiment_run_ulid)
-    await context.vm.start(ctx_manager=ctx_manager_vm_run, stop_event=context.stop_event)
+    with StageCtxManager(VMRunStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        await context.vm.start(stop_event=context.user_interrupt_event)
 
 
 async def step_wait_till_vm_is_ready(context: ExperimentRunCtx):
-    ctx_manager_vm_wait = StageCtxManager(VMWaitTillReadyStage(), context.experiment_run_ulid, event=context.stop_event)
-    log.info('waiting until VM is ready')
-    if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.stop_event, ctx_manager=ctx_manager_vm_wait):
-        raise LoggedException(log, 'VM did not become ready in time')
-    log.info('VM is ready')
+    with StageCtxManager(VMWaitTillReadyStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        log.info('waiting until VM is ready')
+        if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.user_interrupt_event):
+            raise LoggedException(log, 'VM did not become ready in time')
+        log.info('VM is ready')
 
 async def step_install_and_run_websocket_server(context: ExperimentRunCtx):
-    with StageCtxManager(InstallAdareVMStage(), context.experiment_run_ulid, event=context.stop_event):
-        await install_and_run_adare_vm(context, stop_event=context.stop_event)
+    with StageCtxManager(InstallAdareVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        await install_and_run_adare_vm(context, stop_event=context.user_interrupt_event)
 
 async def step_connect_websocket(context: ExperimentRunCtx):
-    with StageCtxManager(ConnectToVMStage(), context.experiment_run_ulid, event=context.stop_event):
+    with StageCtxManager(ConnectToVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         from adare.backend.experiment.websocket_client import AdareVMClient
         from retry import retry
         import asyncio
@@ -598,7 +607,7 @@ async def step_connect_websocket(context: ExperimentRunCtx):
             raise LoggedException(log, f"Failed to connect to AdareVM server: {e}") from e
 
 async def step_execute_installations(context: ExperimentRunCtx):
-    with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.stop_event) as stage:
+    with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage:
         installations = environment_database.get_environment_installations(context.environment_ulid)
         
         if not installations:
@@ -609,19 +618,20 @@ async def step_execute_installations(context: ExperimentRunCtx):
 
 async def step_start_mcp_server(context: ExperimentRunCtx):
     """Start the MCP GUI server for target detection."""
-    log.info("Starting MCP GUI server for target detection...")
-    
-    success = await context.mcp_server.start()
-    if success:
-        log.info("MCP GUI server started successfully")
-    else:
-        from adare.exceptions import LoggedException
-        raise LoggedException(log, "MCP GUI server failed to start - cannot proceed without target detection capabilities")
+    with StageCtxManager(StartMCPServerStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        log.info("Starting MCP GUI server for target detection...")
+        
+        success = await context.mcp_server.start()
+        if success:
+            log.info("MCP GUI server started successfully")
+        else:
+            from adare.exceptions import LoggedException
+            raise LoggedException(log, "MCP GUI server failed to start - cannot proceed without target detection capabilities")
 
 
 async def step_execute_experiment(context: ExperimentRunCtx):
     """Execute the experiment using the playbook controller."""
-    with StageCtxManager(ExperimentRunStage(), context.experiment_run_ulid, event=context.stop_event) as stage:
+    with StageCtxManager(ExperimentRunStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage:
         from adare.backend.experiment.playbook_controller import PlaybookController
         
         if not context.client:
@@ -649,37 +659,44 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             log.error(f"Action results: {result.successful_actions}/{result.total_actions} succeeded")
 
 
-def step_finalize(context: ExperimentRunCtx):
-    timestamp_end = datetime.now(timezone.utc)
-    experiment_database.update_experiment_run_end(context.experiment_run_ulid, timestamp_end)
-    duration_total = timestamp_end - context.timestamp_start
-    duration_box = timestamp_end - context.timestamp_before_box_start
-    log.info(f"Experiment run {context.experiment_run_ulid} finished after {duration_total} seconds (box run time: {duration_box})")
-    with StageCtxManager(CleanupStage(), context.experiment_run_ulid, event=context.stop_event):
+def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
+    event = None if post_interrupt else context.user_interrupt_event
+    with StageCtxManager(FinalizeStage(), context.experiment_run_ulid, event=event):
+        timestamp_end = datetime.now(timezone.utc)
+        experiment_database.update_experiment_run_end(context.experiment_run_ulid, timestamp_end)
+        duration_total = timestamp_end - context.timestamp_start
+        duration_vm = timestamp_end - context.timestamp_before_vm_start
+        log.info(f"Experiment run {context.experiment_run_ulid} finished after {duration_total} seconds (vm run time: {duration_vm})")
         __cleanup_experiment_run(context.experiment_run_directory)
 
-async def step_shutdown_mcp_server(context: ExperimentRunCtx):
+async def step_shutdown_mcp_server(context: ExperimentRunCtx, post_interrupt: bool = False):
     """Stop the MCP GUI server."""
-    log.info('stopping MCP GUI server')
-    await context.mcp_server.stop()
+    event = None if post_interrupt else context.user_interrupt_event
+    with StageCtxManager(ShutdownMCPServerStage(), context.experiment_run_ulid, event=event):
+        log.info('stopping MCP GUI server')
+        await context.mcp_server.stop()
 
 
-async def step_shutdown_ws(context: ExperimentRunCtx):
-    log.info('stopping websocket client')
-    if context.client:
-        await context.client.disconnect()
+async def step_shutdown_ws(context: ExperimentRunCtx, post_interrupt: bool = False):
+    event = None if post_interrupt else context.user_interrupt_event
+    with StageCtxManager(ShutdownWebSocketStage(), context.experiment_run_ulid, event=event):
+        log.info('stopping websocket client')
+        if context.client:
+            await context.client.disconnect()
 
-async def step_shutdown_virtualbox_vm(context: ExperimentRunCtx):
-    ctx_manager_vm_stop= StageCtxManager(VMStopStage(), context.experiment_run_ulid)
-    log.info('destroying virtualbox virtual machine')
-    if context.vm:
-        await context.vm.stop(ctx_manager=ctx_manager_vm_stop)
+async def step_shutdown_virtualbox_vm(context: ExperimentRunCtx, post_interrupt: bool = False):
+    event = None if post_interrupt else context.user_interrupt_event
+    with StageCtxManager(VMStopStage(), context.experiment_run_ulid, event=event):
+        log.info('stopping virtualbox virtual machine')
+        if context.vm:
+            await context.vm.stop()
 
-async def step_cleanup_virtualbox_vm(context: ExperimentRunCtx):
-    ctx_manager_vm_cleanup = StageCtxManager(VMDestroyStage(), context.experiment_run_ulid)
-    log.info('cleaning up virtualbox virtual machine')
-    if context.vm:
-        await context.vm.destroy(ctx_manager=ctx_manager_vm_cleanup)
+async def step_cleanup_virtualbox_vm(context: ExperimentRunCtx, post_interrupt: bool = False):
+    event = None if post_interrupt else context.user_interrupt_event
+    with StageCtxManager(VMDestroyStage(), context.experiment_run_ulid, event=event):
+        log.info('destroying virtualbox virtual machine')
+        if context.vm:
+            await context.vm.destroy()
 
 def step_remove_fake_experiment_run(context: ExperimentRunCtx):
     # todo remove associated stuff as well (e.g. stages/files/...)
@@ -699,11 +716,29 @@ def step_remove_fake_experiment_run(context: ExperimentRunCtx):
 
 def __start_event_listeners(experiment_run_ulid: str):
     from adare.backend.events.listener import event_listener_db, event_listener_cli
-    cli_thread = threading.Thread(target=event_listener_cli, args=(experiment_run_ulid,), daemon=True)
-    db_thread = threading.Thread(target=event_listener_db, args=(experiment_run_ulid,), daemon=True)
+    
+    # Create threading events to signal when listeners are ready
+    cli_ready_event = threading.Event()
+    db_ready_event = threading.Event()
+    
+    def cli_wrapper():
+        cli_ready_event.set()  # Signal that CLI listener is ready
+        event_listener_cli(experiment_run_ulid)
+    
+    def db_wrapper():
+        db_ready_event.set()  # Signal that DB listener is ready
+        event_listener_db(experiment_run_ulid)
+    
+    cli_thread = threading.Thread(target=cli_wrapper, daemon=True)
+    db_thread = threading.Thread(target=db_wrapper, daemon=True)
 
     cli_thread.start()
     db_thread.start()
+    
+    # Wait for both listeners to be ready before returning
+    cli_ready_event.wait()
+    db_ready_event.wait()
+    log.info("Event listeners are ready")
 
     return cli_thread, db_thread
 
@@ -725,9 +760,16 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
     # Create an asyncio Event to signal shutdown.
     stop_event = asyncio.Event()
+    
+    # Create a separate threading Event specifically for user interruption (Ctrl-C)
+    user_interrupt_event = threading.Event()
+    
+    # Add the user interrupt event to the context so step functions can use it
+    experiment_run_context.user_interrupt_event = user_interrupt_event
 
     def handle_sigint():
         log.info("Ctrl-C detected. Stopping experiment run...")
+        user_interrupt_event.set()  # Signal user interruption
         experiment_run_context.stop_event.set()  # Signal the context's stop event.
         stop_event.set()  # Signal the asyncio stop event.
         log.info('hanlde: send stop events')
@@ -738,11 +780,16 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     # No need for custom exception handler - exceptions now bubble up to main try/except
 
 
-    # Create and start the flow console.
-    print(experiment_run_context.experiment_run_ulid)
-    flow_console = __create_and_start_flow_console(experiment_run_context.experiment_run_ulid, disable_printing, experiment_run_context.stop_event)
 
-    # 
+    # Create and start the flow console.
+    # print(experiment_run_context.experiment_run_ulid)
+    flow_console = __create_and_start_flow_console(experiment_run_context.experiment_run_ulid, disable_printing, user_interrupt_event)
+    
+    # Add small delay to let Rich console settle before starting stages
+    await asyncio.sleep(0.1)
+    log.debug("Flow console started, proceeding with event listeners")
+
+    # Start event listeners BEFORE any stages begin to ensure all events are captured
     __start_event_listeners(experiment_run_context.experiment_run_ulid)
 
 
@@ -795,40 +842,56 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                     if not task.done():
                         task.cancel()
 
+    async def run_cleanup_step(step_func, post_interrupt: bool = False):
+        """Run a cleanup step regardless of stop event status."""
+        log.info(f"Running cleanup step: {step_func.__name__}")
+        if asyncio.iscoroutinefunction(step_func):
+            await step_func(experiment_run_context, post_interrupt=post_interrupt)
+        else:
+            await asyncio.to_thread(step_func, experiment_run_context, post_interrupt)
+        log.info(f"Cleanup step {step_func.__name__} completed")
+
     # --- Execution Flow ---
 
     try:
-        # Sequentially run initial blocking setup steps.
-        initial_steps = [
-            step_setup_directories,
-            step_validate_playbook,
-            step_resolve_environment,
-            step_check_integrity_experiment,
-            step_check_integrity_project,
-            step_check_appdata,
-            step_create_run_directory,
-        ]
-        for step in initial_steps:
-            await run_blocking_step(step)
+        # Experiment Preparation Phase
+        if not stop_event.is_set():
+            with StageCtxManager(ExperimentPreparationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
+                initial_steps = [
+                    step_setup_directories,
+                    step_validate_playbook,
+                    step_resolve_environment,
+                    step_check_integrity_experiment,
+                    step_check_integrity_project,
+                    step_check_appdata,
+                    step_create_run_directory,
+                ]
+                for step in initial_steps:
+                    await run_blocking_step(step)
 
-        # Start MCP server early (independent of VM)
-        await run_async_step(step_start_mcp_server)
+                # Start MCP server early (independent of VM)
+                await run_async_step(step_start_mcp_server)
 
-        # VirtualBox operations are now async for responsive ctrl-c handling
-        await run_async_step(step_create_virtualbox_machine)
-        await run_async_step(step_run_vm)
-        await run_async_step(step_wait_till_vm_is_ready)
-        await run_async_step(step_mount_shared_directories)
+        # Virtual Machine Setup Phase  
+        if not stop_event.is_set():
+            with StageCtxManager(VirtualMachineSetupStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
+                await run_async_step(step_create_virtualbox_machine)
+                await run_async_step(step_run_vm)
+                await run_async_step(step_wait_till_vm_is_ready)
+                await run_async_step(step_mount_shared_directories)
 
-        # Execute additional steps (mix of blocking and asynchronous).
-        await run_async_step(step_install_and_run_websocket_server)
+        # Software Installation Phase
+        if not stop_event.is_set():
+            with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
+                await run_async_step(step_install_and_run_websocket_server)
+                await run_async_step(step_connect_websocket)
+                await run_async_step(step_execute_installations)
 
-        await run_async_step(step_connect_websocket)
-        await run_async_step(step_execute_installations)
-        await run_async_step(step_execute_experiment)
-        await run_blocking_step(step_finalize)
-        await run_async_step(step_shutdown_mcp_server)
-        await run_async_step(step_shutdown_ws)
+        # Experiment Execution Phase
+        if not stop_event.is_set():
+            with StageCtxManager(ExperimentExecutionStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
+                await run_async_step(step_execute_experiment)
+
 
     except LoggedException as e:
         # Handle structured exceptions - let them bubble up to exec_with_error_printing for consistent UX
@@ -858,20 +921,29 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             experiment_run_context.stop_event.set()
             log.info("finally: send stop events")
         try:
-            input("Press Enter to finalize and shutdown the experiment run...")
-
-            log.info("Stopping websocket client and flow console...")
-            await step_shutdown_ws(experiment_run_context)
-            await step_shutdown_virtualbox_vm(experiment_run_context)
-            await step_cleanup_virtualbox_vm(experiment_run_context)
+            log.info("Starting cleanup and shutdown...")
+            # Wrap cleanup in proper stage context (don't pass interrupt event - we want to show actual cleanup work)
+            with StageCtxManager(CleanupShutdownStage(), experiment_run_context.experiment_run_ulid, event=None):
+                await run_cleanup_step(step_finalize, post_interrupt=True)
+                await run_cleanup_step(step_shutdown_mcp_server, post_interrupt=True)
+                await run_cleanup_step(step_shutdown_ws, post_interrupt=True)
+                await run_cleanup_step(step_shutdown_virtualbox_vm, post_interrupt=True)
+                await run_cleanup_step(step_cleanup_virtualbox_vm, post_interrupt=True)
+            # Give time for all events to be processed before stopping
+            await asyncio.sleep(2)
+            
+            # Log ULID before stopping console
             if not test:
                 flow_console.log_ulid(experiment_run_context.experiment_run_ulid)
             else:
                 step_remove_fake_experiment_run(experiment_run_context)
             await asyncio.sleep(1)
+            
+            # Print debug flow messages before stopping console
+            # flow_console.print_debug_flow_messages()
             flow_console.stop()
         except Exception as e:
-            log.error(f"Error during shutdown: {e}")
+            log.error(f"Error during shutdown: {e}", exc_info=True)
 
 
 
