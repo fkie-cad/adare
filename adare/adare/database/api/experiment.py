@@ -137,12 +137,12 @@ class ExperimentApi(ProjectDbApi):
         # Populate playbook models from YAML file
         if experiment_directory.playbookfile.exists():
             from adare.database.api.playbook import PlaybookApi
-            playbook_api = PlaybookApi(self._session)
-            try:
-                playbook_api.populate_playbook_from_file(experiment, experiment_directory.playbookfile)
-                log.debug(f'populated playbook models for experiment {experiment.ulid}')
-            except Exception as e:
-                log.warning(f'failed to populate playbook models for experiment {experiment.ulid}: {e}')
+            with PlaybookApi() as playbook_api:
+                try:
+                    playbook_api.populate_playbook_from_file(experiment, experiment_directory.playbookfile)
+                    log.debug(f'populated playbook models for experiment {experiment.ulid}')
+                except Exception as e:
+                    log.warning(f'failed to populate playbook models for experiment {experiment.ulid}: {e}')
 
         log.debug(f'added experiment {experiment.ulid} to database')
         return experiment

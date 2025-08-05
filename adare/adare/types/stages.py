@@ -184,7 +184,7 @@ class InstallationsStage(Stage):
 @attrs.define
 class ExperimentRunStage(Stage):
     name: ClassVar[str] = 'experiment_run'
-    msg: ClassVar[str] = 'Running the experiment'
+    msg: ClassVar[str] = 'Running the playbook'
     parent: ClassVar[str] = 'experiment_execution'
 
 @register_stage

@@ -6,11 +6,20 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 
 
 ### Todos
-- add way to recover playbook file from database (maybe even store it completly to save if removed or edited?)
-- extend/test 
-- add more tests!
-- make commands.py in experiment run nicer
-- make flow work
-- make interactive test development possible
-    - click/save
-    - run only single steps and wait
+
+#### Features
+- [ ] load from existing vm / only create new snapshot to save time and space!
+- [ ] recover file from 
+- [ ] make interactive test development
+    - [ ] some way to skip after installation; and then do something? 
+    - [ ] replay? so let user click and we create playbook
+
+#### Output
+- [ ] Show experimen run flow in show run display (maybe extendable)
+- [ ] make duration dynamic for run. Store the durations in database as before and display for the classic run display
+
+
+#### Bugs
+- [ ] ctrl-c during loading results in vm potentially created later (track vm names -> check on next start and remove old ones)
+- [ ] crtl-c locks at the moment
+- [ ] unclear if flow shows fails -> test

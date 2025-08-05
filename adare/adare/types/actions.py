@@ -1,0 +1,362 @@
+"""Action event types for playbook execution tracking."""
+
+import attrs
+from datetime import datetime, timezone
+from typing import Optional, Dict, Any, Tuple
+import cattrs
+
+from adarelib.constants import StatusEnum
+from adare.types.event_types import EventType, ActionType
+
+# -------------------------------
+# cattrs Converter Setup
+# -------------------------------
+
+converter = cattrs.Converter()
+
+# Handle datetime → str and back
+converter.register_unstructure_hook(datetime, lambda dt: dt.isoformat() if dt else None)
+converter.register_structure_hook(datetime, lambda s, _: datetime.fromisoformat(s) if s else None)
+
+# Handle StatusEnum → int and back
+converter.register_unstructure_hook(StatusEnum, lambda e: int(e))
+converter.register_structure_hook(StatusEnum, lambda i, _: StatusEnum(i))
+
+# -------------------------------
+# Base Action Event Classes
+# -------------------------------
+
+@attrs.define
+class ActionEvent:
+    """Base class for all action execution events."""
+    
+    # Action identification
+    action_id: str
+    action_description: str = ""
+    sequence_order: int = 0
+    
+    # Execution timing
+    timestamp: datetime = attrs.field(factory=lambda: datetime.now(timezone.utc))
+    
+    # Execution context
+    playbook_item_id: Optional[str] = None
+    experiment_run_id: Optional[str] = None
+    display_level: int = 2
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for event publishing."""
+        data = converter.unstructure(self)
+        # Add explicit event_type for proper deserialization
+        data['event_type'] = self.get_event_type().value
+        # Keep __class__ for backward compatibility during transition
+        data['__class__'] = self.__class__.__name__
+        return data
+    
+    def get_event_type(self) -> EventType:
+        """Get the explicit event type for this action event."""
+        # This should be overridden by subclasses
+        return EventType.ACTION_START
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ActionEvent":
+        """Create from dictionary."""
+        return converter.structure(data, cls)
+    
+    @property
+    def action_type(self) -> str:
+        """Get action type from class name."""
+        return self.__class__.__name__.replace('Event', '').replace('Action', '').lower()
+
+
+# -------------------------------
+# Click Action Events
+# -------------------------------
+
+@attrs.define
+class ActionStartEvent(ActionEvent):
+    """Base class for action start events."""
+    
+    def get_event_type(self) -> EventType:
+        return EventType.ACTION_START
+
+
+@attrs.define
+class ActionCompleteEvent(ActionEvent):
+    """Base class for action completion events."""
+    success: bool = False
+    error_message: Optional[str] = None
+    execution_time: Optional[float] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.ACTION_COMPLETE
+
+
+@attrs.define
+class ClickActionStartEvent(ActionStartEvent):
+    """Event for click action start."""
+    target_info: Optional[Dict[str, Any]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.CLICK_START
+
+
+@attrs.define
+class ClickActionCompleteEvent(ActionCompleteEvent):
+    """Event for click action completion."""
+    coordinates: Optional[Tuple[int, int]] = None
+    target_info: Optional[Dict[str, Any]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.CLICK_COMPLETE
+
+
+@attrs.define
+class RightClickActionStartEvent(ActionStartEvent):
+    """Event for right-click action start."""
+    target_info: Optional[Dict[str, Any]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.CLICK_START
+
+
+@attrs.define
+class RightClickActionCompleteEvent(ActionCompleteEvent):
+    """Event for right-click action completion."""
+    coordinates: Optional[Tuple[int, int]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.CLICK_COMPLETE
+
+
+@attrs.define
+class DoubleClickActionStartEvent(ActionStartEvent):
+    """Event for double-click action start."""
+    target_info: Optional[Dict[str, Any]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.CLICK_START
+
+
+@attrs.define
+class DoubleClickActionCompleteEvent(ActionCompleteEvent):
+    """Event for double-click action completion."""
+    coordinates: Optional[Tuple[int, int]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.CLICK_COMPLETE
+
+
+# -------------------------------
+# Keyboard Action Events
+# -------------------------------
+
+@attrs.define
+class KeyboardActionStartEvent(ActionStartEvent):
+    """Event for keyboard action start."""
+    keys: Optional[str] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.KEYBOARD_START
+
+
+@attrs.define
+class KeyboardActionCompleteEvent(ActionCompleteEvent):
+    """Event for keyboard action completion."""
+    keys_sent: Optional[str] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.KEYBOARD_COMPLETE
+
+
+# -------------------------------
+# Command Action Events
+# -------------------------------
+
+@attrs.define
+class CommandActionStartEvent(ActionStartEvent):
+    """Event for command action start."""
+    command: Optional[str] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.COMMAND_START
+
+
+@attrs.define
+class CommandActionCompleteEvent(ActionCompleteEvent):
+    """Event for command action completion."""
+    command_executed: Optional[str] = None
+    output: Optional[str] = None
+    return_code: Optional[int] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.COMMAND_COMPLETE
+
+
+# -------------------------------
+# Test Action Events (Special handling)
+# -------------------------------
+
+@attrs.define
+class TestActionStartEvent(ActionStartEvent):
+    """Event for test action start."""
+    test_name: str = ""
+    
+    def get_event_type(self) -> EventType:
+        return EventType.TEST_START
+
+
+@attrs.define
+class TestActionCompleteEvent(ActionCompleteEvent):
+    """Event for test action completion."""
+    test_name: str = ""
+    test_output: Optional[str] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.TEST_COMPLETE
+    
+    @property
+    def status(self) -> StatusEnum:
+        """Get appropriate status for test results."""
+        if self.success:
+            return StatusEnum.SUCCESS
+        else:
+            return StatusEnum.TEST_FAILED
+
+
+# -------------------------------
+# Block Action Events
+# -------------------------------
+
+@attrs.define
+class BlockActionStartEvent(ActionStartEvent):
+    """Event for block action start."""
+    conditions: Optional[Dict[str, Any]] = None
+    action_count: int = 0
+    
+    def get_event_type(self) -> EventType:
+        return EventType.ACTION_START
+
+
+@attrs.define
+class BlockActionCompleteEvent(ActionCompleteEvent):
+    """Event for block action completion."""
+    actions_executed: int = 0
+    
+    def get_event_type(self) -> EventType:
+        return EventType.ACTION_COMPLETE
+
+
+# -------------------------------
+# Other Action Events
+# -------------------------------
+
+@attrs.define
+class ScreenshotActionStartEvent(ActionStartEvent):
+    """Event for screenshot action start."""
+    pass
+    
+    def get_event_type(self) -> EventType:
+        return EventType.SCREENSHOT_START
+
+
+@attrs.define
+class ScreenshotActionCompleteEvent(ActionCompleteEvent):
+    """Event for screenshot action completion."""
+    screenshot_path: Optional[str] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.SCREENSHOT_COMPLETE
+
+
+@attrs.define
+class ScrollActionStartEvent(ActionStartEvent):
+    """Event for scroll action start."""
+    direction: Optional[str] = None
+    amount: Optional[int] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.SCROLL_START
+
+
+@attrs.define
+class ScrollActionCompleteEvent(ActionCompleteEvent):
+    """Event for scroll action completion."""
+    pass
+    
+    def get_event_type(self) -> EventType:
+        return EventType.SCROLL_COMPLETE
+
+
+@attrs.define
+class IdleActionStartEvent(ActionStartEvent):
+    """Event for idle action start."""
+    duration: Optional[float] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.IDLE_START
+
+
+@attrs.define
+class IdleActionCompleteEvent(ActionCompleteEvent):
+    """Event for idle action completion."""
+    actual_duration: Optional[float] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.IDLE_COMPLETE
+
+
+@attrs.define
+class DragActionStartEvent(ActionStartEvent):
+    """Event for drag action start."""
+    source_target: Optional[Dict[str, Any]] = None
+    dest_target: Optional[Dict[str, Any]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.DRAG_START
+
+
+@attrs.define
+class DragActionCompleteEvent(ActionCompleteEvent):
+    """Event for drag action completion."""
+    source_coordinates: Optional[Tuple[int, int]] = None
+    dest_coordinates: Optional[Tuple[int, int]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.DRAG_COMPLETE
+
+
+@attrs.define
+class GotoActionStartEvent(ActionStartEvent):
+    """Event for goto action start."""
+    url: Optional[str] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.GOTO_START
+
+
+@attrs.define
+class GotoActionCompleteEvent(ActionCompleteEvent):
+    """Event for goto action completion."""
+    final_url: Optional[str] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.GOTO_COMPLETE
+
+
+@attrs.define
+class SaveTimestampActionStartEvent(ActionStartEvent):
+    """Event for save timestamp action start."""
+    variable: Optional[str] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.SAVETIMESTAMP_START
+
+
+@attrs.define
+class SaveTimestampActionCompleteEvent(ActionCompleteEvent):
+    """Event for save timestamp action completion."""
+    variable: Optional[str] = None
+    timestamp_value: Optional[float] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.SAVETIMESTAMP_COMPLETE

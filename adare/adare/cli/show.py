@@ -1,5 +1,6 @@
 # internal imports
 from adare.backend.basics import determine_projectdirectory
+from adare.exceptions import NoProjectFoundError
 
 # configure logging
 import logging
@@ -14,6 +15,8 @@ def exec_show_runs(arguments):
         project = arguments.project
     elif project_path := determine_projectdirectory(arguments.project):
         project = project_path.name
+    else:
+        raise NoProjectFoundError(log, message='no project directory found')
     print_run_list(project)
 
 

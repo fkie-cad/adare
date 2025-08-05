@@ -124,6 +124,26 @@ def _configure_root_logger(console_level: int) -> None:
     root_logger.addHandler(console_handler)
 
 
+def set_console_log_level(level: int) -> None:
+    """Dynamically change the console logging level.
+    
+    This is useful for suppressing console logs when the experiment flow 
+    console is active, to avoid interfering with the rich display.
+    
+    Args:
+        level: New logging level (e.g., logging.CRITICAL to suppress all logs)
+    """
+    root_logger = logging.getLogger()
+    
+    # Update console handlers
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+            handler.setLevel(level)
+    
+    # Also update our custom logger's console handler
+    logger.update_console_level(level)
+
+
 def _clear_existing_handlers(logger_instance: logging.Logger) -> None:
     """Remove all existing handlers from a logger.
     
