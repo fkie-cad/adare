@@ -149,3 +149,16 @@ def _setup_file_handler(logger: logging.Logger, level: int, logfile: str) -> Non
         logger.setLevel(level)
     except (OSError, PermissionError) as e:
         print(f"Warning: Cannot initialize file logging - {e}")
+
+
+def update_console_level(level: int) -> None:
+    """Update console logging level for all console handlers.
+    
+    Args:
+        level: New logging level for console handlers
+    """
+    root_logger = logging.getLogger()
+    
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+            handler.setLevel(level)

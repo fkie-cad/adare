@@ -867,7 +867,10 @@ class VirtualBoxVM:
         Note: VM stop operations are not interruptible to prevent inconsistent VM states.
         """
         async def _stop_async():
-            state = self._get_state()
+            state = self._get_state(raise_on_missing=False)
+            if state == "not existing":
+                log.info(f"VM '{self.vm_name}' does not exist, nothing to stop")
+                return 0
             if state != "running":
                 log.info(f"VM '{self.vm_name}' is not running. Current state: {state}")
                 return 0

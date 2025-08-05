@@ -638,6 +638,20 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             log.error("WebSocket client not available for experiment execution")
             return
         
+        # Get experiment ID for execution tracking
+        experiment_id = None
+        try:
+            experiment_id = experiment_database.get_experiment_by_project_and_name(
+                context.config.project_path, 
+                context.config.experiment_name
+            )
+            if experiment_id:
+                log.debug(f"Found experiment {experiment_id} for execution tracking")
+            else:
+                log.warning("No experiment ID found - execution tracking will be disabled")
+        except Exception as e:
+            log.warning(f"Failed to get experiment ID for execution tracking: {e}")
+        
         # Create playbook controller
         controller = PlaybookController(
             websocket_client=context.client,
@@ -645,7 +659,9 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             project_dir=context.project_directory.path,
             debug_screenshots=context.debug_screenshots,
             screenshots_dir=context.experiment_run_directory.screenshots_directory if context.debug_screenshots else None,
-            playbook=context.playbook  # Pass pre-parsed playbook
+            playbook=context.playbook,  # Pass pre-parsed playbook
+            experiment_id=experiment_id,
+            experiment_run_id=context.experiment_run_ulid
         )
         
         # Execute complete experiment (playbook + tests)
@@ -716,6 +732,11 @@ def step_remove_fake_experiment_run(context: ExperimentRunCtx):
 
 def __start_event_listeners(experiment_run_ulid: str):
     from adare.backend.events.listener import event_listener_db, event_listener_cli
+    from adare.backend.events.coordinator import start_stage_coordinator
+    
+    # Start the stage event coordinator first
+    start_stage_coordinator()
+    log.info("Stage event coordinator started")
     
     # Create threading events to signal when listeners are ready
     cli_ready_event = threading.Event()
@@ -892,6 +913,13 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             with StageCtxManager(ExperimentExecutionStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 await run_async_step(step_execute_experiment)
 
+        # Success: Mark experiment as finished if no exceptions occurred
+        if not stop_event.is_set():
+            log.info("Experiment completed successfully, marking as FINISHED")
+            experiment_database.update_experiment_run_status(
+                experiment_run_context.experiment_run_ulid,
+                StatusEnum.FINISHED,
+            )
 
     except LoggedException as e:
         # Handle structured exceptions - let them bubble up to exec_with_error_printing for consistent UX
@@ -932,6 +960,11 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             # Give time for all events to be processed before stopping
             await asyncio.sleep(2)
             
+            # Stop the stage event coordinator
+            from adare.backend.events.coordinator import stop_stage_coordinator
+            stop_stage_coordinator()
+            log.info("Stage event coordinator stopped")
+            
             # Log ULID before stopping console
             if not test:
                 flow_console.log_ulid(experiment_run_context.experiment_run_ulid)
@@ -944,6 +977,12 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             flow_console.stop()
         except Exception as e:
             log.error(f"Error during shutdown: {e}", exc_info=True)
+            # Ensure coordinator is stopped even if cleanup fails
+            try:
+                from adare.backend.events.coordinator import stop_stage_coordinator
+                stop_stage_coordinator()
+            except Exception as cleanup_error:
+                log.error(f"Error stopping stage coordinator during error cleanup: {cleanup_error}")
 
 
 

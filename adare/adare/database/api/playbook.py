@@ -5,18 +5,23 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
-from adare.database.models.playbook import Playbook, PlaybookItem
+from adare.database.models.playbook import Playbook, PlaybookItem, ActionExecution
 from adare.types.playbook import parse_playbook, Playbook as PlaybookType, ActionType
 from adare.database.models.experiment import Experiment
+from adare.database.api.database import DatabaseApi
+from datetime import datetime, timezone
+import adare.config.database as config_database
 
 log = logging.getLogger(__name__)
 
 
-class PlaybookApi:
+class PlaybookApi(DatabaseApi):
     """API for playbook database operations."""
     
-    def __init__(self, session: Session):
-        self._session = session
+    def __init__(self, db_path: Path = None):
+        if db_path is None:
+            db_path = config_database.get_database_location()
+        super().__init__(db_path)
     
     def populate_playbook_from_file(self, experiment: Experiment, playbook_file_path: Path) -> Playbook:
         """Parse YAML playbook file and populate database models."""
@@ -219,3 +224,62 @@ class PlaybookApi:
             query = query.filter(PlaybookItem.parent_id.is_(None))
         
         return query.order_by(PlaybookItem.sequence_order).all()
+    
+    def get_playbook_by_experiment_id(self, experiment_id: str) -> Optional[Playbook]:
+        """Get playbook by experiment ID."""
+        return self._session.query(Playbook).filter(
+            Playbook.experiment_id == experiment_id
+        ).first()
+    
+    def create_action_execution(
+        self, 
+        playbook_item_id: str, 
+        experiment_run_id: str,
+        status: str = 'pending'
+    ) -> ActionExecution:
+        """Create a new action execution record."""
+        execution = ActionExecution(
+            playbook_item_id=playbook_item_id,
+            experiment_run_id=experiment_run_id,
+            status=status,
+            created_at=datetime.now(timezone.utc)
+        )
+        self._session.add(execution)
+        self._session.flush()  # Get ID assigned
+        return execution
+    
+    def update_action_execution_start(self, execution_id: str) -> None:
+        """Mark action execution as started."""
+        execution = self._session.query(ActionExecution).filter(
+            ActionExecution.id == execution_id
+        ).first()
+        if execution:
+            execution.status = 'running'
+            execution.started_at = datetime.now(timezone.utc)
+            self._session.flush()
+    
+    def update_action_execution_complete(
+        self,
+        execution_id: str,
+        success: bool,
+        result_data: Optional[Dict] = None,
+        error_message: Optional[str] = None,
+        attempt_number: int = 1
+    ) -> None:
+        """Mark action execution as completed."""
+        execution = self._session.query(ActionExecution).filter(
+            ActionExecution.id == execution_id
+        ).first()
+        if execution:
+            execution.status = 'success' if success else 'failed'
+            execution.completed_at = datetime.now(timezone.utc)
+            execution.result_data = result_data
+            execution.error_message = error_message
+            execution.attempt_number = attempt_number
+            self._session.flush()
+    
+    def get_action_executions_by_run(self, experiment_run_id: str) -> List[ActionExecution]:
+        """Get all action executions for an experiment run."""
+        return self._session.query(ActionExecution).filter(
+            ActionExecution.experiment_run_id == experiment_run_id
+        ).order_by(ActionExecution.created_at).all()

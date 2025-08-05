@@ -14,6 +14,7 @@ from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 import time
 import jinja2
+from sqlalchemy.orm import Session
 
 # Playbook and test imports
 from adare.types.playbook import (
@@ -30,6 +31,24 @@ from adarelib.websocket.protocol import ToolRegistry
 
 # Target resolution using MCP GUI server
 from adare.backend.experiment.target_resolver import MCPTargetResolver, MCPConditionChecker
+
+# Action event imports for flow console display
+from adare.backend.events.emitters import emit_action
+from adare.types.actions import (
+    ClickActionStartEvent, ClickActionCompleteEvent,
+    RightClickActionStartEvent, RightClickActionCompleteEvent,
+    DoubleClickActionStartEvent, DoubleClickActionCompleteEvent,
+    KeyboardActionStartEvent, KeyboardActionCompleteEvent,
+    CommandActionStartEvent, CommandActionCompleteEvent,
+    TestActionStartEvent, TestActionCompleteEvent,
+    ScreenshotActionStartEvent, ScreenshotActionCompleteEvent,
+    ScrollActionStartEvent, ScrollActionCompleteEvent,
+    IdleActionStartEvent, IdleActionCompleteEvent,
+    DragActionStartEvent, DragActionCompleteEvent,
+    GotoActionStartEvent, GotoActionCompleteEvent,
+    BlockActionStartEvent, BlockActionCompleteEvent,
+    SaveTimestampActionStartEvent, SaveTimestampActionCompleteEvent
+)
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +84,7 @@ class PlaybookController:
     execution order with timing and conditional logic.
     """
     
-    def __init__(self, websocket_client: AdareVMClient, experiment_dir: Path, project_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp", debug_screenshots: bool = False, screenshots_dir: Path = None, playbook: Optional[Playbook] = None):
+    def __init__(self, websocket_client: AdareVMClient, experiment_dir: Path, project_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp", debug_screenshots: bool = False, screenshots_dir: Path = None, playbook: Optional[Playbook] = None, experiment_id: Optional[str] = None, experiment_run_id: Optional[str] = None):
         """
         Initialize the playbook controller.
         
@@ -77,6 +96,8 @@ class PlaybookController:
             debug_screenshots: Whether to save screenshots for debugging
             screenshots_dir: Directory to save debug screenshots
             playbook: Pre-parsed playbook (optional, will parse if not provided)
+            experiment_id: Experiment ID for database linking
+            experiment_run_id: Experiment run ID for execution tracking
         """
         self.client = websocket_client
         self.experiment_dir = experiment_dir
@@ -88,6 +109,15 @@ class PlaybookController:
         self.screenshot_counter = 0
         self.playbook = playbook  # Pre-parsed playbook
         
+        # Database integration
+        self.experiment_id = experiment_id
+        self.experiment_run_id = experiment_run_id
+        self.playbook_items_map: Dict[int, str] = {}  # Maps action index to playbook_item_id
+        
+        # Initialize playbook items mapping if experiment tracking enabled
+        if self.experiment_id:
+            self._initialize_playbook_items_mapping()
+        
         # Target resolution using MCP GUI server
         self.target_resolver = MCPTargetResolver(experiment_dir, mcp_gui_url)
         self.condition_checker = MCPConditionChecker(self.target_resolver)
@@ -95,6 +125,199 @@ class PlaybookController:
         # Performance tracking
         self.start_time: Optional[float] = None
         self.action_timings: Dict[str, float] = {}
+    
+    def _initialize_playbook_items_mapping(self):
+        """Initialize mapping from action index to playbook_item_id."""
+        if not self.experiment_id:
+            return
+        
+        try:
+            from adare.database.api.playbook import PlaybookApi
+            
+            with PlaybookApi() as playbook_api:
+                # Get playbook from database
+                playbook = playbook_api.get_playbook_by_experiment_id(self.experiment_id)
+                if not playbook:
+                    log.warning(f"No playbook found for experiment {self.experiment_id}")
+                    return
+                
+                # Get playbook items ordered by sequence
+                items = playbook_api.get_playbook_items(playbook.id)
+                
+                # Map action index to playbook_item_id
+                for item in items:
+                    self.playbook_items_map[item.sequence_order] = item.id
+                    
+                log.debug(f"Initialized playbook items mapping: {len(self.playbook_items_map)} items")
+            
+        except Exception as e:
+            log.error(f"Failed to initialize playbook items mapping: {e}")
+    
+    def _create_action_start_event(self, action: ActionType, action_index: int, action_id: str, display_level: int = 2):
+        """Create appropriate start event for the given action type."""
+        action_type = type(action).__name__
+        description = getattr(action, 'description', '')
+        
+        # Common event data
+        event_data = {
+            'action_id': action_id,
+            'action_description': description,
+            'sequence_order': action_index,
+            'playbook_item_id': self.playbook_items_map.get(action_index),
+            'experiment_run_id': self.experiment_run_id,
+            'display_level': display_level
+        }
+        
+        # Create type-specific start event
+        if isinstance(action, ClickAction):
+            return ClickActionStartEvent(target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
+        elif isinstance(action, RightClickAction):
+            return RightClickActionStartEvent(target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
+        elif isinstance(action, DoubleClickAction):
+            return DoubleClickActionStartEvent(target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
+        elif isinstance(action, KeyboardAction):
+            return KeyboardActionStartEvent(keys=getattr(action, 'keys', None), **event_data)
+        elif isinstance(action, CommandAction):
+            return CommandActionStartEvent(command=getattr(action, 'command', None), **event_data)
+        elif isinstance(action, ActionTestAction):
+            return TestActionStartEvent(test_name=getattr(action, 'name', ''), **event_data)
+        elif isinstance(action, ScreenshotAction):
+            return ScreenshotActionStartEvent(**event_data)
+        elif isinstance(action, ScrollAction):
+            return ScrollActionStartEvent(
+                direction=getattr(action, 'direction', None),
+                amount=getattr(action, 'amount', None),
+                **event_data
+            )
+        elif isinstance(action, IdleAction):
+            return IdleActionStartEvent(duration=getattr(action, 'duration', None), **event_data)
+        elif isinstance(action, DragAction):
+            return DragActionStartEvent(
+                source_target=self._get_target_info(getattr(action, 'source', None)),
+                dest_target=self._get_target_info(getattr(action, 'target', None)),
+                **event_data
+            )
+        elif isinstance(action, GotoAction):
+            return GotoActionStartEvent(url=getattr(action, 'url', None), **event_data)
+        elif isinstance(action, BlockAction):
+            return BlockActionStartEvent(
+                action_count=len(getattr(action, 'actions', [])),
+                conditions=self._get_condition_info(getattr(action, 'when', None)),
+                **event_data
+            )
+        elif isinstance(action, SaveTimestampAction):
+            return SaveTimestampActionStartEvent(variable=getattr(action, 'variable', None), **event_data)
+        else:
+            # Generic start event for unknown action types
+            from adare.types.actions import ActionEvent
+            return ActionEvent(**event_data)
+    
+    def _create_action_complete_event(self, action: ActionType, action_index: int, action_id: str, result: ActionResult, display_level: int = 2):
+        """Create appropriate complete event for the given action type and result."""
+        action_type = type(action).__name__
+        description = getattr(action, 'description', '')
+        
+        # Common event data
+        event_data = {
+            'action_id': action_id,
+            'action_description': description,
+            'sequence_order': action_index,
+            'playbook_item_id': self.playbook_items_map.get(action_index),
+            'experiment_run_id': self.experiment_run_id,
+            'success': result.success,
+            'execution_time': result.execution_time,
+            'error_message': result.message if not result.success else None,
+            'display_level': display_level
+        }
+        
+        # Create type-specific complete event
+        if isinstance(action, ClickAction):
+            return ClickActionCompleteEvent(coordinates=result.coordinates, target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
+        elif isinstance(action, RightClickAction):
+            return RightClickActionCompleteEvent(coordinates=result.coordinates, target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
+        elif isinstance(action, DoubleClickAction):
+            return DoubleClickActionCompleteEvent(coordinates=result.coordinates, target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
+        elif isinstance(action, KeyboardAction):
+            return KeyboardActionCompleteEvent(keys_sent=getattr(action, 'keys', None), **event_data)
+        elif isinstance(action, CommandAction):
+            return CommandActionCompleteEvent(
+                command_executed=getattr(action, 'command', None),
+                output=result.data.get('output') if result.data else None,
+                return_code=result.data.get('return_code') if result.data else None,
+                **event_data
+            )
+        elif isinstance(action, ActionTestAction):
+            return TestActionCompleteEvent(
+                test_name=getattr(action, 'name', ''),
+                test_output=result.data.get('output') if result.data else None,
+                **event_data
+            )
+        elif isinstance(action, ScreenshotAction):
+            return ScreenshotActionCompleteEvent(
+                screenshot_path=result.data.get('screenshot_path') if result.data else None,
+                **event_data
+            )
+        elif isinstance(action, ScrollAction):
+            return ScrollActionCompleteEvent(**event_data)
+        elif isinstance(action, IdleAction):
+            return IdleActionCompleteEvent(actual_duration=result.execution_time, **event_data)
+        elif isinstance(action, DragAction):
+            return DragActionCompleteEvent(
+                source_coordinates=result.data.get('source_coordinates') if result.data else None,
+                dest_coordinates=result.coordinates,
+                **event_data
+            )
+        elif isinstance(action, GotoAction):
+            return GotoActionCompleteEvent(
+                final_url=result.data.get('final_url') if result.data else None,
+                **event_data
+            )
+        elif isinstance(action, BlockAction):
+            return BlockActionCompleteEvent(
+                actions_executed=result.data.get('actions_executed', 0) if result.data else 0,
+                **event_data
+            )
+        elif isinstance(action, SaveTimestampAction):
+            return SaveTimestampActionCompleteEvent(
+                variable=getattr(action, 'variable', None),
+                timestamp_value=result.data.get(getattr(action, 'variable', 'timestamp')) if result.data else None,
+                **event_data
+            )
+        else:
+            # Generic complete event for unknown action types
+            from adare.types.actions import ActionEvent
+            return ActionEvent(**event_data)
+    
+    def _get_target_info(self, target) -> Optional[Dict[str, Any]]:
+        """Extract target information for event logging."""
+        if not target:
+            return None
+        
+        info = {}
+        if hasattr(target, 'image') and target.image:
+            info['image'] = target.image
+        if hasattr(target, 'text') and target.text:
+            info['text'] = target.text
+        if hasattr(target, 'position') and target.position:
+            info['position'] = target.position
+        
+        return info if info else None
+    
+    def _get_condition_info(self, conditions) -> Optional[Dict[str, Any]]:
+        """Extract condition information for event logging."""
+        if not conditions:
+            return None
+        
+        # If conditions is a list, extract basic info from each
+        if isinstance(conditions, list):
+            return {
+                'count': len(conditions),
+                'types': [type(cond).__name__ for cond in conditions]
+            }
+        else:
+            return {'type': type(conditions).__name__}
+        
+        return None
         
         
     async def execute_experiment(self, experiment_dir: Path) -> PlaybookExecutionResult:
@@ -186,14 +409,73 @@ class PlaybookController:
             action_name = type(action).__name__
             log.info(f"Executing action {i+1}/{total_actions}: {action_name}")
             
-            # Execute the action
+            # Create database execution record if tracking enabled
+            execution_id = None
+            if self.experiment_run_id and i in self.playbook_items_map:
+                try:
+                    from adare.database.api.playbook import PlaybookApi
+                    
+                    with PlaybookApi() as playbook_api:
+                        execution = playbook_api.create_action_execution(
+                            playbook_item_id=self.playbook_items_map[i],
+                            experiment_run_id=self.experiment_run_id,
+                            status='pending'
+                        )
+                        execution_id = execution.id
+                        playbook_api.update_action_execution_start(execution_id)
+                        log.debug(f"Created execution record {execution_id} for action {i}")
+                except Exception as e:
+                    log.warning(f"Failed to create execution record for action {i}: {e}")
+            
+            # Create unique action ID for event tracking
+            action_id = f"action_{i}_{action_name.lower()}_{int(time.time()*1000)}"
+            
+            # Emit action start event for flow console display
+            if self.experiment_run_id:
+                try:
+                    start_event = self._create_action_start_event(action, i, action_id, display_level=2)
+                    emit_action(self.experiment_run_id, start_event, action_id)
+                    log.info(f"Emitted start event for action {i}: {action_name}, ID: {action_id}")
+                except Exception as e:
+                    log.error(f"Failed to emit start event for action {i}: {e}", exc_info=True)
+            
+            # Execute the action (level 2 for main playbook actions)
             start_time = time.time()
-            result = await self.execute_action(action)
+            result = await self.execute_action(action, display_level=2)
             execution_time = time.time() - start_time
             
             result.execution_time = execution_time
             self.action_results.append(result)
             self.action_timings[f"action_{i+1}_{action_name}"] = execution_time
+            
+            # Emit action complete event for flow console display
+            if self.experiment_run_id:
+                try:
+                    complete_event = self._create_action_complete_event(action, i, action_id, result, display_level=2)
+                    emit_action(self.experiment_run_id, complete_event, action_id)
+                    log.info(f"Emitted complete event for action {i}: {action_name}, Success: {result.success}, ID: {action_id}")
+                except Exception as e:
+                    log.error(f"Failed to emit complete event for action {i}: {e}", exc_info=True)
+            
+            # Update database execution record
+            if execution_id:
+                try:
+                    from adare.database.api.playbook import PlaybookApi
+                    
+                    with PlaybookApi() as playbook_api:
+                        playbook_api.update_action_execution_complete(
+                            execution_id=execution_id,
+                            success=result.success,
+                            result_data={
+                                'coordinates': result.coordinates,
+                                'data': result.data,
+                                'execution_time': execution_time
+                            },
+                            error_message=result.message if not result.success else None
+                        )
+                        log.debug(f"Updated execution record {execution_id}")
+                except Exception as e:
+                    log.warning(f"Failed to update execution record {execution_id}: {e}")
             
             if not result.success:
                 log.error(f"Action {i+1} failed: {result.message}")
@@ -216,7 +498,7 @@ class PlaybookController:
             action_results=self.action_results
         )
     
-    async def execute_action(self, action: ActionType) -> ActionResult:
+    async def execute_action(self, action: ActionType, display_level: int = 2) -> ActionResult:
         """
         Execute a single playbook action by translating to WebSocket calls.
         
@@ -339,13 +621,15 @@ class PlaybookController:
             return ActionResult(
                 success=result.get('status') == 'success',
                 message=result.get('message', ''),
-                coordinates=(x, y)
+                coordinates=(x, y),
+                data={'target': action.target}  # Include target info in result
             )
         except Exception as e:
             return ActionResult(
                 success=False,
                 message=str(e),
-                coordinates=(x, y)
+                coordinates=(x, y),
+                data={'target': action.target}
             )
     
     async def _get_current_screenshot(self) -> Optional[str]:
@@ -412,6 +696,55 @@ class PlaybookController:
         except Exception as e:
             log.error(f"Failed to save debug screenshot: {e}")
     
+    async def _resolve_target_with_events(self, target: Target, parent_action_id: str) -> Optional[Tuple[int, int]]:
+        """
+        Resolve target to screen coordinates with sub-action event emission.
+        
+        Args:
+            target: Target to resolve
+            parent_action_id: ID of the parent action for sub-action events
+            
+        Returns:
+            Coordinates if found, None otherwise
+        """
+        # Create sub-action ID for find operation
+        find_action_id = f"{parent_action_id}_find"
+        
+        # Emit find start event
+        if self.experiment_run_id:
+            try:
+                from adare.types.actions import ActionEvent
+                find_start_event = ActionEvent(
+                    action_id=find_action_id,
+                    action_description=f"find {target.image or target.text or 'target'}",
+                    experiment_run_id=self.experiment_run_id,
+                    display_level=3  # Sub-action level
+                )
+                emit_action(self.experiment_run_id, find_start_event, find_action_id)
+            except Exception as e:
+                log.error(f"Failed to emit find start event: {e}")
+        
+        # Perform target resolution
+        coords = await self._resolve_target(target)
+        
+        # Emit find complete event
+        if self.experiment_run_id:
+            try:
+                find_complete_event = ActionEvent(
+                    action_id=find_action_id,
+                    action_description=f"find {target.image or target.text or 'target'}",
+                    experiment_run_id=self.experiment_run_id,
+                    success=coords is not None,
+                    error_message=f"Could not find {target.image or target.text or 'target'}" if coords is None else None,
+                    display_level=3,  # Sub-action level
+                    coordinates=coords
+                )
+                emit_action(self.experiment_run_id, find_complete_event, find_action_id)
+            except Exception as e:
+                log.error(f"Failed to emit find complete event: {e}")
+                
+        return coords
+
     async def _resolve_target(self, target: Target) -> Optional[Tuple[int, int]]:
         """
         Resolve target to screen coordinates using MCP GUI server.
@@ -485,12 +818,25 @@ class PlaybookController:
     async def _execute_idle(self, action: IdleAction) -> ActionResult:
         """Execute idle action."""
         try:
+            log.info(f"Starting idle action for {action.duration} seconds")
             result = await self.client.idle(action.duration)
+            log.info(f"Idle action completed, result: {result}")
+            
+            # Handle different possible response formats
+            if isinstance(result, dict):
+                success = result.get('status') == 'success' or result.get('success', False)
+                message = result.get('message', '') or result.get('error', '')
+            else:
+                # If result is not a dict, assume success if no exception was thrown
+                success = True
+                message = f"Idle completed ({action.duration}s)"
+            
             return ActionResult(
-                success=result.get('status') == 'success',
-                message=result.get('message', '')
+                success=success,
+                message=message
             )
         except Exception as e:
+            log.error(f"Idle action failed: {e}")
             return ActionResult(success=False, message=str(e))
     
     async def _execute_screenshot(self, action: ScreenshotAction) -> ActionResult:
@@ -545,10 +891,34 @@ class PlaybookController:
                     message=f"Condition check failed: {str(e)}"
                 )
         
-        # Execute all actions in block
+        # Execute all actions in block at level 3 (sub-actions)
         results = []
-        for block_action in action.actions:
-            result = await self.execute_action(block_action)
+        for i, block_action in enumerate(action.actions):
+            # Create sub-action ID (use a timestamp-based ID since we don't have action_id here)
+            sub_action_id = f"block_sub_{i}_{int(time.time()*1000)}"
+            
+            # Emit sub-action start event
+            if self.experiment_run_id:
+                try:
+                    sub_start_event = self._create_action_start_event(block_action, i, sub_action_id, display_level=3)
+                    emit_action(self.experiment_run_id, sub_start_event, sub_action_id)
+                except Exception as e:
+                    log.error(f"Failed to emit sub-action start event: {e}")
+            
+            # Execute the sub-action
+            start_time = time.time()
+            result = await self.execute_action(block_action, display_level=3)
+            execution_time = time.time() - start_time
+            result.execution_time = execution_time
+            
+            # Emit sub-action complete event
+            if self.experiment_run_id:
+                try:
+                    sub_complete_event = self._create_action_complete_event(block_action, i, sub_action_id, result, display_level=3)
+                    emit_action(self.experiment_run_id, sub_complete_event, sub_action_id)
+                except Exception as e:
+                    log.error(f"Failed to emit sub-action complete event: {e}")
+            
             results.append(result)
             if not result.success:
                 # Handle testset-related errors specifically
@@ -564,7 +934,8 @@ class PlaybookController:
         
         return ActionResult(
             success=True,
-            message=f"Block executed successfully ({len(results)} actions)"
+            message=f"Block executed successfully ({len(results)} actions)",
+            data={'actions_executed': len(results)}
         )
     
     # Placeholder implementations for other actions

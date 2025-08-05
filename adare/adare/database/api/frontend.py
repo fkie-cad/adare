@@ -241,6 +241,9 @@ class DataRetrievalApi(DatabaseApi):
         if experiment_ulid:
             return self.get_experiment_runs(experiment_ulid)
 
+        if project_name:
+            self.__check_project_exists(project_name)
+
         query = self._session.query(ExperimentRun)
         if project_name:
             query = query.filter(ExperimentRun.experiment.has(Experiment.environments.any(Environment.project.has(Project.name == project_name))))

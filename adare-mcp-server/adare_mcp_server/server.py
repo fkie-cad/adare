@@ -46,9 +46,11 @@ async def find_icon(icon_base64: str, screenshot_base64: str, offset_x: int = 0,
         }
 
 
-def _run_paddle_ocr(screenshot_path: str):
+def _run_paddle_ocr(screenshot_bytes: bytes):
     """Run PaddleOCR in a separate thread to avoid blocking."""
     from paddleocr import PaddleOCR
+    import cv2
+    import numpy as np
     
     try:
         log.info("Initializing PaddleOCR...")
@@ -58,8 +60,13 @@ def _run_paddle_ocr(screenshot_path: str):
             use_textline_orientation=False
         )
         
+        log.info("Converting image bytes to numpy array...")
+        # Convert bytes to numpy array
+        nparr = np.frombuffer(screenshot_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
         log.info("Running OCR prediction...")
-        result = ocr.ocr(screenshot_path)[0]
+        result = ocr.ocr(img)[0]
         
         log.info("OCR prediction completed")
         return result
@@ -75,10 +82,6 @@ async def find_text(text: str, screenshot_base64: str, offset_x: int = 0, offset
     
     try:
         screenshot_bytes = base64.b64decode(screenshot_base64)
-        # save bytes in a temporary file
-        screenshot_path = "screenshot.png"
-        with open(screenshot_path, "wb") as f:
-            f.write(screenshot_bytes)
         
         # Run PaddleOCR in thread pool
         executor = ThreadPoolExecutor(max_workers=1)
@@ -86,9 +89,9 @@ async def find_text(text: str, screenshot_base64: str, offset_x: int = 0, offset
         try:
             log.info("Running PaddleOCR...")
             
-            # Start the OCR task
+            # Start the OCR task with image bytes directly
             result = await asyncio.get_event_loop().run_in_executor(
-                executor, _run_paddle_ocr, screenshot_path
+                executor, _run_paddle_ocr, screenshot_bytes
             )
             
             log.info("PaddleOCR completed successfully")
