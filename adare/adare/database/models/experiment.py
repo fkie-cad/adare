@@ -13,11 +13,12 @@ import ulid
 from pathlib import Path
 from sqlalchemy_serializer import SerializerMixin
 from sqlalchemy.ext.hybrid import hybrid_property
-from adarelib.constants import StatusEnum
+from adarelib.constants import StatusEnum, VMStatus
 
 from . import Base
 
 StatusEnumType = SAEnum(StatusEnum, name="statusenum")
+VMStatusEnumType = SAEnum(VMStatus, name="vmstatusenum")
 SyncStatusEnum = SAEnum('pending', 'synced', 'failed', 'local_only', name="syncstatusenum")
 SyncDirectionEnum = SAEnum('push', 'pull', 'bidirectional', name="syncdirectionenum")
 
@@ -569,9 +570,37 @@ class Vm(SerializerMixin, Base):
     file = Column(String, nullable=False, unique=True)
     hash = Column(String, nullable=False)
     description = Column(String, nullable=True)
+    
+    # NEW FIELDS FOR SNAPSHOT-BASED VM MANAGEMENT
+    vbox_uuid = Column(String, nullable=True, unique=True, index=True)  # VirtualBox VM UUID
+    base_snapshot_name = Column(String, nullable=True)  # Name of clean base snapshot
+    import_status = Column(VMStatusEnumType, default=VMStatus.IMPORTED)  # VM status in VirtualBox
+    last_verified = Column(DateTime, nullable=True)  # Last time VM was verified to exist
+    use_snapshots = Column(Boolean, default=True)  # Use snapshot workflow vs import
 
     osinfo_id = Column(CHAR(26), ForeignKey('os_info.id', ondelete='RESTRICT'), nullable=False)
     osinfo = relationship(OsInfo, backref=backref("environments", cascade="all, delete-orphan"))
+
+
+class VmSnapshot(SerializerMixin, Base):
+    """
+    Represents a VM snapshot created and managed by Adare.
+    
+    Tracks snapshots for fast experiment setup using VirtualBox snapshot functionality.
+    """
+    __tablename__ = 'vm_snapshot'
+    RELATIONSHIPS_TO_DICT = True
+    
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+    vm_id = Column(CHAR(26), ForeignKey('vm.id', ondelete='CASCADE'), nullable=False)
+    snapshot_name = Column(String, nullable=False)  # VirtualBox snapshot name
+    snapshot_type = Column(String, nullable=False)  # base|experiment|backup
+    experiment_id = Column(CHAR(26), nullable=True)  # If experiment snapshot
+    created_at = Column(DateTime, default=func.now())
+    description = Column(String, nullable=True)
+    
+    # Relationships
+    vm = relationship("Vm", backref=backref("snapshots", cascade="all, delete-orphan"))
 
 
 class Environment(SerializerMixin, Base):
@@ -585,8 +614,8 @@ class Environment(SerializerMixin, Base):
     name = Column(String, nullable=False, unique=True, index=True)
     description = Column(String, nullable=True)
 
-    # VM relationship
-    vm_id = Column(CHAR(26), ForeignKey('vm.id', ondelete='RESTRICT'), nullable=False)
+    # VM relationship - nullable=True for lazy loading
+    vm_id = Column(CHAR(26), ForeignKey('vm.id', ondelete='RESTRICT'), nullable=True)
     vm = relationship(Vm, backref=backref("environments", cascade="all, delete-orphan"))
 
     project_id = Column(CHAR(26), ForeignKey('project.id', ondelete='CASCADE'), nullable=False)
@@ -701,13 +730,20 @@ class Event(SerializerMixin, Base):
     category = Column(String)
     experiment_run_id = Column(String, ForeignKey('experiment_run.id', ondelete='CASCADE'))
     experiment_run = relationship("ExperimentRun", backref=backref("events", cascade="all, delete-orphan"))
-    status = Column(StatusEnumType, default=StatusEnum.PENDING)
     error = Column(String)
-    stage = Column(Boolean, default=False)
-    group_key = Column(String)
-    stage_in_run_id = Column(CHAR(26), ForeignKey('stage_in_run.id', ondelete='SET NULL'), nullable=True, default=None)
-    stage_in_run = relationship("StageInRun", backref=backref("events", cascade="all, delete-orphan"))
+    parent_event_id = Column(CHAR(26), ForeignKey('event.id', ondelete='SET NULL'), nullable=True)  # Parent event ID for nested events
+    parent_event = relationship("Event", remote_side=[id], backref=backref("child_events", cascade="all, delete-orphan"))
 
+    # Success/failure tracking for all events
+    success = Column(Boolean, nullable=True)
+    
+    # Universal event grouping ID to group start/complete event pairs
+    event_group_id = Column(String, nullable=True)     # Groups related events (start/complete pairs)
+    
+    # Specific event type (e.g., 'TEST_START', 'TEST_COMPLETE', 'CLICK_START', etc.)
+    event_type_specific = Column(String, nullable=True)
+    execution_time = Column(Integer, nullable=True)     # Duration in milliseconds
+    
     timestamp = Column(DateTime)
 
     @hybrid_property
@@ -734,28 +770,6 @@ class Event(SerializerMixin, Base):
     }
 
 
-class CommandEvent(Event):
-    """
-    Event representing the execution of a command during an experiment run.
-    """
-    __tablename__ = 'command_events'
-    __mapper_args__ = {
-        'polymorphic_identity': 'command_event',
-    }
-    id = Column(CHAR(26), ForeignKey('event.id'), primary_key=True)
-    name = Column(String)
-    command = Column(String)
-    returncode = Column(Integer)
-    stdout = Column(String)
-
-    @hybrid_property
-    def stage_submessage(self):
-        name, args = self.command.split(' ', 1)
-        return f'Running {self.name} with arguments {args}'
-
-    @hybrid_property
-    def stage_result(self):
-        return None
 
 
 class TestEvent(Event):
@@ -796,124 +810,74 @@ class ErrorEvent(Event):
         'polymorphic_identity': 'error_event',
     }
     id = Column(CHAR(26), ForeignKey('event.id'), primary_key=True)
-    error_name = Column(String)
-    error_msg = Column(String)
 
     def __str__(self):
         return str(self.error)
 
     def __repr__(self):
-        return f"<ErrorEvent(error='{self.error_msg}')>"
+        return f"<ErrorEvent(error='{self.error}')>"
 
     @hybrid_property
     def stage_submessage(self):
-        return f'{self.error_msg}'
+        return f'{self.error}' if self.error else 'Unknown error'
 
     @hybrid_property
     def stage_result(self):
         return StatusEnum.ERROR
 
 
-class GuiFindEvent(Event):
+
+
+class ActionEvent(Event):
     """
-    Event representing a GUI find operation (text or image) during an experiment run.
+    Event representing any action during experiment execution (click, keyboard, test, etc.).
+    This is a flexible event type that can store various action types and their data.
     """
-    __tablename__ = 'gui_find_events'
+    __tablename__ = 'action_events'
     __mapper_args__ = {
-        'polymorphic_identity': 'gui_find_event',
+        'polymorphic_identity': 'action_event',
     }
     id = Column(CHAR(26), ForeignKey('event.id'), primary_key=True)
-    text = Column(Boolean)
-    objective = Column(String)
-    success = Column(Integer)
-    positions = Column(String)
+    
+    # Action type and event type fields
+    action_type = Column(String)  # e.g., 'click', 'keyboard', 'test', etc.
+    # action_event_type = Column(String)   # e.g., 'click_start', 'click_complete', etc.
+    action_id = Column(String)    # Unique action identifier for pairing start/complete events
+    
+    # Execution time tracking is inherited from parent Event class
+    
+    # Generic action data as JSON-like text field
+    # This allows us to store any action-specific data flexibly
+    action_data = Column(String, nullable=True)  # JSON serialized action data
+    
+    # Display level is now computed from parent relationships
 
     @hybrid_property
-    def stage_submessage(self):
-        if self.text:
-            return f'Find text "{self.objective}" on screen'
+    def display_level(self):
+        """
+        Compute display level based on parent relationship hierarchy.
+        Root level actions have display_level = 0, each nested level adds 1.
+        """
+        if not self.parent_event_id:
+            return 0  # Root level
+        
+        # Find parent event and recursively compute depth
+        parent = self.__class__.query.filter_by(id=self.parent_event_id).first()
+        if parent and hasattr(parent, 'display_level'):
+            return parent.display_level + 1
         else:
-            return f'Find image "{self.objective}" on screen'
-
-    @hybrid_property
-    def stage_result(self):
-        if self.success <= 0:
-            return StatusEnum.ERROR
-        return StatusEnum.SUCCESS
-
-
-class GuiClickEvent(Event):
-    """
-    Event representing a GUI click operation during an experiment run.
-    """
-    __tablename__ = 'gui_click_events'
-    __mapper_args__ = {
-        'polymorphic_identity': 'gui_click_event',
-    }
-    id = Column(CHAR(26), ForeignKey('event.id'), primary_key=True)
-    clicktype = Column(String)
-    modifiers = Column(String)
-    target = Column(String)
+            # If parent not found or doesn't have display_level, assume next level
+            return 1
 
     @hybrid_property
     def stage_submessage(self):
-        if self.clicktype == 'left':
-            msg = f'Clicking left at coordinates {self.target}'
-        elif self.clicktype == 'right':
-            msg = f'Clicking right at coordinates {self.target}'
-        elif self.clicktype == 'double':
-            msg = f'Double clicking at coordinates {self.target}'
-        elif self.clicktype == 'double_right':
-            msg = f'Double right clicking at coordinates {self.target}'
-        else:
-            msg = f'Clicking at coordinates {self.target}'
-        if self.modifiers:
-            msg += f' (mod: {self.modifiers})'
-        return msg
+        return f'{self.action_type} action'
 
-    @hybrid_property
+    @hybrid_property  
     def stage_result(self):
-        return None
-
-
-class GuiKeypressEvent(Event):
-    """
-    Event representing a GUI keypress operation during an experiment run.
-    """
-    __tablename__ = 'gui_keypress_events'
-    __mapper_args__ = {
-        'polymorphic_identity': 'gui_keypress_event',
-    }
-    id = Column(CHAR(26), ForeignKey('event.id'), primary_key=True)
-    keys = Column(String)
-
-    @hybrid_property
-    def stage_submessage(self):
-        return f'Pressing keys {self.keys}'
-
-    @hybrid_property
-    def stage_result(self):
-        return None
-
-
-class GuiIdleEvent(Event):
-    """
-    Event representing an idle/wait period during an experiment run.
-    """
-    __tablename__ = 'gui_idle_events'
-    __mapper_args__ = {
-        'polymorphic_identity': 'gui_idle_event',
-    }
-    id = Column(CHAR(26), ForeignKey('event.id'), primary_key=True)
-    seconds = Column(Integer)
-
-    @hybrid_property
-    def stage_submessage(self):
-        return f'Wait idle for {self.seconds} seconds'
-
-    @hybrid_property
-    def stage_result(self):
-        return None
+        if self.success is None:
+            return StatusEnum.PENDING
+        return StatusEnum.SUCCESS if self.success else StatusEnum.FAILED
 
 
 class EventFactory:
@@ -924,20 +888,15 @@ class EventFactory:
     def create_event(category, **kwargs):
         # add category to kwargs
         kwargs['category'] = category
-        # if category == 'action':
-        #     return ActionEvent(**kwargs)
-        if category == 'command':
-            return CommandEvent(**kwargs)
+        
+        # Handle error_message -> error field mapping for backward compatibility
+        if 'error_message' in kwargs and kwargs['error_message']:
+            kwargs['error'] = kwargs.pop('error_message')
+        
+        if category == 'action' or category == 'command':
+            return ActionEvent(**kwargs)
         elif category == 'test':
             return TestEvent(**kwargs)
-        elif category == 'gui:find':
-            return GuiFindEvent(**kwargs)
-        elif category == 'gui:click':
-            return GuiClickEvent(**kwargs)
-        elif category == 'gui:keypress':
-            return GuiKeypressEvent(**kwargs)
-        elif category == 'gui:idle':
-            return GuiIdleEvent(**kwargs)
         elif category == 'error':
             return ErrorEvent(**kwargs)
         else:
@@ -1089,7 +1048,7 @@ class ExperimentRun(SerializerMixin, Base):
         for t in self.tests:
             if not t.result:
                 continue
-            if t.result.status != StatusEnum.SUCCESS:
+            if int(t.result.status_id) != StatusEnum.SUCCESS:
                 return StatusEnum.FAILED
         return StatusEnum.SUCCESS
 

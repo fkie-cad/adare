@@ -22,7 +22,8 @@ from adare.types.stages import (
     # Sub-stages
     SetupDirectoriesStage, ValidatePlaybookStage, ResolveEnvironmentStage, CheckAppdataStage,
     ExperimentIntegrityCheckStage, ProjectIntegrityCheckStage, RunDirectoryCreationStage, StartMCPServerStage,
-    VMCreateStage, VMRunStage, VMWaitTillReadyStage, VMMountSharedDirectoriesStage,
+    VMCreateStage, VMImportStage, VMRunStage, VMWaitTillReadyStage, VMMountSharedDirectoriesStage,
+    VMSnapshotRestoreStage, VMSnapshotCreateStage, VMExperimentSnapshotStage,
     InstallAdareVMStage, ConnectToVMStage, InstallationsStage,
     ExperimentRunStage,
     FinalizeStage, ShutdownMCPServerStage, ShutdownWebSocketStage, VMStopStage, VMDestroyStage,
@@ -371,21 +372,46 @@ def step_setup_directories(context: ExperimentRunCtx):
         log.info(f'checked experiment directory {context.experiment_directory.path}')
 
 def step_validate_playbook(context: ExperimentRunCtx):
-    """Parse and validate playbook early to catch syntax errors before VM startup."""
+    """Load playbook from database (pre-validated, no file parsing needed)."""
     with StageCtxManager(ValidatePlaybookStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-        from adare.types.playbook import parse_playbook
-        
-        playbook_path = context.experiment_directory.path / "playbook.yaml"
-        if not playbook_path.exists():
-            log.info("No playbook.yaml found - experiment will run without GUI actions")
-            return
-        
+        # Get experiment ID to load playbook from database
         try:
-            log.info(f"Parsing and validating playbook: {playbook_path}")
-            context.playbook = parse_playbook(playbook_path)
-            log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
+            experiment_id = experiment_database.get_experiment_by_project_and_name(
+                context.config.project_path, 
+                context.config.experiment_name
+            )
+            if not experiment_id:
+                # Fallback to file-based parsing for new/untracked experiments
+                log.info("Experiment not found in database, falling back to file-based parsing")
+                from adare.types.playbook import parse_playbook
+                playbook_path = context.experiment_directory.path / "playbook.yaml"
+                if not playbook_path.exists():
+                    log.info("No playbook.yaml found - experiment will run without GUI actions")
+                    return
+                context.playbook = parse_playbook(playbook_path)
+                log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
+                return
+            
+            # Load from database (pre-validated)
+            from adare.database.api.playbook import PlaybookApi
+            with PlaybookApi() as playbook_api:
+                try:
+                    log.info(f"Loading pre-validated playbook from database for experiment {experiment_id}")
+                    context.playbook = playbook_api.load_playbook_from_database(experiment_id)
+                    log.info(f"Playbook loaded from database - {len(context.playbook.actions)} actions found")
+                except ValueError as e:
+                    # Fallback to file parsing if database doesn't have the content
+                    log.warning(f"Database playbook load failed: {e}, falling back to file parsing")
+                    from adare.types.playbook import parse_playbook
+                    playbook_path = context.experiment_directory.path / "playbook.yaml"
+                    if not playbook_path.exists():
+                        log.info("No playbook.yaml found - experiment will run without GUI actions")
+                        return
+                    context.playbook = parse_playbook(playbook_path)
+                    log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
+                    
         except Exception as e:
-            raise LoggedException(log, f"Playbook validation failed: {str(e)}")
+            raise LoggedException(log, f"Playbook loading failed: {str(e)}")
 
 def step_resolve_environment(context: ExperimentRunCtx):
     with StageCtxManager(ResolveEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
@@ -401,8 +427,18 @@ def step_resolve_environment(context: ExperimentRunCtx):
             context.config.environment_name = context.environment_file.stem
         context.environment_ulid = experiment_database.get_environment_ulid(context.config.project_path, context.config.environment_name)
 
+        # For lazy loading, VM file might not be available yet - will be resolved during VM creation
         context.vm_file = environment_database.get_environment_vm_file(context.environment_ulid)
         context.guest_platform = environment_database.get_environment_os(context.environment_ulid)
+        
+        # If VM file is not available, get from environment metadata directly
+        if not context.vm_file or not context.guest_platform:
+            from adare.types.environment import parse_environment_file
+            environment_metadata = parse_environment_file(context.environment_file)
+            if not context.vm_file:
+                context.vm_file = Path(environment_metadata.vm)
+            if not context.guest_platform:
+                context.guest_platform = environment_metadata.os.platform
 
         log.info(f'found environment {context.config.environment_name}')
 
@@ -453,7 +489,32 @@ def step_create_run_directory(context: ExperimentRunCtx):
         
 
 async def step_create_virtualbox_machine(context: ExperimentRunCtx):
-        context.vm_name = f"{context.config.environment_name}-{context.config.experiment_name}-{make_string_path_safe(context.experiment_run_ulid)}"
+        # Get VM ID from environment (file operations already done during environment load)
+        env_data = environment_database.get_environment_by_ulid(context.environment_ulid, fields=['vm_id'])
+        vm_id = env_data['vm_id'] if env_data else None
+        if not vm_id:
+            raise LoggedException(log, "No VM associated with environment. Did you load the environment properly?")
+        
+        # Only handle VirtualBox import and snapshots (fast operations)
+        from adare.backend.vm.commands import ensure_vm_ready_for_experiment
+        import adare.backend.vm.database as vm_database
+        
+        log.info("Preparing VM for experiment (VirtualBox import and snapshots only)")
+        vm_id = await ensure_vm_ready_for_experiment(
+            vm_id=vm_id,
+            experiment_id=context.experiment_run_ulid,
+            environment_ulid=context.environment_ulid,
+            experiment_run_ulid=context.experiment_run_ulid,
+            preserve_experiment_snapshot=context.config.preserve_snapshot
+        )
+        
+        # Get the prepared VM from database to use its actual VirtualBox name
+        vm_record = vm_database.get_vm_by_id(vm_id)
+        if not vm_record:
+            raise LoggedException(log, f"VM with ID {vm_id} not found after preparation")
+        
+        # Use the actual VM name from database (not experiment-specific name)
+        context.vm_name = vm_record.name
         
         shared_root = Path(SHARE_POINT_VM[context.guest_platform])
         context.config.shared_directories = {
@@ -466,16 +527,19 @@ async def step_create_virtualbox_machine(context: ExperimentRunCtx):
         
         vbox_manager = VirtualBoxManager()
         context.vm = VirtualBoxVM(
-            vm_name=context.vm_name,
+            vm_name=context.vm_name,  # Use the actual VM name from database
             guest_os=context.guest_platform,
             manager=vbox_manager,
             cpus=context.config.vm_cpus,
             ram=context.config.vm_memory
         )
 
-        # Create VM with stage management
+        # VM is already prepared with snapshots - no need to create from OVF/OVA
+        # Just verify the VM exists in VirtualBox
         with StageCtxManager(VMCreateStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-            await context.vm.create_from_ovf_or_ova(context.vm_file, stop_event=context.user_interrupt_event)
+            if not VirtualBoxVM.verify_vm_exists_by_uuid(vm_record.vbox_uuid):
+                raise LoggedException(log, f"VM '{context.vm_name}' was not properly prepared - missing from VirtualBox")
+            log.info(f"Using prepared VM '{context.vm_name}' with snapshots (UUID: {vm_record.vbox_uuid})")
 
         if not context.stop_event.is_set():
             for name, paths in context.config.shared_directories.items():
@@ -710,9 +774,47 @@ async def step_shutdown_virtualbox_vm(context: ExperimentRunCtx, post_interrupt:
 async def step_cleanup_virtualbox_vm(context: ExperimentRunCtx, post_interrupt: bool = False):
     event = None if post_interrupt else context.user_interrupt_event
     with StageCtxManager(VMDestroyStage(), context.experiment_run_ulid, event=event):
-        log.info('destroying virtualbox virtual machine')
-        if context.vm:
-            await context.vm.destroy()
+        if context.config.preserve_snapshot:
+            log.info('cleaning up experiment snapshot (VM will be preserved)')
+            if context.vm and context.experiment_run_ulid:
+                # Import snapshot manager for cleanup
+                from adare.backend.vm.snapshot_manager import SnapshotManager
+                import adare.backend.vm.database as vm_database
+                
+                # Get VM record from database to access snapshot management
+                try:
+                    # Get the VM ID from the database using the VM name
+                    from adare.database.api.vm import VmApi
+                    with VmApi() as api:
+                        vm_records = api.get_all_vms()
+                        vm_record = None
+                        for record in vm_records:
+                            if record.name == context.vm_name:
+                                vm_record = record
+                                break
+                    
+                    if vm_record and vm_record.vbox_uuid:
+                        snapshot_manager = SnapshotManager()
+                        
+                        # Generate the experiment snapshot name (same logic as in create_experiment_snapshot)
+                        exp_snapshot_name = f"adare_exp_{context.experiment_run_ulid[:8]}"
+                        
+                        # Delete only the experiment-specific snapshot
+                        success = snapshot_manager._delete_snapshot(vm_record, exp_snapshot_name)
+                        if success:
+                            log.info(f'Successfully cleaned up experiment snapshot: {exp_snapshot_name}')
+                        else:
+                            log.warning(f'Failed to cleanup experiment snapshot: {exp_snapshot_name} (may not exist)')
+                    else:
+                        log.warning('VM record not found or missing UUID - cannot cleanup experiment snapshot')
+                        
+                except Exception as e:
+                    log.warning(f'Error during snapshot cleanup: {e}')
+        else:
+            log.info('No experiment snapshot to cleanup (--preserve-snapshot not used)')
+            
+        # Keep the VM running - do NOT destroy it
+        log.info('VM preserved for future experiments')
 
 def step_remove_fake_experiment_run(context: ExperimentRunCtx):
     # todo remove associated stuff as well (e.g. stages/files/...)
@@ -764,14 +866,14 @@ def __start_event_listeners(experiment_run_ulid: str):
     return cli_thread, db_thread
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = False, debug_screenshots: bool = False):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = False, debug_screenshots: bool = False, preserve_snapshot: bool = False):
     import signal
     import asyncio
 
     log.info(f"Starting experiment run {experiment_name} in project {project_path}")
 
     # Create the experiment context and initialize it.
-    config = ExperimentConfig(project_path, experiment_name, environment_name)
+    config = ExperimentConfig(project_path, experiment_name, environment_name, preserve_snapshot=preserve_snapshot)
     experiment_run_context = ExperimentRunCtx(config)
     experiment_run_context.debug_screenshots = debug_screenshots
     if test:
@@ -853,7 +955,8 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 # Check if step_task completed with exception
                 for task in done:
                     if task.exception():
-                        raise task.exception()
+                        # Use result() to properly re-raise exception with chain
+                        task.result()
                         
                 log.info(f"Async step {step_func.__name__} completed")
                 

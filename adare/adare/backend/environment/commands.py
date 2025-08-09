@@ -84,14 +84,23 @@ def environment_load(project: Path, environment: str, force: bool = False):
             ]
         )
 
-    # check if vm is available for environment
-    from adare.backend.vm.commands import ensure_vm_available_for_environment
-    vm_id = ensure_vm_available_for_environment(
-        project_path=project,
-        environment_metadata=environment_metadata,
-    )
+    # Handle VM file copying and hashing during environment load (heavy file operations)
+    vm_id = None
+    if environment_metadata.vm:
+        vm_path = Path(environment_metadata.vm)
+        if vm_path.exists():
+            from adare.backend.vm.commands import load_vm_file_for_environment
+            log.info(f'Processing VM file during environment load: {vm_path}')
+            vm_id = load_vm_file_for_environment(
+                project_path=project,
+                vm_path=vm_path,
+                environment_metadata=environment_metadata
+            )
+            log.info(f'VM file processed and stored in database with ID: {vm_id}')
+        else:
+            log.warning(f'VM file specified but not found: {vm_path}')
 
-    environment_ulid = environment_database.update_environment(project, environment_metadata, environment_file, environment_file_sha256, vm_id, force=force)
+    environment_ulid = environment_database.update_environment(project, environment_metadata, environment_file, environment_file_sha256, vm_id=vm_id, force=force)
     if not environment_ulid:
         log.error(f'environment update failed')
         return

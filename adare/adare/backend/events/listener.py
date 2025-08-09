@@ -8,104 +8,30 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def _get_action_display_info(action_type: ActionType, action_data: dict, is_complete: bool = False) -> str:
-    """Get display information based on action type and data."""
+# Import shared action display logic
+from adare.frontend.terminal.action_display import get_action_display_info, determine_action_status, format_action_message
+
+
+def _compute_display_level(action_data):
+    """
+    Compute display level based on parent relationships.
+    Root level events have display_level = 2 (main playbook actions), each nested level adds 1.
     
-    if action_type in (ActionType.CLICK, ActionType.RIGHTCLICK, ActionType.DOUBLECLICK):
-        # Try to get target info first, then fall back to coordinates
-        target_info = action_data.get('target_info')
-        if target_info:
-            if target_info.get('image'):
-                return f"click {target_info['image']}"
-            elif target_info.get('text'):
-                return f"click text '{target_info['text']}'"
-        coords = action_data.get('coordinates')
-        if coords:
-            return f"click at ({coords[0]}, {coords[1]})"
-        return "click action"
+    This handles the common cases:
+    - Level 2: Main playbook actions (no parent_event_id)
+    - Level 3: Sub-actions like block actions, find/execute substages (has parent_event_id)
     
-        # Handle different click types
-        if action_type == ActionType.RIGHTCLICK:
-            coords = action_data.get('coordinates')
-            if coords:
-                return f"right-click at ({coords[0]}, {coords[1]})"
-            return "right-click action"
-        elif action_type == ActionType.DOUBLECLICK:
-            coords = action_data.get('coordinates')
-            if coords:
-                return f"double-click at ({coords[0]}, {coords[1]})"
-            return "double-click action"
+    For deeper nesting (parent->parent->parent chains), a per-experiment session cache
+    or database traversal would be needed, but the current pattern handles the main use cases.
+    """
+    base_level = 2  # Flow console expects main playbook actions at level 2
     
-    elif action_type == ActionType.KEYBOARD:
-        keys = action_data.get('keys_sent') or action_data.get('keys')
-        combination = action_data.get('combination')
-        if keys:
-            return f"type '{keys}'"
-        elif combination:
-            return f"press {'+'.join(combination)}"
-        return "keyboard input"
-    
-    elif action_type == ActionType.COMMAND:
-        command = action_data.get('command_executed') or action_data.get('command') or action_data.get('cmd')
-        if command:
-            # Truncate long commands
-            if len(command) > 50:
-                command = command[:47] + "..."
-            return f"execute '{command}'"
-        return "execute command"
-    
-    elif action_type == ActionType.IDLE:
-        duration = action_data.get('actual_duration') or action_data.get('duration')
-        if duration:
-            return f"wait {duration:.1f}s"
-        return "wait"
-    
-    elif action_type == ActionType.TEST:
-        test_name = action_data.get('test_name')
-        if test_name:
-            return f"run test '{test_name}'"
-        return "run test"
-    
-    elif action_type == ActionType.SCREENSHOT:
-        path = action_data.get('screenshot_path')
-        if path:
-            return f"save screenshot to {path}"
-        return "take screenshot"
-    
-    elif action_type == ActionType.SCROLL:
-        direction = action_data.get('direction')
-        amount = action_data.get('amount')
-        if direction and amount:
-            return f"scroll {direction} {amount} steps"
-        elif direction:
-            return f"scroll {direction}"
-        return "scroll"
-    
-    elif action_type == ActionType.DRAG:
-        src_coords = action_data.get('source_coordinates')
-        dest_coords = action_data.get('dest_coordinates')
-        if src_coords and dest_coords:
-            return f"drag from ({src_coords[0]}, {src_coords[1]}) to ({dest_coords[0]}, {dest_coords[1]})"
-        return "drag action"
-    
-    elif action_type == ActionType.GOTO:
-        url = action_data.get('final_url') or action_data.get('url')
-        if url:
-            return f"navigate to {url}"
-        return "navigate"
-    
-    elif action_type == ActionType.SAVETIMESTAMP:
-        variable = action_data.get('variable')
-        timestamp = action_data.get('timestamp_value')
-        if variable and timestamp:
-            return f"save timestamp {timestamp} to {variable}"
-        elif variable:
-            return f"save timestamp to {variable}"
-        return "save timestamp"
-    
+    if not action_data.get('parent_event_id'):
+        return base_level  # Main playbook actions (level 2)
     else:
-        # Fallback to description if provided, otherwise generic
-        return action_data.get('action_description', f"{action_type.value} action")
+        # For sub-actions (with parent), add 1 to base level  
+        # This covers block sub-actions, find/execute substages, etc.
+        return base_level + 1  # Sub-actions (level 3)
 
 def event_listener_cli(ulid):
     console = flowconsolemanager.get_handler(ulid)
@@ -177,7 +103,7 @@ def _handle_stage_event(event, console, ulid):
             if stage.status == StatusEnum.INTERRUPTED:
                 message = f"{message} (interrupted by user)"
             if stage.result_status:
-                console.log_spinner_done(identifier=stage_id, status=stage.status, message=message, result_status=stage.result_status, duration=stage_duration)
+                console.log_spinner_done(identifier=stage_id, status=StatusEnum.FINISHED, message=message, result_status=stage.result_status, duration=stage_duration)
             else:
                 console.log_spinner_done(identifier=stage_id,  status=stage.status, message=message, duration=stage_duration)
             log.info(f"[EventListener CLI] Processed stage event for {ulid}: {stage.name if stage else 'None'}")
@@ -199,7 +125,7 @@ def _handle_stage_event(event, console, ulid):
         # Only add the stage if it doesn't already exist
         if not console.exists(stage_id):
             log.info(f"[EventListener CLI] Creating new console spinner for stage: {stage.name}, ID: {stage_id}, Level: {level}")
-            console.log_spinner(identifier=stage_id, message=message, level=level)
+            console.log_spinner(identifier=stage_id, message=message, level=level, start_time=stage.start_time)
         else:
             log.info(f"[EventListener CLI] Stage already exists in console: {stage.name}, ID: {stage_id}")
 
@@ -218,7 +144,7 @@ def _handle_action_event(event, console, ulid):
     try:
         # Use the event type resolver to determine event type
         event_type = event_type_resolver.resolve_event_type(action_data)
-        action_type = event_type_resolver.get_action_type(event_type)
+        action_type = event_type_resolver.get_action_type(event_type, action_data)
         
         # Debug logging with proper type information
         log.debug(f"[EventListener CLI] Processing action event: type={event_type.value}, action={action_type.value}, id={action_id}")
@@ -227,47 +153,38 @@ def _handle_action_event(event, console, ulid):
         is_start_event = event_type_resolver.is_start_event(event_type)
         is_complete_event = event_type_resolver.is_complete_event(event_type)
         
-        # Set display level - regular actions at level 2, sub-actions at level 3
-        level = action_data.get('display_level', 2)
+        # Compute display level from parent relationships
+        level = _compute_display_level(action_data)
         
         if is_start_event:
             # Show spinner for action in progress with type-specific data
-            display_info = _get_action_display_info(action_type, action_data, is_complete=False)
-            message = f"{action_type.value}: {display_info}"
+            display_info = get_action_display_info(action_type, action_data, is_complete=False)
+            message = format_action_message(action_type, display_info)
+            
+            # Extract start time from action data for live duration tracking
+            from datetime import datetime
+            start_time = None
+            if action_data.get('timestamp'):
+                try:
+                    start_time = datetime.fromisoformat(action_data['timestamp'].replace('Z', '+00:00'))
+                except:
+                    start_time = datetime.now(timezone.utc)
+            else:
+                start_time = datetime.now(timezone.utc)
+            
             console.log_spinner(identifier=action_id, message=message, level=level, 
-                              spinner='dots', spinner_style='cyan')
+                              spinner='dots', spinner_style='cyan', start_time=start_time)
             log.info(f"[EventListener CLI] Action started: {action_type.value} with ID {action_id}")
             
         elif is_complete_event:
             # Update spinner with completion status and type-specific data
-            display_info = _get_action_display_info(action_type, action_data, is_complete=True)
-            message = f"{action_type.value}: {display_info}"
+            display_info = get_action_display_info(action_type, action_data, is_complete=True)
+            error_message = action_data.get('error_message') or action_data.get('error')
+            message = format_action_message(action_type, display_info, error_message)
             
-            # Determine status based on action result
-            success = action_data.get('success', False)
+            # Determine status using shared logic
+            status, result_status = determine_action_status(action_type, action_data)
             execution_time = action_data.get('execution_time')
-            error_message = action_data.get('error_message')
-            
-            if success:
-                # Check if it's a test action for special handling
-                if action_type == ActionType.TEST:
-                    status = StatusEnum.SUCCESS
-                    result_status = StatusEnum.SUCCESS
-                else:
-                    status = StatusEnum.SUCCESS
-                    result_status = None
-            else:
-                # Failed action
-                if action_type == ActionType.TEST:
-                    status = StatusEnum.TEST_FAILED
-                    result_status = StatusEnum.TEST_FAILED
-                else:
-                    status = StatusEnum.FAILED
-                    result_status = None
-                
-                # Add error message if available
-                if error_message:
-                    message = f"{message} - {error_message}"
             
             # Update the console
             if console.exists(action_id):
@@ -282,6 +199,7 @@ def _handle_action_event(event, console, ulid):
                 elif status == StatusEnum.FAILED:
                     console.log_failed(identifier=action_id, message=message, level=level, duration=execution_time)
             
+            success = action_data.get('success', False)
             log.info(f"[EventListener CLI] Action completed: {action_type.value} with ID {action_id}, Success: {success}")
             
         else:
@@ -307,9 +225,55 @@ def event_listener_db(ulid):
                 return
             update_stage_in_run(stage=stage, experimentrun_ulid=ulid, stage_id=stage_id)
             log.debug(f"[EventListener DB] Processed stage event for {ulid}: {stage.name if stage else 'None'}")
+            
+            # ALSO store action substages (find/execute) as action events for better integration
+            if stage.name in ['action_find', 'action_execute']:
+                try:
+                    from adare.database.api.event import EventDbApi
+                    
+                    # Convert stage to action event data
+                    action_data = {
+                        'action_description': stage.description if hasattr(stage, 'description') else stage.msg,
+                        'success': stage.status == 2,  # StatusEnum.SUCCESS = 2
+                        'execution_time': None,  # Could calculate from start/end times if needed
+                        'timestamp': stage.start_time.isoformat() if stage.start_time else None
+                    }
+                    
+                    with EventDbApi() as api:
+                        api.add_action_event(action_data, stage_id, ulid)
+                        log.debug(f"[EventListener DB] Also stored substage as action event: {stage.name}")
+                except Exception as e:
+                    log.warning(f"[EventListener DB] Failed to store substage as action event: {e}")
         elif event_type == "action":
-            # For now, we don't store action events in the database
-            # The PlaybookController already handles database storage via ActionExecution records
-            log.debug(f"[EventListener DB] Skipping action event (handled by PlaybookController)")
+            # Store action events in the database for flow console history
+            action_data = event.get("data", {})
+            action_id = event.get("action_id")
+            
+            if not action_data:
+                log.error(f"[EventListener DB] No action data found in event: {event}")
+                return
+            
+            try:
+                from adare.database.api.event import EventDbApi
+                from adare.types.event_types import event_type_resolver
+                
+                # Determine if this is a test event
+                resolved_event_type = event_type_resolver.resolve_event_type(action_data)
+                action_type = event_type_resolver.get_action_type(resolved_event_type)
+                
+                # Extract parent event ID from action data if present
+                parent_event_id = action_data.get('parent_event_id')
+                
+                with EventDbApi() as api:
+                    if action_type.value == 'test':
+                        # Store test events as TestEvent for proper test section display
+                        api.add_test_event(action_data, action_id, ulid, parent_event_id)
+                        log.debug(f"[EventListener DB] Stored test event in database: {action_id}")
+                    else:
+                        # Store other actions as ActionEvent
+                        api.add_action_event(action_data, action_id, ulid, parent_event_id)
+                        log.debug(f"[EventListener DB] Stored action event in database: {action_id}")
+            except Exception as e:
+                log.error(f"[EventListener DB] Failed to store action event {action_id}: {e}", exc_info=True)
         else:
             log.warning(f"[EventListener DB] Unknown event type: {event_type}")

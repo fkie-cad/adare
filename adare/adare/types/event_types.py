@@ -38,6 +38,8 @@ class EventType(Enum):
     GOTO_COMPLETE = "goto_complete"
     SAVETIMESTAMP_START = "savetimestamp_start"
     SAVETIMESTAMP_COMPLETE = "savetimestamp_complete"
+    BLOCK_START = "block_start"
+    BLOCK_COMPLETE = "block_complete"
 
 
 class ActionType(Enum):
@@ -55,6 +57,11 @@ class ActionType(Enum):
     DRAG = "drag"
     GOTO = "goto"
     SAVETIMESTAMP = "savetimestamp"
+    BLOCK = "block"
+    
+    # Internal step action types (not used in playbook YAML)
+    FIND = "find"
+    EXECUTE = "execute"
 
 
 class EventTypeResolver:
@@ -84,6 +91,8 @@ class EventTypeResolver:
             "GotoCompleteEvent": EventType.GOTO_COMPLETE,
             "SavetimestampStartEvent": EventType.SAVETIMESTAMP_START,
             "SavetimestampCompleteEvent": EventType.SAVETIMESTAMP_COMPLETE,
+            "BlockActionStartEvent": EventType.BLOCK_START,
+            "BlockActionCompleteEvent": EventType.BLOCK_COMPLETE,
         }
     
     def resolve_event_type(self, event_data: Dict[str, Any]) -> EventType:
@@ -142,13 +151,19 @@ class EventTypeResolver:
             return EventType.GOTO_COMPLETE if is_complete else EventType.GOTO_START
         elif action_type_raw == "savetimestamp":
             return EventType.SAVETIMESTAMP_COMPLETE if is_complete else EventType.SAVETIMESTAMP_START
+        elif action_type_raw == "block":
+            return EventType.BLOCK_COMPLETE if is_complete else EventType.BLOCK_START
+        elif action_type_raw == "find":
+            return EventType.ACTION_COMPLETE if is_complete else EventType.ACTION_START
+        elif action_type_raw == "execute":
+            return EventType.ACTION_COMPLETE if is_complete else EventType.ACTION_START
         
         # Default fallback to generic action types
         log.warning(f"Could not determine specific event type for: {class_name}, defaulting to generic action")
         return EventType.ACTION_COMPLETE if is_complete else EventType.ACTION_START
     
-    def get_action_type(self, event_type: EventType) -> ActionType:
-        """Extract action type from event type."""
+    def get_action_type(self, event_type: EventType, action_data: Dict[str, Any] = None) -> ActionType:
+        """Extract action type from event type and optionally action data."""
         event_name = event_type.value
         
         if event_name.startswith("click_"):
@@ -171,7 +186,24 @@ class EventTypeResolver:
             return ActionType.GOTO
         elif event_name.startswith("savetimestamp_"):
             return ActionType.SAVETIMESTAMP
+        elif event_name.startswith("block_"):
+            return ActionType.BLOCK
         else:
+            # For generic action events, check the original action data
+            if action_data:
+                class_name = action_data.get("__class__", action_data.get("_type", ""))
+                if "Find" in class_name:
+                    return ActionType.FIND
+                elif "Execute" in class_name:
+                    return ActionType.EXECUTE
+            
+            # Check for find/execute in event names directly
+            event_name_lower = event_name.lower() if event_name else ""
+            if "find" in event_name_lower:
+                return ActionType.FIND
+            elif "execute" in event_name_lower:
+                return ActionType.EXECUTE
+            
             # Fallback for generic action events
             return ActionType.CLICK  # Default fallback
     
@@ -182,6 +214,14 @@ class EventTypeResolver:
     def is_complete_event(self, event_type: EventType) -> bool:
         """Check if event type is a complete event."""
         return event_type.value.endswith("_complete") or event_type == EventType.ACTION_COMPLETE
+    
+    def resolve_event_type_from_name(self, event_type_name: str) -> EventType:
+        """Resolve event type directly from event type name string."""
+        try:
+            return EventType(event_type_name)
+        except ValueError:
+            log.warning(f"Unknown event type name: {event_type_name}, defaulting to generic action")
+            return EventType.ACTION_START
 
 
 # Global resolver instance

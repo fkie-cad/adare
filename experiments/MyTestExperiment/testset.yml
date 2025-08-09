@@ -1,0 +1,29 @@
+name: MyTestExperiment
+tests:
+  # Pre-experiment validation tests
+  - name: existencefile
+    description: 'Verify test file does not exist before experiment'
+    function: file_does_not_exist
+    parameters:
+      dst: 'C:/Users/vagrant/Documents/testfile.txt'
+  
+  # Post-action validation tests  
+  - name: fileexists
+    description: 'Verify test file was created successfully'
+    function: file_exists
+    parameters:
+      dst: 'C:/Users/vagrant/Documents/testfile.txt'
+  
+  # Final validation tests
+  - name: final_validation
+    description: 'Final validation that experiment completed successfully'
+    function: file_exists
+    parameters:
+      dst: 'C:/Users/vagrant/Documents/testfile.txt'
+  
+  # Cleanup validation tests
+  - name: cleanup_validation
+    description: 'Ensure no unwanted files remain'
+    function: file_does_not_exist
+    parameters:
+      dst: 'C:/Users/vagrant/Documents/backup_file.txt'

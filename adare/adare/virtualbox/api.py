@@ -1560,6 +1560,33 @@ class VirtualBoxVM:
         
         return self.manager.run(_restore_snapshot)
 
+    def delete_snapshot(self, snapshot_name: str, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False) -> bool:
+        """Delete a snapshot from the VM."""
+        def _delete_snapshot():
+            try:
+                log.info(f"Deleting snapshot '{snapshot_name}' from VM '{self.vm_name}'.")
+                args = ["snapshot", self.vm_name, "delete", snapshot_name]
+                return_value = self._execute_streaming_command(
+                    args,
+                    log_file=log_file,
+                    stop_event=stop_event,
+                    silent=silent,
+                    ctx_manager=ctx_manager,
+                    operation_name="snapshot deletion"
+                )
+                
+                if return_value == 0:
+                    log.info(f"Snapshot '{snapshot_name}' deleted from VM '{self.vm_name}'.")
+                    return True
+                else:
+                    log.error(f"Failed to delete snapshot '{snapshot_name}' from VM '{self.vm_name}': return code {return_value}")
+                    return False
+            except Exception as e:
+                log.error(f"Failed to delete snapshot '{snapshot_name}' from VM '{self.vm_name}': {e}")
+                return False
+        
+        return self.manager.run(_delete_snapshot)
+
     @classmethod
     def get_vm_by_name(cls, vm_name: str, manager: Optional[VirtualBoxManager] = None):
         vboxmanage_exe = 'VBoxManage.exe' if platform.system().lower() == 'windows' else 'VBoxManage'
@@ -1598,6 +1625,112 @@ class VirtualBoxVM:
             return manager.run(_get_vm_info)
         else:
             return _get_vm_info()
+
+    # ==========================================
+    # PHASE 2: UUID-BASED VM IDENTIFICATION
+    # ==========================================
+
+    @staticmethod
+    def get_vm_uuid_by_name(vm_name: str) -> Optional[str]:
+        """
+        Get VirtualBox UUID for a VM by name.
+        
+        Args:
+            vm_name: Name of the VM in VirtualBox
+            
+        Returns:
+            VirtualBox UUID string or None if VM not found
+        """
+        vboxmanage_exe = 'VBoxManage.exe' if platform.system().lower() == 'windows' else 'VBoxManage'
+        try:
+            result = subprocess.run(
+                [vboxmanage_exe, "showvminfo", vm_name, "--machinereadable"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+                text=True
+            )
+            
+            for line in result.stdout.splitlines():
+                if line.startswith('UUID='):
+                    uuid = line.split('=', 1)[1].strip('"')
+                    log.debug(f"Found VirtualBox UUID for VM '{vm_name}': {uuid}")
+                    return uuid
+                    
+            log.warning(f"No UUID found for VM '{vm_name}'")
+            return None
+            
+        except subprocess.CalledProcessError as e:
+            log.debug(f"VM '{vm_name}' not found in VirtualBox: {e}")
+            return None
+        except FileNotFoundError:
+            log.error("VBoxManage not found - is VirtualBox installed?")
+            return None
+
+    @staticmethod
+    def get_vm_info_by_uuid(vbox_uuid: str) -> Optional[dict]:
+        """
+        Get VM information from VirtualBox using UUID.
+        
+        Args:
+            vbox_uuid: VirtualBox VM UUID
+            
+        Returns:
+            Dictionary with VM info or None if not found
+        """
+        vboxmanage_exe = 'VBoxManage.exe' if platform.system().lower() == 'windows' else 'VBoxManage'
+        try:
+            result = subprocess.run(
+                [vboxmanage_exe, "showvminfo", vbox_uuid, "--machinereadable"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+                text=True
+            )
+            
+            vm_info = {}
+            for line in result.stdout.splitlines():
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    vm_info[key.strip()] = value.strip('"')
+            
+            log.debug(f"Retrieved VM info for UUID {vbox_uuid}: name={vm_info.get('name', 'unknown')}")
+            return vm_info
+            
+        except subprocess.CalledProcessError:
+            log.debug(f"VM with UUID {vbox_uuid} not found in VirtualBox")
+            return None
+        except FileNotFoundError:
+            log.error("VBoxManage not found - is VirtualBox installed?")
+            return None
+
+    @staticmethod
+    def verify_vm_exists_by_uuid(vbox_uuid: str) -> bool:
+        """
+        Verify that a VM exists in VirtualBox using its UUID.
+        
+        Args:
+            vbox_uuid: VirtualBox VM UUID
+            
+        Returns:
+            True if VM exists, False otherwise
+        """
+        vm_info = VirtualBoxVM.get_vm_info_by_uuid(vbox_uuid)
+        return vm_info is not None
+
+    @staticmethod
+    def get_vm_name_by_uuid(vbox_uuid: str) -> Optional[str]:
+        """
+        Get VM name from VirtualBox using UUID.
+        
+        Args:
+            vbox_uuid: VirtualBox VM UUID
+            
+        Returns:
+            VM name or None if not found
+        """
+        vm_info = VirtualBoxVM.get_vm_info_by_uuid(vbox_uuid)
+        return vm_info.get('name') if vm_info else None
 
     # def open_guest_session(self):
     #     def _open_guest_session():

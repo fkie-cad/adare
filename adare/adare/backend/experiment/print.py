@@ -1,6 +1,7 @@
 from rich.console import Console
 import threading
 import time
+from datetime import datetime, timezone
 from rich.live import Live
 from rich.text import Text
 from rich.layout import Layout
@@ -21,9 +22,13 @@ class ExperimentFlowConsole:
     external_stop_event: threading.Event | None
 
     messages: dict
-    ticks_per_second: int = 2  # Slow down for debugging
+    ticks_per_second: int = 12
     _lock: threading.Lock
     _original_log_level: int | None  # Store original console log level
+    
+    # Live duration tracking
+    experiment_start_time: datetime | None
+    show_live_duration: bool
 
     layout: Text
 
@@ -36,11 +41,14 @@ class ExperimentFlowConsole:
         self.disable = disable
         self._lock = threading.Lock()
         self._original_log_level = None
+        
+        # Initialize live duration tracking
+        self.experiment_start_time = None
+        self.show_live_duration = False
 
-        # terminal_size = self.console.size
-        # # Set the height as terminal height minus 10
-        # desired_height = terminal_size.height - 2 if terminal_size.height > 2 else 1
-        self.console = Console()  # Use default console without height restrictions
+        terminal_size = self.console.size
+        desired_height = terminal_size.height - 2 if terminal_size.height > 2 else 1
+        self.console = Console(height=desired_height) 
 
         self.layout = Text('Loading...')
 
@@ -49,15 +57,9 @@ class ExperimentFlowConsole:
         with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second, 
                   auto_refresh=False, transient=False) as live:
             while not self.stop_event.is_set():
-                # Check for external interruption (Ctrl-C) - no need to add separate message
-                # The interrupted stages will show "(interrupted by user)" inline
-                    
                 with self._lock:
-                    # Get snapshot of current messages to avoid race conditions
                     message_identifiers = list(self.messages.keys())
-                
                 messages_as_str = '\n'.join([self._generate_message(identifier, spinner_position=tick_count) for identifier in message_identifiers])
-                
                 live.update(messages_as_str)
                 live.refresh()  # Force manual refresh since auto_refresh=False
                 tick_count += 1
@@ -140,15 +142,27 @@ class ExperimentFlowConsole:
                 message = f'{message} {StatusEnum.get_icon(message_object["result_status"], color=True)}'
 
             # Add duration display aligned to the right if available
+            duration_text = None
+            
             if message_object.get('duration'):
+                # Final duration (when completed)
                 duration_text = f"({message_object['duration']:.2f}s)"
+            elif message_object.get('start_time') and message_object.get('spinner'):
+                # Live duration for active spinners with subsecond precision
+                current_time = datetime.now(timezone.utc)
+                elapsed = current_time - message_object['start_time']
+                elapsed_seconds = elapsed.total_seconds()
+                duration_text = f"({elapsed_seconds:.2f}s)"
+            
+            if duration_text:
                 terminal_width = self.console.size.width
-                # Use Rich's method to get actual display length (without ANSI color codes)
+                # Use Rich's measure method to get actual display width including emojis
                 from rich.text import Text
-                current_message_length = len(Text.from_markup(message).plain)
+                text_obj = Text.from_markup(message)
+                current_message_width = self.console.measure(text_obj).maximum
                 available_width = terminal_width - len(duration_text)
-                if current_message_length < available_width:
-                    padding = available_width - current_message_length
+                if current_message_width < available_width:
+                    padding = available_width - current_message_width
                     message = f"{message}{' ' * padding}{duration_text}"
                 else:
                     # If message is too long, just append normally
@@ -251,13 +265,14 @@ class ExperimentFlowConsole:
                 'result_status': None,
                 'duration': duration,
             }
+        
 
     def change_log_message(self, identifier: str, message: str):
         with self._lock:
             if identifier in self.messages:
                 self.messages[identifier]['message'] = message
 
-    def log_spinner(self, identifier: str, message: str, level: int = 0, spinner: str = 'dots', spinner_style: str = 'bold blue'):
+    def log_spinner(self, identifier: str, message: str, level: int = 0, spinner: str = 'dots', spinner_style: str = 'bold blue', start_time: datetime = None):
         with self._lock:
             self.messages[identifier] = {
                 'message': message,
@@ -267,6 +282,7 @@ class ExperimentFlowConsole:
                 'status': StatusEnum.NONE,
                 'result_status': None,
                 'duration': None,
+                'start_time': start_time,  # Track when this stage started
             }
 
     def log_spinner_done(self, identifier: str, status: int, message: str = None, result_status: int = None, duration: float = None):

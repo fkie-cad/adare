@@ -35,6 +35,8 @@ def exec_experiment_example(arguments):
 
 def exec_experiment_run(arguments):
     from adare.backend.experiment.commands import experiment_run, experiment_load
+    from adare.exceptions import LoggedException, LoggedErrorException
+    import sys
 
     disable_printing = False
     if arguments.verbose or arguments.very_verbose:
@@ -44,7 +46,13 @@ def exec_experiment_run(arguments):
         import asyncio
         try:
             experiment_load(project_directory, arguments.experiment, force=False)
-            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots))
+            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot))
+        except LoggedException as e:
+            e.print()
+            if isinstance(e, LoggedErrorException):
+                sys.exit(-1)
+            else:
+                sys.exit(0)
         except KeyboardInterrupt:
             log.info("Keyboard interrupt received, shutting down gracefully...")
     else:
@@ -52,10 +60,19 @@ def exec_experiment_run(arguments):
 
 def exec_experiment_test(arguments):
     from adare.backend.experiment.commands import experiment_test, experiment_load
+    from adare.exceptions import LoggedException, LoggedErrorException
+    import sys
+    
     if project_directory := determine_projectdirectory(arguments.project):
         try:
             experiment_load(project_directory, arguments.experiment, force=False)
             experiment_test(project_directory, arguments.experiment, arguments.environment)
+        except LoggedException as e:
+            e.print()
+            if isinstance(e, LoggedErrorException):
+                sys.exit(-1)
+            else:
+                sys.exit(0)
         except KeyboardInterrupt:
             log.info("Keyboard interrupt received, shutting down gracefully...")
     else:
