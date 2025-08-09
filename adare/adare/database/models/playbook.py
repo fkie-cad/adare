@@ -18,6 +18,7 @@ class Playbook(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text)
     settings = Column(JSON)  # idle times, timeouts, etc.
+    original_yaml_content = Column(Text)  # Full original YAML content for perfect recovery
     version = Column(Integer, default=1)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())

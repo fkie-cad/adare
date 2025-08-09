@@ -7,6 +7,7 @@ import cattrs
 
 from adarelib.constants import StatusEnum
 from adare.types.event_types import EventType, ActionType
+from adare.types.playbook import Target
 
 # -------------------------------
 # cattrs Converter Setup
@@ -21,6 +22,20 @@ converter.register_structure_hook(datetime, lambda s, _: datetime.fromisoformat(
 # Handle StatusEnum → int and back
 converter.register_unstructure_hook(StatusEnum, lambda e: int(e))
 converter.register_structure_hook(StatusEnum, lambda i, _: StatusEnum(i))
+
+# Handle Target → dict and back
+converter.register_unstructure_hook(Target, lambda t: {
+    'image': t.image,
+    'text': t.text, 
+    'position': t.position,
+    'strategy': converter.unstructure(t.strategy) if t.strategy else None
+})
+converter.register_structure_hook(Target, lambda d, _: Target(
+    image=d.get('image'),
+    text=d.get('text'),
+    position=d.get('position'),
+    strategy=converter.structure(d.get('strategy'), type(None)) if d.get('strategy') else None
+))
 
 # -------------------------------
 # Base Action Event Classes
@@ -41,7 +56,6 @@ class ActionEvent:
     # Execution context
     playbook_item_id: Optional[str] = None
     experiment_run_id: Optional[str] = None
-    display_level: int = 2
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for event publishing."""
@@ -75,6 +89,7 @@ class ActionEvent:
 @attrs.define
 class ActionStartEvent(ActionEvent):
     """Base class for action start events."""
+    parent_event_id: Optional[str] = None
     
     def get_event_type(self) -> EventType:
         return EventType.ACTION_START
@@ -84,8 +99,8 @@ class ActionStartEvent(ActionEvent):
 class ActionCompleteEvent(ActionEvent):
     """Base class for action completion events."""
     success: bool = False
-    error_message: Optional[str] = None
     execution_time: Optional[float] = None
+    parent_event_id: Optional[str] = None
     
     def get_event_type(self) -> EventType:
         return EventType.ACTION_COMPLETE
@@ -234,7 +249,7 @@ class BlockActionStartEvent(ActionStartEvent):
     action_count: int = 0
     
     def get_event_type(self) -> EventType:
-        return EventType.ACTION_START
+        return EventType.BLOCK_START
 
 
 @attrs.define
@@ -243,7 +258,7 @@ class BlockActionCompleteEvent(ActionCompleteEvent):
     actions_executed: int = 0
     
     def get_event_type(self) -> EventType:
-        return EventType.ACTION_COMPLETE
+        return EventType.BLOCK_COMPLETE
 
 
 # -------------------------------
@@ -360,3 +375,44 @@ class SaveTimestampActionCompleteEvent(ActionCompleteEvent):
     
     def get_event_type(self) -> EventType:
         return EventType.SAVETIMESTAMP_COMPLETE
+
+
+# -------------------------------
+# Substage Action Events
+# -------------------------------
+
+@attrs.define
+class FindActionStartEvent(ActionStartEvent):
+    """Event for find substage start."""
+    target_info: Optional[Dict[str, Any]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.ACTION_START
+
+
+@attrs.define
+class FindActionCompleteEvent(ActionCompleteEvent):
+    """Event for find substage completion."""
+    target_info: Optional[Dict[str, Any]] = None
+    coordinates: Optional[Tuple[int, int]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.ACTION_COMPLETE
+
+
+@attrs.define
+class ExecuteActionStartEvent(ActionStartEvent):
+    """Event for execute substage start."""
+    coordinates: Optional[Tuple[int, int]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.ACTION_START
+
+
+@attrs.define
+class ExecuteActionCompleteEvent(ActionCompleteEvent):
+    """Event for execute substage completion."""
+    coordinates: Optional[Tuple[int, int]] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.ACTION_COMPLETE

@@ -37,9 +37,7 @@ class SerializeApi(DatabaseApi):
             'timestamp': event.timestamp.strftime(TIMESTAMP_FORMAT),
             'event_type': event_type,
             'category': event.category,
-            'status': event.status,
             'error': event.error,
-            'group_key': event.group_key,
         }
         if event_type == 'command_event':
             event_dict['name'] = event.name

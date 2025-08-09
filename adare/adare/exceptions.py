@@ -131,3 +131,12 @@ class NotLoggedInError(LoggedErrorException):
         super().__init__(log, 'User is not logged in', possible_solutions=[
             'Please login using the command `adare web login`'
         ])
+
+
+class RunNotFoundError(LoggedErrorException):
+    def __init__(self, log, run_ulid):
+        super().__init__(log, f'Experiment run "{run_ulid}" not found', possible_solutions=[
+            'Use `adare show runs` to list available experiment runs',
+            'Check if the run ULID is correct',
+            'Make sure the experiment run was completed successfully'
+        ])

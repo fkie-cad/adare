@@ -442,3 +442,37 @@ def get_environment_path_by_project_and_name(project_path: Path, environment_nam
                 f'environment {environment_name} does not exist in the database',
             )
 
+def update_environment_vm_id(environment_ulid: str, vm_id: str):
+    """Update the VM ID for an environment (for lazy loading)."""
+    with EnvironmentDbApi() as db:
+        environment = _get_environment_or_raise(
+            db,
+            environment_ulid,
+            log,
+            f'environment with ulid {environment_ulid} does not exist in the database',
+        )
+        environment.vm_id = vm_id
+        db._session.commit()
+        log.info(f'Updated environment {environment_ulid} with VM ID {vm_id}')
+
+
+def get_environment_vm_ids(environment_ulid: str) -> list:
+    """
+    Get VM IDs associated with an environment.
+    
+    Args:
+        environment_ulid: Environment ULID
+        
+    Returns:
+        List of VM IDs (usually just one VM per environment)
+    """
+    try:
+        with EnvironmentDbApi() as db:
+            environment = db.get_environment_by_ulid(environment_ulid)
+            if not environment or not environment.vm_id:
+                return []
+            return [environment.vm_id]
+    except Exception as e:
+        log.error(f"Failed to get VM IDs for environment {environment_ulid}: {e}")
+        return []
+

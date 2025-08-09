@@ -45,6 +45,22 @@ class DataRetrievalApi(DatabaseApi):
         if not self._session.query(Experiment).filter_by(id=experiment_ulid).count():
             raise ExperimentNotFoundError(log, f'Experiment with ulid "{experiment_ulid}" not found')
 
+    def _compute_display_level(self, event):
+        """
+        Compute display level for an event based on parent relationships.
+        Root level events have display_level = 0, each nested level adds 1.
+        """
+        if not event.parent_event_id:
+            return 0  # Root level
+        
+        # Find parent event and recursively compute depth
+        parent = self._session.query(Event).filter_by(id=event.parent_event_id).first()
+        if parent:
+            return self._compute_display_level(parent) + 1
+        else:
+            # If parent not found, assume next level
+            return 1
+
     def __enrich_project_data(self, data: pd.DataFrame) -> pd.DataFrame:
         data['object'] = [self._session.query(Project).filter_by(id=id).one() for id in data['id']]
         data['environments'] = [self._session.query(Environment).filter_by(project_id=id).count() for id in data['id']]
@@ -222,7 +238,7 @@ class DataRetrievalApi(DatabaseApi):
 
         # access hybrid properties
         data['duration'] = data['object_run'].apply(lambda obj: obj.duration)
-        data['result_status'] = data['object_run'].apply(lambda obj: obj.result_status)
+        data['result_status'] = data['object_run'].apply(lambda obj: int(obj.result_status))
         data['status'] = data['object_run'].apply(lambda obj: obj.status)
         data['experiment_dotnotation'] = data['object_run'].apply(lambda obj: obj.experiment_dotnotation)
         data['vm'] = data['object_environment'].apply(lambda obj: obj.vm)
@@ -270,6 +286,127 @@ class DataRetrievalApi(DatabaseApi):
         data = data.merge(stages, left_on='stage_id', right_on='id', suffixes=('', '_stage'))
         return data
 
+    def get_run_actions(self, run_ulid: str) -> pd.DataFrame:
+        """Get all action events for a specific run, including tests.
+        
+        Returns a DataFrame with comprehensive event information including:
+        - success: Boolean indicating if the event execution succeeded (for green/red dots)
+        - error: Error message if execution failed
+        - result_status: For test events only - the actual test result (StatusEnum)
+        """
+        from adare.database.models.experiment import ActionEvent, TestEvent
+        
+        # Query action events (non-test actions)
+        action_events = self._session.query(ActionEvent).filter_by(experiment_run_id=run_ulid).filter(
+            ActionEvent.category.in_(['action', 'command'])  # Exclude test category from ActionEvent
+        ).all()
+        
+        # Query test events separately (they are stored in TestEvent model)
+        # Include relationships to get hierarchy and result information
+        from sqlalchemy.orm import joinedload
+        test_events = self._session.query(TestEvent).options(
+            joinedload(TestEvent.result),
+            joinedload(TestEvent.abstract_test)
+        ).filter_by(experiment_run_id=run_ulid).all()
+        
+        def extract_event_data(event, is_test_event=False):
+            """Extract data from either ActionEvent or TestEvent"""
+            # Extract basic event data and deserialize action_data if available
+            action_data = {}
+            if hasattr(event, 'action_data') and event.action_data:
+                try:
+                    import json
+                    action_data = json.loads(event.action_data)
+                except (json.JSONDecodeError, TypeError):
+                    action_data = {}
+            
+            # For test events, we need to map their fields to action-like fields
+            if is_test_event:
+                # Compute display level from parent relationship
+                display_level = self._compute_display_level(event)
+                
+                # Get execution success from the event itself (now all events have success field)
+                execution_success = getattr(event, 'success', None)
+                
+                # Get test result status and details
+                result_status = None
+                result_details = None
+                if hasattr(event, 'result') and event.result:
+                    result_status = event.result.status if event.result else None
+                    result_details = event.result.details if event.result else None
+                
+                # Add test result information to action_data
+                if not action_data:
+                    action_data = {}
+                if result_details:
+                    action_data['test_result_details'] = result_details
+                
+                # Also add test name if available
+                if hasattr(event, 'abstract_test') and event.abstract_test:
+                    action_data['test_name'] = event.abstract_test.name
+                
+                base_data = {
+                    'id': event.id,
+                    'event_type': 'test_complete',  # Tests are typically stored as complete events
+                    'category': 'test',
+                    'success': execution_success,  # Boolean for execution success (dot color)
+                    'timestamp': event.timestamp,
+                    'error': event.error,
+                    'action_type': 'test',
+                    'action_id': getattr(event, 'action_id', event.id),  # Use event id if no action_id
+                    'event_group_id': getattr(event, 'event_group_id', event.id),  # Universal grouping field
+                    'event_type_specific': getattr(event, 'event_type_specific', 'test_complete'),
+                    'display_level': display_level,
+                    'parent_event_id': event.parent_event_id,
+                    'data': action_data
+                }
+                
+                # Add test result status for test events
+                if result_status is not None:
+                    base_data['result_status'] = int(result_status)
+                
+                return base_data
+            else:
+                # For action events, get success from the event's success field
+                execution_success = getattr(event, 'success', None)
+                
+                return {
+                    'id': event.id,
+                    'event_type': event.event_type or 'unknown',
+                    'category': event.category,
+                    'success': execution_success,  # Boolean for execution success (dot color)
+                    'timestamp': event.timestamp,
+                    'error': event.error,
+                    'action_type': getattr(event, 'action_type', None),
+                    'action_id': getattr(event, 'action_id', None),
+                    'event_group_id': getattr(event, 'event_group_id', None),  # Universal grouping field
+                    'event_type_specific': getattr(event, 'event_type_specific', None),
+                    'display_level': self._compute_display_level(event),
+                    'parent_event_id': event.parent_event_id,
+                    'data': action_data
+                }
+
+        actions_data = []
+        
+        # Process regular action events
+        for event in action_events:
+            actions_data.append(extract_event_data(event, is_test_event=False))
+        
+        # Process test events  
+        for event in test_events:
+            actions_data.append(extract_event_data(event, is_test_event=True))
+        
+        if not actions_data:
+            # Return empty DataFrame with proper structure
+            return pd.DataFrame(columns=['id', 'event_type', 'category', 'success', 'timestamp', 'error', 'action_type', 'action_id', 'event_group_id', 'event_type_specific', 'display_level', 'data', 'result_status'])
+        
+        # Create DataFrame and sort by timestamp to ensure proper chronological order
+        df = pd.DataFrame(actions_data)
+        if 'timestamp' in df.columns:
+            df = df.sort_values('timestamp')
+        
+        return df
+
     def get_tests(self, run_ulid: str) -> dict:
         tests_data = {}
         test_events = self._session.query(Event).filter_by(experiment_run_id=run_ulid).filter(Event.category == 'test').all()
@@ -280,7 +417,7 @@ class DataRetrievalApi(DatabaseApi):
                     'description': event.abstract_test.description,
                     'testfunction_name': event.abstract_test.testfunction.dotnotation,
                     'testfunction_description': event.abstract_test.testfunction.description,
-                    'result_status': event.stage_result if event.result else None,
+                    'result_status': int(event.stage_result) if event.result else None,
                     'result_details': event.result.details if event.result else None,
                     'result_status_name': self._session.query(Status).filter_by(id=event.result.status).one().name if event.result else None,
                 }
@@ -295,7 +432,7 @@ class DataRetrievalApi(DatabaseApi):
                 tests_data[event.abstract_test.name]['parameters'] = parameter_data
             else:
                 # update results
-                tests_data[event.abstract_test.name]['result_status'] = event.stage_result
+                tests_data[event.abstract_test.name]['result_status'] = int(event.stage_result)
                 tests_data[event.abstract_test.name]['result_details'] = event.result.details
                 tests_data[event.abstract_test.name]['result_status_name'] = self._session.query(Status).filter_by(id=event.result.status).one().name
         return tests_data

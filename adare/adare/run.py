@@ -29,13 +29,22 @@ from adare.cli.web import (
 from adare.cli.testfunction import (
     exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 )
+from adare.cli.vm import (
+    exec_vm_list, exec_vm_info, exec_vm_delete, exec_vm_clear_all, exec_vm_clear_by_environment
+)
 from adare.setup_logging import setup_logging
 from adare.exceptions import LoggedException, LoggedErrorException
 
 
 def exec_with_error_printing(func, args):
+    import asyncio
+    import inspect
+    
     try:
-        func(args)
+        if inspect.iscoroutinefunction(func):
+            asyncio.run(func(args))
+        else:
+            func(args)
     except LoggedException as e:
         e.print()
         if isinstance(e, LoggedErrorException):
@@ -196,15 +205,17 @@ def load(experiment, environment, force, project):
 @click.option('-e', '--environment', required=True, help='Name of the environment')
 @click.option('--test', '-t', is_flag=True, help='Run the experiment in test mode - delete results afterwards and do not block changes')
 @click.option('--debug-screenshots', is_flag=True, help='Save screenshots to experiment run directory for debugging')
+@click.option('--preserve-snapshot', is_flag=True, help='Create experiment snapshot for preservation (default: only reset to base snapshot)')
 @click.option('--project', '-p', help='Name of the project')
 @click.pass_context
-def run(ctx, experiment, environment, test, debug_screenshots, project):
+def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot, project):
     """Run an experiment in a given environment."""
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
         test=test,
         debug_screenshots=debug_screenshots,
+        preserve_snapshot=preserve_snapshot,
         project=project,
         verbose=ctx.obj.verbose,
         very_verbose=ctx.obj.very_verbose
@@ -274,6 +285,57 @@ def list_testfunctions(project):
     """List all testfunctions."""
     args = SimpleNamespace(project=project)
     exec_with_error_printing(exec_list_testfunctions, args)
+
+
+# ------------------------------
+# VM management commands
+# ------------------------------
+@cli.group()
+def vm():
+    """VM management commands."""
+    pass
+
+@vm.command(name='list')
+def vm_list():
+    """List all VMs in the system."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_vm_list, args)
+
+@vm.command()
+@click.argument('vm_id')
+def info(vm_id):
+    """Get detailed information about a VM."""
+    args = SimpleNamespace(vm_id=vm_id)
+    exec_with_error_printing(exec_vm_info, args)
+
+@vm.command()
+@click.argument('vm_id')
+@click.option('--force', '-f', is_flag=True, help='Force deletion even if VM is in use')
+def delete(vm_id, force):
+    """Delete a specific VM."""
+    args = SimpleNamespace(vm_id=vm_id, force=force)
+    exec_with_error_printing(exec_vm_delete, args)
+
+# Nested group for VM cleanup commands
+@vm.group()
+def clear():
+    """Clear (delete) VMs from the system."""
+    pass
+
+@clear.command(name='all')
+@click.option('--force', '-f', is_flag=True, help='Force deletion of all VMs (required for confirmation)')
+def clear_all(force):
+    """Clear ALL VMs from the system."""
+    args = SimpleNamespace(force=force)
+    exec_with_error_printing(exec_vm_clear_all, args)
+
+@clear.command(name='environment')
+@click.argument('environment_ulid')
+@click.option('--force', '-f', is_flag=True, help='Force deletion of environment VMs (required for confirmation)')
+def clear_environment(environment_ulid, force):
+    """Clear all VMs associated with a specific environment."""
+    args = SimpleNamespace(environment_ulid=environment_ulid, force=force)
+    exec_with_error_printing(exec_vm_clear_by_environment, args)
 
 
 # ------------------------------

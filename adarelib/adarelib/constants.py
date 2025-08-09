@@ -105,3 +105,12 @@ class StatusEnum(IntEnum):
         elif value == StatusEnum.TEST_FAILED:
             return 'red'
         return ''
+
+
+class VMStatus(IntEnum):
+    """Status values for VM availability and readiness"""
+    IMPORTED = 1      # VM imported but not verified
+    READY = 2         # VM exists and base snapshot available
+    MISSING = 3       # VM should exist but not found in VirtualBox
+    SNAPSHOT_MISSING = 4  # VM exists but base snapshot missing
+    CORRUPTED = 5     # VM or snapshot corrupted/invalid

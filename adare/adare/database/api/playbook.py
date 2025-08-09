@@ -26,11 +26,14 @@ class PlaybookApi(DatabaseApi):
     def populate_playbook_from_file(self, experiment: Experiment, playbook_file_path: Path) -> Playbook:
         """Parse YAML playbook file and populate database models."""
         try:
+            # Read original YAML content for storage
+            original_yaml_content = playbook_file_path.read_text(encoding='utf-8')
+            
             # Parse YAML file using existing parser
             config = parse_playbook(playbook_file_path)
             
             # Create or update playbook record
-            playbook = self._get_or_create_playbook(experiment, config)
+            playbook = self._get_or_create_playbook(experiment, config, original_yaml_content)
             
             # Flush to get the playbook ID assigned before creating items
             self._session.flush()
@@ -53,7 +56,7 @@ class PlaybookApi(DatabaseApi):
             log.error(f"Failed to populate playbook from {playbook_file_path}: {e}", exc_info=True)
             raise
     
-    def _get_or_create_playbook(self, experiment: Experiment, config: PlaybookType) -> Playbook:
+    def _get_or_create_playbook(self, experiment: Experiment, config: PlaybookType, original_yaml_content: str) -> Playbook:
         """Get existing playbook or create new one."""
         playbook = self._session.query(Playbook).filter(
             Playbook.experiment_id == experiment.id
@@ -62,13 +65,15 @@ class PlaybookApi(DatabaseApi):
         if playbook:
             # Update existing
             playbook.settings = self._config_to_settings_json(config)
+            playbook.original_yaml_content = original_yaml_content
             playbook.version += 1
         else:
             # Create new
             playbook = Playbook(
                 experiment_id=experiment.id,
                 name=f"{experiment.name} Playbook",
-                settings=self._config_to_settings_json(config)
+                settings=self._config_to_settings_json(config),
+                original_yaml_content=original_yaml_content
             )
             self._session.add(playbook)
         
@@ -283,3 +288,68 @@ class PlaybookApi(DatabaseApi):
         return self._session.query(ActionExecution).filter(
             ActionExecution.experiment_run_id == experiment_run_id
         ).order_by(ActionExecution.created_at).all()
+    
+    def recover_playbook_yaml(self, experiment_id: str) -> str:
+        """Recover the original playbook YAML from database.
+        
+        Args:
+            experiment_id: The experiment ID to recover the playbook for
+            
+        Returns:
+            Original YAML content as string
+            
+        Raises:
+            ValueError: If no playbook found for experiment
+        """
+        playbook = self.get_playbook_by_experiment_id(experiment_id)
+        if not playbook:
+            raise ValueError(f"No playbook found for experiment {experiment_id}")
+        
+        if not playbook.original_yaml_content:
+            raise ValueError(f"No original YAML content stored for experiment {experiment_id} (legacy data)")
+        
+        return playbook.original_yaml_content
+    
+    def load_playbook_from_database(self, experiment_id: str) -> PlaybookType:
+        """Load Playbook object from stored YAML in database (no file parsing needed).
+        
+        Args:
+            experiment_id: The experiment ID to load the playbook for
+            
+        Returns:
+            Parsed Playbook object from stored YAML
+            
+        Raises:
+            ValueError: If no playbook found for experiment
+        """
+        playbook = self.get_playbook_by_experiment_id(experiment_id)
+        if not playbook:
+            raise ValueError(f"No playbook found for experiment {experiment_id}")
+        
+        if not playbook.original_yaml_content:
+            raise ValueError(f"No original YAML content stored for experiment {experiment_id} (legacy data)")
+        
+        # Parse YAML directly from memory
+        import yaml
+        import cattrs
+        from typing import Union, Optional
+        from adare.types.playbook import (
+            Playbook as PlaybookType, ActionType, ExistsCondition, NotExistsCondition, TargetStrategyType,
+            _structure_action, _structure_condition, _structure_strategy, _register_strict_hooks
+        )
+        
+        # Parse YAML content
+        data = yaml.safe_load(playbook.original_yaml_content)
+        
+        # Set up cattrs converter (same as in parse_playbook)
+        converter = cattrs.Converter()
+        converter.forbid_extra_keys = True
+        
+        # Register structure hooks
+        converter.register_structure_hook(ActionType, lambda obj, _: _structure_action(obj, converter))
+        converter.register_structure_hook(Union[ExistsCondition, NotExistsCondition], lambda obj, _: _structure_condition(obj, converter))
+        converter.register_structure_hook(Optional[TargetStrategyType], lambda obj, _: _structure_strategy(obj, converter) if obj is not None else None)
+        
+        _register_strict_hooks(converter)
+        
+        return converter.structure(data, PlaybookType)

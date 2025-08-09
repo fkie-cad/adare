@@ -11,9 +11,11 @@ from typing import Tuple, Optional, List
 from dataclasses import dataclass
 import json
 import base64
+import ulid
 
 from fastmcp import Client
 from adare.types.playbook import Target, SweepStrategy, BestConfidenceStrategy, ClosestToStrategy, TopLeftStrategy, TopRightStrategy, BottomLeftStrategy, BottomRightStrategy, LargestStrategy, SmallestStrategy
+# Stage events are now handled by action events in playbook controller
 
 log = logging.getLogger(__name__)
 
@@ -36,17 +38,19 @@ class MCPTargetResolver:
     image recognition and text detection for target resolution.
     """
     
-    def __init__(self, experiment_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp"):
+    def __init__(self, experiment_dir: Path, mcp_gui_url: str = "http://localhost:13109/mcp", experiment_run_ulid: Optional[str] = None):
         """
         Initialize MCP target resolver.
         
         Args:
             experiment_dir: Path to experiment directory (contains images/)
             mcp_gui_url: URL of the MCP GUI server
+            experiment_run_ulid: ULID for experiment run (for stage logging)
         """
         self.experiment_dir = experiment_dir
         self.images_dir = experiment_dir / "img"
         self.mcp_gui_url = mcp_gui_url
+        self.experiment_run_ulid = experiment_run_ulid
         self._connection_tested = False
         self._connection_available = False
     
@@ -245,6 +249,8 @@ class MCPTargetResolver:
                             log.error(f"Failed to read icon file: {e}")
                             return None
                         
+                        # Find substage is now handled by action events in playbook controller
+                        
                         result = await client.call_tool("find_icon", {
                             "icon_base64": icon_base64,
                             "screenshot_base64": screenshot_base64,
@@ -293,14 +299,18 @@ class MCPTargetResolver:
                             if selected_match:
                                 selected_index = matches.index(selected_match) + 1
                                 log.info(f"Selected match {selected_index}: image '{target.image}' at {selected_match.coordinates} via MCP")
+                                # Mark substage as successful
                                 return selected_match
                         else:
                             log.warning(f"Image '{target.image}' not found via MCP")
+                            # Mark substage as failed when no matches found
                             return None
                     
                     # Text-based targeting using find_text
                     if target.text:
                         log.debug(f"Using MCP find_text for text: {target.text}")
+                        
+                        # Find substage is now handled by action events in playbook controller
                         
                         result = await client.call_tool("find_text", {
                             "text": target.text,
@@ -354,9 +364,11 @@ class MCPTargetResolver:
                             if selected_match:
                                 selected_index = matches.index(selected_match) + 1
                                 log.info(f"Selected match {selected_index}: '{selected_match.text}' at {selected_match.coordinates} via MCP")
+                                # Mark substage as successful
                                 return selected_match
                         else:
                             log.warning(f"Text '{target.text}' not found via MCP")
+                            # Mark substage as failed when no matches found
                             return None
                         
             except Exception as mcp_error:

@@ -140,6 +140,13 @@ class VMCreateStage(Stage):
 
 @register_stage
 @attrs.define
+class VMImportStage(Stage):
+    name: ClassVar[str] = 'vm_import'
+    msg: ClassVar[str] = 'Importing VM to VirtualBox'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
 class VMMountSharedDirectoriesStage(Stage):
     name: ClassVar[str] = 'vm_mount_shared_directories'
     msg: ClassVar[str] = 'Mounting shared directories in VM'
@@ -214,6 +221,27 @@ class ExperimentGuiFindStage(Stage):
     name: ClassVar[str] = 'gui_find'
     msg: ClassVar[str] = 'GUI find element'
     parent: ClassVar[str] = 'experiment_run'
+
+@register_stage
+@attrs.define
+class ExperimentActionStage(Stage):
+    name: ClassVar[str] = 'experiment_action'
+    msg: ClassVar[str] = 'Executing action'
+    parent: ClassVar[str] = 'experiment_run'
+
+@register_stage
+@attrs.define
+class ExperimentActionFindStage(Stage):
+    name: ClassVar[str] = 'action_find'
+    msg: ClassVar[str] = 'Finding target'
+    parent: ClassVar[str] = 'experiment_action'
+
+@register_stage
+@attrs.define
+class ExperimentActionExecuteStage(Stage):
+    name: ClassVar[str] = 'action_execute'
+    msg: ClassVar[str] = 'Executing action'
+    parent: ClassVar[str] = 'experiment_action'
 
 @register_stage
 @attrs.define
@@ -344,3 +372,31 @@ class ShutdownWebSocketStage(Stage):
     name: ClassVar[str] = 'shutdown_websocket'
     msg: ClassVar[str] = 'Disconnecting WebSocket'
     parent: ClassVar[str] = 'cleanup_shutdown'
+
+# ----------------------------------
+# VM Snapshot Management Stages
+# ----------------------------------
+
+@register_stage
+@attrs.define
+class VMSnapshotRestoreStage(Stage):
+    name: ClassVar[str] = 'vm_snapshot_restore'
+    msg: ClassVar[str] = 'Restoring VM from snapshot'
+    description: ClassVar[str] = 'Fast restore from base snapshot for quick setup'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage  
+@attrs.define
+class VMSnapshotCreateStage(Stage):
+    name: ClassVar[str] = 'vm_snapshot_create'
+    msg: ClassVar[str] = 'Creating base snapshot'
+    description: ClassVar[str] = 'Creating base snapshot for future fast restores'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
+class VMExperimentSnapshotStage(Stage):
+    name: ClassVar[str] = 'vm_experiment_snapshot' 
+    msg: ClassVar[str] = 'Creating experiment snapshot'
+    description: ClassVar[str] = 'Creating snapshot for experiment recovery/debugging'
+    parent: ClassVar[str] = 'vm_setup'

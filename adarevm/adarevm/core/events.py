@@ -1,6 +1,5 @@
 from typing import Callable, Awaitable, Optional
 import contextlib
-import uuid
 import asyncio
 import time
 
@@ -18,19 +17,16 @@ class EventCtxManager(contextlib.AbstractContextManager):
     the new WebSocket event streaming format.
     """
     event: Event
-    group_key: uuid.UUID | None
     log_func: Callable[[str], Awaitable[None]]
     websocket_broadcaster: Optional[Callable] = None
 
     def __init__(self, event: Event, log_func: Callable[[str], Awaitable[None]], websocket_broadcaster: Optional[Callable] = None):
         self.log_func = log_func
         self.event = event
-        self.group_key = None
         self.websocket_broadcaster = websocket_broadcaster
 
     def _log(self):
         """Log the event using the legacy format."""
-        self.event.group_key = str(self.group_key)
         event_ws_msg = EVENT(self.event)
         
         # Create coroutine but don't await it - let the caller handle it
@@ -68,12 +64,6 @@ class EventCtxManager(contextlib.AbstractContextManager):
         # Map event types to WebSocket event types
         mapping = {
             'TestEvent': 'test_progress',
-            'CommandEvent': 'command_progress', 
-            'GuiClickEvent': 'gui_click',
-            'GuiFindEvent': 'gui_find',
-            'GuiKeypressEvent': 'gui_keypress',
-            'GuiIdleEvent': 'gui_idle',
-            'GuiDragAndDropEvent': 'gui_drag',
             'ErrorEvent': 'error',
         }
         
@@ -82,7 +72,6 @@ class EventCtxManager(contextlib.AbstractContextManager):
     def _convert_to_websocket_data(self) -> dict:
         """Convert Event to WebSocket data format."""
         data = {
-            "group_key": str(self.group_key),
             "timestamp": time.time(),
             "status": getattr(self.event, 'status', None),
         }
@@ -90,16 +79,6 @@ class EventCtxManager(contextlib.AbstractContextManager):
         # Add event-specific data
         if hasattr(self.event, 'test_name'):
             data['test_name'] = self.event.test_name
-        if hasattr(self.event, 'command'):
-            data['command'] = self.event.command
-        if hasattr(self.event, 'target'):
-            data['target'] = self.event.target
-        if hasattr(self.event, 'objective'):
-            data['objective'] = self.event.objective
-        if hasattr(self.event, 'keys'):
-            data['keys'] = self.event.keys
-        if hasattr(self.event, 'seconds'):
-            data['duration'] = self.event.seconds
         if hasattr(self.event, 'error_name'):
             data['error_name'] = self.event.error_name
         if hasattr(self.event, 'error_msg'):
@@ -108,7 +87,6 @@ class EventCtxManager(contextlib.AbstractContextManager):
         return data
 
     def __enter__(self):
-        self.group_key = uuid.uuid4()
         self._log()
         
         # Also broadcast over WebSocket if available
