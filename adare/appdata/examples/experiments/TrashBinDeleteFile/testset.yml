@@ -1,17 +1,21 @@
 name: TrashBinDeleteFile
+description: 'Test experiment to delete a file and check if it is moved to the trash bin
 tests:
-  - name: existencefile
-    description: 'check if file exists'
+  - name: testfile_created
+    description: 'Verify test file does not exist before experiment'
+    function: file_exists
+    parameter:
+      dst: 'C:/Users/vagrant/Documents/testfile.txt'
+  - name: testfile_deleted
+    description: 'Verify test file was deleted successfully'
     function: file_does_not_exist
-    parameters:
-      dst: 'C:/Users/vagrant/Documents/testfile'
-  - name: deletedfileInfo
+    parameter:
+      dst: 'C:/Users/vagrant/Documents/testfile.txt'
+  - name: trashbin_check
     description: 'check if file metadata exists'
     function: csv_contains_line_matching_regex
-    depends_on: 
-      - RBCmd
-    parameters:
-      dst: 'C:/Users/vagrant/Documents/test/*.csv'
+    parameter:
+      dst: 'C:/Users/vagrant/Documents/trashbin/*.csv'
       entry:
         - !re '.*'
         - '$I'
@@ -20,8 +24,3 @@ tests:
         - !timestamp
           timestamp: '{{ TIMESTAMP.DELETIONDATE }}'
           tolerance: 30
-commands:
-  - name: RBCmd
-    description: 'Run RBCmd.exe'
-    tool: RBCmd.exe
-    command: 'RBCmd.exe -d C:\ --csv C:/Users/vagrant/Documents/test'
