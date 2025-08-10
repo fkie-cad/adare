@@ -388,4 +388,4 @@ class VMExperimentSnapshotStage(Stage):
     name: ClassVar[str] = 'vm_experiment_snapshot' 
     msg: ClassVar[str] = 'Creating experiment snapshot'
     description: ClassVar[str] = 'Creating snapshot for experiment recovery/debugging'
-    parent: ClassVar[str] = 'vm_setup'
+    parent: ClassVar[str] = 'cleanup_shutdown'
