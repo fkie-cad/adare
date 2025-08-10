@@ -20,8 +20,8 @@ from adare.types.stages import (
     ExperimentPreparationStage, VirtualMachineSetupStage, SoftwareInstallationStage, 
     ExperimentExecutionStage, CleanupShutdownStage,
     # Sub-stages
-    SetupDirectoriesStage, ValidatePlaybookStage, ResolveEnvironmentStage, CheckAppdataStage,
-    ExperimentIntegrityCheckStage, ProjectIntegrityCheckStage, RunDirectoryCreationStage, StartMCPServerStage,
+    SetupExperimentEnvironmentStage, ValidateIntegrityStage, PrepareRunEnvironmentStage, StartMCPServerStage,
+    ExperimentIntegrityCheckStage, ProjectIntegrityCheckStage,
     VMCreateStage, VMImportStage, VMRunStage, VMWaitTillReadyStage, VMMountSharedDirectoriesStage,
     VMSnapshotRestoreStage, VMSnapshotCreateStage, VMExperimentSnapshotStage,
     InstallAdareVMStage, ConnectToVMStage, InstallationsStage,
@@ -340,20 +340,6 @@ def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: 
     flow_console.start()
     return flow_console
 
-# async def __wait_until_receive_done_msg(ws_client: WebSocketClient, experiment_run_ulid: str) -> DONE | None:
-#     received_done = False
-#     wscommand = None
-#     while not received_done:
-#         message = await ws_client.fetch_message()
-#         decoded_msg = message.decode('utf-8')
-#         wscommand = WsCommand.decode(decoded_msg)
-#         if type(wscommand) == EVENT:
-#             event = wscommand.event
-#             with EventDbApi() as api:
-#                 api.add_event(event, experiment_run_ulid)
-#         if type(wscommand) == DONE:
-#             received_done = True
-#     return wscommand
 
 
 def step_initialize(context: ExperimentRunCtx, fake: bool = False):
@@ -364,8 +350,10 @@ def step_initialize(context: ExperimentRunCtx, fake: bool = False):
     context.adarelib = ADARELIB_DIR
     log.info(f'initialized experiment run {context.experiment_run_ulid}')
 
-def step_setup_directories(context: ExperimentRunCtx):
-    with StageCtxManager(SetupDirectoriesStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+def step_setup_experiment_environment(context: ExperimentRunCtx):
+    """Consolidated step: Setup directories, validate playbook, and resolve environment."""
+    with StageCtxManager(SetupExperimentEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        # Setup directories
         context.project_directory = ProjectDirectory(context.config.project_path)
         context.experiment_directory = ExperimentDirectory(context.config.project_path, context.config.experiment_name)
         context.experiment_directory.check_for_missing_files()
@@ -384,10 +372,7 @@ def step_setup_directories(context: ExperimentRunCtx):
         experiment_database.update_experiment_run_start(context.experiment_run_ulid, context.timestamp_start)
         log.info(f'set experiment start timestamp for run {context.experiment_run_ulid}')
 
-def step_validate_playbook(context: ExperimentRunCtx):
-    """Load playbook from database (pre-validated, no file parsing needed)."""
-    with StageCtxManager(ValidatePlaybookStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-        # Get experiment ID to load playbook from database
+        # Validate playbook
         try:
             experiment_id = experiment_database.get_experiment_by_project_and_name(
                 context.config.project_path, 
@@ -426,8 +411,7 @@ def step_validate_playbook(context: ExperimentRunCtx):
         except Exception as e:
             raise LoggedException(log, f"Playbook loading failed: {str(e)}")
 
-def step_resolve_environment(context: ExperimentRunCtx):
-    with StageCtxManager(ResolveEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        # Resolve environment
         if context.config.environment_name:
             context.environment_file = environment_database.get_environment_path_by_project_and_name(
                 context.config.project_path, context.config.environment_name
@@ -455,17 +439,18 @@ def step_resolve_environment(context: ExperimentRunCtx):
 
         log.info(f'found environment {context.config.environment_name}')
 
-def step_check_integrity_experiment(context: ExperimentRunCtx):
-    with StageCtxManager(ExperimentIntegrityCheckStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+def step_validate_integrity(context: ExperimentRunCtx):
+    """Consolidated step: Check experiment and project integrity."""
+    with StageCtxManager(ValidateIntegrityStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        # Check experiment integrity
         __experiment_integrity_check(
             context.config.project_path,
             context.config.experiment_name,
             context.config.environment_name,
             context.experiment_directory
         )
-
-def step_check_integrity_project(context: ExperimentRunCtx):
-    with StageCtxManager(ProjectIntegrityCheckStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        
+        # Check project integrity
         testfunction_files = experiment_database.get_experiment_testfunction_files(
             context.config.project_path, context.config.environment_name, context.config.experiment_name
         )
@@ -478,9 +463,10 @@ def step_check_integrity_project(context: ExperimentRunCtx):
             testfunctions=testfunction_files
         )
 
-def step_check_appdata(context: ExperimentRunCtx):
-    with StageCtxManager(CheckAppdataStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-        # ensure that poetry.lock does not exist for adarevm and adarelib
+def step_prepare_run_environment(context: ExperimentRunCtx):
+    """Consolidated step: Check application data and create run directory."""
+    with StageCtxManager(PrepareRunEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        # Check application data
         adarevm_poetry_lock = ADAREVM_DIR / 'poetry.lock'
         adarelib_poetry_lock = ADARELIB_DIR / 'poetry.lock'
         if adarevm_poetry_lock.exists():
@@ -489,9 +475,8 @@ def step_check_appdata(context: ExperimentRunCtx):
         if adarelib_poetry_lock.exists():
             log.info(f'removing {adarelib_poetry_lock} to ensure that adarelib is installed correctly')
             adarelib_poetry_lock.unlink()
-
-def step_create_run_directory(context: ExperimentRunCtx):
-    with StageCtxManager(RunDirectoryCreationStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        
+        # Create run directory
         run_dir = ExperimentRunDirectory(context.project_directory, context.config.experiment_name)
         run_dir.create()
         context.experiment_run_directory = run_dir
@@ -784,11 +769,49 @@ async def step_cleanup_virtualbox_vm(context: ExperimentRunCtx, post_interrupt: 
     event = None if post_interrupt else context.user_interrupt_event
     with StageCtxManager(VMDestroyStage(), context.experiment_run_ulid, event=event):
         if context.config.preserve_snapshot:
-            log.info('cleaning up experiment snapshot (VM will be preserved)')
+            log.info('Creating experiment snapshot (--preserve-snapshot enabled)')
+            if context.vm and context.experiment_run_ulid:
+                # Import snapshot manager for creating snapshot
+                from adare.backend.vm.snapshot_manager import SnapshotManager
+                
+                # Get VM record from database to create snapshot
+                try:
+                    from adare.database.api.vm import VmApi
+                    with VmApi() as api:
+                        vm_records = api.get_all_vms()
+                        vm_record = None
+                        for record in vm_records:
+                            if record.name == context.vm_name:
+                                vm_record = record
+                                break
+                    
+                    if vm_record and vm_record.vbox_uuid:
+                        snapshot_manager = SnapshotManager()
+                        exp_snapshot_name = f"adare_exp_{context.experiment_run_ulid[:8]}"
+                        
+                        # Create new experiment snapshot with current state
+                        with StageCtxManager(VMExperimentSnapshotStage(), context.experiment_run_ulid, event=event):
+                            created_snapshot = snapshot_manager.create_experiment_snapshot(
+                                vm_record, 
+                                context.experiment_run_ulid,
+                                description=f"Final state snapshot for experiment {context.experiment_run_ulid}",
+                                silent=False
+                            )
+                        
+                        if created_snapshot:
+                            log.info(f'✅ Created experiment snapshot: {created_snapshot}')
+                        else:
+                            log.warning('Failed to create experiment snapshot')
+                    else:
+                        log.warning('VM record not found or missing UUID - cannot create experiment snapshot')
+                        
+                except Exception as e:
+                    log.warning(f'Error creating experiment snapshot: {e}')
+        else:
+            log.info('Cleaning up experiment snapshot (default behavior)')
             if context.vm and context.experiment_run_ulid:
                 # Import snapshot manager for cleanup
                 from adare.backend.vm.snapshot_manager import SnapshotManager
-                import adare.backend.vm.database as vm_database
                 
                 # Get VM record from database to access snapshot management
                 try:
@@ -819,8 +842,6 @@ async def step_cleanup_virtualbox_vm(context: ExperimentRunCtx, post_interrupt: 
                         
                 except Exception as e:
                     log.warning(f'Error during snapshot cleanup: {e}')
-        else:
-            log.info('No experiment snapshot to cleanup (--preserve-snapshot not used)')
             
         # Keep the VM running - do NOT destroy it
         log.info('VM preserved for future experiments')
@@ -831,15 +852,6 @@ def step_remove_fake_experiment_run(context: ExperimentRunCtx):
     log.info(f'fake experiment run {context.experiment_run_ulid} removed')
 
 
-# def callback_vagrant_box_exists(context: ExperimentRunCtx):
-#     if not context.box:
-#         return False
-#     return context.box.exists()
-
-# def callback_vagrant_box_status(context: ExperimentRunCtx):
-#     if not context.box:
-#         return 'not_created'
-#     return context.box.status()
 
 def __start_event_listeners(experiment_run_ulid: str):
     from adare.backend.events.listener import event_listener_db, event_listener_cli
@@ -991,13 +1003,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             with StageCtxManager(ExperimentPreparationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 initial_steps = [
-                    step_setup_directories,
-                    step_validate_playbook,
-                    step_resolve_environment,
-                    step_check_integrity_experiment,
-                    step_check_integrity_project,
-                    step_check_appdata,
-                    step_create_run_directory,
+                    step_setup_experiment_environment,
+                    step_validate_integrity,
+                    step_prepare_run_environment,
                 ]
                 for step in initial_steps:
                     await run_blocking_step(step)
@@ -1107,125 +1115,6 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
 
 
-# def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
-#     from adare.frontend.terminal.textualize.experiment_interactive import ExperimentApp
-#     from adare.backend.types import Step
-
-
-#     setup_adare = lambda ctx: [
-#         step_setup_directories(ctx),
-#         step_resolve_environment(ctx),
-#         step_check_integrity_experiment(ctx),
-#         step_check_integrity_project(ctx),
-#         step_create_run_directory(ctx),
-#         step_create_virtualbox_machine(ctx),
-#     ]
-
-#     steps = [
-#         Step(
-#             label='Setup Adare to run experiment',
-#             func=setup_adare,
-#             thread=True,
-#             description='Setup Adare to run the experiment',
-#         ),
-#         Step(
-#             label='Run Box',
-#             func=step_run_vm,
-#             thread=True,
-#             description='Run the Vagrant box',
-#         ),
-#         Step(
-#             label='Install Adare VM',
-#             func=step_install_adare_vm,
-#             thread=True,
-#             description='Install and run the Adare VM',
-#             repeatable=False,
-#         ),
-#         Step(
-#             label='Connect WebSocket',
-#             func=step_connect_websocket,
-#             thread=False,
-#             description='Connect to the Adare VM via WebSocket',
-#             repeatable=False,
-#         ),
-#         Step(
-#             label='Execute Installations',
-#             func=step_execute_installations,
-#             thread=False,
-#             description='Execute environment installations',
-#             repeatable=False,
-#         ),
-#         Step(
-#             label='Execute Experiment',
-#             func=step_execute_experiment,
-#             thread=False,
-#             description='Execute the experiment',
-#             repeatable=True,
-#         ),
-#         Step(
-#             label='Finalize',
-#             func=step_finalize,
-#             thread=True,
-#             description='Finalize the experiment run',
-#             repeatable=False,
-#         ),
-#         Step(
-#             label='Shutdown WebSocket Client',
-#             func=step_shutdown_ws,
-#             thread=False,
-#             description='Shutdown the WebSocket client',
-#         ),
-#         Step(
-#             label='Shutdown Vagrant',
-#             func=step_shutdown_vagrant,
-#             thread=True,
-#             description='Shutdown the Vagrant box',
-#         ),
-#         Step(
-#             label='Remove Fake Experiment Run',
-#             func=step_remove_fake_experiment_run,
-#             thread=True,
-#             description='Remove the fake experiment run',
-#         ),
-#     ]
-
-#     shutdown_steps = [
-#         Step(
-#             label='Shutdown',
-#             func=step_shutdown_ws,
-#             thread=False,
-#             description='Shutdown the WebSocket client',
-#         ),
-#         Step(
-#             label='Shutdown Vagrant',
-#             func=step_shutdown_vagrant,
-#             thread=True,
-#             description='Shutdown the Vagrant box',
-#         ),
-#         Step(
-#             label='Remove Fake Experiment Run',
-#             func=step_remove_fake_experiment_run,
-#             thread=True,
-#             description='Remove the fake experiment run',
-#         ),
-#     ]
-
-#     callbacks = {
-#         'vagrant_box_exists': callback_vagrant_box_exists,
-#         'vagrant_box_status': callback_vagrant_box_status,
-#     }
-
-#     exit_code = 99
-#     while exit_code == 99:
-#         run_ctx = ExperimentRunCtx(project_path, experiment_name, environment_name)
-#         step_initialize(run_ctx, fake=True)
-#         exp_run_ulid = run_ctx.experiment_run_ulid
-#         from adare.frontend.terminal.textualize.experiment_flow_console_widget import ExperimentRunFlowConsoleWidget, flowwidgetmanager
-#         flowwidgetmanager.add_handler(exp_run_ulid, ExperimentRunFlowConsoleWidget())
-#         app = ExperimentApp(run_ctx, steps=steps, shutdown_steps=shutdown_steps, callbacks=callbacks)
-#         app.run()
-#         exit_code = app.return_code
-#         flowwidgetmanager.remove_handler(exp_run_ulid)
 
 
 def experiment_download(project: Path, experiment_ulid: str):

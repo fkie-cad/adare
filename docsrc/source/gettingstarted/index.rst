@@ -21,7 +21,7 @@ To further work within that project, you must navigate to the project directory:
 
     cd <project_name>
 
-Within this project a user must create an environment, dedicated to contain configurations related to one specific vagrant box (virtual machine).
+Within this project a user must create an environment, dedicated to contain configurations related to one specific virtual machine.
 This can be done by running the following command, when providing an environment config file::
 
     adare environment load  <environment_config_file>.yml
@@ -35,7 +35,7 @@ In the section :ref:`gettingstarted/environment:Create an Environment` you can f
 .. code-block:: yaml
 
     name: <environment_name>
-    vagrantbox: <vagrant_box_name>
+    vm: <path_or_link_to_ova_or_ovf_file>
     os:
         os: <os_name> (custom e.g. 'Windows')
         platform: <os_platform> ('windows' or 'linux')
@@ -43,15 +43,14 @@ In the section :ref:`gettingstarted/environment:Create an Environment` you can f
         version: <os_version> (custom e.g. '11H2.0.2403')
 
 
-Notably ``<vagrant_box_name>`` can be the name of local vagrant box or the name of a box from the vagrant cloud, which has format ``<username>/<box_name>``.
-To list your local vagrant boxes you can run ``vagrant box list``.
-We provide a list of vagrant boxes that can be used with ADARE under our `Vagrant Cloud Account <https://portal.cloud.hashicorp.com/vagrant/discover/mikue>`_.
+Notably ``<path_to_ova_or_ovf_file>`` is the path to a virtual machine image file, such as an OVA or OVF file.
+We provide a link to a list of downloadable virtual machines in `Adare Web <https://adare.seclab-bonn.de/>`_.
 For Windows 11 with our provided box a yaml file would look like this:
 
 .. code-block:: yaml
 
     name: testenvironment
-    vagrantbox: mikue/adare_win11
+    vm: TODOADDREALLINKHERE
     description: "Windows 11 Test Environment"
     os:
       os: Windows

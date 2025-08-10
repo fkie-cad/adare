@@ -69,16 +69,6 @@ class ExperimentRunFlowConsoleWidget(VerticalGroup):
         return len(self.messages)
 
     # --- Logging methods ---
-    def log_breakpoint_done(self, identifier: str, message: str) -> None:
-        self.messages[identifier] = {
-            "message": message,
-            "spinner": None,
-            "spinner_style": None,
-            "level": 0,
-            "status": StatusEnum.BREAKPOINT_RESOLVED,
-            "result_status": None,
-        }
-        self.refresh(layout=True, recompose=True)
 
     def log_success(self, identifier: str, message: str, level: int = 0) -> None:
         self.messages[identifier] = {

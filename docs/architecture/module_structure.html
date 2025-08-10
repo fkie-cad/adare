@@ -1,0 +1,578 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Module Structure &mdash; ADARE  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=903d06c1" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Action Set File" href="actionsetfile.html" />
+    <link rel="prev" title="Structure and Concepts" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Structure and Concepts</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Module Structure</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#package-architecture">Package Architecture</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#core-package-adare">Core Package (adare)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#backend-module-organization">Backend Module Organization</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#experiment-management">Experiment Management</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#environment-management">Environment Management</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#project-management">Project Management</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#testfunction-management">TestFunction Management</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#cli-module-organization">CLI Module Organization</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#command-interface">Command Interface</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#database-module-organization">Database Module Organization</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#data-access-layer">Data Access Layer</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#type-system-architecture">Type System Architecture</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#core-types">Core Types</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#helper-functions-organization">Helper Functions Organization</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#utility-categories">Utility Categories</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#integration-module-architecture">Integration Module Architecture</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#external-system-integration">External System Integration</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#configuration-architecture">Configuration Architecture</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#configuration-management">Configuration Management</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#frontend-architecture">Frontend Architecture</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#terminal-interface">Terminal Interface</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#architectural-patterns">Architectural Patterns</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#domain-driven-design">Domain-Driven Design</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#command-pattern">Command Pattern</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#repository-pattern">Repository Pattern</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#event-driven-architecture">Event-Driven Architecture</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dependency-injection">Dependency Injection</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#testing-architecture-integration">Testing Architecture Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dependencies">Module Dependencies</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dependency-flow">Dependency Flow</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#circular-dependency-prevention">Circular Dependency Prevention</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#future-architecture-considerations">Future Architecture Considerations</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#planned-improvements">Planned Improvements</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#scalability-considerations">Scalability Considerations</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="actionsetfile.html">Action Set File</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testsetfile.html">Test Set File</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#terminology">Terminology</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#files-and-directories">Files and Directories</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ADARE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Structure and Concepts</a></li>
+      <li class="breadcrumb-item active">Module Structure</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/module_structure.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-structure">
+<h1>Module Structure<a class="headerlink" href="#module-structure" title="Link to this heading"></a></h1>
+<p>ADARE is organized into a well-defined module hierarchy that separates concerns and promotes maintainability. This document provides a comprehensive overview of the codebase organization and architectural decisions.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The ADARE framework consists of two main packages:</p>
+<ul class="simple">
+<li><p><strong>adare</strong>: Core framework with CLI, backend, database, and frontend components</p></li>
+<li><p><strong>adarevm</strong>: VM-based execution environment with WebSocket communication</p></li>
+</ul>
+</section>
+<section id="package-architecture">
+<h2>Package Architecture<a class="headerlink" href="#package-architecture" title="Link to this heading"></a></h2>
+<section id="core-package-adare">
+<h3>Core Package (adare)<a class="headerlink" href="#core-package-adare" title="Link to this heading"></a></h3>
+<p>The main <code class="docutils literal notranslate"><span class="pre">adare</span></code> package is organized into the following top-level modules:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>adare/
+├── backend/          # Business logic and operations
+├── cli/              # Command-line interface
+├── database/         # Data persistence layer
+├── frontend/         # User interface components
+├── types/            # Core type definitions
+├── helperfunctions/  # Utility functions
+├── config/           # Configuration management
+├── customyaml/       # YAML processing extensions
+└── integration/      # External system integrations
+</pre></div>
+</div>
+</section>
+</section>
+<section id="backend-module-organization">
+<h2>Backend Module Organization<a class="headerlink" href="#backend-module-organization" title="Link to this heading"></a></h2>
+<p>The backend is organized by functional domain:</p>
+<section id="experiment-management">
+<h3>Experiment Management<a class="headerlink" href="#experiment-management" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>backend/experiment/
+├── commands.py              # Main operations (create, load, run, sync)
+├── runner.py                # Modern async experiment runner
+├── action_controller.py     # Action execution control
+├── websocket_action_controller.py  # WebSocket-based actions
+├── websocket_client.py      # VM communication client
+├── database.py              # Database operations
+├── directory.py             # Directory management
+├── exceptions.py            # Domain-specific exceptions
+└── ...
+</pre></div>
+</div>
+<p><strong>Key Classes:</strong>
+- <code class="docutils literal notranslate"><span class="pre">ExperimentConfig</span></code>: Configuration for experiment execution
+- <code class="docutils literal notranslate"><span class="pre">ExperimentRunContext</span></code>: Runtime context for experiments
+- <code class="docutils literal notranslate"><span class="pre">ExperimentDirectory</span></code>: File system operations
+- <code class="docutils literal notranslate"><span class="pre">WebSocketClient</span></code>: VM communication</p>
+</section>
+<section id="environment-management">
+<h3>Environment Management<a class="headerlink" href="#environment-management" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>backend/environment/
+├── commands.py      # Environment operations
+├── database.py      # Database operations
+└── exceptions.py    # Domain exceptions
+</pre></div>
+</div>
+<p><strong>Key Functions:</strong>
+- Environment creation and loading
+- VM integration and validation
+- Configuration management</p>
+</section>
+<section id="project-management">
+<h3>Project Management<a class="headerlink" href="#project-management" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>backend/project/
+├── commands.py      # Project operations
+├── database.py      # Database operations
+├── directory.py     # Directory management
+└── exceptions.py    # Domain exceptions
+</pre></div>
+</div>
+<p><strong>Key Classes:</strong>
+- <code class="docutils literal notranslate"><span class="pre">ProjectDirectory</span></code>: Project file system operations
+- Project lifecycle management functions</p>
+</section>
+<section id="testfunction-management">
+<h3>TestFunction Management<a class="headerlink" href="#testfunction-management" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>backend/testfunction/
+├── commands.py      # TestFunction operations
+├── database.py      # Database operations
+├── directory.py     # Directory management
+└── exceptions.py    # Domain exceptions
+</pre></div>
+</div>
+</section>
+</section>
+<section id="cli-module-organization">
+<h2>CLI Module Organization<a class="headerlink" href="#cli-module-organization" title="Link to this heading"></a></h2>
+<section id="command-interface">
+<h3>Command Interface<a class="headerlink" href="#command-interface" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>cli/
+├── experiment.py    # Experiment commands
+├── environment.py   # Environment commands
+├── project.py       # Project commands
+├── vm.py           # VM management commands
+├── show.py         # List/display commands
+├── web.py          # Web interface commands
+└── ...
+</pre></div>
+</div>
+<p><strong>Architecture Pattern:</strong>
+Each CLI module follows the pattern:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">exec_</span><span class="o">&lt;</span><span class="n">command</span><span class="o">&gt;</span><span class="n">_</span><span class="o">&lt;</span><span class="n">action</span><span class="o">&gt;</span><span class="p">(</span><span class="n">arguments</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Execute command with argument validation.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">project_directory</span> <span class="o">:=</span> <span class="n">determine_projectdirectory</span><span class="p">(</span><span class="n">arguments</span><span class="o">.</span><span class="n">project</span><span class="p">):</span>
+        <span class="n">backend_function</span><span class="p">(</span><span class="n">project_directory</span><span class="p">,</span> <span class="n">arguments</span><span class="o">.</span><span class="n">param</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">NoProjectFoundError</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="database-module-organization">
+<h2>Database Module Organization<a class="headerlink" href="#database-module-organization" title="Link to this heading"></a></h2>
+<section id="data-access-layer">
+<h3>Data Access Layer<a class="headerlink" href="#data-access-layer" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>database/
+├── api/             # Database access layer
+│   ├── base.py      # Base database functionality
+│   ├── experiment.py # Experiment database operations
+│   ├── environment.py # Environment database operations
+│   ├── vm.py        # VM database operations
+│   └── ...
+├── models/          # SQLAlchemy ORM models
+│   ├── experiment.py # Experiment-related models
+│   ├── login.py     # Authentication models
+│   └── vm.py        # VM-related models
+├── events/          # Database event handling
+└── fixtures.py      # Test data and initialization
+</pre></div>
+</div>
+<p><strong>Key Patterns:</strong>
+- Repository pattern for data access
+- ORM models separate from business logic
+- Event-driven architecture for database changes</p>
+</section>
+</section>
+<section id="type-system-architecture">
+<h2>Type System Architecture<a class="headerlink" href="#type-system-architecture" title="Link to this heading"></a></h2>
+<section id="core-types">
+<h3>Core Types<a class="headerlink" href="#core-types" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>types/
+├── experiment.py    # Experiment type definitions
+├── websocket.py     # WebSocket communication types
+├── testset.py       # TestSet configuration types
+├── stage.py         # Execution stage types
+├── backend.py       # Backend operation types
+├── environment.py   # Environment configuration types
+├── event.py         # Event system types
+├── playbook.py      # YAML automation types
+└── ws.py           # WebSocket protocol types
+</pre></div>
+</div>
+<p><strong>Design Principles:</strong>
+- Dataclasses for immutable configuration
+- Protocol classes for interface definitions
+- Enum types for controlled vocabularies
+- Type hints throughout for static analysis</p>
+</section>
+</section>
+<section id="helper-functions-organization">
+<h2>Helper Functions Organization<a class="headerlink" href="#helper-functions-organization" title="Link to this heading"></a></h2>
+<section id="utility-categories">
+<h3>Utility Categories<a class="headerlink" href="#utility-categories" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>helperfunctions/
+├── file/            # File operations
+│   ├── safe_deletion.py
+│   └── file_progress.py
+├── text/            # Text processing
+│   ├── string.py
+│   ├── regex.py
+│   └── strings/
+├── data/            # Data processing
+│   ├── csv/
+│   ├── dict/
+│   ├── yaml.py
+│   └── hash.py
+├── system/          # System integration
+│   ├── subprocess/
+│   ├── web/
+│   ├── workingdirectory/
+│   └── port.py
+├── analysis/        # Code analysis
+│   └── pyfileanalyze/
+├── user_experience/ # UX enhancements
+│   ├── project_suggestions.py
+│   ├── vm_suggestions.py
+│   └── file_error_suggestions.py
+└── templates/       # Template processing
+    └── jinja/
+</pre></div>
+</div>
+<p><strong>Design Philosophy:</strong>
+- Single responsibility per module
+- Pure functions where possible
+- Comprehensive error handling
+- Extensive documentation</p>
+</section>
+</section>
+<section id="integration-module-architecture">
+<h2>Integration Module Architecture<a class="headerlink" href="#integration-module-architecture" title="Link to this heading"></a></h2>
+<section id="external-system-integration">
+<h3>External System Integration<a class="headerlink" href="#external-system-integration" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>integrations/
+├── virtualbox/      # VirtualBox API integration
+│   └── api.py
+├── vagrant/         # Vagrant integration (legacy)
+│   ├── vagrantbox.py
+│   ├── vagrantfile.py
+│   └── vagrantutils.py
+├── web/             # Web application integration
+│   ├── login.py
+│   └── exceptions.py
+├── webappaccess/    # Web service access
+│   ├── download.py
+│   ├── upload.py
+│   ├── login.py
+│   └── experiment.py
+└── networkdrive/    # Network drive integration
+    ├── networkdrive.py
+    └── exceptions.py
+</pre></div>
+</div>
+</section>
+</section>
+<section id="configuration-architecture">
+<h2>Configuration Architecture<a class="headerlink" href="#configuration-architecture" title="Link to this heading"></a></h2>
+<section id="configuration-management">
+<h3>Configuration Management<a class="headerlink" href="#configuration-management" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>config/
+├── __init__.py          # Core configuration constants
+├── configdirectory.py   # Directory configuration
+├── database.py          # Database configuration
+├── breakpoints.py       # Debugging configuration
+├── gui.py              # GUI configuration
+├── server.py           # Server configuration
+└── exceptions.py        # Configuration exceptions
+</pre></div>
+</div>
+<p><strong>Key Features:</strong>
+- Environment-based configuration
+- Default value management
+- Validation and type checking
+- Path resolution and normalization</p>
+</section>
+</section>
+<section id="frontend-architecture">
+<h2>Frontend Architecture<a class="headerlink" href="#frontend-architecture" title="Link to this heading"></a></h2>
+<section id="terminal-interface">
+<h3>Terminal Interface<a class="headerlink" href="#terminal-interface" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>frontend/terminal/
+├── console.py           # Console management
+├── experiment.py        # Experiment UI
+├── experiment_list.py   # Experiment list view
+├── environment.py       # Environment UI
+├── environment_list.py  # Environment list view
+├── project_list.py      # Project list view
+├── run.py              # Run execution display
+├── run_list.py         # Run list view
+└── textualize/         # Advanced UI components
+    ├── experiment_flow_console_widget.py
+    └── experiment_interactive.py
+</pre></div>
+</div>
+<p><strong>UI Framework:</strong>
+- Built on Textual framework
+- Rich console output
+- Interactive components
+- Real-time updates</p>
+</section>
+</section>
+<section id="architectural-patterns">
+<h2>Architectural Patterns<a class="headerlink" href="#architectural-patterns" title="Link to this heading"></a></h2>
+<section id="domain-driven-design">
+<h3>Domain-Driven Design<a class="headerlink" href="#domain-driven-design" title="Link to this heading"></a></h3>
+<p>The codebase follows domain-driven design principles:</p>
+<ul class="simple">
+<li><p><strong>Bounded Contexts</strong>: Each domain (experiment, environment, project) is self-contained</p></li>
+<li><p><strong>Aggregates</strong>: Related entities are grouped together</p></li>
+<li><p><strong>Repositories</strong>: Data access is abstracted through repository pattern</p></li>
+<li><p><strong>Domain Events</strong>: Changes trigger events for loose coupling</p></li>
+</ul>
+</section>
+<section id="command-pattern">
+<h3>Command Pattern<a class="headerlink" href="#command-pattern" title="Link to this heading"></a></h3>
+<p>CLI commands follow the command pattern:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">exec_command</span><span class="p">(</span><span class="n">arguments</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Command execution with validation and error handling.&quot;&quot;&quot;</span>
+    <span class="c1"># 1. Validate arguments</span>
+    <span class="c1"># 2. Determine context (project directory)</span>
+    <span class="c1"># 3. Execute business logic</span>
+    <span class="c1"># 4. Handle errors appropriately</span>
+</pre></div>
+</div>
+</section>
+<section id="repository-pattern">
+<h3>Repository Pattern<a class="headerlink" href="#repository-pattern" title="Link to this heading"></a></h3>
+<p>Database access uses repository pattern:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ExperimentApi</span><span class="p">(</span><span class="n">BaseDbApi</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Repository for experiment data operations.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_experiment_by_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">project_ulid</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retrieve experiment by name within project.&quot;&quot;&quot;</span>
+        <span class="k">pass</span>
+</pre></div>
+</div>
+</section>
+<section id="event-driven-architecture">
+<h3>Event-Driven Architecture<a class="headerlink" href="#event-driven-architecture" title="Link to this heading"></a></h3>
+<p>Database changes trigger events:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Event listeners automatically handle database changes</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">adare.database.events.stage</span>  <span class="c1"># Activates event listeners</span>
+</pre></div>
+</div>
+</section>
+<section id="dependency-injection">
+<h3>Dependency Injection<a class="headerlink" href="#dependency-injection" title="Link to this heading"></a></h3>
+<p>Components are loosely coupled through dependency injection:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">experiment_run</span><span class="p">(</span><span class="n">project_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">experiment</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">environment</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Business logic receives dependencies as parameters.&quot;&quot;&quot;</span>
+    <span class="n">api</span> <span class="o">=</span> <span class="n">ExperimentApi</span><span class="p">()</span>  <span class="c1"># Dependency can be injected</span>
+    <span class="c1"># ...</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="testing-architecture-integration">
+<h2>Testing Architecture Integration<a class="headerlink" href="#testing-architecture-integration" title="Link to this heading"></a></h2>
+<p>The module structure supports comprehensive testing:</p>
+<p><strong>Test Organization:</strong>
+- Each module has corresponding test file
+- Mock-friendly interfaces
+- Isolated test databases
+- Async test support</p>
+<p><strong>Test Categories:</strong>
+- Unit tests for individual modules
+- Integration tests for workflows
+- End-to-end tests for CLI commands
+- Database tests with temporary databases</p>
+</section>
+<section id="module-dependencies">
+<h2>Module Dependencies<a class="headerlink" href="#module-dependencies" title="Link to this heading"></a></h2>
+<section id="dependency-flow">
+<h3>Dependency Flow<a class="headerlink" href="#dependency-flow" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>CLI Layer
+   ↓
+Backend Layer
+   ↓
+Database Layer
+   ↓
+Models/Types Layer
+</pre></div>
+</div>
+<p><strong>Rules:</strong>
+- Higher layers can depend on lower layers
+- Lower layers cannot depend on higher layers
+- Cross-domain dependencies are minimized
+- External dependencies are isolated</p>
+</section>
+<section id="circular-dependency-prevention">
+<h3>Circular Dependency Prevention<a class="headerlink" href="#circular-dependency-prevention" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Import statements are carefully managed</p></li>
+<li><p>Interface segregation prevents tight coupling</p></li>
+<li><p>Dependency injection breaks circular references</p></li>
+<li><p>Event-driven communication reduces direct dependencies</p></li>
+</ul>
+</section>
+</section>
+<section id="future-architecture-considerations">
+<h2>Future Architecture Considerations<a class="headerlink" href="#future-architecture-considerations" title="Link to this heading"></a></h2>
+<section id="planned-improvements">
+<h3>Planned Improvements<a class="headerlink" href="#planned-improvements" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Microservice Architecture</strong>: Consider splitting into microservices</p></li>
+<li><p><strong>Plugin System</strong>: Extensible plugin architecture</p></li>
+<li><p><strong>API Layer</strong>: RESTful API for external integration</p></li>
+<li><p><strong>Event Sourcing</strong>: Consider event sourcing for audit trails</p></li>
+<li><p><strong>CQRS Pattern</strong>: Separate read/write models for complex queries</p></li>
+</ol>
+</section>
+<section id="scalability-considerations">
+<h3>Scalability Considerations<a class="headerlink" href="#scalability-considerations" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Database sharding strategies</p></li>
+<li><p>Async/await for I/O bound operations</p></li>
+<li><p>WebSocket for real-time communication</p></li>
+<li><p>Message queues for background processing</p></li>
+</ul>
+<p>This module structure provides a solid foundation for the ADARE framework while maintaining flexibility for future enhancements and scalability requirements.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Structure and Concepts" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="actionsetfile.html" class="btn btn-neutral float-right" title="Action Set File" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

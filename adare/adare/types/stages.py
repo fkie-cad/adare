@@ -299,46 +299,35 @@ class ExperimentExecutionStage(Stage):
 @attrs.define
 class CleanupShutdownStage(Stage):
     name: ClassVar[str] = 'cleanup_shutdown'
-    msg: ClassVar[str] = 'Cleanup and shutdown'
+    msg: ClassVar[str] = 'Shutdown & Cleanup'
     description: ClassVar[str] = 'Finalizing results and cleaning up resources'
 
 # ----------------------------------
-# Sub-Stages for Experiment Preparation
+# Sub-Stages for Experiment Preparation (Consolidated)
 # ----------------------------------
 
 @register_stage
 @attrs.define
-class SetupDirectoriesStage(Stage):
-    name: ClassVar[str] = 'setup_directories'
-    msg: ClassVar[str] = 'Setting up directories'
+class SetupExperimentEnvironmentStage(Stage):
+    name: ClassVar[str] = 'setup_experiment_environment'
+    msg: ClassVar[str] = 'Setting up experiment environment'
+    description: ClassVar[str] = 'Setting up directories, validating playbook, and resolving environment'
     parent: ClassVar[str] = 'experiment_preparation'
 
 @register_stage
 @attrs.define
-class ValidatePlaybookStage(Stage):
-    name: ClassVar[str] = 'validate_playbook'
-    msg: ClassVar[str] = 'Validating playbook'
+class ValidateIntegrityStage(Stage):
+    name: ClassVar[str] = 'validate_integrity'
+    msg: ClassVar[str] = 'Validating experiment and project integrity'
+    description: ClassVar[str] = 'Checking experiment integrity and project integrity'
     parent: ClassVar[str] = 'experiment_preparation'
 
 @register_stage
 @attrs.define
-class ResolveEnvironmentStage(Stage):
-    name: ClassVar[str] = 'resolve_environment'
-    msg: ClassVar[str] = 'Resolving environment'
-    parent: ClassVar[str] = 'experiment_preparation'
-
-@register_stage
-@attrs.define
-class CheckAppdataStage(Stage):
-    name: ClassVar[str] = 'check_appdata'
-    msg: ClassVar[str] = 'Checking application data'
-    parent: ClassVar[str] = 'experiment_preparation'
-
-@register_stage
-@attrs.define
-class RunDirectoryCreationStage(Stage):
-    name: ClassVar[str] = 'run_dir_creation'
-    msg: ClassVar[str] = 'Creating run directory'
+class PrepareRunEnvironmentStage(Stage):
+    name: ClassVar[str] = 'prepare_run_environment'
+    msg: ClassVar[str] = 'Preparing run environment'
+    description: ClassVar[str] = 'Checking application data and creating run directory'
     parent: ClassVar[str] = 'experiment_preparation'
 
 @register_stage

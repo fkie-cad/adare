@@ -421,31 +421,6 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     if not restore_success:
         raise VMError(log, f"Failed to restore VM '{vm.name}' to base snapshot")
     
-    # Create experiment-specific snapshot only if requested (for recovery/debugging)
-    exp_snapshot_name = None
-    if preserve_experiment_snapshot:
-        log.info("📸 Creating experiment snapshot (--preserve-snapshot enabled)")
-        snapshot_manager = SnapshotManager()
-        if experiment_run_ulid:
-            with StageCtxManager(VMExperimentSnapshotStage(), experiment_run_ulid):
-                exp_snapshot_name = snapshot_manager.create_experiment_snapshot(
-                    vm, experiment_id, 
-                    description=f"Snapshot for experiment {experiment_id}",
-                    silent=False
-                )
-        else:
-            exp_snapshot_name = snapshot_manager.create_experiment_snapshot(
-                vm, experiment_id, 
-                description=f"Snapshot for experiment {experiment_id}",
-                silent=False
-            )
-        
-        if exp_snapshot_name:
-            log.info(f"📸 Created experiment snapshot: {exp_snapshot_name}")
-        else:
-            log.warning("Failed to create experiment snapshot")
-    else:
-        log.info("⚡ Skipping experiment snapshot creation (use --preserve-snapshot to enable)")
     
     # Update verification timestamp
     update_vm_status_in_db(vm.id, VMStatus.READY)

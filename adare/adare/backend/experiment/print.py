@@ -170,17 +170,6 @@ class ExperimentFlowConsole:
 
             return message
 
-    def log_breakpoint_done(self, identifier: str, message: str, duration: float = None):
-        with self._lock:
-            self.messages[identifier] = {
-                'message': message,
-                'spinner': None,
-                'spinner_style': None,
-                'level': 0,
-                'status': StatusEnum.BREAKPOINT_RESOLVED,
-                'result_status': None,
-                'duration': duration,
-            }
 
     def log_success(self, identifier: str, message: str, level: int = 0, duration: float = None):
         with self._lock:
