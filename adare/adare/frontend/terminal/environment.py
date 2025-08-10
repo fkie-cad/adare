@@ -27,10 +27,10 @@ class InfoPanel:
             f"{pad_string_to_length('name', 12)}: [b]{self.environment['dotnotation'].values[0]}[/b]",
         )
         grid.add_row(
-            f"{pad_string_to_length('ulid', 12)}: [b]{self.environment['ulid'].values[0]}[/b]",
+            f"{pad_string_to_length('ulid', 12)}: [b]{self.environment['id'].values[0]}[/b]",
         )
         grid.add_row(
-            f"{pad_string_to_length('box', 12)}: [b]{self.environment['vagrantbox'].values[0]}[/b]",
+            f"{pad_string_to_length('vm', 12)}: [b]{self.environment['vm_name'].values[0]}[/b]",
         )
         grid.add_row(
             f"{pad_string_to_length('project', 12)}: [b]{self.environment['project_name'].values[0]}[/b]",
@@ -128,10 +128,10 @@ class EnvironmentPanel:
         return Panel(layout, title=title, border_style="blue", title_align="left")
 
 
-def print_environment(environment: str = None, project: str = None, ulid: str = None):
+def print_environment(dotnotation: str):
     with DataRetrievalApi() as db:
         console = DefaultConsole()
-        environment = db.get_environment(environment, project, ulid)
+        environment = db.get_environment_by_dotnotation(dotnotation)
         layout = Layout(name="root")
         panel = EnvironmentPanel(environment)
         layout.update(panel)

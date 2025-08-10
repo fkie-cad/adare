@@ -17,7 +17,7 @@ from adare.cli.experiment import (
 )
 from adare.cli.manage import exec_manage_reset
 from adare.cli.show import (
-    exec_show_projects, exec_show_environment, exec_show_environments,
+    exec_show_environment, exec_show_environments,
     exec_show_experiment, exec_show_runs, exec_show_run,
     exec_show_testfunctions, exec_show_testfunction, exec_show_experiments
 )
@@ -168,6 +168,21 @@ def example(name, project):
     )
     exec_with_error_printing(exec_environment_example, args)
 
+@environment.command(name='list')
+def list_environments():
+    """List all environments in a project."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_show_environments, args)
+
+@environment.command()
+@click.argument('dotnotation')
+def info(dotnotation):
+    """Show detailed information about a specific environment."""
+    args = SimpleNamespace(
+        dotnotation=dotnotation,
+    )
+    exec_with_error_printing(exec_show_environment, args)
+
 
 # ------------------------------
 # Experiment commands
@@ -246,6 +261,23 @@ def example(name, project):
     )
     exec_with_error_printing(exec_experiment_example, args)
 
+@experiment.command(name='list')
+def list_experiments():
+    """List all experiments in an environment."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_show_experiments, args)
+
+@experiment.command()
+@click.option('--dotnotation', '-d', help='Dotnotation in format: project_name.environment_name.experiment_name')
+@click.option('--ulid', '-u', help='ULID of the experiment')
+def info(dotnotation, ulid):
+    """Show detailed information about a specific experiment."""
+    args = SimpleNamespace(
+        dotnotation=dotnotation,
+        ulid=ulid
+    )
+    exec_with_error_printing(exec_show_experiment, args)
+
 
 # ------------------------------
 # Testfunction commands
@@ -285,6 +317,20 @@ def list_testfunctions(project):
     """List all testfunctions."""
     args = SimpleNamespace(project=project)
     exec_with_error_printing(exec_list_testfunctions, args)
+
+@testfunction.command()
+@click.option('--file-name', '-f', help='File name')
+def show(file_name):
+    """Show testfunctions with optional file filtering."""
+    args = SimpleNamespace(file_name=file_name)
+    exec_with_error_printing(exec_show_testfunctions, args)
+
+@testfunction.command()
+@click.argument('dotnotation')
+def info(dotnotation):
+    """Show detailed information about a specific testfunction."""
+    args = SimpleNamespace(dotnotation=dotnotation)
+    exec_with_error_printing(exec_show_testfunction, args)
 
 
 # ------------------------------
@@ -344,6 +390,29 @@ def clear_environment(environment_ulid, force):
     """Clear all VMs associated with a specific environment."""
     args = SimpleNamespace(environment_ulid=environment_ulid, force=force)
     exec_with_error_printing(exec_vm_clear_by_environment, args)
+
+
+# ------------------------------
+# Run management commands
+# ------------------------------
+@cli.group()
+def run():
+    """Experiment run management commands."""
+    pass
+
+@run.command(name='list')
+@click.option('--project', '-p', help='Name of the project')
+def list_runs(project):
+    """List all experiment runs."""
+    args = SimpleNamespace(project=project)
+    exec_with_error_printing(exec_show_runs, args)
+
+@run.command()
+@click.argument('ulid')
+def info(ulid):
+    """Show detailed information about a specific run."""
+    args = SimpleNamespace(ulid=ulid)
+    exec_with_error_printing(exec_show_run, args)
 
 
 # ------------------------------
@@ -421,89 +490,6 @@ def sync(project):
 def help():
     """Show help for special options."""
     pass
-
-
-# ------------------------------
-# Show information commands
-# ------------------------------
-@cli.group()
-def show():
-    """Show information about projects, environments, experiments, etc."""
-    pass
-
-@show.command(name='projects')
-def show_projects():
-    """Show list of projects."""
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_show_projects, args)
-
-@show.command(name='environments')
-def show_environments():
-    """Show all environments in a project."""
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_show_environments, args)
-
-@show.command(name='environment')
-@click.option('-env', '--environment-name', help='Name of the environment')
-@click.option('-proj', '--project-name', help='Name of the project')
-@click.option('-ulid', '--ulid', help='ULID of the environment')
-def show_environment(environment_name, project_name, ulid):
-    """Show a specific environment."""
-    args = SimpleNamespace(
-        environment_name=environment_name,
-        project_name=project_name,
-        ulid=ulid
-    )
-    exec_with_error_printing(exec_show_environment, args)
-
-@show.command(name='experiments')
-def show_experiments():
-    """Show all experiments in an environment."""
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_show_experiments, args)
-
-@show.command(name='experiment')
-@click.option('-env', '--environment-name', help='Name of the environment')
-@click.option('-proj', '--project-name', help='Name of the project')
-@click.option('-exp', '--experiment-name', help='Name of the experiment')
-@click.option('-ulid', '--ulid', help='ULID of the experiment')
-def show_experiment(environment_name, project_name, experiment_name, ulid):
-    """Show a specific experiment."""
-    args = SimpleNamespace(
-        environment_name=environment_name,
-        project_name=project_name,
-        experiment_name=experiment_name,
-        ulid=ulid
-    )
-    exec_with_error_printing(exec_show_experiment, args)
-
-@show.command(name='runs')
-@click.option('-proj', '--project', help='Name of the project')
-def show_runs(project):
-    """Show all runs."""
-    args = SimpleNamespace(project=project)
-    exec_with_error_printing(exec_show_runs, args)
-
-@show.command(name='run')
-@click.argument('ulid')
-def show_run(ulid):
-    """Show a specific run."""
-    args = SimpleNamespace(ulid=ulid)
-    exec_with_error_printing(exec_show_run, args)
-
-@show.command(name='testfunctions')
-@click.option('-f', '--file-name', help='File name')
-def show_testfunctions(file_name):
-    """Show all testfunctions."""
-    args = SimpleNamespace(file_name=file_name)
-    exec_with_error_printing(exec_show_testfunctions, args)
-
-@show.command(name='testfunction')
-@click.argument('dotnotation')
-def show_testfunction(dotnotation):
-    """Show a specific testfunction."""
-    args = SimpleNamespace(dotnotation=dotnotation)
-    exec_with_error_printing(exec_show_testfunction, args)
 
 
 def main():
