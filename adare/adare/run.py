@@ -15,7 +15,7 @@ from adare.cli.environment import (
 from adare.cli.experiment import (
     exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example
 )
-from adare.cli.manage import exec_manage_reset
+from adare.cli.manage import exec_manage_reset_db, exec_manage_reset_vm
 from adare.cli.show import (
     exec_show_environment, exec_show_environments,
     exec_show_experiment, exec_show_runs, exec_show_run,
@@ -86,11 +86,18 @@ def manage():
     """Manage commands (wrapper for management-related operations)."""
     pass
 
-@manage.command()
-def reset():
-    """Remove the database (use with caution)."""
+@manage.command(name='reset-db')
+def reset_db():
+    """Reset the database (use with caution)."""
     args = SimpleNamespace()
-    exec_with_error_printing(exec_manage_reset, args)
+    exec_with_error_printing(exec_manage_reset_db, args)
+
+@manage.command(name='reset-vm')
+@click.option('--force', '-f', is_flag=True, help='Force deletion of all VMs (required for confirmation)')
+def reset_vm(force):
+    """Reset all VMs in the system (use with caution)."""
+    args = SimpleNamespace(force=force)
+    exec_with_error_printing(exec_manage_reset_vm, args)
 
 
 # ------------------------------

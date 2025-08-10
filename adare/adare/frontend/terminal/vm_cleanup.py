@@ -46,7 +46,7 @@ class VMConfirmationPanel:
         if len(self.vms) > 15:
             table.add_row(f"... and {len(self.vms) - 15} more", "", "")
         
-        content = f"[red bold]{self.warning_text}[/red bold]\n\n" + table.__rich__() + f"\n\n[yellow]Use --force to confirm this action[/yellow]"
+        content = f"[red bold]{self.warning_text}[/red bold]\n\n{table}\n\n[yellow]Use --force to confirm this action[/yellow]"
         
         return Panel(content, title=f"[b red]⚠️  {self.title}[/b red]", 
                     border_style="red", title_align="left")
@@ -111,21 +111,30 @@ def print_vm_clear_all_confirmation():
     """Print confirmation for clearing all VMs."""
     try:
         vms = list_all_vms()
-        console = DefaultConsole()
         
-        layout = Layout(name="root")
-        panel = VMConfirmationPanel(
-            vms, 
-            "Clear All VMs", 
-            f"This will delete ALL {len(vms)} VMs from the system!"
-        )
-        layout.update(panel)
-        console.print(layout)
+        print(f"⚠️  This will delete ALL {len(vms)} VMs from the system!")
+        
+        if vms:
+            print("\nVMs to be deleted:")
+            for vm in vms[:10]:  # Show max 10 VMs
+                if hasattr(vm, 'name'):  # VM object
+                    name = vm.name
+                    vm_id = vm.id
+                else:  # Dict
+                    name = vm['name']
+                    vm_id = vm['id']
+                print(f"  - {name} ({vm_id})")
+            
+            if len(vms) > 10:
+                print(f"  ... and {len(vms) - 10} more")
+        else:
+            print("No VMs found to delete")
+            
+        print("\nUse --force to confirm this action")
         
     except Exception as e:
         log.error(f"Failed to show VM confirmation: {e}")
-        console = DefaultConsole()
-        console.print(f"[red]Error showing confirmation: {e}[/red]")
+        print(f"Error showing confirmation: {e}")
 
 
 def print_vm_clear_environment_confirmation(environment_ulid: str):
