@@ -15,10 +15,82 @@ from adare.backend.environment.exceptions import EnvironmentLoadFailed, Environm
 from adare.webappaccess.download import download_environment, sync
 from adare.webappaccess.login import is_logged_in
 from adare.exceptions import NotLoggedInError
+from adare.helperfunctions.web.download import download
+from urllib.parse import urlparse
+import hashlib
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
+
+
+def resolve_vm_from_url(url: str, project_path: Path) -> Path:
+    """
+    Download and cache an OVA file from URL using the project's vm directory.
+    
+    Args:
+        url: URL to the OVA file
+        project_path: Project root path
+        
+    Returns:
+        Path to the downloaded/cached OVA file
+        
+    Raises:
+        EnvironmentLoadFailed: If download fails
+    """
+    from adare.backend.project.directory import ProjectDirectory
+    
+    project_dir = ProjectDirectory(project_path)
+    vm_dir = project_dir.vm
+    
+    # Generate filename from URL
+    parsed_url = urlparse(url)
+    original_filename = Path(parsed_url.path).name
+    
+    # Create hash-based filename to avoid conflicts and enable caching
+    url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+    
+    if original_filename and original_filename.lower().endswith(('.ova', '.ovf')):
+        filename = f"{url_hash}_{original_filename}"
+    else:
+        filename = f"{url_hash}_downloaded.ova"
+    
+    cached_file_path = vm_dir / filename
+    
+    # Check if already cached
+    if cached_file_path.exists() and cached_file_path.stat().st_size > 0:
+        log.info(f"Using cached VM file: {cached_file_path}")
+        return cached_file_path
+    
+    # Download the file
+    try:
+        log.info(f"Downloading VM from URL: {url}")
+        download(url, cached_file_path, quiet=False)
+        
+        if not cached_file_path.exists() or cached_file_path.stat().st_size == 0:
+            raise EnvironmentLoadFailed(
+                log,
+                f'Downloaded VM file {cached_file_path} is empty or missing',
+                possible_solutions=['Check if the URL is valid', 'Check network connectivity']
+            )
+        
+        log.info(f"Successfully downloaded VM to: {cached_file_path}")
+        return cached_file_path
+        
+    except Exception as e:
+        # Clean up failed download
+        if cached_file_path.exists():
+            cached_file_path.unlink()
+            
+        raise EnvironmentLoadFailed(
+            log,
+            f'Failed to download VM from URL {url}: {e}',
+            possible_solutions=[
+                'Check if the URL is accessible',
+                'Check network connectivity', 
+                'Ensure the URL points to a valid OVA/OVF file'
+            ]
+        ) from e
 
 
 def environment_sync(environment_ulid: str):
@@ -87,7 +159,32 @@ def environment_load(project: Path, environment: str, force: bool = False):
     # Handle VM file copying and hashing during environment load (heavy file operations)
     vm_id = None
     if environment_metadata.vm:
-        vm_path = Path(environment_metadata.vm)
+        # Determine how to handle the VM specification
+        is_url = False
+        
+        if environment_metadata.vm_type == "auto":
+            # Auto-detect URL vs local path
+            is_url = environment_metadata.vm.startswith(('http://', 'https://'))
+        elif environment_metadata.vm_type == "url":
+            # Force treat as URL (even if it doesn't start with http)
+            is_url = True
+        elif environment_metadata.vm_type == "path":
+            # Force treat as local path
+            is_url = False
+        
+        if is_url:
+            # Download VM from URL and cache in project/vm directory
+            log.info(f'Processing URL-based VM: {environment_metadata.vm}')
+            try:
+                vm_path = resolve_vm_from_url(environment_metadata.vm, project)
+                log.info(f'VM downloaded from URL and cached: {vm_path}')
+            except Exception as e:
+                log.error(f'Failed to download VM from URL {environment_metadata.vm}: {e}')
+                raise
+        else:
+            # Handle local file path (existing behavior)
+            vm_path = Path(environment_metadata.vm)
+        
         if vm_path.exists():
             from adare.backend.vm.commands import load_vm_file_for_environment
             log.info(f'Processing VM file during environment load: {vm_path}')

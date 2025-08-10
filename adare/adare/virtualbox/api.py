@@ -2,7 +2,6 @@ import base64
 import subprocess
 import platform
 import logging
-import time
 import threading
 import queue
 import os

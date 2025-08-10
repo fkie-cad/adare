@@ -52,7 +52,7 @@ class EnvironmentMetadata:
     tags: list[str] = attrs.Factory(list)
     description: str = attrs.Factory(str)
     
-    vm_type: Literal["path", "url", "ulid", "name"] = "path"
+    vm_type: Literal["auto", "path", "url"] = "auto"
     
     # Legacy Vagrant-based environment fields (for backward compatibility)
     vagrantbox: Optional[str] = None

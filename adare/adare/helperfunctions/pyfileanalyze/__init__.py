@@ -1,3 +1,0 @@
-from .pyclassanalyzer import PyClassAnalyzer
-from .pyclassattributeanalyzer import PyClassAttributeAnalyzer
-from .pymoduleanalyzer import PyModuleAnalyzer

@@ -17,7 +17,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
     - [ ] some way to skip after installation; and then do something? 
     - [ ] replay? so let user click and we create playbook
 - [x] add way to delete all vms at once? make with additonal requestto user to agree
-- [ ] add way to download ova/ovf directly on first use!
+- [x] add way to download ova/ovf directly on first use!
 - [ ] built tests
 
 #### Output
@@ -34,13 +34,14 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] look for dead/deprecated code and remove
 
 #### Bugs
-- [] always run on base snapshot and create one after the experiment run not before (if specific option is set) -> test -> no snapshot saved?!
+- [x] always run on base snapshot and create one after the experiment run not before (if specific option is set) -> test -> no snapshot saved?!
 - [x] adare show run shows pending for interrupted run
 - [x] ligntning does not show for interrupted run?!
 - [ ] unclear if flow shows fails -> test
-- [ ] with preserve snapshot we do snapshot before the run not after (also for run do it after even after fail!)
-- [ ] somehow environment got deleted adter adare manage reset-vm -> test more
+- [ ] somehow environment got deleted after adare manage reset-vm -> test more
+- [ ] remove vm_type or change to auto to auto detect
 
 
 #### Test
 - [ ] all frontend terminal commands
+- [ ] download of ova! -> find location where to upload machines? 
