@@ -17,24 +17,29 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
     - [ ] some way to skip after installation; and then do something? 
     - [ ] replay? so let user click and we create playbook
 - [x] add way to delete all vms at once? make with additonal requestto user to agree
+- [ ] add way to download ova/ovf directly on first use!
+- [ ] built tests
 
 #### Output
 - [x] Show experiment run flow in show run display (maybe extendable)
 - [x] make duration dynamic for run. Store the durations in database as before and display for the classic run display
-- [ ] improve stages (at the moment to unclear / maybe to many?! -> combine typical short ones)
+- [x] improve stages (at the moment to unclear / maybe to many?! -> combine typical short ones)
 - [x] restructure command like args maybe do not have show but instead incooporate it smoothly? 
 
 #### QOL
-- [ ] make general output for filterable/specificable (e.g. delete all snapshots for one vm with one command)
+- [ ] update documentation drastically
+    - [x] update Installation guide
+    - [x] update About Adare
+    - [ ] the rest
+- [ ] look for dead/deprecated code and remove
 
 #### Bugs
-- [ ] always run on base snapshot and create one after the experiment run not before (if specific option is set)
-- [ ] adare show run shows pending for interrupted run
-- [ ] ligntning does not show for interrupted run?!
-- [ ] ctrl-c during loading results in vm potentially created later (track vm names -> check on next start and remove old ones)
+- [] always run on base snapshot and create one after the experiment run not before (if specific option is set) -> test -> no snapshot saved?!
+- [x] adare show run shows pending for interrupted run
+- [x] ligntning does not show for interrupted run?!
 - [ ] unclear if flow shows fails -> test
 - [ ] with preserve snapshot we do snapshot before the run not after (also for run do it after even after fail!)
-- [ ] update tui
+- [ ] somehow environment got deleted adter adare manage reset-vm -> test more
 
 
 #### Test

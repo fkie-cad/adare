@@ -1,0 +1,449 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Testing Architecture &mdash; ADARE  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=903d06c1" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Create your own Adare Box" href="vagrantboxcreation.html" />
+    <link rel="prev" title="Action File Methods" href="actionfile_methods.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Structure and Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Advanced</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="testfunction.html">Write your own Testfunction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="actionfile_methods.html">Action File Methods</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Testing Architecture</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#testing-guidelines">Testing Guidelines</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#core-principles">Core Principles</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#test-organization">Test Organization</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#directory-structure">Directory Structure</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#naming-convention">Naming Convention</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#testing-categories">Testing Categories</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#unit-tests">Unit Tests</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#integration-tests">Integration Tests</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#async-tests">Async Tests</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#database-tests">Database Tests</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#mock-strategies">Mock Strategies</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#external-dependencies">External Dependencies</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#database-mocking">Database Mocking</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#file-system-mocking">File System Mocking</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#error-testing">Error Testing</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#exception-handling">Exception Handling</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#logging-verification">Logging Verification</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#test-coverage-status">Test Coverage Status</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#current-coverage">Current Coverage</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#priority-areas">Priority Areas</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#running-tests">Running Tests</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#basic-test-execution">Basic Test Execution</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#coverage-reporting">Coverage Reporting</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#async-test-execution">Async Test Execution</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#best-practices">Best Practices</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#test-design">Test Design</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fixture-design">Fixture Design</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#documentation">Documentation</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#continuous-improvement">Continuous Improvement</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="vagrantboxcreation.html">Create your own Adare Box</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ADARE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Advanced</a></li>
+      <li class="breadcrumb-item active">Testing Architecture</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/advanced/testing_architecture.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="testing-architecture">
+<h1>Testing Architecture<a class="headerlink" href="#testing-architecture" title="Link to this heading"></a></h1>
+<p>ADARE follows a comprehensive testing strategy that ensures all implemented methods and classes have meaningful test coverage, as mandated by the project’s testing guidelines.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The testing architecture is designed to provide:</p>
+<ul class="simple">
+<li><p><strong>100% Coverage Requirement</strong>: All implemented methods and classes must have meaningful tests</p></li>
+<li><p><strong>Layered Testing Strategy</strong>: Unit tests, integration tests, and end-to-end tests</p></li>
+<li><p><strong>Mock-Based Testing</strong>: Extensive use of mocks for external dependencies</p></li>
+<li><p><strong>Async Testing Support</strong>: Full support for testing async/await patterns</p></li>
+<li><p><strong>Database Testing</strong>: Isolated database testing with temporary databases</p></li>
+</ul>
+</section>
+<section id="testing-guidelines">
+<h2>Testing Guidelines<a class="headerlink" href="#testing-guidelines" title="Link to this heading"></a></h2>
+<section id="core-principles">
+<h3>Core Principles<a class="headerlink" href="#core-principles" title="Link to this heading"></a></h3>
+<p>According to CLAUDE.md testing requirements:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&quot;for all implemented methods and classes build also meaningful tests&quot;
+</pre></div>
+</div>
+<p>This means:</p>
+<ul class="simple">
+<li><p>Every public method must have at least one test</p></li>
+<li><p>Every class must have tests for its core functionality</p></li>
+<li><p>Critical business logic must have comprehensive test coverage</p></li>
+<li><p>Error handling and edge cases must be tested</p></li>
+<li><p>External dependencies must be mocked appropriately</p></li>
+</ul>
+</section>
+</section>
+<section id="test-organization">
+<h2>Test Organization<a class="headerlink" href="#test-organization" title="Link to this heading"></a></h2>
+<section id="directory-structure">
+<h3>Directory Structure<a class="headerlink" href="#directory-structure" title="Link to this heading"></a></h3>
+<p>Tests are organized in the <code class="docutils literal notranslate"><span class="pre">adare/tests/</span></code> directory following this structure:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>adare/tests/
+├── test_backend_experiment_commands.py     # Backend experiment operations
+├── test_backend_experiment_runner.py       # Modern async experiment runner
+├── test_cli_experiment.py                  # CLI experiment commands
+├── test_database_api_experiment.py         # Database API operations
+├── test_database_models_experiment.py      # Database model tests
+├── test_show_commands.py                   # Show/list command tests
+├── test_websocket_action_controller.py     # WebSocket functionality
+├── test_yaml_*.py                          # YAML processing tests
+└── ...
+</pre></div>
+</div>
+</section>
+<section id="naming-convention">
+<h3>Naming Convention<a class="headerlink" href="#naming-convention" title="Link to this heading"></a></h3>
+<p>Test files follow the naming pattern: <code class="docutils literal notranslate"><span class="pre">test_&lt;module_path&gt;.py</span></code></p>
+<p>Examples:
+- <code class="docutils literal notranslate"><span class="pre">adare/backend/experiment/commands.py</span></code> → <code class="docutils literal notranslate"><span class="pre">test_backend_experiment_commands.py</span></code>
+- <code class="docutils literal notranslate"><span class="pre">adare/cli/experiment.py</span></code> → <code class="docutils literal notranslate"><span class="pre">test_cli_experiment.py</span></code>
+- <code class="docutils literal notranslate"><span class="pre">adare/database/api/experiment.py</span></code> → <code class="docutils literal notranslate"><span class="pre">test_database_api_experiment.py</span></code></p>
+</section>
+</section>
+<section id="testing-categories">
+<h2>Testing Categories<a class="headerlink" href="#testing-categories" title="Link to this heading"></a></h2>
+<section id="unit-tests">
+<h3>Unit Tests<a class="headerlink" href="#unit-tests" title="Link to this heading"></a></h3>
+<p>Test individual functions and methods in isolation:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">test_experiment_creation</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test basic experiment creation functionality.&quot;&quot;&quot;</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">ExperimentConfig</span><span class="p">(</span>
+        <span class="n">project_path</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/test/project&quot;</span><span class="p">),</span>
+        <span class="n">experiment_name</span><span class="o">=</span><span class="s2">&quot;test_experiment&quot;</span><span class="p">,</span>
+        <span class="n">environment_name</span><span class="o">=</span><span class="s2">&quot;test_environment&quot;</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="n">config</span><span class="o">.</span><span class="n">experiment_name</span> <span class="o">==</span> <span class="s2">&quot;test_experiment&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="integration-tests">
+<h3>Integration Tests<a class="headerlink" href="#integration-tests" title="Link to this heading"></a></h3>
+<p>Test interactions between components:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;adare.backend.experiment.commands.experiment_database&#39;</span><span class="p">)</span>
+<span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;adare.backend.experiment.commands.environment_database&#39;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_experiment_run_integration</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_env_db</span><span class="p">,</span> <span class="n">mock_exp_db</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test complete experiment run workflow.&quot;&quot;&quot;</span>
+    <span class="c1"># Setup mocks and test full workflow</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+</section>
+<section id="async-tests">
+<h3>Async Tests<a class="headerlink" href="#async-tests" title="Link to this heading"></a></h3>
+<p>Test async/await functionality:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">asyncio</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">test_async_experiment_execution</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test async experiment execution patterns.&quot;&quot;&quot;</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_experiment</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</pre></div>
+</div>
+</section>
+<section id="database-tests">
+<h3>Database Tests<a class="headerlink" href="#database-tests" title="Link to this heading"></a></h3>
+<p>Test database operations with temporary databases:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">temp_db_path</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create temporary database for testing.&quot;&quot;&quot;</span>
+    <span class="n">temp_dir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">()</span>
+    <span class="n">db_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">temp_dir</span><span class="p">)</span> <span class="o">/</span> <span class="s2">&quot;test.db&quot;</span>
+    <span class="k">yield</span> <span class="n">db_path</span>
+    <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">temp_dir</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="mock-strategies">
+<h2>Mock Strategies<a class="headerlink" href="#mock-strategies" title="Link to this heading"></a></h2>
+<section id="external-dependencies">
+<h3>External Dependencies<a class="headerlink" href="#external-dependencies" title="Link to this heading"></a></h3>
+<p>All external dependencies are mocked to ensure isolated testing:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;adare.backend.experiment.commands.VirtualBoxVM&#39;</span><span class="p">)</span>
+<span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;adare.backend.experiment.commands.WebSocketClient&#39;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_vm_integration</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_ws_client</span><span class="p">,</span> <span class="n">mock_vm</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test VM integration with mocked dependencies.&quot;&quot;&quot;</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+</section>
+<section id="database-mocking">
+<h3>Database Mocking<a class="headerlink" href="#database-mocking" title="Link to this heading"></a></h3>
+<p>Database operations use temporary databases or mocks:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">experiment_api</span><span class="p">(</span><span class="n">temp_db_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create ExperimentApi with temporary database.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">ExperimentApi</span><span class="p">(</span><span class="n">temp_db_path</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="file-system-mocking">
+<h3>File System Mocking<a class="headerlink" href="#file-system-mocking" title="Link to this heading"></a></h3>
+<p>File system operations are mocked for predictable testing:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;adare.backend.experiment.commands.ExperimentDirectory&#39;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_experiment_directory_operations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_exp_dir</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test experiment directory operations.&quot;&quot;&quot;</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="error-testing">
+<h2>Error Testing<a class="headerlink" href="#error-testing" title="Link to this heading"></a></h2>
+<section id="exception-handling">
+<h3>Exception Handling<a class="headerlink" href="#exception-handling" title="Link to this heading"></a></h3>
+<p>All error conditions must be tested:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">test_experiment_not_found_error</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test handling when experiment is not found.&quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">ExperimentDirectoryDoesNotExistError</span><span class="p">):</span>
+        <span class="n">experiment_load</span><span class="p">(</span><span class="s2">&quot;nonexistent_experiment&quot;</span><span class="p">,</span> <span class="s2">&quot;test_project&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="logging-verification">
+<h3>Logging Verification<a class="headerlink" href="#logging-verification" title="Link to this heading"></a></h3>
+<p>Critical operations verify proper logging:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;adare.cli.experiment.log&#39;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_keyboard_interrupt_logging</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_log</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that keyboard interrupt is properly logged.&quot;&quot;&quot;</span>
+    <span class="c1"># Test keyboard interrupt handling</span>
+    <span class="n">mock_log</span><span class="o">.</span><span class="n">info</span><span class="o">.</span><span class="n">assert_called_with</span><span class="p">(</span><span class="s2">&quot;Keyboard interrupt received, shutting down gracefully...&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="test-coverage-status">
+<h2>Test Coverage Status<a class="headerlink" href="#test-coverage-status" title="Link to this heading"></a></h2>
+<section id="current-coverage">
+<h3>Current Coverage<a class="headerlink" href="#current-coverage" title="Link to this heading"></a></h3>
+<p>As of the latest audit:</p>
+<ul class="simple">
+<li><p><strong>Total Modules</strong>: ~150+ Python files</p></li>
+<li><p><strong>Modules with Tests</strong>: ~20 files</p></li>
+<li><p><strong>Test Coverage</strong>: ~15% of critical business logic modules</p></li>
+</ul>
+</section>
+<section id="priority-areas">
+<h3>Priority Areas<a class="headerlink" href="#priority-areas" title="Link to this heading"></a></h3>
+<p><strong>High Priority (Missing Tests)</strong>:</p>
+<ol class="arabic simple">
+<li><p>Backend command modules</p></li>
+<li><p>CLI interface modules</p></li>
+<li><p>Database API modules</p></li>
+<li><p>Core type definitions</p></li>
+</ol>
+<p><strong>Medium Priority</strong>:</p>
+<ol class="arabic simple">
+<li><p>Helper function modules</p></li>
+<li><p>Configuration modules</p></li>
+<li><p>Directory management</p></li>
+</ol>
+<p><strong>Low Priority</strong>:</p>
+<ol class="arabic simple">
+<li><p>Frontend/UI components</p></li>
+<li><p>Integration modules</p></li>
+<li><p>Utility functions</p></li>
+</ol>
+</section>
+</section>
+<section id="running-tests">
+<h2>Running Tests<a class="headerlink" href="#running-tests" title="Link to this heading"></a></h2>
+<section id="basic-test-execution">
+<h3>Basic Test Execution<a class="headerlink" href="#basic-test-execution" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run all tests</span>
+poetry<span class="w"> </span>run<span class="w"> </span>pytest
+
+<span class="c1"># Run specific test file</span>
+poetry<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>adare/tests/test_backend_experiment_commands.py
+
+<span class="c1"># Run with verbose output</span>
+poetry<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-v
+
+<span class="c1"># Run tests matching pattern</span>
+poetry<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-k<span class="w"> </span><span class="s2">&quot;experiment&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="coverage-reporting">
+<h3>Coverage Reporting<a class="headerlink" href="#coverage-reporting" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run tests with coverage</span>
+poetry<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--cov<span class="o">=</span>adare
+
+<span class="c1"># Generate HTML coverage report</span>
+poetry<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--cov<span class="o">=</span>adare<span class="w"> </span>--cov-report<span class="o">=</span>html
+</pre></div>
+</div>
+</section>
+<section id="async-test-execution">
+<h3>Async Test Execution<a class="headerlink" href="#async-test-execution" title="Link to this heading"></a></h3>
+<p>Async tests use the <code class="docutils literal notranslate"><span class="pre">pytest-asyncio</span></code> plugin:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run async tests specifically</span>
+poetry<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span>asyncio
+</pre></div>
+</div>
+</section>
+</section>
+<section id="best-practices">
+<h2>Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading"></a></h2>
+<section id="test-design">
+<h3>Test Design<a class="headerlink" href="#test-design" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Arrange-Act-Assert Pattern</strong>: Structure tests clearly</p></li>
+<li><p><strong>Single Responsibility</strong>: Each test should test one thing</p></li>
+<li><p><strong>Descriptive Names</strong>: Test names should describe what they test</p></li>
+<li><p><strong>Mock External Dependencies</strong>: Never rely on external systems</p></li>
+<li><p><strong>Test Error Conditions</strong>: Always test failure scenarios</p></li>
+</ol>
+</section>
+<section id="fixture-design">
+<h3>Fixture Design<a class="headerlink" href="#fixture-design" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Reusable Fixtures</strong>: Create fixtures for common test data</p></li>
+<li><p><strong>Scoped Appropriately</strong>: Use correct fixture scope (function, class, module)</p></li>
+<li><p><strong>Clean Isolation</strong>: Each test should be independent</p></li>
+</ol>
+</section>
+<section id="documentation">
+<h3>Documentation<a class="headerlink" href="#documentation" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Docstrings Required</strong>: All test modules need descriptive docstrings</p></li>
+<li><p><strong>Test Purpose Clear</strong>: Each test should have clear documentation</p></li>
+<li><p><strong>Setup Instructions</strong>: Complex tests need setup documentation</p></li>
+</ol>
+</section>
+</section>
+<section id="continuous-improvement">
+<h2>Continuous Improvement<a class="headerlink" href="#continuous-improvement" title="Link to this heading"></a></h2>
+<p>The testing architecture is continuously improved through:</p>
+<ol class="arabic simple">
+<li><p><strong>Regular Coverage Audits</strong>: Identifying gaps in test coverage</p></li>
+<li><p><strong>Refactoring Tests</strong>: Improving test maintainability</p></li>
+<li><p><strong>Adding Integration Tests</strong>: Expanding beyond unit tests</p></li>
+<li><p><strong>Performance Testing</strong>: Adding performance regression tests</p></li>
+</ol>
+<p>This testing architecture ensures the reliability and maintainability of the ADARE framework while supporting rapid development and confident refactoring.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="actionfile_methods.html" class="btn btn-neutral float-left" title="Action File Methods" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="vagrantboxcreation.html" class="btn btn-neutral float-right" title="Create your own Adare Box" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

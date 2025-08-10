@@ -9,4 +9,5 @@ Advanced
 
    testfunction
    actionfile_methods
+   testing_architecture
    vagrantboxcreation

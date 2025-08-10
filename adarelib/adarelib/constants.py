@@ -13,8 +13,6 @@ class StatusEnum(IntEnum):
     PENDING = 7
     INTERRUPTED = 8
     FINISHED = 9
-    BREAKPOINT_HIT = 10
-    BREAKPOINT_RESOLVED = 11
     TEST_MISSING = 12
     TEST_FAILED = 13
 
@@ -37,10 +35,6 @@ class StatusEnum(IntEnum):
             return StatusEnum.INTERRUPTED
         elif status_string == 'finished':
             return StatusEnum.FINISHED
-        elif status_string == 'breakpoint_hit':
-            return StatusEnum.BREAKPOINT_HIT
-        elif status_string == 'breakpoint_resolved':
-            return StatusEnum.BREAKPOINT_RESOLVED
         elif status_string == 'test_missing':
             return StatusEnum.TEST_MISSING
         elif status_string == 'test_failed':
@@ -67,10 +61,6 @@ class StatusEnum(IntEnum):
             icon = ':arrow_forward:'
         elif value == StatusEnum.PENDING:
             icon = ':hourglass:'
-        elif value == StatusEnum.BREAKPOINT_HIT:
-            icon = ':stop_sign:'
-        elif value == StatusEnum.BREAKPOINT_RESOLVED:
-            icon = ':checkered_flag:'
         elif value == StatusEnum.TEST_MISSING:
             icon = ':black_medium_square:'
         elif value == StatusEnum.TEST_FAILED:
@@ -96,10 +86,6 @@ class StatusEnum(IntEnum):
             return 'blue'
         elif value == StatusEnum.PENDING:
             return 'yellow'
-        elif value == StatusEnum.BREAKPOINT_HIT:
-            return 'red'
-        elif value == StatusEnum.BREAKPOINT_RESOLVED:
-            return 'green'
         elif value == StatusEnum.TEST_MISSING:
             return 'blue'
         elif value == StatusEnum.TEST_FAILED:

@@ -242,35 +242,3 @@ def get_visible_windows():
               f"Non-visible areas: {window.non_visible_areas}")
     return filtered_windows
 
-# def screenshot_and_mark_nonvisible(window: Window):
-#     # Take a screenshot of the window area (already uses window.rect, which includes shadow)
-#     screenshot = pyautogui.screenshot(region=window.rect)
-#     draw = ImageDraw.Draw(screenshot)
-#     # Draw red rectangles over non-visible areas
-#     for area in window.non_visible_areas:
-#         ax, ay, aw, ah = area
-#         # Adjust coordinates relative to the window.rect (not window.x/y)
-#         rel_x = ax - window.rect[0]
-#         rel_y = ay - window.rect[1]
-#         draw.rectangle([rel_x, rel_y, rel_x + aw, rel_y + ah], outline="red", width=3)
-#     screenshot.save(f"window_{window.id}_marked.png")
-#     print(f"Saved screenshot: window_{window.id}_marked.png")
-
-# def screenshot_fullscreen_and_mark_windows(windows: list[Window]):
-#     # Take a screenshot of the entire screen
-#     screenshot = pyautogui.screenshot()
-#     draw = ImageDraw.Draw(screenshot)
-#     for window in windows:
-#         x, y, w, h = window.rect
-#         # Draw a green rectangle around the visible window area
-#         draw.rectangle([x, y, x + w, y + h], outline="green", width=3)
-#     screenshot.save("all_windows_marked.png")
-#     print("Saved screenshot: all_windows_marked.png")
-
-
-# if __name__ == "__main__":
-#     windows = get_visible_windows()
-#     for window in windows:
-#         screenshot_and_mark_nonvisible(window)
-#     # Screenshot of the whole screen with all windows marked
-#     screenshot_fullscreen_and_mark_windows(windows)

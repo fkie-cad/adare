@@ -8,6 +8,7 @@ Moved from adare.types.backend to consolidate application-specific types.
 """
 
 # external imports
+from abc import abstractmethod
 from typing import Union, Literal, Optional
 import attrs
 
@@ -71,9 +72,11 @@ class Share:
     """
     name: str
 
+    @abstractmethod
     def get_fstab_entry(self, ip: str) -> str:
         pass
 
+    @abstractmethod
     def get_windows_mount_command(self, ip: str) -> str:
         pass
 

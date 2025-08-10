@@ -2,6 +2,15 @@
 Structure and Concepts
 **********************
 
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: Contents:
+
+   module_structure
+   actionsetfile
+   testsetfile
+
 The ADARE framework consists of several components, whose terms are frequently used in the documentation.
 This section aims to provide a concise overview of the framework's structure and its associated terminology.
 

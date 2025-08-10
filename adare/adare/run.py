@@ -227,7 +227,7 @@ def load(experiment, environment, force, project):
 @click.option('-e', '--environment', required=True, help='Name of the environment')
 @click.option('--test', '-t', is_flag=True, help='Run the experiment in test mode - delete results afterwards and do not block changes')
 @click.option('--debug-screenshots', is_flag=True, help='Save screenshots to experiment run directory for debugging')
-@click.option('--preserve-snapshot', is_flag=True, help='Create experiment snapshot for preservation (default: only reset to base snapshot)')
+@click.option('--preserve-snapshot', '-s', is_flag=True, help='Create experiment snapshot for preservation (default: only reset to base snapshot)')
 @click.option('--project', '-p', help='Name of the project')
 @click.pass_context
 def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot, project):
