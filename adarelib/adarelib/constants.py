@@ -72,7 +72,7 @@ class StatusEnum(IntEnum):
         elif value == StatusEnum.BREAKPOINT_RESOLVED:
             icon = ':checkered_flag:'
         elif value == StatusEnum.TEST_MISSING:
-            icon = ':question:'
+            icon = ':black_medium_square:'
         elif value == StatusEnum.TEST_FAILED:
             icon = ':no_entry_sign:'
         from rich.text import Text
