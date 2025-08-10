@@ -37,6 +37,35 @@ async def exec_vm_delete(arguments):
         print_vm_delete_failure(arguments.vm_id, str(e))
 
 
+def exec_vm_delete_snapshot(arguments):
+    """Delete a single snapshot from a specific VM."""
+    from adare.backend.vm.snapshot_manager import SnapshotManager
+    from adare.database.api.vm import VmApi
+    
+    try:
+        # Get VM record from database
+        with VmApi() as api:
+            vm_record = api.get_vm_by_id(arguments.vm_id)
+            if not vm_record:
+                log.error(f"VM with ID '{arguments.vm_id}' not found")
+                return
+        
+        # Initialize snapshot manager
+        snapshot_manager = SnapshotManager()
+        
+        # Delete the snapshot
+        success, msg = snapshot_manager._delete_snapshot(vm_record, arguments.snapshot_name)
+        
+        if success:
+            print(f"Successfully deleted snapshot '{arguments.snapshot_name}' from VM '{vm_record.name}'")
+        else:
+            print(f"Failed to delete snapshot '{arguments.snapshot_name}' from VM '{vm_record.name}'\nReason: {msg}")
+            
+    except Exception as e:
+        log.error(f"Error deleting snapshot '{arguments.snapshot_name}' from VM '{arguments.vm_id}': {e}")
+        print(f"Error: {str(e)}")
+
+
 def exec_vm_clear_all(arguments):
     """Clear all VMs from the system."""
     from adare.backend.vm.commands import clear_all_vms

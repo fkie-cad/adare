@@ -381,7 +381,7 @@ class ShutdownWebSocketStage(Stage):
 @attrs.define
 class VMSnapshotRestoreStage(Stage):
     name: ClassVar[str] = 'vm_snapshot_restore'
-    msg: ClassVar[str] = 'Restoring VM from snapshot'
+    msg: ClassVar[str] = 'Resetting VM to base snapshot'
     description: ClassVar[str] = 'Fast restore from base snapshot for quick setup'
     parent: ClassVar[str] = 'vm_setup'
 

@@ -30,7 +30,7 @@ from adare.cli.testfunction import (
     exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 )
 from adare.cli.vm import (
-    exec_vm_list, exec_vm_info, exec_vm_delete, exec_vm_clear_all, exec_vm_clear_by_environment
+    exec_vm_list, exec_vm_info, exec_vm_delete, exec_vm_delete_snapshot, exec_vm_clear_all, exec_vm_clear_by_environment
 )
 from adare.setup_logging import setup_logging
 from adare.exceptions import LoggedException, LoggedErrorException
@@ -315,6 +315,14 @@ def delete(vm_id, force):
     """Delete a specific VM."""
     args = SimpleNamespace(vm_id=vm_id, force=force)
     exec_with_error_printing(exec_vm_delete, args)
+
+@vm.command(name='delete-snapshot')
+@click.argument('vm_id')
+@click.argument('snapshot_name')
+def delete_snapshot(vm_id, snapshot_name):
+    """Delete a single snapshot from a specific VM."""
+    args = SimpleNamespace(vm_id=vm_id, snapshot_name=snapshot_name)
+    exec_with_error_printing(exec_vm_delete_snapshot, args)
 
 # Nested group for VM cleanup commands
 @vm.group()
