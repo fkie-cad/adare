@@ -172,9 +172,10 @@ class ExperimentRunFlowConsoleWidget(VerticalGroup):
     def log_spinner_done(
             self,
             identifier: str,
-            status: str,
+            status: int,
             message: str = None,
-            result_status: str = None
+            result_status: int = None,
+            duration: float = None
     ) -> None:
         if identifier in self.messages:
             updated = self.messages[identifier]
@@ -184,6 +185,8 @@ class ExperimentRunFlowConsoleWidget(VerticalGroup):
             updated["result_status"] = result_status
             if message:
                 updated["message"] = message
+            if duration is not None:
+                updated["duration"] = duration
             self.messages[identifier] = updated
             self.refresh(layout=True, recompose=True)
 

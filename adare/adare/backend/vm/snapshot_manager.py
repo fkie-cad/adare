@@ -20,10 +20,6 @@ from adare.database.models.experiment import VmSnapshot
 log = logging.getLogger(__name__)
 
 
-# ==========================================
-# PHASE 3: SNAPSHOT MANAGEMENT SYSTEM
-# ==========================================
-
 class SnapshotManager:
     """
     High-level manager for VM snapshots enabling fast experiment setup.
@@ -235,43 +231,43 @@ class SnapshotManager:
             log.debug(f"Error checking base snapshot for VM '{vm_record.name}': {e}")
             return False
     
-    def cleanup_experiment_snapshots(self, vm_record, keep_recent: int = 5, 
-                                   older_than_days: int = 7) -> int:
-        """
-        Clean up old experiment snapshots to save space.
+    # def cleanup_experiment_snapshots(self, vm_record, keep_recent: int = 5, 
+    #                                older_than_days: int = 7) -> int:
+    #     """
+    #     Clean up old experiment snapshots to save space.
         
-        Args:
-            vm_record: VM database record
-            keep_recent: Number of recent snapshots to keep
-            older_than_days: Delete snapshots older than this many days
+    #     Args:
+    #         vm_record: VM database record
+    #         keep_recent: Number of recent snapshots to keep
+    #         older_than_days: Delete snapshots older than this many days
             
-        Returns:
-            Number of snapshots deleted
-        """
-        if not vm_record.vbox_uuid:
-            return 0
+    #     Returns:
+    #         Number of snapshots deleted
+    #     """
+    #     if not vm_record.vbox_uuid:
+    #         return 0
         
-        # Get experiment snapshots from database
-        with VmApi() as api:
-            # This would need a new method to get snapshots by VM and type
-            experiment_snapshots = self._get_experiment_snapshots_for_vm(vm_record.id)
+    #     # Get experiment snapshots from database
+    #     with VmApi() as api:
+    #         # This would need a new method to get snapshots by VM and type
+    #         experiment_snapshots = self._get_experiment_snapshots_for_vm(vm_record.id)
         
-        deleted_count = 0
-        cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
+    #     deleted_count = 0
+    #     cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
         
-        # Sort by creation date (newest first)
-        experiment_snapshots.sort(key=lambda s: s.created_at, reverse=True)
+    #     # Sort by creation date (newest first)
+    #     experiment_snapshots.sort(key=lambda s: s.created_at, reverse=True)
         
-        # Skip the most recent ones
-        snapshots_to_check = experiment_snapshots[keep_recent:]
+    #     # Skip the most recent ones
+    #     snapshots_to_check = experiment_snapshots[keep_recent:]
         
-        for snapshot in snapshots_to_check:
-            if snapshot.created_at < cutoff_date:
-                if self._delete_snapshot(vm_record, snapshot.snapshot_name):
-                    deleted_count += 1
+    #     for snapshot in snapshots_to_check:
+    #         if snapshot.created_at < cutoff_date:
+    #             if self._delete_snapshot(vm_record, snapshot.snapshot_name):
+    #                 deleted_count += 1
         
-        log.info(f"Cleaned up {deleted_count} old experiment snapshots for VM '{vm_record.name}'")
-        return deleted_count
+    #     log.info(f"Cleaned up {deleted_count} old experiment snapshots for VM '{vm_record.name}'")
+    #     return deleted_count
     
     def get_snapshot_info(self, vm_record) -> dict:
         """
@@ -333,17 +329,18 @@ class SnapshotManager:
         with VmApi() as api:
             return api.get_snapshots_for_vm(vm_id, snapshot_type="experiment")
     
-    def _delete_snapshot(self, vm_record, snapshot_name: str) -> bool:
+    def _delete_snapshot(self, vm_record, snapshot_name: str) -> tuple[bool, str]:
         """Delete a snapshot from VirtualBox and database."""
+        log.info(f"Deleting snapshot '{snapshot_name}' for VM '{vm_record.name}'")
         if not vm_record.vbox_uuid:
             log.warning(f"VM '{vm_record.name}' has no VirtualBox UUID - cannot delete snapshot")
-            return False
+            return False, "VM UUID not found"
         
         # Get VirtualBox VM instance
         vm_name = self._get_vm_name_by_uuid(vm_record.vbox_uuid)
         if not vm_name:
             log.warning(f"VM with UUID {vm_record.vbox_uuid} not found in VirtualBox")
-            return False
+            return False, "VM not found in VirtualBox"
         
         vbox_vm = VirtualBoxVM(
             vm_name=vm_name,
@@ -355,7 +352,7 @@ class SnapshotManager:
             # First check if snapshot exists
             if not vbox_vm.snapshot_exists(snapshot_name):
                 log.info(f"Snapshot '{snapshot_name}' does not exist for VM '{vm_record.name}' - nothing to delete")
-                return True
+                return False, f"Snapshot '{snapshot_name}' does not exist"
             
             # Delete the snapshot from VirtualBox
             success = vbox_vm.delete_snapshot(snapshot_name, silent=False)
@@ -368,14 +365,14 @@ class SnapshotManager:
                     log.info(f"Deleted snapshot '{snapshot_name}' for VM '{vm_record.name}'")
                 except Exception as db_error:
                     log.warning(f"Snapshot deleted from VirtualBox but failed to remove from database: {db_error}")
-                return True
+                return True, "Snapshot deleted successfully"
             else:
                 log.error(f"Failed to delete snapshot '{snapshot_name}' for VM '{vm_record.name}'")
-                return False
+                return False, "Failed to delete snapshot from VirtualBox"
                 
         except Exception as e:
             log.error(f"Error deleting snapshot '{snapshot_name}' for VM '{vm_record.name}': {e}")
-            return False
+            return False, str(e)
 
 
 # Convenience functions for direct use

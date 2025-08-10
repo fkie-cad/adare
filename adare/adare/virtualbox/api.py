@@ -1522,7 +1522,7 @@ class VirtualBoxVM:
                     log_prefix=f"[{self.vm_name}] "
                 )
                 for line in result.stdout.splitlines():
-                    if line.startswith("SnapshotName="):
+                    if line.startswith("SnapshotName"):
                         name = line.split("=", 1)[1].strip().strip('"')
                         if name == snapshot_name:
                             log.info(f"Snapshot '{snapshot_name}' exists for VM '{self.vm_name}'.")
