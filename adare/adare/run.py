@@ -401,10 +401,10 @@ def run():
     pass
 
 @run.command(name='list')
-@click.option('--project', '-p', help='Name of the project')
-def list_runs(project):
-    """List all experiment runs."""
-    args = SimpleNamespace(project=project)
+@click.option('--filter', '-f', help='Filter by dotnotation: [project][.environment][.experiment]')
+def list_runs(filter):
+    """List all experiment runs. Use --filter with dotnotation for advanced filtering."""
+    args = SimpleNamespace(filter=filter)
     exec_with_error_printing(exec_show_runs, args)
 
 @run.command()

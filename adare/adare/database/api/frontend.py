@@ -303,7 +303,7 @@ class DataRetrievalApi(DatabaseApi):
         data = data.drop(columns=['object_run', 'object_environment'])
         return data
 
-    def get_runs(self, experiment_ulid: str = None, project_name: str = None, environment_name: str = None) -> pd.DataFrame:
+    def get_runs(self, experiment_ulid: str = None, project_name: str = None, environment_name: str = None, experiment_name: str = None) -> pd.DataFrame:
         if experiment_ulid:
             return self.get_experiment_runs(experiment_ulid)
 
@@ -319,6 +319,9 @@ class DataRetrievalApi(DatabaseApi):
             
         if environment_name:
             query = query.filter(ExperimentRun.experiment.has(Experiment.environments.any(Environment.name == environment_name)))
+
+        if experiment_name:
+            query = query.filter(ExperimentRun.experiment.has(Experiment.name == experiment_name))
 
         # execute query and return result as pandas dataframe excluding the id column
         data = pd.read_sql(query.statement, self._session.bind).map(str)
