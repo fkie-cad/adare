@@ -147,6 +147,34 @@ class DataRetrievalApi(DatabaseApi):
         else:
             raise ArgumentsError(log, 'Either ulid or project_name and environment_name must be provided')
         return environment_df
+    
+    def get_environment_by_dotnotation(self, dotnotation: str, current_project_name: str = None) -> pd.DataFrame:
+        """Get environment by its dotnotation."""
+        dotparts = dotnotation.split('.')
+        
+        if len(dotparts) == 1:
+            # Only environment name provided, use current project
+            if not current_project_name:
+                from adare.backend.basics import determine_projectdirectory
+                from adare.exceptions import NoProjectFoundError
+                if project_path := determine_projectdirectory(None):
+                    current_project_name = project_path.name
+                else:
+                    raise NoProjectFoundError(log, message='No project directory found. Either provide full dotnotation (project.environment) or run from a project directory')
+            project_name, environment_name = current_project_name, dotparts[0]
+        elif len(dotparts) == 2:
+            # Full dotnotation provided
+            project_name, environment_name = dotparts
+        else:
+            raise ArgumentsError(log, f'Invalid dotnotation "{dotnotation}". Expected format: environment_name or project_name.environment_name')
+            
+        self.__check_environment_exists_by_projenv(project_name, environment_name)
+        environment_df = pd.read_sql(self._session.query(Environment).filter(
+            Environment.name == environment_name).filter(
+            Environment.project.has(Project.name == project_name)).statement, self._session.bind)
+        environment_df = environment_df.map(str)
+        environment_df = self.__enrich_environment_data(environment_df)
+        return environment_df
 
     def __enrich_experiment_data(self, data: pd.DataFrame) -> pd.DataFrame:
         data['object'] = [self._session.query(Experiment).filter_by(id=id).one() for id in data['id']]
@@ -190,6 +218,28 @@ class DataRetrievalApi(DatabaseApi):
         else:
             raise ArgumentsError(log, 'Either ulid or project_name, environment_name and experiment_name must be provided')
         return experiment_df
+
+    def get_experiment_by_dotnotation(self, dotnotation: str, current_project_name: str = None) -> pd.DataFrame:
+        """Get experiment by its dotnotation."""
+        dotparts = dotnotation.split('.')
+        
+        if len(dotparts) == 2:
+            # Only environment.experiment provided, use current project
+            if not current_project_name:
+                from adare.backend.basics import determine_projectdirectory
+                from adare.exceptions import NoProjectFoundError
+                if project_path := determine_projectdirectory(None):
+                    current_project_name = project_path.name
+                else:
+                    raise NoProjectFoundError(log, message='No project directory found. Either provide full dotnotation (project.environment.experiment) or run from a project directory')
+            project_name, environment_name, experiment_name = current_project_name, dotparts[0], dotparts[1]
+        elif len(dotparts) == 3:
+            # Full dotnotation provided
+            project_name, environment_name, experiment_name = dotparts
+        else:
+            raise ArgumentsError(log, f'Invalid dotnotation "{dotnotation}". Expected format: environment_name.experiment_name or project_name.environment_name.experiment_name')
+            
+        return self.get_experiment(project_name, environment_name, experiment_name)
 
     def get_experiment_details_by_ulid(self, experiment_ulid: str):
         self.__check_experiment_exists_by_ulid(experiment_ulid)

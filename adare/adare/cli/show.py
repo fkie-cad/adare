@@ -37,7 +37,7 @@ def exec_show_testfunction(arguments):
 
 def exec_show_experiment(arguments):
     from adare.frontend.terminal.experiment import print_experiment
-    print_experiment(arguments.project_name, arguments.environment_name, arguments.experiment_name, arguments.ulid)
+    print_experiment(dotnotation=arguments.dotnotation, ulid=arguments.ulid)
 
 
 def exec_show_experiments(arguments):
@@ -57,6 +57,6 @@ def exec_show_environments(arguments):
 
 def exec_show_environment(arguments):
     from adare.frontend.terminal.environment import print_environment
-    print_environment(arguments.environment_name, arguments.project_name, arguments.ulid)
+    print_environment(arguments.dotnotation)
 
 

@@ -5,17 +5,11 @@ from rich.layout import Layout
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.rule import Rule, ConsoleOptions, RenderResult, cell_len, set_cell_size, Measurement
-from rich.text import Text
-import numpy as np
+from rich.rule import Rule
 
 # internal imports
-from adare.helperfunctions.cli import print_df, print_dict
 from adare.database.api.frontend import DataRetrievalApi
-from adare.exceptions import ArgumentsError
-from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, timedelta_to_str, TagsText
-from adare.config import TIMESTAMP_FORMAT, StatusEnum
-from adare.frontend.terminal.console import TwoTitleRule
+from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, TagsText
 
 import logging
 log = logging.getLogger(__name__)
@@ -103,10 +97,19 @@ class ExperimentPanel:
         return Panel(layout, title=title, border_style="blue", title_align="left")
 
 
-def print_experiment(project_name: str = None, environment_name: str = None, experiment_name: str = None, ulid: str = None):
+def print_experiment(dotnotation: str = None, ulid: str = None, project_name: str = None, environment_name: str = None, experiment_name: str = None):
     with DataRetrievalApi() as db:
         console = DefaultConsole()
-        experiment = db.get_experiment(project_name, environment_name, experiment_name, ulid)
+        if dotnotation:
+            experiment = db.get_experiment_by_dotnotation(dotnotation)
+        elif ulid:
+            experiment = db.get_experiment(ulid=ulid)
+        elif project_name and environment_name and experiment_name:
+            experiment = db.get_experiment(project_name, environment_name, experiment_name)
+        else:
+            from adare.exceptions import ArgumentsError
+            raise ArgumentsError(log, 'Either dotnotation, ulid, or project_name/environment_name/experiment_name must be provided')
+        
         ulid = experiment['ulid'].values[0]
         abstract_tests = db.get_abstract_tests(ulid)
         layout = Layout(name="root")

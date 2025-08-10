@@ -35,3 +35,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] unclear if flow shows fails -> test
 - [ ] with preserve snapshot we do snapshot before the run not after (also for run do it after even after fail!)
 - [ ] update tui
+
+
+#### Test
+- [ ] all frontend terminal commands

@@ -27,10 +27,7 @@ class RunListPanel:
         table.add_column("tests status", justify="left", style="cyan", no_wrap=True)
         table.add_column("duration", justify="left", style="cyan", no_wrap=True)
 
-        for x in self.runs.iterrows():
-            print(x)
-
-        for index, row in self.runs.iterrows():
+        for _, row in self.runs.iterrows():
             table.add_row(
                 row['id'],
                 row['experiment_dotnotation'],
