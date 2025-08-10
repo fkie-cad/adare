@@ -166,17 +166,19 @@ class ExperimentApi(ProjectDbApi):
         return logfile
 
     def update_experiment_run(
-            self, run_ulid: str, experiment: Experiment, environment: Environment, path: Path,
+            self, run_ulid: str, path: Path,
             logfile_vagrant: Path, logfile_adarevm: Path, status: int
     ) -> ExperimentRun:
+        """
+        Update experiment run with VM-specific data (path, logfiles, status).
+        The experiment and environment should already be set via set_experiment_run_base_info().
+        """
         experiment_run_files = ExperimentRunFiles(
             log_vagrant=self.__create_logfile(logfile_vagrant),
             log_adarevm=self.__create_logfile(logfile_adarevm),
         )
         self._session.add(experiment_run_files)
         experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == run_ulid).first()
-        experiment_run.environment = environment
-        experiment_run.experiment = experiment
         experiment_run.path = path.as_posix()
         experiment_run.files = experiment_run_files
         experiment_run.status = status
@@ -187,6 +189,18 @@ class ExperimentApi(ProjectDbApi):
         experiment_run = ExperimentRun(fake=fake)
         self._session.add(experiment_run)
         self._session.commit()
+        return experiment_run
+
+    def set_experiment_run_base_info(self, run_ulid: str, experiment: Experiment, environment: Environment) -> ExperimentRun:
+        """
+        Set the basic experiment and environment information early in the process.
+        This prevents orphaned experiment runs if the process is interrupted early.
+        """
+        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == run_ulid).first()
+        if experiment_run:
+            experiment_run.experiment = experiment
+            experiment_run.environment = environment
+            self._session.commit()
         return experiment_run
 
     def update_experiment_run_start(self, experiment_run_ulid: str, timestamp: datetime):

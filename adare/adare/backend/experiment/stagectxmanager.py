@@ -55,12 +55,16 @@ class StageCtxManager(contextlib.AbstractContextManager):
 
     def __exit__(self, exc_type, exc_value, traceback):
         # Handle different exit conditions based on priority:
-        # 1. If an exception occurred, mark as failed/error
-        # 2. If user interrupted (event set), mark as interrupted  
+        # 1. If user interrupted (event set), mark as interrupted (takes priority over exceptions)
+        # 2. If an exception occurred, mark as failed/error
         # 3. Otherwise, let the stage complete with its current status
         
-        if exc_type is not None:
-            # An exception occurred during stage execution
+        if self.event and self.event.is_set() and self.stage.status != StatusEnum.SUCCESS:
+            # User interrupted and stage hasn't already completed successfully
+            # This takes priority over exceptions since interrupts can cause CancelledError
+            self.stage.status = StatusEnum.INTERRUPTED
+        elif exc_type is not None:
+            # An exception occurred during stage execution (only if not interrupted)
             from adare.exceptions import LoggedErrorException
             if issubclass(exc_type, LoggedErrorException):
                 # This is an expected experiment error (guest OS issues, etc.)
@@ -70,9 +74,6 @@ class StageCtxManager(contextlib.AbstractContextManager):
                 # This is an unexpected error (programming errors, etc.)
                 self.stage.status = StatusEnum.ERROR
                 log.debug(f"Stage '{self.stage.name}' errored due to unexpected exception: {exc_value}")
-        elif self.event and self.event.is_set() and self.stage.status != StatusEnum.SUCCESS:
-            # User interrupted and stage hasn't already completed successfully
-            self.stage.status = StatusEnum.INTERRUPTED
             
         self.stage.end()
         if self.experimentrun_ulid:

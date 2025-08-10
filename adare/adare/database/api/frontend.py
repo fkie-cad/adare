@@ -262,7 +262,11 @@ class DataRetrievalApi(DatabaseApi):
 
         query = self._session.query(ExperimentRun)
         if project_name:
-            query = query.filter(ExperimentRun.experiment.has(Experiment.environments.any(Environment.project.has(Project.name == project_name))))
+            # Get project ID first, then filter directly using environment relationship
+            project = self._session.query(Project).filter_by(name=project_name).first()
+            if project:
+                query = query.filter(ExperimentRun.experiment.has(Experiment.environments.any(Environment.project_id == project.id)))
+            
         if environment_name:
             query = query.filter(ExperimentRun.experiment.has(Experiment.environments.any(Environment.name == environment_name)))
 

@@ -217,14 +217,14 @@ def get_environment_vagrant_box(environment_ulid: str):
         return api.get_environment_vagrant_box(environment_ulid)
 
 
-def update_experiment_run(experiment_run_ulid: str, experiment_name: str, environment_name: str, project_name: str, experimentrun_directory: ExperimentRunDirectory) -> str:
+def update_experiment_run(experiment_run_ulid: str, experimentrun_directory: ExperimentRunDirectory) -> str:
+    """
+    Update experiment run with VM-specific data (path, logfiles, status).
+    The experiment and environment should already be set via set_experiment_run_base_info().
+    """
     with ExperimentApi() as api:
-        environment = api.get_environment(environment_name, project_name)
-        experiment = api.get_experiment(experiment_name, environment)
         experiment_run = api.update_experiment_run(
             run_ulid=experiment_run_ulid,
-            experiment=experiment,
-            environment=environment,
             path=experimentrun_directory.path,
             logfile_vagrant=experimentrun_directory.vagrant_log_file,
             logfile_adarevm=experimentrun_directory.adarevm_log_file,
@@ -236,6 +236,21 @@ def update_experiment_run(experiment_run_ulid: str, experiment_name: str, enviro
 def initialize_experiment_run(fake: bool = False):
     with ExperimentApi() as api:
         return api.initialize_experiment_run(fake).ulid
+
+def set_experiment_run_base_info(experiment_run_ulid: str, experiment_name: str, environment_name: str, project_name: str) -> str:
+    """
+    Set the basic experiment and environment information early in the process.
+    This prevents orphaned experiment runs if the process is interrupted early.
+    """
+    with ExperimentApi() as api:
+        environment = api.get_environment(environment_name, project_name)
+        experiment = api.get_experiment(experiment_name, environment)
+        experiment_run = api.set_experiment_run_base_info(
+            run_ulid=experiment_run_ulid,
+            experiment=experiment,
+            environment=environment
+        )
+        return experiment_run.ulid
 
 def remove_fake_experiment_run(experiment_run_ulid: str):
     with ExperimentApi() as api:

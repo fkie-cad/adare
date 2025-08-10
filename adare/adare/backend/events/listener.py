@@ -102,7 +102,7 @@ def _handle_stage_event(event, console, ulid):
             # Add interrupt indication for spinner updates
             if stage.status == StatusEnum.INTERRUPTED:
                 message = f"{message} (interrupted by user)"
-            if stage.result_status:
+            if stage.result_status and stage.result_status != StatusEnum.NONE:
                 console.log_spinner_done(identifier=stage_id, status=StatusEnum.FINISHED, message=message, result_status=stage.result_status, duration=stage_duration)
             else:
                 console.log_spinner_done(identifier=stage_id,  status=stage.status, message=message, duration=stage_duration)

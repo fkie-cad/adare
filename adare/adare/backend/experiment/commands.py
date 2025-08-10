@@ -370,6 +370,19 @@ def step_setup_directories(context: ExperimentRunCtx):
         context.experiment_directory = ExperimentDirectory(context.config.project_path, context.config.experiment_name)
         context.experiment_directory.check_for_missing_files()
         log.info(f'checked experiment directory {context.experiment_directory.path}')
+        
+        # Set experiment and environment info early to prevent orphaned runs on interruption
+        experiment_database.set_experiment_run_base_info(
+            context.experiment_run_ulid,
+            context.config.experiment_name,
+            context.config.environment_name,
+            context.config.project_path.name
+        )
+        log.info(f'set base experiment info for run {context.experiment_run_ulid}')
+        
+        # Set experiment start timestamp early to ensure it's persisted even if interrupted
+        experiment_database.update_experiment_run_start(context.experiment_run_ulid, context.timestamp_start)
+        log.info(f'set experiment start timestamp for run {context.experiment_run_ulid}')
 
 def step_validate_playbook(context: ExperimentRunCtx):
     """Load playbook from database (pre-validated, no file parsing needed)."""
@@ -546,12 +559,9 @@ async def step_create_virtualbox_machine(context: ExperimentRunCtx):
                 await context.vm.add_shared_folder(name, host_path=paths['host'], mountpoint=paths['vm'], stop_event=context.user_interrupt_event)
 
         if not context.stop_event.is_set():
-            # Update experiment run in database (could be a separate step if needed)
+            # Update experiment run with VM-specific data (experiment and environment already set earlier)
             context.experiment_run_ulid = experiment_database.update_experiment_run(
                 context.experiment_run_ulid,
-                context.config.experiment_name,
-                context.config.environment_name,
-                context.config.project_path.name,
                 context.experiment_run_directory
             )
 
@@ -567,7 +577,6 @@ async def step_create_virtualbox_machine(context: ExperimentRunCtx):
             )
             log.info(f'added port forwarding for websocket server on port {context.config.websocket_port}')
 
-        experiment_database.update_experiment_run_start(context.experiment_run_ulid, context.timestamp_start)
         context.timestamp_before_vm_start = datetime.now(timezone.utc)
 
 
@@ -1051,6 +1060,15 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             experiment_run_context.stop_event.set()
             log.info("finally: send stop events")
+        
+        # Update database status if user interrupted
+        if user_interrupt_event.is_set():
+            log.info("User interrupt detected - updating experiment run status to INTERRUPTED")
+            experiment_database.update_experiment_run_status(
+                experiment_run_context.experiment_run_ulid,
+                StatusEnum.INTERRUPTED,
+            )
+        
         try:
             log.info("Starting cleanup and shutdown...")
             # Wrap cleanup in proper stage context (don't pass interrupt event - we want to show actual cleanup work)

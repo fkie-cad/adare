@@ -329,7 +329,7 @@ def get_vm_by_uuid_from_db(vbox_uuid: str):
 # PHASE 4: OPTIMIZED EXPERIMENT WORKFLOW
 # ==========================================
 
-async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environment_ulid: str = None, cleanup_snapshots: bool = True, experiment_run_ulid: Optional[str] = None, preserve_experiment_snapshot: bool = False) -> str:
+async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environment_ulid: str = None, experiment_run_ulid: Optional[str] = None, preserve_experiment_snapshot: bool = False) -> str:
     """
     🚀 FAST VM preparation for experiment - only VirtualBox import and snapshots!
     
@@ -447,15 +447,6 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     else:
         log.info("⚡ Skipping experiment snapshot creation (use --preserve-snapshot to enable)")
     
-    # Cleanup old experiment snapshots if requested
-    if cleanup_snapshots:
-        log.info("🧹 Cleaning up old experiment snapshots...")
-        deleted_count = cleanup_experiment_snapshots_for_vm(vm.id, keep_recent=5)
-        if deleted_count > 0:
-            log.info(f"🗑️  Deleted {deleted_count} old snapshots")
-        else:
-            log.debug("No old snapshots to clean up")
-    
     # Update verification timestamp
     update_vm_status_in_db(vm.id, VMStatus.READY)
     
@@ -498,28 +489,6 @@ def _reimport_missing_vm(vm_record, vm_path: Path, project_path: Path,
     return vm
 
 
-def cleanup_experiment_snapshots_for_vm(vm_id: str, keep_recent: int = 5) -> int:
-    """
-    Clean up old experiment snapshots for a specific VM.
-    
-    Args:
-        vm_id: VM database ID
-        keep_recent: Number of recent snapshots to keep
-        
-    Returns:
-        Number of snapshots deleted
-    """
-    vm = vm_database.get_vm_by_id(vm_id)
-    if not vm:
-        log.warning(f"VM with ID {vm_id} not found for cleanup")
-        return 0
-    
-    from adare.backend.vm.snapshot_manager import SnapshotManager
-    manager = SnapshotManager()
-    
-    return manager.cleanup_experiment_snapshots(vm, keep_recent=keep_recent)
-
-
 def clear_all_vms(force: bool = False) -> dict:
     """
     Clear all VMs from the system.
@@ -530,22 +499,22 @@ def clear_all_vms(force: bool = False) -> dict:
     Returns:
         Dictionary with deletion results
     """
-    log.info("🗑️  Starting VM cleanup - removing ALL VMs")
+    log.info("Starting VM cleanup - removing ALL VMs")
     
     results = vm_database.delete_all_vms(force=force)
     
     if results['deleted_count'] > 0:
-        log.info(f"✅ Successfully cleared {results['deleted_count']} VMs")
+        log.info(f"Successfully cleared {results['deleted_count']} VMs")
         for vm_name in results['deleted_vms']:
             log.info(f"   - {vm_name}")
     
     if results['failed_count'] > 0:
-        log.error(f"❌ Failed to delete {results['failed_count']} VMs")
+        log.error(f"Failed to delete {results['failed_count']} VMs")
         for error in results['failed_vms']:
             log.error(f"   - {error}")
     
     if results['deleted_count'] == 0 and results['failed_count'] == 0:
-        log.info("ℹ️  No VMs found to delete")
+        log.info("ℹNo VMs found to delete")
     
     return results
 

@@ -231,44 +231,6 @@ class SnapshotManager:
             log.debug(f"Error checking base snapshot for VM '{vm_record.name}': {e}")
             return False
     
-    # def cleanup_experiment_snapshots(self, vm_record, keep_recent: int = 5, 
-    #                                older_than_days: int = 7) -> int:
-    #     """
-    #     Clean up old experiment snapshots to save space.
-        
-    #     Args:
-    #         vm_record: VM database record
-    #         keep_recent: Number of recent snapshots to keep
-    #         older_than_days: Delete snapshots older than this many days
-            
-    #     Returns:
-    #         Number of snapshots deleted
-    #     """
-    #     if not vm_record.vbox_uuid:
-    #         return 0
-        
-    #     # Get experiment snapshots from database
-    #     with VmApi() as api:
-    #         # This would need a new method to get snapshots by VM and type
-    #         experiment_snapshots = self._get_experiment_snapshots_for_vm(vm_record.id)
-        
-    #     deleted_count = 0
-    #     cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
-        
-    #     # Sort by creation date (newest first)
-    #     experiment_snapshots.sort(key=lambda s: s.created_at, reverse=True)
-        
-    #     # Skip the most recent ones
-    #     snapshots_to_check = experiment_snapshots[keep_recent:]
-        
-    #     for snapshot in snapshots_to_check:
-    #         if snapshot.created_at < cutoff_date:
-    #             if self._delete_snapshot(vm_record, snapshot.snapshot_name):
-    #                 deleted_count += 1
-        
-    #     log.info(f"Cleaned up {deleted_count} old experiment snapshots for VM '{vm_record.name}'")
-    #     return deleted_count
-    
     def get_snapshot_info(self, vm_record) -> dict:
         """
         Get information about VM snapshots.
