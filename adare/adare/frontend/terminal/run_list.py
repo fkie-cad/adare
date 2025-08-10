@@ -39,11 +39,11 @@ class RunListPanel:
         return Panel(table, border_style="blue", title_align='left', style='', title=title)
 
 
-def print_run_list(project: str):
+def print_run_list(project: str, environment: str = None, experiment: str = None):
     console = DefaultConsole()
 
     with DataRetrievalApi() as api:
-        runs = api.get_runs(project_name=project)
+        runs = api.get_runs(project_name=project, environment_name=environment, experiment_name=experiment)
         layout = Layout(name="root")
         panel = RunListPanel(runs)
         layout.update(panel)
