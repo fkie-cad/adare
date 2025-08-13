@@ -26,35 +26,6 @@ class TestfunctionDbApi(ExperimentApi):
         super().__init__(db_path)
         ExperimentBase.metadata.create_all(self.engine)
 
-    # def check_test_validity(self, testfunction_file: Path, testfunction: str):
-    #     testfunction_obj = self._session.query(TestFunction).filter(
-    #         TestFunction.file.path == testfunction_file.as_posix(), TestFunction.name == testfunction).first()
-    #     if not testfunction_obj:
-    #         raise DatabaseTestValidationError(
-    #             log,
-    #             message=f'testfunction {testfunction_file.name}.{testfunction} does not exist in database',
-    #         )
-    #     # get test method from testfunction_file
-    #     module_analyzer = PyModuleAnalyzer(testfunction_file)
-    #     test_class = module_analyzer.get_class(testfunction)
-    #     if not test_class:
-    #         raise DatabaseTestValidationError(
-    #             log,
-    #             message=f'test {testfunction} does not exist in testfunction file {testfunction_file}',
-    #         )
-    #     # check hash of test method
-    #     sha256_test = hash_string_sha256(test_class.get_attribute('test').get_value())
-    #     if testfunction_obj.sha256hash != sha256_test and self._session.query(Test).filter(
-    #             Test.abstracttest.has(TestFunction.id == testfunction_obj.id)).first():
-    #         raise DatabaseTestValidationError(
-    #             log,
-    #             message=f'test {testfunction} has been changed. It therefore cannot be used in a test because it would result in an inconsistent results',
-    #             possible_solutions=[
-    #                 'if the test is not used in a test, try to load the testfunction first',
-    #                 'otherwise, recover the old testfunction'
-    #             ]
-    #         )
-
     def create_testfunction(self, testfunction_file, t_func_class, db_parameter_objects, sha256_testfunction: str):
         test_name = t_func_class.get_attribute('testname').get_value()
         test_description = t_func_class.get_attribute('testdescription').get_value()
