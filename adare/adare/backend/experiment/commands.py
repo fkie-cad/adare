@@ -12,9 +12,10 @@ from adare.backend.experiment.exceptions import ExperimentDirectoryAlreadyExists
     ExperimentDirectoryDoesNotExistError, ExperimentIntegrityError, ExperimentAlreadyExistsError, ExperimentNotChanged
 from adare.exceptions import LoggedException
 from adare.backend.project.directory import ProjectDirectory
-from adare.config import SHARE_POINT_VM
 from adare.helperfunctions.string import make_string_path_safe
 from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
+from adare.backend.experiment.step_runner import ExperimentStepRunner
+from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
 from adare.types.stages import (
     # Top-level parent stages
     ExperimentPreparationStage, VirtualMachineSetupStage, SoftwareInstallationStage, 
@@ -22,11 +23,9 @@ from adare.types.stages import (
     # Sub-stages
     SetupExperimentEnvironmentStage, ValidateIntegrityStage, PrepareRunEnvironmentStage, StartMCPServerStage,
     ExperimentIntegrityCheckStage, ProjectIntegrityCheckStage,
-    VMCreateStage, VMImportStage, VMRunStage, VMWaitTillReadyStage, VMMountSharedDirectoriesStage,
-    VMSnapshotRestoreStage, VMSnapshotCreateStage, VMExperimentSnapshotStage,
     InstallAdareVMStage, ConnectToVMStage, InstallationsStage,
     ExperimentRunStage,
-    FinalizeStage, ShutdownMCPServerStage, ShutdownWebSocketStage, VMStopStage, VMDestroyStage,
+    FinalizeStage, ShutdownMCPServerStage, ShutdownWebSocketStage,
 )
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adarelib.constants import StatusEnum
@@ -35,7 +34,6 @@ from adare.webappaccess.download import download_experiment, sync
 from adare.webappaccess.login import is_logged_in
 from adare.exceptions import NotLoggedInError
 from adare.backend.experiment.runctx import ExperimentRunCtx, ExperimentConfig
-from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager, VMAlreadyRunningException, VMNotFoundException
 
 # configure logging
 import logging
@@ -486,107 +484,6 @@ def step_prepare_run_environment(context: ExperimentRunCtx):
         context.mcp_server = MCPServerManager(log_file=run_dir.mcp_gui_log_file)
         
 
-async def step_create_virtualbox_machine(context: ExperimentRunCtx):
-        # Get VM ID from environment (file operations already done during environment load)
-        env_data = environment_database.get_environment_by_ulid(context.environment_ulid, fields=['vm_id'])
-        vm_id = env_data['vm_id'] if env_data else None
-        if not vm_id:
-            raise LoggedException(log, "No VM associated with environment. Did you load the environment properly?")
-        
-        # Only handle VirtualBox import and snapshots (fast operations)
-        from adare.backend.vm.commands import ensure_vm_ready_for_experiment
-        import adare.backend.vm.database as vm_database
-        
-        log.info("Preparing VM for experiment (VirtualBox import and snapshots only)")
-        vm_id = await ensure_vm_ready_for_experiment(
-            vm_id=vm_id,
-            experiment_id=context.experiment_run_ulid,
-            environment_ulid=context.environment_ulid,
-            experiment_run_ulid=context.experiment_run_ulid,
-            preserve_experiment_snapshot=context.config.preserve_snapshot
-        )
-        
-        # Get the prepared VM from database to use its actual VirtualBox name
-        vm_record = vm_database.get_vm_by_id(vm_id)
-        if not vm_record:
-            raise LoggedException(log, f"VM with ID {vm_id} not found after preparation")
-        
-        # Use the actual VM name from database (not experiment-specific name)
-        context.vm_name = vm_record.name
-        
-        shared_root = Path(SHARE_POINT_VM[context.guest_platform])
-        context.config.shared_directories = {
-            'run': {'host': context.experiment_run_directory.path, 'vm': shared_root / 'run'},
-            'adare': {'host': context.adarevm.parent, 'vm': 'Z:'},
-            'experiment': {'host': context.experiment_directory.path, 'vm': shared_root / 'experiment'},
-            'testfunctions': {'host': context.project_directory.testfunctions, 'vm': shared_root / 'testfunctions'},
-            'shared': {'host': context.project_directory.shared, 'vm': shared_root / 'shared'},
-        }
-        
-        vbox_manager = VirtualBoxManager()
-        context.vm = VirtualBoxVM(
-            vm_name=context.vm_name,  # Use the actual VM name from database
-            guest_os=context.guest_platform,
-            manager=vbox_manager,
-            cpus=context.config.vm_cpus,
-            ram=context.config.vm_memory
-        )
-
-        # VM is already prepared with snapshots - no need to create from OVF/OVA
-        # Just verify the VM exists in VirtualBox
-        with StageCtxManager(VMCreateStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-            if not VirtualBoxVM.verify_vm_exists_by_uuid(vm_record.vbox_uuid):
-                raise LoggedException(log, f"VM '{context.vm_name}' was not properly prepared - missing from VirtualBox")
-            log.info(f"Using prepared VM '{context.vm_name}' with snapshots (UUID: {vm_record.vbox_uuid})")
-
-        if not context.stop_event.is_set():
-            for name, paths in context.config.shared_directories.items():
-                await context.vm.add_shared_folder(name, host_path=paths['host'], mountpoint=paths['vm'], stop_event=context.user_interrupt_event)
-
-        if not context.stop_event.is_set():
-            # Update experiment run with VM-specific data (experiment and environment already set earlier)
-            context.experiment_run_ulid = experiment_database.update_experiment_run(
-                context.experiment_run_ulid,
-                context.experiment_run_directory
-            )
-
-        # maybe extra step
-        # add port forwarding for the websocket server
-        if not context.stop_event.is_set():
-            await context.vm.add_port_forwarding(
-                name='adarevm',
-                protocol='tcp',
-                host_port=context.config.websocket_port,
-                guest_port=context.config.websocket_port,
-                stop_event=context.user_interrupt_event
-            )
-            log.info(f'added port forwarding for websocket server on port {context.config.websocket_port}')
-
-        context.timestamp_before_vm_start = datetime.now(timezone.utc)
-
-
-async def step_mount_shared_directories(context: ExperimentRunCtx):
-    with StageCtxManager(VMMountSharedDirectoriesStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-        folders = {
-            name: paths['vm'] for name, paths in context.config.shared_directories.items()
-        }
-        await context.vm.mount_multiple_shared_folders(
-            folders=folders,
-            stop_event=context.user_interrupt_event
-        )
-        #
-
-async def step_run_vm(context: ExperimentRunCtx):
-    with StageCtxManager(VMRunStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-        await context.vm.start(stop_event=context.user_interrupt_event)
-
-
-async def step_wait_till_vm_is_ready(context: ExperimentRunCtx):
-    with StageCtxManager(VMWaitTillReadyStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-        log.info('waiting until VM is ready')
-        if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.user_interrupt_event):
-            raise LoggedException(log, 'VM did not become ready in time')
-        log.info('VM is ready')
 
 async def step_install_and_run_websocket_server(context: ExperimentRunCtx):
     with StageCtxManager(InstallAdareVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
@@ -758,93 +655,7 @@ async def step_shutdown_ws(context: ExperimentRunCtx, post_interrupt: bool = Fal
         if context.client:
             await context.client.disconnect()
 
-async def step_shutdown_virtualbox_vm(context: ExperimentRunCtx, post_interrupt: bool = False):
-    event = None if post_interrupt else context.user_interrupt_event
-    with StageCtxManager(VMStopStage(), context.experiment_run_ulid, event=event):
-        log.info('stopping virtualbox virtual machine')
-        if context.vm:
-            await context.vm.stop()
 
-async def step_cleanup_virtualbox_vm(context: ExperimentRunCtx, post_interrupt: bool = False):
-    event = None if post_interrupt else context.user_interrupt_event
-    with StageCtxManager(VMDestroyStage(), context.experiment_run_ulid, event=event):
-        if context.config.preserve_snapshot:
-            log.info('Creating experiment snapshot (--preserve-snapshot enabled)')
-            if context.vm and context.experiment_run_ulid:
-                # Import snapshot manager for creating snapshot
-                from adare.backend.vm.snapshot_manager import SnapshotManager
-                
-                # Get VM record from database to create snapshot
-                try:
-                    from adare.database.api.vm import VmApi
-                    with VmApi() as api:
-                        vm_records = api.get_all_vms()
-                        vm_record = None
-                        for record in vm_records:
-                            if record.name == context.vm_name:
-                                vm_record = record
-                                break
-                    
-                    if vm_record and vm_record.vbox_uuid:
-                        snapshot_manager = SnapshotManager()
-                        exp_snapshot_name = f"adare_exp_{context.experiment_run_ulid[:8]}"
-                        
-                        # Create new experiment snapshot with current state
-                        with StageCtxManager(VMExperimentSnapshotStage(), context.experiment_run_ulid, event=event):
-                            created_snapshot = snapshot_manager.create_experiment_snapshot(
-                                vm_record, 
-                                context.experiment_run_ulid,
-                                description=f"Final state snapshot for experiment {context.experiment_run_ulid}",
-                                silent=False
-                            )
-                        
-                        if created_snapshot:
-                            log.info(f'✅ Created experiment snapshot: {created_snapshot}')
-                        else:
-                            log.warning('Failed to create experiment snapshot')
-                    else:
-                        log.warning('VM record not found or missing UUID - cannot create experiment snapshot')
-                        
-                except Exception as e:
-                    log.warning(f'Error creating experiment snapshot: {e}')
-        else:
-            log.info('Cleaning up experiment snapshot (default behavior)')
-            if context.vm and context.experiment_run_ulid:
-                # Import snapshot manager for cleanup
-                from adare.backend.vm.snapshot_manager import SnapshotManager
-                
-                # Get VM record from database to access snapshot management
-                try:
-                    # Get the VM ID from the database using the VM name
-                    from adare.database.api.vm import VmApi
-                    with VmApi() as api:
-                        vm_records = api.get_all_vms()
-                        vm_record = None
-                        for record in vm_records:
-                            if record.name == context.vm_name:
-                                vm_record = record
-                                break
-                    
-                    if vm_record and vm_record.vbox_uuid:
-                        snapshot_manager = SnapshotManager()
-                        
-                        # Generate the experiment snapshot name (same logic as in create_experiment_snapshot)
-                        exp_snapshot_name = f"adare_exp_{context.experiment_run_ulid[:8]}"
-                        
-                        # Delete only the experiment-specific snapshot
-                        success = snapshot_manager._delete_snapshot(vm_record, exp_snapshot_name)
-                        if success:
-                            log.info(f'Successfully cleaned up experiment snapshot: {exp_snapshot_name}')
-                        else:
-                            log.warning(f'Failed to cleanup experiment snapshot: {exp_snapshot_name} (may not exist)')
-                    else:
-                        log.warning('VM record not found or missing UUID - cannot cleanup experiment snapshot')
-                        
-                except Exception as e:
-                    log.warning(f'Error during snapshot cleanup: {e}')
-            
-        # Keep the VM running - do NOT destroy it
-        log.info('VM preserved for future experiments')
 
 def step_remove_fake_experiment_run(context: ExperimentRunCtx):
     # todo remove associated stuff as well (e.g. stages/files/...)
@@ -937,64 +748,11 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     __start_event_listeners(experiment_run_context.experiment_run_ulid)
 
 
-    # --- Helper Functions ---
-
-    async def run_blocking_step(step_func):
-        """Run a blocking step in a separate thread if not cancelled."""
-        if not stop_event.is_set():
-            log.info(f"Running blocking step: {step_func.__name__}")
-            await asyncio.to_thread(step_func, experiment_run_context)
-            log.info(f"Blocking step {step_func.__name__} completed")
-
-    async def run_async_step(step_func):
-        """
-        Run an asynchronous step and wait for its completion or for a stop event.
-        The step function must return a coroutine.
-        """
-        if not stop_event.is_set():
-            log.info(f"Running async step: {step_func.__name__}")
-            
-            # Create proper tasks so exceptions bubble up to main try/except
-            step_task = asyncio.create_task(step_func(experiment_run_context))
-            stop_task = asyncio.create_task(stop_event.wait())
-            
-            try:
-                # Use gather to let exceptions bubble up naturally
-                done, pending = await asyncio.wait(
-                    [step_task, stop_task],
-                    return_when=asyncio.FIRST_COMPLETED
-                )
-                
-                # Cancel pending tasks
-                for task in pending:
-                    task.cancel()
-                    try:
-                        await task
-                    except asyncio.CancelledError:
-                        pass
-                
-                # Check if step_task completed with exception
-                for task in done:
-                    if task.exception():
-                        # Use result() to properly re-raise exception with chain
-                        task.result()
-                        
-                log.info(f"Async step {step_func.__name__} completed")
-                
-            finally:
-                # Ensure cleanup
-                for task in [step_task, stop_task]:
-                    if not task.done():
-                        task.cancel()
-
-    async def run_cleanup_step(step_func, post_interrupt: bool = False):
-        """Run a cleanup step regardless of stop event status."""
-        log.info(f"Running cleanup step: {step_func.__name__}")
-        if asyncio.iscoroutinefunction(step_func):
-            await step_func(experiment_run_context, post_interrupt=post_interrupt)
-        else:
-            await asyncio.to_thread(step_func, experiment_run_context, post_interrupt)
-        log.info(f"Cleanup step {step_func.__name__} completed")
+    # Create step runner to handle execution logic
+    step_runner = ExperimentStepRunner(stop_event, user_interrupt_event)
+    
+    # Create VM lifecycle manager
+    vm_manager = VMLifecycleManager()
 
     # --- Execution Flow ---
 
@@ -1007,31 +765,30 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                     step_validate_integrity,
                     step_prepare_run_environment,
                 ]
-                for step in initial_steps:
-                    await run_blocking_step(step)
+                await step_runner.run_steps_sequence(initial_steps, experiment_run_context)
 
                 # Start MCP server early (independent of VM)
-                await run_async_step(step_start_mcp_server)
+                await step_runner.run_async_step(step_start_mcp_server, experiment_run_context)
 
         # Virtual Machine Setup Phase  
         if not stop_event.is_set():
             with StageCtxManager(VirtualMachineSetupStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
-                await run_async_step(step_create_virtualbox_machine)
-                await run_async_step(step_run_vm)
-                await run_async_step(step_wait_till_vm_is_ready)
-                await run_async_step(step_mount_shared_directories)
+                await step_runner.run_async_step(vm_manager.create_and_prepare_vm, experiment_run_context)
+                await step_runner.run_async_step(vm_manager.start_vm, experiment_run_context)
+                await step_runner.run_async_step(vm_manager.wait_until_ready, experiment_run_context)
+                await step_runner.run_async_step(vm_manager.mount_shared_directories, experiment_run_context)
 
         # Software Installation Phase
         if not stop_event.is_set():
             with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
-                await run_async_step(step_install_and_run_websocket_server)
-                await run_async_step(step_connect_websocket)
-                await run_async_step(step_execute_installations)
+                await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
+                await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
+                await step_runner.run_async_step(step_execute_installations, experiment_run_context)
 
         # Experiment Execution Phase
         if not stop_event.is_set():
             with StageCtxManager(ExperimentExecutionStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
-                await run_async_step(step_execute_experiment)
+                await step_runner.run_async_step(step_execute_experiment, experiment_run_context)
 
         # Success: Mark experiment as finished if no exceptions occurred
         if not stop_event.is_set():
@@ -1081,11 +838,11 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             log.info("Starting cleanup and shutdown...")
             # Wrap cleanup in proper stage context (don't pass interrupt event - we want to show actual cleanup work)
             with StageCtxManager(CleanupShutdownStage(), experiment_run_context.experiment_run_ulid, event=None):
-                await run_cleanup_step(step_finalize, post_interrupt=True)
-                await run_cleanup_step(step_shutdown_mcp_server, post_interrupt=True)
-                await run_cleanup_step(step_shutdown_ws, post_interrupt=True)
-                await run_cleanup_step(step_shutdown_virtualbox_vm, post_interrupt=True)
-                await run_cleanup_step(step_cleanup_virtualbox_vm, post_interrupt=True)
+                await step_runner.run_cleanup_step(step_finalize, experiment_run_context, post_interrupt=True)
+                await step_runner.run_cleanup_step(step_shutdown_mcp_server, experiment_run_context, post_interrupt=True)
+                await step_runner.run_cleanup_step(step_shutdown_ws, experiment_run_context, post_interrupt=True)
+                await step_runner.run_cleanup_step(vm_manager.stop_vm, experiment_run_context, post_interrupt=True)
+                await step_runner.run_cleanup_step(vm_manager.cleanup_vm, experiment_run_context, post_interrupt=True)
             # Give time for all events to be processed before stopping
             await asyncio.sleep(2)
             
