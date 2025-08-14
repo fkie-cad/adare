@@ -1036,20 +1036,28 @@ class ExperimentRun(SerializerMixin, Base):
 
     @hybrid_property
     def result_status(self):
+        # First check for test execution failures and result failures
+        # This takes priority over missing tests since failed tests cause early termination
+        for t in self.tests:
+            # Check if test execution failed (success=False in Event base class)
+            if hasattr(t, 'success') and t.success is False:
+                return StatusEnum.FAILED
+            
+            # Check if test result indicates failure
+            if t.result and int(t.result.status_id) != StatusEnum.SUCCESS:
+                return StatusEnum.FAILED
+        
+        # Only check for missing tests if no tests failed
+        # (missing tests are expected when earlier tests failed and stopped execution)
         for test in self.experiment.abstract_tests:
             found = False
             for t in self.tests:
                 if t.abstract_test_id == test.id:
-                    if t.result:
-                        found = True
-                        break
+                    found = True
+                    break
             if not found:
                 return StatusEnum.TEST_MISSING
-        for t in self.tests:
-            if not t.result:
-                continue
-            if int(t.result.status_id) != StatusEnum.SUCCESS:
-                return StatusEnum.FAILED
+        
         return StatusEnum.SUCCESS
 
     @hybrid_property

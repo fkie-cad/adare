@@ -36,6 +36,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [x] always run on base snapshot and create one after the experiment run not before (if specific option is set) -> test -> no snapshot saved?!
 - [x] adare show run shows pending for interrupted run
 - [x] ligntning does not show for interrupted run?!
+- [x] if one tests fails and not all tests are run we see wrong result for adare run list and tests panel for adare run info
 - [ ] unclear if flow shows fails -> test
 - [ ] somehow environment got deleted after adare manage reset-vm -> test more
 
