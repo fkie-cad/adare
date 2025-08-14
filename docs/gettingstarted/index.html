@@ -52,7 +52,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#create-an-environment">Create an Environment</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#create-an-experiment">Create an Experiment</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#testset-file">Testset File</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#action-file">Action File</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#playbook-file">Playbook File</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#develop-and-run-an-experiment">Develop and Run an Experiment</a></li>
@@ -92,50 +92,51 @@
 <p>The following sections will help you get started with using ADARE.</p>
 <section id="walkthrough-quick-start-guide">
 <h2>Walkthrough: Quick Start Guide<a class="headerlink" href="#walkthrough-quick-start-guide" title="Link to this heading"></a></h2>
-<p>This is a walkthrough providing information how to setup ADARE to run downloaded experiments and to create new experiments.
-To use ADARE you must setup a project, which is basically a directory containing data used for the experiments.
+<p>This walkthrough provides information on how to setup ADARE to run downloaded experiments and to create new experiments.
+ADARE uses YAML-based playbooks for GUI automation, making experiments easy to create and maintain without Python coding.</p>
+<p>To use ADARE you must setup a project, which is basically a directory containing data used for the experiments.
 This can be simply done by navigating to the directory where you want to create the project and run the following command:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">project</span> <span class="n">create</span> <span class="o">&lt;</span><span class="n">project_name</span><span class="o">&gt;</span>
 </pre></div>
 </div>
-<p>This will create a directory with the name <code class="docutils literal notranslate"><span class="pre">&lt;project_name&gt;</span></code> and within it data, such as data used for the text recognition within the experiemnts.
+<p>This will create a directory with the name <code class="docutils literal notranslate"><span class="pre">&lt;project_name&gt;</span></code> and within it data, such as data used for the text recognition within the experiments.
 To further work within that project, you must navigate to the project directory:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cd</span> <span class="o">&lt;</span><span class="n">project_name</span><span class="o">&gt;</span>
 </pre></div>
 </div>
-<p>Within this project a user must create an environment, dedicated to contain configurations related to one specific vagrant box (virtual machine).
+<p>Within this project a user must create an environment, dedicated to contain configurations related to one specific virtual machine.
 This can be done by running the following command, when providing an environment config file:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">environment</span> <span class="n">load</span>  <span class="o">&lt;</span><span class="n">environment_config_file</span><span class="o">&gt;.</span><span class="n">yml</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">environment</span> <span class="n">load</span> <span class="o">&lt;</span><span class="n">environment_config_file</span><span class="o">&gt;.</span><span class="n">yml</span>
 </pre></div>
 </div>
-<p>The environment config file is a yaml file containing information about the environment that is to be created.
-It contains the vagrant box that should be used along with the operating system, telling ADARE whether the box is a Windows or Linux box.
-An minimal example of a file is provided below.
-In the section <a class="reference internal" href="environment.html#create-an-environment"><span class="std std-ref">Create an Environment</span></a> you can find a detailed description of the environment config file and it possible configurations.</p>
+<p>The environment config file is a YAML file containing information about the environment that is to be created.
+It contains the VM image path that should be used along with the operating system information, telling ADARE whether the VM is a Windows or Linux box.
+A minimal example of a file is provided below.
+In the section <a class="reference internal" href="environment.html#create-an-environment"><span class="std std-ref">Create an Environment</span></a> you can find a detailed description of the environment config file and its possible configurations.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;environment_name&gt;</span>
-<span class="nt">vagrantbox</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;vagrant_box_name&gt;</span>
+<span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;path_or_link_to_ova_or_ovf_file&gt;</span>
 <span class="nt">os</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;os_name&gt; (custom e.g. &#39;Windows&#39;)</span>
-<span class="w">    </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;os_platform&gt; (&#39;windows&#39; or &#39;linux&#39;)</span>
-<span class="w">    </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;os_distribution&gt; (custom e.g. &#39;Windows 10&#39;)</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;os_version&gt; (custom e.g. &#39;11H2.0.2403&#39;)</span>
+<span class="w">    </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;os_name&gt;</span><span class="w"> </span><span class="c1"># custom e.g. &#39;Windows 11&#39;</span>
+<span class="w">    </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;os_platform&gt;</span><span class="w"> </span><span class="c1"># &#39;windows&#39; or &#39;linux&#39;</span>
+<span class="w">    </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;os_distribution&gt;</span><span class="w"> </span><span class="c1"># custom e.g. &#39;Home&#39;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;os_version&gt;</span><span class="w"> </span><span class="c1"># custom e.g. &#39;23H1&#39;</span>
+<span class="w">    </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;language&gt;</span><span class="w"> </span><span class="c1"># e.g. &#39;English&#39;</span>
 </pre></div>
 </div>
-<p>Notably <code class="docutils literal notranslate"><span class="pre">&lt;vagrant_box_name&gt;</span></code> can be the name of local vagrant box or the name of a box from the vagrant cloud, which has format <code class="docutils literal notranslate"><span class="pre">&lt;username&gt;/&lt;box_name&gt;</span></code>.
-To list your local vagrant boxes you can run <code class="docutils literal notranslate"><span class="pre">vagrant</span> <span class="pre">box</span> <span class="pre">list</span></code>.
-We provide a list of vagrant boxes that can be used with ADARE under our <a class="reference external" href="https://portal.cloud.hashicorp.com/vagrant/discover/mikue">Vagrant Cloud Account</a>.
-For Windows 11 with our provided box a yaml file would look like this:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testenvironment</span>
-<span class="nt">vagrantbox</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mikue/adare_win11</span>
-<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">11</span><span class="nv"> </span><span class="s">Test</span><span class="nv"> </span><span class="s">Environment&quot;</span>
+<p>Notably <code class="docutils literal notranslate"><span class="pre">&lt;path_or_link_to_ova_or_ovf_file&gt;</span></code> is the path to a virtual machine image file, such as an OVA or OVF file.
+We provide a link to a list of downloadable virtual machines in <a class="reference external" href="https://adare.seclab-bonn.de/">Adare Web</a>.
+For Windows 11 with our provided VM, a YAML file would look like this:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">win11</span>
+<span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TODOADDREALLINKHERE</span>
 <span class="nt">os</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Windows</span>
-<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">windows</span>
-<span class="w">  </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Windows 11</span>
-<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">11H2.0.2403</span>
+<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">11&quot;</span>
+<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span>
+<span class="w">  </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Home&quot;</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;23H1&quot;</span>
+<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;English&quot;</span>
 <span class="nt">tags</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">windows11</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">test</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">example</span>
 </pre></div>
 </div>
 <p>Now that we have specified the environment and therefore the virtual machine to be used, we can specify what we want to do and test on this machine.
@@ -143,48 +144,56 @@ Therefore a user can create an experiment template with the following command:</
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">create</span> <span class="o">&lt;</span><span class="n">experiment_name</span><span class="o">&gt;</span>
 </pre></div>
 </div>
-<p>This will create a directory project’s experiment directory of the following structure</p>
+<p>This will create a directory in the project’s experiment directory with the following structure:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>&lt;project&gt;/
 ├── experiments/
 │   ├── ...
 │   └── &lt;experiment_name&gt;/
-│       ├── action.py
+│       ├── playbook.yaml
 │       ├── testset.yml
 │       ├── metadata.yml
 │       └── img/
 └── ...
 </pre></div>
 </div>
-<p>The metadata.yml file contains information about the experiment, especially the names of the environments it can be run on.
-The testset.yml file contains all tests, that can be run within the experiment.
-The action.py file contains the user action performed within the experiment, such as mouse clicks or keyboard inputs, as well as the calls to the tests specified in the testset file.
-The directory <code class="docutils literal notranslate"><span class="pre">img</span></code> contains images used within the gui automation.</p>
-<p>In the following we will create an simple example experiment to delete a file from the home folder to the trash bin on an Windows 11 machine.
+<p>The <code class="docutils literal notranslate"><span class="pre">metadata.yml</span></code> file contains information about the experiment, especially the names of the environments it can be run on.
+The <code class="docutils literal notranslate"><span class="pre">testset.yml</span></code> file contains all tests that can be run within the experiment.
+The <code class="docutils literal notranslate"><span class="pre">playbook.yaml</span></code> file contains the YAML-based GUI automation instructions, such as mouse clicks or keyboard inputs, as well as calls to the tests specified in the testset file.
+The directory <code class="docutils literal notranslate"><span class="pre">img</span></code> contains images used for GUI automation.</p>
+<p>In the following we will create a simple example experiment to delete a file from the Documents folder to the trash bin on a Windows 11 machine.
 We therefore start by creating the experiment template:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">create</span> <span class="n">TrashBinDeleteFile</span>
 </pre></div>
 </div>
 <p>We start with the metadata file, which would look like this:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">environments</span><span class="p">:</span>
+<span class="w"> </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">win11</span>
+</pre></div>
+</div>
 <p>We then create the tests within the testset file.
-It contains a list of tests, as well as the name of the experiment and optionally commands to be run to parse artifacts.
-Each test must specify a name, a description, a type and parameters.
-The type specifies the test to be performed, such as checking if a file exists or checking if a file contains a specific line.
+It contains a list of tests, as well as the name of the experiment.
+Each test must specify a name, a description, a function and parameters.
+The function specifies the test to be performed, such as checking if a file exists or checking if a file contains a specific line.
 The parameters specify the file or directory to be checked, the line to be checked or the regex to be checked.
 An example testset file in our example would look like this:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TrashBinDeleteFile</span>
+<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Test</span><span class="nv"> </span><span class="s">experiment</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">delete</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">it</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">moved</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">trash</span><span class="nv"> </span><span class="s">bin&#39;</span>
 <span class="nt">tests</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">existencefile</span>
-<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">exists&#39;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testfile_created</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Verify</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">does</span><span class="nv"> </span><span class="s">not</span><span class="nv"> </span><span class="s">exist</span><span class="nv"> </span><span class="s">before</span><span class="nv"> </span><span class="s">experiment&#39;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_exists</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/testfile.txt&#39;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testfile_deleted</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Verify</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">was</span><span class="nv"> </span><span class="s">deleted</span><span class="nv"> </span><span class="s">successfully&#39;</span>
 <span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_does_not_exist</span>
-<span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/testfile&#39;</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deletedfileInfo</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/testfile.txt&#39;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trashbin_check</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">metadata</span><span class="nv"> </span><span class="s">exists&#39;</span>
 <span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csv_contains_line_matching_regex</span>
-<span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RBCmd</span>
-<span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/test/*.csv&#39;</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/trashbin/*.csv&#39;</span>
 <span class="w">      </span><span class="nt">entry</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!re</span><span class="w"> </span><span class="s">&#39;.*&#39;</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;$I&#39;</span>
@@ -193,107 +202,97 @@ An example testset file in our example would look like this:</p>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!timestamp</span>
 <span class="w">          </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{</span><span class="nv"> </span><span class="s">TIMESTAMP.DELETIONDATE</span><span class="nv"> </span><span class="s">}}&#39;</span>
 <span class="w">          </span><span class="nt">tolerance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
-<span class="nt">commands</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RBCmd</span>
-<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Run</span><span class="nv"> </span><span class="s">RBCmd.exe&#39;</span>
-<span class="w">    </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RBCmd.exe</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;RBCmd.exe</span><span class="nv"> </span><span class="s">-d</span><span class="nv"> </span><span class="s">C:\</span><span class="nv"> </span><span class="s">--csv</span><span class="nv"> </span><span class="s">C:/Users/vagrant/Documents/test&#39;</span>
 </pre></div>
 </div>
-<p>This file contains two tests, one checking if the file exists and one checking if the trash bin artifact after parsed with RBCmd to an csv file contains a line in a given format.
-We can even save a variable within the action file and used it in the testset file (as here done with <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">TIMESTAMP.DELETIONDATE</span> <span class="pre">}}</span></code>).</p>
-<p>We now create the action file, which contains the user action performed within the experiment.
-First we need possibly some steps to prepare the experiment, such as in our case creating a file that we want to delete.
-This can be done in the prepare function.
-Then we need to specify the gui actions, key presses, calls to tests from the testset and saving of variables.
-An example action file in our example would look like this:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adarevm.action.experiment</span><span class="w"> </span><span class="kn">import</span> <span class="n">Experiment</span><span class="p">,</span> <span class="n">KEYMAP</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Awaitable</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adarevm.testset.testset</span><span class="w"> </span><span class="kn">import</span> <span class="n">Testset</span>
+<p>This file contains three tests: one checking if the test file exists initially, one checking if the file was deleted successfully, and one checking if the trash bin artifact (when parsed with RBCmd to a CSV file) contains a line in a given format.
+We can save variables within the playbook and use them in the testset file (as shown with <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">TIMESTAMP.DELETIONDATE</span> <span class="pre">}}</span></code>).</p>
+<p>We now create the playbook file, which contains the YAML-based GUI automation steps.
+The playbook uses a declarative approach where you specify actions like clicks, keyboard input, and test executions.
+An example playbook file for our example would look like this:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Default pause between actions (seconds)</span>
+<span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
-<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="w">  </span><span class="c1"># Overall timeout for the experiment (seconds)</span>
+<span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
 
+<span class="w">  </span><span class="c1"># Default screenshot settings</span>
+<span class="w">  </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;png&quot;</span>
+<span class="w">    </span><span class="nt">quality</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">95</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">TrashBinDeleteFile</span><span class="p">(</span><span class="n">Experiment</span><span class="p">):</span>
-    <span class="n">description</span> <span class="o">=</span> <span class="s1">&#39;delete file and check trash bin&#39;</span>
+<span class="c1"># Variables that can be used throughout the playbook</span>
+<span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;vagrant&quot;</span>
+<span class="w">  </span><span class="nt">filepath</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;C:/Users/{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}/Documents/testfile.txt&quot;</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img_folder</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">tessdata_folder</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">testset</span><span class="p">:</span> <span class="n">Testset</span><span class="p">,</span> <span class="n">log_func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Awaitable</span><span class="p">[</span><span class="kc">None</span><span class="p">]]):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">            initialization function which in most cases should not be changed (except there is a need to use a different display controller or computer vision backend for guibot)</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">img_folder</span><span class="p">,</span> <span class="n">tessdata_folder</span><span class="p">,</span> <span class="n">testset</span><span class="p">,</span> <span class="n">log_func</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">prepare</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">            this function can be used to execute some commands before the clicks happen (e.g. creating a file)</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># create file C:/Users/vagrant/Documents/testfile</span>
-        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;C:/Users/vagrant/Documents/testfile&#39;</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;test&#39;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;&#39;</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">            this function should be used to execute the gui automation steps</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> started&#39;</span><span class="p">)</span>
-
-        <span class="c1"># place the code to execute some stuff here</span>
-        <span class="n">match</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;files.png&#39;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="n">match</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">idle</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">error_name</span> <span class="o">=</span> <span class="s1">&#39;find failed&#39;</span>
-            <span class="n">error_msg</span> <span class="o">=</span> <span class="s1">&#39;could not find files.png&#39;</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">error_name</span><span class="p">,</span> <span class="n">error_msg</span><span class="p">)</span>
-            <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">error_name</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">error_msg</span><span class="si">}</span><span class="s1">&#39;</span>
-
-        <span class="n">match</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;documents.png&#39;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="n">match</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">idle</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">error_name</span> <span class="o">=</span> <span class="s1">&#39;find failed&#39;</span>
-            <span class="n">error_msg</span> <span class="o">=</span> <span class="s1">&#39;could not find documents.png&#39;</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">error_name</span><span class="p">,</span> <span class="n">error_msg</span><span class="p">)</span>
-            <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">error_name</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">error_msg</span><span class="si">}</span><span class="s1">&#39;</span>
-
-        <span class="n">match</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;testfile.png&#39;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="n">match</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">idle</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">error_name</span> <span class="o">=</span> <span class="s1">&#39;find failed&#39;</span>
-            <span class="n">error_msg</span> <span class="o">=</span> <span class="s1">&#39;could not find testfile.png&#39;</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">error_name</span><span class="p">,</span> <span class="n">error_msg</span><span class="p">)</span>
-            <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;&#39;</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">press_keys</span><span class="p">([</span><span class="n">KEYMAP</span><span class="o">.</span><span class="n">DELETE</span><span class="p">])</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">save_time</span><span class="p">(</span><span class="s1">&#39;DELETIONDATE&#39;</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">run_test</span><span class="p">(</span><span class="s1">&#39;existencefile&#39;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">run_test</span><span class="p">(</span><span class="s1">&#39;deletedfileInfo&#39;</span><span class="p">)</span>
-
-        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> done&#39;</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;&#39;</span>
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">Test</span><span class="nv"> </span><span class="s">File&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;create</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">deleted</span><span class="nv"> </span><span class="s">file&quot;</span>
+<span class="w">      </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;This</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file.&#39;</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">filepath</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testfile_created</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;explorer.png&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Open</span><span class="nv"> </span><span class="s">File</span><span class="nv"> </span><span class="s">Explorer&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">additional</span><span class="nv"> </span><span class="s">time</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">File</span><span class="nv"> </span><span class="s">Explorer</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">open</span><span class="nv"> </span><span class="s">since</span><span class="nv"> </span><span class="s">some</span><span class="nv"> </span><span class="s">systems</span><span class="nv"> </span><span class="s">are</span><span class="nv"> </span><span class="s">slow&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Documents&quot;</span>
+<span class="w">        </span><span class="nt">strategy</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">SweepStrategy</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">index</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Navigate</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">Documents</span><span class="nv"> </span><span class="s">folder&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testfile&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Select</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">delete</span><span class="nv"> </span><span class="s">it</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">shortcut&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;delete&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">using</span><span class="nv"> </span><span class="s">keyboard</span><span class="nv"> </span><span class="s">shortcut&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Save</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">timestamp</span><span class="nv"> </span><span class="s">of</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">deletion</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">later</span><span class="nv"> </span><span class="s">verification&quot;</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TIMESTAMP.DELETIONDATE</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">deletion</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">complete&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testfile_deleted</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">metadata</span><span class="nv"> </span><span class="s">exists</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">trash</span><span class="nv"> </span><span class="s">bin&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;RBCmd&quot;</span>
+<span class="w">            </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Run</span><span class="nv"> </span><span class="s">RBCmd.exe</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">check</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">metadata&quot;</span>
+<span class="w">            </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RBCmd.exe</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;RBCmd.exe</span><span class="nv"> </span><span class="s">-d</span><span class="nv"> </span><span class="s">C:\</span><span class="nv"> </span><span class="s">--csv</span><span class="nv"> </span><span class="s">C:/Users/vagrant/Documents/trashbin&#39;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trashbin_check</span>
 </pre></div>
 </div>
-<p>As you have noticed, the action file can use images to find elements on the screen.
-To provide these images, you must place them in the img folder within the experiment directory.
+<p>As you can see, the playbook uses YAML syntax and provides several types of actions:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">command</span></code>: Execute system commands</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">click</span></code>: Mouse clicks using image recognition or text finding</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">keyboard</span></code>: Keyboard input and key combinations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">idle</span></code>: Wait/pause actions</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test</span></code>: Execute tests from the testset file</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">save_timestamp</span></code>: Save timestamps for later use in tests</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">block</span></code>: Group actions together</p></li>
+</ul>
+<p>The playbook can use images to find elements on the screen. To provide these images, you must place them in the <code class="docutils literal notranslate"><span class="pre">img</span></code> folder within the experiment directory.
 For this example you can download the images from <a class="reference external" href="https://github.com/fkie-cad/adare/tree/dev/adare/appdata/examples/experiments/TrashBinDeleteFile/img">GitHub</a>.
 More detailed explanation as well as details on creating an experiment can be found in <a class="reference internal" href="experiment.html#create-an-experiment"><span class="std std-ref">Create an Experiment</span></a>.</p>
 <p>Now that we have created the experiment, we can finally run it:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="o">&lt;</span><span class="n">experiment_name</span><span class="o">&gt;</span> <span class="o">-</span><span class="n">e</span> <span class="o">&lt;</span><span class="n">environment_name</span><span class="o">&gt;</span> <span class="o">--</span><span class="n">fake</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="n">TrashBinDeleteFile</span> <span class="o">-</span><span class="n">e</span> <span class="n">win11</span> <span class="o">--</span><span class="n">fake</span>
 </pre></div>
 </div>
-<p>This will start the vagrant box and execute the experiment on it.
+<p>This will start the virtual machine and execute the experiment on it.
 While the experiment is running, the user can see the progress of the experiment in the terminal.
-Since during development we might want to</p>
-<p>To later see more detailed information about the run a user can run:</p>
+The <code class="docutils literal notranslate"><span class="pre">--fake</span></code> flag runs the experiment in a test mode for development purposes.</p>
+<p>To later see more detailed information about the run, a user can run:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">show</span> <span class="n">run</span> <span class="o">&lt;</span><span class="n">run_ulid</span><span class="o">&gt;</span>
 </pre></div>
 </div>
@@ -399,10 +398,11 @@ Notably</p>
 ├── experiments/
 │   ├── ...
 │   └── &lt;experiment_name&gt;/
-│       ├── action.py
+│       ├── playbook.yml
 │       ├── testset.yml
 │       ├── metadata.yml
-│       └── img/
+│       ├── img/
+│       └── shared/
 └── ...
 </pre></div>
 </div>
@@ -428,9 +428,9 @@ So its basic structure looks like the following:</p>
 </pre></div>
 </div>
 </section>
-<section id="action-file">
-<h3>Action File<a class="headerlink" href="#action-file" title="Link to this heading"></a></h3>
-<p>When creating an experiment, an action file skeleton is created, looking like the following:</p>
+<section id="playbook-file">
+<h3>Playbook File<a class="headerlink" href="#playbook-file" title="Link to this heading"></a></h3>
+<p>The playbook.yml file defines the GUI automation steps for your experiment using simple YAML syntax. A basic playbook looks like this:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adarevm.action.experiment</span><span class="w"> </span><span class="kn">import</span> <span class="n">Experiment</span><span class="p">,</span> <span class="n">KEYMAP</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Awaitable</span>

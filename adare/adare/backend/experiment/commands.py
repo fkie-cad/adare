@@ -39,7 +39,7 @@ from adare.backend.experiment.runctx import ExperimentRunCtx, ExperimentConfig
 import logging
 log = logging.getLogger(__name__)
 
-# Disable verbose MCP client logging to prevent base64 image flooding
+# Disable verbose MCP client logging to prevent base64 image flooding the log
 logging.getLogger('mcp.client.streamable_http').setLevel(logging.WARNING)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
@@ -65,6 +65,8 @@ def experiment_sync(experiment_ulid: str):
 
 
 def experiment_create(project_path: Path, experiment: str):
+    from adare.console import print_success_message
+    
     experiment_directory = ExperimentDirectory(project_path, experiment)
     if experiment_directory.exists():
         raise ExperimentDirectoryAlreadyExistsError(
@@ -72,6 +74,22 @@ def experiment_create(project_path: Path, experiment: str):
         )
     experiment_directory.create()
     log.info(f'experiment directory {experiment_directory.path} created')
+    
+    # Provide clear user feedback with next steps
+    next_steps = [
+        f'Edit {experiment_directory.playbookfile.name} to define a sequence of gui actions and tests',
+        f'Edit {experiment_directory.testsetfile.name} to define your tests', 
+        f'Edit {experiment_directory.metadatafile.name} to add experiment details, such as possible environments, tags, and more',
+        f'Before run load the experiment with: adare experiment load {experiment}',
+        f'Run the experiment with: adare experiment run {experiment} -e <environment>'
+    ]
+    
+    print_success_message(
+        title=f'Experiment "{experiment}" created successfully!',
+        location=str(experiment_directory.path),
+        next_steps=next_steps,
+        tip='See documentation for an tutorial on how write an experiment here: https://adare.seclab-bonn.de/docs/gettingstarted/index.html#create-an-experiment'
+    )
 
 
 def experiment_example(project_path: Path, experiment: str):
@@ -164,7 +182,9 @@ def __validate_testset_compatibility(project_path: Path, experiment_directory: E
         )
 
 
-def experiment_load(project_path: Path, experiment_name: str, force: bool = False):
+def experiment_load(project_path: Path, experiment_name: str, force: bool = False, silent: bool = False):
+    from adare.console import print_success_message
+    
     # todo: fix bug that we can have two identical experiments
     experiment_directory = ExperimentDirectory(project_path, experiment_name)
     if not experiment_directory.exists():
@@ -179,6 +199,8 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
     
     # Validate testset compatibility with available testfunctions
     __validate_testset_compatibility(project_path, experiment_directory)
+    
+    was_updated = False
     if experiment_ulid := experiment_database.get_experiment_by_project_and_name(
             project_path, experiment_name, trigger_error=False
     ):
@@ -186,6 +208,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
             __experiment_update(
                 experiment_ulid, experiment_name, experiment_directory, force
             )
+            was_updated = True
         except ExperimentNotChanged as e:
             experiment_sync(experiment_ulid)
     else:
@@ -196,6 +219,20 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
         log.info(f'experiment {experiment_name} created')
 
     experiment_sync(experiment_ulid)
+    
+    # Provide clear user feedback only if not in silent mode
+    if not silent:
+        action = "updated" if was_updated else "loaded"
+        next_steps = [
+            f'Run the experiment with: adare experiment run {experiment_name} -e <environment>',
+        ]
+        
+        print_success_message(
+            title=f'Experiment "{experiment_name}" {action} successfully!',
+            location=str(experiment_directory.path),
+            next_steps=next_steps,
+            tip=f'show the experiment info with `adare experiment info {experiment_name}` to see the details',
+        )
 
 
 def __cleanup_experiment_run(experiment_run_directory: ExperimentRunDirectory):
@@ -380,9 +417,9 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                 # Fallback to file-based parsing for new/untracked experiments
                 log.info("Experiment not found in database, falling back to file-based parsing")
                 from adare.types.playbook import parse_playbook
-                playbook_path = context.experiment_directory.path / "playbook.yaml"
+                playbook_path = context.experiment_directory.path / "playbook.yml"
                 if not playbook_path.exists():
-                    log.info("No playbook.yaml found - experiment will run without GUI actions")
+                    log.warning("No playbook.yml found - experiment cannot run GUI actions (experiment may be incomplete)")
                     return
                 context.playbook = parse_playbook(playbook_path)
                 log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
@@ -399,9 +436,9 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                     # Fallback to file parsing if database doesn't have the content
                     log.warning(f"Database playbook load failed: {e}, falling back to file parsing")
                     from adare.types.playbook import parse_playbook
-                    playbook_path = context.experiment_directory.path / "playbook.yaml"
+                    playbook_path = context.experiment_directory.path / "playbook.yml"
                     if not playbook_path.exists():
-                        log.info("No playbook.yaml found - experiment will run without GUI actions")
+                        log.warning("No playbook.yml found - experiment cannot run GUI actions (experiment may be incomplete)")
                         return
                     context.playbook = parse_playbook(playbook_path)
                     log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")

@@ -275,13 +275,21 @@ def list_experiments():
     exec_with_error_printing(exec_show_experiments, args)
 
 @experiment.command()
-@click.option('--dotnotation', '-d', help='Dotnotation in format: project_name.environment_name.experiment_name')
+@click.argument('name', required=False)
 @click.option('--ulid', '-u', help='ULID of the experiment')
-def info(dotnotation, ulid):
-    """Show detailed information about a specific experiment."""
+@click.option('--dotnotation', '-d', help='Dotnotation in format: project_name.environment_name.experiment_name')
+def info(name, ulid, dotnotation):
+    """Show detailed information about a specific experiment.
+    
+    Usage:
+    - adare experiment info NAME (find experiment by name in current project)
+    - adare experiment info -u ULID (find experiment by ULID)
+    - adare experiment info -d project.env.experiment (find by dotnotation)
+    """
     args = SimpleNamespace(
-        dotnotation=dotnotation,
-        ulid=ulid
+        name=name,
+        ulid=ulid,
+        dotnotation=dotnotation
     )
     exec_with_error_printing(exec_show_experiment, args)
 

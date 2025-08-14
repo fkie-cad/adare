@@ -241,6 +241,33 @@ class DataRetrievalApi(DatabaseApi):
             
         return self.get_experiment(project_name, environment_name, experiment_name)
 
+    def get_experiment_by_name_in_current_project(self, experiment_name: str) -> pd.DataFrame:
+        """Get experiment by name within the current project (names are unique per project)."""
+        from adare.backend.basics import determine_projectdirectory
+        from adare.exceptions import NoProjectFoundError
+        
+        # Determine current project
+        project_path = determine_projectdirectory(None)
+        if not project_path:
+            raise NoProjectFoundError(log, message='No project directory found. Please run from within a project directory or provide full dotnotation.')
+        
+        project_name = project_path.name
+        self.__check_project_exists(project_name)
+        
+        # Find the experiment by name in any environment within this project
+        experiment_query = self._session.query(Experiment).filter(
+            Experiment.name == experiment_name).filter(
+            Experiment.environments.any(Environment.project.has(Project.name == project_name)))
+        
+        if not experiment_query.count():
+            from adare.exceptions import ExperimentNotFoundError
+            raise ExperimentNotFoundError(log, f'Experiment "{experiment_name}" not found in project "{project_name}"')
+        
+        experiment_df = pd.read_sql(experiment_query.statement, self._session.bind)
+        experiment_df = experiment_df.map(str)
+        experiment_df = self.__enrich_experiment_data(experiment_df)
+        return experiment_df
+
     def get_experiment_details_by_ulid(self, experiment_ulid: str):
         self.__check_experiment_exists_by_ulid(experiment_ulid)
         experiment_df = pd.read_sql(self._session.query(Experiment).filter(
