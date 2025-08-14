@@ -65,6 +65,9 @@ class InfoPanel:
         grid.add_row(
             f'{pad_string_to_length("created", 8)}: {self.experiment["created_at"].values[0]}',
         )
+        grid.add_row(
+            f'{pad_string_to_length("environments", 8)}: {self.experiment["environments"].values[0] or "None"}',
+        )
 
         title = f'[b medium_turquoise]info[/b medium_turquoise]'
         return Panel(grid, title=title, border_style="blue", title_align="left")
@@ -97,10 +100,20 @@ class ExperimentPanel:
         return Panel(layout, title=title, border_style="blue", title_align="left")
 
 
-def print_experiment(dotnotation: str = None, ulid: str = None, project_name: str = None, environment_name: str = None, experiment_name: str = None):
+def print_experiment(name: str = None, dotnotation: str = None, ulid: str = None, project_name: str = None, environment_name: str = None, experiment_name: str = None):
     with DataRetrievalApi() as db:
         console = DefaultConsole()
-        if dotnotation:
+        
+        # Check for conflicting arguments
+        provided_args = sum(bool(arg) for arg in [name, dotnotation, ulid])
+        if provided_args > 1:
+            from adare.exceptions import ArgumentsError
+            raise ArgumentsError(log, 'Only one of name, --dotnotation, or --ulid should be provided')
+        
+        if name:
+            # Find experiment by name in current project (names are unique per project)
+            experiment = db.get_experiment_by_name_in_current_project(name)
+        elif dotnotation:
             experiment = db.get_experiment_by_dotnotation(dotnotation)
         elif ulid:
             experiment = db.get_experiment(ulid=ulid)
@@ -108,7 +121,7 @@ def print_experiment(dotnotation: str = None, ulid: str = None, project_name: st
             experiment = db.get_experiment(project_name, environment_name, experiment_name)
         else:
             from adare.exceptions import ArgumentsError
-            raise ArgumentsError(log, 'Either dotnotation, ulid, or project_name/environment_name/experiment_name must be provided')
+            raise ArgumentsError(log, 'Either name, dotnotation, ulid, or project_name/environment_name/experiment_name must be provided')
         
         ulid = experiment['ulid'].values[0]
         abstract_tests = db.get_abstract_tests(ulid)

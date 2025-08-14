@@ -71,7 +71,7 @@ def exec_show_testfunction(arguments):
 
 def exec_show_experiment(arguments):
     from adare.frontend.terminal.experiment import print_experiment
-    print_experiment(dotnotation=arguments.dotnotation, ulid=arguments.ulid)
+    print_experiment(name=arguments.name, ulid=arguments.ulid, dotnotation=arguments.dotnotation)
 
 
 def exec_show_experiments(arguments):

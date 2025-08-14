@@ -1,0 +1,43 @@
+# ADARE Experiment Playbook - Simple Template
+# Define the GUI automation steps for your experiment
+
+actions:
+  # Run initial test to check starting conditions  
+  - test:
+      name: "initial_check"
+      description: "Verify initial state before experiment"
+  
+  # Click on text in the UI
+  - click:
+      target:
+        text: "Start"
+      description: "Click the Start button"
+  
+  # Click on an image (place your image files in the img/ folder)
+  - click:
+      target:
+        image: "button.png"
+      description: "Click on button image"
+  
+  # Type text
+  - keyboard:
+      keys: "Hello World"
+      description: "Type some text"
+  
+  # Use keyboard shortcuts
+  - keyboard:
+      combination: ["ctrl", "s"]
+      description: "Save with Ctrl+S"
+  
+  # Wait between actions if needed
+  - idle:
+      duration: 2.0
+      description: "Wait 2 seconds"
+  
+  # Run final test to verify results
+  - test:
+      name: "final_check"
+      description: "Verify experiment completed successfully"
+
+# For advanced features and complete documentation, see:
+# https://docs.adare.example.com/experiments/playbook-reference

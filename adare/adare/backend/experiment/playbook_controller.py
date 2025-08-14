@@ -366,14 +366,14 @@ class PlaybookController:
         await self.load_tests(experiment_dir)
         
         # 2. Execute playbook actions (can now use loaded tests)
-        playbook_path = experiment_dir / "playbook.yaml"
+        playbook_path = experiment_dir / "playbook.yml"
         if playbook_path.exists():
             log.info("Executing playbook actions...")
             playbook_result = await self.execute_playbook()
             if not playbook_result.success:
                 return playbook_result
         else:
-            log.warning("No playbook.yaml found, skipping GUI actions")
+            log.warning("No playbook.yml found, skipping GUI actions")
         
         # 3. Run any additional tests
         await self.run_final_tests(experiment_dir)
@@ -395,7 +395,7 @@ class PlaybookController:
         Execute YAML playbook actions in order.
         
         Args:
-            playbook_path: Path to playbook.yaml file
+            playbook_path: Path to playbook.yml file
             
         Returns:
             PlaybookExecutionResult with execution details

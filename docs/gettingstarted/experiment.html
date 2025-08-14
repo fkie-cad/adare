@@ -82,10 +82,11 @@
 ├── experiments/
 │   ├── ...
 │   └── &lt;experiment_name&gt;/
-│       ├── action.py
+│       ├── playbook.yml
 │       ├── testset.yml
 │       ├── metadata.yml
-│       └── img/
+│       ├── img/
+│       └── shared/
 └── ...
 </pre></div>
 </div>
@@ -111,9 +112,9 @@ So its basic structure looks like the following:</p>
 </pre></div>
 </div>
 </section>
-<section id="action-file">
-<h2>Action File<a class="headerlink" href="#action-file" title="Link to this heading"></a></h2>
-<p>When creating an experiment, an action file skeleton is created, looking like the following:</p>
+<section id="playbook-file">
+<h2>Playbook File<a class="headerlink" href="#playbook-file" title="Link to this heading"></a></h2>
+<p>The playbook.yml file defines the GUI automation steps for your experiment using simple YAML syntax. A basic playbook looks like this:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adarevm.action.experiment</span><span class="w"> </span><span class="kn">import</span> <span class="n">Experiment</span><span class="p">,</span> <span class="n">KEYMAP</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Awaitable</span>

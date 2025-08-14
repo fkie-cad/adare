@@ -9,10 +9,11 @@ When an experiment is created via ``adare experiment create <experiment_name>``,
     ├── experiments/
     │   ├── ...
     │   └── <experiment_name>/
-    │       ├── action.py
+    │       ├── playbook.yml
     │       ├── testset.yml
     │       ├── metadata.yml
-    │       └── img/
+    │       ├── img/
+    │       └── shared/
     └── ...
 
 
@@ -42,10 +43,10 @@ So its basic structure looks like the following:
 
 
 
-Action File
+Playbook File
 ############
 
-When creating an experiment, an action file skeleton is created, looking like the following:
+The playbook.yml file defines the GUI automation steps for your experiment using simple YAML syntax. A basic playbook looks like this:
 
 .. code-block:: python
 

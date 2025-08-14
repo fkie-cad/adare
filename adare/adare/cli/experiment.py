@@ -45,7 +45,7 @@ def exec_experiment_run(arguments):
     if project_directory := determine_projectdirectory(arguments.project):
         import asyncio
         try:
-            experiment_load(project_directory, arguments.experiment, force=False)
+            experiment_load(project_directory, arguments.experiment, force=False, silent=True)
             asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot))
         except LoggedException as e:
             e.print()
@@ -65,7 +65,7 @@ def exec_experiment_test(arguments):
     
     if project_directory := determine_projectdirectory(arguments.project):
         try:
-            experiment_load(project_directory, arguments.experiment, force=False)
+            experiment_load(project_directory, arguments.experiment, force=False, silent=True)
             experiment_test(project_directory, arguments.experiment, arguments.environment)
         except LoggedException as e:
             e.print()

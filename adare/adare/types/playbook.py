@@ -66,7 +66,7 @@ TargetStrategyType = Union[
 
 @attrs.define
 class Settings:
-    idle: float
+    idle: float = 0.1
     timeout: Optional[float] = None
     screenshot: Optional[dict] = None
 
@@ -184,8 +184,8 @@ ActionType = Union[
 
 @attrs.define
 class Playbook:
-    settings: Settings
     actions: List[ActionType]
+    settings: Settings = attrs.Factory(Settings)
     variables: Optional[dict] = None
 
 def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or str

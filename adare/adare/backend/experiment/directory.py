@@ -74,7 +74,7 @@ class ExperimentDirectory(Directory):
         self.shared = self.path / 'shared'
         self.shared_tools = self.shared / 'tools'
         self.shared_data = self.shared / 'data'
-        self.playbookfile = self.path / 'playbook.yaml'
+        self.playbookfile = self.path / 'playbook.yml'
         self.testsetfile = self.path / 'testset.yml'
         self.metadatafile = self.path / 'metadata.yml'
         self.bibtexfile = self.path / 'bibtext.bib'
@@ -83,7 +83,7 @@ class ExperimentDirectory(Directory):
     def __create_experiment_files(self):
         # Use YAML-first templates from package directory
         package_templates_dir = Path(adare.__file__).parent.parent / 'appdata' / 'templates'
-        playbookfile_template = package_templates_dir / 'experiment' / 'playbook.yaml'
+        playbookfile_template = package_templates_dir / 'experiment' / 'playbook.yml'
         testsetfile_template = package_templates_dir / 'experiment' / 'testset.yml'
         metadatafile_template = package_templates_dir / 'experiment' / 'metadata.yml'
 
