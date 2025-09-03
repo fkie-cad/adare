@@ -9,6 +9,7 @@ readme = "README.md"
 adarelib = {path = "../adarelib", develop=true}
 python = "^3.10"
 pyautogui = "^0.9.54"
+pillow = "^11.3.0"
 websockets = "^15.0"
 cattrs = "^23.2.3"
 attrs = "^24.0.0"

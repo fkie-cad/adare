@@ -36,7 +36,7 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
     vm_manager = VMFileManager()
     
     # Calculate hash (heavy operation done during environment load)
-    log.info(f"📊 Calculating VM file hash during environment load...")
+    log.info(f"Calculating VM file hash during environment load...")
     file_hash = vm_manager.calculate_file_hash(vm_path, silent=False)
     log.info(f"VM file hash: {file_hash}")
     
@@ -162,8 +162,7 @@ def ensure_vm_available_for_environment(vm_id: str, experiment_id: str = None) -
         experiment_id = str(ulid.ULID())
         log.info(f"Generated experiment ID for VM preparation: {experiment_id}")
     
-    # 🚀 ALWAYS use the optimized snapshot workflow!
-    log.info(f"🚀 Using OPTIMIZED snapshot workflow (experiment: {experiment_id})")
+    log.info(f"Using OPTIMIZED snapshot workflow (experiment: {experiment_id})")
     return ensure_vm_ready_for_experiment(vm_id, experiment_id)
 
 
@@ -355,7 +354,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     
     from adare.backend.vm.snapshot_manager import SnapshotManager, create_base_snapshot_for_vm, restore_vm_to_base_snapshot
     
-    log.info(f"🚀 Starting VM preparation for experiment {experiment_id}")
+    log.info(f"Starting VM preparation for experiment {experiment_id}")
     
     # Get VM record from database (file operations already done during env load)
     vm = vm_database.get_vm_by_id(vm_id)
@@ -371,7 +370,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     # Handle different VM states
     if vm_status == VMStatus.IMPORTED or vm_status == VMStatus.MISSING:
         # First time or missing: Import VM to VirtualBox + create base snapshot  
-        log.info(f"⚡ First time VM setup - importing to VirtualBox...")
+        log.info(f"First time VM setup - importing to VirtualBox...")
         
         # Use dedicated VM import stage
         if experiment_run_ulid:
@@ -390,7 +389,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
             create_base_snapshot_for_vm(vm, silent=False)
         
         first_run_time = time.time() - start_time
-        log.info(f"⏱️  First VirtualBox import completed in {first_run_time:.1f} seconds")
+        log.info(f"First VirtualBox import completed in {first_run_time:.1f} seconds")
         return vm.id
         
     elif vm_status == VMStatus.SNAPSHOT_MISSING:
@@ -407,11 +406,11 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         log.warning(f"VM not ready (status: {vm_status.name}) - attempting repair...")
         # Additional repair logic could go here
     
-    # VM exists in VirtualBox - use FAST snapshot workflow! 🏃‍♂️💨
-    log.info(f"⚡ VM already in VirtualBox! Using FAST snapshot workflow...")
+    # VM exists in VirtualBox - use FAST snapshot workflow! 
+    log.info(f"VM already in VirtualBox! Using FAST snapshot workflow...")
     
     # 🚀 FAST RESTORE from base snapshot (this is where the magic happens!)
-    log.info(f"⚡ Restoring from base snapshot - SUPER FAST!")
+    log.info(f"Restoring from base snapshot - SUPER FAST!")
     if experiment_run_ulid:
         with StageCtxManager(VMSnapshotRestoreStage(), experiment_run_ulid):
             restore_success = restore_vm_to_base_snapshot(vm, silent=False)
@@ -426,7 +425,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     update_vm_status_in_db(vm.id, VMStatus.READY)
     
     total_time = time.time() - start_time
-    log.info(f"🎉 VM preparation completed in {total_time:.1f} seconds!")
+    log.info(f"VM preparation completed in {total_time:.1f} seconds!")
     
     return vm.id
 
@@ -510,17 +509,17 @@ def clear_vms_by_environment(environment_ulid: str, force: bool = False) -> dict
     results = vm_database.delete_vms_by_environment(environment_ulid, force=force)
     
     if results['deleted_count'] > 0:
-        log.info(f"✅ Successfully cleared {results['deleted_count']} VMs for environment {environment_ulid}")
+        log.info(f"Successfully cleared {results['deleted_count']} VMs for environment {environment_ulid}")
         for vm_name in results['deleted_vms']:
             log.info(f"   - {vm_name}")
     
     if results['failed_count'] > 0:
-        log.error(f"❌ Failed to delete {results['failed_count']} VMs")
+        log.error(f"Failed to delete {results['failed_count']} VMs")
         for error in results['failed_vms']:
             log.error(f"   - {error}")
     
     if results['deleted_count'] == 0 and results['failed_count'] == 0:
-        log.info(f"ℹ️  No VMs found for environment {environment_ulid}")
+        log.info(f"ℹNo VMs found for environment {environment_ulid}")
     
     return results
 

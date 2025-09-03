@@ -291,3 +291,47 @@ class CsvContainsLineMatchingRegex(BasicTest):
                 details=[f'file with path {self.parameter.dst} does not exist']
             )
             return result
+
+@attrs.define
+class FileContentEqualsParameter(Parameter):
+    dst: str
+    content: str
+
+@attrs.define
+class FileContentEquals(BasicTest):
+    testname: ClassVar[str] = 'file_content_equals'
+    testdescription: ClassVar[str] = 'tests if file content equals the given content'
+
+    name: str
+    parameter: FileContentEqualsParameter
+    description: Optional[str] = ''
+    variables: Optional[dict] = None
+
+    def test(self):
+        dst, status = self.resolve_globfilepath(self.parameter.dst)
+        if not dst:
+            result = TestResult(
+                status=StatusEnum.FAILED,
+                details=[f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})']
+            )
+            return result
+        log.debug(f'dst file {dst} will be used for test {self.name}')
+        try:
+            with open(dst, 'r') as f:
+                data = f.read()
+        except FileNotFoundError:
+            result = TestResult(
+                status=StatusEnum.FAILED,
+                details=[f'file with path {self.parameter.dst} does not exist']
+            )
+            return result
+        if self.parameter.content == data:
+            result = TestResult(
+                status=StatusEnum.SUCCESS
+            )
+        else:
+            result = TestResult(
+                status=StatusEnum.FAILED,
+                details=['file content does not equal expected content'],
+            )
+        return result

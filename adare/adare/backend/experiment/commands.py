@@ -21,11 +21,11 @@ from adare.types.stages import (
     ExperimentPreparationStage, VirtualMachineSetupStage, SoftwareInstallationStage, 
     ExperimentExecutionStage, CleanupShutdownStage,
     # Sub-stages
-    SetupExperimentEnvironmentStage, ValidateIntegrityStage, PrepareRunEnvironmentStage, StartMCPServerStage,
+    SetupExperimentEnvironmentStage, ValidateIntegrityStage, PrepareRunEnvironmentStage, StartComputerVisionServerStage,
     ExperimentIntegrityCheckStage, ProjectIntegrityCheckStage,
     InstallAdareVMStage, ConnectToVMStage, InstallationsStage,
     ExperimentRunStage,
-    FinalizeStage, ShutdownMCPServerStage, ShutdownWebSocketStage,
+    FinalizeStage, ShutdownComputerVisionServerStage, ShutdownWebSocketStage,
 )
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adarelib.constants import StatusEnum
@@ -196,7 +196,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
             ]
         )
     experiment_directory.check_for_missing_files()
-    
+
     # Validate testset compatibility with available testfunctions
     __validate_testset_compatibility(project_path, experiment_directory)
     
@@ -527,9 +527,8 @@ async def step_install_and_run_websocket_server(context: ExperimentRunCtx):
         await install_and_run_adare_vm(context, stop_event=context.user_interrupt_event)
 
 async def step_connect_websocket(context: ExperimentRunCtx):
-    with StageCtxManager(ConnectToVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+    with StageCtxManager(ConnectToVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
         from adare.backend.experiment.websocket_client import AdareVMClient
-        from retry import retry
         import asyncio
         from websockets.exceptions import ConnectionClosed, WebSocketException
         
@@ -548,55 +547,69 @@ async def step_connect_websocket(context: ExperimentRunCtx):
         context.client.add_event_handler('log', log_event_handler)
         context.client.add_event_handler('error', error_event_handler)
         
-        @retry(
-            exceptions=(
-                asyncio.TimeoutError,
-                ConnectionClosed,
-                WebSocketException,
-                ConnectionRefusedError,
-                OSError
-            ),
-            tries=10,
-            delay=2,
-            backoff=1.2,
-            jitter=(1, 3)
-        )
-        async def connect_with_retry():
+        # Retry delays: 1, 2, 3, 5, 7 seconds
+        retry_delays = [1, 2, 3, 5, 7]
+        max_attempts = len(retry_delays) + 1  # +1 for the initial attempt
+        
+        last_error = None
+        for attempt in range(1, max_attempts + 1):
             if context.stop_event.is_set():
                 log.info("Connection cancelled by stop event")
-                return False
-                
-            log.info("Attempting to connect to AdareVM server")
-            connected = await context.client.connect(timeout=60.0)
+                return
             
-            if not connected:
-                raise ConnectionRefusedError("Failed to establish websocket connection")
-            
-            return True
-        
-        # Attempt connection with retry logic
-        try:
-            await connect_with_retry()
-            log.info("Successfully connected to AdareVM WebSocket server")
-            
-            # Test the connection with ping
-            ping_success = await context.client.ping()
-            if ping_success:
-                log.info("Ping test successful - WebSocket connection is working")
+            # Update stage message to show retry attempt
+            if attempt == 1:
+                stage_ctx.stage.sub_msg = f"Attempting connection..."
             else:
-                log.warning("Ping test failed but connection established")
+                stage_ctx.stage.sub_msg = f"Retrying connection (attempt {attempt}/{max_attempts})"
+            stage_ctx.set_status(stage_ctx.stage.status)
             
-            # Get server status
             try:
-                status = await context.client.get_status()
-                log.info(f"AdareVM server status: {status}")
-            except (asyncio.TimeoutError, ConnectionClosed) as e:
-                log.warning(f"Could not get server status: {e}")
+                log.info(f"Attempting to connect to AdareVM server (attempt {attempt}/{max_attempts})")
+                connected = await context.client.connect(timeout=60.0)
                 
-        except (asyncio.TimeoutError, WebSocketException, ConnectionRefusedError, OSError) as e:
-            from adare.exceptions import LoggedException
-            log.error(e, exc_info=True)
-            raise LoggedException(log, f"Failed to connect to AdareVM server: {e}") from e
+                if connected:
+                    stage_ctx.stage.sub_msg = ""  # Clear sub_msg to show default stage message
+                    stage_ctx.set_status(stage_ctx.stage.status)
+                    log.info("Successfully connected to AdareVM WebSocket server")
+                    
+                    # Test the connection with ping
+                    ping_success = await context.client.ping()
+                    if ping_success:
+                        log.info("Ping test successful - WebSocket connection is working")
+                    else:
+                        log.warning("Ping test failed but connection established")
+                    
+                    # Get server status
+                    try:
+                        status = await context.client.get_status()
+                        log.info(f"AdareVM server status: {status}")
+                    except (asyncio.TimeoutError, ConnectionClosed) as e:
+                        log.warning(f"Could not get server status: {e}")
+                    
+                    return  # Success - exit the function
+                else:
+                    raise ConnectionRefusedError("Failed to establish websocket connection")
+                    
+            except (asyncio.TimeoutError, ConnectionClosed, WebSocketException, ConnectionRefusedError, OSError) as e:
+                last_error = e
+                log.warning(f"Connection attempt {attempt}/{max_attempts} failed: {e}")
+                
+                if attempt < max_attempts:
+                    # Not the final attempt - wait and retry
+                    delay = retry_delays[attempt - 1]
+                    stage_ctx.stage.sub_msg = f"Attempt {attempt} failed, retrying in {delay}s..."
+                    stage_ctx.set_status(stage_ctx.stage.status)
+                    
+                    log.info(f"Retrying in {delay} seconds...")
+                    await asyncio.sleep(delay)
+        
+        # All attempts failed
+        stage_ctx.stage.sub_msg = f"All {max_attempts} connection attempts failed"
+        stage_ctx.set_status(stage_ctx.stage.status)
+        from adare.exceptions import LoggedException
+        log.error(last_error, exc_info=True)
+        raise LoggedException(log, f"Failed to connect to AdareVM server after {max_attempts} attempts: {last_error}") from last_error
 
 async def step_execute_installations(context: ExperimentRunCtx):
     with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage:
@@ -610,7 +623,7 @@ async def step_execute_installations(context: ExperimentRunCtx):
 
 async def step_start_mcp_server(context: ExperimentRunCtx):
     """Start the MCP GUI server for target detection."""
-    with StageCtxManager(StartMCPServerStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+    with StageCtxManager(StartComputerVisionServerStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         log.info("Starting MCP GUI server for target detection...")
         
         success = await context.mcp_server.start()
@@ -680,7 +693,7 @@ def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
 async def step_shutdown_mcp_server(context: ExperimentRunCtx, post_interrupt: bool = False):
     """Stop the MCP GUI server."""
     event = None if post_interrupt else context.user_interrupt_event
-    with StageCtxManager(ShutdownMCPServerStage(), context.experiment_run_ulid, event=event):
+    with StageCtxManager(ShutdownComputerVisionServerStage(), context.experiment_run_ulid, event=event):
         log.info('stopping MCP GUI server')
         await context.mcp_server.stop()
 
@@ -819,6 +832,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
+                # input("Press Enter to continue after AdareVM has fully started (look for 'WebSocket server started' in adarevm log)...")
                 await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
                 await step_runner.run_async_step(step_execute_installations, experiment_run_context)
 

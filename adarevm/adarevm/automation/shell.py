@@ -8,10 +8,10 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def execute_on_shell(command: list, cwd: Path = None, shell: bool = False, powershell: bool = True, env: dict = None, timeout: float = None) -> dict:
+def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell: bool = True, env: dict = None, timeout: float = None) -> dict:
     """
     Executes a shell command.
-    :param command: List of command and arguments.
+    :param command: List of command and arguments, or string when shell=True.
     :param cwd: Current working directory where the command should be executed.
     :param shell: If True, execute in shell (Cmd.exe on Windows, default shell on Unix).
     :param powershell: If True, execute in powershell instead of cmd.exe. (Windows only)
@@ -21,11 +21,16 @@ def execute_on_shell(command: list, cwd: Path = None, shell: bool = False, power
     """
     is_windows = platform.system().lower() == "windows"
 
-    if shell and is_windows and powershell:
-        command_str = " ".join(command)
-        command = ["powershell", "-Command", command_str]
+    # Handle both string and list commands
+    if isinstance(command, str):
+        command_str = command
+        if shell and is_windows and powershell:
+            command = ["powershell", "-Command", command_str]
+        # For shell=True on Unix or when not using powershell, keep as string
     else:
         command_str = " ".join(command)
+        if shell and is_windows and powershell:
+            command = ["powershell", "-Command", command_str]
 
     # Prepare environment variables
     process_env = None

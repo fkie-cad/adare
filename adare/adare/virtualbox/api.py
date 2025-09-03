@@ -121,8 +121,8 @@ class VirtualBoxVM:
         vm_name: str,
         guest_os: str,
         manager: 'VirtualBoxManager',
-        username: str = 'vagrant',
-        password: str = 'vagrant',
+        username: str = 'adare',
+        password: str = 'adare',
         cpus: int = 1,
         ram: int = 1024,
         network: str = "nat"
@@ -149,7 +149,9 @@ class VirtualBoxVM:
                 ["modifyvm", self.vm_name, "--ostype", self.guest_os],
                 ["modifyvm", self.vm_name, "--cpus", str(self.cpus)],
                 ["modifyvm", self.vm_name, "--memory", str(self.ram)],
-                ["modifyvm", self.vm_name, "--nic1", self.network]
+                ["modifyvm", self.vm_name, "--nic1", self.network],
+                ["modifyvm", self.vm_name, "--graphicscontroller", "vmsvga"],
+                ["modifyvm", self.vm_name, "--vram", "128"]
             ]
             
             total_return_value = 0
@@ -632,7 +634,12 @@ class VirtualBoxVM:
                     lines = stdout_content.splitlines()
                     if lines:
                         pid_candidate = lines[-1].strip()
-                        if pid_candidate.isdigit():
+                        if pid_candidate == 'NOHUP_FAILED':
+                            # nohup command failed, treat this as an error
+                            log.error(f"Background command failed to start in VM '{self.vm_name}': {command[:50]}...")
+                            from adare.backend.experiment.exceptions import ExperimentCommandError
+                            raise ExperimentCommandError(log, command, 1, stdout_content, "nohup command failed")
+                        elif pid_candidate.isdigit():
                             pid = pid_candidate
                     
                     if pid:
@@ -720,7 +727,7 @@ class VirtualBoxVM:
             vbox_command = [
                 self.vboxmanage_exe, "guestcontrol", self.vm_name, "run",
                 "--exe", command_exe,
-                "--", command_exe, command_args
+                "--", command_args
             ]
 
             # if hasattr(self, "_guest_session_id") and self._guest_session_id:
@@ -860,6 +867,41 @@ class VirtualBoxVM:
         
         return await self.manager.run_async(_start_async)
 
+    async def set_video_mode_hint(self, width: int = 1920, height: int = 1080, depth: int = 32, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+        """
+        Set video mode hint for the VM (must be running).
+        
+        Args:
+            width: Screen width in pixels
+            height: Screen height in pixels  
+            depth: Color depth in bits
+        """
+        async def _set_video_mode_async():
+            state = self._get_state()
+            if state != "running":
+                log.warning(f"VM '{self.vm_name}' is not running (state: {state}). Cannot set video mode hint.")
+                return 1
+            
+            log.info(f"Setting video mode hint for VM '{self.vm_name}' to {width}x{height}x{depth}")
+            args = ["controlvm", self.vm_name, "setvideomodehint", str(width), str(height), str(depth)]
+            return_value, _, _ = await self._execute_streaming_command_async(
+                args,
+                log_file=log_file,
+                stop_event=stop_event,
+                silent=silent,
+                ctx_manager=ctx_manager,
+                operation_name="video mode hint setting"
+            )
+            
+            if return_value == 0:
+                log.info(f"Video mode hint set to {width}x{height}x{depth} for VM '{self.vm_name}'")
+            else:
+                log.warning(f"Failed to set video mode hint for VM '{self.vm_name}': return code {return_value}")
+            
+            return return_value
+        
+        return await self.manager.run_async(_set_video_mode_async)
+
     async def stop(self, ctx_manager=None, log_file: Optional[Path] = None, silent: bool = False):
         """
         Gracefully stop the VM using VBoxManage controlvm poweroff.
@@ -927,15 +969,27 @@ class VirtualBoxVM:
         else:
             command_exe = "/bin/bash"
             if background:
-                command_args = f"-c '{cmd_to_run} & echo $!'"
+                # Use nohup with bash -c to handle shell builtins and complex commands
+                # This ensures the background process survives when the parent shell exits
+                # Log errors to startup log file for debugging and background the nohup process
+                linux_command = f"nohup bash -c '{cmd_to_run}' >/dev/null 2>>/adare/run/logs/adarevmstartup.log & echo $!"
             else:
-                command_args = f"-c '{cmd_to_run}'"
+                linux_command = cmd_to_run
         
-        args = [
-            "guestcontrol", self.vm_name, "run",
-            "--exe", command_exe,
-            "--", command_exe, command_args
-        ]
+        if 'windows' in self.guest_os.lower():
+            args = [
+                "guestcontrol", self.vm_name, "run",
+                "--exe", command_exe,
+                "--", command_exe, command_args
+            ]
+        else:
+            args = [
+                "guestcontrol", self.vm_name, "run",
+                "--exe", command_exe,
+                "--putenv", "DISPLAY=:0",
+                "--putenv", "XAUTHORITY=/run/user/1000/gdm/Xauthority",
+                "--", "-c", linux_command
+            ]
         
         # Add authentication
         if hasattr(self, "_guest_session_id") and self._guest_session_id:
@@ -1020,7 +1074,7 @@ class VirtualBoxVM:
         
         return await self.manager.run_async(_import_async)
 
-    async def add_shared_folder(self, name: str, host_path: Path, automount: bool = True, readonly: bool = False, mountpoint: Optional[Path] = None, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+    async def add_shared_folder(self, name: str, host_path: Path, readonly: bool = False, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
         """
         Add a shared folder to the VM (VirtualBox configuration only).
         For Windows guests with custom mountpoint, this only adds the shared folder - use mount_shared_folder() after VM startup.
@@ -1029,9 +1083,7 @@ class VirtualBoxVM:
         Args:
             name: Name of the shared folder
             host_path: Path on the host machine
-            automount: Whether to automount (ignored for Windows with custom mountpoint)
             readonly: Whether the share is read-only
-            mountpoint: Custom mount point (Windows: use mount_shared_folder() after startup)
             ctx_manager: Context manager for status updates
             stop_event: Event to signal stop
             log_file: Log file for output
@@ -1039,7 +1091,7 @@ class VirtualBoxVM:
         """
         async def _add_shared_folder_async():
             # For Windows guests with custom mountpoint, use command execution for arbitrary paths
-            if 'windows' in self.guest_os.lower() and mountpoint:
+            if 'windows' in self.guest_os.lower():
                 # First add the shared folder using standard VirtualBox method (no automount)
                 args = [
                     "sharedfolder", "add", self.vm_name,
@@ -1076,18 +1128,15 @@ class VirtualBoxVM:
                     log.error(f"OS error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
                     return 1
             else:
-                # Use standard VirtualBox shared folder mechanism
+                # For Linux: Use VirtualBox shared folder mechanism without automount
+                # We'll manually mount later for better control over permissions and mount points
                 args = [
                     "sharedfolder", "add", self.vm_name,
                     "--name", name,
                     "--hostpath", host_path
                 ]
-                if automount:
-                    args.append("--automount")
                 if readonly:
                     args.append("--readonly")
-                if mountpoint:
-                    args += ["--auto-mount-point", mountpoint]
                 
                 try:
                     log.info(f"Adding shared folder '{name}' (host: {host_path}) to VM '{self.vm_name}'.")
@@ -1115,99 +1164,130 @@ class VirtualBoxVM:
         
         return await self.manager.run_async(_add_shared_folder_async)
 
+    def _build_mount_commands(self, name: str, mountpoint: Path) -> list:
+        """
+        Build mounting commands for a shared folder.
+        Returns a list of command dictionaries with 'command' and 'description' keys.
+        """
+        commands = []
+        
+        if 'windows' in self.guest_os.lower():
+            from pathlib import PureWindowsPath
+            unc_path = f"\\\\vboxsvr\\{name}"
+            mountpoint_str = str(mountpoint)
+            
+            # Check if it's a drive letter (like Z:, X:, Y:, etc.)
+            if len(mountpoint_str) == 2 and mountpoint_str[1] == ':' and mountpoint_str[0].isalpha():
+                # Mount to drive letter using net use command
+                drive_letter = mountpoint_str.upper()
+                mount_cmd = f'net use {drive_letter} "{unc_path}" /persistent:yes'
+                commands.append({
+                    'command': mount_cmd,
+                    'description': f"Mount shared folder {name} to drive {drive_letter}"
+                })
+            else:
+                # Mount to directory path using symbolic link
+                win_mountpoint = mountpoint_str.replace('/', '\\')
+                parent_dir = PureWindowsPath(win_mountpoint).parent.as_posix()
+                
+                # Create parent directory
+                commands.append({
+                    'command': f'New-Item -ItemType Directory -Path "{parent_dir}" -Force -ErrorAction SilentlyContinue',
+                    'description': f"Create parent directory for {name}"
+                })
+                
+                # Remove existing link
+                commands.append({
+                    'command': f'if (Test-Path "{win_mountpoint}") {{ Remove-Item "{win_mountpoint}" -Force -Recurse -ErrorAction SilentlyContinue }}',
+                    'description': f"Remove existing link for {name}"
+                })
+                
+                # Create symbolic link
+                mount_cmd = f'mklink /D "{win_mountpoint}" "{unc_path}"'
+                commands.append({
+                    'command': f"cmd /c '{mount_cmd}'",
+                    'description': f"Create symlink for {name}"
+                })
+        else:
+            # Linux mounting with proper permissions for adare user
+            unix_mountpoint = str(mountpoint)
+            
+            # Create mount point directory
+            commands.append({
+                'command': f'sudo mkdir -p {unix_mountpoint}',
+                'description': f"Create mount point for {name}"
+            })
+            
+            # Mount with proper uid/gid for adare user (1000:1000)
+            commands.append({
+                'command': f'sudo mount -t vboxsf -o uid=1000,gid=1000,dmode=775,fmode=664 {name} {unix_mountpoint}',
+                'description': f"Mount shared folder {name} with adare user permissions"
+            })
+            
+            # Ensure adare user can access the mount point
+            commands.append({
+                'command': f'sudo chown -R adare:adare {unix_mountpoint}',
+                'description': f"Set ownership of {name} to adare user"
+            })
+        
+        return commands
+
     async def mount_shared_folder(self, name: str, mountpoint: Path, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
         """
         Mount a shared folder to a custom path (VM must be running).
-        For Windows guests, mounts to drive letters (Z:, X:, Y:, etc.) using persistent net use command,
-        or creates symbolic links to UNC paths for directory mounts.
-        For Linux guests, uses the mount command.
+        For Windows guests, mounts to drive letters or directory paths.
+        For Linux guests, uses sudo to mount with proper adare user permissions.
         
         Args:
             name: Name of the shared folder (must be already added with add_shared_folder)
-            mountpoint: Path where to mount in the guest (for Windows: drive letters like Z:, X:, etc. or full paths)
+            mountpoint: Path where to mount in the guest
             ctx_manager: Context manager for status updates
             stop_event: Event to signal stop
             log_file: Log file for output
             silent: Whether to suppress logging
         """
         async def _mount_shared_folder_async():
-            if 'windows' in self.guest_os.lower():
-                from pathlib import PureWindowsPath
-                # Windows: Determine if mounting to a drive letter or directory path
-                mountpoint_str = str(mountpoint)
-                unc_path = f"\\\\vboxsvr\\{name}"
+            commands = self._build_mount_commands(name, mountpoint)
+            
+            if not commands:
+                log.info(f"No mounting needed for shared folder '{name}' on {self.guest_os}")
+                return 0
+            
+            log.info(f"Mounting shared folder '{name}' to '{mountpoint}' in {self.guest_os} VM '{self.vm_name}'")
+            
+            # Execute all mounting commands sequentially
+            for cmd_info in commands:
+                if stop_event and stop_event.is_set():
+                    log.info("Stop event detected during mounting")
+                    return 1
                 
-                # Check if it's a drive letter (like Z:, X:, Y:, etc.)
-                if len(mountpoint_str) == 2 and mountpoint_str[1] == ':' and mountpoint_str[0].isalpha():
-                    # Mount to drive letter using net use command (assuming drive is available)
-                    drive_letter = mountpoint_str.upper()
-                    log.info(f"Mounting shared folder '{name}' to drive letter '{drive_letter}' in Windows VM '{self.vm_name}'")
-                    
-                    # Mount the network share to the drive letter with persistence
-                    mount_cmd = f"net use {drive_letter} \"{unc_path}\" /persistent:yes"
-                    mount_result = await self.run_command(
-                        mount_cmd,
+                if not silent:
+                    log.debug(f"Executing: {cmd_info['description']}")
+                
+                if 'windows' in self.guest_os.lower():
+                    result = await self.run_command(
+                        cmd_info['command'],
                         silent=silent,
                         stop_event=stop_event,
                         ctx_manager=ctx_manager,
                         log_file=log_file,
-                        use_cmd=True
+                        use_cmd='net use' in cmd_info['command'] or 'mklink' in cmd_info['command']
                     )
-                    
-                    if mount_result.returncode == 0:
-                        log.info(f"Successfully mounted shared folder '{name}' to drive '{drive_letter}' in VM '{self.vm_name}'")
-                        return 0
-                    else:
-                        log.error(f"Failed to mount shared folder '{name}' to drive '{drive_letter}' in VM '{self.vm_name}': return code {mount_result.returncode}")
-                        return mount_result.returncode
-                
                 else:
-                    # Mount to directory path using symbolic link (existing behavior)
-                    # Convert to Windows path format
-                    win_mountpoint = mountpoint_str.replace('/', '\\')
-                    parent_dir = PureWindowsPath(win_mountpoint).parent.as_posix()
-                    
-                    # Create parent directory if it doesn't exist
-                    mkdir_cmd = f"New-Item -ItemType Directory -Path '{parent_dir}' -Force -ErrorAction SilentlyContinue"
-                    await self.run_command(
-                        mkdir_cmd,
-                        silent=True,
-                        stop_event=stop_event,
-                        ctx_manager=ctx_manager,
-                        log_file=log_file
-                    )
-                    
-                    # Remove existing link if it exists
-                    remove_cmd = f"if (Test-Path '{win_mountpoint}') {{ Remove-Item '{win_mountpoint}' -Force -Recurse -ErrorAction SilentlyContinue }}"
-                    await self.run_command(
-                        remove_cmd,
-                        silent=True,
-                        stop_event=stop_event,
-                        ctx_manager=ctx_manager,
-                        log_file=log_file
-                    )
-                    
-                    # Create symbolic link using mklink /D (run directly without cmd /c)
-                    mount_cmd = f'mklink /D "{win_mountpoint}" "{unc_path}"'
-                    cmd = f"cmd /c '{mount_cmd}'"
-                    
-                    log.info(f"Creating directory symbolic link from '{win_mountpoint}' to '{unc_path}' in Windows VM '{self.vm_name}'")
-                    mount_result = await self.run_command(
-                        cmd,
+                    result = await self.run_command(
+                        cmd_info['command'],
                         silent=silent,
                         stop_event=stop_event,
                         ctx_manager=ctx_manager,
                         log_file=log_file
                     )
-                    
-                    if mount_result.returncode == 0:
-                        log.info(f"Successfully mounted shared folder '{name}' to '{mountpoint}' in VM '{self.vm_name}'")
-                        return 0
-                    else:
-                        log.error(f"Failed to mount shared folder '{name}' to '{mountpoint}' in VM '{self.vm_name}': return code {mount_result.returncode}")
-                        return mount_result.returncode
-            else:
-                log.info(f"For Linux guests, the shared folder '{name}' should already be mounted automatically since automount was enabled.")
+                
+                if result.returncode != 0:
+                    log.error(f"Failed to execute: {cmd_info['description']} (return code: {result.returncode})")
+                    return result.returncode
+            
+            log.info(f"Successfully mounted shared folder '{name}' to '{mountpoint}' in VM '{self.vm_name}'")
+            return 0
         
         return await self.manager.run_async(_mount_shared_folder_async)
 
@@ -1227,65 +1307,17 @@ class VirtualBoxVM:
 
     def queue_mount_shared_folder(self, name: str, mountpoint: Path):
         """
-        Queue a shared folder mount command.
+        Queue a shared folder mount command using the consolidated mounting logic.
         
         Args:
             name: Name of the shared folder
-            mountpoint: Path where to mount in the guest (for Windows: drive letters like Z:, X:, etc. or full paths)
+            mountpoint: Path where to mount in the guest
         """
-        if 'windows' in self.guest_os.lower():
-            from pathlib import PureWindowsPath
-            unc_path = f"\\\\vboxsvr\\{name}"
-            mountpoint_str = str(mountpoint)
-            
-            # Check if it's a drive letter (like Z:, X:, Y:, etc.)
-            if len(mountpoint_str) == 2 and mountpoint_str[1] == ':' and mountpoint_str[0].isalpha():
-                # Queue net use command for drive letter mounting
-                drive_letter = mountpoint_str.upper()
-                mount_cmd = f'net use {drive_letter} "{unc_path}"'
+        commands = self._build_mount_commands(name, mountpoint)
 
-                self.queue_command(
-                    mount_cmd,
-                    f"Mount shared folder {name} to drive {drive_letter}"
-                )
-            else:
-                # Queue directory path mounting using symbolic link (existing behavior)
-                win_mountpoint = mountpoint_str.replace('/', '\\')
-                parent_dir = PureWindowsPath(win_mountpoint).parent.as_posix()
-                
-                # Queue directory creation
-                self.queue_command(
-                    f'New-Item -ItemType Directory -Path "{parent_dir}" -Force -ErrorAction SilentlyContinue',
-                    f"Create parent directory for {name}"
-                )
-                
-                # Queue existing link removal
-                self.queue_command(
-                    f'if (Test-Path "{win_mountpoint}") {{ Remove-Item "{win_mountpoint}" -Force -Recurse -ErrorAction SilentlyContinue }}',
-                    f"Remove existing link for {name}"
-                )
-                
-                # Queue mklink command using same pattern as individual mount
-                mount_cmd = f'mklink /D "{win_mountpoint}" "{unc_path}"'
-                self.queue_command(
-                    f"cmd /c '{mount_cmd}'",
-                    f"Create symlink for {name}"
-                )
-        else:
-            # Linux
-            unix_mountpoint = str(mountpoint)
-            
-            # Queue directory creation
-            self.queue_command(
-                f'sudo mkdir -p {unix_mountpoint}',
-                f"Create mount point for {name}"
-            )
-            
-            # Queue mount command
-            self.queue_command(
-                f'sudo mount -t vboxsf -o uid=1000,gid=1000 {name} {unix_mountpoint}',
-                f"Mount shared folder {name}"
-            )
+        # Queue all the commands from the consolidated logic
+        for cmd_info in commands:
+            self.queue_command(cmd_info['command'], cmd_info['description'])
 
     async def execute_queued_commands(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False, win_noprofile: bool = False):
         """
@@ -1355,7 +1387,18 @@ class VirtualBoxVM:
         """
         # Clear any existing commands
         self.clear_command_queue()
-        
+
+        # setup parent directories first
+        if 'linux' in self.guest_os.lower():
+            # todo: make this more generic and allow more levels (complicated due to permission issues)
+            for name, mountpoint in folders.items():
+                parent_dir = mountpoint.parent
+                mkdir_command = f'sudo mkdir -p {parent_dir}'
+                chown_command = f'sudo chown -R adare:adare {parent_dir}'
+                if mkdir_command not in [cmd['command'] for cmd in self._command_queue]:
+                    self.queue_command(mkdir_command, f"Create parent directory {parent_dir} for {name}")
+                    self.queue_command(chown_command, f"Set ownership of {parent_dir} to adare user")
+
         # Queue all mount commands
         for name, mountpoint in folders.items():
             self.queue_mount_shared_folder(name, mountpoint)

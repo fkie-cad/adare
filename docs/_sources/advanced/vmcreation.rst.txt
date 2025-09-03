@@ -1,0 +1,11 @@
+Create your custom ADARE VM
+****************************
+
+Creating an own VirtualBox VM compatible with Adare can be easily done by creating an new VM in VirtualBox, install some minimal setup required for adare and then export the VM as .ova or .ovf file.
+Adare requires the following minimal setup in the VM:
+
+- VirtualBox Guest Additions must be installed
+- Autologin needs to be enabled and setup, such that the VM boots directly into the desktop of a user
+- for future compatible: setup with username "adare" and password "adare"
+
+Additionally you may install any other software you require for experiments that can take a while to download and install, such that this does not need to be done everytime an experiment is executed.

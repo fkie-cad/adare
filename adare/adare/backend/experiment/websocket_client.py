@@ -73,7 +73,7 @@ class AdareVMClient:
                 log.info(f"Connecting to adarevm server at {self.server_url}")
                 
                 self.websocket = await asyncio.wait_for(
-                    websockets.connect(self.server_url),
+                    websockets.connect(self.server_url, max_size=None),
                     timeout=timeout
                 )
                 

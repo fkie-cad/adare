@@ -332,9 +332,9 @@ class PrepareRunEnvironmentStage(Stage):
 
 @register_stage
 @attrs.define
-class StartMCPServerStage(Stage):
-    name: ClassVar[str] = 'start_mcp_server'
-    msg: ClassVar[str] = 'Starting MCP server'
+class StartComputerVisionServerStage(Stage):
+    name: ClassVar[str] = 'start_computer_vision_server'
+    msg: ClassVar[str] = 'Starting computer vision server'
     parent: ClassVar[str] = 'experiment_preparation'
 
 # ----------------------------------
@@ -350,9 +350,9 @@ class FinalizeStage(Stage):
 
 @register_stage
 @attrs.define
-class ShutdownMCPServerStage(Stage):
-    name: ClassVar[str] = 'shutdown_mcp_server'
-    msg: ClassVar[str] = 'Stopping MCP server'
+class ShutdownComputerVisionServerStage(Stage):
+    name: ClassVar[str] = 'shutdown_computer_vision_server'
+    msg: ClassVar[str] = 'Stopping computer vision server'
     parent: ClassVar[str] = 'cleanup_shutdown'
 
 @register_stage

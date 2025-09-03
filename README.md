@@ -6,16 +6,10 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 
 
 ### Todos
+- [ ] built windows vm new from fresh installation
 
 #### Features
-- [x] load from existing vm / only create new snapshot to save time and space! 
-- [x] add command line option to not remove snapshot after run
-- [x] add command line option/command to clean up certain VMs still there (either all or by environment)
-- [x] for adare show run implement a filter mechanism to search for at least environments, experiments (and combo with donotation?)
-- [x] recover file from playbook
-- [x] add way to delete all vms at once? make with additonal requestto user to agree
-- [x] add way to download ova/ovf directly on first use!
-- [ ] built tests
+- [ ] test and enable ydotool to make it work on wayland as well -> also would make machine setup easier as not X11 specific stuff needs to happen 
 
 #### Output
 - [x] Show experiment run flow in show run display (maybe extendable)
@@ -27,10 +21,8 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 
 #### QOL
 - [ ] update documentation drastically
-    - [x] update Installation guide
-    - [x] update About Adare
-    - [ ] the rest
 - [ ] add all output available as json or csv? 
+- [ ] screenshot not via websockets but via shared files (to improve speed)
 
 #### Bugs
 - [x] always run on base snapshot and create one after the experiment run not before (if specific option is set) -> test -> no snapshot saved?!
@@ -39,8 +31,10 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [x] if one tests fails and not all tests are run we see wrong result for adare run list and tests panel for adare run info
 - [ ] unclear if flow shows fails -> test
 - [ ] somehow environment got deleted after adare manage reset-vm -> test more
-
+- [ ] allow .yml and .yaml for input files (playbook, testset, ...)
+- [ ] fix shared directory handling with snapshots
 
 #### Test
 - [ ] all frontend terminal commands
 - [ ] download of ova! -> find location where to upload machines? 
+- [ ] built test suite to test if vm is ready and can be used to avoid errors!

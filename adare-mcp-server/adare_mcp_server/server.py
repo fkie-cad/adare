@@ -20,29 +20,54 @@ def find_icon_locations(screenshot_bytes: bytes, icon_bytes: bytes, threshold: f
     # Decode images
     screenshot_img = cv2.imdecode(screenshot_array, cv2.IMREAD_COLOR)
     icon_img = cv2.imdecode(icon_array, cv2.IMREAD_COLOR)
+    
+    # Get dimensions
+    icon_h, icon_w = icon_img.shape[:2]
+    screenshot_h, screenshot_w = screenshot_img.shape[:2]
+    
     # Template matching
     result = cv2.matchTemplate(screenshot_img, icon_img, cv2.TM_CCOEFF_NORMED)
+    
+    # Find locations above threshold
     locations = np.where(result >= threshold)
     points = list(zip(locations[1], locations[0]))  # (x, y)
-    return points
+    
+    # Filter points so icon is completely within image bounds
+    valid_points = []
+    valid_similarities = []
+    
+    for x, y in points:
+        # Check if the full icon would fit completely within bounds
+        if x >= 0 and y >= 0 and x + icon_w <= screenshot_w and y + icon_h <= screenshot_h:
+            # Return center coordinates instead of top-left corner
+            center_x = x + icon_w // 2
+            center_y = y + icon_h // 2
+            valid_points.append((center_x, center_y))
+            valid_similarities.append(float(result[y, x]))
+    
+    return valid_points, valid_similarities
 
 
 @mcp.tool()
-async def find_icon(icon_base64: str, screenshot_base64: str, offset_x: int = 0, offset_y: int = 0, threshold: float = 0.6):
+async def find_icon(icon_base64: str, screenshot_base64: str, offset_x: int = 0, offset_y: int = 0, threshold: float = 0.3):
     """Find icon locations in provided screenshot data using base64 encoded icon."""
     try:
         log.info(f"Starting icon search with base64 icon data")
         screenshot_bytes = base64.b64decode(screenshot_base64)
         icon_bytes = base64.b64decode(icon_base64)
-        locations = find_icon_locations(screenshot_bytes, icon_bytes, threshold=threshold)
+        locations, similarities = find_icon_locations(screenshot_bytes, icon_bytes, threshold=threshold)
         locations = [(x + offset_x, y + offset_y) for x, y in locations]
         log.info(f"Found {len(locations)} icon matches")
-        return {"locations": locations}
+        return {
+            "locations": locations,
+            "similarities": similarities
+        }
     except Exception as e:
         log.error(f"Icon search failed: {e}")
         return {
             "error": f"Icon search failed: {str(e)}", 
-            "locations": []
+            "locations": [],
+            "similarities": []
         }
 
 
@@ -114,6 +139,7 @@ async def find_text(text: str, screenshot_base64: str, offset_x: int = 0, offset
     
     # find all detections that contain the text
     locations = []
+    confidences = []
     for detection in result:
         box, (text_rec, confidence) = detection
         if text.lower() in text_rec.lower():
@@ -130,10 +156,12 @@ async def find_text(text: str, screenshot_base64: str, offset_x: int = 0, offset
                     "y": center_y,
                 }
             })
+            confidences.append(float(confidence))
     
     log.info(f"Found {len(locations)} text matches")
     return {
-        "locations": locations
+        "locations": locations,
+        "confidences": confidences
     }
 
 
