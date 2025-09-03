@@ -61,6 +61,7 @@ class Testset:
                     test_name=name, status=StatusEnum.FINISHED, result=test_result
                 )
             )
+            return test_result
 
     def testall(self, variables: dict):
         for test in self.tests:

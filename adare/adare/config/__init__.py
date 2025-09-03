@@ -44,15 +44,15 @@ DEFAULT_SMB_CONF = {
             'remote_path': '/mnt/smb_share_0',
             'path': '/mnt/smb',
             'comment': 'This is an SMB share',
-            'user': 'vagrant',
+            'user': 'adare',
             'writable': True,
             'uid': 1000,
             'gid': 1000
         },
     'user':
         {
-            'name': 'vagrant',
-            'password': 'vagrant',
+            'name': 'adare',
+            'password': 'adare',
         }
 }
 

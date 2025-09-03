@@ -48,56 +48,46 @@ Playbook File
 
 The playbook.yml file defines the GUI automation steps for your experiment using simple YAML syntax. A basic playbook looks like this:
 
-.. code-block:: python
+.. code-block:: yaml
 
-    from adarevm.action.experiment import Experiment, KEYMAP
-    from pathlib import Path
-    from typing import Callable, Awaitable
-    from adarevm.testset.testset import Testset
+    actions:
+      # Run initial test
+      - test:
+          name: "initial_check"
+          description: "Verify initial state"
+      
+      # Click on text in the UI
+      - click:
+          target:
+            text: "Start"
+          description: "Click the Start button"
+      
+      # Type some text
+      - keyboard:
+          keys: "Hello World"
+          description: "Type text"
+      
+      # Use keyboard shortcuts
+      - keyboard:
+          combination: ["ctrl", "s"]
+          description: "Save with Ctrl+S"
+      
+      # Run final test
+      - test:
+          name: "final_check"
+          description: "Verify success"
 
-    import logging
+Common Actions
+**************
 
-    log = logging.getLogger(__name__)
+The playbook supports these basic GUI actions:
 
+- **click**: Click on text, images, or coordinates
+- **keyboard**: Type text or keyboard combinations  
+- **test**: Run validation tests (defined in testset.yml)
+- **idle**: Wait/pause between actions
 
-    class ExperimentExample(Experiment):
-        description = ''
-
-        def __init__(self, img_folder: Path, tessdata_folder: Path, testset: Testset,
-                     log_func: Callable[[str], Awaitable[None]]):
-            """
-                initialization function which in most cases should not be changed (except there is a need to use a different display controller or computer vision backend for guibot)
-            """
-            super().__init__(img_folder, tessdata_folder, testset, log_func)
-
-        def prepare(self) -> tuple[bool, str]:
-            """
-                this function can be used to execute some commands before the clicks happen (e.g. creating a file)
-            """
-            pass
-
-        def run(self) -> tuple[bool, str]:
-            """
-                this function should be used to execute the gui automation steps
-            """
-            log.info(f'experiment {self.name} started')
-
-            pass
-
-            log.info(f'experiment {self.name} done')
-
-            return True, ''
-
-
-The ``Experiment`` base class provides some methods to enable gui automation, the execution of tests as well as logging.
-We provided these described below.
-To get a full list together with a description of all existing parameters, please refer to TODO.
-
-.. csv-table:: existing methods of the Experiment Base Class
-    :file: /_static/tables/action_methods.csv
-    :delim: |
-    :widths: 20,80
-    :header-rows: 1
+For advanced features and complete reference, see the full playbook documentation.
 
 
 

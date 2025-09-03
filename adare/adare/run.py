@@ -35,6 +35,9 @@ from adare.cli.testfunction import (
 from adare.cli.vm import (
     exec_vm_list, exec_vm_info, exec_vm_delete, exec_vm_delete_snapshot, exec_vm_clear_all, exec_vm_clear_by_environment
 )
+from adare.cli.mcp import (
+    exec_mcp_test_icon, exec_mcp_test_text
+)
 from adare.setup_logging import setup_logging
 from adare.exceptions import LoggedException, LoggedErrorException
 
@@ -534,6 +537,60 @@ def sync(project):
     """Sync all environments and experiments with the web interface."""
     args = SimpleNamespace(project=project)
     exec_with_error_printing(exec_web_sync, args)
+
+
+# ------------------------------
+# MCP test commands
+# ------------------------------
+@cli.group()
+def mcp():
+    """MCP server testing commands."""
+    pass
+
+@mcp.command(name='test-icon')
+@click.option('--icon', required=True, type=click.Path(exists=True), help='Path to icon image file')
+@click.option('--screenshot', required=True, type=click.Path(exists=True), help='Path to screenshot image file')
+@click.option('--output', type=click.Path(), help='Path to save marked image with found locations')
+@click.option('--host', default='localhost', help='MCP server host (default: localhost)')
+@click.option('--port', type=int, default=13109, help='MCP server port (default: 13109)')
+@click.option('--threshold', type=float, default=0.6, help='Match threshold (0.0-1.0, default: 0.6)')
+def test_icon(icon, screenshot, output, host, port, threshold):
+    """Test MCP server icon finding functionality.
+    
+    Automatically starts MCP server, finds an icon in a screenshot, 
+    prints coordinates of all matches, and stops the server.
+    Optionally saves a marked image showing found locations.
+    """
+    args = SimpleNamespace(
+        icon_path=icon,
+        screenshot_path=screenshot,
+        output_path=output,
+        host=host,
+        port=port,
+        threshold=threshold
+    )
+    exec_with_error_printing(exec_mcp_test_icon, args)
+
+@mcp.command(name='test-text')
+@click.argument('text')
+@click.option('--screenshot', required=True, type=click.Path(exists=True), help='Path to screenshot image file')
+@click.option('--host', default='localhost', help='MCP server host (default: localhost)')
+@click.option('--port', type=int, default=13109, help='MCP server port (default: 13109)')
+def test_text(text, screenshot, host, port):
+    """Test MCP server text finding functionality.
+    
+    TEXT is the text string to search for in the screenshot.
+    Automatically starts MCP server, finds text matches, 
+    prints coordinates, and stops the server.
+    """
+    args = SimpleNamespace(
+        text=text,
+        screenshot_path=screenshot,
+        host=host,
+        port=port
+    )
+    exec_with_error_printing(exec_mcp_test_text, args)
+
 
 
 # ------------------------------

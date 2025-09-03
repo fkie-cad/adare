@@ -88,7 +88,7 @@ def _handle_stage_event(event, console, ulid):
             break
     
     if stage.sub_msg:
-        message = f"{stage.name}: {stage.sub_msg}"
+        message = f"{stage.msg}: {stage.sub_msg}"
     else:
         message = stage.msg
 

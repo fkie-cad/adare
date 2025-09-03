@@ -83,6 +83,11 @@ class EventCtxManager(contextlib.AbstractContextManager):
             data['error_name'] = self.event.error_name
         if hasattr(self.event, 'error_msg'):
             data['error_message'] = self.event.error_msg
+        if hasattr(self.event, 'result'):
+            data['result'] = {
+                'status': self.event.result.status,
+                'details': getattr(self.event.result, 'details', [])
+            }
         
         return data
 

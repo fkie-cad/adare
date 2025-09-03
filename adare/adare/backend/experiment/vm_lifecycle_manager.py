@@ -57,7 +57,7 @@ class VMLifecycleManager:
         shared_root = Path(SHARE_POINT_VM[context.guest_platform])
         context.config.shared_directories = {
             'run': {'host': context.experiment_run_directory.path, 'vm': shared_root / 'run'},
-            'adare': {'host': context.adarevm.parent, 'vm': 'Z:'},
+            'adare': {'host': context.adarevm.parent, 'vm': shared_root / 'app'},
             'experiment': {'host': context.experiment_directory.path, 'vm': shared_root / 'experiment'},
             'testfunctions': {'host': context.project_directory.testfunctions, 'vm': shared_root / 'testfunctions'},
             'shared': {'host': context.project_directory.shared, 'vm': shared_root / 'shared'},
@@ -81,7 +81,7 @@ class VMLifecycleManager:
         # Setup shared folders
         if not context.stop_event.is_set():
             for name, paths in context.config.shared_directories.items():
-                await context.vm.add_shared_folder(name, host_path=paths['host'], mountpoint=paths['vm'], stop_event=context.user_interrupt_event)
+                await context.vm.add_shared_folder(name, host_path=paths['host'], stop_event=context.user_interrupt_event)
 
         # Update experiment run with VM-specific data
         if not context.stop_event.is_set():
@@ -107,6 +107,15 @@ class VMLifecycleManager:
         """Start the virtual machine."""
         with StageCtxManager(VMRunStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
             await context.vm.start(stop_event=context.user_interrupt_event)
+            
+            # Set video mode hint to default resolution after VM starts
+            if not context.stop_event.is_set():
+                width, height = context.config.vm_resolution
+                await context.vm.set_video_mode_hint(
+                    width=width, 
+                    height=height,
+                    stop_event=context.user_interrupt_event
+                )
 
     async def wait_until_ready(self, context: ExperimentRunCtx):
         """Wait until VM is fully booted and ready."""
@@ -179,7 +188,7 @@ class VMLifecycleManager:
                         )
                     
                     if created_snapshot:
-                        log.info(f'✅ Created experiment snapshot: {created_snapshot}')
+                        log.info(f'Created experiment snapshot: {created_snapshot}')
                     else:
                         log.warning('Failed to create experiment snapshot')
                 else:

@@ -55,6 +55,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#playbook-file">Playbook File</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="#common-actions">Common Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#develop-and-run-an-experiment">Develop and Run an Experiment</a></li>
 </ul>
 </li>
@@ -431,105 +432,46 @@ So its basic structure looks like the following:</p>
 <section id="playbook-file">
 <h3>Playbook File<a class="headerlink" href="#playbook-file" title="Link to this heading"></a></h3>
 <p>The playbook.yml file defines the GUI automation steps for your experiment using simple YAML syntax. A basic playbook looks like this:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adarevm.action.experiment</span><span class="w"> </span><span class="kn">import</span> <span class="n">Experiment</span><span class="p">,</span> <span class="n">KEYMAP</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Awaitable</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adarevm.testset.testset</span><span class="w"> </span><span class="kn">import</span> <span class="n">Testset</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Run initial test</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;initial_check&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">initial</span><span class="nv"> </span><span class="s">state&quot;</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="w">  </span><span class="c1"># Click on text in the UI</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Start&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Click</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">Start</span><span class="nv"> </span><span class="s">button&quot;</span>
 
-<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="w">  </span><span class="c1"># Type some text</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Hello</span><span class="nv"> </span><span class="s">World&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Type</span><span class="nv"> </span><span class="s">text&quot;</span>
 
+<span class="w">  </span><span class="c1"># Use keyboard shortcuts</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;ctrl&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;s&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Save</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">Ctrl+S&quot;</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">ExperimentExample</span><span class="p">(</span><span class="n">Experiment</span><span class="p">):</span>
-    <span class="n">description</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img_folder</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">tessdata_folder</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">testset</span><span class="p">:</span> <span class="n">Testset</span><span class="p">,</span>
-                 <span class="n">log_func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Awaitable</span><span class="p">[</span><span class="kc">None</span><span class="p">]]):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">            initialization function which in most cases should not be changed (except there is a need to use a different display controller or computer vision backend for guibot)</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">img_folder</span><span class="p">,</span> <span class="n">tessdata_folder</span><span class="p">,</span> <span class="n">testset</span><span class="p">,</span> <span class="n">log_func</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">prepare</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">            this function can be used to execute some commands before the clicks happen (e.g. creating a file)</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">pass</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">            this function should be used to execute the gui automation steps</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> started&#39;</span><span class="p">)</span>
-
-        <span class="k">pass</span>
-
-        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;experiment </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> done&#39;</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;&#39;</span>
+<span class="w">  </span><span class="c1"># Run final test</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;final_check&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">success&quot;</span>
 </pre></div>
 </div>
-<p>The <code class="docutils literal notranslate"><span class="pre">Experiment</span></code> base class provides some methods to enable gui automation, the execution of tests as well as logging.
-We provided these described below.
-To get a full list together with a description of all existing parameters, please refer to TODO.</p>
-<table class="docutils align-default" id="id2">
-<caption><span class="caption-text">existing methods of the Experiment Base Class</span><a class="headerlink" href="#id2" title="Link to this table"></a></caption>
-<colgroup>
-<col style="width: 20.0%" />
-<col style="width: 80.0%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Method</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>find</p></td>
-<td><p>Finds the image in the current screen and returns a list of matches or None if no match was found.</p></td>
-</tr>
-<tr class="row-odd"><td><p>find_text</p></td>
-<td><p>Finds the text in the current screen and returns a list of matches or None if no match was found. (not reliable due to OCR)</p></td>
-</tr>
-<tr class="row-even"><td><p>click</p></td>
-<td><p>Left Click on the given match, previously found with the find method or manually created by coordinates.</p></td>
-</tr>
-<tr class="row-odd"><td><p>right_click</p></td>
-<td><p>Right Click on the given match, previously found with the find method or manually created by coordinates.</p></td>
-</tr>
-<tr class="row-even"><td><p>double_click</p></td>
-<td><p>Double Left Click on the given match, previously found with the find method or manually created by coordinates.</p></td>
-</tr>
-<tr class="row-odd"><td><p>drag_and_drop</p></td>
-<td><p>Drags the source match to the target match.</p></td>
-</tr>
-<tr class="row-even"><td><p>press_keys</p></td>
-<td><p>Presses the given key or keys</p></td>
-</tr>
-<tr class="row-odd"><td><p>idle</p></td>
-<td><p>Idles the experiment for the given amount of time.</p></td>
-</tr>
-<tr class="row-even"><td><p>exec_command</p></td>
-<td><p>Executes the given command in the shell.</p></td>
-</tr>
-<tr class="row-odd"><td><p>run_test</p></td>
-<td><p>Runs the test with the given name.</p></td>
-</tr>
-<tr class="row-even"><td><p>run_tests</p></td>
-<td><p>Runs a list of tests with the given names.</p></td>
-</tr>
-<tr class="row-odd"><td><p>error</p></td>
-<td><p>Logs an error message with the given name and message.</p></td>
-</tr>
-<tr class="row-even"><td><p>save_variable</p></td>
-<td><p>Saves the given value under the given name in the variables file.</p></td>
-</tr>
-<tr class="row-odd"><td><p>save_time</p></td>
-<td><p>Saves the current timestamp under the given name in the variables file.</p></td>
-</tr>
-</tbody>
-</table>
 </section>
+</section>
+<section id="common-actions">
+<h2>Common Actions<a class="headerlink" href="#common-actions" title="Link to this heading"></a></h2>
+<p>The playbook supports these basic GUI actions:</p>
+<ul class="simple">
+<li><p><strong>click</strong>: Click on text, images, or coordinates</p></li>
+<li><p><strong>keyboard</strong>: Type text or keyboard combinations</p></li>
+<li><p><strong>test</strong>: Run validation tests (defined in testset.yml)</p></li>
+<li><p><strong>idle</strong>: Wait/pause between actions</p></li>
+</ul>
+<p>For advanced features and complete reference, see the full playbook documentation.</p>
 </section>
 <section id="develop-and-run-an-experiment">
 <h2>Develop and Run an Experiment<a class="headerlink" href="#develop-and-run-an-experiment" title="Link to this heading"></a></h2>

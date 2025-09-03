@@ -322,6 +322,16 @@ class PlaybookController:
             info['text'] = target.text
         if hasattr(target, 'position') and target.position:
             info['position'] = target.position
+        if hasattr(target, 'strategy') and target.strategy:
+            strategy_name = target.strategy.__class__.__name__
+            info['strategy'] = strategy_name
+            # Add strategy parameters if available
+            if hasattr(target.strategy, '__dict__'):
+                import attrs
+                if attrs.has(target.strategy):
+                    strategy_params = attrs.asdict(target.strategy)
+                    if strategy_params:
+                        info['strategy_params'] = strategy_params
         
         return info if info else None
     
@@ -435,19 +445,22 @@ class PlaybookController:
                 except Exception as e:
                     log.warning(f"Failed to create execution record for action {i}: {e}")
             
+            # Resolve variables early for consistent display and execution
+            resolved_action = self._resolve_action_variables(action)
+            
             # Create unique action ID for event tracking
             action_id = f"action_{i}_{action_name.lower()}_{int(time.time()*1000)}"
             
-            # Emit action start event for flow console display
+            # Emit action start event for flow console display using resolved action
             if self.experiment_run_id:
                 try:
-                    start_event = self._create_action_start_event(action, i, action_id)
+                    start_event = self._create_action_start_event(resolved_action, i, action_id)
                     emit_action(self.experiment_run_id, start_event, action_id)
                     log.info(f"Emitted start event for action {i}: {action_name}, ID: {action_id}")
                 except Exception as e:
                     log.error(f"Failed to emit start event for action {i}: {e}", exc_info=True)
             
-            # Execute the action (level 2 for main playbook actions)
+            # Execute the action (level 2 for main playbook actions) - pass original action since execute_action handles resolution
             start_time = time.time()
             result = await self.execute_action(action, parent_event_id=action_id)
             execution_time = time.time() - start_time
@@ -456,10 +469,10 @@ class PlaybookController:
             self.action_results.append(result)
             self.action_timings[f"action_{i+1}_{action_name}"] = execution_time
             
-            # Emit action complete event for flow console display
+            # Emit action complete event for flow console display using resolved action
             if self.experiment_run_id:
                 try:
-                    complete_event = self._create_action_complete_event(action, i, action_id, result)
+                    complete_event = self._create_action_complete_event(resolved_action, i, action_id, result)
                     emit_action(self.experiment_run_id, complete_event, action_id)
                     log.info(f"Emitted complete event for action {i}: {action_name}, Success: {result.success}, ID: {action_id}")
                 except Exception as e:
@@ -518,37 +531,40 @@ class PlaybookController:
             ActionResult with execution details
         """
         try:
-            action_type = type(action).__name__
-            description = getattr(action, 'description', '')
+            # Resolve variables in action fields first
+            resolved_action = self._resolve_action_variables(action)
+            
+            action_type = type(resolved_action).__name__
+            description = getattr(resolved_action, 'description', '')
             log.debug(f"Executing {action_type}: {description}")
             
-            # Dispatch to appropriate handler
-            if isinstance(action, ClickAction):
-                return await self._execute_click(action, parent_event_id)
-            elif isinstance(action, RightClickAction):
-                return await self._execute_right_click(action, parent_event_id)
-            elif isinstance(action, DoubleClickAction):
-                return await self._execute_double_click(action, parent_event_id)
-            elif isinstance(action, DragAction):
-                return await self._execute_drag(action, parent_event_id)
-            elif isinstance(action, KeyboardAction):
-                return await self._execute_keyboard(action, parent_event_id)
-            elif isinstance(action, IdleAction):
-                return await self._execute_idle(action, parent_event_id)
-            elif isinstance(action, ScrollAction):
-                return await self._execute_scroll(action, parent_event_id)
-            elif isinstance(action, GotoAction):
-                return await self._execute_goto(action, parent_event_id)
-            elif isinstance(action, ScreenshotAction):
-                return await self._execute_screenshot(action, parent_event_id)
-            elif isinstance(action, CommandAction):
-                return await self._execute_command(action, parent_event_id)
-            elif isinstance(action, ActionTestAction):
-                return await self._execute_test(action, parent_event_id)
-            elif isinstance(action, BlockAction):
-                return await self._execute_block(action, parent_event_id)
-            elif isinstance(action, SaveTimestampAction):
-                return await self._execute_save_timestamp(action, parent_event_id)
+            # Dispatch to appropriate handler using resolved action
+            if isinstance(resolved_action, ClickAction):
+                return await self._execute_click(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, RightClickAction):
+                return await self._execute_right_click(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, DoubleClickAction):
+                return await self._execute_double_click(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, DragAction):
+                return await self._execute_drag(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, KeyboardAction):
+                return await self._execute_keyboard(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, IdleAction):
+                return await self._execute_idle(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, ScrollAction):
+                return await self._execute_scroll(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, GotoAction):
+                return await self._execute_goto(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, ScreenshotAction):
+                return await self._execute_screenshot(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, CommandAction):
+                return await self._execute_command(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, ActionTestAction):
+                return await self._execute_test(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, BlockAction):
+                return await self._execute_block(resolved_action, parent_event_id)
+            elif isinstance(resolved_action, SaveTimestampAction):
+                return await self._execute_save_timestamp(resolved_action, parent_event_id)
             else:
                 return ActionResult(
                     success=False,
@@ -678,14 +694,34 @@ class PlaybookController:
         """Resolve target with find step emitted as action event."""
         import time
         
+        # Apply smart defaults if no strategy specified (before creating find step description)
+        if target.strategy is None:
+            from adare.types.playbook import BestConfidenceStrategy, TopLeftStrategy
+            if target.image:
+                target.strategy = BestConfidenceStrategy()  # Images: best visual match
+                log.debug("Applied default BestConfidence strategy for image target")
+            elif target.text:
+                target.strategy = TopLeftStrategy()  # Text: natural reading order
+                log.debug("Applied default TopLeft strategy for text target")
+            else:
+                target.strategy = TopLeftStrategy()  # Fallback
+                log.debug("Applied fallback TopLeft strategy for position target")
+        
         # Create and emit find step events
         find_action_id = f"find_step_{int(time.time()*1000)}"
         
         if self.experiment_run_id:
             # Create find step action
             target_desc = target.image or target.text or f"position {target.position}" if target else "target"
+            
+            # Include strategy in description if available
+            strategy_desc = ""
+            if hasattr(target, 'strategy') and target.strategy:
+                strategy_name = target.strategy.__class__.__name__
+                strategy_desc = f" using {strategy_name}"
+            
             find_step = FindAction(
-                description=f"finding {target_desc}",
+                description=f"finding {target_desc}{strategy_desc}",
                 target_info=self._get_target_info(target)
             )
             
@@ -895,18 +931,7 @@ class PlaybookController:
             Coordinates if found, None otherwise
         """
         try:
-            # Apply smart defaults if no strategy specified
-            if target.strategy is None:
-                from adare.types.playbook import BestConfidenceStrategy, TopLeftStrategy
-                if target.image:
-                    target.strategy = BestConfidenceStrategy()  # Images: best visual match
-                    log.debug("Applied default BestConfidence strategy for image target")
-                elif target.text:
-                    target.strategy = TopLeftStrategy()  # Text: natural reading order
-                    log.debug("Applied default TopLeft strategy for text target")
-                else:
-                    target.strategy = TopLeftStrategy()  # Fallback
-                    log.debug("Applied fallback TopLeft strategy for position target")
+            # Strategy defaults are now applied in _resolve_target_with_steps
             
             # Get fresh screenshot for image/text targets
             screenshot_base64 = None
@@ -996,11 +1021,10 @@ class PlaybookController:
         """Execute individual test action."""
         try:
             result = await self.client.run_test(action.name)
-            return ActionResult(
-                success=result.get('status') == 'success',
-                message=result.get('message', ''),
-                data=result
-            )
+            
+            # Use TestResultProcessor to handle result processing
+            from adare.adare.backend.experiment.test_result_processor import TestResultProcessor
+            return TestResultProcessor.process_test_result(action.name, result)
         except Exception as e:
             error_msg = str(e)
             if "No testset loaded" in error_msg or "testset" in error_msg.lower():
@@ -1150,6 +1174,70 @@ class PlaybookController:
         """Execute goto action with steps."""
         return await self._execute_action_with_target(action, parent_event_id)
     
+    def _resolve_action_variables(self, action: ActionType) -> ActionType:
+        """Resolve variables in action fields that support templating.
+        
+        Returns a copy of the action with variables resolved in applicable fields.
+        """
+        import copy
+        from adare.types.playbook import (
+            CommandAction, KeyboardAction, ActionTestAction, SaveTimestampAction,
+            Target, ClickAction, RightClickAction, DoubleClickAction, GotoAction, DragAction
+        )
+        
+        # Create a deep copy to avoid modifying the original
+        resolved_action = copy.deepcopy(action)
+        
+        # Resolve description for all actions
+        if hasattr(resolved_action, 'description') and resolved_action.description:
+            resolved_action.description = self._replace_variables(resolved_action.description)
+        
+        # Resolve fields specific to each action type
+        if isinstance(action, CommandAction):
+            if resolved_action.command:
+                resolved_action.command = self._replace_variables(resolved_action.command)
+            if resolved_action.cwd:
+                resolved_action.cwd = self._replace_variables(resolved_action.cwd)
+            if resolved_action.env:
+                resolved_action.env = {k: self._replace_variables(str(v)) for k, v in resolved_action.env.items()}
+        
+        elif isinstance(action, KeyboardAction):
+            if resolved_action.keys:
+                resolved_action.keys = self._replace_variables(resolved_action.keys)
+        
+        elif isinstance(action, ActionTestAction):
+            if resolved_action.name:
+                resolved_action.name = self._replace_variables(resolved_action.name)
+        
+        elif isinstance(action, SaveTimestampAction):
+            if resolved_action.variable:
+                resolved_action.variable = self._replace_variables(resolved_action.variable)
+        
+        # Resolve Target fields for actions that have targets
+        if hasattr(resolved_action, 'target') and resolved_action.target:
+            resolved_action.target = self._resolve_target_variables(resolved_action.target)
+        
+        # Resolve Source/Destination targets for DragAction
+        if isinstance(action, DragAction):
+            if resolved_action.source:
+                resolved_action.source = self._resolve_target_variables(resolved_action.source)
+            if resolved_action.destination:
+                resolved_action.destination = self._resolve_target_variables(resolved_action.destination)
+        
+        return resolved_action
+    
+    def _resolve_target_variables(self, target: Target) -> Target:
+        """Resolve variables in Target fields."""
+        import copy
+        resolved_target = copy.deepcopy(target)
+        
+        if resolved_target.image:
+            resolved_target.image = self._replace_variables(resolved_target.image)
+        if resolved_target.text:
+            resolved_target.text = self._replace_variables(resolved_target.text)
+        
+        return resolved_target
+
     def _replace_variables(self, text: str) -> str:
         """Replace Jinja2 template variables in text with values from execution context.
         
@@ -1200,15 +1288,10 @@ class PlaybookController:
     
     async def _execute_command(self, action: CommandAction, parent_event_id: str = None) -> ActionResult:
         try:
-            # Handle both old and new command formats
-            command = action.cmd or action.command
-            
-            # Replace variables in the command
-            command = self._replace_variables(command)
-            
-            # Replace variables in other options as well
-            cwd = self._replace_variables(action.cwd) if action.cwd else None
-            env = {k: self._replace_variables(str(v)) for k, v in action.env.items()} if action.env else None
+            # Get the command (variables already resolved)
+            command = action.command
+            cwd = action.cwd
+            env = action.env
             
             # Execute raw shell command directly with options
             result = await self.client.execute_shell(

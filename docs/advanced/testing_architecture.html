@@ -19,9 +19,7 @@
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
-    <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Create your own Adare Box" href="vagrantboxcreation.html" />
-    <link rel="prev" title="Action File Methods" href="actionfile_methods.html" /> 
+    <link rel="search" title="Search" href="../search.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -45,66 +43,12 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul class="current">
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Structure and Concepts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
-<li class="toctree-l1 current"><a class="reference internal" href="index.html">Advanced</a><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="testfunction.html">Write your own Testfunction</a></li>
-<li class="toctree-l2"><a class="reference internal" href="actionfile_methods.html">Action File Methods</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Testing Architecture</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#testing-guidelines">Testing Guidelines</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#core-principles">Core Principles</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#test-organization">Test Organization</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#directory-structure">Directory Structure</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#naming-convention">Naming Convention</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#testing-categories">Testing Categories</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#unit-tests">Unit Tests</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#integration-tests">Integration Tests</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#async-tests">Async Tests</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#database-tests">Database Tests</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#mock-strategies">Mock Strategies</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#external-dependencies">External Dependencies</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#database-mocking">Database Mocking</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#file-system-mocking">File System Mocking</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#error-testing">Error Testing</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#exception-handling">Exception Handling</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#logging-verification">Logging Verification</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#test-coverage-status">Test Coverage Status</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#current-coverage">Current Coverage</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#priority-areas">Priority Areas</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#running-tests">Running Tests</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#basic-test-execution">Basic Test Execution</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#coverage-reporting">Coverage Reporting</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#async-test-execution">Async Test Execution</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#best-practices">Best Practices</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#test-design">Test Design</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#fixture-design">Fixture Design</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#documentation">Documentation</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#continuous-improvement">Continuous Improvement</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="vagrantboxcreation.html">Create your own Adare Box</a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Advanced</a></li>
 </ul>
 
         </div>
@@ -121,7 +65,6 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-          <li class="breadcrumb-item"><a href="index.html">Advanced</a></li>
       <li class="breadcrumb-item active">Testing Architecture</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/advanced/testing_architecture.rst.txt" rel="nofollow"> View page source</a>
@@ -418,10 +361,7 @@ poetry<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> 
 
            </div>
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="actionfile_methods.html" class="btn btn-neutral float-left" title="Action File Methods" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="vagrantboxcreation.html" class="btn btn-neutral float-right" title="Create your own Adare Box" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-    </div>
+          <footer>
 
   <hr/>
 

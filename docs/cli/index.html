@@ -49,7 +49,27 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Structure and Concepts</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Command Line Interface (CLI)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Command Line Interface (CLI)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#global-options">Global Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#command-groups">Command Groups</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#project-management">Project Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#environment-management">Environment Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#experiment-management">Experiment Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#testfunction-management">Testfunction Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#virtual-machine-management">Virtual Machine Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#run-management">Run Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#web-platform-integration">Web Platform Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#system-management">System Management</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#common-usage-patterns">Common Usage Patterns</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#creating-and-running-your-first-experiment">Creating and Running Your First Experiment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#working-with-shared-content">Working with Shared Content</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#vm-cleanup-and-maintenance">VM Cleanup and Maintenance</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
 </ul>
 
@@ -79,7 +99,363 @@
              
   <section id="command-line-interface-cli">
 <h1>Command Line Interface (CLI)<a class="headerlink" href="#command-line-interface-cli" title="Link to this heading"></a></h1>
-<p>The CLI is a command line interface of ADARE.</p>
+<p>The ADARE CLI provides comprehensive command-line access to all framework functionality. It supports project management, environment configuration, experiment execution, VM lifecycle management, and web platform integration.</p>
+<section id="global-options">
+<h2>Global Options<a class="headerlink" href="#global-options" title="Link to this heading"></a></h2>
+<p>All ADARE commands support the following global options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--logfile</span> <span class="pre">PATH</span></code> - Path to logfile for detailed logging</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--verbose</span></code> - Verbose output (loglevel=INFO)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--very-verbose</span></code> - Very verbose output (loglevel=DEBUG)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--log-level</span> <span class="pre">LEVEL</span></code> - Specific log level for logfile</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--version</span></code> - Show version information</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--help</span></code> - Show help message</p></li>
+</ul>
+</section>
+<section id="command-groups">
+<h2>Command Groups<a class="headerlink" href="#command-groups" title="Link to this heading"></a></h2>
+<section id="project-management">
+<h3>Project Management<a class="headerlink" href="#project-management" title="Link to this heading"></a></h3>
+<p>Projects are top-level containers that organize environments and provide shared resources.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">project</span> <span class="pre">create</span> <span class="pre">&lt;name&gt;</span></code></dt><dd><p>Create a new project with the specified name. Creates a directory structure with shared resources like tools and templates.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--description</span> <span class="pre">TEXT</span></code> - Description of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">project</span> <span class="pre">remove</span> <span class="pre">&lt;name&gt;</span></code></dt><dd><p>Remove an existing project and all its contents.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">project</span> <span class="pre">list</span></code></dt><dd><p>List all available projects in the system.</p>
+</dd>
+</dl>
+</section>
+<section id="environment-management">
+<h3>Environment Management<a class="headerlink" href="#environment-management" title="Link to this heading"></a></h3>
+<p>Environments define virtual machine configurations and contain experiments that run on the same VM setup.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">environment</span> <span class="pre">create</span> <span class="pre">&lt;name&gt;</span></code></dt><dd><p>Create a new environment within the current project.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project (if not in project directory)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--with-vm</span> <span class="pre">PATH</span></code> - VM file path (OVA) to load automatically during creation</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">environment</span> <span class="pre">load</span> <span class="pre">&lt;environment&gt;</span></code></dt><dd><p>Load an environment from a YAML configuration file.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--force</span></code> - Force update of the environment</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">environment</span> <span class="pre">delete</span> <span class="pre">&lt;ulid&gt;</span></code></dt><dd><p>Delete an environment by its ULID.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--force</span></code> - Force deletion without confirmation</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">environment</span> <span class="pre">example</span> <span class="pre">[name]</span></code></dt><dd><p>Create an example environment (default: win11test) with sample configuration.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">environment</span> <span class="pre">list</span></code></dt><dd><p>List all environments in the current project.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">environment</span> <span class="pre">info</span> <span class="pre">&lt;dotnotation&gt;</span></code></dt><dd><p>Show detailed information about a specific environment using dotnotation (project.environment).</p>
+</dd>
+</dl>
+</section>
+<section id="experiment-management">
+<h3>Experiment Management<a class="headerlink" href="#experiment-management" title="Link to this heading"></a></h3>
+<p>Experiments contain the actual test automation logic using YAML-based playbooks.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">create</span> <span class="pre">&lt;experiment&gt;</span></code></dt><dd><p>Create a new experiment skeleton with template files (playbook.yaml, testset.yml, metadata.yml).</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">load</span> <span class="pre">&lt;experiment&gt;</span></code></dt><dd><p>Load an experiment configuration.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--environment</span> <span class="pre">TEXT</span></code> - Name of the environment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--force</span></code> - Force update of the experiment</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">run</span> <span class="pre">&lt;experiment&gt;</span></code></dt><dd><p>Execute an experiment in the specified environment.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--environment</span> <span class="pre">TEXT</span></code> - Name of the environment (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--test</span></code> - Run in test mode (delete results afterwards, don’t block changes)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--debug-screenshots</span></code> - Save screenshots to experiment run directory for debugging</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--preserve-snapshot</span></code> - Create experiment snapshot for preservation (default: only reset to base)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">develop</span> <span class="pre">&lt;experiment&gt;</span></code></dt><dd><p>Run an experiment in development/test mode for iterative development.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--environment</span> <span class="pre">TEXT</span></code> - Name of the environment (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">example</span> <span class="pre">[name]</span></code></dt><dd><p>Create an example experiment (default: TrashBinDeleteFile) with complete playbook and test configuration.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">list</span></code></dt><dd><p>List all experiments in the current environment.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">info</span> <span class="pre">[name]</span></code></dt><dd><p>Show detailed information about a specific experiment.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--ulid</span> <span class="pre">TEXT</span></code> - Find experiment by ULID</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--dotnotation</span> <span class="pre">TEXT</span></code> - Find by dotnotation (project.environment.experiment)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+<section id="testfunction-management">
+<h3>Testfunction Management<a class="headerlink" href="#testfunction-management" title="Link to this heading"></a></h3>
+<p>Testfunctions are reusable test components that can be shared across experiments.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">testfunction</span> <span class="pre">create</span> <span class="pre">&lt;name&gt;</span></code></dt><dd><p>Create a new testfunction with template structure.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">testfunction</span> <span class="pre">remove</span> <span class="pre">&lt;name&gt;</span></code></dt><dd><p>Remove an existing testfunction.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">testfunction</span> <span class="pre">load</span> <span class="pre">&lt;name&gt;</span></code></dt><dd><p>Load a testfunction into the current project.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">testfunction</span> <span class="pre">list</span></code></dt><dd><p>List all available testfunctions.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">testfunction</span> <span class="pre">show</span></code></dt><dd><p>Show testfunctions with optional filtering.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--file-name</span> <span class="pre">TEXT</span></code> - Filter by file name</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">testfunction</span> <span class="pre">info</span> <span class="pre">&lt;dotnotation&gt;</span></code></dt><dd><p>Show detailed information about a specific testfunction using dotnotation.</p>
+</dd>
+</dl>
+</section>
+<section id="virtual-machine-management">
+<h3>Virtual Machine Management<a class="headerlink" href="#virtual-machine-management" title="Link to this heading"></a></h3>
+<p>VM commands provide lifecycle management for virtual machines used in experiments.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">list</span></code></dt><dd><p>List all VMs currently managed by ADARE, including their status and associated environments.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">info</span> <span class="pre">&lt;vm_id&gt;</span></code></dt><dd><p>Get detailed information about a specific VM, including snapshots and configuration.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">delete</span> <span class="pre">&lt;vm_id&gt;</span></code></dt><dd><p>Delete a specific VM from the system.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--force</span></code> - Force deletion even if VM is in use</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">delete-snapshot</span> <span class="pre">&lt;vm_id&gt;</span> <span class="pre">&lt;snapshot_name&gt;</span></code></dt><dd><p>Delete a specific snapshot from a VM while preserving the VM itself.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">clear</span> <span class="pre">all</span></code></dt><dd><p>Clear ALL VMs from the system.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--force</span></code> - Force deletion of all VMs (required for confirmation)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">clear</span> <span class="pre">environment</span> <span class="pre">&lt;environment_ulid&gt;</span></code></dt><dd><p>Clear all VMs associated with a specific environment.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--force</span></code> - Force deletion of environment VMs (required for confirmation)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+<section id="run-management">
+<h3>Run Management<a class="headerlink" href="#run-management" title="Link to this heading"></a></h3>
+<p>Commands for viewing and managing experiment run history and results.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">run</span> <span class="pre">list</span></code></dt><dd><p>List all experiment runs with filtering capabilities.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--filter</span> <span class="pre">TEXT</span></code> - Filter by dotnotation: [project][.environment][.experiment]</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">run</span> <span class="pre">info</span> <span class="pre">&lt;ulid&gt;</span></code></dt><dd><p>Show detailed information about a specific experiment run, including results and logs.</p>
+</dd>
+</dl>
+</section>
+<section id="web-platform-integration">
+<h3>Web Platform Integration<a class="headerlink" href="#web-platform-integration" title="Link to this heading"></a></h3>
+<p>Commands for integrating with the ADARE Web platform for sharing experiments and results.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">login</span></code></dt><dd><p>Login to the ADARE Web platform to access shared experiments and upload results.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">logout</span></code></dt><dd><p>Logout from the ADARE Web platform.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">status</span></code></dt><dd><p>Show current login status and connection to the web platform.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">download</span> <span class="pre">experiment</span> <span class="pre">&lt;ulid&gt;</span></code></dt><dd><p>Download an experiment from the web platform by its ULID.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">download</span> <span class="pre">testfunction</span> <span class="pre">&lt;name&gt;</span></code></dt><dd><p>Download a testfunction from the web platform.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">download</span> <span class="pre">environment</span> <span class="pre">&lt;name&gt;</span></code></dt><dd><p>Download an environment configuration from the web platform.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">publish</span> <span class="pre">&lt;ulid&gt;</span></code></dt><dd><p>Publish an experiment run to the web platform for sharing with the community.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">sync</span></code></dt><dd><p>Synchronize all environments and experiments with the web platform.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+<section id="system-management">
+<h3>System Management<a class="headerlink" href="#system-management" title="Link to this heading"></a></h3>
+<p>Administrative commands for maintaining the ADARE system.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">manage</span> <span class="pre">reset-db</span></code></dt><dd><p>Reset the ADARE database (use with caution - will delete all experiment data).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">manage</span> <span class="pre">reset-vm</span></code></dt><dd><p>Reset all VMs in the system (use with caution).</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--force</span></code> - Force deletion of all VMs (required for confirmation)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+</section>
+<section id="common-usage-patterns">
+<h2>Common Usage Patterns<a class="headerlink" href="#common-usage-patterns" title="Link to this heading"></a></h2>
+<section id="creating-and-running-your-first-experiment">
+<h3>Creating and Running Your First Experiment<a class="headerlink" href="#creating-and-running-your-first-experiment" title="Link to this heading"></a></h3>
+<ol class="arabic">
+<li><p>Create a project:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">project</span> <span class="n">create</span> <span class="n">my</span><span class="o">-</span><span class="n">forensics</span><span class="o">-</span><span class="n">project</span>
+<span class="n">cd</span> <span class="n">my</span><span class="o">-</span><span class="n">forensics</span><span class="o">-</span><span class="n">project</span>
+</pre></div>
+</div>
+</li>
+<li><p>Load an environment:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">environment</span> <span class="n">load</span> <span class="n">win11</span><span class="o">-</span><span class="n">config</span><span class="o">.</span><span class="n">yml</span>
+</pre></div>
+</div>
+</li>
+<li><p>Create an experiment:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">create</span> <span class="n">file</span><span class="o">-</span><span class="n">deletion</span><span class="o">-</span><span class="n">test</span>
+</pre></div>
+</div>
+</li>
+<li><p>Edit the generated playbook.yaml and testset.yml files</p></li>
+<li><p>Run the experiment:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="n">file</span><span class="o">-</span><span class="n">deletion</span><span class="o">-</span><span class="n">test</span> <span class="o">-</span><span class="n">e</span> <span class="n">win11</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</section>
+<section id="working-with-shared-content">
+<h3>Working with Shared Content<a class="headerlink" href="#working-with-shared-content" title="Link to this heading"></a></h3>
+<ol class="arabic">
+<li><p>Login to ADARE Web:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">web</span> <span class="n">login</span>
+</pre></div>
+</div>
+</li>
+<li><p>Download a shared experiment:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">web</span> <span class="n">download</span> <span class="n">experiment</span> <span class="mi">01</span><span class="n">ARZ3NDEKTSV4RRFFQ69G5FAV</span>
+</pre></div>
+</div>
+</li>
+<li><p>Run the downloaded experiment:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="n">TrashBinDeleteFile</span> <span class="o">-</span><span class="n">e</span> <span class="n">win11</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</section>
+<section id="vm-cleanup-and-maintenance">
+<h3>VM Cleanup and Maintenance<a class="headerlink" href="#vm-cleanup-and-maintenance" title="Link to this heading"></a></h3>
+<ol class="arabic">
+<li><p>List all VMs to see current usage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">vm</span> <span class="nb">list</span>
+</pre></div>
+</div>
+</li>
+<li><p>Clean up VMs for a specific environment:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">vm</span> <span class="n">clear</span> <span class="n">environment</span> <span class="mi">01</span><span class="n">ARZ3NDEKTSV4RRFFQ69G5FAV</span> <span class="o">--</span><span class="n">force</span>
+</pre></div>
+</div>
+</li>
+<li><p>View experiment run results:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">run</span> <span class="nb">list</span> <span class="o">--</span><span class="nb">filter</span> <span class="n">my</span><span class="o">-</span><span class="n">project</span><span class="o">.</span><span class="n">win11</span>
+<span class="n">adare</span> <span class="n">run</span> <span class="n">info</span> <span class="mi">01</span><span class="n">ARZ3NDEKTSV4RRFFQ69G5FAV</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</section>
+</section>
 </section>
 
 

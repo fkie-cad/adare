@@ -139,10 +139,9 @@ class ActionTestAction:
 
 @attrs.define
 class CommandAction:
+    command: str  # Required field - the shell command to execute
     name: Optional[str] = None
     description: str = ''
-    cmd: Optional[str] = None
-    command: Optional[str] = None
     tool: Optional[str] = None
     cwd: Optional[str] = None
     env: Optional[dict] = None

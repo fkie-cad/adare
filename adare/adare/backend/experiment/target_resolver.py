@@ -73,9 +73,9 @@ class MCPTargetResolver:
             return matches[0]
         
         if strategy is None:
-            # Should not happen - playbook controller sets smart defaults
-            log.warning("No strategy provided, using first match")
-            return matches[0]
+            # Error when multiple matches found but no strategy provided
+            raise ValueError(f"Found {len(matches)} matches but no strategy was provided to select from them. "
+                           f"Please specify a strategy (e.g., BestConfidence, TopLeft, etc.) to handle multiple matches.")
         
         elif isinstance(strategy, SweepStrategy):
             # Sort matches spatially: top-to-bottom, left-to-right (reading order)
@@ -268,21 +268,30 @@ class MCPTargetResolver:
                             log.error("No data found in MCP result")
                             return None
                         locations = locations_data.get("locations", [])
+                        similarities = locations_data.get("similarities", [])
                         
                         if locations:
-                            # Create matches for all found locations
+                            # Create matches for all found locations using actual similarities
                             matches = []
-                            for x, y in locations:
+                            for i, (x, y) in enumerate(locations):
+                                # Use actual similarity score from MCP server, fallback to 0.8 if not available
+                                confidence = similarities[i] if i < len(similarities) else 0.8
                                 matches.append(TargetMatch(
                                     coordinates=(x, y),
-                                    confidence=0.8,  # Could be enhanced to get actual confidence from CV
+                                    confidence=confidence,  # Use actual similarity from CV matching
                                     method='image'
                                 ))
                             
-                            # Log all found matches
+                            # Log all found matches with their actual confidences
                             log.info(f"Found {len(matches)} matches for image '{target.image}':")
                             for i, match in enumerate(matches):
-                                log.info(f"  Match {i+1}: at {match.coordinates}")
+                                log.info(f"  Match {i+1}: at {match.coordinates} (confidence: {match.confidence:.3f})")
+                            
+                            # Set default strategy if none provided
+                            if target.strategy is None:
+                                from adare.types.playbook import BestConfidenceStrategy
+                                target.strategy = BestConfidenceStrategy()
+                                log.info(f"No strategy specified for image target, using default BestConfidenceStrategy")
                             
                             # Apply strategy to select from multiple matches
                             strategy_name = target.strategy.__class__.__name__ if target.strategy else "default"
@@ -295,12 +304,20 @@ class MCPTargetResolver:
                                         strategy_params = f" with params {params}"
                             log.info(f"Applying {strategy_name} strategy{strategy_params} to select from {len(matches)} matches")
                             
-                            selected_match = self._select_match_by_strategy(matches, target.strategy)
-                            if selected_match:
-                                selected_index = matches.index(selected_match) + 1
-                                log.info(f"Selected match {selected_index}: image '{target.image}' at {selected_match.coordinates} via MCP")
-                                # Mark substage as successful
-                                return selected_match
+                            try:
+                                selected_match = self._select_match_by_strategy(matches, target.strategy)
+                                if selected_match:
+                                    selected_index = matches.index(selected_match) + 1
+                                    log.info(f"Selected match {selected_index}: image '{target.image}' at {selected_match.coordinates} via MCP")
+                                    # Mark substage as successful
+                                    return selected_match
+                                else:
+                                    log.error(f"Strategy selection returned None for image '{target.image}' with {len(matches)} matches")
+                                    return None
+                            except ValueError as strategy_error:
+                                log.error(f"Strategy selection failed for image '{target.image}': {strategy_error}")
+                                log.error(f"Target strategy: {target.strategy}, Matches: {len(matches)}")
+                                return None
                         else:
                             log.warning(f"Image '{target.image}' not found via MCP")
                             # Mark substage as failed when no matches found
@@ -329,25 +346,34 @@ class MCPTargetResolver:
                             log.error("No data found in MCP result")
                             return None
                         locations = locations_data.get("locations", [])
+                        confidences = locations_data.get("confidences", [])
                         
                         if locations:
-                            # Create matches for all found text locations
+                            # Create matches for all found text locations using actual OCR confidences
                             matches = []
-                            for location_info in locations:
+                            for i, location_info in enumerate(locations):
                                 x = location_info["location"]["x"]
                                 y = location_info["location"]["y"]
                                 found_text = location_info["text"]
+                                # Use actual OCR confidence score from MCP server, fallback to 0.8 if not available
+                                confidence = confidences[i] if i < len(confidences) else 0.8
                                 matches.append(TargetMatch(
                                     coordinates=(x, y),
-                                    confidence=0.8,  # Could use OCR confidence if available
+                                    confidence=confidence,  # Use actual OCR confidence from PaddleOCR
                                     method='text',
                                     text=found_text
                                 ))
                             
-                            # Log all found matches
+                            # Log all found matches with their actual confidences
                             log.info(f"Found {len(matches)} matches for text '{target.text}':")
                             for i, match in enumerate(matches):
-                                log.info(f"  Match {i+1}: '{match.text}' at {match.coordinates}")
+                                log.info(f"  Match {i+1}: '{match.text}' at {match.coordinates} (confidence: {match.confidence:.3f})")
+                            
+                            # Set default strategy if none provided
+                            if target.strategy is None:
+                                from adare.types.playbook import TopLeftStrategy
+                                target.strategy = TopLeftStrategy()  # Text: natural reading order (top-left first)
+                                log.info(f"No strategy specified for text target, using default TopLeftStrategy")
                             
                             # Apply strategy to select from multiple matches
                             strategy_name = target.strategy.__class__.__name__ if target.strategy else "default"
@@ -360,12 +386,20 @@ class MCPTargetResolver:
                                         strategy_params = f" with params {params}"
                             log.info(f"Applying {strategy_name} strategy{strategy_params} to select from {len(matches)} matches")
                             
-                            selected_match = self._select_match_by_strategy(matches, target.strategy)
-                            if selected_match:
-                                selected_index = matches.index(selected_match) + 1
-                                log.info(f"Selected match {selected_index}: '{selected_match.text}' at {selected_match.coordinates} via MCP")
-                                # Mark substage as successful
-                                return selected_match
+                            try:
+                                selected_match = self._select_match_by_strategy(matches, target.strategy)
+                                if selected_match:
+                                    selected_index = matches.index(selected_match) + 1
+                                    log.info(f"Selected match {selected_index}: '{selected_match.text}' at {selected_match.coordinates} via MCP")
+                                    # Mark substage as successful
+                                    return selected_match
+                                else:
+                                    log.error(f"Strategy selection returned None for text '{target.text}' with {len(matches)} matches")
+                                    return None
+                            except ValueError as strategy_error:
+                                log.error(f"Strategy selection failed for text '{target.text}': {strategy_error}")
+                                log.error(f"Target strategy: {target.strategy}, Matches: {len(matches)}")
+                                return None
                         else:
                             log.warning(f"Text '{target.text}' not found via MCP")
                             # Mark substage as failed when no matches found

@@ -15,10 +15,16 @@ import asyncio
 import json
 import logging
 import threading
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
+
+# Suppress websockets deprecation warnings from NiceGUI until they update
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="websockets.legacy")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="websockets.server") 
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="uvicorn.protocols.websockets")
 
 import websockets
 from nicegui import ui, app
@@ -75,9 +81,13 @@ class InteractiveDevelopmentServer:
     async def start_vm_session(self) -> bool:
         """Start VM and prepare for interactive development."""
         try:
-            # Load experiment and environment
-            from adare.backend.experiment.commands import experiment_load
-            experiment_load(self.session.project_directory.path, self.session.experiment_name, force=False, silent=True)
+            # Create experiment directory for dev mode if it doesn't exist
+            # Skip full experiment_load validation - dev mode only needs basic structure
+            if not self.session.experiment_directory.exists():
+                self.session.experiment_directory.create(empty=False)
+                log.info(f"Created experiment directory for dev mode: {self.session.experiment_directory.path}")
+            else:
+                log.debug(f"Using existing experiment directory: {self.session.experiment_directory.path}")
             
             # Create experiment run context for development
             config = ExperimentConfig(
@@ -389,11 +399,13 @@ class InteractiveDevelopmentServer:
             if self.session.vm_started:
                 await self.stop_vm_session()
         
+        # NiceGUI needs reload=False when called from imported module
         ui.run(
             host="127.0.0.1",
             port=self.port,
             title="Adare Interactive Development",
-            dark=True
+            dark=True,
+            reload=False
         )
 
 

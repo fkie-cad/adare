@@ -426,12 +426,17 @@ class AdareVMServer:
             await self.send_event(websocket, EventType.TEST_START, {"test_name": test_name})
             
             # Execute test
-            self.testset_instance.test(test_name, self.current_variables)
+            test_result = self.testset_instance.test(test_name, self.current_variables)
+            
+            # Use TestResultLogger to handle logging and formatting
+            from adarevm.testing.result_logger import TestResultLogger
+            TestResultLogger.log_test_result(test_name, test_result)
+            result_data = TestResultLogger.format_result_for_response(test_name, test_result)
             
             await self.send_event(websocket, EventType.TEST_COMPLETE, {"test_name": test_name})
-            log.info(f"Test completed successfully: {test_name}")
+            log.info(f"Test execution completed: {test_name}")
             
-            return {"status": "success", "message": f"Test '{test_name}' executed successfully"}
+            return {"status": "success", "message": f"Test '{test_name}' executed", "result": result_data}
             
         except TestsetExecutionError as e:
             log.error(f"Test execution error: {test_name}: {e}")
@@ -524,9 +529,19 @@ class AdareVMServer:
                 options['timeout'] = timeout
             if shell is not None:
                 options['shell'] = shell
+            else:
+                # Auto-detect if shell mode is needed based on special characters
+                shell_chars = ['>', '<', '>>', '|', '||', '&&', ';', '`', '$', '*', '?', '~']
+                if any(char in shell_command for char in shell_chars):
+                    options['shell'] = True
+                    log.info(f"Auto-enabled shell mode for command with special characters: {shell_command}")
             
             # Execute shell command directly using execute_on_shell
-            result = execute_on_shell(shell_command.split(" "), **options)
+            # When shell=True, pass command as string; otherwise split into list
+            if options.get('shell', False):
+                result = execute_on_shell(shell_command, **options)
+            else:
+                result = execute_on_shell(shell_command.split(" "), **options)
             
             if result['returncode'] == 0:
                 await self.send_event(websocket, EventType.COMMAND_COMPLETE, {"shell_command": shell_command})

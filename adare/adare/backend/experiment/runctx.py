@@ -6,7 +6,6 @@ from typing import Optional, Tuple, Dict
 from adare.virtualbox.api import VirtualBoxVM
 from adare.backend.project.directory import ProjectDirectory
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
-from adare.vagrantapi.vagrantfile import VagrantFile
 from adare.backend.experiment.websocket_client import AdareVMClient
 from adare.backend.experiment.mcp_server_manager import MCPServerManager
 from adare.types.playbook import Playbook

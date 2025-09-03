@@ -8,6 +8,4 @@ Advanced
    :caption: Contents:
 
    testfunction
-   actionfile_methods
-   testing_architecture
-   vagrantboxcreation
+   vmcreation
