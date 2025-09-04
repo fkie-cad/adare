@@ -35,7 +35,7 @@ def get_experiment_by_ulid(experiment_ulid: str, fields: list[str] = None) -> Ex
         experiment_ulid: Experiment ULID
         fields: Optional list of fields to extract. If None, returns full object.
                 Available fields: 'id', 'name', 'description', 'sha256', 'sha256_playbook', 
-                'sha256_testset', 'sha256_metadata', 'ulid', 'project_id'
+                'sha256_metadata', 'ulid', 'project_id'
                 Relationship fields: 'environments', 'environment_names', 'runs_count', 'tags'
     
     Returns:
@@ -104,8 +104,6 @@ def get_experiment_by_ulid(experiment_ulid: str, fields: list[str] = None) -> Ex
                     result['sha256'] = experiment.sha256
                 elif field == 'sha256_playbook':
                     result['sha256_playbook'] = experiment.sha256_playbook
-                elif field == 'sha256_testset':
-                    result['sha256_testset'] = experiment.sha256_testset
                 elif field == 'sha256_metadata':
                     result['sha256_metadata'] = experiment.sha256_metadata
                 elif field == 'ulid':
@@ -130,7 +128,7 @@ def get_experiment_by_ulid(experiment_ulid: str, fields: list[str] = None) -> Ex
                 elif field == 'test_count':
                     result['test_count'] = len(experiment.abstract_tests) if hasattr(experiment, 'abstract_tests') else 0
                 else:
-                    log.warning(f'Unknown field requested: {field}. Available: id, name, description, sha256, sha256_playbook, sha256_testset, sha256_metadata, ulid, project_id, environments, environment_names, runs_count, tags, test_count')
+                    log.warning(f'Unknown field requested: {field}. Available: id, name, description, sha256, sha256_playbook, sha256_metadata, ulid, project_id, environments, environment_names, runs_count, tags, test_count')
             except AttributeError as e:
                 log.warning(f"Could not access field '{field}': {e}")
                 result[field] = None
@@ -140,7 +138,7 @@ def get_experiment_by_ulid(experiment_ulid: str, fields: list[str] = None) -> Ex
 
 def get_experiment_data(experiment_ulid: str) -> dict | None:
     """Get full experiment data with relationships - convenience function for common case."""
-    return get_experiment_by_ulid(experiment_ulid, fields=['id', 'name', 'description', 'sha256', 'sha256_playbook', 'sha256_testset', 'sha256_metadata', 'ulid', 'environment_names', 'runs_count', 'test_count'])
+    return get_experiment_by_ulid(experiment_ulid, fields=['id', 'name', 'description', 'sha256', 'sha256_playbook', 'sha256_metadata', 'ulid', 'environment_names', 'runs_count', 'test_count'])
 
 
 def get_experiment_summary(experiment_ulid: str) -> dict | None:
@@ -167,7 +165,6 @@ def get_experiment_hashes(project_path: Path, environment_name: str, experiment_
         return {
             'experiment': experiment.sha256,
             'playbook': experiment.sha256_playbook,
-            'testset': experiment.sha256_testset,
             'metadata': experiment.sha256_metadata,
         }
 
