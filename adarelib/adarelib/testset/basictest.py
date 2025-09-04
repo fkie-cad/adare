@@ -6,6 +6,7 @@ import re
 
 # internal imports
 from adarelib.testset.yaml.customtags import YamlCustomTag
+from adarelib.common.variables import VariableRegistry
 
 # configure logging
 import logging
@@ -86,7 +87,7 @@ class BasicTest:
     name: str
     parameter: Parameter
     description: Optional[str]
-    variables: Optional[dict]
+    variables: Optional[VariableRegistry]
 
     def resolve_globfilepath(self, globfilepath: str) -> tuple[str, str]:
         """
@@ -108,14 +109,12 @@ class BasicTest:
         """
         replace a variable in a string (e.g. test{VARIABLE} with VARIABLE=value -> testvalue)
         :param string: string to replace variables in
-        :param variables: dict with variables
         :param regex: boolean if string is a regex expression
         :return:
         """
-        regex_expr = r"{{[ ]*(.*?)[ ]*}}"
-        if regex:
-            return re.sub(regex_expr, lambda match: resolve_var_in_match_regex(match, self.variables), string)
-        return re.sub(regex_expr, lambda match: resolve_var_in_match_string(match, self.variables), string)
+        if not self.variables:
+            return string
+        return self.variables.resolve_in_string(string, for_regex=regex)
 
     
 

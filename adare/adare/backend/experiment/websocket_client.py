@@ -313,12 +313,6 @@ class AdareVMClient:
             "testfunctions_data": zip_data
         })
     
-    async def upload_testset(self, testset_yaml: str) -> Dict[str, Any]:
-        """Upload testset YAML configuration."""
-        return await self.call_tool(ToolRegistry.UPLOAD_TESTSET, {
-            "testset_yaml": testset_yaml
-        })
-    
     async def set_variables(self, variables: Dict[str, Any]) -> Dict[str, Any]:
         """Set variables for test execution."""
         return await self.call_tool(ToolRegistry.SET_VARIABLES, {
@@ -333,13 +327,6 @@ class AdareVMClient:
         }
         return await self.call_tool(ToolRegistry.RUN_TEST, params)
     
-    async def run_all_tests(self) -> Dict[str, Any]:
-        """Run all available tests."""
-        return await self.call_tool(ToolRegistry.RUN_ALL_TESTS)
-    
-    async def list_tests(self) -> Dict[str, Any]:
-        """List available tests."""
-        return await self.call_tool(ToolRegistry.LIST_TESTS)
     
     async def execute_shell(self, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False) -> Dict[str, Any]:
         """Execute a raw shell command with advanced options."""

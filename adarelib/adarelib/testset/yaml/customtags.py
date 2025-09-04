@@ -5,7 +5,10 @@ import attr
 import datetime
 import dateutil.parser
 import dateutil.relativedelta
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from adarelib.common.variables import VariableRegistry
 
 # internal imports
 import adarelib.helper.regex as helper_regex
@@ -26,8 +29,9 @@ class ComparisonResult:
 class YamlCustomTag(yaml.YAMLObject):
     string: str
 
-    def set_variables(self, variables: dict):
-        self.string = helper_regex.resolve_variable_in_string(self.string, variables, regex=False)
+    def set_variables(self, variables: 'VariableRegistry'):
+        if variables:
+            self.string = variables.resolve_in_string(self.string, for_regex=False)
 
 
 class YamlString(YamlCustomTag):
@@ -143,10 +147,11 @@ class YamlRegexString(YamlCustomTag):
     def to_yaml(cls, dumper, data):
         return dumper.represent_scalar(cls.yaml_tag, data.string)
 
-    def set_variables(self, variables: dict):
-        self.string = helper_regex.resolve_variable_in_string(self.string, variables, regex=True)
+    def set_variables(self, variables: 'VariableRegistry'):
+        if variables:
+            self.string = variables.resolve_in_string(self.string, for_regex=True)
 
-    def compare(self, entry: str, variables: dict or None = None) -> ComparisonResult:
+    def compare(self, entry: str, variables: 'VariableRegistry' = None) -> ComparisonResult:
         try:
             compiled_regex = re.compile(self.string)
         except re.error as e:
@@ -174,7 +179,7 @@ class YamlRegexStringAll(YamlRegexString):
     def to_yaml(cls, dumper, data):
         return dumper.represent_scalar(cls.yaml_tag, data.string)
 
-    def compare(self, entry: str, variables: dict or None = None) -> ComparisonResult:
+    def compare(self, entry: str, variables: 'VariableRegistry' = None) -> ComparisonResult:
         return ComparisonResult(True)
 
 

@@ -1,5 +1,9 @@
 # external imports
 import attrs
+from typing import Optional
+
+# internal imports
+from adarelib.common.variables import VariableRegistry
 
 # configure logging
 import logging
@@ -12,6 +16,7 @@ class Test:
     function: str
     description: str = ''
     parameter: dict = {}
+    variables: Optional[VariableRegistry] = None
 
 
 @attrs.define

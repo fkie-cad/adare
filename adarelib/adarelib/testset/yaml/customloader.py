@@ -47,3 +47,8 @@ def create_custom_yaml_loader_dumper_status_enum():
 
 
 YAML_STATUS_LOADER, YAML_STATUS_DUMPER = create_custom_yaml_loader_dumper_status_enum()
+
+
+def get_custom_loader():
+    """Get the custom YAML loader for parsing playbooks and testsets."""
+    return YAML_TESTSET_LOADER
