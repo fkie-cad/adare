@@ -13,8 +13,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] test and enable ydotool to make it work on wayland as well -> also would make machine setup easier as not X11 specific stuff needs to happen 
 - [ ] make interactive experiment development
     - [ ] use nicegui to interactively test and create playbook and tests -> e.g. crop images extract icons ... 
-
-#### TUI
+- [ ] add filter to variables as timestamp to define timezone/format and tolerance
 
 
 #### QOL

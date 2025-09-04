@@ -59,11 +59,14 @@
 <li class="toctree-l3"><a class="reference internal" href="#virtual-machine-management">Virtual Machine Management</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#run-management">Run Management</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#web-platform-integration">Web Platform Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mcp-server-testing">MCP Server Testing</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#system-management">System Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#help-commands">Help Commands</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#common-usage-patterns">Common Usage Patterns</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#creating-and-running-your-first-experiment">Creating and Running Your First Experiment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#interactive-development-workflow-not-currently-available">Interactive Development Workflow <strong>[NOT CURRENTLY AVAILABLE]</strong></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#working-with-shared-content">Working with Shared Content</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#vm-cleanup-and-maintenance">VM Cleanup and Maintenance</a></li>
 </ul>
@@ -219,6 +222,17 @@
 </dd>
 </dl>
 </dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">dev</span> <span class="pre">&lt;experiment&gt;</span></code> <strong>[NOT IMPLEMENTED]</strong></dt><dd><p>Interactive development mode with web-based interface (currently not functional).</p>
+<p><em>Note: This feature is under development and not currently working.</em></p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--environment</span> <span class="pre">TEXT</span></code> - Name of the environment (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--port</span> <span class="pre">INTEGER</span></code> - Port for the web interface (default: 8080)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
 <dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">example</span> <span class="pre">[name]</span></code></dt><dd><p>Create an example experiment (default: TrashBinDeleteFile) with complete playbook and test configuration.</p>
 <dl class="simple">
 <dt>Options:</dt><dd><ul class="simple">
@@ -306,6 +320,9 @@
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">delete-snapshot</span> <span class="pre">&lt;vm_id&gt;</span> <span class="pre">&lt;snapshot_name&gt;</span></code></dt><dd><p>Delete a specific snapshot from a VM while preserving the VM itself.</p>
 </dd>
+</dl>
+<p><strong>VM Cleanup Sub-commands (adare vm clear)</strong></p>
+<dl>
 <dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">clear</span> <span class="pre">all</span></code></dt><dd><p>Clear ALL VMs from the system.</p>
 <dl class="simple">
 <dt>Options:</dt><dd><ul class="simple">
@@ -343,13 +360,16 @@
 <section id="web-platform-integration">
 <h3>Web Platform Integration<a class="headerlink" href="#web-platform-integration" title="Link to this heading"></a></h3>
 <p>Commands for integrating with the ADARE Web platform for sharing experiments and results.</p>
-<dl>
+<dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">login</span></code></dt><dd><p>Login to the ADARE Web platform to access shared experiments and upload results.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">logout</span></code></dt><dd><p>Logout from the ADARE Web platform.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">status</span></code></dt><dd><p>Show current login status and connection to the web platform.</p>
 </dd>
+</dl>
+<p><strong>Web Download Sub-commands (adare web download)</strong></p>
+<dl>
 <dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">download</span> <span class="pre">experiment</span> <span class="pre">&lt;ulid&gt;</span></code></dt><dd><p>Download an experiment from the web platform by its ULID.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">web</span> <span class="pre">download</span> <span class="pre">testfunction</span> <span class="pre">&lt;name&gt;</span></code></dt><dd><p>Download a testfunction from the web platform.</p>
@@ -362,6 +382,41 @@
 <dl class="simple">
 <dt>Options:</dt><dd><ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+<section id="mcp-server-testing">
+<h3>MCP Server Testing<a class="headerlink" href="#mcp-server-testing" title="Link to this heading"></a></h3>
+<p>Commands for testing MCP (Model Control Protocol) server functionality used for GUI automation.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">mcp</span> <span class="pre">test-icon</span></code></dt><dd><p>Test MCP server icon finding functionality by searching for an icon in a screenshot.</p>
+<p>Automatically starts MCP server, finds icon matches, prints coordinates, and stops the server. Optionally saves a marked image showing found locations.</p>
+<dl class="simple">
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--icon</span> <span class="pre">PATH</span></code> - Path to icon image file (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--screenshot</span> <span class="pre">PATH</span></code> - Path to screenshot image file (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">PATH</span></code> - Path to save marked image with found locations (optional)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--host</span> <span class="pre">TEXT</span></code> - MCP server host (default: localhost)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--port</span> <span class="pre">INTEGER</span></code> - MCP server port (default: 13109)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--threshold</span> <span class="pre">FLOAT</span></code> - Match threshold 0.0-1.0 (default: 0.6)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">mcp</span> <span class="pre">test-text</span> <span class="pre">&lt;text&gt;</span></code></dt><dd><p>Test MCP server text finding functionality by searching for text in a screenshot.</p>
+<p>Automatically starts MCP server, finds text matches, prints coordinates, and stops the server.</p>
+<dl class="simple">
+<dt>Arguments:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">text</span></code> - The text string to search for in the screenshot</p></li>
+</ul>
+</dd>
+<dt>Options:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--screenshot</span> <span class="pre">PATH</span></code> - Path to screenshot image file (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--host</span> <span class="pre">TEXT</span></code> - MCP server host (default: localhost)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--port</span> <span class="pre">INTEGER</span></code> - MCP server port (default: 13109)</p></li>
 </ul>
 </dd>
 </dl>
@@ -381,6 +436,13 @@
 </ul>
 </dd>
 </dl>
+</dd>
+</dl>
+</section>
+<section id="help-commands">
+<h3>Help Commands<a class="headerlink" href="#help-commands" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">help</span></code></dt><dd><p>Show help for special options and advanced usage patterns.</p>
 </dd>
 </dl>
 </section>
@@ -408,6 +470,24 @@
 </li>
 <li><p>Edit the generated playbook.yaml and testset.yml files</p></li>
 <li><p>Run the experiment:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="n">file</span><span class="o">-</span><span class="n">deletion</span><span class="o">-</span><span class="n">test</span> <span class="o">-</span><span class="n">e</span> <span class="n">win11</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</section>
+<section id="interactive-development-workflow-not-currently-available">
+<h3>Interactive Development Workflow <strong>[NOT CURRENTLY AVAILABLE]</strong><a class="headerlink" href="#interactive-development-workflow-not-currently-available" title="Link to this heading"></a></h3>
+<p><em>Note: Interactive development mode is currently not implemented and these commands will not work.</em></p>
+<p>For experiment development, use the standard workflow:</p>
+<ol class="arabic">
+<li><p>Create and edit playbooks manually using a text editor</p></li>
+<li><p>Test with development mode:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">develop</span> <span class="n">file</span><span class="o">-</span><span class="n">deletion</span><span class="o">-</span><span class="n">test</span> <span class="o">-</span><span class="n">e</span> <span class="n">win11</span>
+</pre></div>
+</div>
+</li>
+<li><p>Run the completed experiment:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="n">file</span><span class="o">-</span><span class="n">deletion</span><span class="o">-</span><span class="n">test</span> <span class="o">-</span><span class="n">e</span> <span class="n">win11</span>
 </pre></div>
 </div>

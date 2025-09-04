@@ -109,6 +109,16 @@ Experiments contain the actual test automation logic using YAML-based playbooks.
     * ``--environment TEXT`` - Name of the environment (required)
     * ``--project TEXT`` - Name of the project
 
+``adare experiment dev <experiment>`` **[NOT IMPLEMENTED]**
+  Interactive development mode with web-based interface (currently not functional).
+  
+  *Note: This feature is under development and not currently working.*
+  
+  Options:
+    * ``--environment TEXT`` - Name of the environment (required)
+    * ``--project TEXT`` - Name of the project
+    * ``--port INTEGER`` - Port for the web interface (default: 8080)
+
 ``adare experiment example [name]``
   Create an example experiment (default: TrashBinDeleteFile) with complete playbook and test configuration.
   
@@ -183,6 +193,8 @@ VM commands provide lifecycle management for virtual machines used in experiment
 ``adare vm delete-snapshot <vm_id> <snapshot_name>``
   Delete a specific snapshot from a VM while preserving the VM itself.
 
+**VM Cleanup Sub-commands (adare vm clear)**
+
 ``adare vm clear all``
   Clear ALL VMs from the system.
   
@@ -223,6 +235,8 @@ Commands for integrating with the ADARE Web platform for sharing experiments and
 ``adare web status``
   Show current login status and connection to the web platform.
 
+**Web Download Sub-commands (adare web download)**
+
 ``adare web download experiment <ulid>``
   Download an experiment from the web platform by its ULID.
 
@@ -241,6 +255,37 @@ Commands for integrating with the ADARE Web platform for sharing experiments and
   Options:
     * ``--project TEXT`` - Name of the project
 
+MCP Server Testing
+==================
+
+Commands for testing MCP (Model Control Protocol) server functionality used for GUI automation.
+
+``adare mcp test-icon``
+  Test MCP server icon finding functionality by searching for an icon in a screenshot.
+  
+  Automatically starts MCP server, finds icon matches, prints coordinates, and stops the server. Optionally saves a marked image showing found locations.
+  
+  Options:
+    * ``--icon PATH`` - Path to icon image file (required)
+    * ``--screenshot PATH`` - Path to screenshot image file (required)
+    * ``--output PATH`` - Path to save marked image with found locations (optional)
+    * ``--host TEXT`` - MCP server host (default: localhost)
+    * ``--port INTEGER`` - MCP server port (default: 13109)
+    * ``--threshold FLOAT`` - Match threshold 0.0-1.0 (default: 0.6)
+
+``adare mcp test-text <text>``
+  Test MCP server text finding functionality by searching for text in a screenshot.
+  
+  Automatically starts MCP server, finds text matches, prints coordinates, and stops the server.
+  
+  Arguments:
+    * ``text`` - The text string to search for in the screenshot
+  
+  Options:
+    * ``--screenshot PATH`` - Path to screenshot image file (required)
+    * ``--host TEXT`` - MCP server host (default: localhost)
+    * ``--port INTEGER`` - MCP server port (default: 13109)
+
 System Management
 =================
 
@@ -254,6 +299,12 @@ Administrative commands for maintaining the ADARE system.
   
   Options:
     * ``--force`` - Force deletion of all VMs (required for confirmation)
+
+Help Commands
+=============
+
+``adare help``
+  Show help for special options and advanced usage patterns.
 
 Common Usage Patterns
 *********************
@@ -277,6 +328,22 @@ Creating and Running Your First Experiment
 4. Edit the generated playbook.yaml and testset.yml files
 
 5. Run the experiment::
+
+    adare experiment run file-deletion-test -e win11
+
+Interactive Development Workflow **[NOT CURRENTLY AVAILABLE]**
+=============================================================
+
+*Note: Interactive development mode is currently not implemented and these commands will not work.*
+
+For experiment development, use the standard workflow:
+
+1. Create and edit playbooks manually using a text editor
+2. Test with development mode::
+
+    adare experiment develop file-deletion-test -e win11
+
+3. Run the completed experiment::
 
     adare experiment run file-deletion-test -e win11
 
