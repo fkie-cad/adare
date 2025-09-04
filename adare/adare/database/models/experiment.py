@@ -672,13 +672,11 @@ class Experiment(SerializerMixin, Base):
     playbook = relationship("Playbook", back_populates="experiment", uselist=False, cascade="all, delete-orphan")
 
     playbook_file = Column(String, nullable=True)
-    testset_file = Column(String, nullable=True)
     metadata_file = Column(String, nullable=True)
     bibtex_file = Column(String, nullable=True, default=None)
     markdown_file = Column(String, nullable=True, default=None)
 
     sha256_playbook = Column(String, nullable=True)
-    sha256_testset = Column(String, nullable=True)
     sha256_metadata = Column(String, nullable=True)
     sha256_bibtex = Column(String, nullable=True)
     sha256_markdown = Column(String, nullable=True)

@@ -69,11 +69,9 @@ async def send_experiment_request(request_ulid: str):
         # get experiment action and testset file
         experiment = request.experiment
         action_file = experiment.action_file
-        testset_file = experiment.testset_file
 
         # get file handles
         action_file_handle = open(action_file, 'rb')
-        testset_file_handle = open(testset_file, 'rb')
 
         data = {
             'title': request.title,
@@ -136,15 +134,11 @@ async def send_experiment_request(request_ulid: str):
 
         # rewrite the data dict to multipart/form-data
         with aiohttp.MultipartWriter("form-data") as mpwriter:
-            # add files as action_file and testset_file
+            # add action file (testset integrated into playbook)
             action_file_mp = mpwriter.append(
                 action_file_handle.read(),
             )
             action_file_mp.set_content_disposition('form-data', name='action_file', filename='action_file')
-            testset_file_mp = mpwriter.append(
-                testset_file_handle.read(),
-            )
-            testset_file_mp.set_content_disposition('form-data', name='testset_file', filename='testset_file')
             # add experiment data as json
             metadata_mp = mpwriter.append(json.dumps(data))
             metadata_mp.set_content_disposition('json', name='metadata')
@@ -177,7 +171,6 @@ async def send_experiment_request(request_ulid: str):
 
         # close file handles
         action_file_handle.close()
-        testset_file_handle.close()
 
         if error_msg:
             return False, error_msg

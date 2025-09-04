@@ -78,7 +78,6 @@ def experiment_create(project_path: Path, experiment: str):
     # Provide clear user feedback with next steps
     next_steps = [
         f'Edit {experiment_directory.playbookfile.name} to define a sequence of gui actions and tests',
-        f'Edit {experiment_directory.testsetfile.name} to define your tests', 
         f'Edit {experiment_directory.metadatafile.name} to add experiment details, such as possible environments, tags, and more',
         f'Before run load the experiment with: adare experiment load {experiment}',
         f'Run the experiment with: adare experiment run {experiment} -e <environment>'
@@ -252,13 +251,7 @@ def __experiment_integrity_check(project_path: Path, experiment_name: str, envir
     else:
         log.info(f'integrity check for playbook file {experiment_directory.playbookfile} passed')
     
-    # Check testset hash only if it differs from playbook hash (for backward compatibility)
-    if experiment_hashes.get('testset') != experiment_directory.sha256_testset:
-        # Only report as testset change if it's not the same as playbook change
-        if experiment_directory.sha256_playbook == experiment_hashes.get('playbook'):
-            file_changed.append('testset (integrated in playbook)')
-    else:
-        log.info(f'integrity check for integrated tests passed')
+    # Tests are now integrated into playbook, so no separate testset check needed
     # if experiment_directory.sha256_metadata != experiment_hashes['metadata']:
     #     file_changed.append('metadata')
     # else:

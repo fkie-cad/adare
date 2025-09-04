@@ -8,7 +8,6 @@ import cattrs
 
 # internal imports
 from adarelib.testset.type import TestsetFile
-from adarelib.testset.parser import parse_testsetfile
 from adare.config.configdirectory import TEMPLATES_DIR, EXAMPLES_DIR
 import adare
 from adare.helperfunctions.hash import hash_file_sha256, combine_hashes
@@ -57,7 +56,6 @@ class ExperimentDirectory(Directory):
     path: Path
     img: Path
     playbookfile: Path
-    testsetfile: Path
     metadatafile: Path
     bibtexfile: Path
     markdownfile: Path
@@ -75,7 +73,6 @@ class ExperimentDirectory(Directory):
         self.shared_tools = self.shared / 'tools'
         self.shared_data = self.shared / 'data'
         self.playbookfile = self.path / 'playbook.yml'
-        self.testsetfile = self.path / 'testset.yml'
         self.metadatafile = self.path / 'metadata.yml'
         self.bibtexfile = self.path / 'bibtext.bib'
         self.markdownfile = self.path / 'details.md'
@@ -84,7 +81,6 @@ class ExperimentDirectory(Directory):
         # Use YAML-first templates from package directory
         package_templates_dir = Path(adare.__file__).parent.parent / 'appdata' / 'templates'
         playbookfile_template = package_templates_dir / 'experiment' / 'playbook.yml'
-        testsetfile_template = package_templates_dir / 'experiment' / 'testset.yml'
         metadatafile_template = package_templates_dir / 'experiment' / 'metadata.yml'
 
         # Testset configuration is now integrated into playbook.yml
@@ -172,10 +168,6 @@ class ExperimentDirectory(Directory):
 
 
 
-    @property
-    def sha256_testset(self) -> str:
-        # Tests are now in playbook, so use playbook hash for testset hash
-        return hash_file_sha256(self.playbookfile)
 
     @property
     def sha256_metadata(self) -> str:
