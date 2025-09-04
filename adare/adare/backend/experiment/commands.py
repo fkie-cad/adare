@@ -126,10 +126,10 @@ def __experiment_update(experiment_ulid, experiment_name, experiment_directory, 
 
 def __validate_testset_compatibility(project_path: Path, experiment_directory: ExperimentDirectory):
     """Validate testset against available testfunctions during experiment loading."""
-    testset_path = experiment_directory.path / "testset.yml"
-    if not testset_path.exists():
-        log.info("No testset.yml found - skipping testset validation")
-        return  # No testset to validate
+    playbook_path = experiment_directory.path / "playbook.yml"
+    if not playbook_path.exists():
+        log.info("No playbook.yml found - skipping testset validation")
+        return  # No playbook to validate
     
     project_directory = ProjectDirectory(project_path)
     testfunctions_dir = project_directory.testfunctions
@@ -139,13 +139,12 @@ def __validate_testset_compatibility(project_path: Path, experiment_directory: E
         return
     
     try:
-        from adarelib.testset.parser import parse_testsetfile
         from adarelib.testset.testfunction import import_basictest_subclasses, get_missing_testfunctions
         
         log.info("Validating testset compatibility with available testfunctions...")
         
-        # Parse testset configuration
-        testsetfile = parse_testsetfile(testset_path)
+        # Load testset from playbook
+        testsetfile = experiment_directory.load_testset()
         
         # Import available testfunctions from project
         supported_tests = import_basictest_subclasses(testfunctions_dir)
@@ -251,11 +250,15 @@ def __experiment_integrity_check(project_path: Path, experiment_name: str, envir
     if experiment_directory.sha256_playbook != experiment_hashes['playbook']:
         file_changed.append('playbook')
     else:
-        log.info(f'integrity check for action file {experiment_directory.playbookfile} passed')
-    if experiment_directory.sha256_testset != experiment_hashes['testset']:
-        file_changed.append('testset')
+        log.info(f'integrity check for playbook file {experiment_directory.playbookfile} passed')
+    
+    # Check testset hash only if it differs from playbook hash (for backward compatibility)
+    if experiment_hashes.get('testset') != experiment_directory.sha256_testset:
+        # Only report as testset change if it's not the same as playbook change
+        if experiment_directory.sha256_playbook == experiment_hashes.get('playbook'):
+            file_changed.append('testset (integrated in playbook)')
     else:
-        log.info(f'integrity check for testset file {experiment_directory.testsetfile} passed')
+        log.info(f'integrity check for integrated tests passed')
     # if experiment_directory.sha256_metadata != experiment_hashes['metadata']:
     #     file_changed.append('metadata')
     # else:

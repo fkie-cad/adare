@@ -5,6 +5,10 @@ import yaml
 import cattrs
 from pathlib import Path
 
+# Import the new Variable system
+from adarelib.common.variables import VariableRegistry
+from adarelib.testset.type import Test
+
 # Target selection strategies
 @attrs.define
 class SweepStrategy:
@@ -186,12 +190,26 @@ ActionType = Union[
 class Playbook:
     actions: List[ActionType]
     settings: Settings = attrs.Factory(Settings)
-    variables: Optional[dict] = None
+    variables: Optional[VariableRegistry] = None
+    tests: List[Test] = attrs.Factory(list)
 
 def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or str
     yaml_path = Path(yaml_path)  # Ensure it's a Path object
+    
+    # Use custom YAML loader to handle our custom tags
+    from adarelib.testset.yaml.customloader import get_custom_loader
+    
     with yaml_path.open('r') as f:
-        data = yaml.safe_load(f)
+        data = yaml.load(f, Loader=get_custom_loader())
+    
+    # Convert variables to VariableRegistry if present
+    if 'variables' in data and data['variables']:
+        from adarelib.common.variables import VariableRegistry
+        data['variables'] = VariableRegistry.from_dict(data['variables'])
+    
+    # Tests will be converted by cattrs when structuring the Playbook object
+    # No need to convert them here
+    
     converter = cattrs.Converter()
     
     # Configure converter to forbid extra keys - fail on unknown fields
@@ -209,6 +227,16 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
     converter.register_structure_hook(
         Optional[TargetStrategyType],
         lambda obj, _: _structure_strategy(obj, converter) if obj is not None else None
+    )
+    
+    # Register structure hook for VariableRegistry
+    converter.register_structure_hook(
+        VariableRegistry,
+        lambda obj, _: obj if isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
+    )
+    converter.register_structure_hook(
+        Optional[VariableRegistry],
+        lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
     )
     
     # Register strict structure hooks for all main classes to validate fields
@@ -314,6 +342,14 @@ def _register_strict_hooks(converter):
             fresh_converter.register_structure_hook(
                 Optional[TargetStrategyType],
                 lambda obj, _: _structure_strategy(obj, fresh_converter) if obj is not None else None
+            )
+            fresh_converter.register_structure_hook(
+                VariableRegistry,
+                lambda obj, _: obj if isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
+            )
+            fresh_converter.register_structure_hook(
+                Optional[VariableRegistry],
+                lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
             )
             return fresh_converter.structure(obj, cls)
         return strict_structure_hook

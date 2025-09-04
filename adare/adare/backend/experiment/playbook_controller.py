@@ -389,8 +389,7 @@ class PlaybookController:
         else:
             log.warning("No playbook.yml found, skipping GUI actions")
         
-        # 3. Run any additional tests
-        await self.run_final_tests(experiment_dir)
+        # Tests are now executed inline during playbook execution via 'test:' actions
         
         execution_time = time.time() - self.start_time
         log.info(f"Experiment completed successfully in {execution_time:.2f}s")
@@ -420,8 +419,10 @@ class PlaybookController:
         self.execution_context['playbook'] = playbook
         if hasattr(playbook, 'variables') and playbook.variables:
             log.info("Setting experiment variables...")
-            await self.client.set_variables(playbook.variables)
-            self.execution_context.update(playbook.variables)
+            # Convert VariableRegistry to execution context format
+            var_dict = playbook.variables.to_execution_context()
+            await self.client.set_variables(var_dict)
+            self.execution_context.update(var_dict)
         
         # Execute actions sequentially
         total_actions = len(playbook.actions)
@@ -602,28 +603,9 @@ class PlaybookController:
         else:
             log.warning("No testfunctions directory found")
         
-        # Store testset path for local processing during test execution
-        self.testset_path = experiment_dir / "testset.yml"
-        if not self.testset_path.exists():
-            log.warning("No testset.yml found - test actions in playbook will fail")
+        # Individual tests are sent via WebSocket when executed
+        # No need to upload entire testset file to VM
     
-    async def run_final_tests(self, experiment_dir: Path):
-        """
-        Run final tests after playbook execution.
-        
-        Args:
-            experiment_dir: Path to experiment directory
-        """
-        testset_path = experiment_dir / "testset.yml"
-        if testset_path.exists():
-            log.info("Running final test suite...")
-            try:
-                result = await self.client.run_all_tests()
-                log.info(f"Final test execution completed: {result}")
-            except Exception as e:
-                log.error(f"Failed to run final tests: {e}")
-        else:
-            log.info("No testset.yml found, skipping final tests")
     
     # Simplified method - just add steps under existing action events
     async def _execute_action_with_steps(self, action, execute_func, parent_action_id: str = None) -> ActionResult:
@@ -1021,7 +1003,7 @@ class PlaybookController:
             if not resolved_test:
                 return ActionResult(
                     success=False,
-                    message=f"Test '{action.name}' not found in testset.yml"
+                    message=f"Test '{action.name}' not found in playbook tests"
                 )
             
             # Send resolved test to VM for execution
@@ -1035,7 +1017,7 @@ class PlaybookController:
             if "No testset loaded" in error_msg or "testset" in error_msg.lower():
                 return ActionResult(
                     success=False, 
-                    message=f"No testset loaded - ensure testset.yml exists and loads successfully before test actions"
+                    message=f"No tests loaded - ensure playbook.yml contains tests section and loads successfully before test actions"
                 )
             return ActionResult(success=False, message=error_msg)
     
@@ -1355,14 +1337,16 @@ class PlaybookController:
     async def _resolve_test_locally(self, test_name: str) -> Optional[Dict[str, Any]]:
         """Load and resolve a specific test locally with variable substitution."""
         try:
-            if not hasattr(self, 'testset_path') or not self.testset_path or not self.testset_path.exists():
+            # Load tests from playbook instead of separate testset file
+            playbook_path = self.experiment_dir / "playbook.yml"
+            if not playbook_path.exists():
                 return None
             
             import yaml
-            testset_yaml = self.testset_path.read_text()
-            testset_data = yaml.safe_load(testset_yaml)
+            playbook_yaml = playbook_path.read_text()
+            playbook_data = yaml.safe_load(playbook_yaml)
             
-            if 'tests' not in testset_data:
+            if 'tests' not in playbook_data:
                 return None
             
             # Debug: Log current execution context before test resolution
@@ -1371,7 +1355,7 @@ class PlaybookController:
             log.debug(f"Execution context values: {formatted_context}")
             
             # Find the test by name
-            for test in testset_data['tests']:
+            for test in playbook_data['tests']:
                 if test.get('name') == test_name:
                     log.debug(f"Found test '{test_name}' raw data: {test}")
                     # Apply variable substitution to all string values in the test

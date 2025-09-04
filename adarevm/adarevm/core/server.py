@@ -45,7 +45,6 @@ class AdareVMServer:
         
         # Test management state
         self.testfunctions_dir: Optional[Path] = None
-        self.testset_instance: Optional[Any] = None
         self.current_variables: Dict[str, Any] = {}
         
         # Tool registry
@@ -61,11 +60,8 @@ class AdareVMServer:
             "idle": self._idle,
             "screenshot_window": self._screenshot_window,
             "upload_testfunctions": self._upload_testfunctions,
-            "upload_testset": self._upload_testset,
             "set_variables": self._set_variables,
             "run_test": self._run_test,
-            "run_all_tests": self._run_all_tests,
-            "list_tests": self._list_tests,
             "execute_shell": self._execute_shell,
             "get_status": self._get_status,
         }
@@ -340,49 +336,6 @@ class AdareVMServer:
             await self.send_event(websocket, EventType.ERROR, {"message": f"Upload failed: {e}"})
             return {"status": "error", "message": str(e)}
     
-    async def _upload_testset(self, websocket, testset_yaml: str):
-        """Upload testset YAML configuration."""
-        await self.send_event(websocket, EventType.LOG, {"message": "Loading testset"})
-        
-        try:
-            if not self.testfunctions_dir or not self.testfunctions_dir.exists():
-                return {"status": "error", "message": "Testfunctions must be uploaded first"}
-            
-            # Write testset YAML
-            testset_path = self.testfunctions_dir / "testset.yml"
-            with open(testset_path, 'w') as f:
-                f.write(testset_yaml)
-            
-            # Import and create testset
-            from adarevm.testing.testset import Testset
-            
-            async def log_func(message: str):
-                await self.broadcast_event(EventType.LOG, {"message": f"Testset: {message}"})
-            
-            self.testset_instance = Testset(self.testfunctions_dir, testset_path, log_func)
-            
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Testset loaded with {len(self.testset_instance.tests)} tests"
-            })
-            
-            return {
-                "status": "success", 
-                "message": f"Testset loaded with {len(self.testset_instance.tests)} tests",
-                "tests": list(self.testset_instance.tests.keys())
-            }
-            
-        except (OSError, FileNotFoundError) as e:
-            log.error(f"Testset file operation failed: {e}")
-            await self.send_event(websocket, EventType.ERROR, {"message": f"File operation failed: {e}"})
-            return {"status": "error", "message": f"File operation failed: {e}"}
-        except ImportError as e:
-            log.error(f"Testing module not available: {e}")
-            await self.send_event(websocket, EventType.ERROR, {"message": f"Testing module not available: {e}"})
-            return {"status": "error", "message": f"Testing module not available: {e}"}
-        except Exception as e:
-            log.error(f"Unexpected testset upload error: {e}")
-            await self.send_event(websocket, EventType.ERROR, {"message": f"Testset upload failed: {e}"})
-            return {"status": "error", "message": str(e)}
     
     async def _set_variables(self, websocket, variables: str):
         """Set variables for test execution."""
@@ -524,66 +477,6 @@ class AdareVMServer:
             })
             return {"status": "error", "message": str(e)}
     
-    async def _run_all_tests(self, websocket):
-        """Run all available tests."""
-        log.info("Running all tests")
-        try:
-            if not self.testset_instance:
-                return {"status": "error", "message": "No testset loaded"}
-            
-            test_names = list(self.testset_instance.tests.keys())
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Running {len(test_names)} tests"
-            })
-            
-            # Execute all tests
-            self.testset_instance.testall(self.current_variables)
-            
-            log.info(f"All tests completed: {len(test_names)} tests")
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"All {len(test_names)} tests completed successfully"
-            })
-            
-            return {
-                "status": "success",
-                "message": f"All {len(test_names)} tests executed",
-                "tests": test_names
-            }
-            
-        except TestsetExecutionError as e:
-            log.error(f"Test suite execution error: {e}")
-            await self.send_event(websocket, EventType.ERROR, {"message": f"Test suite execution failed: {e}"})
-            return {"status": "error", "message": f"Test suite execution failed: {e}"}
-        except Exception as e:
-            log.error(f"Unexpected test suite error: {e}")
-            await self.send_event(websocket, EventType.ERROR, {"message": f"Test execution failed: {e}"})
-            return {"status": "error", "message": str(e)}
-    
-    async def _list_tests(self, websocket):
-        """List available tests."""
-        log.info("Listing available tests")
-        try:
-            if not self.testset_instance:
-                return {"status": "error", "message": "No testset loaded"}
-            
-            tests = list(self.testset_instance.tests.keys())
-            await self.send_event(websocket, EventType.LOG, {
-                "message": f"Found {len(tests)} available tests"
-            })
-            
-            return {
-                "status": "success",
-                "tests": tests,
-                "count": len(self.testset_instance.tests)
-            }
-        except AttributeError as e:
-            log.error(f"Testset not properly initialized: {e}")
-            await self.send_event(websocket, EventType.ERROR, {"message": f"Testset not initialized: {e}"})
-            return {"status": "error", "message": f"Testset not initialized: {e}"}
-        except Exception as e:
-            log.error(f"Unexpected list tests error: {e}")
-            await self.send_event(websocket, EventType.ERROR, {"message": f"Failed to list tests: {e}"})
-            return {"status": "error", "message": str(e)}
     
     async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False):
         """Execute a raw shell command with advanced options."""
@@ -645,8 +538,6 @@ class AdareVMServer:
         return {
             "testfunctions_uploaded": self.testfunctions_dir is not None and self.testfunctions_dir.exists(),
             "testfunctions_path": str(self.testfunctions_dir) if self.testfunctions_dir else None,
-            "testset_loaded": self.testset_instance is not None,
-            "available_tests": list(self.testset_instance.tests.keys()) if self.testset_instance else [],
             "variables_count": len(self.current_variables),
             "variables": self.current_variables,
             "connected_clients": len(self.clients)

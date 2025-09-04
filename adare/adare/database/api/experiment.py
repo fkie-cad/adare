@@ -265,6 +265,15 @@ class ExperimentApi(ProjectDbApi):
         parameter_entries = []
         for p_key, p_val in test.parameter.items():
             parameter = self._session.query(TestParameter).filter_by(name=p_key).first()
+            if not parameter:
+                raise TestSetFormatError(
+                    log,
+                    message=f'test parameter [b]{p_key}[/b] mentioned in test [b]{test.name}[/b] does not exist in the database.',
+                    possible_solutions=[
+                        'ensure the test parameter is loaded by running: [i]adare testparameter list[/i]',
+                        'check if the parameter name is correctly spelled in the testset file'
+                    ]
+                )
             # check if TestParameterEntry already exists
             test_parameter_entry_q = self._session.query(TestParameterEntry).filter_by(parameter=parameter,
                                                                                        value=str(p_val))

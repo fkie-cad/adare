@@ -87,39 +87,14 @@ class ExperimentDirectory(Directory):
         testsetfile_template = package_templates_dir / 'experiment' / 'testset.yml'
         metadatafile_template = package_templates_dir / 'experiment' / 'metadata.yml'
 
-        # Create testset configuration (define all tests here)
-        try:
-            with open(self.testsetfile, 'w') as f:
-                f.write(jinja2.Template(testsetfile_template.read_text()).render(
-                    name=f'{self.experiment}',
-                ))
-        except OSError as e:
-            raise ExperimentFileCreationError(
-                log,
-                message=f'Failed to create testset file for experiment {self.experiment}: {e.strerror}'
-            ) from e
+        # Testset configuration is now integrated into playbook.yml
+        # No separate testset file needed anymore
 
-        # Create YAML playbook file (reference tests from testset)
-        # NOTE: The playbook template must be updated to only reference tests by name/ID, not define them.
-        # For example, it could use: tests: [test1, test2, ...] and the actual definitions are in testset.yml
+        # Create YAML playbook file (now contains integrated tests)
         try:
-            # Optionally, parse testset to get test names/IDs to pass to the playbook template
-            try:
-                testset = parse_testsetfile(self.testsetfile)
-            except cattrs.BaseValidationError as e:
-                error_msg = "\n".join(cattrs.transform_error(e))
-                raise DataStructuringError(
-                    log,
-                    message=f'parsing errors while parsing testset file {self.testsetfile}:{error_msg}',
-                    possible_solutions=[
-                        'fix the structure of the testset file',
-                    ]
-                ) from e
-            test_names = [test.name for test in getattr(testset, 'tests', [])] if hasattr(testset, 'tests') else []
             with open(self.playbookfile, 'w') as f:
                 f.write(jinja2.Template(playbookfile_template.read_text()).render(
                     name=f'{self.experiment}',
-                    test_names=test_names,
                 ))
         except OSError as e:
             raise ExperimentFileCreationError(
@@ -169,7 +144,7 @@ class ExperimentDirectory(Directory):
     def check_for_missing_files(self):
         if missing_files := [
             f.name
-            for f in [self.testsetfile, self.metadatafile]
+            for f in [self.metadatafile]
             if not f.exists()
         ]:
             missing_files_str = ','.join(missing_files)
@@ -186,13 +161,21 @@ class ExperimentDirectory(Directory):
         return parse_metadata_file(self.metadatafile)
 
     def load_testset(self) -> TestsetFile:
-        return parse_testsetfile(self.testsetfile)
+        # Load tests from playbook instead of separate testset file
+        from adare.types.playbook import parse_playbook
+        from adarelib.testset.type import TestsetFile
+        
+        playbook = parse_playbook(self.playbookfile)
+        
+        # Return TestsetFile constructed from playbook tests
+        return TestsetFile(name=self.experiment, tests=playbook.tests)
 
 
 
     @property
     def sha256_testset(self) -> str:
-        return hash_file_sha256(self.testsetfile)
+        # Tests are now in playbook, so use playbook hash for testset hash
+        return hash_file_sha256(self.playbookfile)
 
     @property
     def sha256_metadata(self) -> str:
@@ -212,7 +195,6 @@ class ExperimentDirectory(Directory):
 
     @property
     def sha256(self) -> str:
-        return combine_hashes([
-            self.sha256_testset,
-            self.sha256_playbook,
-        ])
+        # Since testset is now part of playbook, only use playbook hash
+        # to avoid double-counting the same content
+        return self.sha256_playbook

@@ -14,18 +14,18 @@ settings:
 variables:
   username:
     type: string
-    value: "adare"
+    value: "vagrant"
     description: "Username for the target system"
   
   filepath:
     type: path
-    value: "/home/{{username}}/Documents/testfile.txt"
+    value: "C:/Users/{{username}}/Documents/testfile.txt"
     description: "Full path to the test file"
   
-  trashbin_path:
-    type: path  
-    value: "/home/{{username}}/.local/share/Trash"
-    description: "Path to user's trash bin"
+  trashbin_csv:
+    type: path
+    value: "C:/Users/{{username}}/Documents/trashbin/*.csv"
+    description: "Path pattern for trashbin CSV files"
   
   deletion_timestamp:
     type: string
@@ -35,7 +35,7 @@ variables:
 # Test definitions
 tests:
   - name: testfile_created
-    description: 'Verify test file does exist before experiment'
+    description: 'Verify test file exists before experiment'
     function: file_exists
     parameter:
       dst: '{{filepath}}'
@@ -44,25 +44,18 @@ tests:
     function: file_does_not_exist
     parameter:
       dst: '{{filepath}}'
-  - name: trashbin_check_file
-    description: 'check if file exists in trashbin'
-    function: file_exists
+  - name: trashbin_check
+    description: 'check if file metadata exists in CSV with correct timestamp'
+    function: csv_contains_line_matching_regex
     parameter:
-      dst: '{{trashbin_path}}/files/testfile.txt'
-  - name: trahsbin_check_info_file
-    description: 'check if info file exists in trashbin'
-    function: file_exists
-    parameter:
-      dst: '{{trashbin_path}}/info/testfile.txt.trashinfo'
-  - name: trashbin_check_info_date
-    description: 'check if deletion date in info file matches expected content'
-    function: file_content_equals
-    parameter:
-      dst: '{{trashbin_path}}/info/testfile.txt.trashinfo'
-      content: |
-        [Trash Info]
-        Path={{filepath}}
-        DeletionDate={{deletion_timestamp}}
+      dst: '{{trashbin_csv}}'
+      entry:
+        - !re '.*'  # Any value in first column
+        - '$I'      # Recycle bin identifier
+        - 'C:\\Users\\{{username}}\\Documents\\testfile' 
+        - !re '.*'  # Any value in fourth column 
+        - !timestamp
+          timestamp: '{{deletion_timestamp}}'
 
 actions:
   - command:
@@ -73,8 +66,8 @@ actions:
   - test: testfile_created
   - click:
       target:
-        image: "nautilus_taskbar.png"
-      description: "Open Ubuntu File Explorer"
+        image: "explorer.png"
+      description: "Open File Explorer"
   - idle:
       duration: 2.0
       description: "Wait additional time for File Explorer to open since some systems are slow"
@@ -87,7 +80,7 @@ actions:
       description: "Navigate to Documents folder"
   - click:
       target:
-        text: "testfile.txt"
+        text: "testfile"
       description: "Select the test file to delete it with shortcut"
   - keyboard:
       combination: ["delete"]
@@ -99,7 +92,12 @@ actions:
       duration: 1.0
       description: "Wait for file deletion to complete"
   - test: testfile_deleted
-  - test: trashbin_check_file
-  - test: trahsbin_check_info_file
-  - test: trashbin_check_info_date
-  
+  - block:
+      description: "Check if file metadata exists in trash bin"
+      actions:
+        - command:
+            name: "RBCmd"
+            description: "Run RBCmd.exe to check file metadata"
+            tool: RBCmd.exe
+            command: 'RBCmd.exe -d C:\ --csv C:/Users/vagrant/Documents/trashbin'
+        - test: trashbin_check

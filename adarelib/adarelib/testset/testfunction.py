@@ -6,6 +6,7 @@ import attrs
 from adarelib.testset.basictest import BasicTest
 from adarelib.testset.type import TestsetFile
 from adarelib.helper.module import import_module_from_pyfile
+from adarelib.common.variables import VariableRegistry
 
 import logging
 log = logging.getLogger(__name__)
@@ -65,7 +66,15 @@ def structure_tests(testset: TestsetFile, testfunction_collection: dict) -> tupl
     for test in testset.tests:
         testclass = get_testclass_from_testfunction(test.function, testfunction_collection)
         try:
-            testclass_instance = cattrs.structure(attrs.asdict(test), testclass)
+            # Convert test to dict and ensure variables are properly handled
+            test_dict = attrs.asdict(test)
+            
+            # Convert variables to VariableRegistry if present
+            if 'variables' in test_dict and test_dict['variables']:
+                if not isinstance(test_dict['variables'], VariableRegistry):
+                    test_dict['variables'] = VariableRegistry.from_dict(test_dict['variables'])
+            
+            testclass_instance = cattrs.structure(test_dict, testclass)
         except cattrs.errors.ClassValidationError as e:
             log.error('an test has missing/wrong parameters in the testset file -> see exception below')
             log.error(e, exc_info=True)
