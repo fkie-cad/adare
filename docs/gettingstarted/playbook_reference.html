@@ -1,0 +1,933 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Complete Playbook Reference &mdash; ADARE  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=903d06c1" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Structure and Concepts" href="../architecture/index.html" />
+    <link rel="prev" title="Create an Experiment" href="experiment.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Getting Started</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="index.html#walkthrough-quick-start-guide">Walkthrough: Quick Start Guide</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="environment.html">Create an Environment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="experiment.html">Create an Experiment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="experiment.html#common-actions">Common Actions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="experiment.html#develop-and-run-an-experiment">Develop and Run an Experiment</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Complete Playbook Reference</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#basic-structure">Basic Structure</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#settings-section">Settings Section</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#variables-section">Variables Section</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#action-types">Action Types</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conditional-execution">Conditional Execution</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#advanced-features">Advanced Features</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#complex-examples">Complex Examples</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#best-practices">Best Practices</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#common-pitfalls">Common Pitfalls</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#complete-parameter-reference">Complete Parameter Reference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#action-reference-summary">Action Reference Summary</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#create-an-environment">Create an Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#create-an-experiment">Create an Experiment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#common-actions">Common Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#develop-and-run-an-experiment">Develop and Run an Experiment</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Structure and Concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ADARE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Getting Started</a></li>
+      <li class="breadcrumb-item active">Complete Playbook Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/gettingstarted/playbook_reference.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="complete-playbook-reference">
+<h1>Complete Playbook Reference<a class="headerlink" href="#complete-playbook-reference" title="Link to this heading"></a></h1>
+<p>This comprehensive reference covers all possibilities for writing ADARE playbooks. Playbooks use YAML syntax to define GUI automation steps for experiments.</p>
+<section id="basic-structure">
+<h2>Basic Structure<a class="headerlink" href="#basic-structure" title="Link to this heading"></a></h2>
+<p>Every playbook has this basic structure:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span><span class="w">           </span><span class="c1"># Global settings (optional)</span>
+<span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
+<span class="w">  </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;png&quot;</span>
+<span class="w">    </span><span class="nt">quality</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">95</span>
+
+<span class="nt">variables</span><span class="p">:</span><span class="w">          </span><span class="c1"># Variables for templating (optional)</span>
+<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testuser&quot;</span>
+<span class="w">  </span><span class="nt">filepath</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/home/{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}/test.txt&quot;</span>
+
+<span class="nt">actions</span><span class="p">:</span><span class="w">            </span><span class="c1"># List of actions to execute</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">action_type</span><span class="p">:</span>
+<span class="w">      </span><span class="c1"># action parameters</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">another_action</span><span class="p">:</span>
+<span class="w">      </span><span class="c1"># parameters</span>
+</pre></div>
+</div>
+</section>
+<section id="settings-section">
+<h2>Settings Section<a class="headerlink" href="#settings-section" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">settings</span></code> section configures global playbook behavior:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.5</span><span class="w">                    </span><span class="c1"># Default pause between actions (seconds)</span>
+<span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span><span class="w">                 </span><span class="c1"># Overall experiment timeout (seconds)</span>
+<span class="w">  </span><span class="nt">screenshot</span><span class="p">:</span><span class="w">                  </span><span class="c1"># Default screenshot settings</span>
+<span class="w">    </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;png&quot;</span><span class="w">              </span><span class="c1"># Image format: &quot;png&quot; or &quot;jpg&quot;</span>
+<span class="w">    </span><span class="nt">quality</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">95</span><span class="w">                </span><span class="c1"># Quality for JPEG (1-100)</span>
+</pre></div>
+</div>
+</section>
+<section id="variables-section">
+<h2>Variables Section<a class="headerlink" href="#variables-section" title="Link to this heading"></a></h2>
+<p>Variables allow templating throughout the playbook:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;vagrant&quot;</span>
+<span class="w">  </span><span class="nt">password</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;secret123&quot;</span>
+<span class="w">  </span><span class="nt">filepath</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/home/{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}/testfile.txt&quot;</span>
+<span class="w">  </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;https://example.com/{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">  </span><span class="nt">timeout_value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+</pre></div>
+</div>
+<p>Variables can reference other variables using Jinja2 template syntax <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">variable_name</span> <span class="pre">}}</span></code>.</p>
+</section>
+<section id="action-types">
+<h2>Action Types<a class="headerlink" href="#action-types" title="Link to this heading"></a></h2>
+<section id="click-actions">
+<h3>Click Actions<a class="headerlink" href="#click-actions" title="Link to this heading"></a></h3>
+<p><strong>Basic Click</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;button.png&quot;</span><span class="w">      </span><span class="c1"># Click on image</span>
+<span class="w">      </span><span class="c1"># OR</span>
+<span class="w">      </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Login&quot;</span><span class="w">            </span><span class="c1"># Click on text</span>
+<span class="w">      </span><span class="c1"># OR</span>
+<span class="w">      </span><span class="nt">position</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">100</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">200</span><span class="p p-Indicator">]</span><span class="w">     </span><span class="c1"># Click at coordinates</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Click</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">login</span><span class="nv"> </span><span class="s">button&quot;</span>
+</pre></div>
+</div>
+<p><strong>Right Click</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">right_click</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;File&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Right-click</span><span class="nv"> </span><span class="s">on</span><span class="nv"> </span><span class="s">File</span><span class="nv"> </span><span class="s">menu&quot;</span>
+</pre></div>
+</div>
+<p><strong>Double Click</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">double_click</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;folder.png&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Double-click</span><span class="nv"> </span><span class="s">folder</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">open&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="target-selection-strategies">
+<h3>Target Selection Strategies<a class="headerlink" href="#target-selection-strategies" title="Link to this heading"></a></h3>
+<p>When multiple matches are found, use strategies to select the desired one:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Submit&quot;</span>
+<span class="w">      </span><span class="nt">strategy</span><span class="p">:</span>
+<span class="w">        </span><span class="c1"># Select the nth match (1-based indexing)</span>
+<span class="w">        </span><span class="nt">SweepStrategy</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">index</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">        </span><span class="c1"># OR select match with highest confidence</span>
+<span class="w">        </span><span class="nt">BestConfidenceStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">        </span><span class="c1"># OR select match closest to coordinates</span>
+<span class="w">        </span><span class="nt">ClosestToStrategy</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">x</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">500</span>
+<span class="w">          </span><span class="nt">y</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
+<span class="w">        </span><span class="c1"># OR select by position</span>
+<span class="w">        </span><span class="nt">TopLeftStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">        </span><span class="c1"># Topmost-leftmost</span>
+<span class="w">        </span><span class="nt">TopRightStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">       </span><span class="c1"># Topmost-rightmost</span>
+<span class="w">        </span><span class="nt">BottomLeftStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">     </span><span class="c1"># Bottommost-leftmost</span>
+<span class="w">        </span><span class="nt">BottomRightStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">    </span><span class="c1"># Bottommost-rightmost</span>
+<span class="w">        </span><span class="c1"># OR select by size</span>
+<span class="w">        </span><span class="nt">LargestStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">        </span><span class="c1"># Largest bounding box</span>
+<span class="w">        </span><span class="nt">SmallestStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">       </span><span class="c1"># Smallest bounding box</span>
+</pre></div>
+</div>
+</section>
+<section id="keyboard-actions">
+<h3>Keyboard Actions<a class="headerlink" href="#keyboard-actions" title="Link to this heading"></a></h3>
+<p><strong>Type Text</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Type</span><span class="nv"> </span><span class="s">username&quot;</span>
+</pre></div>
+</div>
+<p><strong>Key Combinations</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;ctrl&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;c&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Copy</span><span class="nv"> </span><span class="s">shortcut&quot;</span>
+
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;ctrl&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;shift&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;n&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Multiple</span><span class="nv"> </span><span class="s">key</span><span class="nv"> </span><span class="s">combination&quot;</span>
+
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;alt&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;f4&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Alt+F4&quot;</span>
+</pre></div>
+</div>
+<p><strong>Special Keys</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;enter&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Press</span><span class="nv"> </span><span class="s">Enter&quot;</span>
+
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;delete&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Press</span><span class="nv"> </span><span class="s">Delete</span><span class="nv"> </span><span class="s">key&quot;</span>
+
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;tab&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Press</span><span class="nv"> </span><span class="s">Tab&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="movement-and-interaction">
+<h3>Movement and Interaction<a class="headerlink" href="#movement-and-interaction" title="Link to this heading"></a></h3>
+<p><strong>Drag and Drop</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">drag</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file.png&quot;</span>
+<span class="w">    </span><span class="nt">destination</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Trash&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Drag</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">trash&quot;</span>
+</pre></div>
+</div>
+<p><strong>Mouse Movement</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">goto</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">position</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">500</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">300</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Move</span><span class="nv"> </span><span class="s">mouse</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">coordinates&quot;</span>
+</pre></div>
+</div>
+<p><strong>Scrolling</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">scroll</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">direction</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;down&quot;</span><span class="w">          </span><span class="c1"># &quot;up&quot;, &quot;down&quot;, &quot;left&quot;, &quot;right&quot;</span>
+<span class="w">    </span><span class="nt">amount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">                  </span><span class="c1"># Number of scroll steps</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Scroll</span><span class="nv"> </span><span class="s">down</span><span class="nv"> </span><span class="s">5</span><span class="nv"> </span><span class="s">steps&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="command-execution">
+<h3>Command Execution<a class="headerlink" href="#command-execution" title="Link to this heading"></a></h3>
+<p><strong>Basic Command</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">Directory&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">directory&quot;</span>
+<span class="w">    </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;mkdir</span><span class="nv"> </span><span class="s">-p</span><span class="nv"> </span><span class="s">/tmp/{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</pre></div>
+</div>
+<p><strong>Command with Tool</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Download</span><span class="nv"> </span><span class="s">File&quot;</span>
+<span class="w">    </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;curl&quot;</span><span class="w">                           </span><span class="c1"># Tool/executable name</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;curl</span><span class="nv"> </span><span class="s">-o</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">filepath</span><span class="nv"> </span><span class="s">}}</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">url</span><span class="nv"> </span><span class="s">}}&quot;</span><span class="w">  </span><span class="c1"># Command to run</span>
+<span class="w">    </span><span class="nt">cwd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/tmp&quot;</span><span class="w">                            </span><span class="c1"># Working directory</span>
+<span class="w">    </span><span class="nt">env</span><span class="p">:</span><span class="w">                                   </span><span class="c1"># Environment variables</span>
+<span class="w">      </span><span class="nt">USER</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">      </span><span class="nt">TIMEOUT</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">timeout_value</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60.0</span><span class="w">                          </span><span class="c1"># Command timeout</span>
+<span class="w">    </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                            </span><span class="c1"># Run in shell</span>
+</pre></div>
+</div>
+<p><strong>Windows Command</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">Command&quot;</span>
+<span class="w">    </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;dir</span><span class="nv"> </span><span class="s">C:\\Users\\{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">    </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;List</span><span class="nv"> </span><span class="s">user</span><span class="nv"> </span><span class="s">directory&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="utility-actions">
+<h3>Utility Actions<a class="headerlink" href="#utility-actions" title="Link to this heading"></a></h3>
+<p><strong>Wait/Pause</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.0</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">3</span><span class="nv"> </span><span class="s">seconds&quot;</span>
+</pre></div>
+</div>
+<p><strong>Take Screenshot</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Full screenshot</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Capture</span><span class="nv"> </span><span class="s">full</span><span class="nv"> </span><span class="s">screen&quot;</span>
+
+<span class="c1"># Partial screenshot</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Capture</span><span class="nv"> </span><span class="s">specific</span><span class="nv"> </span><span class="s">area&quot;</span>
+<span class="w">    </span><span class="nt">x</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span><span class="w">              </span><span class="c1"># Top-left X coordinate</span>
+<span class="w">    </span><span class="nt">y</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span><span class="w">              </span><span class="c1"># Top-left Y coordinate</span>
+<span class="w">    </span><span class="nt">width</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">400</span><span class="w">          </span><span class="c1"># Width in pixels</span>
+<span class="w">    </span><span class="nt">height</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span><span class="w">         </span><span class="c1"># Height in pixels</span>
+</pre></div>
+</div>
+<p><strong>Save Timestamp</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;TIMESTAMP.START&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Record</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">time&quot;</span>
+
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;TIMESTAMP.DELETION&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Record</span><span class="nv"> </span><span class="s">when</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">was</span><span class="nv"> </span><span class="s">deleted&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="test-execution">
+<h3>Test Execution<a class="headerlink" href="#test-execution" title="Link to this heading"></a></h3>
+<p>Tests are defined in <code class="docutils literal notranslate"><span class="pre">testset.yml</span></code> and executed in playbooks:</p>
+<p><strong>Inline Test</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file_exists&quot;</span>
+</pre></div>
+</div>
+<p><strong>Detailed Test</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;network_connectivity&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Check</span><span class="nv"> </span><span class="s">network</span><span class="nv"> </span><span class="s">connection&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="conditional-execution">
+<h2>Conditional Execution<a class="headerlink" href="#conditional-execution" title="Link to this heading"></a></h2>
+<section id="block-actions">
+<h3>Block Actions<a class="headerlink" href="#block-actions" title="Link to this heading"></a></h3>
+<p>Group actions together and execute conditionally:</p>
+<p><strong>Simple Block</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Group</span><span class="nv"> </span><span class="s">of</span><span class="nv"> </span><span class="s">related</span><span class="nv"> </span><span class="s">actions&quot;</span>
+<span class="w">    </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;Block</span><span class="nv"> </span><span class="s">action</span><span class="nv"> </span><span class="s">1&#39;&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;Block</span><span class="nv"> </span><span class="s">action</span><span class="nv"> </span><span class="s">2&#39;&quot;</span>
+</pre></div>
+</div>
+<p><strong>Conditional Block - Exists</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Execute</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">element</span><span class="nv"> </span><span class="s">exists&quot;</span>
+<span class="w">    </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Continue&quot;</span>
+<span class="w">    </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Continue&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;proceeding...&quot;</span>
+</pre></div>
+</div>
+<p><strong>Conditional Block - Not Exists</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Execute</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">element</span><span class="nv"> </span><span class="s">doesn&#39;t</span><span class="nv"> </span><span class="s">exist&quot;</span>
+<span class="w">    </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">not_exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;error.png&quot;</span>
+<span class="w">    </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;No</span><span class="nv"> </span><span class="s">error</span><span class="nv"> </span><span class="s">detected&#39;&quot;</span>
+</pre></div>
+</div>
+<p><strong>Multiple Conditions</strong></p>
+<p>All conditions must be met (AND logic):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Multiple</span><span class="nv"> </span><span class="s">conditions</span><span class="nv"> </span><span class="s">required&quot;</span>
+<span class="w">    </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Ready&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">not_exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;loading.png&quot;</span>
+<span class="w">    </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;System</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">ready&#39;&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Ready</span><span class="nv"> </span><span class="s">state</span><span class="nv"> </span><span class="s">screenshot&quot;</span>
+</pre></div>
+</div>
+<p><strong>Image-based Conditions</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Check</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">dialog&quot;</span>
+<span class="w">    </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;dialog.png&quot;</span>
+<span class="w">    </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;OK&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;enter&quot;</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p><strong>Nested Blocks</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Outer</span><span class="nv"> </span><span class="s">block&quot;</span>
+<span class="w">    </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;Outer</span><span class="nv"> </span><span class="s">block</span><span class="nv"> </span><span class="s">start&#39;&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Inner</span><span class="nv"> </span><span class="s">block&quot;</span>
+<span class="w">          </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">                </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Inner</span><span class="nv"> </span><span class="s">Condition&quot;</span>
+<span class="w">          </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">                </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">                  </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Inner</span><span class="nv"> </span><span class="s">Button&quot;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">                </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;inner</span><span class="nv"> </span><span class="s">action&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;Outer</span><span class="nv"> </span><span class="s">block</span><span class="nv"> </span><span class="s">end&#39;&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="conditional-keyboard-actions">
+<h3>Conditional Keyboard Actions<a class="headerlink" href="#conditional-keyboard-actions" title="Link to this heading"></a></h3>
+<p>Individual actions can also have conditions:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;test</span><span class="nv"> </span><span class="s">input&quot;</span>
+<span class="w">    </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Input</span><span class="nv"> </span><span class="s">Field&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Type</span><span class="nv"> </span><span class="s">only</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">input</span><span class="nv"> </span><span class="s">field</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">visible&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="advanced-features">
+<h2>Advanced Features<a class="headerlink" href="#advanced-features" title="Link to this heading"></a></h2>
+<section id="variable-templating">
+<h3>Variable Templating<a class="headerlink" href="#variable-templating" title="Link to this heading"></a></h3>
+<p>Use Jinja2 template syntax for dynamic values:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testuser&quot;</span>
+<span class="w">  </span><span class="nt">base_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/home/{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">  </span><span class="nt">log_file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">base_path</span><span class="nv"> </span><span class="s">}}/experiment.log&quot;</span>
+
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;touch</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">log_file</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Hello</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}!&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="template-functions">
+<h3>Template Functions<a class="headerlink" href="#template-functions" title="Link to this heading"></a></h3>
+<p>ADARE supports some template functions:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;python3</span><span class="nv"> </span><span class="s">-c</span><span class="nv"> </span><span class="s">\&quot;print(&#39;Hello</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}!&#39;)\&quot;&quot;</span>
+<span class="w">    </span><span class="nt">cwd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">filepath</span><span class="nv"> </span><span class="s">|</span><span class="nv"> </span><span class="s">dirname</span><span class="nv"> </span><span class="s">}}&quot;</span><span class="w">        </span><span class="c1"># Get directory of filepath</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Command</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">template</span><span class="nv"> </span><span class="s">function&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="complex-examples">
+<h2>Complex Examples<a class="headerlink" href="#complex-examples" title="Link to this heading"></a></h2>
+<section id="file-management-workflow">
+<h3>File Management Workflow<a class="headerlink" href="#file-management-workflow" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
+
+<span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;vagrant&quot;</span>
+<span class="w">  </span><span class="nt">test_file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;C:/Users/{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}/Documents/test.txt&quot;</span>
+
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Create test file</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">Test</span><span class="nv"> </span><span class="s">File&quot;</span>
+<span class="w">      </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;Test</span><span class="nv"> </span><span class="s">content&#39;</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">&#39;{{</span><span class="nv"> </span><span class="s">test_file</span><span class="nv"> </span><span class="s">}}&#39;&quot;</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="c1"># Open File Explorer</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;explorer.png&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Open</span><span class="nv"> </span><span class="s">File</span><span class="nv"> </span><span class="s">Explorer&quot;</span>
+
+<span class="w">  </span><span class="c1"># Navigate to Documents</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Documents&quot;</span>
+<span class="w">        </span><span class="nt">strategy</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">SweepStrategy</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">index</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Click</span><span class="nv"> </span><span class="s">Documents</span><span class="nv"> </span><span class="s">folder&quot;</span>
+
+<span class="w">  </span><span class="c1"># Right-click on test file</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">right_click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;test.txt&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Right-click</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file&quot;</span>
+
+<span class="w">  </span><span class="c1"># Delete file</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Click</span><span class="nv"> </span><span class="s">Delete</span><span class="nv"> </span><span class="s">from</span><span class="nv"> </span><span class="s">context</span><span class="nv"> </span><span class="s">menu&quot;</span>
+
+<span class="w">  </span><span class="c1"># Confirm deletion if dialog appears</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Are</span><span class="nv"> </span><span class="s">you</span><span class="nv"> </span><span class="s">sure&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Yes&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;TIMESTAMP.DELETED&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="multi-application-workflow">
+<h3>Multi-Application Workflow<a class="headerlink" href="#multi-application-workflow" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Open first application</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;win&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;r&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Open</span><span class="nv"> </span><span class="s">Run</span><span class="nv"> </span><span class="s">dialog&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;notepad&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Type</span><span class="nv"> </span><span class="s">notepad&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;enter&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Press</span><span class="nv"> </span><span class="s">Enter</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">launch&quot;</span>
+
+<span class="w">  </span><span class="c1"># Wait for application to load</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+
+<span class="w">  </span><span class="c1"># Type content only if notepad is ready</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Untitled</span><span class="nv"> </span><span class="s">-</span><span class="nv"> </span><span class="s">Notepad&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;This</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">content</span><span class="nv"> </span><span class="s">from</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;ctrl&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;s&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}_test.txt&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;enter&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="w">  </span><span class="c1"># Switch to browser</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;alt&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;tab&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Switch</span><span class="nv"> </span><span class="s">applications&quot;</span>
+
+<span class="w">  </span><span class="c1"># Navigate to website</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;ctrl&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;l&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Focus</span><span class="nv"> </span><span class="s">address</span><span class="nv"> </span><span class="s">bar&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;https://example.com&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;enter&quot;</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+</section>
+<section id="error-handling-pattern">
+<h3>Error Handling Pattern<a class="headerlink" href="#error-handling-pattern" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Try main action</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Submit&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Try</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">submit</span><span class="nv"> </span><span class="s">form&quot;</span>
+
+<span class="w">  </span><span class="c1"># Handle success case</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Handle</span><span class="nv"> </span><span class="s">successful</span><span class="nv"> </span><span class="s">submission&quot;</span>
+<span class="w">      </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Success&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Success</span><span class="nv"> </span><span class="s">screenshot&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;TIMESTAMP.SUCCESS&quot;</span>
+
+<span class="w">  </span><span class="c1"># Handle error case</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Handle</span><span class="nv"> </span><span class="s">submission</span><span class="nv"> </span><span class="s">error&quot;</span>
+<span class="w">      </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Error&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">not_exists</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Success&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Error</span><span class="nv"> </span><span class="s">screenshot&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Try</span><span class="nv"> </span><span class="s">Again&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="best-practices">
+<h2>Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p><strong>Use Descriptive Names</strong>: Always include meaningful descriptions for actions</p></li>
+<li><p><strong>Strategic Waits</strong>: Use <code class="docutils literal notranslate"><span class="pre">idle</span></code> actions after opening applications or before critical actions</p></li>
+<li><p><strong>Error Handling</strong>: Use conditional blocks to handle different UI states</p></li>
+<li><p><strong>Screenshot Documentation</strong>: Take screenshots at key points for debugging</p></li>
+<li><p><strong>Timestamp Recording</strong>: Save timestamps around important events for testing</p></li>
+<li><p><strong>Variable Usage</strong>: Use variables for repeated values and user-specific paths</p></li>
+<li><p><strong>Strategy Selection</strong>: Use appropriate selection strategies when multiple elements match</p></li>
+<li><p><strong>Modular Blocks</strong>: Group related actions in blocks with descriptive names</p></li>
+</ol>
+</section>
+<section id="common-pitfalls">
+<h2>Common Pitfalls<a class="headerlink" href="#common-pitfalls" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p><strong>Missing Waits</strong>: Not allowing enough time for UI elements to appear</p></li>
+<li><p><strong>Ambiguous Targets</strong>: Text or images that match multiple elements without strategies</p></li>
+<li><p><strong>Hard-coded Paths</strong>: Using fixed paths instead of variables with usernames</p></li>
+<li><p><strong>No Error Handling</strong>: Not accounting for different possible UI states</p></li>
+<li><p><strong>Overly Complex Conditions</strong>: Making conditional logic too complicated to debug</p></li>
+</ol>
+</section>
+<section id="complete-parameter-reference">
+<h2>Complete Parameter Reference<a class="headerlink" href="#complete-parameter-reference" title="Link to this heading"></a></h2>
+<p>This section lists all available parameters for each action type, indicating which are required vs optional.</p>
+<section id="click-actions-parameters">
+<h3>Click Actions Parameters<a class="headerlink" href="#click-actions-parameters" title="Link to this heading"></a></h3>
+<p><strong>ClickAction, RightClickAction, DoubleClickAction:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span><span class="w">  </span><span class="c1"># or right_click, double_click</span>
+<span class="w">    </span><span class="nt">target</span><span class="p">:</span><span class="w">                    </span><span class="c1"># REQUIRED - Target definition</span>
+<span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file.png&quot;</span><span class="w">        </span><span class="c1"># Image file (relative to img/ folder)</span>
+<span class="w">      </span><span class="c1"># OR</span>
+<span class="w">      </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Button</span><span class="nv"> </span><span class="s">Text&quot;</span><span class="w">      </span><span class="c1"># Text to find on screen</span>
+<span class="w">      </span><span class="c1"># OR</span>
+<span class="w">      </span><span class="nt">position</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">x</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">y</span><span class="p p-Indicator">]</span><span class="w">         </span><span class="c1"># Exact coordinates [x, y]</span>
+<span class="w">      </span><span class="nt">strategy</span><span class="p">:</span><span class="w">                </span><span class="c1"># OPTIONAL - Selection strategy (see strategies section)</span>
+<span class="w">        </span><span class="nt">SweepStrategy</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">index</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Action</span><span class="nv"> </span><span class="s">description&quot;</span><span class="w">  </span><span class="c1"># OPTIONAL but recommended</span>
+</pre></div>
+</div>
+<p><strong>DragAction:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">drag</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w">                    </span><span class="c1"># REQUIRED - Source target</span>
+<span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file.png&quot;</span>
+<span class="w">    </span><span class="nt">destination</span><span class="p">:</span><span class="w">               </span><span class="c1"># REQUIRED - Destination target</span>
+<span class="w">      </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Trash&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Drag</span><span class="nv"> </span><span class="s">description&quot;</span><span class="w">    </span><span class="c1"># OPTIONAL but recommended</span>
+</pre></div>
+</div>
+<p><strong>GotoAction:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">goto</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">target</span><span class="p">:</span><span class="w">                    </span><span class="c1"># REQUIRED - Target position</span>
+<span class="w">      </span><span class="nt">position</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">500</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">300</span><span class="p p-Indicator">]</span><span class="w">     </span><span class="c1"># Usually coordinates for goto</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Move</span><span class="nv"> </span><span class="s">description&quot;</span><span class="w">    </span><span class="c1"># OPTIONAL but recommended</span>
+</pre></div>
+</div>
+</section>
+<section id="keyboard-action-parameters">
+<h3>Keyboard Action Parameters<a class="headerlink" href="#keyboard-action-parameters" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;text</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">type&quot;</span><span class="w">       </span><span class="c1"># OPTIONAL - Text to type</span>
+<span class="w">    </span><span class="c1"># OR</span>
+<span class="w">    </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;ctrl&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;c&quot;</span><span class="p p-Indicator">]</span><span class="w"> </span><span class="c1"># OPTIONAL - Key combination list</span>
+<span class="w">    </span><span class="nt">when</span><span class="p">:</span><span class="w">                      </span><span class="c1"># OPTIONAL - Conditional execution</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Input</span><span class="nv"> </span><span class="s">Field&quot;</span>
+<span class="w">      </span><span class="c1"># OR</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">not_exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;dialog.png&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Keyboard</span><span class="nv"> </span><span class="s">description&quot;</span><span class="w">  </span><span class="c1"># OPTIONAL but recommended</span>
+</pre></div>
+</div>
+<p><strong>Note:</strong> Either <code class="docutils literal notranslate"><span class="pre">keys</span></code> OR <code class="docutils literal notranslate"><span class="pre">combination</span></code> must be specified, not both.</p>
+</section>
+<section id="command-action-parameters">
+<h3>Command Action Parameters<a class="headerlink" href="#command-action-parameters" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Command</span><span class="nv"> </span><span class="s">Name&quot;</span><span class="w">       </span><span class="c1"># OPTIONAL - Display name</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;What</span><span class="nv"> </span><span class="s">it</span><span class="nv"> </span><span class="s">does&quot;</span><span class="w"> </span><span class="c1"># OPTIONAL but recommended</span>
+<span class="w">    </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">hello&quot;</span><span class="w">          </span><span class="c1"># OPTIONAL - Command string</span>
+<span class="w">    </span><span class="c1"># OR</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;curl</span><span class="nv"> </span><span class="s">-o</span><span class="nv"> </span><span class="s">file&quot;</span><span class="w">    </span><span class="c1"># OPTIONAL - Alternative to cmd</span>
+<span class="w">    </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;curl&quot;</span><span class="w">               </span><span class="c1"># OPTIONAL - Executable name/path</span>
+<span class="w">    </span><span class="nt">cwd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/working/directory&quot;</span><span class="w">  </span><span class="c1"># OPTIONAL - Working directory</span>
+<span class="w">    </span><span class="nt">env</span><span class="p">:</span><span class="w">                       </span><span class="c1"># OPTIONAL - Environment variables</span>
+<span class="w">      </span><span class="nt">VAR1</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;value1&quot;</span>
+<span class="w">      </span><span class="nt">VAR2</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;value2&quot;</span>
+<span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span><span class="w">              </span><span class="c1"># OPTIONAL - Command timeout (seconds)</span>
+<span class="w">    </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                </span><span class="c1"># OPTIONAL - Run in shell (default: false)</span>
+</pre></div>
+</div>
+<p><strong>Note:</strong> Either <code class="docutils literal notranslate"><span class="pre">cmd</span></code> OR <code class="docutils literal notranslate"><span class="pre">command</span></code> must be specified. Use <code class="docutils literal notranslate"><span class="pre">tool</span></code> + <code class="docutils literal notranslate"><span class="pre">command</span></code> for specific executables.</p>
+</section>
+<section id="utility-action-parameters">
+<h3>Utility Action Parameters<a class="headerlink" href="#utility-action-parameters" title="Link to this heading"></a></h3>
+<p><strong>IdleAction:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.0</span><span class="w">              </span><span class="c1"># REQUIRED - Wait time in seconds</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">description&quot;</span><span class="w">  </span><span class="c1"># OPTIONAL but recommended</span>
+</pre></div>
+</div>
+<p><strong>ScrollAction:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">scroll</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">direction</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;down&quot;</span><span class="w">          </span><span class="c1"># REQUIRED - &quot;up&quot;, &quot;down&quot;, &quot;left&quot;, &quot;right&quot;</span>
+<span class="w">    </span><span class="nt">amount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">                  </span><span class="c1"># REQUIRED - Number of scroll steps</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Scroll</span><span class="nv"> </span><span class="s">description&quot;</span><span class="w">  </span><span class="c1"># OPTIONAL but recommended</span>
+</pre></div>
+</div>
+<p><strong>ScreenshotAction:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Screenshot</span><span class="nv"> </span><span class="s">description&quot;</span><span class="w">  </span><span class="c1"># OPTIONAL but recommended</span>
+<span class="w">    </span><span class="nt">x</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span><span class="w">                     </span><span class="c1"># OPTIONAL - Top-left X coordinate</span>
+<span class="w">    </span><span class="nt">y</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span><span class="w">                     </span><span class="c1"># OPTIONAL - Top-left Y coordinate</span>
+<span class="w">    </span><span class="nt">width</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">400</span><span class="w">                 </span><span class="c1"># OPTIONAL - Width in pixels</span>
+<span class="w">    </span><span class="nt">height</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span><span class="w">                </span><span class="c1"># OPTIONAL - Height in pixels</span>
+</pre></div>
+</div>
+<p><strong>Note:</strong> If x, y, width, height are omitted, captures full screen.</p>
+<p><strong>SaveTimestampAction:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;TIMESTAMP.EVENT&quot;</span><span class="w">  </span><span class="c1"># REQUIRED - Variable name to store timestamp</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Timestamp</span><span class="nv"> </span><span class="s">description&quot;</span><span class="w">  </span><span class="c1"># OPTIONAL but recommended</span>
+</pre></div>
+</div>
+</section>
+<section id="test-action-parameters">
+<h3>Test Action Parameters<a class="headerlink" href="#test-action-parameters" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Inline format</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;test_name&quot;</span><span class="w">            </span><span class="c1"># REQUIRED - Test name from testset.yml</span>
+
+<span class="c1"># Detailed format</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;test_name&quot;</span><span class="w">          </span><span class="c1"># REQUIRED - Test name from testset.yml</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Test</span><span class="nv"> </span><span class="s">description&quot;</span><span class="w">  </span><span class="c1"># OPTIONAL but recommended</span>
+</pre></div>
+</div>
+</section>
+<section id="block-action-parameters">
+<h3>Block Action Parameters<a class="headerlink" href="#block-action-parameters" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Block</span><span class="nv"> </span><span class="s">description&quot;</span><span class="w">     </span><span class="c1"># OPTIONAL but recommended</span>
+<span class="w">    </span><span class="nt">when</span><span class="p">:</span><span class="w">                               </span><span class="c1"># OPTIONAL - Conditional execution</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span><span class="w">                         </span><span class="c1"># Condition type</span>
+<span class="w">          </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Element</span><span class="nv"> </span><span class="s">Text&quot;</span><span class="w">          </span><span class="c1"># Text to check for</span>
+<span class="w">          </span><span class="c1"># OR</span>
+<span class="w">          </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;element.png&quot;</span><span class="w">          </span><span class="c1"># Image to check for</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">not_exists</span><span class="p">:</span><span class="w">                     </span><span class="c1"># Multiple conditions (AND logic)</span>
+<span class="w">          </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;error.png&quot;</span>
+<span class="w">    </span><span class="nt">actions</span><span class="p">:</span><span class="w">                            </span><span class="c1"># REQUIRED - List of nested actions</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Button&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;input</span><span class="nv"> </span><span class="s">text&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="target-parameter-details">
+<h3>Target Parameter Details<a class="headerlink" href="#target-parameter-details" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">target</span></code> parameter is used by click, right_click, double_click, drag (source/destination), and goto actions:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">target</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Choose ONE of these target types:</span>
+<span class="w">  </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;filename.png&quot;</span><span class="w">        </span><span class="c1"># Image file (relative to experiment/img/)</span>
+<span class="w">  </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Visible</span><span class="nv"> </span><span class="s">Text&quot;</span><span class="w">         </span><span class="c1"># Text visible on screen</span>
+<span class="w">  </span><span class="nt">position</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">x</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">y</span><span class="p p-Indicator">]</span><span class="w">             </span><span class="c1"># Exact pixel coordinates</span>
+
+<span class="w">  </span><span class="c1"># Optional selection strategy:</span>
+<span class="w">  </span><span class="nt">strategy</span><span class="p">:</span><span class="w">                    </span><span class="c1"># Used when multiple matches found</span>
+<span class="w">    </span><span class="c1"># Choose ONE strategy:</span>
+<span class="w">    </span><span class="nt">SweepStrategy</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">index</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span><span class="w">                 </span><span class="c1"># Select nth match (1-based)</span>
+<span class="w">    </span><span class="nt">BestConfidenceStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">  </span><span class="c1"># Highest confidence match</span>
+<span class="w">    </span><span class="nt">ClosestToStrategy</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">x</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">500</span><span class="w">                   </span><span class="c1"># Select closest to these coordinates</span>
+<span class="w">      </span><span class="nt">y</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
+<span class="w">    </span><span class="nt">TopLeftStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">         </span><span class="c1"># Topmost-leftmost match</span>
+<span class="w">    </span><span class="nt">TopRightStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">        </span><span class="c1"># Topmost-rightmost match</span>
+<span class="w">    </span><span class="nt">BottomLeftStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">      </span><span class="c1"># Bottommost-leftmost match</span>
+<span class="w">    </span><span class="nt">BottomRightStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">     </span><span class="c1"># Bottommost-rightmost match</span>
+<span class="w">    </span><span class="nt">LargestStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">         </span><span class="c1"># Largest bounding box</span>
+<span class="w">    </span><span class="nt">SmallestStrategy</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">        </span><span class="c1"># Smallest bounding box</span>
+</pre></div>
+</div>
+</section>
+<section id="condition-parameters">
+<h3>Condition Parameters<a class="headerlink" href="#condition-parameters" title="Link to this heading"></a></h3>
+<p>Conditions are used in <code class="docutils literal notranslate"><span class="pre">when</span></code> clauses for blocks and keyboard actions:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">when</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span><span class="w">                    </span><span class="c1"># Element must be present</span>
+<span class="w">      </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Button</span><span class="nv"> </span><span class="s">Text&quot;</span><span class="w">      </span><span class="c1"># Check for text</span>
+<span class="w">      </span><span class="c1"># OR</span>
+<span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;dialog.png&quot;</span><span class="w">      </span><span class="c1"># Check for image</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">not_exists</span><span class="p">:</span><span class="w">                </span><span class="c1"># Element must NOT be present</span>
+<span class="w">      </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Error</span><span class="nv"> </span><span class="s">Message&quot;</span>
+<span class="w">      </span><span class="c1"># OR</span>
+<span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;loading.png&quot;</span>
+</pre></div>
+</div>
+<p><strong>Note:</strong> Multiple conditions use AND logic - all must be true.</p>
+</section>
+<section id="parameter-data-types">
+<h3>Parameter Data Types<a class="headerlink" href="#parameter-data-types" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>String</strong>: Text values in quotes: <code class="docutils literal notranslate"><span class="pre">&quot;text</span> <span class="pre">value&quot;</span></code></p></li>
+<li><p><strong>Integer</strong>: Whole numbers: <code class="docutils literal notranslate"><span class="pre">42</span></code>, <code class="docutils literal notranslate"><span class="pre">100</span></code></p></li>
+<li><p><strong>Float</strong>: Decimal numbers: <code class="docutils literal notranslate"><span class="pre">3.14</span></code>, <code class="docutils literal notranslate"><span class="pre">1.0</span></code></p></li>
+<li><p><strong>Boolean</strong>: <code class="docutils literal notranslate"><span class="pre">true</span></code> or <code class="docutils literal notranslate"><span class="pre">false</span></code></p></li>
+<li><p><strong>List</strong>: Array of values: <code class="docutils literal notranslate"><span class="pre">[1,</span> <span class="pre">2,</span> <span class="pre">3]</span></code> or <code class="docutils literal notranslate"><span class="pre">[&quot;ctrl&quot;,</span> <span class="pre">&quot;c&quot;]</span></code></p></li>
+<li><p><strong>Dictionary</strong>: Key-value pairs with indentation:</p></li>
+</ul>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">KEY1</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;value1&quot;</span>
+<span class="w">  </span><span class="nt">KEY2</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;value2&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="action-reference-summary">
+<h2>Action Reference Summary<a class="headerlink" href="#action-reference-summary" title="Link to this heading"></a></h2>
+<p><strong>GUI Actions:</strong>
+- <code class="docutils literal notranslate"><span class="pre">click</span></code> - Left mouse click (target, description)
+- <code class="docutils literal notranslate"><span class="pre">right_click</span></code> - Right mouse click (target, description)
+- <code class="docutils literal notranslate"><span class="pre">double_click</span></code> - Double mouse click (target, description)
+- <code class="docutils literal notranslate"><span class="pre">drag</span></code> - Drag and drop (source, destination, description)
+- <code class="docutils literal notranslate"><span class="pre">goto</span></code> - Move mouse cursor (target, description)</p>
+<p><strong>Keyboard Actions:</strong>
+- <code class="docutils literal notranslate"><span class="pre">keyboard</span></code> - Type text or key combinations (keys/combination, when, description)</p>
+<p><strong>System Actions:</strong>
+- <code class="docutils literal notranslate"><span class="pre">command</span></code> - Execute system commands (name, cmd/command, tool, cwd, env, timeout, shell, description)
+- <code class="docutils literal notranslate"><span class="pre">idle</span></code> - Wait/pause (duration, description)
+- <code class="docutils literal notranslate"><span class="pre">screenshot</span></code> - Capture screen images (x, y, width, height, description)
+- <code class="docutils literal notranslate"><span class="pre">save_timestamp</span></code> - Record timestamps (variable, description)</p>
+<p><strong>Test Actions:</strong>
+- <code class="docutils literal notranslate"><span class="pre">test</span></code> - Execute validation tests (name, description)</p>
+<p><strong>Control Actions:</strong>
+- <code class="docutils literal notranslate"><span class="pre">block</span></code> - Group actions with optional conditions (actions, when, description)</p>
+<p><strong>Target Types:</strong>
+- <code class="docutils literal notranslate"><span class="pre">image</span></code> - Match by image template
+- <code class="docutils literal notranslate"><span class="pre">text</span></code> - Match by text content
+- <code class="docutils literal notranslate"><span class="pre">position</span></code> - Use exact coordinates</p>
+<p><strong>Selection Strategies:</strong>
+- <code class="docutils literal notranslate"><span class="pre">SweepStrategy</span></code> - Select nth match
+- <code class="docutils literal notranslate"><span class="pre">BestConfidenceStrategy</span></code> - Highest confidence match
+- <code class="docutils literal notranslate"><span class="pre">ClosestToStrategy</span></code> - Closest to coordinates
+- <code class="docutils literal notranslate"><span class="pre">TopLeftStrategy</span></code>, <code class="docutils literal notranslate"><span class="pre">TopRightStrategy</span></code> - By corner position
+- <code class="docutils literal notranslate"><span class="pre">BottomLeftStrategy</span></code>, <code class="docutils literal notranslate"><span class="pre">BottomRightStrategy</span></code> - By corner position
+- <code class="docutils literal notranslate"><span class="pre">LargestStrategy</span></code>, <code class="docutils literal notranslate"><span class="pre">SmallestStrategy</span></code> - By bounding box size</p>
+<p><strong>Condition Types:</strong>
+- <code class="docutils literal notranslate"><span class="pre">exists</span></code> - Element is present
+- <code class="docutils literal notranslate"><span class="pre">not_exists</span></code> - Element is not present</p>
+<p>This complete reference covers all available playbook features and parameters in ADARE. For specific use cases and examples, refer to the sample experiments and test files in the project.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="experiment.html" class="btn btn-neutral float-left" title="Create an Experiment" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../architecture/index.html" class="btn btn-neutral float-right" title="Structure and Concepts" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

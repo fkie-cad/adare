@@ -140,7 +140,7 @@ class EventDbApi(ExperimentApi):
                     # Create a Result object for the test
                     test_result = self.get_or_create_test_result({
                         'status': StatusEnum.SUCCESS if success else StatusEnum.FAILED,
-                        'details': action_data.get('error_message') or action_data.get('test_output'),
+                        'details': json.dumps(action_data.get('test_output')) if action_data.get('test_output') else (action_data.get('error_message') or None),
                     })
                 
                 # Create TestEvent with specific event type information (like ActionEvent)

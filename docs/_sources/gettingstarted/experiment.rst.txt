@@ -87,7 +87,7 @@ The playbook supports these basic GUI actions:
 - **test**: Run validation tests (defined in testset.yml)
 - **idle**: Wait/pause between actions
 
-For advanced features and complete reference, see the full playbook documentation.
+For advanced features and complete reference, see :ref:`gettingstarted/playbook_reference:Complete Playbook Reference`.
 
 
 

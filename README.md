@@ -7,34 +7,28 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 
 ### Todos
 - [ ] built windows vm new from fresh installation
+- [ ] built remote platform to store VMs and test/improve download to not be done manually
 
 #### Features
 - [ ] test and enable ydotool to make it work on wayland as well -> also would make machine setup easier as not X11 specific stuff needs to happen 
-
-#### Output
-- [x] Show experiment run flow in show run display (maybe extendable)
-- [x] make duration dynamic for run. Store the durations in database as before and display for the classic run display
-- [x] improve stages (at the moment to unclear / maybe to many?! -> combine typical short ones)
-- [x] restructure command like args maybe do not have show but instead incooporate it smoothly? 
 - [ ] make interactive experiment development
     - [ ] use nicegui to interactively test and create playbook and tests -> e.g. crop images extract icons ... 
 
+#### TUI
+
+
 #### QOL
-- [ ] update documentation drastically
-- [ ] add all output available as json or csv? 
-- [ ] screenshot not via websockets but via shared files (to improve speed)
+- [ ] update documentation
+- [ ] make all output available as csv/json/yaml
+- [ ] screenshot not via websockets but via shared files (to make faster?)
+- [ ] add easier way to test updated/new testfunctions
+- [ ] improve code quality in general
+- [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
 
 #### Bugs
-- [x] always run on base snapshot and create one after the experiment run not before (if specific option is set) -> test -> no snapshot saved?!
-- [x] adare show run shows pending for interrupted run
-- [x] ligntning does not show for interrupted run?!
-- [x] if one tests fails and not all tests are run we see wrong result for adare run list and tests panel for adare run info
-- [ ] unclear if flow shows fails -> test
-- [ ] somehow environment got deleted after adare manage reset-vm -> test more
-- [ ] allow .yml and .yaml for input files (playbook, testset, ...)
-- [ ] fix shared directory handling with snapshots
+- [ ] fix shared directory handling with snapshots; so what happens if we remove project and then create again with same vms .... At the moment we get an error.
+- [ ] we can easily load testfunction and change while we already run an experiment -> fix that to be not possible to preserve integrity; general workflow for update those seems a little broken
+
 
 #### Test
-- [ ] all frontend terminal commands
-- [ ] download of ova! -> find location where to upload machines? 
-- [ ] built test suite to test if vm is ready and can be used to avoid errors!
+- [ ] built more and working unit tests (maybe with claude)

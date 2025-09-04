@@ -80,6 +80,11 @@ class VMLifecycleManager:
 
         # Setup shared folders
         if not context.stop_event.is_set():
+            # First clean up any existing shared folders to avoid conflicts
+            expected_folders = {name: str(paths['host']) for name, paths in context.config.shared_directories.items()}
+            await context.vm.clean_shared_folders(expected_folders, stop_event=context.user_interrupt_event)
+            
+            # Now add the shared folders
             for name, paths in context.config.shared_directories.items():
                 await context.vm.add_shared_folder(name, host_path=paths['host'], stop_event=context.user_interrupt_event)
 

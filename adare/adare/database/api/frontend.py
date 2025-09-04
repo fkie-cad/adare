@@ -360,6 +360,37 @@ class DataRetrievalApi(DatabaseApi):
         data = self.__enrich_run_data(data)
         return data
 
+    def get_latest_run_in_project(self, project_name: str = None) -> pd.DataFrame:
+        """Get the latest run in the current project or specified project."""
+        if not project_name:
+            from adare.backend.basics import determine_projectdirectory
+            from adare.exceptions import NoProjectFoundError
+            if project_path := determine_projectdirectory(None):
+                project_name = project_path.name
+            else:
+                raise NoProjectFoundError(log, message='no project directory found and no project specified')
+        
+        self.__check_project_exists(project_name)
+        
+        # Query the latest run in the project ordered by timestamp
+        project = self._session.query(Project).filter_by(name=project_name).first()
+        query = self._session.query(ExperimentRun).filter(
+            ExperimentRun.experiment.has(
+                Experiment.environments.any(
+                    Environment.project_id == project.id
+                )
+            )
+        ).order_by(ExperimentRun.timestamp_start.desc()).limit(1)
+        
+        data = pd.read_sql(query.statement, self._session.bind).map(str)
+        
+        if data.empty:
+            from adare.exceptions import RunNotFoundError
+            raise RunNotFoundError(log, f'No runs found in project "{project_name}"')
+            
+        data = self.__enrich_run_data(data)
+        return data
+
     def get_run_stages(self, run_ulid: str) -> pd.DataFrame:
         # execute query and return result as pandas dataframe excluding the id column
         data = pd.read_sql(self._session.query(StageInRun).filter_by(run_id=run_ulid).statement, self._session.bind)

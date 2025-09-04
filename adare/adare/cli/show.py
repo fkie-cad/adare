@@ -56,7 +56,16 @@ def exec_show_runs(arguments):
 
 def exec_show_run(arguments):
     from adare.frontend.terminal.run import print_run
-    print_run(arguments.ulid)
+    from adare.database.api.frontend import DataRetrievalApi
+    
+    if arguments.ulid:
+        print_run(arguments.ulid)
+    else:
+        # Get the latest run in the current project
+        with DataRetrievalApi() as api:
+            latest_run_data = api.get_latest_run_in_project()
+            latest_run_ulid = latest_run_data['id'].iloc[0]
+            print_run(latest_run_ulid)
 
 
 def exec_show_testfunctions(arguments):

@@ -464,9 +464,9 @@ def list_runs(filter):
     exec_with_error_printing(exec_show_runs, args)
 
 @run.command()
-@click.argument('ulid')
+@click.argument('ulid', required=False)
 def info(ulid):
-    """Show detailed information about a specific run."""
+    """Show detailed information about a run. Shows latest run if no ULID provided."""
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_show_run, args)
 

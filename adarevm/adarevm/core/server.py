@@ -13,7 +13,7 @@ import tempfile
 import shutil
 import binascii
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Set
+from typing import Dict, List, Any, Optional, Set, Tuple, Union
 import time
 
 # Import automation modules
@@ -409,24 +409,97 @@ class AdareVMServer:
             await self.send_event(websocket, EventType.ERROR, {"message": f"Variable setting failed: {e}"})
             return {"status": "error", "message": str(e)}
     
-    async def _run_test(self, websocket, test_name: str):
-        """Run a specific test."""
-        log.info(f"Running test: {test_name}")
+    
+    
+    
+    
+    def _execute_resolved_test_data(self, resolved_test_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a test using pre-resolved test data."""
         try:
-            if not self.testset_instance:
-                return {"status": "error", "message": "No testset loaded"}
-            
-            if test_name not in self.testset_instance.tests:
+            # Validate resolved_test_data is not None
+            if resolved_test_data is None:
+                error_msg = "No test data provided - resolved_test_data is None"
+                log.error(error_msg)
                 return {
-                    "status": "error",
-                    "message": f"Test '{test_name}' not found",
-                    "available_tests": list(self.testset_instance.tests.keys())
+                    "success": False,
+                    "message": error_msg
                 }
             
+            # Check if testfunctions directory is available
+            if not self.testfunctions_dir or not self.testfunctions_dir.exists():
+                error_msg = "No testfunctions directory available. Please upload testfunctions first."
+                log.error(error_msg)
+                return {
+                    "success": False,
+                    "message": error_msg
+                }
+                
+            # Import test function class based on function name
+            from adarelib.testset.testfunction import import_basictest_subclasses, get_testclass_from_testfunction
+            supported_tests = import_basictest_subclasses(self.testfunctions_dir)
+            
+            function_name = resolved_test_data.get('function')
+            if not function_name:
+                return {
+                    "success": False,
+                    "message": "No test function specified"
+                }
+            
+            # Get test class using the proper helper function
+            test_class = get_testclass_from_testfunction(function_name, supported_tests)
+            if not test_class:
+                return {
+                    "success": False,
+                    "message": f"Test function '{function_name}' not found"
+                }
+            
+            # Create test instance with required arguments
+            test_name = resolved_test_data.get('name', 'unknown_test')
+            test_description = resolved_test_data.get('description', '')
+            
+            # No complex timestamp processing - use resolved test data as-is
+            processed_test_data = resolved_test_data
+            
+            # Create proper parameter instance using the test class's parameter class
+            parameter_instance = None
+            if 'parameter' in processed_test_data:
+                # Get parameter class from the test class's type annotations
+                import typing
+                type_hints = typing.get_type_hints(test_class)
+                
+                if 'parameter' not in type_hints:
+                    raise Exception(f"No parameter type annotation found for {test_class.__name__}")
+                
+                parameter_class = type_hints['parameter']
+                parameter_instance = parameter_class(**processed_test_data['parameter'])
+            
+            test_instance = test_class(
+                name=test_name,
+                parameter=parameter_instance,
+                description=test_description,
+                variables=processed_test_data.get('variables', None)
+            )
+            
+            # Execute the test
+            test_result = test_instance.test()
+            return test_result
+            
+        except Exception as e:
+            log.error(f"Error executing resolved test data: {e}")
+            return {
+                "success": False,
+                "message": str(e)
+            }
+    
+    async def _run_test(self, websocket, test_name: str, resolved_test_data: dict):
+        """Run a test with pre-resolved test data (variables already substituted)."""
+        log.info(f"Running test: {test_name}")
+        log.debug(f"Test '{test_name}' resolved_test_data: {resolved_test_data}")
+        try:
             await self.send_event(websocket, EventType.TEST_START, {"test_name": test_name})
             
-            # Execute test
-            test_result = self.testset_instance.test(test_name, self.current_variables)
+            # Execute test with resolved data by creating temporary test instance
+            test_result = self._execute_resolved_test_data(resolved_test_data)
             
             # Use TestResultLogger to handle logging and formatting
             from adarevm.testing.result_logger import TestResultLogger

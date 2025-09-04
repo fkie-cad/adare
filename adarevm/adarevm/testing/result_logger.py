@@ -28,9 +28,17 @@ class TestResultLogger:
         if not result:
             log.warning(f"Test '{test_name}' returned no result")
             return
-            
+        
+        # Debug logging to understand the result object
+        log.debug(f"Test '{test_name}' result object type: {type(result)}")
+        log.debug(f"Test '{test_name}' result object attributes: {dir(result)}")
+        log.debug(f"Test '{test_name}' result object: {result}")
+        
         status = getattr(result, 'status', StatusEnum.NONE)
         details = getattr(result, 'details', [])
+        
+        # Additional debug for status
+        log.debug(f"Test '{test_name}' extracted status: {status} (type: {type(status)})")
         
         # Log the primary result
         status_name = TestResultLogger._get_status_name(status)

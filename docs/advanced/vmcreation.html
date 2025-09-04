@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Create your custom ADARE VM &mdash; ADARE  documentation</title>
+  <title>Create Your Custom ADARE VM &mdash; ADARE  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=903d06c1" />
@@ -51,7 +51,15 @@
 <li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Advanced</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="testfunction.html">Write your own Testfunction</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Create your custom ADARE VM</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Create Your Custom ADARE VM</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#windows-setup">Windows Setup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#linux-setup">Linux Setup</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#base-configuration-all-environments">Base Configuration (all environments)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#desktop-environmentspecific-setup">Desktop Environment–Specific Setup</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -71,7 +79,7 @@
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="index.html">Advanced</a></li>
-      <li class="breadcrumb-item active">Create your custom ADARE VM</li>
+      <li class="breadcrumb-item active">Create Your Custom ADARE VM</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/advanced/vmcreation.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -82,15 +90,76 @@
            <div itemprop="articleBody">
              
   <section id="create-your-custom-adare-vm">
-<h1>Create your custom ADARE VM<a class="headerlink" href="#create-your-custom-adare-vm" title="Link to this heading"></a></h1>
-<p>Creating an own VirtualBox VM compatible with Adare can be easily done by creating an new VM in VirtualBox, install some minimal setup required for adare and then export the VM as .ova or .ovf file.
-Adare requires the following minimal setup in the VM:</p>
+<h1>Create Your Custom ADARE VM<a class="headerlink" href="#create-your-custom-adare-vm" title="Link to this heading"></a></h1>
+<p>Setting up a VirtualBox VM compatible with ADARE can be done in just a few steps.
+It make sense to create a new VM in one of two cases: 1. None of the provided VMs has the operating system/distribution you need, or 2. You need specific software that takes a while to installing-with-the-official-installer
+You therefore can either create a new VM from scratch or adapt an existing one, as long as the requirements below are met.
+Once configured, export the VM as an <code class="docutils literal notranslate"><span class="pre">.ova</span></code> or <code class="docutils literal notranslate"><span class="pre">.ovf</span></code> file in <strong>OVF 1.0 format</strong>.</p>
+<section id="windows-setup">
+<h2>Windows Setup<a class="headerlink" href="#windows-setup" title="Link to this heading"></a></h2>
+<p>Inside the VM, ensure the following configuration:</p>
 <ul class="simple">
-<li><p>VirtualBox Guest Additions must be installed</p></li>
-<li><p>Autologin needs to be enabled and setup, such that the VM boots directly into the desktop of a user</p></li>
-<li><p>for future compatible: setup with username “adare” and password “adare”</p></li>
+<li><p>Create a user account with:</p>
+<ul>
+<li><p><strong>Username:</strong> <code class="docutils literal notranslate"><span class="pre">adare</span></code></p></li>
+<li><p><strong>Password:</strong> <code class="docutils literal notranslate"><span class="pre">adare</span></code></p></li>
 </ul>
-<p>Additionally you may install any other software you require for experiments that can take a while to download and install, such that this does not need to be done everytime an experiment is executed.</p>
+</li>
+<li><p>Enable <strong>autologin</strong> so the VM boots directly into the <code class="docutils literal notranslate"><span class="pre">adare</span></code> user’s desktop.</p></li>
+<li><p>Install:
+- Python 3.10 or newer
+- <a class="reference external" href="https://python-poetry.org/docs/#installing-with-the-official-installer">Poetry</a>
+- VirtualBox Guest Additions</p></li>
+</ul>
+</section>
+<section id="linux-setup">
+<h2>Linux Setup<a class="headerlink" href="#linux-setup" title="Link to this heading"></a></h2>
+<section id="base-configuration-all-environments">
+<h3>Base Configuration (all environments)<a class="headerlink" href="#base-configuration-all-environments" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Create a user account with:</p>
+<ul>
+<li><p><strong>Username:</strong> <code class="docutils literal notranslate"><span class="pre">adare</span></code></p></li>
+<li><p><strong>Password:</strong> <code class="docutils literal notranslate"><span class="pre">adare</span></code></p></li>
+</ul>
+</li>
+<li><p>Enable <strong>autologin</strong> so the VM boots directly into the <code class="docutils literal notranslate"><span class="pre">adare</span></code> user’s desktop.</p>
+<ul>
+<li><p><strong>Important:</strong> autologin must start an <strong>X11 session</strong> (not Wayland).</p></li>
+</ul>
+</li>
+<li><p>Install:</p>
+<ul>
+<li><p>Python 3.10 or newer</p></li>
+<li><p><a class="reference external" href="https://python-poetry.org/docs/#installing-with-the-official-installer">Poetry</a></p></li>
+<li><p>VirtualBox Guest Additions</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">python3-tk</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">python3-dev</span></code></p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="desktop-environmentspecific-setup">
+<h3>Desktop Environment–Specific Setup<a class="headerlink" href="#desktop-environmentspecific-setup" title="Link to this heading"></a></h3>
+<section id="gnome">
+<h4>GNOME<a class="headerlink" href="#gnome" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>Install:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">gnome-screenshot</span></code></p></li>
+</ul>
+</li>
+<li><p>Configure Seahorse (keyring) to unlock automatically on login by setting an empty password.</p></li>
+</ul>
+</section>
+<section id="other-desktop-environments">
+<h4>Other Desktop Environments<a class="headerlink" href="#other-desktop-environments" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>Not tested so far. Confirm PyAutoGUI can make screenshots and control the mouse and keyboard.</p></li>
+</ul>
+</section>
+</section>
+</section>
 </section>
 
 

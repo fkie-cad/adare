@@ -231,5 +231,13 @@ To later see more detailed information about the run, a user can run::
 
     adare show run <run_ulid>
 
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+
+   environment
+   experiment
+   playbook_reference
+
 .. include:: ./environment.rst
 .. include:: ./experiment.rst

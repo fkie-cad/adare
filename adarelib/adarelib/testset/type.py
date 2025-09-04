@@ -10,8 +10,8 @@ log = logging.getLogger(__name__)
 class Test:
     name: str
     function: str
-    parameter: dict = {}
     description: str = ''
+    parameter: dict = {}
 
 
 @attrs.define
