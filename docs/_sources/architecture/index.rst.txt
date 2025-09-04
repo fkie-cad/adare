@@ -17,10 +17,11 @@ This section aims to provide a concise overview of the framework's structure and
 .. image:: ../_static/img/structure.png
    :width: 100%
 
-The core functionality of this framework lies in running experiments in  and facilitating both the viewing and publishing of their results.
+The core functionality of this framework lies in running experiments in virtual machines and facilitating both the viewing and publishing of their results.
 An experiment consists of a :term:`playbook` containing a series of :term:`actions<action>` and :term:`tests<test>`, all executed on a virtual machine.
-The :term:`playbook` defines user interactions with the virtual machine using YAML-based automation, such as clicking buttons, typing text, or executing commands.
-A :term:`testset` comprising multiple :term:`tests<test>` verifies the state of forensic artifacts and machine state by comparing them against expected outcomes.
+The :term:`playbook` defines a list of user interactions with the virtual machine using YAML-based automation, such as clicking buttons, typing text, or executing commands in a terminal.
+It additionally contains tests to verify the state of certain files or settings after the actions have been performed.
+As the :term:`playbook` only contains the test's name the full tests with their parameters are defined in the so called :term:`testset`.
 
 :term:`Experiments<experiment>` are organized within :term:`environments<environment>`.
 Each :term:`environment` is associated with a Vagrant box, which is essentially the virtual machine used for running :term:`experiments<experiment>`.

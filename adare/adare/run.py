@@ -16,7 +16,7 @@ from adare.cli.experiment import (
     exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example
 )
 from adare.cli.interactive import (
-    exec_experiment_interactive, exec_experiment_dev
+    exec_experiment_dev
 )
 from adare.cli.manage import exec_manage_reset_db, exec_manage_reset_vm
 from adare.cli.show import (
@@ -285,28 +285,12 @@ def list_experiments():
 @click.option('-e', '--environment', required=True, help='Name of the environment')
 @click.option('--project', '-p', help='Name of the project')
 @click.option('--port', type=int, default=8080, help='Port for the web interface (default: 8080)')
-def interactive(experiment, environment, project, port):
+def dev(experiment, environment, project, port):
     """Start interactive development mode for an experiment.
     
-    This starts a web-based interface for interactive development and testing
-    of experiment playbooks. The VM will be started and you can send individual
-    commands, test them, and build up your playbook incrementally.
+    This would start a web-based interface for interactive development and testing
+    of experiment playbooks, but is currently not implemented.
     """
-    args = SimpleNamespace(
-        experiment=experiment,
-        environment=environment,
-        project=project,
-        port=port
-    )
-    exec_with_error_printing(exec_experiment_interactive, args)
-
-@experiment.command()
-@click.argument('experiment')
-@click.option('-e', '--environment', required=True, help='Name of the environment')
-@click.option('--project', '-p', help='Name of the project')
-@click.option('--port', type=int, default=8080, help='Port for the web interface (default: 8080)')
-def dev(experiment, environment, project, port):
-    """Alias for interactive development mode (shorter command)."""
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
