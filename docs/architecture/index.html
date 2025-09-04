@@ -21,7 +21,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Module Structure" href="module_structure.html" />
-    <link rel="prev" title="Getting Started" href="../gettingstarted/index.html" /> 
+    <link rel="prev" title="Complete Playbook Reference" href="../gettingstarted/playbook_reference.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -92,10 +92,10 @@
 This section aims to provide a concise overview of the framework’s structure and its associated terminology.</p>
 <a class="reference internal image-reference" href="../_images/structure.png"><img alt="../_images/structure.png" src="../_images/structure.png" style="width: 100%;" />
 </a>
-<p>The core functionality of this framework lies in running experiments and facilitating both the viewing and publishing of their results.
-An experiment consists of a series of <a class="reference internal" href="#term-action"><span class="xref std std-term">actions</span></a> and <a class="reference internal" href="#term-test"><span class="xref std std-term">tests</span></a>, all executed on a virtual machine.
-The <a class="reference internal" href="#term-action"><span class="xref std std-term">actions</span></a>, which are grouped into an <a class="reference internal" href="#term-action-set"><span class="xref std std-term">action set</span></a>, aim to simulate user interactions with the virtual machine, such as deleting a file by clicking and pressing delete.
-Conversely, a <a class="reference internal" href="#term-test-set"><span class="xref std std-term">test set</span></a> which comprises multiple <a class="reference internal" href="#term-test"><span class="xref std std-term">tests</span></a>, is used to verify the state of forensic artifacts as well as the state of the machine by comparing them against a known ground truth.</p>
+<p>The core functionality of this framework lies in running experiments in  and facilitating both the viewing and publishing of their results.
+An experiment consists of a <a class="reference internal" href="#term-playbook"><span class="xref std std-term">playbook</span></a> containing a series of <a class="reference internal" href="#term-action"><span class="xref std std-term">actions</span></a> and <a class="reference internal" href="#term-test"><span class="xref std std-term">tests</span></a>, all executed on a virtual machine.
+The <a class="reference internal" href="#term-playbook"><span class="xref std std-term">playbook</span></a> defines user interactions with the virtual machine using YAML-based automation, such as clicking buttons, typing text, or executing commands.
+A <a class="reference internal" href="#term-testset"><span class="xref std std-term">testset</span></a> comprising multiple <a class="reference internal" href="#term-test"><span class="xref std std-term">tests</span></a> verifies the state of forensic artifacts and machine state by comparing them against expected outcomes.</p>
 <p><a class="reference internal" href="#term-experiment"><span class="xref std std-term">Experiments</span></a> are organized within <a class="reference internal" href="#term-environment"><span class="xref std std-term">environments</span></a>.
 Each <a class="reference internal" href="#term-environment"><span class="xref std std-term">environment</span></a> is associated with a Vagrant box, which is essentially the virtual machine used for running <a class="reference internal" href="#term-experiment"><span class="xref std std-term">experiments</span></a>.
 <a class="reference internal" href="#term-environment"><span class="xref std std-term">Environments</span></a> also include necessary details for the <a class="reference internal" href="#term-experiment"><span class="xref std std-term">experiments</span></a>, like the installation of specific software.
@@ -103,8 +103,8 @@ These <a class="reference internal" href="#term-environment"><span class="xref s
 <a class="reference internal" href="#term-project"><span class="xref std std-term">Projects</span></a> can provide common resources, such as tools used across all <a class="reference internal" href="#term-environment"><span class="xref std std-term">environments</span></a> within the project.</p>
 <p>In the system, <a class="reference internal" href="#term-project"><span class="xref std std-term">Projects</span></a>, <a class="reference internal" href="#term-environment"><span class="xref std std-term">Environments</span></a>, and <a class="reference internal" href="#term-experiment"><span class="xref std std-term">Experiments</span></a> are represented as directories in the file system and as tables in a database.
 The relevant directory tree is depicted in the structure overview above.
-<a class="reference internal" href="#term-action"><span class="xref std std-term">Actions</span></a> are specified in a Python file, named the <a class="reference internal" href="#term-action-set-file"><span class="xref std std-term">action set file</span></a>, located within the experiment directory.
-A <a class="reference internal" href="#term-test-set"><span class="xref std std-term">test set</span></a> is defined in a YAML file, termed the <a class="reference internal" href="#term-test-set-file"><span class="xref std std-term">test set file</span></a>, also within the experiment directory.
+<a class="reference internal" href="#term-action"><span class="xref std std-term">Actions</span></a> are specified in a YAML <a class="reference internal" href="#term-playbook-file"><span class="xref std std-term">playbook file</span></a>, located within the experiment directory.
+A <a class="reference internal" href="#term-testset"><span class="xref std std-term">testset</span></a> is defined in a separate YAML file, also within the experiment directory.
 To create an <a class="reference internal" href="#term-environment"><span class="xref std std-term">environment</span></a>, a YAML file known as the :term:<a href="#id1"><span class="problematic" id="id2">`</span></a>environment setup file ` is required.
 This file contains details about the Vagrant box and other information like the guest operating system.</p>
 <section id="terminology">
@@ -125,20 +125,21 @@ Experiments can be downloaded from the ADARE gitea or be created.</p>
 </dd>
 <dt id="term-experiment-run">experiment run<a class="headerlink" href="#term-experiment-run" title="Link to this term"></a></dt><dd><p>An experiment run is a single execution of an experiment.</p>
 </dd>
+<dt id="term-playbook">playbook<a class="headerlink" href="#term-playbook" title="Link to this term"></a></dt><dd><p>A playbook is a YAML file that defines a sequence of actions and tests for automated execution.
+It includes settings, variables, and an ordered list of GUI automation steps.</p>
+</dd>
+<dt id="term-playbook-file">playbook file<a class="headerlink" href="#term-playbook-file" title="Link to this term"></a></dt><dd><p>The playbook file is a YAML file unique per experiment that contains the action execution flow.</p>
+</dd>
 <dt id="term-action">action<a class="headerlink" href="#term-action" title="Link to this term"></a></dt><dd><p>An action is a single simulated interaction between a user and the virtual machine.
-This can be, for example, clicking on a file or pressing a key.</p>
-</dd>
-<dt id="term-action-set">action set<a class="headerlink" href="#term-action-set" title="Link to this term"></a></dt><dd><p>An action set is a series of actions arranged in an execution flow with possibly branches.</p>
-</dd>
-<dt id="term-action-set-file">action set file<a class="headerlink" href="#term-action-set-file" title="Link to this term"></a></dt><dd><p>The action set file is unique per experiment python file including the execution flow of actions.</p>
+This can be, for example, clicking on a file, typing text, or pressing a key.</p>
 </dd>
 <dt id="term-test">test<a class="headerlink" href="#term-test" title="Link to this term"></a></dt><dd><p>A test checks the state of the virtual machine and its forensic artifacts after the actions are played.
 This can be, for example, checking whether a file exists or whether a registry key has a specific value.
 Alternatively, a test can also check whether the trash bin artifact contains a within the actions deleted file.</p>
 </dd>
-<dt id="term-test-set">test set<a class="headerlink" href="#term-test-set" title="Link to this term"></a></dt><dd><p>A test set is a collection of tests.</p>
+<dt id="term-testset">testset<a class="headerlink" href="#term-testset" title="Link to this term"></a></dt><dd><p>A testset is a collection of tests defined in YAML format for validating experiment outcomes.</p>
 </dd>
-<dt id="term-test-set-file">test set file<a class="headerlink" href="#term-test-set-file" title="Link to this term"></a></dt><dd><p>The test set file is a YAML file including a test set.</p>
+<dt id="term-testset-file">testset file<a class="headerlink" href="#term-testset-file" title="Link to this term"></a></dt><dd><p>The testset file is a YAML file containing structured test definitions and validation rules.</p>
 </dd>
 <dt id="term-gui">gui<a class="headerlink" href="#term-gui" title="Link to this term"></a></dt><dd><p>The gui is the graphical user interface of the ADARE framework.
 It mainly can be used to view the results of experiment runs.</p>
@@ -181,10 +182,10 @@ For the environment <code class="docutils literal notranslate"><span class="pre"
 ├── run                             # directory where files for the experiment run are stored temporarily
 ├── experiments                     # experiments directory
 │   ├── test_experiment             # directory for the exp. test_experiment
-│   │   ├── test_experiment.py      # action set file
-│   │   ├── test_experiment.yml     # test set file
+│   │   ├── playbook.yml            # playbook file (YAML-based actions)
+│   │   ├── testset.yml             # testset file (YAML-based tests)
 │   │   ├── metadata.yml            # metadata file
-└── └── └── img                     # directory for the images used within the action set file
+└── └── └── img                     # directory for images used within the playbook
 </pre></div>
 </div>
 </section>
@@ -194,7 +195,7 @@ For the environment <code class="docutils literal notranslate"><span class="pre"
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../gettingstarted/index.html" class="btn btn-neutral float-left" title="Getting Started" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../gettingstarted/playbook_reference.html" class="btn btn-neutral float-left" title="Complete Playbook Reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="module_structure.html" class="btn btn-neutral float-right" title="Module Structure" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

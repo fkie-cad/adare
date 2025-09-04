@@ -325,9 +325,13 @@ class AdareVMClient:
             "variables": json.dumps(variables)
         })
     
-    async def run_test(self, test_name: str) -> Dict[str, Any]:
-        """Run a specific test."""
-        return await self.call_tool(ToolRegistry.RUN_TEST, {"test_name": test_name})
+    async def run_test(self, test_name: str, resolved_test_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Run a test with pre-resolved test data (variables already substituted)."""
+        params = {
+            "test_name": test_name,
+            "resolved_test_data": resolved_test_data
+        }
+        return await self.call_tool(ToolRegistry.RUN_TEST, params)
     
     async def run_all_tests(self) -> Dict[str, Any]:
         """Run all available tests."""

@@ -171,6 +171,9 @@ def __validate_testset_compatibility(project_path: Path, experiment_directory: E
         log.warning(f"Could not import testset validation modules: {e}")
         log.warning("Skipping testset validation - validation will occur at runtime")
     except Exception as e:
+        # print stack trace for debugging
+        import traceback
+        traceback.print_exc()
         raise ExperimentIntegrityError(
             log,
             f"Testset validation failed: {str(e)}",
@@ -547,8 +550,8 @@ async def step_connect_websocket(context: ExperimentRunCtx):
         context.client.add_event_handler('log', log_event_handler)
         context.client.add_event_handler('error', error_event_handler)
         
-        # Retry delays: 1, 2, 3, 5, 7 seconds
-        retry_delays = [1, 2, 3, 5, 7]
+        # Retry delays: 2, 3, 5, 7, 10 seconds (increased initial delay)
+        retry_delays = [2, 3, 5, 7, 10]
         max_attempts = len(retry_delays) + 1  # +1 for the initial attempt
         
         last_error = None

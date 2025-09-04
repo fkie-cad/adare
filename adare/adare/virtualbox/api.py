@@ -1388,6 +1388,10 @@ class VirtualBoxVM:
         # Clear any existing commands
         self.clear_command_queue()
 
+        # Clean slate approach: remove /adare directory to avoid any mount conflicts
+        if 'linux' in self.guest_os.lower():
+            self.queue_command('sudo rm -rf /adare 2>/dev/null || true', "Remove /adare directory to clean any stale mounts")
+
         # setup parent directories first
         if 'linux' in self.guest_os.lower():
             # todo: make this more generic and allow more levels (complicated due to permission issues)
@@ -1468,6 +1472,82 @@ class VirtualBoxVM:
                 return 1
         
         return await self.manager.run_async(_remove_shared_folder_async)
+
+    async def list_shared_folders(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+        """
+        List all shared folders configured for the VM.
+        
+        Returns:
+            dict: Dictionary with shared folder names as keys and host paths as values
+        """
+        async def _list_shared_folders_async():
+            try:
+                args = ["showvminfo", self.vm_name, "--machinereadable"]
+                return_value, stdout_lines, _ = await self._execute_streaming_command_async(
+                    args,
+                    log_file=log_file,
+                    stop_event=stop_event,
+                    silent=silent,
+                    ctx_manager=ctx_manager,
+                    operation_name="list shared folders"
+                )
+                
+                if return_value != 0:
+                    log.error(f"Failed to get VM info for '{self.vm_name}': return code {return_value}")
+                    return {}
+                
+                shared_folders = {}
+                for line in stdout_lines:
+                    # SharedFolderNameMachineMapping1="adare"
+                    # SharedFolderPathMachineMapping1="/home/user/adare"
+                    if line.startswith('SharedFolderNameMachineMapping'):
+                        # Extract the index and name
+                        parts = line.split('=', 1)
+                        if len(parts) == 2:
+                            name = parts[1].strip('"')
+                            index = parts[0].replace('SharedFolderNameMachineMapping', '')
+                            
+                            # Find corresponding path
+                            path_key = f'SharedFolderPathMachineMapping{index}='
+                            for path_line in stdout_lines:
+                                if path_line.startswith(path_key):
+                                    path = path_line.split('=', 1)[1].strip('"')
+                                    shared_folders[name] = path
+                                    break
+                
+                return shared_folders
+                
+            except Exception as e:
+                log.error(f"Error listing shared folders for VM '{self.vm_name}': {e}")
+                return {}
+        
+        return await self.manager.run_async(_list_shared_folders_async)
+
+    async def clean_shared_folders(self, expected_folders: dict, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+        """
+        Clean up existing shared folders - remove any that don't match expected folders.
+        
+        Args:
+            expected_folders: Dict of {name: host_path} for folders we want to keep
+        """
+        async def _clean_shared_folders_async():
+            try:
+                # Get current shared folders
+                current_folders = await self.list_shared_folders(ctx_manager, stop_event, log_file, silent)
+                
+                # Remove folders that shouldn't be there
+                for name, current_path in current_folders.items():
+                    if name not in expected_folders or expected_folders[name] != current_path:
+                        log.info(f"Removing stale shared folder '{name}' (path: {current_path})")
+                        await self.remove_shared_folder(name, ctx_manager=ctx_manager, stop_event=stop_event, log_file=log_file, silent=silent)
+                
+                return True
+                
+            except Exception as e:
+                log.error(f"Error cleaning shared folders for VM '{self.vm_name}': {e}")
+                return False
+        
+        return await self.manager.run_async(_clean_shared_folders_async)
 
     def create_snapshot(self, snapshot_name: str, description: str = "", ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
         def _create_snapshot():

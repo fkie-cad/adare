@@ -9,12 +9,16 @@ local CV/OCR for target resolution and maintains proper execution order.
 import asyncio
 import logging
 import base64
+import json
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 import time
 import jinja2
 from sqlalchemy.orm import Session
+
+
+# Removed TimestampTransform class - no longer needed with simplified approach
 
 # Playbook and test imports
 from adare.types.playbook import (
@@ -257,7 +261,7 @@ class PlaybookController:
         elif isinstance(action, ActionTestAction):
             event = TestActionCompleteEvent(
                 test_name=getattr(action, 'name', ''),
-                test_output=result.data.get('output') if result.data else None,
+                test_output=result.data.get('result', {}).get('details') if result.data else None,
                 **event_data
             )
         elif isinstance(action, ScreenshotAction):
@@ -488,8 +492,8 @@ class PlaybookController:
                             execution_id=execution_id,
                             success=result.success,
                             result_data={
-                                'coordinates': result.coordinates,
-                                'data': result.data,
+                                'coordinates': getattr(result, 'coordinates', None),
+                                'data': getattr(result, 'data', None),
                                 'execution_time': execution_time
                             },
                             error_message=result.message if not result.success else None
@@ -598,17 +602,9 @@ class PlaybookController:
         else:
             log.warning("No testfunctions directory found")
         
-        # Upload testset configuration (YAML)
-        testset_path = experiment_dir / "testset.yml"
-        if testset_path.exists():
-            log.info("Uploading testset configuration...")
-            try:
-                testset_yaml = testset_path.read_text()
-                await self.client.upload_testset(testset_yaml)
-                log.info("Testset loaded successfully - tests are now available for playbook actions")
-            except Exception as e:
-                log.error(f"Failed to upload testset: {e}")
-        else:
+        # Store testset path for local processing during test execution
+        self.testset_path = experiment_dir / "testset.yml"
+        if not self.testset_path.exists():
             log.warning("No testset.yml found - test actions in playbook will fail")
     
     async def run_final_tests(self, experiment_dir: Path):
@@ -1018,12 +1014,21 @@ class PlaybookController:
             return ActionResult(success=False, message=str(e))
     
     async def _execute_test(self, action: ActionTestAction, parent_event_id: str = None) -> ActionResult:
-        """Execute individual test action."""
+        """Execute individual test action with local variable substitution."""
         try:
-            result = await self.client.run_test(action.name)
+            # Load and resolve test locally with current execution context
+            resolved_test = await self._resolve_test_locally(action.name)
+            if not resolved_test:
+                return ActionResult(
+                    success=False,
+                    message=f"Test '{action.name}' not found in testset.yml"
+                )
+            
+            # Send resolved test to VM for execution
+            result = await self.client.run_test(action.name, resolved_test)
             
             # Use TestResultProcessor to handle result processing
-            from adare.adare.backend.experiment.test_result_processor import TestResultProcessor
+            from adare.backend.experiment.test_result_processor import TestResultProcessor
             return TestResultProcessor.process_test_result(action.name, result)
         except Exception as e:
             error_msg = str(e)
@@ -1244,6 +1249,8 @@ class PlaybookController:
         Performs recursive replacement to handle nested variables like:
         username: "vagrant"
         filepath: "C:/Users/{{ username }}/Documents/file.txt"
+        
+        TIMESTAMP variables are automatically formatted as ISO datetime strings.
         """
         if not text or '{{' not in text:
             return text
@@ -1265,10 +1272,17 @@ class PlaybookController:
                 
                 previous_results.add(result)
                 
+                # Create formatted context with timestamp formatting
+                formatted_context = self._get_formatted_context()
+                
                 # Perform template replacement
-                log.debug(f"Processing template: '{result}' with context keys: {list(self.execution_context.keys())}")
+                log.debug(f"Processing template: '{result}' with context keys: {list(formatted_context.keys())}")
                 template = jinja2.Template(result)
-                new_result = template.render(self.execution_context)
+                
+                # Add custom filters for transformations
+                template.environment.filters.update(self._get_custom_filters())
+                
+                new_result = template.render(formatted_context)
                 log.debug(f"Template result: '{new_result}'")
                 
                 # If no change occurred, break to avoid infinite loops
@@ -1285,6 +1299,101 @@ class PlaybookController:
         except Exception as e:
             log.warning(f"Failed to replace variables in '{text}': {e}")
             return text
+    
+    def _get_formatted_context(self) -> Dict[str, Any]:
+        """Get execution context with TIMESTAMP variables as special objects for VM-side processing."""
+        formatted_context = {}
+        timestamp_dict = {}
+        
+        class TimestampValue:
+            """Special object that renders as TIMESTAMP: marker for VM processing."""
+            def __init__(self, unix_timestamp: float):
+                self.unix_timestamp = unix_timestamp
+            
+            def __str__(self) -> str:
+                return f"TIMESTAMP:{self.unix_timestamp}"
+        
+        for key, value in self.execution_context.items():
+            if key.startswith('TIMESTAMP.') and isinstance(value, (int, float)):
+                # Create special TimestampValue object for VM processing
+                timestamp_name = key[len('TIMESTAMP.'):]
+                timestamp_dict[timestamp_name] = TimestampValue(value)
+                
+                # Also keep the original flat key for backward compatibility
+                formatted_context[key] = TimestampValue(value)
+            else:
+                formatted_context[key] = value
+        
+        # Add the nested TIMESTAMP object with TimestampValue objects for VM processing
+        if timestamp_dict:
+            formatted_context['TIMESTAMP'] = timestamp_dict
+        
+        return formatted_context
+    
+    def _get_custom_filters(self) -> Dict[str, Any]:
+        """Get custom Jinja2 filters that pass through to VM for processing."""
+        def format_filter(timestamp_value, format_str):
+            """Pass-through format filter that preserves filter syntax for VM processing."""
+            if hasattr(timestamp_value, 'unix_timestamp'):  # TimestampValue object
+                return f"{timestamp_value}|format('{format_str}')"
+            return str(timestamp_value)
+        
+        def tolerance_filter(timestamp_value, plus_seconds, minus_seconds=None):
+            """Pass-through tolerance filter that preserves filter syntax for VM processing."""
+            if minus_seconds is None:
+                minus_seconds = -plus_seconds
+            
+            # Check if we already have format applied
+            base_value = str(timestamp_value)
+            return f"{base_value}|tolerance({plus_seconds},{minus_seconds})"
+        
+        return {
+            'format': format_filter,
+            'tolerance': tolerance_filter
+        }
+    
+    async def _resolve_test_locally(self, test_name: str) -> Optional[Dict[str, Any]]:
+        """Load and resolve a specific test locally with variable substitution."""
+        try:
+            if not hasattr(self, 'testset_path') or not self.testset_path or not self.testset_path.exists():
+                return None
+            
+            import yaml
+            testset_yaml = self.testset_path.read_text()
+            testset_data = yaml.safe_load(testset_yaml)
+            
+            if 'tests' not in testset_data:
+                return None
+            
+            # Debug: Log current execution context before test resolution
+            formatted_context = self._get_formatted_context()
+            log.debug(f"Resolving test '{test_name}' with execution context keys: {list(formatted_context.keys())}")
+            log.debug(f"Execution context values: {formatted_context}")
+            
+            # Find the test by name
+            for test in testset_data['tests']:
+                if test.get('name') == test_name:
+                    log.debug(f"Found test '{test_name}' raw data: {test}")
+                    # Apply variable substitution to all string values in the test
+                    resolved_test = self._resolve_test_content(test)
+                    log.debug(f"Resolved test '{test_name}' data: {resolved_test}")
+                    return resolved_test
+            
+            return None
+        except Exception as e:
+            log.error(f"Failed to resolve test '{test_name}' locally: {e}")
+            return None
+    
+    def _resolve_test_content(self, test_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Recursively apply variable substitution to test content."""
+        if isinstance(test_data, dict):
+            return {key: self._resolve_test_content(value) for key, value in test_data.items()}
+        elif isinstance(test_data, list):
+            return [self._resolve_test_content(item) for item in test_data]
+        elif isinstance(test_data, str):
+            return self._replace_variables(test_data)
+        else:
+            return test_data
     
     async def _execute_command(self, action: CommandAction, parent_event_id: str = None) -> ActionResult:
         try:
@@ -1314,7 +1423,13 @@ class PlaybookController:
         try:
             current_timestamp = time.time()
             self.execution_context[action.variable] = current_timestamp
-            log.info(f"Saved timestamp {current_timestamp} to variable {action.variable}")
+            
+            # Also log formatted version for debugging
+            import datetime
+            formatted_timestamp = datetime.datetime.fromtimestamp(current_timestamp).strftime('%Y-%m-%dT%H:%M:%S')
+            log.info(f"Saved timestamp {current_timestamp} ({formatted_timestamp}) to variable {action.variable}")
+            log.debug(f"Full execution context after timestamp save: {self.execution_context}")
+            
             return ActionResult(
                 success=True,
                 message=f"Timestamp saved to {action.variable}",

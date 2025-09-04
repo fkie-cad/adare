@@ -58,8 +58,11 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     stdout = stdout.decode("utf-8").replace("\r", "")
     stderr = stderr.decode("utf-8").replace("\r", "")
 
-    for line in stdout.split("\n"):
-        log.debug(line)
+    # Always log stdout (even if empty)
+    log.info(f"stdout: {stdout if stdout else ''}")
+    
+    # Always log stderr (even if empty)  
+    log.info(f"stderr: {stderr if stderr else ''}")
 
     ret = {
         'returncode': proc.returncode,
@@ -67,11 +70,9 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
         'stderr': stderr
     }
 
-    log.debug(f"'{command_str}' exited with return code: {ret['returncode']}")
+    log.info(f"'{command_str}' exited with return code: {ret['returncode']}")
 
     if ret['returncode'] != 0:
         log.error(f"{command_str} exited with an error (return code {ret['returncode']})")
-        for line in stderr.split("\n"):
-            log.error(line)
 
     return ret

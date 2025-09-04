@@ -16,6 +16,8 @@ import logging
 log = logging.getLogger(__name__)
 
 
+
+
 @attrs.define
 class FileExistsParameter(Parameter):
     dst: str
@@ -325,13 +327,32 @@ class FileContentEquals(BasicTest):
                 details=[f'file with path {self.parameter.dst} does not exist']
             )
             return result
-        if self.parameter.content == data:
-            result = TestResult(
-                status=StatusEnum.SUCCESS
-            )
+            
+        # Simple exact content match after resolving variables
+        expected_content = self.resolve_variable_in_string(self.parameter.content)
+        success = data == expected_content
+        message = "Exact content match" if success else "Content does not match exactly"
+            
+        if success:
+            return TestResult(status=StatusEnum.SUCCESS, details=[message])
         else:
-            result = TestResult(
+            # Show diff for debugging
+            import difflib
+            expected_for_diff = self.resolve_variable_in_string(self.parameter.content)
+            diff_lines = list(difflib.unified_diff(
+                expected_for_diff.splitlines(keepends=True),
+                data.splitlines(keepends=True),
+                fromfile='expected',
+                tofile='actual',
+                lineterm=''
+            ))
+            diff_output = ''.join(diff_lines) if diff_lines else 'Content differs but no line-by-line diff available'
+            
+            return TestResult(
                 status=StatusEnum.FAILED,
-                details=['file content does not equal expected content'],
+                details=[
+                    message,
+                    f'Diff:\n{diff_output}'
+                ]
             )
-        return result
+    

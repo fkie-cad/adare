@@ -49,7 +49,7 @@ def find_icon_locations(screenshot_bytes: bytes, icon_bytes: bytes, threshold: f
 
 
 @mcp.tool()
-async def find_icon(icon_base64: str, screenshot_base64: str, offset_x: int = 0, offset_y: int = 0, threshold: float = 0.3):
+async def find_icon(icon_base64: str, screenshot_base64: str, offset_x: int = 0, offset_y: int = 0, threshold: float = 0.5, max_results: int = 50):
     """Find icon locations in provided screenshot data using base64 encoded icon."""
     try:
         log.info(f"Starting icon search with base64 icon data")
@@ -57,6 +57,13 @@ async def find_icon(icon_base64: str, screenshot_base64: str, offset_x: int = 0,
         icon_bytes = base64.b64decode(icon_base64)
         locations, similarities = find_icon_locations(screenshot_bytes, icon_bytes, threshold=threshold)
         locations = [(x + offset_x, y + offset_y) for x, y in locations]
+
+        if max_results:
+            # sort by similarity and limit results
+            sorted_results = sorted(zip(locations, similarities), key=lambda item: item[1],
+                                    reverse=True)[:max_results]
+            locations, similarities = zip(*sorted_results) if sorted_results else ([], [])
+
         log.info(f"Found {len(locations)} icon matches")
         return {
             "locations": locations,

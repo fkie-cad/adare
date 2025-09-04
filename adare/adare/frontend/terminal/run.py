@@ -89,14 +89,21 @@ class ExperimentRunTestsPanel:
                     title_right=f'[b {color}]{test_data["result_status_name"]}[/b {color}]',
                 ),
             )
-            if test_data['result_details']:
-                grid.add_row(':pencil: [b]details[/b]:')
-                grid.add_row(f'  {test_data["result_details"]}')
+            # Add parameters section
             grid.add_row(':gear: [b]parameters[/b]:')
             for parameter in test_data['parameters']:
                 grid.add_row(
                     f'  {parameter["name"]} ([i]{parameter["dtype"]}[/i]): [b]{parameter["value"]}[/b]'
                 )
+            
+            # Add details section with better separation if details exist
+            if test_data['result_details']:
+                grid.add_row('')  # Empty line for separation
+                grid.add_row(':information_source: [b]details[/b]:')
+                grid.add_row(f'  {test_data["result_details"]}')
+            
+            # Add spacing between tests for better readability
+            grid.add_row('')
 
         title = '[b light_steel_blue]tests[/b light_steel_blue]'
         title = f'{title} {StatusEnum.get_icon(self.test_overall_result, color=True)}'

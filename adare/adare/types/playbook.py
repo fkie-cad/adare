@@ -167,6 +167,7 @@ class ActionResult:
     success: bool
     message: str = ''
     data: Optional[dict] = None
+    execution_time: Optional[float] = None
 
 @attrs.define
 class BlockAction:

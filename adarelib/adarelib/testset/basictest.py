@@ -117,6 +117,8 @@ class BasicTest:
             return re.sub(regex_expr, lambda match: resolve_var_in_match_regex(match, self.variables), string)
         return re.sub(regex_expr, lambda match: resolve_var_in_match_string(match, self.variables), string)
 
+    
+
     def test(self):
         """
         This method has to be implemented by all subclasses. It should return a TestResult object.
