@@ -44,7 +44,7 @@ class YamlString(YamlCustomTag):
         return f'{self.yaml_tag} {self.string}'
 
     @classmethod
-    def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.MappingNode):
+    def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode):
         return YamlString(node.value)
 
     @classmethod
@@ -68,8 +68,8 @@ class YamlPath(YamlCustomTag):
         return f'{self.yaml_tag} {self.string}'
 
     @classmethod
-    def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.MappingNode):
-        return YamlString(node.value)
+    def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode):
+        return YamlPath(node.value)
 
     @classmethod
     def to_yaml(cls, dumper, data):
@@ -140,7 +140,7 @@ class YamlRegexString(YamlCustomTag):
         return f'{self.yaml_tag} {self.string}'
 
     @classmethod
-    def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.MappingNode):
+    def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode):
         return YamlRegexString(node.value)
 
     @classmethod
@@ -156,7 +156,7 @@ class YamlRegexString(YamlCustomTag):
             compiled_regex = re.compile(self.string)
         except re.error as e:
             return ComparisonResult(False, f'regex {self.string} could not be compiled', e)
-        match = compiled_regex.match(self.string)
+        match = compiled_regex.match(entry)
         if not match:
             return ComparisonResult(False)
         return ComparisonResult(True)
@@ -172,7 +172,7 @@ class YamlRegexStringAll(YamlRegexString):
         return f'{self.yaml_tag}'
 
     @classmethod
-    def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.MappingNode):
+    def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.ScalarNode):
         return YamlRegexStringAll()
 
     @classmethod
