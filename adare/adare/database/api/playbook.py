@@ -338,8 +338,9 @@ class PlaybookApi(DatabaseApi):
             _structure_action, _structure_condition, _structure_strategy, _register_strict_hooks
         )
         
-        # Parse YAML content
-        data = yaml.safe_load(playbook.original_yaml_content)
+        # Parse YAML content using custom loader for tags like !re
+        from adarelib.testset.yaml.customloader import get_custom_loader
+        data = yaml.load(playbook.original_yaml_content, Loader=get_custom_loader())
         
         # Set up cattrs converter (same as in parse_playbook)
         converter = cattrs.Converter()
