@@ -1639,6 +1639,70 @@ class VirtualBoxVM:
         
         return await self.manager.run_async(_clean_shared_folders_async)
 
+    async def remove_all_shared_folders(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+        """
+        Remove all shared folders from the VM.
+        
+        This is useful when preparing a VM for a new experiment to ensure
+        no stale shared folder configurations remain.
+        
+        Args:
+            ctx_manager: Context manager for status updates
+            stop_event: Event to signal stop
+            log_file: Log file for output
+            silent: Whether to suppress logging
+            
+        Returns:
+            bool: True if all folders were removed successfully
+        """
+        async def _remove_all_shared_folders_async():
+            try:
+                # Get list of all current shared folders
+                current_folders = await self.list_shared_folders(ctx_manager, stop_event, log_file, silent=True)
+                
+                if not current_folders:
+                    if not silent:
+                        log.debug(f"No shared folders to remove from VM '{self.vm_name}'")
+                    return True
+                
+                removed_count = 0
+                failed_removals = []
+                
+                if not silent:
+                    log.info(f"Removing {len(current_folders)} shared folders from VM '{self.vm_name}'")
+                
+                # Remove each folder
+                for name in current_folders.keys():
+                    try:
+                        await self.remove_shared_folder(name, ctx_manager=ctx_manager, stop_event=stop_event, log_file=log_file, silent=True)
+                        removed_count += 1
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as e:
+                        log.debug(f"Standard removal failed for '{name}': {e}")
+                        failed_removals.append(name)
+                
+                # For any failed removals, try again with the standard method
+                # (sometimes VBoxManage operations are flaky and succeed on retry)
+                for name in failed_removals:
+                    try:
+                        await self.remove_shared_folder(name, ctx_manager=ctx_manager, stop_event=stop_event, log_file=log_file, silent=True)
+                        removed_count += 1
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+                        log.warning(f"Could not remove shared folder '{name}' after retry: {e}")
+                
+                if not silent:
+                    if removed_count == len(current_folders):
+                        log.info(f"Successfully removed all {removed_count} shared folders")
+                    else:
+                        log.warning(f"Removed {removed_count}/{len(current_folders)} shared folders")
+                
+                return removed_count == len(current_folders)
+                
+            except (subprocess.CalledProcessError, OSError, RuntimeError) as e:
+                log.error(f"Error removing all shared folders from VM '{self.vm_name}': {e}")
+                return False
+        
+        return await self.manager.run_async(_remove_all_shared_folders_async)
+
     def create_snapshot(self, snapshot_name: str, description: str = "", ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
         def _create_snapshot():
             args = [

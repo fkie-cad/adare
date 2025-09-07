@@ -26,16 +26,16 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] update documentation
 - [ ] make all output available as csv/json/yaml
 - [ ] screenshot not via websockets but via shared files (to make faster?)
-- [ ] add easier way to tcd est updated/new testfunctions
+- [ ] add easier way to updated/test new testfunctions
 - [ ] improve code quality in general
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
 - [x] Final short experiment finished message with overall result (exception/error vs none) and test result (if all tests succeded)and ULID
 
 #### Bugs
-- [ ] fix shared directory handling with snapshots; so what happens if we remove project and then create again with same vms .... At the moment we get an error.
-- [ ] fix port forwarding if already there check if identical and if yes then do nothing! -> at the moment logs shows an error
+- [x] fix shared directory handling with snapshots; so what happens if we remove project and then create again with same vms .... At the moment we get an error.
+- [x] fix port forwarding if already there check if identical and if yes then do nothing! -> at the moment logs shows an error
 - [ ] we can easily load testfunction and change while we already run an experiment -> fix that to be not possible to preserve integrity; general workflow for update those seems a little broken
-- [ ] we copy adarevm into project dir?! but we use it from appdata so we may not do this?!
+- [x] we copy adarevm into project dir?! but we use it from appdata so we may not do this?!
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove)
 
 #### Test
