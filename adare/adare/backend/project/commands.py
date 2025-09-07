@@ -28,14 +28,6 @@ def project_create(path: Path, name: str, description: str = ''):
         raise e
 
     try:
-        project_directory.copy_adarevm_to_adare_dir()
-    except ProjectDirectoryCopyError as e:
-        project_directory.remove()
-        project_database.remove_project(path)
-        log.info(f'project directory {path} removed, since adare could not be copied to adare directory')
-        raise e
-
-    try:
         project_directory.copy_standard_testfunction()
     except ProjectDirectoryCopyError as e:
         project_directory.remove()
