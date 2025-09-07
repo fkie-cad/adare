@@ -6,15 +6,71 @@ import threading
 import queue
 import os
 import signal
-from typing import Optional, List, Iterator
+from typing import Optional, List, Iterator, Dict
 import asyncio
 from pathlib import Path
 import contextlib
+from dataclasses import dataclass
 
 from adare.exceptions import LoggedErrorException
 from adarelib.constants import StatusEnum
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class PortForwardingRule:
+    """Represents a VirtualBox NAT port forwarding rule."""
+    name: str
+    protocol: str  # 'tcp' or 'udp'
+    host_ip: str = ""
+    host_port: int = 0
+    guest_ip: str = ""
+    guest_port: int = 0
+    
+    def matches(self, other: 'PortForwardingRule') -> bool:
+        """Check if this rule is identical to another rule."""
+        return (self.protocol == other.protocol and
+                self.host_ip == other.host_ip and
+                self.host_port == other.host_port and
+                self.guest_ip == other.guest_ip and
+                self.guest_port == other.guest_port)
+    
+    def to_vbox_format(self) -> str:
+        """Convert to VirtualBox command format."""
+        return f"{self.name},{self.protocol},{self.host_ip},{self.host_port},{self.guest_ip},{self.guest_port}"
+    
+    @classmethod
+    def from_vbox_format(cls, vbox_string: str) -> 'PortForwardingRule':
+        """Create PortForwardingRule from VirtualBox output format."""
+        # Parse: "name,protocol,host_ip,host_port,guest_ip,guest_port"
+        parts = vbox_string.split(',')
+        if len(parts) != 6:
+            raise ValueError(f"Invalid VirtualBox port forwarding format: {vbox_string}")
+        
+        name, protocol, host_ip, host_port_str, guest_ip, guest_port_str = parts
+        return cls(
+            name=name,
+            protocol=protocol,
+            host_ip=host_ip,
+            host_port=int(host_port_str) if host_port_str.isdigit() else 0,
+            guest_ip=guest_ip,
+            guest_port=int(guest_port_str) if guest_port_str.isdigit() else 0
+        )
+
+
+@dataclass
+class SharedFolderConfig:
+    """Represents a VirtualBox shared folder configuration."""
+    name: str
+    host_path: str
+    readonly: bool = False
+    
+    def matches(self, other: 'SharedFolderConfig') -> bool:
+        """Check if this shared folder config is identical to another."""
+        return (self.name == other.name and
+                self.host_path == other.host_path and
+                self.readonly == other.readonly)
 
 
 class VMImportException(LoggedErrorException):
@@ -1077,6 +1133,7 @@ class VirtualBoxVM:
     async def add_shared_folder(self, name: str, host_path: Path, readonly: bool = False, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
         """
         Add a shared folder to the VM (VirtualBox configuration only).
+        Checks if an identical shared folder already exists to prevent conflicts.
         For Windows guests with custom mountpoint, this only adds the shared folder - use mount_shared_folder() after VM startup.
         For other cases, uses VirtualBox's built-in shared folder mechanism with automount.
         
@@ -1090,84 +1147,79 @@ class VirtualBoxVM:
             silent: Whether to suppress logging
         """
         async def _add_shared_folder_async():
-            # For Windows guests with custom mountpoint, use command execution for arbitrary paths
-            if 'windows' in self.guest_os.lower():
-                # First add the shared folder using standard VirtualBox method (no automount)
-                args = [
-                    "sharedfolder", "add", self.vm_name,
-                    "--name", name,
-                    "--hostpath", host_path.as_posix(),
-                ]
-                if readonly:
-                    args.append("--readonly")
+            # Create config object for comparison
+            new_config = SharedFolderConfig(
+                name=name,
+                host_path=str(host_path),
+                readonly=readonly
+            )
+            
+            # First check if identical folder already exists
+            existing_folders = await self.list_shared_folders(ctx_manager, stop_event, log_file, silent)
+            
+            if name in existing_folders:
+                existing_config = existing_folders[name]
+                # Check if the existing folder is identical
+                if new_config.matches(existing_config):
+                    if not silent:
+                        log.info(f"Shared folder '{name}' already exists with identical configuration - skipping")
+                    return 0
+                else:
+                    log.warning(f"Shared folder '{name}' exists but with different configuration - will attempt to remove and re-add")
+                    log.debug(f"Existing: {existing_config}, New: {new_config}")
+                    # Remove existing folder first
+                    remove_args = ["sharedfolder", "remove", self.vm_name, "--name", name]
+                    try:
+                        await self._execute_streaming_command_async(
+                            remove_args,
+                            log_file=log_file,
+                            stop_event=stop_event,
+                            silent=silent,
+                            ctx_manager=ctx_manager,
+                            operation_name="shared folder removal"
+                        )
+                    except Exception as e:
+                        log.warning(f"Failed to remove existing shared folder '{name}': {e}")
+            
+            # Add the shared folder
+            args = [
+                "sharedfolder", "add", self.vm_name,
+                "--name", name,
+                "--hostpath", str(host_path)
+            ]
+            if readonly:
+                args.append("--readonly")
+            
+            try:
+                log.info(f"Adding shared folder '{name}' (host: {host_path}) to VM '{self.vm_name}'.")
+                return_value, _, _ = await self._execute_streaming_command_async(
+                    args,
+                    log_file=log_file,
+                    stop_event=stop_event,
+                    silent=silent,
+                    ctx_manager=ctx_manager,
+                    operation_name="shared folder addition"
+                )
                 
-                try:
-                    log.info(f"Adding shared folder '{name}' (host: {host_path}) to VM '{self.vm_name}'.")
-                    return_value, _, _ = await self._execute_streaming_command_async(
-                        args,
-                        log_file=log_file,
-                        stop_event=stop_event,
-                        silent=silent,
-                        ctx_manager=ctx_manager,
-                        operation_name="shared folder addition"
-                    )
-                    
-                    if return_value != 0:
-                        log.error(f"Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
-                        return return_value
-                    
-                    # For Windows with custom mountpoint, only add the shared folder here
-                    # Mounting will be done after VM startup using mount_shared_folder()
-                    log.info(f"Shared folder '{name}' added to VM '{self.vm_name}' (Windows - mount after startup).")
-                    return return_value
-                        
-                except subprocess.CalledProcessError as e:
-                    log.error(f"VBoxManage error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
-                    return e.returncode
-                except OSError as e:
-                    log.error(f"OS error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
-                    return 1
-            else:
-                # For Linux: Use VirtualBox shared folder mechanism without automount
-                # We'll manually mount later for better control over permissions and mount points
-                args = [
-                    "sharedfolder", "add", self.vm_name,
-                    "--name", name,
-                    "--hostpath", host_path
-                ]
-                if readonly:
-                    args.append("--readonly")
+                if return_value == 0:
+                    log.info(f"Shared folder '{name}' added to VM '{self.vm_name}'.")
+                else:
+                    log.error(f"Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
                 
-                try:
-                    log.info(f"Adding shared folder '{name}' (host: {host_path}) to VM '{self.vm_name}'.")
-                    return_value, _, _ = await self._execute_streaming_command_async(
-                        args,
-                        log_file=log_file,
-                        stop_event=stop_event,
-                        silent=silent,
-                        ctx_manager=ctx_manager,
-                        operation_name="shared folder addition"
-                    )
-                    
-                    if return_value == 0:
-                        log.info(f"Shared folder '{name}' added to VM '{self.vm_name}'.")
-                    else:
-                        log.error(f"Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
-                    
-                    return return_value
-                except subprocess.CalledProcessError as e:
-                    log.error(f"VBoxManage error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
-                    return e.returncode
-                except OSError as e:
-                    log.error(f"OS error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
-                    return 1
+                return return_value
+            except subprocess.CalledProcessError as e:
+                log.error(f"VBoxManage error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
+                return e.returncode
+            except OSError as e:
+                log.error(f"OS error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
+                return 1
         
         return await self.manager.run_async(_add_shared_folder_async)
 
     def _build_mount_commands(self, name: str, mountpoint: Path) -> list:
         """
         Build mounting commands for a shared folder.
-        Returns a list of command dictionaries with 'command' and 'description' keys.
+        Returns a list of command dictionaries with 'command', 'description', and 'ignore_errors' keys.
         """
         commands = []
         
@@ -1178,12 +1230,20 @@ class VirtualBoxVM:
             
             # Check if it's a drive letter (like Z:, X:, Y:, etc.)
             if len(mountpoint_str) == 2 and mountpoint_str[1] == ':' and mountpoint_str[0].isalpha():
-                # Mount to drive letter using net use command
+                # Check if drive is already in use and disconnect it first
                 drive_letter = mountpoint_str.upper()
+                commands.append({
+                    'command': f'net use {drive_letter} /delete /y 2>$null',
+                    'description': f"Disconnect existing drive {drive_letter} if present",
+                    'ignore_errors': True
+                })
+                
+                # Mount to drive letter using net use command
                 mount_cmd = f'net use {drive_letter} "{unc_path}" /persistent:yes'
                 commands.append({
                     'command': mount_cmd,
-                    'description': f"Mount shared folder {name} to drive {drive_letter}"
+                    'description': f"Mount shared folder {name} to drive {drive_letter}",
+                    'ignore_errors': False
                 })
             else:
                 # Mount to directory path using symbolic link
@@ -1193,20 +1253,23 @@ class VirtualBoxVM:
                 # Create parent directory
                 commands.append({
                     'command': f'New-Item -ItemType Directory -Path "{parent_dir}" -Force -ErrorAction SilentlyContinue',
-                    'description': f"Create parent directory for {name}"
+                    'description': f"Create parent directory for {name}",
+                    'ignore_errors': True
                 })
                 
                 # Remove existing link
                 commands.append({
                     'command': f'if (Test-Path "{win_mountpoint}") {{ Remove-Item "{win_mountpoint}" -Force -Recurse -ErrorAction SilentlyContinue }}',
-                    'description': f"Remove existing link for {name}"
+                    'description': f"Remove existing link for {name}",
+                    'ignore_errors': True
                 })
                 
                 # Create symbolic link
                 mount_cmd = f'mklink /D "{win_mountpoint}" "{unc_path}"'
                 commands.append({
                     'command': f"cmd /c '{mount_cmd}'",
-                    'description': f"Create symlink for {name}"
+                    'description': f"Create symlink for {name}",
+                    'ignore_errors': False
                 })
         else:
             # Linux mounting with proper permissions for adare user
@@ -1215,19 +1278,29 @@ class VirtualBoxVM:
             # Create mount point directory
             commands.append({
                 'command': f'sudo mkdir -p {unix_mountpoint}',
-                'description': f"Create mount point for {name}"
+                'description': f"Create mount point for {name}",
+                'ignore_errors': True
+            })
+            
+            # Check if already mounted and unmount if necessary
+            commands.append({
+                'command': f'sudo umount {unix_mountpoint} 2>/dev/null || true',
+                'description': f"Unmount existing mount at {unix_mountpoint} if present",
+                'ignore_errors': True
             })
             
             # Mount with proper uid/gid for adare user (1000:1000)
             commands.append({
                 'command': f'sudo mount -t vboxsf -o uid=1000,gid=1000,dmode=775,fmode=664 {name} {unix_mountpoint}',
-                'description': f"Mount shared folder {name} with adare user permissions"
+                'description': f"Mount shared folder {name} with adare user permissions",
+                'ignore_errors': False
             })
             
             # Ensure adare user can access the mount point
             commands.append({
                 'command': f'sudo chown -R adare:adare {unix_mountpoint}',
-                'description': f"Set ownership of {name} to adare user"
+                'description': f"Set ownership of {name} to adare user",
+                'ignore_errors': True
             })
         
         return commands
@@ -1473,12 +1546,12 @@ class VirtualBoxVM:
         
         return await self.manager.run_async(_remove_shared_folder_async)
 
-    async def list_shared_folders(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+    async def list_shared_folders(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False) -> Dict[str, SharedFolderConfig]:
         """
         List all shared folders configured for the VM.
         
         Returns:
-            dict: Dictionary with shared folder names as keys and host paths as values
+            Dict[str, SharedFolderConfig]: Dictionary with shared folder names as keys and SharedFolderConfig objects as values
         """
         async def _list_shared_folders_async():
             try:
@@ -1497,23 +1570,40 @@ class VirtualBoxVM:
                     return {}
                 
                 shared_folders = {}
+                name_to_index = {}
+                
+                # First pass: collect names and their indices
                 for line in stdout_lines:
                     # SharedFolderNameMachineMapping1="adare"
-                    # SharedFolderPathMachineMapping1="/home/user/adare"
                     if line.startswith('SharedFolderNameMachineMapping'):
-                        # Extract the index and name
                         parts = line.split('=', 1)
                         if len(parts) == 2:
                             name = parts[1].strip('"')
                             index = parts[0].replace('SharedFolderNameMachineMapping', '')
-                            
-                            # Find corresponding path
-                            path_key = f'SharedFolderPathMachineMapping{index}='
-                            for path_line in stdout_lines:
-                                if path_line.startswith(path_key):
-                                    path = path_line.split('=', 1)[1].strip('"')
-                                    shared_folders[name] = path
-                                    break
+                            name_to_index[name] = index
+                
+                # Second pass: collect paths and readonly flags
+                for name, index in name_to_index.items():
+                    path = None
+                    readonly = False
+                    
+                    # Find corresponding path
+                    path_key = f'SharedFolderPathMachineMapping{index}='
+                    readonly_key = f'SharedFolderReadOnlyMachineMapping{index}='
+                    
+                    for line in stdout_lines:
+                        if line.startswith(path_key):
+                            path = line.split('=', 1)[1].strip('"')
+                        elif line.startswith(readonly_key):
+                            readonly_value = line.split('=', 1)[1].strip('"').lower()
+                            readonly = readonly_value in ('on', 'true', '1', 'yes')
+                    
+                    if path:
+                        shared_folders[name] = SharedFolderConfig(
+                            name=name,
+                            host_path=path,
+                            readonly=readonly
+                        )
                 
                 return shared_folders
                 
@@ -1536,9 +1626,9 @@ class VirtualBoxVM:
                 current_folders = await self.list_shared_folders(ctx_manager, stop_event, log_file, silent)
                 
                 # Remove folders that shouldn't be there
-                for name, current_path in current_folders.items():
-                    if name not in expected_folders or expected_folders[name] != current_path:
-                        log.info(f"Removing stale shared folder '{name}' (path: {current_path})")
+                for name, current_config in current_folders.items():
+                    if name not in expected_folders or expected_folders[name] != current_config.host_path:
+                        log.info(f"Removing stale shared folder '{name}' (path: {current_config.host_path})")
                         await self.remove_shared_folder(name, ctx_manager=ctx_manager, stop_event=stop_event, log_file=log_file, silent=silent)
                 
                 return True
@@ -1877,6 +1967,50 @@ class VirtualBoxVM:
     #             return None
     #     return self.manager.run(_open_guest_session)
 
+    async def list_port_forwarding_rules(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False) -> Dict[str, PortForwardingRule]:
+        """
+        List all port forwarding rules configured for the VM.
+        
+        Returns:
+            Dict[str, PortForwardingRule]: Dictionary with rule names as keys and PortForwardingRule objects as values
+        """
+        async def _list_port_forwarding_async():
+            try:
+                args = ["showvminfo", self.vm_name, "--machinereadable"]
+                return_value, stdout_lines, _ = await self._execute_streaming_command_async(
+                    args,
+                    log_file=log_file,
+                    stop_event=stop_event,
+                    silent=silent,
+                    ctx_manager=ctx_manager,
+                    operation_name="list port forwarding rules"
+                )
+                
+                if return_value != 0:
+                    log.error(f"Failed to get VM info for '{self.vm_name}': return code {return_value}")
+                    return {}
+                
+                port_rules = {}
+                for line in stdout_lines:
+                    # Forwarding(0)="adarevm,tcp,,8080,,8080"
+                    if line.startswith('Forwarding('):
+                        parts = line.split('=', 1)
+                        if len(parts) == 2:
+                            rule_data = parts[1].strip('"')
+                            try:
+                                rule = PortForwardingRule.from_vbox_format(rule_data)
+                                port_rules[rule.name] = rule
+                            except ValueError as e:
+                                log.warning(f"Failed to parse port forwarding rule '{rule_data}': {e}")
+                
+                return port_rules
+                
+            except Exception as e:
+                log.error(f"Error listing port forwarding rules for VM '{self.vm_name}': {e}")
+                return {}
+        
+        return await self.manager.run_async(_list_port_forwarding_async)
+
     async def add_port_forwarding(
         self,
         name: str,
@@ -1892,6 +2026,7 @@ class VirtualBoxVM:
     ):
         """
         Add a port forwarding rule to the VM's NAT adapter.
+        Checks if an identical rule already exists to prevent conflicts.
         
         Args:
             name: Name of the port forwarding rule
@@ -1906,9 +2041,47 @@ class VirtualBoxVM:
             silent: Whether to suppress logging
         """
         async def _add_port_forward_async():
+            # Create rule object for comparison
+            new_rule = PortForwardingRule(
+                name=name,
+                protocol=protocol,
+                host_ip=host_ip,
+                host_port=host_port,
+                guest_ip=guest_ip,
+                guest_port=guest_port
+            )
+            
+            # First check if identical rule already exists
+            existing_rules = await self.list_port_forwarding_rules(ctx_manager, stop_event, log_file, silent)
+            
+            if name in existing_rules:
+                existing_rule = existing_rules[name]
+                # Check if the existing rule is identical
+                if new_rule.matches(existing_rule):
+                    if not silent:
+                        log.info(f"Port forward '{name}' already exists with identical configuration - skipping")
+                    return 0
+                else:
+                    log.warning(f"Port forward '{name}' exists but with different configuration - will attempt to remove and re-add")
+                    log.debug(f"Existing: {existing_rule}, New: {new_rule}")
+                    # Remove existing rule first
+                    remove_args = ["modifyvm", self.vm_name, "--natpf1", "delete", name]
+                    try:
+                        await self._execute_streaming_command_async(
+                            remove_args,
+                            log_file=log_file,
+                            stop_event=stop_event,
+                            silent=silent,
+                            ctx_manager=ctx_manager,
+                            operation_name="port forward removal"
+                        )
+                    except Exception as e:
+                        log.warning(f"Failed to remove existing port forward '{name}': {e}")
+            
+            # Add the port forwarding rule
             args = [
                 "modifyvm", self.vm_name,
-                "--natpf1", f"{name},{protocol},{host_ip},{host_port},{guest_ip},{guest_port}"
+                "--natpf1", new_rule.to_vbox_format()
             ]
             
             try:

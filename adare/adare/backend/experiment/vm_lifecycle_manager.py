@@ -78,13 +78,12 @@ class VMLifecycleManager:
                 raise LoggedException(log, f"VM '{context.vm_name}' was not properly prepared - missing from VirtualBox")
             log.info(f"Using prepared VM '{context.vm_name}' with snapshots (UUID: {vm_record.vbox_uuid})")
 
-        # Setup shared folders
+        # Setup shared folders - simple cleanup and add
         if not context.stop_event.is_set():
             # First clean up any existing shared folders to avoid conflicts
-            expected_folders = {name: str(paths['host']) for name, paths in context.config.shared_directories.items()}
-            await context.vm.clean_shared_folders(expected_folders, stop_event=context.user_interrupt_event)
+            await context.vm.clean_shared_folders({}, stop_event=context.user_interrupt_event)
             
-            # Now add the shared folders
+            # Now add the new shared folders
             for name, paths in context.config.shared_directories.items():
                 await context.vm.add_shared_folder(name, host_path=paths['host'], stop_event=context.user_interrupt_event)
 

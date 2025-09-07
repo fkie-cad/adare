@@ -311,7 +311,7 @@ class ExperimentFlowConsole:
                                 success, was_interrupted, total_tests, test_summary)
         
         # ULID section
-        summary_parts.extend(["", f"{indent}🆔 Run ID: [dim]{ulid}[/dim]"])
+        summary_parts.extend([f"{indent}🆔 Run ID: [dim]{ulid}[/dim]"])
         
         # Footer
         summary_parts.extend(["", separator])
