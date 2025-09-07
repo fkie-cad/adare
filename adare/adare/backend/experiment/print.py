@@ -126,6 +126,7 @@ class ExperimentFlowConsole:
                 return ""
             message_object = self.messages[identifier]
             message = message_object['message']
+            
             icon = StatusEnum.get_icon(message_object['status'], color=True)
             message = f'{icon} {message}'
 
@@ -211,6 +212,124 @@ class ExperimentFlowConsole:
                 'result_status': None,
                 'duration': None,
             }
+
+    def log_experiment_summary(self, ulid: str, success: bool, total_actions: int = 0, successful_actions: int = 0, failed_actions: int = 0, total_tests: int = 0, successful_tests: int = 0, failed_tests: int = 0, duration: float = None, level: int = 0, was_interrupted: bool = False):
+        """Log a comprehensive, visually appealing experiment summary."""
+        with self._lock:
+            overall_status = self._determine_overall_status(success, was_interrupted)
+            action_summary = self._format_action_summary(successful_actions, total_actions, failed_actions)
+            test_summary = self._format_test_summary(successful_tests, total_tests, failed_tests)
+            duration_text = self._format_duration(duration)
+            
+            summary_parts = self._build_summary_parts(
+                success, was_interrupted, duration_text, action_summary, 
+                test_summary, total_actions, total_tests, ulid
+            )
+            
+            complete_message = "\n".join(summary_parts)
+            
+            # Replace the experiment timer with the summary for final display
+            if 'EXPERIMENT_TIMER' in self.messages:
+                del self.messages['EXPERIMENT_TIMER']
+            
+            self.messages['EXPERIMENT_SUMMARY'] = {
+                'message': complete_message,
+                'spinner': None,
+                'spinner_style': None,
+                'level': level,
+                'status': None,
+                'result_status': None,
+                'duration': None,
+            }
+
+    def _determine_overall_status(self, success: bool, was_interrupted: bool) -> int:
+        """Determine the overall experiment status."""
+        if success:
+            return StatusEnum.SUCCESS
+        elif was_interrupted:
+            return StatusEnum.INTERRUPTED
+        else:
+            return StatusEnum.FAILED
+
+    def _format_action_summary(self, successful: int, total: int, failed: int) -> str:
+        """Format the action summary statistics."""
+        summary = f"Actions: [bold cyan]{successful}[/bold cyan]/[dim]{total}[/dim] passed"
+        if failed > 0:
+            summary += f", [bold red]{failed}[/bold red] failed"
+        return summary
+
+    def _format_test_summary(self, successful: int, total: int, failed: int) -> str:
+        """Format the test summary statistics."""
+        if total == 0:
+            return ""
+        
+        summary = f"Tests: [bold cyan]{successful}[/bold cyan]/[dim]{total}[/dim] passed"
+        if failed > 0:
+            summary += f", [bold red]{failed}[/bold red] failed"
+        return summary
+
+    def _format_duration(self, duration: float) -> str:
+        """Format experiment duration."""
+        if not duration:
+            return ""
+        
+        if duration >= 60:
+            minutes = int(duration // 60)
+            remaining_seconds = duration % 60
+            return f"[bold cyan]{minutes}m {remaining_seconds:.1f}s[/bold cyan]"
+        else:
+            return f"[bold cyan]{duration:.1f}s[/bold cyan]"
+
+    def _get_status_header(self, success: bool, was_interrupted: bool) -> str:
+        """Get the appropriate status header with icon."""
+        if success:
+            return f"[bold green]EXPERIMENT COMPLETED SUCCESSFULLY[/bold green] ✅"
+        elif was_interrupted:
+            return f"[bold yellow]EXPERIMENT INTERRUPTED[/bold yellow] ⚡"
+        else:
+            return f"[bold red]EXPERIMENT FAILED[/bold red] ❌"
+
+    def _build_summary_parts(self, success: bool, was_interrupted: bool, duration_text: str, 
+                           action_summary: str, test_summary: str, total_actions: int, 
+                           total_tests: int, ulid: str) -> list[str]:
+        """Build the complete summary message parts."""
+        summary_parts = []
+        indent = "  "  # 2 spaces for inner message indentation
+        
+        line_width = self.console.size.width
+        separator = "[dim]" + "─" * line_width + "[/dim]"
+        
+        # Header section
+        summary_parts.extend(["", separator, self._get_status_header(success, was_interrupted)])
+        
+        # Duration line
+        if duration_text:
+            summary_parts.append(f"{indent}⏱️  Duration: {duration_text}")
+        
+        # Results section
+        self._add_results_section(summary_parts, indent, total_actions, action_summary, 
+                                success, was_interrupted, total_tests, test_summary)
+        
+        # ULID section
+        summary_parts.extend(["", f"{indent}🆔 Run ID: [dim]{ulid}[/dim]"])
+        
+        # Footer
+        summary_parts.extend(["", separator])
+        
+        return summary_parts
+
+    def _add_results_section(self, summary_parts: list[str], indent: str, total_actions: int, 
+                           action_summary: str, success: bool, was_interrupted: bool, 
+                           total_tests: int, test_summary: str):
+        """Add the results section to summary parts."""
+        if total_actions > 0:
+            summary_parts.append(f"{indent}📊 {action_summary}")
+        elif not success:
+            message = "No actions executed (experiment was interrupted)" if was_interrupted else "No actions executed (experiment failed during setup)"
+            summary_parts.append(f"{indent}📊 {message}")
+        
+        if total_tests > 0:
+            summary_parts.append(f"{indent}🧪 {test_summary}")
 
     def log_warning(self, identifier: str, message: str, level: int = 0, duration: float = None):
         with self._lock:
@@ -333,12 +452,10 @@ class ExperimentFlowConsole:
 
     def start_experiment_timer(self, experiment_name: str = None):
         """Start the experiment timer header row that shows live total time."""
-        experiment_part = f" {experiment_name}" if experiment_name else ""
-        
         with self._lock:
             self.experiment_start_time = datetime.now(timezone.utc)
             self.messages['EXPERIMENT_TIMER'] = {
-                'message': f"Experiment{experiment_part} running",
+                'message': "",  # Empty message - duration will be shown via start_time
                 'spinner': None,
                 'spinner_style': None,
                 'level': 0,

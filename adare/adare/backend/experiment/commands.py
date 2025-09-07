@@ -672,6 +672,9 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         log.info(f"Starting experiment execution for {context.config.experiment_name}")
         result = await controller.execute_experiment(context.experiment_directory.path)
         
+        # Store execution result in context for final message generation
+        context.execution_result = result
+        
         if result.success:
             log.info(f"Experiment completed successfully: {result.successful_actions}/{result.total_actions} actions succeeded")
         else:
@@ -917,9 +920,54 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             stop_stage_coordinator()
             log.info("Stage event coordinator stopped")
             
-            # Log ULID before stopping console
+            # Log enhanced experiment summary before stopping console
             if not test:
-                flow_console.log_ulid(experiment_run_context.experiment_run_ulid)
+                # Get execution results and calculate overall statistics
+                execution_result = getattr(experiment_run_context, 'execution_result', None)
+                
+                if execution_result:
+                    # Calculate total duration from context timestamps
+                    total_duration = None
+                    if hasattr(experiment_run_context, 'timestamp_start'):
+                        from datetime import datetime, timezone
+                        total_duration = (datetime.now(timezone.utc) - experiment_run_context.timestamp_start).total_seconds()
+                    
+                    # Log comprehensive experiment summary
+                    flow_console.log_experiment_summary(
+                        ulid=experiment_run_context.experiment_run_ulid,
+                        success=execution_result.success,
+                        total_actions=execution_result.total_actions,
+                        successful_actions=execution_result.successful_actions,
+                        failed_actions=execution_result.failed_actions,
+                        total_tests=execution_result.total_tests,
+                        successful_tests=execution_result.successful_tests,
+                        failed_tests=execution_result.failed_tests,
+                        duration=total_duration
+                    )
+                else:
+                    # Enhanced fallback - show what we can determine from the context
+                    # Calculate total duration from context timestamps
+                    total_duration = None
+                    if hasattr(experiment_run_context, 'timestamp_start'):
+                        from datetime import datetime, timezone
+                        total_duration = (datetime.now(timezone.utc) - experiment_run_context.timestamp_start).total_seconds()
+                    
+                    # Check if this was an interruption vs failure
+                    was_interrupted = user_interrupt_event.is_set()
+                    
+                    # Show a summary even without execution result
+                    flow_console.log_experiment_summary(
+                        ulid=experiment_run_context.experiment_run_ulid,
+                        success=False,  # If we're here, something failed or was interrupted
+                        total_actions=0,
+                        successful_actions=0,
+                        failed_actions=0,
+                        total_tests=0,
+                        successful_tests=0,
+                        failed_tests=0,
+                        duration=total_duration,
+                        was_interrupted=was_interrupted
+                    )
             else:
                 step_remove_fake_experiment_run(experiment_run_context)
             await asyncio.sleep(1)

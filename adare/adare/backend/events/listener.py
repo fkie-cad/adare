@@ -173,7 +173,7 @@ def _handle_action_event(event, console, ulid):
                 start_time = datetime.now(timezone.utc)
             
             console.log_spinner(identifier=action_id, message=message, level=level, 
-                              spinner='dots', spinner_style='cyan', start_time=start_time)
+                              spinner='dots', spinner_style='bold blue', start_time=start_time)
             log.info(f"[EventListener CLI] Action started: {action_type.value} with ID {action_id}")
             
         elif is_complete_event:
