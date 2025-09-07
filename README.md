@@ -9,7 +9,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] built windows vm new from fresh installation -> done; test it
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
 - [ ] built furhter testfunction; and filters/variables
-- [ ] clear distinction between failed test and exception/error -> find a way to propagate to the client!
+- [x] clear distinction between failed test and exception/error -> find a way to propagate to the client!
 - [ ] test if we can still run adare if we delete cloned repo
 
 #### Features
@@ -28,7 +28,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] screenshot not via websockets but via shared files (to make faster?)
 - [ ] add easier way to updated/test new testfunctions
 - [ ] improve code quality in general
-  - [ ] split virtualbox api into multiple files
+  - [x] split virtualbox api into multiple files
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
 - [x] Final short experiment finished message with overall result (exception/error vs none) and test result (if all tests succeded)and ULID
 

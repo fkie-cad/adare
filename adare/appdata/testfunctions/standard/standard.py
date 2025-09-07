@@ -34,17 +34,13 @@ class FileExists(BasicTest):
     variable_metadata: Optional[dict] = None
 
     def test(self):
-        if Path(self.parameter.dst).is_file():
-            result = TestResult(
-                status=StatusEnum.SUCCESS,
-            )
-
-        else:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'file with path {self.parameter.dst} does not exist']
-            )
-        return result
+        try:
+            if Path(self.parameter.dst).is_file():
+                return TestResult.success()
+            else:
+                return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
+        except (OSError, PermissionError) as e:
+            return TestResult.execution_error(e, f"Cannot check file existence for {self.parameter.dst}")
 
 
 @attrs.define
@@ -63,16 +59,13 @@ class FileDoesNotExist(BasicTest):
     variable_metadata: Optional[dict] = None
 
     def test(self):
-        if not Path(self.parameter.dst).is_file():
-            result = TestResult(
-                status=StatusEnum.SUCCESS,
-            )
-        else:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'file with path {self.parameter.dst} does exist']
-            )
-        return result
+        try:
+            if not Path(self.parameter.dst).is_file():
+                return TestResult.success()
+            else:
+                return TestResult.failed([f'file with path {self.parameter.dst} does exist'])
+        except (OSError, PermissionError) as e:
+            return TestResult.execution_error(e, f"Cannot check file existence for {self.parameter.dst}")
 
 
 
@@ -92,16 +85,13 @@ class DirExists(BasicTest):
     variable_metadata: Optional[dict] = None
 
     def test(self):
-        if Path(self.parameter.dst).is_dir():
-            result = TestResult(
-                status=StatusEnum.SUCCESS,
-            )
-        else:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'directory with path {self.parameter.dst} does not exist']
-            )
-        return result
+        try:
+            if Path(self.parameter.dst).is_dir():
+                return TestResult.success()
+            else:
+                return TestResult.failed([f'directory with path {self.parameter.dst} does not exist'])
+        except (OSError, PermissionError) as e:
+            return TestResult.execution_error(e, f"Cannot check directory existence for {self.parameter.dst}")
 
 
 @attrs.define
@@ -120,16 +110,13 @@ class DirDoesNotExist(BasicTest):
     variable_metadata: Optional[dict] = None
 
     def test(self):
-        if not Path(self.parameter.dst).is_dir():
-            result = TestResult(
-                status=StatusEnum.SUCCESS,
-            )
-        else:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'directory with path {self.parameter.dst} does exist']
-            )
-        return result
+        try:
+            if not Path(self.parameter.dst).is_dir():
+                return TestResult.success()
+            else:
+                return TestResult.failed([f'directory with path {self.parameter.dst} does exist'])
+        except (OSError, PermissionError) as e:
+            return TestResult.execution_error(e, f"Cannot check directory existence for {self.parameter.dst}")
 
 
 @attrs.define
@@ -149,36 +136,29 @@ class DirContent(BasicTest):
     variable_metadata: Optional[dict] = None
 
     def test(self):
-        dst, status = self.resolve_globfilepath(self.parameter.dst)
-        if not dst:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'directory with path {self.parameter.dst} can\'t be used, because no unambiguous directory could be identified (because {status})']
-            )
-            return result
-        log.debug(f'dst directory {dst} will be used for test {self.name}')
+        try:
+            dst, status = self.resolve_globfilepath(self.parameter.dst)
+            if not dst:
+                return TestResult.error([f'directory with path {self.parameter.dst} can\'t be used, because no unambiguous directory could be identified (because {status})'])
+            
+            log.debug(f'dst directory {dst} will be used for test {self.name}')
 
-        dir_content = [str(p) for p in Path(dst).iterdir()]
-        expected_missing_files = [
-            file for file in self.parameter.files if file not in dir_content
-        ]
-        additional_files = [
-            file for file in dir_content if file not in self.parameter.files
-        ]
-        if expected_missing_files:
-            details = [f'expected missing files: {expected_missing_files}']
-            if additional_files:
-                details.append(f'additional files: {additional_files}')
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=details
-            )
-            return result
+            dir_content = [str(p) for p in Path(dst).iterdir()]
+            expected_missing_files = [
+                file for file in self.parameter.files if file not in dir_content
+            ]
+            additional_files = [
+                file for file in dir_content if file not in self.parameter.files
+            ]
+            if expected_missing_files:
+                details = [f'expected missing files: {expected_missing_files}']
+                if additional_files:
+                    details.append(f'additional files: {additional_files}')
+                return TestResult.failed(details)
 
-        result = TestResult(
-            status=StatusEnum.SUCCESS
-        )
-        return result
+            return TestResult.success()
+        except (OSError, PermissionError) as e:
+            return TestResult.execution_error(e, f"Cannot read directory content for {self.parameter.dst}")
 
 
 @attrs.define
@@ -198,33 +178,34 @@ class FileContentMatchesRegex(BasicTest):
     variable_metadata: Optional[dict] = None
 
     def test(self):
-        dst, status = self.resolve_globfilepath(self.parameter.dst)
-        if not dst:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})']
-            )
-            return result
-        log.debug(f'dst file {dst} will be used for test {self.name}')
         try:
-            with open(dst, 'r') as f:
-                data = f.read()
-        except FileNotFoundError:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'file with path {self.parameter.dst} does not exist']
-            )
-            return result
-        if re.search(self.parameter.regex, data):
-            result = TestResult(
-                status=StatusEnum.SUCCESS
-            )
-        else:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=['file content does not match regex expression'],
-            )
-        return result
+            dst, status = self.resolve_globfilepath(self.parameter.dst)
+            if not dst:
+                return TestResult.error([f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+            
+            log.debug(f'dst file {dst} will be used for test {self.name}')
+            
+            try:
+                with open(dst, 'r') as f:
+                    data = f.read()
+            except FileNotFoundError:
+                return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
+            except (PermissionError, OSError) as e:
+                return TestResult.execution_error(e, f"Cannot read file {dst}")
+            
+            # Test regex compilation first
+            try:
+                pattern = re.compile(self.parameter.regex)
+            except re.error as e:
+                return TestResult.execution_error(e, f"Invalid regex pattern: {self.parameter.regex}")
+            
+            if pattern.search(data):
+                return TestResult.success()
+            else:
+                return TestResult.failed(['file content does not match regex expression'])
+                
+        except Exception as e:
+            return TestResult.execution_error(e, "Unexpected error in file content regex test")
 
 
 def _row_match(row, comparison_list):
@@ -257,42 +238,35 @@ class CsvContainsLineMatchingRegex(BasicTest):
     variable_metadata: Optional[dict] = None
 
     def test(self):
-        dst, status = self.resolve_globfilepath(self.parameter.dst)
-        if not dst:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified']
-            )
-            return result
-
-        log.debug(f'dst file {dst} will be used for test {self.name}')
-        comparison_list = []
-        for entry in self.parameter.entry:
-            if entry is str:
-                comparison_list.append(yml.YamlString(entry))
-            else:
-                comparison_list.append(entry)
-
         try:
-            with open(dst, 'r') as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    if _row_match(row, comparison_list):
-                        result = TestResult(
-                            status=StatusEnum.SUCCESS
-                        )
-                        return result
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'entry {self.parameter.entry} does not exist in file']
-            )
-            return result
-        except FileNotFoundError:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'file with path {self.parameter.dst} does not exist']
-            )
-            return result
+            dst, status = self.resolve_globfilepath(self.parameter.dst)
+            if not dst:
+                return TestResult.error([f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+
+            log.debug(f'dst file {dst} will be used for test {self.name}')
+            comparison_list = []
+            for entry in self.parameter.entry:
+                if entry is str:
+                    comparison_list.append(yml.YamlString(entry))
+                else:
+                    comparison_list.append(entry)
+
+            try:
+                with open(dst, 'r') as f:
+                    reader = csv.reader(f)
+                    for row in reader:
+                        if _row_match(row, comparison_list):
+                            return TestResult.success()
+                return TestResult.failed([f'entry {self.parameter.entry} does not exist in file'])
+            except FileNotFoundError:
+                return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
+            except (PermissionError, OSError) as e:
+                return TestResult.execution_error(e, f"Cannot read CSV file {dst}")
+            except csv.Error as e:
+                return TestResult.execution_error(e, f"CSV parsing error in file {dst}")
+                
+        except Exception as e:
+            return TestResult.execution_error(e, "Unexpected error in CSV line matching test")
 
 @attrs.define
 class FileContentEqualsParameter(Parameter):
@@ -310,55 +284,57 @@ class FileContentEquals(BasicTest):
     variable_metadata: Optional[dict] = None
 
     def test(self):
-        dst, status = self.resolve_globfilepath(self.parameter.dst)
-        if not dst:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})']
-            )
-            return result
-        log.debug(f'dst file {dst} will be used for test {self.name}')
         try:
-            with open(dst, 'r') as f:
-                data = f.read()
-        except FileNotFoundError:
-            result = TestResult(
-                status=StatusEnum.FAILED,
-                details=[f'file with path {self.parameter.dst} does not exist']
-            )
-            return result
+            dst, status = self.resolve_globfilepath(self.parameter.dst)
+            if not dst:
+                return TestResult.error([f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
             
-        # Check if we have placeholders that need special handling
-        expected_content = self.parameter.content
-        
-        if not self.has_placeholders(expected_content):
-            # No placeholders - direct comparison (content already fully resolved by client)
-            success = data.strip() == expected_content.strip()
-            message = "Direct content comparison"
-        else:
-            # Has placeholders - special handling needed
-            success, message = self._handle_placeholders_comparison(data.strip(), expected_content)
+            log.debug(f'dst file {dst} will be used for test {self.name}')
+            try:
+                with open(dst, 'r') as f:
+                    data = f.read()
+            except FileNotFoundError:
+                return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
+            except (PermissionError, OSError, UnicodeDecodeError) as e:
+                return TestResult.execution_error(e, f"Cannot read file {dst}")
+                
+            # Check if we have placeholders that need special handling
+            expected_content = self.parameter.content
             
-        if success:
-            return TestResult(status=StatusEnum.SUCCESS, details=[message])
-        else:
-            # Show diff for debugging
-            import difflib
-            expected_for_diff = expected_content
-            diff_lines = list(difflib.unified_diff(
-                expected_for_diff.splitlines(keepends=True),
-                data.splitlines(keepends=True),
-                fromfile='expected',
-                tofile='actual',
-                lineterm=''
-            ))
-            diff_output = ''.join(diff_lines) if diff_lines else 'Content differs but no line-by-line diff available'
-            
-            return TestResult(
-                status=StatusEnum.FAILED,
-                details=[
-                    message,
-                    f'Diff:\n{diff_output}'
-                ]
-            )
+            if not self.has_placeholders(expected_content):
+                # No placeholders - direct comparison (content already fully resolved by client)
+                success = data.strip() == expected_content.strip()
+                message = "Direct content comparison"
+            else:
+                # Has placeholders - special handling needed
+                try:
+                    success, message = self._handle_placeholders_comparison(data.strip(), expected_content)
+                except Exception as e:
+                    return TestResult.execution_error(e, "Error in placeholder comparison logic")
+                
+            if success:
+                return TestResult.success([message])
+            else:
+                # Show diff for debugging
+                try:
+                    import difflib
+                    expected_for_diff = expected_content
+                    diff_lines = list(difflib.unified_diff(
+                        expected_for_diff.splitlines(keepends=True),
+                        data.splitlines(keepends=True),
+                        fromfile='expected',
+                        tofile='actual',
+                        lineterm=''
+                    ))
+                    diff_output = ''.join(diff_lines) if diff_lines else 'Content differs but no line-by-line diff available'
+                    
+                    return TestResult.failed([
+                        message,
+                        f'Diff:\n{diff_output}'
+                    ])
+                except Exception as e:
+                    return TestResult.execution_error(e, "Error generating diff output")
+                    
+        except Exception as e:
+            return TestResult.execution_error(e, "Unexpected error in file content equals test")
     
