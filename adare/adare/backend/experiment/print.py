@@ -59,6 +59,10 @@ class ExperimentFlowConsole:
             while not self.stop_event.is_set():
                 with self._lock:
                     message_identifiers = list(self.messages.keys())
+                    # Ensure experiment timer appears first if it exists
+                    if 'EXPERIMENT_TIMER' in message_identifiers:
+                        message_identifiers.remove('EXPERIMENT_TIMER')
+                        message_identifiers.insert(0, 'EXPERIMENT_TIMER')
                 messages_as_str = '\n'.join([self._generate_message(identifier, spinner_position=tick_count) for identifier in message_identifiers])
                 live.update(messages_as_str)
                 live.refresh()  # Force manual refresh since auto_refresh=False
@@ -146,23 +150,36 @@ class ExperimentFlowConsole:
             
             if message_object.get('duration'):
                 # Final duration (when completed)
-                duration_text = f"({message_object['duration']:.2f}s)"
-            elif message_object.get('start_time') and message_object.get('spinner'):
-                # Live duration for active spinners with subsecond precision
-                current_time = datetime.now(timezone.utc)
-                elapsed = current_time - message_object['start_time']
-                elapsed_seconds = elapsed.total_seconds()
-                duration_text = f"({elapsed_seconds:.2f}s)"
+                if message_object.get('is_experiment_timer'):
+                    duration_text = self._format_experiment_timer_duration(
+                        message_object['duration'], message_object['status']
+                    )
+                else:
+                    duration_text = f"({message_object['duration']:.2f}s)"
+            elif message_object.get('start_time'):
+                # Live duration
+                elapsed_seconds = (datetime.now(timezone.utc) - message_object['start_time']).total_seconds()
+                if message_object.get('is_experiment_timer'):
+                    duration_text = self._format_experiment_timer_duration(
+                        elapsed_seconds, message_object['status']
+                    )
+                else:
+                    duration_text = f"({elapsed_seconds:.2f}s)"
             
             if duration_text:
                 terminal_width = self.console.size.width
-                # Use Rich's measure method to get actual display width including emojis
+                # Use Rich's measure method to get actual display width including markup
                 from rich.text import Text
-                text_obj = Text.from_markup(message)
-                current_message_width = self.console.measure(text_obj).maximum
-                available_width = terminal_width - len(duration_text)
-                if current_message_width < available_width:
-                    padding = available_width - current_message_width
+                
+                message_obj = Text.from_markup(message)
+                duration_obj = Text.from_markup(duration_text)
+                
+                message_width = self.console.measure(message_obj).maximum
+                duration_width = self.console.measure(duration_obj).maximum
+                
+                available_width = terminal_width - duration_width
+                if message_width < available_width:
+                    padding = available_width - message_width
                     message = f"{message}{' ' * padding}{duration_text}"
                 else:
                     # If message is too long, just append normally
@@ -293,6 +310,56 @@ class ExperimentFlowConsole:
     def exists(self, identifier: str):
         with self._lock:
             return identifier in self.messages
+
+    def _format_experiment_timer_duration(self, seconds: float, status: int) -> str:
+        """Format experiment timer duration with appropriate color and time units."""
+        # Choose color based on status
+        if status == StatusEnum.SUCCESS:
+            color = "green"
+        elif status == StatusEnum.FAILED:
+            color = "red"
+        else:
+            color = "cyan"
+        
+        # Format time with colored numbers, grey units
+        if seconds >= 60:
+            minutes = int(seconds // 60)
+            remaining_seconds = seconds % 60
+            time_str = f"([{color}]{minutes}[/{color}]m [{color}]{remaining_seconds:.2f}[/{color}]s"
+        else:
+            time_str = f"[{color}]{seconds:.2f}[/{color}]s"
+        
+        return f"({time_str})"
+
+    def start_experiment_timer(self, experiment_name: str = None):
+        """Start the experiment timer header row that shows live total time."""
+        experiment_part = f" {experiment_name}" if experiment_name else ""
+        
+        with self._lock:
+            self.experiment_start_time = datetime.now(timezone.utc)
+            self.messages['EXPERIMENT_TIMER'] = {
+                'message': f"Experiment{experiment_part} running",
+                'spinner': None,
+                'spinner_style': None,
+                'level': 0,
+                'status': StatusEnum.NONE,
+                'result_status': None,
+                'duration': None,
+                'start_time': self.experiment_start_time,
+                'is_experiment_timer': True,  # Flag for special handling
+            }
+
+    def finish_experiment_timer(self, success: bool = True):
+        """Finalize the experiment timer with completion status."""
+        with self._lock:
+            if 'EXPERIMENT_TIMER' in self.messages:
+                timer_msg = self.messages['EXPERIMENT_TIMER']
+                if timer_msg.get('start_time'):
+                    # Calculate final duration
+                    end_time = datetime.now(timezone.utc)
+                    timer_msg['duration'] = (end_time - timer_msg['start_time']).total_seconds()
+                timer_msg['status'] = StatusEnum.SUCCESS if success else StatusEnum.FAILED
+                timer_msg['start_time'] = None  # Stop live updates
 
     def print_debug_flow_messages(self):
         """Print all flow messages for debugging purposes."""

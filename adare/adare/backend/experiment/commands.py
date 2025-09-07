@@ -789,6 +789,10 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     # print(experiment_run_context.experiment_run_ulid)
     flow_console = __create_and_start_flow_console(experiment_run_context.experiment_run_ulid, disable_printing, user_interrupt_event)
     
+    # Start experiment timer header row
+    if not disable_printing:
+        flow_console.start_experiment_timer(experiment_name)
+    
     # Add small delay to let Rich console settle before starting stages
     await asyncio.sleep(0.1)
     log.debug("Flow console started, proceeding with event listeners")
@@ -847,6 +851,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 experiment_run_context.experiment_run_ulid,
                 StatusEnum.FINISHED,
             )
+            # Update experiment timer to show completion
+            if not disable_printing:
+                flow_console.finish_experiment_timer(success=True)
 
     except LoggedException as e:
         # Handle structured exceptions - let them bubble up to exec_with_error_printing for consistent UX
@@ -858,6 +865,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             experiment_run_context.experiment_run_ulid,
             status,
         )
+        # Update experiment timer to show failure
+        if not disable_printing:
+            flow_console.finish_experiment_timer(success=False)
         # Re-raise to be handled by exec_with_error_printing
         raise
     except Exception as e:
@@ -868,6 +878,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             experiment_run_context.experiment_run_ulid,
             StatusEnum.INTERRUPTED,
         )
+        # Update experiment timer to show failure
+        if not disable_printing:
+            flow_console.finish_experiment_timer(success=False)
         # Re-raise unexpected exceptions too so they get proper exit codes
         raise
     finally:
@@ -883,6 +896,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 experiment_run_context.experiment_run_ulid,
                 StatusEnum.INTERRUPTED,
             )
+            # Update experiment timer to show interruption
+            if not disable_printing:
+                flow_console.finish_experiment_timer(success=False)
         
         try:
             log.info("Starting cleanup and shutdown...")

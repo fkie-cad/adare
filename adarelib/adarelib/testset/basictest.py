@@ -1,6 +1,6 @@
 # external imports
 import glob
-from typing import Optional, ClassVar
+from typing import Optional, ClassVar, Dict, Any, List, Tuple
 import attrs
 import re
 
@@ -87,7 +87,7 @@ class BasicTest:
     name: str
     parameter: Parameter
     description: Optional[str]
-    variables: Optional[VariableRegistry]
+    variable_metadata: Optional[Dict[str, Any]]
 
     def resolve_globfilepath(self, globfilepath: str) -> tuple[str, str]:
         """
@@ -105,18 +105,142 @@ class BasicTest:
             return found_files[0], ""
 
 
-    def resolve_variable_in_string(self, string: str, regex=False):
-        """
-        replace a variable in a string (e.g. test{VARIABLE} with VARIABLE=value -> testvalue)
-        :param string: string to replace variables in
-        :param regex: boolean if string is a regex expression
-        :return:
-        """
-        if not self.variables:
-            return string
-        return self.variables.resolve_in_string(string, for_regex=regex)
-
+    # === PLACEHOLDER HELPER METHODS ===
     
+    def has_placeholders(self, text: str) -> bool:
+        """Check if text has any {{ }} placeholders."""
+        return '{{' in text and '}}' in text
+    
+    def get_placeholders(self, text: str) -> List[str]:
+        """Get all placeholder names from text."""
+        matches = re.findall(r'\{\{\s*([^}]+)\s*\}\}', text)
+        return [match.strip() for match in matches]
+    
+    def get_placeholder_metadata(self, placeholder_name: str) -> Dict[str, Any]:
+        """Get metadata for specific placeholder."""
+        if not self.variable_metadata:
+            return {}
+        return self.variable_metadata.get(placeholder_name, {})
+    
+    def has_tolerance_metadata(self, placeholder_name: str) -> bool:
+        """Check if placeholder has tolerance metadata."""
+        metadata = self.get_placeholder_metadata(placeholder_name)
+        return 'tolerance' in metadata and bool(metadata['tolerance'])
+    
+    def compare_with_tolerance(self, placeholder_name: str, actual_value: str) -> Tuple[bool, str]:
+        """Compare actual value with placeholder using tolerance."""
+        metadata = self.get_placeholder_metadata(placeholder_name)
+        
+        if not self.has_tolerance_metadata(placeholder_name):
+            # No tolerance - do exact comparison  
+            expected = metadata.get('resolved_value', '')
+            success = actual_value == expected
+            return success, f"Exact comparison: {'match' if success else 'no match'}"
+        
+        # Has tolerance - do timestamp comparison
+        try:
+            import dateutil.parser
+            import datetime
+            
+            # Parse actual timestamp
+            actual_dt = dateutil.parser.parse(actual_value)
+            
+            # Parse original timestamp
+            raw_value = metadata.get('raw_value', '')
+            original_dt = dateutil.parser.parse(raw_value)
+            
+            # Get tolerance range
+            tolerance = metadata.get('tolerance', [0, 0])
+            upper_tolerance = tolerance[0] if len(tolerance) > 0 else 0
+            lower_tolerance = tolerance[1] if len(tolerance) > 1 else -upper_tolerance
+            
+            # Calculate difference
+            diff_seconds = (actual_dt - original_dt).total_seconds()
+            
+            # Check if within tolerance
+            within_range = lower_tolerance <= diff_seconds <= upper_tolerance
+            
+            if within_range:
+                return True, f"Within tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)"
+            else:
+                return False, f"Outside tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)"
+                
+        except Exception as e:
+            # Fallback to string comparison
+            expected = metadata.get('resolved_value', '')
+            success = actual_value == expected
+            return success, f"Tolerance comparison failed ({e}), used string comparison"
+
+    def _handle_placeholders_comparison(self, actual_content: str, expected_template: str) -> Tuple[bool, str]:
+        """Handle comparison when placeholders are present using string splitting approach."""
+        placeholders = self.get_placeholders(expected_template)
+        
+        # Check if we got unconverted Jinja2 templates (client-side issue)
+        for placeholder in placeholders:
+            if '|' in placeholder:
+                return False, f"Received unconverted Jinja2 template '{{{{ {placeholder} }}}}'. This suggests client-side variable resolution failed. Expected placeholder format: '{{{{ VARIABLE_RESOLVED }}}}'."
+        
+        # Split template into text parts (before/between/after placeholders)
+        import re
+        text_parts = re.split(r'\{\{\s*[^}]+\s*\}\}', expected_template)
+        
+        # Extract values by finding delimiters step by step
+        current_pos = 0
+        extracted_values = []
+        
+        for i in range(len(placeholders)):
+            # Check that text before this placeholder matches
+            expected_prefix = text_parts[i]
+            if not actual_content[current_pos:].startswith(expected_prefix):
+                return False, f"Text before '{placeholders[i]}' doesn't match. Expected: '{expected_prefix}'"
+            
+            # Move past the matching prefix
+            current_pos += len(expected_prefix)
+            
+            # Find where this placeholder's value ends
+            # Check if there's a meaningful next delimiter (not empty and not the last)
+            if i + 1 < len(text_parts) and text_parts[i + 1]:
+                # Not the last placeholder and has non-empty delimiter - find next delimiter
+                next_delimiter = text_parts[i + 1]
+                delimiter_pos = actual_content.find(next_delimiter, current_pos)
+                if delimiter_pos == -1:
+                    return False, f"Couldn't find delimiter '{next_delimiter}' after placeholder '{placeholders[i]}'"
+                
+                # Extract value between current position and delimiter
+                placeholder_value = actual_content[current_pos:delimiter_pos]
+                current_pos = delimiter_pos
+            elif i + 1 < len(text_parts) and not text_parts[i + 1] and i + 1 < len(placeholders):
+                # Empty delimiter between placeholders (not at end) - this is an error
+                return False, f"Empty delimiter after '{placeholders[i]}' - cannot determine where placeholder ends. Please add text between placeholders."
+            else:
+                # Last placeholder or placeholder at end with empty suffix - take everything to the end
+                final_suffix = text_parts[-1] if len(text_parts) > len(placeholders) and text_parts[-1] else ""
+                if final_suffix:
+                    # Find the final suffix to determine where placeholder ends
+                    suffix_pos = actual_content.rfind(final_suffix)
+                    if suffix_pos == -1 or suffix_pos < current_pos:
+                        return False, f"Couldn't find final text '{final_suffix}' after last placeholder '{placeholders[i]}'"
+                    placeholder_value = actual_content[current_pos:suffix_pos]
+                    current_pos = suffix_pos
+                else:
+                    # No final suffix - take everything to end
+                    placeholder_value = actual_content[current_pos:]
+                    current_pos = len(actual_content)
+            
+            extracted_values.append(placeholder_value)
+        
+        # Validate each extracted value using its metadata
+        validation_messages = []
+        for i, placeholder in enumerate(placeholders):
+            actual_value = extracted_values[i]
+            
+            success, msg = self.compare_with_tolerance(placeholder, actual_value)
+            validation_messages.append(f"{placeholder}: {msg}")
+            
+            if not success:
+                return False, f"Validation failed - {'; '.join(validation_messages)}"
+        
+        return True, f"All placeholders valid - {'; '.join(validation_messages)}"
 
     def test(self):
         """

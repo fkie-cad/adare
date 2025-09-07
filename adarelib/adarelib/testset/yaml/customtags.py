@@ -85,11 +85,22 @@ class YamlPath(YamlCustomTag):
 class YamlTimestamp(YamlCustomTag):
     yaml_tag = u'!timestamp'
 
-    def __init__(self, timestamp, timestamp_format_comparison=None, timestamp_format_in_entry=None, tolerance=1):
+    def __init__(self, timestamp, timestamp_format_comparison=None, timestamp_format_in_entry=None, tolerance=1, timezone=None, format=None):
         self.string = timestamp
         self.timestamp_format_comparison = timestamp_format_comparison
         self.timestamp_format_in_entry = timestamp_format_in_entry
         self.tolerance = tolerance
+        # New metadata fields
+        self.timezone = timezone
+        self.format = format
+        # Store all metadata in a dict for easy access
+        self.metadata = {}
+        if timezone:
+            self.metadata['timezone'] = timezone
+        if format:
+            self.metadata['format'] = format
+        if tolerance != 1:  # Only store non-default tolerance
+            self.metadata['tolerance'] = [tolerance, tolerance]
 
     def __repr__(self):
         return f'{self.yaml_tag} {self.string}'
@@ -123,7 +134,18 @@ class YamlTimestamp(YamlCustomTag):
 
     @classmethod
     def from_yaml(cls, loader: yaml.SafeLoader, node: yaml.nodes.MappingNode):
-        return YamlTimestamp(**loader.construct_mapping(node))
+        """Create YamlTimestamp from YAML mapping node, supporting new metadata fields."""
+        mapping = loader.construct_mapping(node)
+        
+        # Handle the case where the first argument might be positional (timestamp value)
+        if 'timestamp' not in mapping and len(mapping) > 0:
+            # If no 'timestamp' key, use the first key-value as the timestamp
+            first_key = next(iter(mapping.keys()))
+            if isinstance(first_key, str) and not first_key.startswith(('timezone', 'format', 'tolerance')):
+                mapping['timestamp'] = first_key
+                mapping.pop(first_key, None)
+        
+        return YamlTimestamp(**mapping)
 
     @classmethod
     def to_yaml(cls, dumper, data):
