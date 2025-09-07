@@ -37,8 +37,31 @@ class Event:
 
 @attrs.define
 class TestResult:
-    status: Literal[StatusEnum.SUCCESS, StatusEnum.FAILED]
+    status: Literal[StatusEnum.SUCCESS, StatusEnum.FAILED, StatusEnum.ERROR]
     details: list = attrs.field(default=attrs.Factory(list))
+    
+    @classmethod
+    def success(cls, details: list = None):
+        """Create a successful test result."""
+        return cls(status=StatusEnum.SUCCESS, details=details or [])
+    
+    @classmethod
+    def failed(cls, details: list = None):
+        """Create a failed test result (test ran but condition not met)."""
+        return cls(status=StatusEnum.FAILED, details=details or [])
+    
+    @classmethod
+    def error(cls, details: list = None):
+        """Create an error test result (test could not execute)."""
+        return cls(status=StatusEnum.ERROR, details=details or [])
+    
+    @classmethod
+    def execution_error(cls, exception: Exception, context: str = None):
+        """Create an error result from an exception."""
+        error_msg = f"{type(exception).__name__}: {str(exception)}"
+        if context:
+            error_msg = f"{context} - {error_msg}"
+        return cls(status=StatusEnum.ERROR, details=[error_msg])
 
 
 @attrs.define

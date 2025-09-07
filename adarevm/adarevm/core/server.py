@@ -373,38 +373,39 @@ class AdareVMServer:
             if resolved_test_data is None:
                 error_msg = "No test data provided - resolved_test_data is None"
                 log.error(error_msg)
-                return {
-                    "success": False,
-                    "message": error_msg
-                }
+                # This is a system error, not a test failure
+                from adarelib.event.event import TestResult
+                from adarelib.constants import StatusEnum
+                return TestResult.error([error_msg])
             
             # Check if testfunctions directory is available
             if not self.testfunctions_dir or not self.testfunctions_dir.exists():
                 error_msg = "No testfunctions directory available. Please upload testfunctions first."
                 log.error(error_msg)
-                return {
-                    "success": False,
-                    "message": error_msg
-                }
+                # This is a system error, not a test failure
+                from adarelib.event.event import TestResult
+                from adarelib.constants import StatusEnum
+                return TestResult.error([error_msg])
                 
             # Import test function class based on function name
             from adarelib.testset.testfunction import import_basictest_subclasses, get_testclass_from_testfunction
-            supported_tests = import_basictest_subclasses(self.testfunctions_dir)
+            from adarelib.event.event import TestResult
+            from adarelib.constants import StatusEnum
+            
+            try:
+                supported_tests = import_basictest_subclasses(self.testfunctions_dir)
+            except Exception as e:
+                log.error(f"Error importing test functions: {e}")
+                return TestResult.execution_error(e, "Failed to import testfunctions")
             
             function_name = resolved_test_data.get('function')
             if not function_name:
-                return {
-                    "success": False,
-                    "message": "No test function specified"
-                }
+                return TestResult.error(["No test function specified"])
             
             # Get test class using the proper helper function
             test_class = get_testclass_from_testfunction(function_name, supported_tests)
             if not test_class:
-                return {
-                    "success": False,
-                    "message": f"Test function '{function_name}' not found"
-                }
+                return TestResult.error([f"Test function '{function_name}' not found"])
             
             # Create test instance with required arguments
             test_name = resolved_test_data.get('name', 'unknown_test')
@@ -413,36 +414,46 @@ class AdareVMServer:
             # No complex timestamp processing - use resolved test data as-is
             processed_test_data = resolved_test_data
             
-            # Create proper parameter instance using the test class's parameter class
-            parameter_instance = None
-            if 'parameter' in processed_test_data:
-                # Get parameter class from the test class's type annotations
-                import typing
-                type_hints = typing.get_type_hints(test_class)
+            try:
+                # Create proper parameter instance using the test class's parameter class
+                parameter_instance = None
+                if 'parameter' in processed_test_data:
+                    # Get parameter class from the test class's type annotations
+                    import typing
+                    type_hints = typing.get_type_hints(test_class)
+                    
+                    if 'parameter' not in type_hints:
+                        return TestResult.error([f"No parameter type annotation found for {test_class.__name__}"])
+                    
+                    parameter_class = type_hints['parameter']
+                    parameter_instance = parameter_class(**processed_test_data['parameter'])
                 
-                if 'parameter' not in type_hints:
-                    raise Exception(f"No parameter type annotation found for {test_class.__name__}")
+                test_instance = test_class(
+                    name=test_name,
+                    parameter=parameter_instance,
+                    description=test_description,
+                    variable_metadata=processed_test_data.get('_VARIABLE_METADATA', {})
+                )
+            except Exception as e:
+                log.error(f"Error creating test instance: {e}")
+                return TestResult.execution_error(e, f"Failed to create test instance for {function_name}")
+            
+            # Execute the test - this returns a TestResult object
+            try:
+                test_result = test_instance.test()
+                if test_result is None:
+                    return TestResult.error(["Test returned None result"])
+                return test_result
+            except Exception as e:
+                # Test execution threw an exception - this is an ERROR, not a FAILED test
+                log.error(f"Test execution threw exception: {e}")
+                return TestResult.execution_error(e, f"Test {test_name} threw exception during execution")
                 
-                parameter_class = type_hints['parameter']
-                parameter_instance = parameter_class(**processed_test_data['parameter'])
-            
-            test_instance = test_class(
-                name=test_name,
-                parameter=parameter_instance,
-                description=test_description,
-                variable_metadata=processed_test_data.get('_VARIABLE_METADATA', {})
-            )
-            
-            # Execute the test
-            test_result = test_instance.test()
-            return test_result
-            
         except Exception as e:
-            log.error(f"Error executing resolved test data: {e}")
-            return {
-                "success": False,
-                "message": str(e)
-            }
+            # System-level exception during test setup/teardown
+            log.error(f"System error executing resolved test data: {e}")
+            from adarelib.event.event import TestResult
+            return TestResult.execution_error(e, "System error during test execution")
     
     async def _run_test(self, websocket, test_name: str, resolved_test_data: dict):
         """Run a test with pre-resolved test data (variables already substituted)."""
