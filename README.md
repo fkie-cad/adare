@@ -11,6 +11,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] built furhter testfunction; and filters/variables
 - [ ] clear distinction between failed test and exception/error -> find a way to propagate to the client!
 - [ ] built a way to better validate playbooks (e.g. two variables with saame name through variables or save_timestamp ..., check that used variables are defined before, check if filters are correct)
+- [ ] test if we can still run adare if we delete cloned repo
 
 #### Features
 - [ ] test and enable ydotool to make it work on wayland as well -> also would make machine setup easier as not X11 specific stuff needs to happen 

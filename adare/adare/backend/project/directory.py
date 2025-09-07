@@ -43,10 +43,6 @@ class ProjectDirectory(Directory):
         return self.shared / 'data'
 
     @property
-    def adarevm(self) -> Path:
-        return self.path / 'adarevm'
-    
-    @property
     def vm(self) -> Path:
         return self.path / 'vm'
     
@@ -91,7 +87,7 @@ class ProjectDirectory(Directory):
         # check if all paths exist
         return all(
             [self.path.exists(), self.environments.exists(), self.experiments.exists(), self.testfunctions.exists(),
-             self.shared.exists(), self.adarevm.exists(), self.vm.exists(), self.run.exists()])
+             self.shared.exists(), self.vm.exists(), self.run.exists()])
 
     def _create_project_directories(self):
         self.path.mkdir()
@@ -101,7 +97,6 @@ class ProjectDirectory(Directory):
         self.shared.mkdir()
         self.shared_tools.mkdir()
         self.shared_data.mkdir()
-        self.adarevm.mkdir()
         self.vm.mkdir()
         self.run.mkdir()
 
@@ -119,24 +114,6 @@ class ProjectDirectory(Directory):
             file.unlink()
         log.info('download of tool was successful')
 
-
-    def copy_adarevm_to_adare_dir(self):
-        try:
-            adarevm = ADARE_DIR / 'adarevm'
-            from adare.helperfunctions.file.copy import copytree_with_progress
-            from shutil import ignore_patterns
-            copytree_with_progress(
-                src=adarevm,
-                dst=self.adarevm,
-                preserve_metadata=True,
-                dirs_exist_ok=True,
-                ignore=ignore_patterns('*.pyc', '__pycache__')
-            )
-        except OSError as e:
-            raise ProjectDirectoryCopyError(
-                log,
-                message=f'adare directory ([i]{adarevm}[/i]) could not be copied to project directory ({self.adarevm}): {e.strerror}',
-            ) from e
 
     def copy_standard_testfunction(self):
         try:
