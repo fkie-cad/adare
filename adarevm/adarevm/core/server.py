@@ -430,7 +430,7 @@ class AdareVMServer:
                 name=test_name,
                 parameter=parameter_instance,
                 description=test_description,
-                variables=processed_test_data.get('variables', None)
+                variable_metadata=processed_test_data.get('_VARIABLE_METADATA', {})
             )
             
             # Execute the test

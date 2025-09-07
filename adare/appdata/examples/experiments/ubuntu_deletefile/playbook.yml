@@ -26,11 +26,6 @@ variables:
     type: path  
     value: "/home/{{username}}/.local/share/Trash"
     description: "Path to user's trash bin"
-  
-  deletion_timestamp:
-    type: string
-    value: ""
-    description: "Timestamp when the file was deleted (set dynamically during playbook execution)"
 
 # Test definitions
 tests:
@@ -55,14 +50,14 @@ tests:
     parameter:
       dst: '{{trashbin_path}}/info/testfile.txt.trashinfo'
   - name: trashbin_check_info_date
-    description: 'check if deletion date in info file matches expected content'
+    description: 'check if deletion date in info file is correct'
     function: file_content_equals
     parameter:
-      dst: '{{trashbin_path}}/info/testfile.txt.trashinfo'
+      dst: '/home/adare/.local/share/Trash/info/testfile.txt.trashinfo'
       content: |
         [Trash Info]
-        Path={{filepath}}
-        DeletionDate={{deletion_timestamp}}
+        Path=/home/adare/Documents/testfile.txt
+        DeletionDate={{ deletion_timestamp | format('%Y-%m-%dT%H:%M:%S') | tolerance(5, -5) }}
 
 actions:
   - command:

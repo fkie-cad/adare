@@ -6,16 +6,12 @@ actions and tests into WebSocket commands for execution on the VM. It handles
 local CV/OCR for target resolution and maintains proper execution order.
 """
 
-import asyncio
 import logging
-import base64
-import json
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any, Union
+from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 import time
 import jinja2
-from sqlalchemy.orm import Session
 
 
 # Removed TimestampTransform class - no longer needed with simplified approach
@@ -418,11 +414,11 @@ class PlaybookController:
         # Set up experiment variables and playbook access
         self.execution_context['playbook'] = playbook
         if hasattr(playbook, 'variables') and playbook.variables:
-            log.info("Setting experiment variables...")
-            # Convert VariableRegistry to execution context format
-            var_dict = playbook.variables.to_execution_context()
-            await self.client.set_variables(var_dict)
+            log.info("Loading experiment variables...")
+            # Convert VariableRegistry to execution context format (for actions - full resolution)
+            var_dict = playbook.variables.to_execution_context(for_tests=False)
             self.execution_context.update(var_dict)
+            log.debug(f"Loaded {len(playbook.variables.variables)} variables into execution context")
         
         # Execute actions sequentially
         total_actions = len(playbook.actions)
@@ -1226,13 +1222,10 @@ class PlaybookController:
         return resolved_target
 
     def _replace_variables(self, text: str) -> str:
-        """Replace Jinja2 template variables in text with values from execution context.
+        """Replace Jinja2 template variables in text with values or metadata placeholders.
         
-        Performs recursive replacement to handle nested variables like:
-        username: "vagrant"
-        filepath: "C:/Users/{{ username }}/Documents/file.txt"
-        
-        TIMESTAMP variables are automatically formatted as ISO datetime strings.
+        Variables with metadata are resolved to placeholders (e.g., VARTIMESTAMP_RESOLVED)
+        and the metadata is captured for server-side processing.
         """
         if not text or '{{' not in text:
             return text
@@ -1254,18 +1247,19 @@ class PlaybookController:
                 
                 previous_results.add(result)
                 
-                # Create formatted context with timestamp formatting
-                formatted_context = self._get_formatted_context()
+                # Create formatted context with metadata-aware variable handling  
+                formatted_context = self._get_formatted_context(for_tests=False)
                 
-                # Perform template replacement
+                # Perform template replacement with metadata capture
                 log.debug(f"Processing template: '{result}' with context keys: {list(formatted_context.keys())}")
                 template = jinja2.Template(result)
                 
-                # Add custom filters for transformations
+                # Add custom filters for metadata capture
                 template.environment.filters.update(self._get_custom_filters())
                 
                 new_result = template.render(formatted_context)
                 log.debug(f"Template result: '{new_result}'")
+                
                 
                 # If no change occurred, break to avoid infinite loops
                 if new_result == result:
@@ -1282,57 +1276,33 @@ class PlaybookController:
             log.warning(f"Failed to replace variables in '{text}': {e}")
             return text
     
-    def _get_formatted_context(self) -> Dict[str, Any]:
-        """Get execution context with TIMESTAMP variables as special objects for VM-side processing."""
-        formatted_context = {}
-        timestamp_dict = {}
+    
+    def _get_formatted_context(self, for_tests: bool = False) -> Dict[str, Any]:
+        """Get execution context with smart variable handling based on usage."""
+        # If we have a variable registry, use its smart execution context
+        if hasattr(self.playbook, 'variables') and self.playbook.variables:
+            registry_context = self.playbook.variables.to_execution_context(for_tests=for_tests)
+            # Merge with existing execution context
+            merged_context = self.execution_context.copy()
+            merged_context.update(registry_context)
+            return merged_context
         
-        class TimestampValue:
-            """Special object that renders as TIMESTAMP: marker for VM processing."""
-            def __init__(self, unix_timestamp: float):
-                self.unix_timestamp = unix_timestamp
-            
-            def __str__(self) -> str:
-                return f"TIMESTAMP:{self.unix_timestamp}"
-        
-        for key, value in self.execution_context.items():
-            if key.startswith('TIMESTAMP.') and isinstance(value, (int, float)):
-                # Create special TimestampValue object for VM processing
-                timestamp_name = key[len('TIMESTAMP.'):]
-                timestamp_dict[timestamp_name] = TimestampValue(value)
-                
-                # Also keep the original flat key for backward compatibility
-                formatted_context[key] = TimestampValue(value)
-            else:
-                formatted_context[key] = value
-        
-        # Add the nested TIMESTAMP object with TimestampValue objects for VM processing
-        if timestamp_dict:
-            formatted_context['TIMESTAMP'] = timestamp_dict
-        
-        return formatted_context
+        # Fallback to simple execution context copy
+        return self.execution_context.copy()
+    
     
     def _get_custom_filters(self) -> Dict[str, Any]:
-        """Get custom Jinja2 filters that pass through to VM for processing."""
-        def format_filter(timestamp_value, format_str):
-            """Pass-through format filter that preserves filter syntax for VM processing."""
-            if hasattr(timestamp_value, 'unix_timestamp'):  # TimestampValue object
-                return f"{timestamp_value}|format('{format_str}')"
-            return str(timestamp_value)
+        """Get custom Jinja2 filters from variable registry metadata."""
+        # Get filters from variable registry if available
+        if hasattr(self.playbook, 'variables') and self.playbook.variables:
+            registry_filters = self.playbook.variables.get_all_jinja_filters()
+            if registry_filters:
+                log.debug(f"Using {len(registry_filters)} filters from variable registry: {list(registry_filters.keys())}")
+                return registry_filters
         
-        def tolerance_filter(timestamp_value, plus_seconds, minus_seconds=None):
-            """Pass-through tolerance filter that preserves filter syntax for VM processing."""
-            if minus_seconds is None:
-                minus_seconds = -plus_seconds
-            
-            # Check if we already have format applied
-            base_value = str(timestamp_value)
-            return f"{base_value}|tolerance({plus_seconds},{minus_seconds})"
-        
-        return {
-            'format': format_filter,
-            'tolerance': tolerance_filter
-        }
+        # Fallback to empty dict - no custom filters available
+        log.debug("No variable registry filters available, using no custom filters")
+        return {}
     
     async def _resolve_test_locally(self, test_name: str) -> Optional[Dict[str, Any]]:
         """Load and resolve a specific test locally with variable substitution."""
@@ -1349,8 +1319,8 @@ class PlaybookController:
             if 'tests' not in playbook_data:
                 return None
             
-            # Debug: Log current execution context before test resolution
-            formatted_context = self._get_formatted_context()
+            # Debug: Log current execution context before test resolution (use test context)
+            formatted_context = self._get_formatted_context(for_tests=True)
             log.debug(f"Resolving test '{test_name}' with execution context keys: {list(formatted_context.keys())}")
             log.debug(f"Execution context values: {formatted_context}")
             
@@ -1360,6 +1330,15 @@ class PlaybookController:
                     log.debug(f"Found test '{test_name}' raw data: {test}")
                     # Apply variable substitution to all string values in the test
                     resolved_test = self._resolve_test_content(test)
+                    
+                    # After processing, check if variable registry now has placeholder metadata
+                    if hasattr(self.playbook, 'variables') and self.playbook.variables:
+                        if hasattr(self.playbook.variables, '_placeholder_metadata') and self.playbook.variables._placeholder_metadata:
+                            resolved_test['_VARIABLE_METADATA'] = self.playbook.variables._placeholder_metadata
+                            log.info(f"Added variable metadata to resolved test: {list(self.playbook.variables._placeholder_metadata.keys())}")
+                        else:
+                            log.debug("No placeholder metadata found after template processing")
+                    
                     log.debug(f"Resolved test '{test_name}' data: {resolved_test}")
                     return resolved_test
             
@@ -1369,15 +1348,38 @@ class PlaybookController:
             return None
     
     def _resolve_test_content(self, test_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Recursively apply variable substitution to test content."""
+        """Recursively apply variable substitution to test content with test-aware context."""
         if isinstance(test_data, dict):
             return {key: self._resolve_test_content(value) for key, value in test_data.items()}
         elif isinstance(test_data, list):
             return [self._resolve_test_content(item) for item in test_data]
         elif isinstance(test_data, str):
-            return self._replace_variables(test_data)
+            return self._replace_variables_for_tests(test_data)
         else:
             return test_data
+    
+    def _replace_variables_for_tests(self, text: str) -> str:
+        """Replace variables in test content using test-aware context with smart resolution."""
+        if not text or '{{' not in text:
+            return text
+        
+        try:
+            # Use test-aware context that creates placeholders for variables with test-specific filters
+            formatted_context = self._get_formatted_context(for_tests=True)
+            
+            log.debug(f"Processing test template: '{text}' with context keys: {list(formatted_context.keys())}")
+            template = jinja2.Template(text)
+            
+            # Add custom filters for metadata capture
+            template.environment.filters.update(self._get_custom_filters())
+            
+            result = template.render(formatted_context)
+            log.debug(f"Test template result: '{result}'")
+            
+            return result
+        except Exception as e:
+            log.warning(f"Failed to replace variables in test text '{text}': {e}")
+            return text
     
     async def _execute_command(self, action: CommandAction, parent_event_id: str = None) -> ActionResult:
         try:
@@ -1403,16 +1405,23 @@ class PlaybookController:
             return ActionResult(success=False, message=str(e))
     
     async def _execute_save_timestamp(self, action: SaveTimestampAction, parent_event_id: str = None) -> ActionResult:
-        """Save current timestamp to execution context for later use in tests."""
+        """Save current timestamp to execution context and variable registry."""
         try:
             current_timestamp = time.time()
+            
+            # Save to execution context for immediate use
             self.execution_context[action.variable] = current_timestamp
             
-            # Also log formatted version for debugging
-            import datetime
-            formatted_timestamp = datetime.datetime.fromtimestamp(current_timestamp).strftime('%Y-%m-%dT%H:%M:%S')
-            log.info(f"Saved timestamp {current_timestamp} ({formatted_timestamp}) to variable {action.variable}")
-            log.debug(f"Full execution context after timestamp save: {self.execution_context}")
+            # Also save to variable registry if available for metadata support
+            if hasattr(self.playbook, 'variables') and self.playbook.variables:
+                from adarelib.common.variables import Variable, VariableType
+                import datetime
+                timestamp_dt = datetime.datetime.fromtimestamp(current_timestamp)
+                timestamp_var = Variable(timestamp_dt, VariableType.TIMESTAMP)
+                self.playbook.variables.add(action.variable, timestamp_var)
+                log.debug(f"Added timestamp variable '{action.variable}' to variable registry")
+            
+            log.info(f"Saved timestamp {current_timestamp} to variable {action.variable}")
             
             return ActionResult(
                 success=True,

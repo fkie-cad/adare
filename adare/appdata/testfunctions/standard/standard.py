@@ -31,7 +31,7 @@ class FileExists(BasicTest):
     name: str
     parameter: FileExistsParameter
     description: Optional[str] = ''
-    variables: Optional[dict] = None
+    variable_metadata: Optional[dict] = None
 
     def test(self):
         if Path(self.parameter.dst).is_file():
@@ -60,7 +60,7 @@ class FileDoesNotExist(BasicTest):
     name: str
     parameter: FileDoesNotExistParameter
     description: Optional[str] = ''
-    variables: Optional[dict] = None
+    variable_metadata: Optional[dict] = None
 
     def test(self):
         if not Path(self.parameter.dst).is_file():
@@ -89,7 +89,7 @@ class DirExists(BasicTest):
     name: str
     parameter: DirExistsParameter
     description: Optional[str] = ''
-    variables: Optional[dict] = None
+    variable_metadata: Optional[dict] = None
 
     def test(self):
         if Path(self.parameter.dst).is_dir():
@@ -117,7 +117,7 @@ class DirDoesNotExist(BasicTest):
     name: str
     parameter: DirDoesNotExistParameter
     description: Optional[str] = ''
-    variables: Optional[dict] = None
+    variable_metadata: Optional[dict] = None
 
     def test(self):
         if not Path(self.parameter.dst).is_dir():
@@ -146,7 +146,7 @@ class DirContent(BasicTest):
     name: str
     parameter: DirContentParameter
     description: Optional[str] = ''
-    variables: Optional[dict] = None
+    variable_metadata: Optional[dict] = None
 
     def test(self):
         dst, status = self.resolve_globfilepath(self.parameter.dst)
@@ -195,7 +195,7 @@ class FileContentMatchesRegex(BasicTest):
     name: str
     parameter: FileContentMatchesRegexParameter
     description: Optional[str] = ''
-    variables: Optional[dict] = None
+    variable_metadata: Optional[dict] = None
 
     def test(self):
         dst, status = self.resolve_globfilepath(self.parameter.dst)
@@ -254,7 +254,7 @@ class CsvContainsLineMatchingRegex(BasicTest):
     name: str
     parameter: CsvContainsLineMatchingRegexParameter
     description: Optional[str] = ''
-    variables: Optional[dict] = None
+    variable_metadata: Optional[dict] = None
 
     def test(self):
         dst, status = self.resolve_globfilepath(self.parameter.dst)
@@ -307,7 +307,7 @@ class FileContentEquals(BasicTest):
     name: str
     parameter: FileContentEqualsParameter
     description: Optional[str] = ''
-    variables: Optional[dict] = None
+    variable_metadata: Optional[dict] = None
 
     def test(self):
         dst, status = self.resolve_globfilepath(self.parameter.dst)
@@ -328,17 +328,23 @@ class FileContentEquals(BasicTest):
             )
             return result
             
-        # Simple exact content match after resolving variables
-        expected_content = self.resolve_variable_in_string(self.parameter.content)
-        success = data == expected_content
-        message = "Exact content match" if success else "Content does not match exactly"
+        # Check if we have placeholders that need special handling
+        expected_content = self.parameter.content
+        
+        if not self.has_placeholders(expected_content):
+            # No placeholders - direct comparison (content already fully resolved by client)
+            success = data.strip() == expected_content.strip()
+            message = "Direct content comparison"
+        else:
+            # Has placeholders - special handling needed
+            success, message = self._handle_placeholders_comparison(data.strip(), expected_content)
             
         if success:
             return TestResult(status=StatusEnum.SUCCESS, details=[message])
         else:
             # Show diff for debugging
             import difflib
-            expected_for_diff = self.resolve_variable_in_string(self.parameter.content)
+            expected_for_diff = expected_content
             diff_lines = list(difflib.unified_diff(
                 expected_for_diff.splitlines(keepends=True),
                 data.splitlines(keepends=True),
