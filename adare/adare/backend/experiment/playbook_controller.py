@@ -78,6 +78,10 @@ class PlaybookExecutionResult:
     execution_time: float
     action_results: List[ActionResult]
     error_message: Optional[str] = None
+    # Test statistics
+    total_tests: int = 0
+    successful_tests: int = 0
+    failed_tests: int = 0
 
 
 class PlaybookController:
@@ -390,13 +394,22 @@ class PlaybookController:
         execution_time = time.time() - self.start_time
         log.info(f"Experiment completed successfully in {execution_time:.2f}s")
         
+        # Count test statistics
+        test_results = [r for r in self.action_results if self._is_test_action_result(r)]
+        total_tests = len(test_results)
+        successful_tests = sum(1 for r in test_results if r.success)
+        failed_tests = total_tests - successful_tests
+        
         return PlaybookExecutionResult(
             success=True,
             total_actions=len(self.action_results),
             successful_actions=sum(1 for r in self.action_results if r.success),
             failed_actions=sum(1 for r in self.action_results if not r.success),
             execution_time=execution_time,
-            action_results=self.action_results
+            action_results=self.action_results,
+            total_tests=total_tests,
+            successful_tests=successful_tests,
+            failed_tests=failed_tests
         )
     
     async def execute_playbook(self) -> PlaybookExecutionResult:
@@ -511,13 +524,22 @@ class PlaybookController:
         successful = sum(1 for r in self.action_results if r.success)
         failed = len(self.action_results) - successful
         
+        # Count test statistics
+        test_results = [r for r in self.action_results if self._is_test_action_result(r)]
+        total_tests = len(test_results)
+        successful_tests = sum(1 for r in test_results if r.success)
+        failed_tests = total_tests - successful_tests
+        
         return PlaybookExecutionResult(
             success=failed == 0,
             total_actions=total_actions,
             successful_actions=successful,
             failed_actions=failed,
             execution_time=sum(self.action_timings.values()),
-            action_results=self.action_results
+            action_results=self.action_results,
+            total_tests=total_tests,
+            successful_tests=successful_tests,
+            failed_tests=failed_tests
         )
     
     async def execute_action(self, action: ActionType, parent_event_id: str = None) -> ActionResult:
@@ -1387,7 +1409,7 @@ class PlaybookController:
             command = action.command
             cwd = action.cwd
             env = action.env
-            
+        
             # Execute raw shell command directly with options
             result = await self.client.execute_shell(
                 shell_command=command,
@@ -1430,3 +1452,11 @@ class PlaybookController:
             )
         except Exception as e:
             return ActionResult(success=False, message=str(e))
+    
+    def _is_test_action_result(self, action_result: ActionResult) -> bool:
+        """Check if an action result corresponds to a test execution."""
+        if action_result.data and isinstance(action_result.data, dict):
+            # Check if this was a test action by looking at the result data structure
+            result_data = action_result.data.get('result', {})
+            return 'status' in result_data and 'details' in result_data
+        return False
