@@ -10,7 +10,6 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
 - [ ] built furhter testfunction; and filters/variables
 - [ ] clear distinction between failed test and exception/error -> find a way to propagate to the client!
-- [ ] built a way to better validate playbooks (e.g. two variables with saame name through variables or save_timestamp ..., check that used variables are defined before, check if filters are correct)
 - [ ] test if we can still run adare if we delete cloned repo
 
 #### Features
@@ -20,6 +19,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [x] add filter to variables as timestamp to define timezone/format and tolerance
 - [ ] install requirements of testfunctions if given into poetry somehow!
 - [x] make in experiment run total time at top in a row!
+- [ ] built a way to better validate playbooks (e.g. two variables with saame name through variables or save_timestamp ..., check that used variables are defined before, check if filters are correct)
 
 
 #### QOL
@@ -28,6 +28,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] screenshot not via websockets but via shared files (to make faster?)
 - [ ] add easier way to updated/test new testfunctions
 - [ ] improve code quality in general
+  - [ ] split virtualbox api into multiple files
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
 - [x] Final short experiment finished message with overall result (exception/error vs none) and test result (if all tests succeded)and ULID
 
@@ -36,7 +37,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [x] fix port forwarding if already there check if identical and if yes then do nothing! -> at the moment logs shows an error
 - [ ] we can easily load testfunction and change while we already run an experiment -> fix that to be not possible to preserve integrity; general workflow for update those seems a little broken
 - [x] we copy adarevm into project dir?! but we use it from appdata so we may not do this?!
-- [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove)
+- [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 
 #### Test
 - [ ] built more unit tests / integration tests / ... (maybe with claude)

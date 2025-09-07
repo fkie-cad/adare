@@ -1,0 +1,476 @@
+"""
+VirtualBox VM networking operations mixin.
+"""
+import logging
+from pathlib import Path
+from typing import Dict, Optional
+import threading
+
+from .models import PortForwardingRule, SharedFolderConfig
+from .utils import run_subprocess
+
+log = logging.getLogger(__name__)
+
+
+class NetworkingMixin:
+    """Mixin class providing networking operations for VirtualBox VMs."""
+    
+    async def list_port_forwarding_rules(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False) -> Dict[str, PortForwardingRule]:
+        """List all port forwarding rules for the VM."""
+        async def _list_port_forwards_async():
+            try:
+                result = run_subprocess(
+                    [self.vboxmanage_exe, "showvminfo", self.vm_name, "--machinereadable"],
+                    log_prefix="list_port_forwarding_rules: ",
+                    check=False
+                )
+                
+                if result.returncode != 0:
+                    log.warning(f"Failed to get VM info for '{self.vm_name}': return code {result.returncode}")
+                    return {}
+                
+                rules = {}
+                for line in result.stdout.split('\n'):
+                    # Look for lines like: Forwarding(0)="name,protocol,host_ip,host_port,guest_ip,guest_port"
+                    if line.startswith('Forwarding(') and ')=' in line:
+                        try:
+                            # Extract the rule string
+                            rule_str = line.split('=', 1)[1].strip('"')
+                            rule = PortForwardingRule.from_vbox_format(rule_str)
+                            rules[rule.name] = rule
+                        except Exception as e:
+                            log.warning(f"Failed to parse port forwarding rule: {line} - {e}")
+                
+                if not silent:
+                    log.debug(f"Found {len(rules)} port forwarding rules for VM '{self.vm_name}'")
+                return rules
+            except Exception as e:
+                log.error(f"Error listing port forwarding rules for VM '{self.vm_name}': {e}")
+                return {}
+        
+        return await self.manager.run_async(_list_port_forwards_async)
+
+    async def add_port_forwarding(
+        self,
+        name: str,
+        protocol: str,
+        host_port: int,
+        guest_port: int,
+        host_ip: str = "",
+        guest_ip: str = "",
+        ctx_manager=None,
+        stop_event=None,
+        log_file: Optional[Path] = None,
+        silent: bool = False
+    ) -> int:
+        """Add a port forwarding rule to the VM."""
+        async def _add_port_forward_async():
+            # Create rule object for comparison
+            new_rule = PortForwardingRule(
+                name=name,
+                protocol=protocol,
+                host_ip=host_ip,
+                host_port=host_port,
+                guest_ip=guest_ip,
+                guest_port=guest_port
+            )
+            
+            # First check if identical rule already exists
+            existing_rules = await self.list_port_forwarding_rules(ctx_manager, stop_event, log_file, silent)
+            
+            if name in existing_rules:
+                existing_rule = existing_rules[name]
+                # Check if the existing rule is identical
+                if new_rule.matches(existing_rule):
+                    if not silent:
+                        log.info(f"Port forward '{name}' already exists with identical configuration - skipping")
+                    return 0
+                else:
+                    log.warning(f"Port forward '{name}' exists but with different configuration - will attempt to remove and re-add")
+                    log.debug(f"Existing: {existing_rule}, New: {new_rule}")
+                    # Remove existing rule first
+                    remove_args = ["modifyvm", self.vm_name, "--natpf1", "delete", name]
+                    try:
+                        await self._execute_streaming_command_async(
+                            remove_args,
+                            log_file=log_file,
+                            stop_event=stop_event,
+                            silent=silent,
+                            ctx_manager=ctx_manager,
+                            operation_name="port forward removal"
+                        )
+                    except Exception as e:
+                        log.warning(f"Failed to remove existing port forward '{name}': {e}")
+            
+            # Add the port forwarding rule
+            args = [
+                "modifyvm", self.vm_name,
+                "--natpf1", new_rule.to_vbox_format()
+            ]
+            
+            try:
+                log.info(f"Adding port forward '{name}' ({protocol}) {host_ip}:{host_port} -> {guest_ip}:{guest_port} for VM '{self.vm_name}'")
+                return_value, _, _ = await self._execute_streaming_command_async(
+                    args,
+                    log_file=log_file,
+                    stop_event=stop_event,
+                    silent=silent,
+                    ctx_manager=ctx_manager,
+                    operation_name="port forward addition"
+                )
+                
+                if return_value == 0:
+                    log.info(f"Port forward '{name}' added successfully to VM '{self.vm_name}'")
+                else:
+                    log.error(f"Failed to add port forward '{name}' to VM '{self.vm_name}': return code {return_value}")
+                
+                return return_value
+            except Exception as e:
+                log.error(f"Error adding port forward '{name}' to VM '{self.vm_name}': {e}")
+                return 1
+        
+        return await self.manager.run_async(_add_port_forward_async)
+
+    async def add_shared_folder(self, name: str, host_path: Path, readonly: bool = False, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+        """Add a shared folder to the VM."""
+        async def _add_shared_folder_async():
+            shared_folder = SharedFolderConfig(name=name, host_path=str(host_path), readonly=readonly)
+            
+            args = [
+                "sharedfolder", "add", self.vm_name,
+                "--name", name,
+                "--hostpath", str(host_path)
+            ]
+            
+            if readonly:
+                args.append("--readonly")
+            
+            try:
+                log.info(f"Adding shared folder '{name}' ({host_path}) to VM '{self.vm_name}'" + (" (readonly)" if readonly else ""))
+                return_value, _, _ = await self._execute_streaming_command_async(
+                    args,
+                    log_file=log_file,
+                    stop_event=stop_event,
+                    silent=silent,
+                    ctx_manager=ctx_manager,
+                    operation_name="shared folder addition"
+                )
+                
+                if return_value == 0:
+                    log.info(f"Shared folder '{name}' added successfully to VM '{self.vm_name}'")
+                else:
+                    log.error(f"Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
+                
+                return return_value
+            except Exception as e:
+                log.error(f"Error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
+                return 1
+        
+        return await self.manager.run_async(_add_shared_folder_async)
+
+    def _build_mount_commands(self, name: str, mountpoint: Path) -> list:
+        """Build mounting commands for a shared folder."""
+        commands = []
+        
+        if 'windows' in self.guest_os.lower():
+            from pathlib import PureWindowsPath
+            unc_path = f"\\\\vboxsvr\\{name}"
+            mountpoint_str = str(mountpoint)
+            
+            # Check if it's a drive letter (like Z:, X:, Y:, etc.)
+            if len(mountpoint_str) == 2 and mountpoint_str[1] == ':' and mountpoint_str[0].isalpha():
+                # Check if drive is already in use and disconnect it first
+                drive_letter = mountpoint_str.upper()
+                commands.append({
+                    'command': f'net use {drive_letter} /delete /y 2>$null',
+                    'description': f"Disconnect existing drive {drive_letter} if present",
+                    'ignore_errors': True
+                })
+                
+                # Mount to drive letter using net use command
+                mount_cmd = f'net use {drive_letter} "{unc_path}" /persistent:yes'
+                commands.append({
+                    'command': mount_cmd,
+                    'description': f"Mount shared folder {name} to drive {drive_letter}",
+                    'ignore_errors': False
+                })
+            else:
+                # Mount to directory path using symbolic link
+                parent_dir = mountpoint.parent
+                commands.append({
+                    'command': f'New-Item -ItemType Directory -Path "{parent_dir}" -Force',
+                    'description': f"Create parent directory {parent_dir}",
+                    'ignore_errors': True
+                })
+                
+                # Remove existing symbolic link if it exists
+                commands.append({
+                    'command': f'if (Test-Path "{mountpoint}") {{ Remove-Item "{mountpoint}" -Force -Recurse }}',
+                    'description': f"Remove existing path {mountpoint}",
+                    'ignore_errors': True
+                })
+                
+                # Create symbolic link
+                commands.append({
+                    'command': f'cmd /c mklink /D "{mountpoint}" "{unc_path}"',
+                    'description': f"Create symbolic link from {mountpoint} to {unc_path}",
+                    'ignore_errors': False
+                })
+        else:
+            # Linux mounting with proper permissions for adare user
+            unix_mountpoint = str(mountpoint)
+            
+            # Create mount point directory
+            commands.append({
+                'command': f'sudo mkdir -p {unix_mountpoint}',
+                'description': f"Create mount point for {name}",
+                'ignore_errors': True
+            })
+            
+            # Check if already mounted and unmount if necessary
+            commands.append({
+                'command': f'sudo umount {unix_mountpoint} 2>/dev/null || true',
+                'description': f"Unmount existing mount at {unix_mountpoint} if present",
+                'ignore_errors': True
+            })
+            
+            # Mount with proper uid/gid for adare user (1000:1000)
+            commands.append({
+                'command': f'sudo mount -t vboxsf -o uid=1000,gid=1000,dmode=775,fmode=664 {name} {unix_mountpoint}',
+                'description': f"Mount shared folder {name} with adare user permissions",
+                'ignore_errors': False
+            })
+        
+        return commands
+
+    async def mount_shared_folder(self, name: str, mountpoint: Path, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+        """Mount a shared folder inside the guest VM."""
+        async def _mount_shared_folder_async():
+            try:
+                log.info(f"Mounting shared folder '{name}' to '{mountpoint}' in VM '{self.vm_name}'")
+                
+                commands = self._build_mount_commands(name, mountpoint)
+                total_return_value = 0
+                
+                for cmd_info in commands:
+                    command = cmd_info['command']
+                    description = cmd_info['description']
+                    ignore_errors = cmd_info['ignore_errors']
+                    
+                    if not silent:
+                        log.info(f"[{self.vm_name}] {description}")
+                    
+                    args = self._build_guest_command_args(command)
+                    return_value, _, _ = await self._execute_streaming_command_async(
+                        args,
+                        log_file=log_file,
+                        stop_event=stop_event,
+                        silent=silent,
+                        ctx_manager=ctx_manager,
+                        operation_name=f"mount command: {description}"
+                    )
+                    
+                    if return_value != 0:
+                        if ignore_errors:
+                            log.debug(f"Command failed but errors ignored: {description}")
+                        else:
+                            log.error(f"Mount command failed: {description}")
+                            total_return_value = return_value
+                            break
+                
+                if total_return_value == 0:
+                    log.info(f"Shared folder '{name}' mounted successfully to '{mountpoint}' in VM '{self.vm_name}'")
+                
+                return total_return_value
+                
+            except Exception as e:
+                log.error(f"Error mounting shared folder '{name}' in VM '{self.vm_name}': {e}")
+                return 1
+        
+        return await self.manager.run_async(_mount_shared_folder_async)
+
+    async def list_shared_folders(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False) -> Dict[str, SharedFolderConfig]:
+        """List all shared folders for the VM."""
+        async def _list_shared_folders_async():
+            try:
+                result = run_subprocess(
+                    [self.vboxmanage_exe, "showvminfo", self.vm_name, "--machinereadable"],
+                    log_prefix="list_shared_folders: ",
+                    check=False
+                )
+                
+                if result.returncode != 0:
+                    log.warning(f"Failed to get VM info for '{self.vm_name}': return code {result.returncode}")
+                    return {}
+                
+                shared_folders = {}
+                for line in result.stdout.split('\n'):
+                    # Look for lines like: SharedFolderNameMachineMapping1="name"
+                    # and SharedFolderPathMachineMapping1="/path/to/folder"
+                    if line.startswith('SharedFolderNameMachineMapping'):
+                        try:
+                            # Extract folder name
+                            folder_name = line.split('=', 1)[1].strip('"')
+                            
+                            # Find corresponding path line
+                            mapping_num = line.split('SharedFolderNameMachineMapping')[1].split('=')[0]
+                            path_line_prefix = f"SharedFolderPathMachineMapping{mapping_num}="
+                            
+                            for path_line in result.stdout.split('\n'):
+                                if path_line.startswith(path_line_prefix):
+                                    folder_path = path_line.split('=', 1)[1].strip('"')
+                                    
+                                    # Check if readonly
+                                    readonly_line_prefix = f"SharedFolderReadOnlyMachineMapping{mapping_num}="
+                                    readonly = False
+                                    for readonly_line in result.stdout.split('\n'):
+                                        if readonly_line.startswith(readonly_line_prefix):
+                                            readonly = readonly_line.split('=', 1)[1].strip('"').lower() == 'on'
+                                            break
+                                    
+                                    shared_folders[folder_name] = SharedFolderConfig(
+                                        name=folder_name,
+                                        host_path=folder_path,
+                                        readonly=readonly
+                                    )
+                                    break
+                        except Exception as e:
+                            log.warning(f"Failed to parse shared folder info from line: {line} - {e}")
+                
+                if not silent:
+                    log.debug(f"Found {len(shared_folders)} shared folders for VM '{self.vm_name}'")
+                return shared_folders
+            except Exception as e:
+                log.error(f"Error listing shared folders for VM '{self.vm_name}': {e}")
+                return {}
+        
+        return await self.manager.run_async(_list_shared_folders_async)
+
+    async def remove_shared_folder(self, name: str, mountpoint: Optional[str] = None, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+        """Remove a shared folder from the VM."""
+        async def _remove_shared_folder_async():
+            try:
+                log.info(f"Removing shared folder '{name}' from VM '{self.vm_name}'")
+                
+                # First try to unmount from guest if mountpoint provided
+                if mountpoint:
+                    if 'windows' in self.guest_os.lower():
+                        if len(mountpoint) == 2 and mountpoint[1] == ':':
+                            # Drive letter
+                            unmount_cmd = f'net use {mountpoint.upper()} /delete /y'
+                        else:
+                            # Directory path - remove symbolic link
+                            unmount_cmd = f'if (Test-Path "{mountpoint}") {{ Remove-Item "{mountpoint}" -Force -Recurse }}'
+                    else:
+                        # Linux guest
+                        unmount_cmd = f'sudo umount "{mountpoint}" 2>/dev/null || true'
+                    
+                    args = self._build_guest_command_args(unmount_cmd)
+                    try:
+                        await self._execute_streaming_command_async(
+                            args,
+                            log_file=log_file,
+                            stop_event=stop_event,
+                            silent=True,  # Don't log unmount errors
+                            ctx_manager=ctx_manager,
+                            operation_name="shared folder unmount"
+                        )
+                    except Exception:
+                        pass  # Ignore unmount errors
+                
+                # Remove shared folder from VM configuration
+                args = ["sharedfolder", "remove", self.vm_name, "--name", name]
+                return_value, _, _ = await self._execute_streaming_command_async(
+                    args,
+                    log_file=log_file,
+                    stop_event=stop_event,
+                    silent=silent,
+                    ctx_manager=ctx_manager,
+                    operation_name="shared folder removal"
+                )
+                
+                if return_value == 0:
+                    log.info(f"Shared folder '{name}' removed successfully from VM '{self.vm_name}'")
+                else:
+                    log.error(f"Failed to remove shared folder '{name}' from VM '{self.vm_name}': return code {return_value}")
+                
+                return return_value
+            except Exception as e:
+                log.error(f"Error removing shared folder '{name}' from VM '{self.vm_name}': {e}")
+                return 1
+        
+        return await self.manager.run_async(_remove_shared_folder_async)
+
+    async def remove_all_shared_folders(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+        """Remove all shared folders from the VM."""
+        async def _remove_all_shared_folders_async():
+            try:
+                log.info(f"Removing all shared folders from VM '{self.vm_name}'")
+                
+                # First get list of all shared folders
+                shared_folders = await self.list_shared_folders(ctx_manager, stop_event, log_file, silent=True)
+                
+                if not shared_folders:
+                    if not silent:
+                        log.info(f"No shared folders found for VM '{self.vm_name}'")
+                    return 0
+                
+                total_return_value = 0
+                for folder_name in shared_folders.keys():
+                    return_value = await self.remove_shared_folder(
+                        folder_name,
+                        ctx_manager=ctx_manager,
+                        stop_event=stop_event,
+                        log_file=log_file,
+                        silent=silent
+                    )
+                    if return_value != 0:
+                        total_return_value = return_value
+                
+                if total_return_value == 0:
+                    log.info(f"All shared folders removed successfully from VM '{self.vm_name}'")
+                
+                return total_return_value
+            except Exception as e:
+                log.error(f"Error removing all shared folders from VM '{self.vm_name}': {e}")
+                return 1
+        
+        return await self.manager.run_async(_remove_all_shared_folders_async)
+
+    def queue_mount_shared_folder(self, name: str, mountpoint: Path):
+        """Queue a shared folder mount command using the consolidated mounting logic."""
+        commands = self._build_mount_commands(name, mountpoint)
+        # Queue all the commands from the consolidated logic
+        for cmd_info in commands:
+            self.queue_command(cmd_info['command'], cmd_info['description'])
+
+    async def mount_multiple_shared_folders(self, folders: dict, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+        """Mount multiple shared folders using the command queue for efficiency."""
+        # Clear any existing commands
+        self.clear_command_queue()
+        
+        # Clean slate approach: remove /adare directory to avoid any mount conflicts
+        if 'linux' in self.guest_os.lower():
+            self.queue_command('sudo rm -rf /adare 2>/dev/null || true', "Remove /adare directory to clean any stale mounts")
+        
+        # Setup parent directories first
+        if 'linux' in self.guest_os.lower():
+            # Create parent directories and set ownership
+            processed_parents = set()
+            for name, mountpoint in folders.items():
+                parent_dir = mountpoint.parent
+                parent_str = str(parent_dir)
+                
+                if parent_str not in processed_parents:
+                    mkdir_command = f'sudo mkdir -p {parent_dir}'
+                    chown_command = f'sudo chown -R adare:adare {parent_dir}'
+                    self.queue_command(mkdir_command, f"Create parent directory {parent_dir}")
+                    self.queue_command(chown_command, f"Set ownership of {parent_dir} to adare user")
+                    processed_parents.add(parent_str)
+        
+        # Queue all mount commands
+        for name, mountpoint in folders.items():
+            self.queue_mount_shared_folder(name, mountpoint)
+        
+        # Execute all queued commands
+        return await self.execute_queued_commands(ctx_manager, stop_event, log_file, silent, win_noprofile=True)
