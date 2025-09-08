@@ -489,7 +489,7 @@ class AdareVMServer:
             return {"status": "error", "message": str(e)}
     
     
-    async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False):
+    async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True):
         """Execute a raw shell command with advanced options."""
         log.info(f"Executing shell command: {shell_command}")
         try:
@@ -504,6 +504,8 @@ class AdareVMServer:
                 options['env'] = env
             if timeout:
                 options['timeout'] = timeout
+            if inherit_env is not None:
+                options['inherit_env'] = inherit_env
             if shell is not None:
                 options['shell'] = shell
             else:

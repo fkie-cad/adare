@@ -8,7 +8,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell: bool = True, env: dict = None, timeout: float = None) -> dict:
+def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell: bool = True, env: dict = None, timeout: float = None, inherit_env: bool = True) -> dict:
     """
     Executes a shell command.
     :param command: List of command and arguments, or string when shell=True.
@@ -17,6 +17,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     :param powershell: If True, execute in powershell instead of cmd.exe. (Windows only)
     :param env: Dictionary of environment variables to set for the command.
     :param timeout: Timeout in seconds for the command execution.
+    :param inherit_env: If True, inherit system environment variables (default: True).
     :return: Dictionary containing return code, stdout, and stderr.
     """
     is_windows = platform.system().lower() == "windows"
@@ -33,11 +34,14 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
             command = ["powershell", "-Command", command_str]
 
     # Prepare environment variables
+    import os
     process_env = None
-    if env:
-        import os
+    if inherit_env:
         process_env = os.environ.copy()
-        process_env.update(env)
+        if env:
+            process_env.update(env)
+    elif env:
+        process_env = env
 
     if cwd:
         proc = Popen(command, stdout=PIPE, stderr=PIPE, cwd=cwd, shell=shell, env=process_env)

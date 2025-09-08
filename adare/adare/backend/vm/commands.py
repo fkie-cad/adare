@@ -421,9 +421,6 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     
     log.info(f"Using pre-loaded VM: {vm.name} (hash: {vm.hash})")
     
-    # Verify VM integrity before proceeding with import
-    verify_vm_integrity(vm_id, experiment_run_ulid)
-    
     # Check VM status in VirtualBox
     vm_status = verify_vm_status(vm)
     log.info(f"VM VirtualBox status: {vm_status.name}")
@@ -432,6 +429,9 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     if vm_status == VMStatus.IMPORTED or vm_status == VMStatus.MISSING:
         # First time or missing: Import VM to VirtualBox + create base snapshot  
         log.info(f"First time VM setup - importing to VirtualBox...")
+        
+        # Verify VM integrity before proceeding with import (only when importing)
+        verify_vm_integrity(vm_id, experiment_run_ulid)
         
         # Use dedicated VM import stage
         if experiment_run_ulid:
