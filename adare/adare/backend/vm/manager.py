@@ -12,6 +12,7 @@ from adare.backend.vm.exceptions import VMValidationError, VMCopyError
 from adare.backend.vm.storage import get_vm_storage_directory, generate_vm_filename
 from adare.helperfunctions.file.hash import file_sha256_with_progress
 from adare.helperfunctions.file.validation import validate_tarfile_with_progress
+from adare.helperfunctions.integrity import IntegrityManager
 
 log = logging.getLogger(__name__)
 
@@ -141,6 +142,9 @@ class VMFileManager:
             
             if target_path.exists() and target_path.samefile(source_path):
                 log.info(f"VM file already in target location: {target_path}")
+                # Ensure existing file is also write-protected
+                if IntegrityManager.protect_file(target_path):
+                    log.info(f"Existing VM file write-protected for integrity: {target_path}")
                 return target_path
             
             from adare.helperfunctions.file.copy import copy
@@ -149,6 +153,13 @@ class VMFileManager:
                 dst=target_path,
                 silent=silent,
             )
+            
+            # Make the copied VM file write-protected for integrity preservation
+            if IntegrityManager.protect_file(target_path):
+                log.info(f"VM file write-protected for integrity: {target_path}")
+            else:
+                log.warning(f"Failed to write-protect VM file: {target_path}")
+            
             return target_path
             
         except OSError as e:

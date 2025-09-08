@@ -216,6 +216,15 @@ class AdareVMClient:
         # Create tool call message
         call_msg = create_tool_call(tool_name, params or {})
         
+        # Enhanced logging for command tracking
+        import time
+        start_time = time.time()
+        log.info(f"[{call_msg.id[:8]}] Sending tool call: {tool_name}")
+        if tool_name == "execute_shell" and params and "shell_command" in params:
+            log.info(f"[{call_msg.id[:8]}] Shell command: {params['shell_command']}")
+        log.debug(f"[{call_msg.id[:8]}] Tool params: {params}")
+        log.debug(f"[{call_msg.id[:8]}] Timeout: {timeout}s")
+        
         # Create future for the result
         result_future = asyncio.Future()
         self.pending_calls[call_msg.id] = result_future
@@ -223,20 +232,29 @@ class AdareVMClient:
         try:
             # Send the message
             await self.websocket.send(call_msg.to_json())
+            log.debug(f"[{call_msg.id[:8]}] Message sent, waiting for response...")
             
             # Wait for result
             result_msg = await asyncio.wait_for(result_future, timeout=timeout)
             
+            execution_time = time.time() - start_time
+            log.info(f"[{call_msg.id[:8]}] Tool call completed in {execution_time:.2f}s")
+            
             if result_msg.success:
                 return result_msg.result
             else:
+                log.error(f"[{call_msg.id[:8]}] Tool call failed: {result_msg.error}")
                 raise RuntimeError(f"Tool call failed: {result_msg.error}")
                 
         except asyncio.TimeoutError:
+            execution_time = time.time() - start_time
+            log.error(f"[{call_msg.id[:8]}] Tool call '{tool_name}' timed out after {timeout}s (actual: {execution_time:.2f}s)")
             # Clean up pending call
             self.pending_calls.pop(call_msg.id, None)
             raise WebSocketTimeoutError(f"Tool call '{tool_name}' timed out after {timeout} seconds")
         except Exception as e:
+            execution_time = time.time() - start_time
+            log.error(f"[{call_msg.id[:8]}] Tool call error after {execution_time:.2f}s: {e}")
             # Clean up pending call
             self.pending_calls.pop(call_msg.id, None)
             raise e
