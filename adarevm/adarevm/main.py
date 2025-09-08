@@ -8,9 +8,9 @@ def __setup_logging(logfile: str = None):
     if not logfile:
         import platform
         if platform.system() == "Windows":
-            logfile = 'C:/adare/run/adarevm.log'
+            logfile = 'C:/adare/run/logs/adarevm.log'
         else:
-            logfile = '/adare/run/adarevm.log'
+            logfile = '/adare/run/logs/adarevm.log'
     logging.basicConfig(
         filename=logfile,
         level=logging.INFO,
