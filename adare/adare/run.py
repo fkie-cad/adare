@@ -527,9 +527,17 @@ def sync(project):
 
 
 # ------------------------------
-# MCP test commands
+# Development commands
 # ------------------------------
 @cli.group()
+def dev():
+    """Development commands for testing and debugging."""
+    pass
+
+# ------------------------------
+# MCP test commands (under dev)
+# ------------------------------
+@dev.group()
 def mcp():
     """MCP server testing commands."""
     pass
@@ -602,9 +610,9 @@ def get_all_text(screenshot, format, host, port):
 
 
 # ------------------------------
-# WebSocket commands  
+# WebSocket commands (under dev)
 # ------------------------------
-@cli.group()
+@dev.group()
 def ws():
     """WebSocket adarevm interaction commands."""
     pass

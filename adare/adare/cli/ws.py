@@ -18,7 +18,8 @@ log = logging.getLogger(__name__)
 
 class WSActionError(LoggedException):
     """Error during WebSocket action execution."""
-    pass
+    def __init__(self, message: str):
+        super().__init__(log, message)
 
 async def exec_ws_action(args: SimpleNamespace):
     """Execute WebSocket actions from YAML file."""

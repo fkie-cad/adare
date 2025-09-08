@@ -23,7 +23,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] install requirements of testfunctions if given into poetry somehow!
 - [x] make in experiment run total time at top in a row!
 - [ ] built a way to better validate playbooks (e.g. two variables with saame name through variables or save_timestamp ..., check that used variables are defined before, check if filters are correct)
-- [ ] built some flag --developer that enables hthe commands mcp; ws
+- [x] built some flag --developer that enables hthe commands mcp; ws
 
 
 #### QOL
