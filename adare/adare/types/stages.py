@@ -140,6 +140,13 @@ class VMCreateStage(Stage):
 
 @register_stage
 @attrs.define
+class VMIntegrityVerificationStage(Stage):
+    name: ClassVar[str] = 'vm_integrity_verification'
+    msg: ClassVar[str] = 'Verifying VM file integrity'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
 class VMImportStage(Stage):
     name: ClassVar[str] = 'vm_import'
     msg: ClassVar[str] = 'Importing VM to VirtualBox'

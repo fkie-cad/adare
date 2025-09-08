@@ -32,8 +32,8 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin):
         vm_name: str,
         guest_os: str,
         manager: 'VirtualBoxManager',
-        username: str = 'adare',
-        password: str = 'adare',
+        username: str,
+        password: str,
         cpus: int = 1,
         ram: int = 1024,
         network: str = "nat"
@@ -221,7 +221,8 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin):
                     command,
                     silent=silent,
                     stop_event=stop_event,
-                    win_noprofile=win_noprofile
+                    win_noprofile=win_noprofile,
+                    use_cmd='net use' in command or 'mklink' in command
                 )
                 
                 if return_value != 0:

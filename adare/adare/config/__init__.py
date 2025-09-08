@@ -89,3 +89,27 @@ SHARE_POINT_VM = {
     'windows': 'C:/adare/'
 }
 
+# VM Guest Credentials
+DEFAULT_VM_CREDENTIALS = {
+    'linux': {'username': 'adare', 'password': 'adare'},
+    'windows': {'username': 'adare', 'password': 'adare'}
+}
+
+
+def get_vm_credentials(guest_os: str) -> tuple[str, str]:
+    """
+    Get default username and password for a guest OS.
+    
+    Args:
+        guest_os: Guest OS type (e.g., 'windows', 'linux')
+        
+    Returns:
+        Tuple of (username, password)
+    """
+    if 'windows' in guest_os.lower():
+        return (DEFAULT_VM_CREDENTIALS['windows']['username'], 
+                DEFAULT_VM_CREDENTIALS['windows']['password'])
+    else:
+        return (DEFAULT_VM_CREDENTIALS['linux']['username'],
+                DEFAULT_VM_CREDENTIALS['linux']['password'])
+

@@ -1,0 +1,202 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+
+# Variables for JSON forensic analysis
+variables:
+  username:
+    type: string
+    value: "adare"
+    description: "System username"
+  
+  config_file:
+    type: path
+    value: "/home/{{username}}/app_config.json"
+    description: "Application config file path"
+  
+  log_file:
+    type: path
+    value: "/home/{{username}}/app_logs.json"
+    description: "Application log file path"
+  
+  timestamp_test_file:
+    type: path
+    value: "/home/{{username}}/timestamp_test.json"
+    description: "File for timestamp tolerance testing"
+  
+  session_id:
+    type: string
+    value: "sess_123456789"
+    description: "Expected session ID"
+  
+  user_id:
+    type: integer
+    value: 42
+    description: "Expected user ID"
+  
+  api_endpoint:
+    type: string
+    value: "https://api.example.com/v1"
+    description: "Expected API endpoint"
+
+# Test definitions using new JSON forensic methods
+tests:
+  - name: config_has_api_key
+    description: 'Verify config file contains API key'
+    function: json_contains_key
+    parameter:
+      dst: '{{config_file}}'
+      key_path: 'api.key'
+  
+  - name: config_api_endpoint_correct
+    description: 'Verify API endpoint matches expected value'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_file}}'
+      key_path: 'api.endpoint'
+      expected_value: '{{api_endpoint}}'
+  
+  - name: config_debug_enabled
+    description: 'Check if debug mode is enabled'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_file}}'
+      key_path: 'debug.enabled'
+      expected_value: true
+  
+  - name: config_contains_analytics_feature
+    description: 'Check if analytics feature is enabled'
+    function: json_array_contains
+    parameter:
+      dst: '{{config_file}}'
+      array_path: 'features.flags'
+      expected_element: 'analytics'
+  
+  - name: log_session_exists
+    description: 'Verify session ID exists in logs'
+    function: json_value_matches
+    parameter:
+      dst: '{{log_file}}'
+      key_path: 'session.id'
+      expected_value: '{{session_id}}'
+  
+  - name: log_user_id_correct
+    description: 'Verify user ID matches expected value'
+    function: json_value_matches
+    parameter:
+      dst: '{{log_file}}'
+      key_path: 'user.id'
+      expected_value: '{{user_id}}'
+  
+  - name: log_timestamp_format_check
+    description: 'Check timestamp format with regex'
+    function: json_value_matches
+    parameter:
+      dst: '{{log_file}}'
+      key_path: 'timestamp'
+      expected_value: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+      regex_match: true
+  
+  - name: timestamp_tolerance_test
+    description: 'Verify saved timestamp matches JSON timestamp with tolerance'
+    function: json_value_matches
+    parameter:
+      dst: '{{timestamp_test_file}}'
+      key_path: 'event.timestamp'
+      expected_value: '{{ action_timestamp | format("%Y-%m-%dT%H:%M:%SZ") | tolerance(3, -3) }}'
+
+actions:
+  - command:
+      name: "Create Config JSON"
+      description: "Create sample config file for testing"
+      command: |
+        cat > {{config_file}} << 'EOF'
+        {
+          "api": {
+            "key": "sk_test_123456",
+            "endpoint": "{{api_endpoint}}",
+            "timeout": 30
+          },
+          "debug": {
+            "enabled": true,
+            "level": "info"
+          },
+          "features": {
+            "flags": ["analytics", "reporting", "notifications"]
+          },
+          "database": {
+            "host": "localhost",
+            "port": 5432,
+            "name": "app_db"
+          }
+        }
+        EOF
+      shell: true
+  
+  - command:
+      name: "Create Log JSON"
+      description: "Create sample log file for testing"
+      command: |
+        cat > {{log_file}} << 'EOF'
+        {
+          "session": {
+            "id": "{{session_id}}",
+            "start_time": "2024-01-15T10:30:00Z"
+          },
+          "user": {
+            "id": {{user_id}},
+            "username": "{{username}}"
+          },
+          "events": {
+            "actions": ["login", "view_dashboard", "logout"],
+            "errors": ["authentication_failed", "network_timeout"]
+          },
+          "timestamp": "2024-01-15T10:35:42Z",
+          "metadata": {
+            "version": "1.2.3",
+            "environment": "production"
+          }
+        }
+        EOF
+      shell: true
+  
+  # Timestamp tolerance testing
+  - save_timestamp:
+      description: "Save timestamp before creating JSON file"
+      variable: action_timestamp
+  
+  - idle:
+      duration: 1.0
+      description: "Small delay to simulate processing time"
+  
+  - command:
+      name: "Create Timestamp Test JSON"
+      description: "Create JSON file with current timestamp for tolerance testing"
+      command: |
+        cat > {{timestamp_test_file}} << EOF
+        {
+          "event": {
+            "type": "file_created",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "user": "{{username}}"
+          },
+          "metadata": {
+            "source": "forensic_test",
+            "version": "1.0"
+          }
+        }
+        EOF
+      shell: true
+  
+  # Run all JSON forensic tests
+  - test: config_has_api_key
+  - test: config_api_endpoint_correct
+  - test: config_debug_enabled
+  - test: config_contains_analytics_feature
+  - test: log_session_exists
+  - test: log_user_id_correct
+  - test: log_timestamp_format_check
+  - test: timestamp_tolerance_test

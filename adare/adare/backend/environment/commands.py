@@ -203,6 +203,12 @@ def environment_load(project: Path, environment: str, force: bool = False):
         return
     
     environment_sync(environment_ulid)
+    
+    # Protect environment file after loading
+    from adare.helperfunctions.integrity import protect_loaded_files
+    protected_files = protect_loaded_files([environment_file])
+    log.info(f'Protected {len(protected_files)} environment files')
+    
     log.info(f'environment file {environment_file} loaded')
 
 

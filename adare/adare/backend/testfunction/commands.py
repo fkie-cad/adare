@@ -46,6 +46,13 @@ def testfunction_remove(project_path: Path, name: str):
             log,
             message=f'Testfunction {name} does not exist',
         )
+    
+    # Unprotect files before removal
+    from adare.helperfunctions.integrity import unprotect_files_for_update
+    testfunction_files = [testfunction_directory.pythonfile, testfunction_directory.requirements]
+    unprotected_files = unprotect_files_for_update(testfunction_files)
+    log.info(f'Unprotected {len(unprotected_files)} testfunction files for removal')
+    
     testfunction_database.remove_testfunction_file(testfunction_directory.pythonfile)
     testfunction_directory.remove_testfunction()
 
@@ -59,6 +66,12 @@ def testfunction_load(project_path: Path, name: str):
         )
     testfunction_id = testfunction_database.load_testfunction_file(project_path, testfunction_directory.pythonfile, testfunction_directory.requirements)
     testfunction_sync(testfunction_id)
+    
+    # Protect testfunction files after loading
+    from adare.helperfunctions.integrity import protect_loaded_files
+    testfunction_files = [testfunction_directory.pythonfile, testfunction_directory.requirements]
+    protected_files = protect_loaded_files(testfunction_files)
+    log.info(f'Protected {len(protected_files)} testfunction files for {name}')
 
 
 def testfunction_list():

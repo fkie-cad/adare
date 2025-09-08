@@ -132,10 +132,57 @@ class NetworkingMixin:
         return await self.manager.run_async(_add_port_forward_async)
 
     async def add_shared_folder(self, name: str, host_path: Path, readonly: bool = False, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
-        """Add a shared folder to the VM."""
+        """
+        Add a shared folder to the VM (VirtualBox configuration only).
+        Checks if an identical shared folder already exists to prevent conflicts.
+        For Windows guests with custom mountpoint, this only adds the shared folder - use mount_shared_folder() after VM startup.
+        For other cases, uses VirtualBox's built-in shared folder mechanism with automount.
+        
+        Args:
+            name: Name of the shared folder
+            host_path: Path on the host machine
+            readonly: Whether the share is read-only
+            ctx_manager: Context manager for status updates
+            stop_event: Event to signal stop
+            log_file: Log file for output
+            silent: Whether to suppress logging
+        """
         async def _add_shared_folder_async():
-            shared_folder = SharedFolderConfig(name=name, host_path=str(host_path), readonly=readonly)
+            # Create config object for comparison
+            new_config = SharedFolderConfig(
+                name=name,
+                host_path=str(host_path),
+                readonly=readonly
+            )
             
+            # First check if identical folder already exists
+            existing_folders = await self.list_shared_folders(ctx_manager, stop_event, log_file, silent)
+            
+            if name in existing_folders:
+                existing_config = existing_folders[name]
+                # Check if the existing folder is identical
+                if new_config.matches(existing_config):
+                    if not silent:
+                        log.info(f"Shared folder '{name}' already exists with identical configuration - skipping")
+                    return 0
+                else:
+                    log.warning(f"Shared folder '{name}' exists but with different configuration - will attempt to remove and re-add")
+                    log.debug(f"Existing: {existing_config}, New: {new_config}")
+                    # Remove existing folder first
+                    remove_args = ["sharedfolder", "remove", self.vm_name, "--name", name]
+                    try:
+                        await self._execute_streaming_command_async(
+                            remove_args,
+                            log_file=log_file,
+                            stop_event=stop_event,
+                            silent=silent,
+                            ctx_manager=ctx_manager,
+                            operation_name="shared folder removal"
+                        )
+                    except Exception as e:
+                        log.warning(f"Failed to remove existing shared folder '{name}': {e}")
+            
+            # Add the shared folder
             args = [
                 "sharedfolder", "add", self.vm_name,
                 "--name", name,
@@ -146,7 +193,7 @@ class NetworkingMixin:
                 args.append("--readonly")
             
             try:
-                log.info(f"Adding shared folder '{name}' ({host_path}) to VM '{self.vm_name}'" + (" (readonly)" if readonly else ""))
+                log.info(f"Adding shared folder '{name}' (host: {host_path}) to VM '{self.vm_name}'.")
                 return_value, _, _ = await self._execute_streaming_command_async(
                     args,
                     log_file=log_file,
@@ -157,7 +204,7 @@ class NetworkingMixin:
                 )
                 
                 if return_value == 0:
-                    log.info(f"Shared folder '{name}' added successfully to VM '{self.vm_name}'")
+                    log.info(f"Shared folder '{name}' added to VM '{self.vm_name}'.")
                 else:
                     log.error(f"Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
                 
@@ -195,25 +242,30 @@ class NetworkingMixin:
                     'ignore_errors': False
                 })
             else:
-                # Mount to directory path using symbolic link
-                parent_dir = mountpoint.parent
+                # Mount to directory path using symbolic link (copy behavior from old API)
+                from pathlib import PureWindowsPath
+                win_mountpoint = mountpoint_str.replace('/', '\\')
+                parent_dir = PureWindowsPath(win_mountpoint).parent.as_posix()
+                
+                # Create parent directory
                 commands.append({
-                    'command': f'New-Item -ItemType Directory -Path "{parent_dir}" -Force',
-                    'description': f"Create parent directory {parent_dir}",
+                    'command': f'if (!(Test-Path "{parent_dir}")) {{ New-Item -ItemType Directory -Path "{parent_dir}" -Force }}',
+                    'description': f"Create parent directory for {name}",
                     'ignore_errors': True
                 })
                 
                 # Remove existing symbolic link if it exists
                 commands.append({
-                    'command': f'if (Test-Path "{mountpoint}") {{ Remove-Item "{mountpoint}" -Force -Recurse }}',
-                    'description': f"Remove existing path {mountpoint}",
+                    'command': f'if (Test-Path "{win_mountpoint}") {{ Remove-Item "{win_mountpoint}" -Force -Recurse -ErrorAction SilentlyContinue }}',
+                    'description': f"Remove existing link for {name}",
                     'ignore_errors': True
                 })
                 
-                # Create symbolic link
+                # Create symbolic link (exact copy from old API)
+                mount_cmd = f'mklink /D "{win_mountpoint}" "{unc_path}"'
                 commands.append({
-                    'command': f'cmd /c mklink /D "{mountpoint}" "{unc_path}"',
-                    'description': f"Create symbolic link from {mountpoint} to {unc_path}",
+                    'command': f"cmd /c '{mount_cmd}'",
+                    'description': f"Create symlink for {name}",
                     'ignore_errors': False
                 })
         else:

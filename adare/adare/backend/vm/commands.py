@@ -14,10 +14,68 @@ from adare.backend.vm.exceptions import VMError
 from adare.types.environment import EnvironmentMetadata
 from adare.virtualbox.api import VirtualBoxVM
 from adarelib.constants import VMStatus
-from adare.types.stages import VMImportStage, VMSnapshotRestoreStage, VMSnapshotCreateStage, VMExperimentSnapshotStage
+from adare.types.stages import VMIntegrityVerificationStage, VMImportStage, VMSnapshotRestoreStage, VMSnapshotCreateStage, VMExperimentSnapshotStage
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 
 log = logging.getLogger(__name__)
+
+
+def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None) -> None:
+    """
+    Verify VM file integrity before import/use.
+    This ensures the VM file hasn't been tampered with since loading.
+    
+    Args:
+        vm_id: Database ID of the VM to verify
+        experiment_run_ulid: Optional experiment run ID for stage tracking
+    """
+    # Get VM record from database
+    vm_record = vm_database.get_vm_by_id(vm_id)
+    if not vm_record:
+        from adare.exceptions import LoggedException
+        raise LoggedException(log, f"VM with ID {vm_id} not found in database")
+    
+    # Get VM file path
+    vm_file_path = Path(vm_record.file)
+    if not vm_file_path.exists():
+        from adare.backend.experiment.exceptions import ExperimentIntegrityError
+        raise ExperimentIntegrityError(
+            log,
+            f"VM file not found: {vm_file_path}",
+            possible_solutions=[
+                "Check if VM file was moved or deleted",
+                "Re-import VM with correct file path",
+                "Verify file system permissions"
+            ]
+        )
+    
+    # Calculate current hash and compare with stored hash
+    vm_manager = VMFileManager()
+    
+    def verify_in_stage():
+        log.info(f"Verifying integrity of VM: {vm_record.name}")
+        current_hash = vm_manager.calculate_file_hash(vm_file_path, silent=True)
+        
+        if current_hash != vm_record.hash:
+            from adare.backend.experiment.exceptions import ExperimentIntegrityError
+            raise ExperimentIntegrityError(
+                log,
+                f"VM file integrity check failed for '{vm_record.name}'. File has been modified since import.",
+                possible_solutions=[
+                    "Re-import VM from original source",
+                    "Check for unauthorized file modifications",
+                    "Verify VM file hasn't been corrupted"
+                ]
+            )
+        
+        log.info(f"VM integrity verification passed: {vm_record.name}")
+    
+    # Run with stage context if experiment run provided
+    if experiment_run_ulid:
+        with StageCtxManager(VMIntegrityVerificationStage(), experiment_run_ulid):
+            verify_in_stage()
+    else:
+        verify_in_stage()
 
 
 def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_metadata) -> str:
@@ -201,7 +259,7 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
                         # Remove VM from VirtualBox (this also removes snapshots)
                         from adare.virtualbox.api import VirtualBoxManager
                         manager = VirtualBoxManager()
-                        vbox_vm = VirtualBoxVM(vm_name, "", manager)
+                        vbox_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy")
                         await vbox_vm.remove()
                         log.info(f"Successfully removed VM '{vm.name}' from VirtualBox")
                 else:
@@ -362,6 +420,9 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         raise VMError(log, f"VM with ID {vm_id} not found in database")
     
     log.info(f"Using pre-loaded VM: {vm.name} (hash: {vm.hash})")
+    
+    # Verify VM integrity before proceeding with import
+    verify_vm_integrity(vm_id, experiment_run_ulid)
     
     # Check VM status in VirtualBox
     vm_status = verify_vm_status(vm)
