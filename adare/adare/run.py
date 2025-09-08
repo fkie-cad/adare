@@ -38,6 +38,9 @@ from adare.cli.vm import (
 from adare.cli.mcp import (
     exec_mcp_test_icon, exec_mcp_test_text, exec_mcp_get_all_text
 )
+from adare.cli.ws import (
+    exec_ws_action, create_example_action_file
+)
 from adare.setup_logging import setup_logging
 from adare.exceptions import LoggedException, LoggedErrorException
 
@@ -596,6 +599,49 @@ def get_all_text(screenshot, format, host, port):
         port=port
     )
     exec_with_error_printing(exec_mcp_get_all_text, args)
+
+
+# ------------------------------
+# WebSocket commands  
+# ------------------------------
+@cli.group()
+def ws():
+    """WebSocket adarevm interaction commands."""
+    pass
+
+@ws.command()
+@click.argument('action_file', type=click.Path(exists=True))
+@click.option('--host', default='localhost', help='AdareVM host (default: localhost)')
+@click.option('--port', type=int, default=18765, help='AdareVM WebSocket port (default: 18765)')
+@click.option('--connect-timeout', type=float, default=10.0, help='Connection timeout in seconds (default: 10.0)')
+@click.option('--default-timeout', type=float, default=30.0, help='Default action timeout in seconds (default: 30.0)')
+@click.option('--continue-on-error', is_flag=True, help='Continue executing actions even if one fails')
+@click.option('--output-format', type=click.Choice(['json', 'yaml', 'summary', 'simple']), 
+              default='simple', help='Output format (default: simple)')
+def action(action_file, host, port, connect_timeout, default_timeout, continue_on_error, output_format):
+    """Execute actions from YAML file on adarevm via WebSocket.
+    
+    ACTION_FILE: Path to YAML file containing actions to execute
+    
+    Example: adare ws action test.yml --host 192.168.1.100 --port 18765
+    """
+    args = SimpleNamespace(
+        action_file=action_file,
+        host=host,
+        port=port,
+        connect_timeout=connect_timeout,
+        default_timeout=default_timeout,
+        continue_on_error=continue_on_error,
+        output_format=output_format
+    )
+    exec_with_error_printing(exec_ws_action, args)
+
+@ws.command(name='example')
+@click.argument('output_file', type=click.Path())
+def create_example(output_file):
+    """Create an example action YAML file."""
+    from pathlib import Path
+    create_example_action_file(Path(output_file))
 
 
 

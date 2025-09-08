@@ -491,9 +491,22 @@ class AdareVMServer:
     
     async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True):
         """Execute a raw shell command with advanced options."""
-        log.info(f"Executing shell command: {shell_command}")
+        import time
+        import uuid
+        
+        # Generate unique command ID for tracking
+        command_id = str(uuid.uuid4())[:8]
+        start_time = time.time()
+        
+        log.info(f"[{command_id}] Executing shell command: {shell_command}")
+        log.debug(f"[{command_id}] Command options - cwd: {cwd}, timeout: {timeout}, shell: {shell}, inherit_env: {inherit_env}")
+        
         try:
-            await self.send_event(websocket, EventType.COMMAND_START, {"shell_command": shell_command})
+            await self.send_event(websocket, EventType.COMMAND_START, {
+                "shell_command": shell_command, 
+                "command_id": command_id,
+                "start_time": start_time
+            })
             
             # Prepare options for execute_on_shell
             from pathlib import Path
@@ -517,34 +530,61 @@ class AdareVMServer:
             
             # Execute shell command directly using execute_on_shell
             # When shell=True, pass command as string; otherwise split into list
+            # Log command execution start
+            log.debug(f"[{command_id}] Starting shell execution with options: {options}")
+            
             if options.get('shell', False):
                 result = execute_on_shell(shell_command, **options)
             else:
                 result = execute_on_shell(shell_command.split(" "), **options)
             
+            execution_time = time.time() - start_time
+            
             if result['returncode'] == 0:
-                await self.send_event(websocket, EventType.COMMAND_COMPLETE, {"shell_command": shell_command})
-                log.info(f"Shell command completed successfully: {shell_command}")
+                await self.send_event(websocket, EventType.COMMAND_COMPLETE, {
+                    "shell_command": shell_command,
+                    "command_id": command_id,
+                    "execution_time": execution_time
+                })
+                log.info(f"[{command_id}] Shell command completed successfully in {execution_time:.2f}s: {shell_command}")
                 return {
                     "status": "success", 
                     "message": f"Shell command executed successfully",
                     "returncode": result['returncode'],
-                    "stdout": result['stdout']
+                    "stdout": result['stdout'],
+                    "command_id": command_id,
+                    "execution_time": execution_time
                 }
             else:
-                await self.send_event(websocket, EventType.ERROR, {"message": f"Shell command failed: {shell_command}"})
-                log.error(f"Shell command failed with return code {result['returncode']}: {shell_command}")
+                await self.send_event(websocket, EventType.ERROR, {
+                    "message": f"Shell command failed: {shell_command}",
+                    "command_id": command_id,
+                    "execution_time": execution_time
+                })
+                log.error(f"[{command_id}] Shell command failed with return code {result['returncode']} in {execution_time:.2f}s: {shell_command}")
                 return {
                     "status": "error", 
                     "message": f"Shell command failed with return code {result['returncode']}",
                     "returncode": result['returncode'],
-                    "stdout": result['stdout']
+                    "stdout": result['stdout'],
+                    "command_id": command_id,
+                    "execution_time": execution_time
                 }
             
         except Exception as e:
-            log.error(f"Unexpected shell command error: {shell_command}: {e}")
-            await self.send_event(websocket, EventType.ERROR, {"message": f"Shell command '{shell_command}' failed: {e}"})
-            return {"status": "error", "message": str(e)}
+            execution_time = time.time() - start_time
+            log.error(f"[{command_id}] Unexpected shell command error after {execution_time:.2f}s: {shell_command}: {e}")
+            await self.send_event(websocket, EventType.ERROR, {
+                "message": f"Shell command '{shell_command}' failed: {e}",
+                "command_id": command_id,
+                "execution_time": execution_time
+            })
+            return {
+                "status": "error", 
+                "message": str(e),
+                "command_id": command_id,
+                "execution_time": execution_time
+            }
     
     async def _get_status(self, websocket):
         """Get current server status."""

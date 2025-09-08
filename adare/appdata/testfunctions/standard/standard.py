@@ -248,7 +248,16 @@ class CsvContainsLineMatchingRegex(BasicTest):
         try:
             dst, status = self.resolve_globfilepath(self.parameter.dst)
             if not dst:
-                return TestResult.error([f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+                # List files in directory to help with debugging
+                try:
+                    from pathlib import Path
+                    search_path = Path(self.parameter.dst).parent if '/' in self.parameter.dst or '\\' in self.parameter.dst else Path('.')
+                    available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
+                    files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
+                except Exception:
+                    files_info = "Could not list directory contents"
+                
+                return TestResult.execution_error(None, f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}')
 
             log.debug(f'dst file {dst} will be used for test {self.name}')
             comparison_list = []
@@ -266,7 +275,7 @@ class CsvContainsLineMatchingRegex(BasicTest):
                             return TestResult.success()
                 return TestResult.failed([f'entry {self.parameter.entry} does not exist in file'])
             except FileNotFoundError:
-                return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
+                return TestResult.execution_error(None, f'file with path {self.parameter.dst} does not exist')
             except (PermissionError, OSError) as e:
                 return TestResult.execution_error(e, f"Cannot read CSV file {dst}")
             except csv.Error as e:

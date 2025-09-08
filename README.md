@@ -13,7 +13,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] check if we can easily add new testfunctionsets? 
 - [x] clear distinction between failed test and exception/error -> find a way to propagate to the client!
 - [ ] test if we can still run adare if we delete cloned repo
-- [ ] vm is copied to project or? then we can also make it write protected?
+- [x] vm is copied to project or? then we can also make it write protected?
 
 #### Features
 - [ ] test and enable ydotool to make it work on wayland as well -> also would make machine setup easier as not X11 specific stuff needs to happen 
@@ -23,6 +23,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] install requirements of testfunctions if given into poetry somehow!
 - [x] make in experiment run total time at top in a row!
 - [ ] built a way to better validate playbooks (e.g. two variables with saame name through variables or save_timestamp ..., check that used variables are defined before, check if filters are correct)
+- [ ] built some flag --developer that enables hthe commands mcp; ws
 
 
 #### QOL
@@ -32,10 +33,9 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] add easier way to updated/test new testfunctions
 - [ ] improve code quality in general
   - [x] split virtualbox api into multiple files
+  - [ ] we use the username/password dummy when we with virtualbox do not need the commands ... -> find a better solution!
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
 - [x] Final short experiment finished message with overall result (exception/error vs none) and test result (if all tests succeded)and ULID
-- [ ] we use the username/password dummy when we with virtualbox do not need the commands ... -> find a better solution!
-- [ ] vm file integrity takes a long time -> any better ideas? -> maybe exchange for filesize -> maybe keep due to snapshot we only do it once!
 
 #### Bugs
 - [x] fix shared directory handling with snapshots; so what happens if we remove project and then create again with same vms .... At the moment we get an error.
