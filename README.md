@@ -43,7 +43,8 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [x] we can easily load testfunction and change while we already run an experiment -> fix that to be not possible to preserve integrity; general workflow for update those seems a little broken
 - [x] we copy adarevm into project dir?! but we use it from appdata so we may not do this?!
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
-- [ ] if over 1m we have two opening brackets ((2m ... 
+- [x] if over 1m we have two opening brackets ((2m ... 
+- [x] verify vm integrity is only required when we import vm -> saved 30s per run!
 
 #### Test
 - [ ] built more unit tests / integration tests / ... (maybe with claude)

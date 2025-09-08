@@ -328,7 +328,7 @@ class AdareVMClient:
         return await self.call_tool(ToolRegistry.RUN_TEST, params)
     
     
-    async def execute_shell(self, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False) -> Dict[str, Any]:
+    async def execute_shell(self, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True) -> Dict[str, Any]:
         """Execute a raw shell command with advanced options."""
         params = {"shell_command": shell_command}
         if cwd is not None:
@@ -339,6 +339,8 @@ class AdareVMClient:
             params["timeout"] = timeout
         if shell is not None:
             params["shell"] = shell
+        if inherit_env is not None:
+            params["inherit_env"] = inherit_env
         return await self.call_tool(ToolRegistry.EXECUTE_SHELL, params)
     
     async def get_status(self) -> Dict[str, Any]:
