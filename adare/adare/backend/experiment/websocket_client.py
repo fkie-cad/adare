@@ -346,7 +346,7 @@ class AdareVMClient:
         return await self.call_tool(ToolRegistry.RUN_TEST, params)
     
     
-    async def execute_shell(self, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True) -> Dict[str, Any]:
+    async def execute_shell(self, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True, websocket_timeout: float = None) -> Dict[str, Any]:
         """Execute a raw shell command with advanced options."""
         params = {"shell_command": shell_command}
         if cwd is not None:
@@ -359,7 +359,10 @@ class AdareVMClient:
             params["shell"] = shell
         if inherit_env is not None:
             params["inherit_env"] = inherit_env
-        return await self.call_tool(ToolRegistry.EXECUTE_SHELL, params)
+        
+        # Use command timeout + buffer for WebSocket timeout, or default to 30s
+        call_timeout = websocket_timeout or (timeout + 10 if timeout else 30.0)
+        return await self.call_tool(ToolRegistry.EXECUTE_SHELL, params, timeout=call_timeout)
     
     async def get_status(self) -> Dict[str, Any]:
         """Get current server status."""
