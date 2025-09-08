@@ -102,7 +102,19 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
     existing_vm = vm_database.get_vm_by_hash(file_hash)
     if existing_vm:
         log.info(f"VM with hash {file_hash} already exists: {existing_vm.name}")
-        return existing_vm.id
+        
+        # Check if existing VM has proper snapshot configuration
+        if not existing_vm.use_snapshots or not existing_vm.base_snapshot_name:
+            log.warning(f"⚠️  Existing VM '{existing_vm.name}' has no snapshot configuration!")
+            log.warning(f"⚠️  This VM may be in an unknown state from previous experiments.")
+            log.warning(f"⚠️  Creating a NEW VM entry to ensure clean state.")
+            log.warning(f"⚠️  You may have a RELICT VM '{existing_vm.name}' in VirtualBox that needs manual cleanup!")
+            log.warning(f"⚠️  Consider running: VBoxManage unregistervm '{existing_vm.name}' --delete")
+            
+            # Don't reuse - fall through to create new VM
+        else:
+            # VM has snapshot configuration - safe to reuse
+            return existing_vm.id
     
     # Create VM record without VirtualBox import (file operations only)
     vm = vm_database.create_vm(
