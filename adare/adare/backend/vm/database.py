@@ -386,8 +386,10 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
         
         # Create VirtualBoxVM instance and import
         from adare.virtualbox.api import VirtualBoxManager
+        from adare.config import get_vm_credentials
         manager = VirtualBoxManager()
-        vbox_vm = VirtualBoxVM(vm.name, guest_os, manager)
+        username, password = get_vm_credentials(guest_os)
+        vbox_vm = VirtualBoxVM(vm.name, guest_os, manager, username, password)
         await vbox_vm.create_from_ovf_or_ova(vm_file, silent=True)
         
         # Capture UUID after successful import
@@ -570,7 +572,7 @@ def delete_all_vms(force: bool = False) -> dict:
                                 # Remove VM from VirtualBox (this also removes snapshots)
                                 from adare.virtualbox.api import VirtualBoxManager
                                 manager = VirtualBoxManager()
-                                vbox_vm = VirtualBoxVM(vm_name, "", manager)
+                                vbox_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy")
                                 vbox_vm.delete_vm()
                                 log.info(f"Successfully removed VM '{vm.name}' from VirtualBox")
                         else:
@@ -643,7 +645,7 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
                                 # Remove VM from VirtualBox (this also removes snapshots)
                                 from adare.virtualbox.api import VirtualBoxManager
                                 manager = VirtualBoxManager()
-                                vbox_vm = VirtualBoxVM(vm_name, "", manager)
+                                vbox_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy")
                                 vbox_vm.delete_vm()
                                 log.info(f"Successfully removed VM '{vm.name}' from VirtualBox")
                     except Exception as vbox_error:

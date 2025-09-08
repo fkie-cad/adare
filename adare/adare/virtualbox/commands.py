@@ -328,19 +328,30 @@ class CommandExecutionMixin:
                 cmd_to_run = f"cmd /c '{cmd_to_run}'"
             
             if background:
-                noprofile_inner = "'-NoProfile'," if win_noprofile else ""
-                ps_cmd = (
-                    f"$p=Start-Process -WindowStyle Hidden -PassThru -FilePath powershell.exe "
-                    f"-ArgumentList {noprofile_inner}'-ExecutionPolicy','Bypass','-Command','{cmd_to_run}';"
-                    f"$p.Id"
-                )
+                if use_cmd:
+                    # For background commands with cmd, use cmd.exe directly in Start-Process
+                    noprofile_inner = "'-NoProfile'," if win_noprofile else ""
+                    # Remove the cmd /c wrapper since we'll use cmd.exe directly
+                    original_cmd = cmd_to_run.replace("cmd /c '", "").rstrip("'")
+                    ps_cmd = (
+                        f"$p=Start-Process -WindowStyle Hidden -PassThru -FilePath cmd.exe "
+                        f"-ArgumentList '/c','{original_cmd}';"
+                        f"$p.Id"
+                    )
+                else:
+                    noprofile_inner = "'-NoProfile'," if win_noprofile else ""
+                    ps_cmd = (
+                        f"$p=Start-Process -WindowStyle Hidden -PassThru -FilePath powershell.exe "
+                        f"-ArgumentList {noprofile_inner}'-ExecutionPolicy','Bypass','-Command','{cmd_to_run}';"
+                        f"$p.Id"
+                    )
                 command_bytes = ps_cmd.encode('utf-16le')
                 encoded_command = base64.b64encode(command_bytes).decode('ascii')
-                command_args = f"{noprofile_arg} -ExecutionPolicy Bypass -EncodedCommand {encoded_command}".strip()
+                command_args = [arg for arg in [noprofile_arg, "-ExecutionPolicy Bypass", "-EncodedCommand", encoded_command] if arg]
             else:
                 command_bytes = cmd_to_run.encode('utf-16le')
                 encoded_command = base64.b64encode(command_bytes).decode('ascii')
-                command_args = f"{noprofile_arg} -ExecutionPolicy Bypass -EncodedCommand {encoded_command}".strip()
+                command_args = [arg for arg in [noprofile_arg, "-ExecutionPolicy Bypass", "-EncodedCommand", encoded_command] if arg]
         else:
             # Linux/Unix guest
             command_exe = "/bin/bash"
@@ -357,8 +368,10 @@ class CommandExecutionMixin:
             args = [
                 "guestcontrol", self.vm_name, "run",
                 "--exe", command_exe,
-                "--", command_exe, command_args
+                "--", command_exe
             ]
+            # Add PowerShell arguments as separate list items
+            args.extend(command_args)
         else:
             args = [
                 "guestcontrol", self.vm_name, "run",

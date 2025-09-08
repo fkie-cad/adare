@@ -165,8 +165,9 @@ class VMDatabaseApi(EnhancedDatabaseApi):
         Returns:
             VM instance or None if not found
         """
+        from sqlalchemy.orm import joinedload
         with self:
-            vm = self._session.query(Vm).filter_by(name=name).first()
+            vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter_by(name=name).first()
             if vm:
                 self._session.expunge(vm)
             return vm
@@ -181,15 +182,17 @@ class VMDatabaseApi(EnhancedDatabaseApi):
         Returns:
             VM instance if found, None otherwise
         """
+        from sqlalchemy.orm import joinedload
         with self:
-            vm = self._session.query(Vm).filter_by(hash=file_hash).first()
+            vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter_by(hash=file_hash).first()
             if vm:
                 self._session.expunge(vm)
             return vm
     
     def get_vm_by_id(self, vm_id: str) -> Optional[Vm]:
         """Get VM by database ID."""
-        vm = self._session.query(Vm).filter(Vm.id == vm_id).first()
+        from sqlalchemy.orm import joinedload
+        vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter(Vm.id == vm_id).first()
         if vm:
             self._session.expunge(vm)
         return vm
@@ -204,8 +207,9 @@ class VMDatabaseApi(EnhancedDatabaseApi):
         Returns:
             VM instance if found, None otherwise
         """
+        from sqlalchemy.orm import joinedload
         with self:
-            vm = self._session.query(Vm).filter_by(vbox_uuid=vbox_uuid).first()
+            vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter_by(vbox_uuid=vbox_uuid).first()
             if vm:
                 self._session.expunge(vm)
             return vm
@@ -335,7 +339,8 @@ class VMDatabaseApi(EnhancedDatabaseApi):
             List of VM instances
         """
         with self:
-            vms = self._session.query(Vm).all()
+            from sqlalchemy.orm import joinedload
+            vms = self._session.query(Vm).options(joinedload(Vm.osinfo)).all()
             # Expunge objects from session to make them detached
             for vm in vms:
                 self._session.expunge(vm)
@@ -349,7 +354,8 @@ class VMDatabaseApi(EnhancedDatabaseApi):
             List of available VM instances
         """
         with self:
-            vms = self._session.query(Vm).all()
+            from sqlalchemy.orm import joinedload
+            vms = self._session.query(Vm).options(joinedload(Vm.osinfo)).all()
             # Expunge objects from session to make them detached
             for vm in vms:
                 self._session.expunge(vm)

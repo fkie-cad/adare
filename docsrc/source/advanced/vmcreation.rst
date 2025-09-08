@@ -17,6 +17,31 @@ Inside the VM, ensure the following configuration:
   - **Password:** ``adare``
 
 - Enable **autologin** so the VM boots directly into the ``adare`` user’s desktop.
+- We must also go to the control panel ``User Accounts -> User Accounts -> Change User Account Control settings`` and set the slider to the bottom (``Never notify``).
+- Enable Developer mode: In windows settings search ``For Developers`` and toggle the switch to enable it. This is required to setup the shared directories properly.
+- Press Win + R, type wf.msc, press Enter.
+
+In the left panel, right-click Windows Defender Firewall with Advanced Security on Local Computer (left-click) → Properties.
+
+For Domain Profile, Private Profile, and Public Profile tabs, change:
+
+Inbound connections → Allow.
+
+Outbound connections → Allow (default is already allow).
+
+Click OK.
+
+- Afterwards a clean shutdown is required to apply the changes.
+.. otherwise we need elevation not possible, except we disable UAC and create some schedulted task we can trigger that executest some content to a file we can write.
+
+
+.. - We also must disable UAC so we need to execute the following and afterwards make a clean shutdown to apply it successfully:
+
+..   .. code-block:: batch
+
+..      reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System /v EnableLUA /t REG_DWORD /d 0 /f
+
+..   We know that this may result in some apps not working properly, but it is necessary for ADARE to function correctly so far. We are currently working on an alternative solution for those cases.
 
 - Install:
   - Python 3.10 or newer

@@ -57,10 +57,17 @@ class SnapshotManager:
         if not vm_name:
             raise VMError(log, f"VM with UUID {vm_record.vbox_uuid} not found in VirtualBox")
         
+        # Get OS platform for credentials
+        from adare.config import get_vm_credentials
+        platform = getattr(vm_record.osinfo, 'platform', 'linux') if hasattr(vm_record, 'osinfo') and vm_record.osinfo else 'linux'
+        username, password = get_vm_credentials(platform)
+        
         vbox_vm = VirtualBoxVM(
             vm_name=vm_name,
-            guest_os="",  # Will be populated from VBox info
-            manager=self.vbox_manager
+            guest_os=platform,
+            manager=self.vbox_manager,
+            username=username,
+            password=password
         )
         
         try:
@@ -119,10 +126,17 @@ class SnapshotManager:
         if not vm_name:
             raise VMError(log, f"VM with UUID {vm_record.vbox_uuid} not found in VirtualBox")
         
+        # Get OS platform for credentials
+        from adare.config import get_vm_credentials
+        platform = getattr(vm_record.osinfo, 'platform', 'linux') if hasattr(vm_record, 'osinfo') and vm_record.osinfo else 'linux'
+        username, password = get_vm_credentials(platform)
+        
         vbox_vm = VirtualBoxVM(
             vm_name=vm_name,
-            guest_os="",
-            manager=self.vbox_manager
+            guest_os=platform,
+            manager=self.vbox_manager,
+            username=username,
+            password=password
         )
         
         try:
@@ -167,10 +181,17 @@ class SnapshotManager:
         if not vm_name:
             raise VMError(log, f"VM with UUID {vm_record.vbox_uuid} not found in VirtualBox")
         
+        # Get OS platform for credentials
+        from adare.config import get_vm_credentials
+        platform = getattr(vm_record.osinfo, 'platform', 'linux') if hasattr(vm_record, 'osinfo') and vm_record.osinfo else 'linux'
+        username, password = get_vm_credentials(platform)
+        
         vbox_vm = VirtualBoxVM(
             vm_name=vm_name,
-            guest_os="",
-            manager=self.vbox_manager
+            guest_os=platform,
+            manager=self.vbox_manager,
+            username=username,
+            password=password
         )
         
         try:
@@ -219,10 +240,17 @@ class SnapshotManager:
         if not vm_name:
             return False
         
+        # Get OS platform for credentials
+        from adare.config import get_vm_credentials
+        platform = getattr(vm_record.osinfo, 'platform', 'linux') if hasattr(vm_record, 'osinfo') and vm_record.osinfo else 'linux'
+        username, password = get_vm_credentials(platform)
+        
         vbox_vm = VirtualBoxVM(
             vm_name=vm_name,
-            guest_os="",
-            manager=self.vbox_manager
+            guest_os=platform,
+            manager=self.vbox_manager,
+            username=username,
+            password=password
         )
         
         try:
@@ -304,10 +332,17 @@ class SnapshotManager:
             log.warning(f"VM with UUID {vm_record.vbox_uuid} not found in VirtualBox")
             return False, "VM not found in VirtualBox"
         
+        # Get OS platform for credentials
+        from adare.config import get_vm_credentials
+        platform = getattr(vm_record.osinfo, 'platform', 'linux') if hasattr(vm_record, 'osinfo') and vm_record.osinfo else 'linux'
+        username, password = get_vm_credentials(platform)
+        
         vbox_vm = VirtualBoxVM(
             vm_name=vm_name,
-            guest_os="",
-            manager=self.vbox_manager
+            guest_os=platform,
+            manager=self.vbox_manager,
+            username=username,
+            password=password
         )
         
         try:
@@ -399,11 +434,13 @@ def check_snapshot_exists_by_uuid(vbox_uuid: str, snapshot_name: str) -> bool:
     if not vm_name:
         return False
     
-    # Create VirtualBox VM instance and check snapshot
+    # Create VirtualBox VM instance and check snapshot (no credentials needed for snapshot check)
     vbox_vm = VirtualBoxVM(
         vm_name=vm_name,
         guest_os="",
-        manager=VirtualBoxManager()
+        manager=VirtualBoxManager(),
+        username="dummy",
+        password="dummy"
     )
     
     try:

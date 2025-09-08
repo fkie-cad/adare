@@ -74,15 +74,13 @@ This will create a directory in the project's experiment directory with the foll
     ├── experiments/
     │   ├── ...
     │   └── <experiment_name>/
-    │       ├── playbook.yaml
-    │       ├── testset.yml
+    │       ├── playbook.yml
     │       ├── metadata.yml
     │       └── img/
     └── ...
 
 The ``metadata.yml`` file contains information about the experiment, especially the names of the environments it can be run on.
-The ``testset.yml`` file contains all tests that can be run within the experiment.
-The ``playbook.yaml`` file contains the YAML-based GUI automation instructions, such as mouse clicks or keyboard inputs, as well as calls to the tests specified in the testset file.
+The ``playbook.yml`` file contains everything needed for the experiment: variables, test definitions, and YAML-based GUI automation instructions such as mouse clicks or keyboard inputs.
 The directory ``img`` contains images used for GUI automation.
 
 In the following we will create a simple example experiment to delete a file from the Documents folder to the trash bin on Ubuntu.
@@ -97,53 +95,10 @@ We start with the metadata file, which would look like this:
     environments:
      - ubuntu24043
 
-We then create the tests within the testset file.
-It contains a list of tests, as well as the name of the experiment.
-Each test must specify a name, a description, a function and parameters.
-The function specifies the test to be performed, such as checking if a file exists or checking if a file contains a specific line.
-The parameters specify the file or directory to be checked, the line to be checked or the regex to be checked.
-An example testset file in our example would look like this:
+We then create the playbook file, which contains everything needed for the experiment including variables, tests, and actions.
+The playbook uses a declarative approach where you specify settings, variables, test definitions, and actions like clicks, keyboard input, and test executions all in one file.
 
-.. code-block:: yaml
-
-    name: ubuntu_deletefile
-    tests:
-      - name: testfile_created
-        description: 'Verify test file does exist before experiment'
-        function: file_exists
-        parameter:
-          dst: '/home/adare/Documents/testfile.txt'
-      - name: testfile_deleted
-        description: 'Verify test file was deleted successfully'
-        function: file_does_not_exist
-        parameter:
-          dst: '/home/adare/Documents/testfile.txt'
-      - name: trashbin_check_file
-        description: 'check if file exists in trashbin'
-        function: file_exists
-        parameter:
-          dst: '/home/adare/.local/share/Trash/files/testfile.txt'
-      - name: trahsbin_check_info_file
-        description: 'check if info file exists in trashbin'
-        function: file_exists
-        parameter:
-          dst: '/home/adare/.local/share/Trash/info/testfile.txt.trashinfo'
-      - name: trashbin_check_info_date
-        description: 'check if deletion date in info file is correct'
-        function: file_content_equals
-        parameter:
-          dst: '/home/adare/.local/share/Trash/info/testfile.txt.trashinfo'
-          content: |
-            [Trash Info]
-            Path=/home/adare/Documents/testfile.txt
-            DeletionDate={{ TIMESTAMP.DELETIONDATE | format('%Y-%m-%dT%H:%M:%S') | tolerance(5, -5) }}
-
-This file contains five tests: checking if the test file exists initially, verifying the file was deleted, and confirming the file appears in Ubuntu's trash system (both the actual file and its metadata).
-We can save variables within the playbook and use them in the testset file (as shown with ``{{ TIMESTAMP.DELETIONDATE }}``).
-
-We now create the playbook file, which contains the YAML-based GUI automation steps.
-The playbook uses a declarative approach where you specify actions like clicks, keyboard input, and test executions.
-An example playbook file for our example would look like this:
+An example playbook file for our Ubuntu file deletion experiment would look like this:
 
 .. code-block:: yaml
 
@@ -161,8 +116,52 @@ An example playbook file for our example would look like this:
 
     # Variables that can be used throughout the playbook
     variables:
-      username: "adare"
-      filepath: "/home/{{ username }}/Documents/testfile.txt"
+      username:
+        type: string
+        value: "adare"
+        description: "Username for the target system"
+      
+      filepath:
+        type: path
+        value: "/home/{{username}}/Documents/testfile.txt"
+        description: "Full path to the test file"
+      
+      trashbin_path:
+        type: path  
+        value: "/home/{{username}}/.local/share/Trash"
+        description: "Path to user's trash bin"
+
+    # Test definitions
+    tests:
+      - name: testfile_created
+        description: 'Verify test file does exist before experiment'
+        function: file_exists
+        parameter:
+          dst: '{{filepath}}'
+      - name: testfile_deleted
+        description: 'Verify test file was deleted successfully'
+        function: file_does_not_exist
+        parameter:
+          dst: '{{filepath}}'
+      - name: trashbin_check_file
+        description: 'check if file exists in trashbin'
+        function: file_exists
+        parameter:
+          dst: '{{trashbin_path}}/files/testfile.txt'
+      - name: trahsbin_check_info_file
+        description: 'check if info file exists in trashbin'
+        function: file_exists
+        parameter:
+          dst: '{{trashbin_path}}/info/testfile.txt.trashinfo'
+      - name: trashbin_check_info_date
+        description: 'check if deletion date in info file is correct'
+        function: file_content_equals
+        parameter:
+          dst: '/home/adare/.local/share/Trash/info/testfile.txt.trashinfo'
+          content: |
+            [Trash Info]
+            Path=/home/adare/Documents/testfile.txt
+            DeletionDate={{ deletion_timestamp | format('%Y-%m-%dT%H:%M:%S') | tolerance(5, -5) }}
 
     actions:
       - command:
@@ -194,7 +193,7 @@ An example playbook file for our example would look like this:
           description: "Delete the test file using keyboard shortcut"
       - save_timestamp:
           description: "Save the timestamp of file deletion for later verification"
-          variable: TIMESTAMP.DELETIONDATE
+          variable: deletion_timestamp
       - idle:
           duration: 1.0
           description: "Wait for file deletion to complete"
@@ -209,7 +208,7 @@ As you can see, the playbook uses YAML syntax and provides several types of acti
 - ``click``: Mouse clicks using image recognition or text finding
 - ``keyboard``: Keyboard input and key combinations
 - ``idle``: Wait/pause actions
-- ``test``: Execute tests from the testset file
+- ``test``: Execute tests defined in the playbook
 - ``save_timestamp``: Save timestamps for later use in tests
 - ``block``: Group actions together
 

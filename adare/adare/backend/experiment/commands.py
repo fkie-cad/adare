@@ -221,6 +221,14 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
 
     experiment_sync(experiment_ulid)
     
+    # Protect experiment files after loading
+    from adare.helperfunctions.integrity import protect_loaded_files
+    experiment_files = [experiment_directory.playbookfile]
+    if experiment_directory.metadatafile.exists():
+        experiment_files.append(experiment_directory.metadatafile)
+    protected_files = protect_loaded_files(experiment_files)
+    log.info(f'Protected {len(protected_files)} experiment files')
+    
     # Provide clear user feedback only if not in silent mode
     if not silent:
         action = "updated" if was_updated else "loaded"
@@ -279,8 +287,81 @@ def __experiment_integrity_check(project_path: Path, experiment_name: str, envir
         )
 
 
+def __verify_playbook_testfunction_integrity(project_path: Path, playbook) -> None:
+    """
+    Verify integrity of all testfunctions used in the playbook.
+    This ensures no testfunction has been modified after loading.
+    """
+    from adare.helperfunctions.integrity import verify_testfunction_integrity
+    from adare.backend.testfunction.database import get_testfunction_files_data
+    
+    # Extract testfunction names from playbook tests
+    testfunction_names = set()
+    if hasattr(playbook, 'tests') and playbook.tests:
+        for test in playbook.tests:
+            if hasattr(test, 'testfunction'):
+                testfunction_names.add(test.testfunction)
+    
+    if not testfunction_names:
+        log.info("No testfunctions found in playbook - skipping integrity verification")
+        return
+    
+    log.info(f"Verifying integrity of {len(testfunction_names)} testfunctions used in playbook")
+    
+    try:
+        # Get all testfunction data from database
+        tf_data = get_testfunction_files_data(
+            project_path, 
+            fields=['path', 'requirements_path', 'sha256hash', 'name']
+        )
+        
+        # Create lookup by testfunction directory name
+        tf_lookup = {}
+        for tf in tf_data:
+            tf_path = Path(tf['path'])
+            tf_dir_name = tf_path.parent.name  # e.g., 'standard' from 'testfunctions/standard/standard.py'
+            tf_lookup[tf_dir_name] = tf
+        
+        # Verify integrity of each required testfunction
+        verified_count = 0
+        for tf_name in testfunction_names:
+            if tf_name not in tf_lookup:
+                raise ExperimentIntegrityError(
+                    log,
+                    f"Testfunction '{tf_name}' used in playbook is not loaded in database",
+                    possible_solutions=[
+                        f"Load testfunction with 'adare testfunction load {tf_name}'",
+                        "Check if testfunction directory exists",
+                        "Verify testfunction name spelling in playbook"
+                    ]
+                )
+            
+            tf_info = tf_lookup[tf_name]
+            tf_path = Path(tf_info['path'])
+            req_path = Path(tf_info['requirements_path'])
+            expected_hash = tf_info['sha256hash']
+            
+            verify_testfunction_integrity(tf_path, req_path, expected_hash)
+            verified_count += 1
+            log.debug(f"Testfunction integrity verified: {tf_name}")
+        
+        log.info(f"Testfunction integrity verification completed: {verified_count}/{len(testfunction_names)} verified")
+        
+    except ExperimentIntegrityError:
+        # Re-raise integrity errors with full context
+        raise
+    except ImportError as e:
+        log.warning(f"Integrity verification modules not available: {e}")
+    except (FileNotFoundError, KeyError) as e:
+        log.error(f"Testfunction database access failed: {e}")
+        raise LoggedException(log, f"Failed to access testfunction database for integrity verification: {e}")
+
+
 def __project_integrity_check(project_path: Path, project_directory: ProjectDirectory, environments: list[Path] = None,
                               testfunctions: list[Path] = None):
+    # Use new integrity module for testfunctions
+    from adare.helperfunctions.integrity import verify_testfunction_integrity
+    
     testfunctions_changed: list = []
     hashes: list = project_database.get_project_testfunction_hashes(project_path)
     for hash_dict in hashes:
@@ -293,11 +374,12 @@ def __project_integrity_check(project_path: Path, project_directory: ProjectDire
         if testfunctions and path not in testfunctions:
             continue
 
-        if project_directory.get_testfunction_hash(path, requirements_path) != hash_value:
+        try:
+            verify_testfunction_integrity(path, requirements_path, hash_value)
+            log.info(f'integrity check for testfunction file {path} passed')
+        except ExperimentIntegrityError:
             testfunctions_changed.append(path)
             log.info(f'integrity check for testfunction file {path} failed')
-        else:
-            log.info(f'integrity check for testfunction file {path} passed')
 
     if testfunctions_changed:
         message = 'to ensure the integrity of a project, testfunctions are not allowed to be changed after they have been loaded\n'
@@ -312,17 +394,22 @@ def __project_integrity_check(project_path: Path, project_directory: ProjectDire
             possible_solutions=solutions
         )
 
+    # Use new integrity module for environments  
+    from adare.helperfunctions.integrity import verify_environment_integrity
+    
     environments_changed: list = []
     hashes: dict = project_database.get_project_environment_hashes(project_path)
     for file, hash_value in hashes.items():
         path = Path(file)
         if environments and path not in environments:
             continue
-        if project_directory.get_environment_hash(path) != hash_value:
+            
+        try:
+            verify_environment_integrity(path, hash_value)
+            log.info(f'integrity check for environment {path} passed')
+        except ExperimentIntegrityError:
             environments_changed.append(path)
             log.info(f'integrity check for environment {path} failed')
-        else:
-            log.info(f'integrity check for environment {path} passed')
 
     if environments_changed:
         message = 'to ensure the integrity of a project, environments are not allowed to be changed after they have been loaded\n'
@@ -346,6 +433,9 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         await vm.run_command(firewall_rule, stop_event=stop_event)
         set_path_command = r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\shared\tools", "User")'
         set_path_command_experiment_tools = r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\experiment\shared\tools", "User")'
+        # Mount VirtualBox shared folders shortly (VirtualBox shared folders are exposed as a network provider -> lazy loading prevents access otherwise)
+        mount_shared_folder = r'net use Z: \\vboxsvr\adare; net use Z: /delete'
+        await vm.run_command(mount_shared_folder, stop_event=stop_event)
         # TODO: need to manually remount here - unclear why but it just fixes hours of trying to get it to work?! Windows I love you <3
         install_command = r'cd \\vboxsvr\adare\adarevm; poetry install'
         run_command = r'cd \\vboxsvr\adare\adarevm; poetry run adarevm'
@@ -444,7 +534,11 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                     
         except Exception as e:
             raise LoggedException(log, f"Playbook loading failed: {str(e)}")
-
+        
+        # Verify integrity of testfunctions used in playbook
+        if hasattr(context, 'playbook') and context.playbook:
+            __verify_playbook_testfunction_integrity(context.config.project_path, context.playbook)
+        
         # Resolve environment
         if context.config.environment_name:
             context.environment_file = environment_database.get_environment_path_by_project_and_name(
@@ -838,7 +932,6 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
-                # input("Press Enter to continue after AdareVM has fully started (look for 'WebSocket server started' in adarevm log)...")
                 await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
                 await step_runner.run_async_step(step_execute_installations, experiment_run_context)
 

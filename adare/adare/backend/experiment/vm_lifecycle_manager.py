@@ -64,10 +64,14 @@ class VMLifecycleManager:
         }
         
         # Create VirtualBox VM instance
+        from adare.config import get_vm_credentials
+        username, password = get_vm_credentials(context.guest_platform)
         context.vm = VirtualBoxVM(
             vm_name=context.vm_name,  # Use the actual VM name from database
             guest_os=context.guest_platform,
             manager=self.vbox_manager,
+            username=username,
+            password=password,
             cpus=context.config.vm_cpus,
             ram=context.config.vm_memory
         )
