@@ -444,7 +444,7 @@ class ExperimentFlowConsole:
         if seconds >= 60:
             minutes = int(seconds // 60)
             remaining_seconds = seconds % 60
-            time_str = f"([{color}]{minutes}[/{color}]m [{color}]{remaining_seconds:.2f}[/{color}]s"
+            time_str = f"[{color}]{minutes}[/{color}]m [{color}]{remaining_seconds:.2f}[/{color}]s"
         else:
             time_str = f"[{color}]{seconds:.2f}[/{color}]s"
         

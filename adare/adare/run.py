@@ -36,7 +36,7 @@ from adare.cli.vm import (
     exec_vm_list, exec_vm_info, exec_vm_delete, exec_vm_delete_snapshot, exec_vm_clear_all, exec_vm_clear_by_environment
 )
 from adare.cli.mcp import (
-    exec_mcp_test_icon, exec_mcp_test_text
+    exec_mcp_test_icon, exec_mcp_test_text, exec_mcp_get_all_text
 )
 from adare.setup_logging import setup_logging
 from adare.exceptions import LoggedException, LoggedErrorException
@@ -558,9 +558,10 @@ def test_icon(icon, screenshot, output, host, port, threshold):
 @mcp.command(name='test-text')
 @click.argument('text')
 @click.option('--screenshot', required=True, type=click.Path(exists=True), help='Path to screenshot image file')
+@click.option('--format', default='json', help='Output format: json or csv (default: json)')
 @click.option('--host', default='localhost', help='MCP server host (default: localhost)')
 @click.option('--port', type=int, default=13109, help='MCP server port (default: 13109)')
-def test_text(text, screenshot, host, port):
+def test_text(text, screenshot, format, host, port):
     """Test MCP server text finding functionality.
     
     TEXT is the text string to search for in the screenshot.
@@ -570,10 +571,31 @@ def test_text(text, screenshot, host, port):
     args = SimpleNamespace(
         text=text,
         screenshot_path=screenshot,
+        format=format,
         host=host,
         port=port
     )
     exec_with_error_printing(exec_mcp_test_text, args)
+
+@mcp.command(name='get-all-text')
+@click.option('--screenshot', required=True, type=click.Path(exists=True), help='Path to screenshot image file')
+@click.option('--format', default='json', help='Output format: json or csv (default: json)')
+@click.option('--host', default='localhost', help='MCP server host (default: localhost)')
+@click.option('--port', type=int, default=13109, help='MCP server port (default: 13109)')
+def get_all_text(screenshot, format, host, port):
+    """Get all detected text from screenshot using OCR.
+    
+    Automatically starts MCP server, runs OCR on the screenshot,
+    returns all detected text with coordinates and confidence scores,
+    then stops the server.
+    """
+    args = SimpleNamespace(
+        screenshot_path=screenshot,
+        format=format,
+        host=host,
+        port=port
+    )
+    exec_with_error_printing(exec_mcp_get_all_text, args)
 
 
 

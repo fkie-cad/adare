@@ -14,7 +14,7 @@ python = "^3.10"
 fastmcp = "^2.9.2"
 click = "^8.1.7"
 opencv-python = "^4.10.0"
-paddleocr = "^2.8.1"
+paddleocr = "^3.1.0"
 paddlepaddle = { version = "3.0.0", source = "paddlepaddle" }
 numpy = "^1.26.0"
 

@@ -302,6 +302,90 @@ async def exec_mcp_test_icon(args):
             print(f"❌ Error testing MCP server: {e}")
 
 
+async def exec_mcp_get_all_text(args):
+    """Get all detected text from screenshot using MCP server."""
+    
+    # Check that required path is provided
+    if not args.screenshot_path:
+        print("❌ Screenshot file path is required. Use --screenshot option.")
+        return
+    
+    screenshot_path = Path(args.screenshot_path)
+    
+    # Check if file exists
+    if not screenshot_path.exists():
+        print(f"❌ Screenshot file not found: {screenshot_path}")
+        return
+    
+    # Read and encode file
+    try:
+        with open(screenshot_path, "rb") as f:
+            screenshot_base64 = base64.b64encode(f.read()).decode('utf-8')
+            
+        print(f"📁 Using screenshot: {screenshot_path}")
+        
+    except Exception as e:
+        print(f"❌ Error reading file: {e}")
+        return
+    
+    # Start MCP server for this command
+    host = getattr(args, 'host', 'localhost')
+    port = getattr(args, 'port', 13109)
+    format_type = getattr(args, 'format', 'json')
+    
+    async with MCPServerManager(host, port) as server_manager:
+        # Start the server
+        if not await server_manager.start_server():
+            return
+        
+        try:
+            async with Client(server_manager.server_url) as client:
+                print("✅ Connected to MCP server")
+                print(f"🔍 Getting all detected text (format: {format_type})")
+                
+                result = await client.call_tool("get_all_text", {
+                    "screenshot_base64": screenshot_base64,
+                    "format": format_type
+                })
+                
+                # Parse result
+                if result.data is not None:
+                    response = result.data
+                elif result.content and len(result.content) > 0:
+                    response = json.loads(result.content[0].text)
+                else:
+                    print("❌ No data found in result")
+                    return
+                
+                # Display results
+                if "error" in response:
+                    print(f"❌ Error: {response['error']}")
+                    return
+                
+                if format_type.lower() == "csv" and "data" in response:
+                    print("📊 All detected text (CSV format):")
+                    print(response["data"])
+                elif "all_text" in response:
+                    all_text = response["all_text"]
+                    if all_text:
+                        print(f"✅ Found {len(all_text)} text detections:")
+                        for i, detection in enumerate(all_text):
+                            text = detection.get("text", "")
+                            x = detection.get("x", 0)
+                            y = detection.get("y", 0)
+                            confidence = detection.get("confidence", 0)
+                            print(f"   {i+1}: '{text}' at x={x}, y={y} (confidence: {confidence:.3f})")
+                    else:
+                        print("ℹ️  No text detected")
+                else:
+                    print("❌ Unexpected response format")
+                    
+        except ConnectionError:
+            print(f"❌ Could not connect to MCP server")
+        except Exception as e:
+            print(f"❌ Error testing MCP server: {e}")
+
+
 async def exec_mcp_test_text(args):
     """Test MCP server text finding functionality."""
     
@@ -332,6 +416,7 @@ async def exec_mcp_test_text(args):
     host = getattr(args, 'host', 'localhost')
     port = getattr(args, 'port', 13109)
     text = args.text
+    format_type = getattr(args, 'format', 'json')
     
     async with MCPServerManager(host, port) as server_manager:
         # Start the server
@@ -341,11 +426,12 @@ async def exec_mcp_test_text(args):
         try:
             async with Client(server_manager.server_url) as client:
                 print("✅ Connected to MCP server")
-                print(f"🔍 Finding text: '{text}'")
+                print(f"🔍 Finding text: '{text}' (format: {format_type})")
                 
                 result = await client.call_tool("find_text", {
                     "text": text,
-                    "screenshot_base64": screenshot_base64
+                    "screenshot_base64": screenshot_base64,
+                    "format": format_type
                 })
                 
                 # Parse result
@@ -361,8 +447,11 @@ async def exec_mcp_test_text(args):
                 if "error" in response:
                     print(f"❌ Error: {response['error']}")
                     return
-                    
-                if "locations" in response:
+                
+                if format_type.lower() == "csv" and "data" in response:
+                    print("📊 Text search results (CSV format):")
+                    print(response["data"])
+                elif "locations" in response:
                     locations = response["locations"]
                     if locations:
                         print(f"✅ Found {len(locations)} text matches:")

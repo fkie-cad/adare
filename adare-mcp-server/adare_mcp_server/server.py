@@ -92,23 +92,113 @@ def _run_paddle_ocr(screenshot_bytes: bytes):
             use_textline_orientation=False
         )
         
-        log.info("Converting image bytes to numpy array...")
-        # Convert bytes to numpy array
+        log.info("Converting bytes to numpy array...")
+        # Convert bytes to numpy array for PaddleOCR
         nparr = np.frombuffer(screenshot_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        log.info("Running OCR prediction...")
-        result = ocr.ocr(img)[0]
+        log.info("Running OCR prediction with numpy array...")
+        result = ocr.predict(input=img)
+
+        # Extract detection results from predict() format
+        detections = []
+        for res in result:
+            # OCRResult is a dictionary-like object
+            rec_texts = res['rec_texts']
+            rec_polys = res['rec_polys']  
+            rec_scores = res['rec_scores']
+            
+            # Combine texts, boxes and scores
+            for text, box, score in zip(rec_texts, rec_polys, rec_scores):
+                # Convert numpy array box to list of points
+                box_points = box.tolist()
+                detections.append([box_points, (text, score)])
         
-        log.info("OCR prediction completed")
-        return result
+        log.info(f"OCR prediction completed - found {len(detections)} text detections")
+        return detections
+        
     except Exception as e:
         log.error(f"OCR failed: {str(e)}")
         raise
 
 
 @mcp.tool()
-async def find_text(text: str, screenshot_base64: str, offset_x: int = 0, offset_y: int = 0):
+async def get_all_text(screenshot_base64: str, offset_x: int = 0, offset_y: int = 0, format: str = "json"):
+    """Get all detected text from screenshot data. Format can be 'json' or 'csv'."""
+    log.info("Starting OCR to get all detected text")
+    
+    try:
+        screenshot_bytes = base64.b64decode(screenshot_base64)
+        
+        # Run PaddleOCR in thread pool
+        executor = ThreadPoolExecutor(max_workers=1)
+        
+        try:
+            log.info("Running PaddleOCR...")
+            
+            # Start the OCR task with image bytes directly
+            result = await asyncio.get_event_loop().run_in_executor(
+                executor, _run_paddle_ocr, screenshot_bytes
+            )
+            
+            log.info("PaddleOCR completed successfully")
+            
+        except Exception as e:
+            log.error(f"PaddleOCR failed: {e}")
+            return {
+                "error": f"OCR processing failed: {str(e)}", 
+                "all_text": []
+            }
+        finally:
+            executor.shutdown(wait=True)
+            
+    except Exception as e:
+        log.error(f"Get all text failed: {e}")
+        return {
+            "error": f"Get all text failed: {str(e)}", 
+            "all_text": []
+        }
+    
+    # Process all detected text with locations
+    all_text = []
+    for detection in result:
+        box, (text_rec, confidence) = detection
+        # box is a list of 4 corner points [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+        # Calculate center from bounding box
+        x_coords = [point[0] for point in box]
+        y_coords = [point[1] for point in box]
+        center_x = int(sum(x_coords) / len(x_coords)) + offset_x
+        center_y = int(sum(y_coords) / len(y_coords)) + offset_y
+        all_text.append({
+            "text": text_rec,
+            "confidence": float(confidence),
+            "x": center_x,
+            "y": center_y,
+        })
+    
+    log.info(f"Found {len(all_text)} total text detections")
+    
+    if format.lower() == "csv":
+        import io
+        csv_output = io.StringIO()
+        csv_output.write("text,x,y,confidence\n")
+        for item in all_text:
+            # Escape quotes in text by doubling them, wrap in quotes
+            escaped_text = item["text"].replace('"', '""')
+            csv_output.write(f'"{escaped_text}",{item["x"]},{item["y"]},{item["confidence"]}\n')
+        return {
+            "format": "csv",
+            "data": csv_output.getvalue()
+        }
+    else:
+        return {
+            "format": "json",
+            "all_text": all_text
+        }
+
+
+@mcp.tool()
+async def find_text(text: str, screenshot_base64: str, offset_x: int = 0, offset_y: int = 0, format: str = "json"):
     """Find text locations in provided screenshot data."""
     log.info(f"Starting text search for: '{text}'")
     
@@ -145,8 +235,7 @@ async def find_text(text: str, screenshot_base64: str, offset_x: int = 0, offset
         }
     
     # find all detections that contain the text
-    locations = []
-    confidences = []
+    matches = []
     for detection in result:
         box, (text_rec, confidence) = detection
         if text.lower() in text_rec.lower():
@@ -156,20 +245,46 @@ async def find_text(text: str, screenshot_base64: str, offset_x: int = 0, offset
             y_coords = [point[1] for point in box]
             center_x = int(sum(x_coords) / len(x_coords)) + offset_x
             center_y = int(sum(y_coords) / len(y_coords)) + offset_y
-            locations.append({
+            matches.append({
                 "text": text_rec,
+                "confidence": float(confidence),
+                "x": center_x,
+                "y": center_y,
+            })
+    
+    log.info(f"Found {len(matches)} text matches")
+    
+    if format.lower() == "csv":
+        import io
+        csv_output = io.StringIO()
+        csv_output.write("text,x,y,confidence\n")
+        for item in matches:
+            # Escape quotes in text by doubling them, wrap in quotes
+            escaped_text = item["text"].replace('"', '""')
+            csv_output.write(f'"{escaped_text}",{item["x"]},{item["y"]},{item["confidence"]}\n')
+        return {
+            "format": "csv",
+            "data": csv_output.getvalue()
+        }
+    else:
+        # Convert to old format for backward compatibility
+        locations = []
+        confidences = []
+        for match in matches:
+            locations.append({
+                "text": match["text"],
                 "location": {
-                    "x": center_x,
-                    "y": center_y,
+                    "x": match["x"],
+                    "y": match["y"],
                 }
             })
-            confidences.append(float(confidence))
-    
-    log.info(f"Found {len(locations)} text matches")
-    return {
-        "locations": locations,
-        "confidences": confidences
-    }
+            confidences.append(match["confidence"])
+        
+        return {
+            "format": "json",
+            "locations": locations,
+            "confidences": confidences
+        }
 
 
 def create_server():
