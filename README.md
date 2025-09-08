@@ -6,7 +6,7 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 
 
 ### Todos
-- [ ] built windows vm new from fresh installation -> done; test it
+- [x] built windows vm new from fresh installation -> done; test it
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
 - [x] built furhter testfunction; and filters/variables 
 - [ ] built tests/test experiments for new testfunctions
@@ -44,7 +44,6 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [x] we copy adarevm into project dir?! but we use it from appdata so we may not do this?!
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 - [ ] if over 1m we have two opening brackets ((2m ... 
-- [ ] vm file integrity does not seem to work!
 
 #### Test
 - [ ] built more unit tests / integration tests / ... (maybe with claude)

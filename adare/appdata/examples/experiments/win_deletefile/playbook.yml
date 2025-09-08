@@ -14,7 +14,7 @@ settings:
 variables:
   username:
     type: string
-    value: "vagrant"
+    value: "adare"
     description: "Username for the target system"
   
   filepath:
@@ -99,5 +99,5 @@ actions:
             name: "RBCmd"
             description: "Run RBCmd.exe to check file metadata"
             tool: RBCmd.exe
-            command: 'RBCmd.exe -d C:\ --csv C:/Users/vagrant/Documents/trashbin'
+            command: 'RBCmd.exe -d C:\ --csv C:/Users/{{username}}/Documents/trashbin'
         - test: trashbin_check

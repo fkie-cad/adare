@@ -1335,8 +1335,9 @@ class PlaybookController:
                 return None
             
             import yaml
+            from adarelib.testset.yaml.customloader import get_custom_loader
             playbook_yaml = playbook_path.read_text()
-            playbook_data = yaml.safe_load(playbook_yaml)
+            playbook_data = yaml.load(playbook_yaml, Loader=get_custom_loader())
             
             if 'tests' not in playbook_data:
                 return None

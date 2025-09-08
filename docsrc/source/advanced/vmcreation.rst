@@ -9,44 +9,55 @@ Once configured, export the VM as an ``.ova`` or ``.ovf`` file in **OVF 1.0 form
 Windows Setup
 =============
 
-Inside the VM, ensure the following configuration:
+User Account Configuration
+--------------------------
 
 - Create a user account with:
 
   - **Username:** ``adare``
   - **Password:** ``adare``
 
-- Enable **autologin** so the VM boots directly into the ``adare`` user’s desktop.
-- We must also go to the control panel ``User Accounts -> User Accounts -> Change User Account Control settings`` and set the slider to the bottom (``Never notify``).
-- Enable Developer mode: In windows settings search ``For Developers`` and toggle the switch to enable it. This is required to setup the shared directories properly.
-- Press Win + R, type wf.msc, press Enter.
+- Enable **autologin** so the VM boots directly into the ``adare`` user's desktop.
 
-In the left panel, right-click Windows Defender Firewall with Advanced Security on Local Computer (left-click) → Properties.
+Security Configuration
+----------------------
 
-For Domain Profile, Private Profile, and Public Profile tabs, change:
+1. **Disable User Account Control (UAC):**
 
-Inbound connections → Allow.
+   - Go to Control Panel → ``User Accounts`` → ``User Accounts`` → ``Change User Account Control settings``
+   - Set the slider to the bottom (``Never notify``)
 
-Outbound connections → Allow (default is already allow).
+2. **Enable Developer Mode:**
 
-Click OK.
+   - In Windows Settings, search for ``For Developers``
+   - Toggle the switch to enable Developer Mode
+   - This is required to set up shared directories properly
 
-- Afterwards a clean shutdown is required to apply the changes.
-.. otherwise we need elevation not possible, except we disable UAC and create some schedulted task we can trigger that executest some content to a file we can write.
+3. **Configure Windows Defender Firewall:**
 
+   a. Press ``Win + R``, type ``wf.msc``, and press Enter
+   
+   b. In the left panel, right-click **Windows Defender Firewall with Advanced Security on Local Computer** → **Properties**
+   
+   c. For each profile tab (**Domain Profile**, **Private Profile**, and **Public Profile**), configure:
+   
+      - **Inbound connections:** Allow
+      - **Outbound connections:** Allow (default)
+   
+   d. Click **OK**
 
-.. - We also must disable UAC so we need to execute the following and afterwards make a clean shutdown to apply it successfully:
+4. **Apply Changes:**
 
-..   .. code-block:: batch
+   - Perform a clean shutdown to apply all security changes
 
-..      reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System /v EnableLUA /t REG_DWORD /d 0 /f
+Required Software Installation
+-----------------------------
 
-..   We know that this may result in some apps not working properly, but it is necessary for ADARE to function correctly so far. We are currently working on an alternative solution for those cases.
+Install the following software:
 
-- Install:
-  - Python 3.10 or newer
-  - `Poetry <https://python-poetry.org/docs/#installing-with-the-official-installer>`_
-  - VirtualBox Guest Additions
+- **Python 3.10 or newer**
+- **Poetry** (`Installation Guide <https://python-poetry.org/docs/#installing-with-the-official-installer>`_)
+- **VirtualBox Guest Additions**
   
 
 Linux Setup
