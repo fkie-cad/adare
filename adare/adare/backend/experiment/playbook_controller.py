@@ -1411,13 +1411,20 @@ class PlaybookController:
             cwd = action.cwd
             env = action.env
         
+            # Calculate WebSocket timeout with buffer for long-running commands
+            websocket_timeout = None
+            if action.timeout:
+                # Add 10 second buffer to shell timeout for WebSocket communication
+                websocket_timeout = action.timeout + 10
+        
             # Execute raw shell command directly with options
             result = await self.client.execute_shell(
                 shell_command=command,
                 cwd=cwd,
                 env=env,
                 timeout=action.timeout,
-                shell=action.shell
+                shell=action.shell,
+                websocket_timeout=websocket_timeout
             )
             return ActionResult(
                 success=result.get('status') == 'success',
