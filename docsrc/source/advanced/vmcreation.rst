@@ -46,9 +46,7 @@ Additional Configuration
    
    d. Click **OK**
 
-4. For simplicity we recommed to set the timezone to UTC, because then we do not need to specify timezone information in the playbooks, for all timestamps.
-
-5. **Apply Changes:**
+4. **Apply Changes:**
 
    - Perform a clean shutdown to apply all security changes
 

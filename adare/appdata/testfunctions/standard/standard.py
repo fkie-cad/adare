@@ -215,9 +215,15 @@ class FileContentMatchesRegex(BasicTest):
 
 
 def _row_matches_pattern(test_instance, row, entry_pattern):
-    """Check if a CSV row matches the expected pattern using placeholder system."""
-    if len(row) != len(entry_pattern):
-        return False
+    """Check if a CSV row matches the expected pattern using placeholder system.
+    
+    Returns:
+        tuple: (is_match: bool, failed_columns: list, column_count_match: bool)
+    """
+    column_count_match = len(row) == len(entry_pattern)
+    if not column_count_match:
+        log.info(f"Row column count mismatch: got {len(row)} columns {row}, expected {len(entry_pattern)} columns {entry_pattern}")
+        return False, [f"column_count({len(row)} != {len(entry_pattern)})"], False
     
     failed_columns = []
     
@@ -236,20 +242,21 @@ def _row_matches_pattern(test_instance, row, entry_pattern):
                         failed_columns.append(f"col{i}({message})")
                 except Exception as e:
                     log.error(f"Error in placeholder comparison for column {i}: {e}")
-                    failed_columns.append(f"col{i}(error)")
+                    failed_columns.append(f"col{i}(placeholder_error: {e})")
             else:
-                failed_columns.append(f"col{i}(bad placeholder)")
+                failed_columns.append(f"col{i}(invalid_placeholder: expected 1 placeholder, got {len(placeholder_names)})")
         else:
             # Direct string comparison
             if actual_value != expected_str:
                 failed_columns.append(f"col{i}('{actual_value}' != '{expected_str}')")
     
+    is_match = len(failed_columns) == 0
+    
     # Log failures only if there were any
     if failed_columns:
-        log.info(f"Row {row} failed on: {', '.join(failed_columns)}")
-        return False
+        log.info(f"Row {row} failed pattern match: {', '.join(failed_columns)}")
     
-    return True
+    return is_match, failed_columns, column_count_match
 
 
 @attrs.define
@@ -292,17 +299,53 @@ class CsvContainsLine(BasicTest):
                 with open(dst, 'r') as f:
                     reader = csv.reader(f)
                     rows = list(reader)
+                    
+                    # Track best matching rows for detailed error reporting
+                    match_results = []
+                    
                     for i, row in enumerate(rows):
-                        if _row_matches_pattern(self, row, entry_pattern):
+                        is_match, failed_columns, column_count_match = _row_matches_pattern(self, row, entry_pattern)
+                        if is_match:
                             return TestResult.success()
+                        
+                        # Store match details for error reporting
+                        match_results.append({
+                            'row_index': i,
+                            'row': row,
+                            'failed_columns': failed_columns,
+                            'column_count_match': column_count_match,
+                            'failure_count': len(failed_columns)
+                        })
                 
                 # Log file contents for debugging when test fails
                 log.info(f"CSV file '{dst}' contents for failed test '{self.name}':")
                 for i, row in enumerate(rows):
                     log.info(f"  Row {i}: {row}")
                 log.info(f"Expected entry pattern: {entry_pattern}")
+                
+                # Find the best matching rows (least number of failed columns)
+                if match_results:
+                    # Sort by failure count (ascending), then by whether column count matches
+                    best_matches = sorted(match_results, key=lambda x: (x['failure_count'], not x['column_count_match']))
                     
-                return TestResult.failed([f'No matching row found for pattern {entry_pattern}'])
+                    # Build structured failure details
+                    failure_details = [
+                        f'no matching row found for pattern: {entry_pattern}',
+                        f'analyzed {len(rows)} rows in CSV file'
+                    ]
+                    
+                    # Add up to 3 best matching rows with detailed failures
+                    failure_details.append('closest matches:')
+                    for i, match in enumerate(best_matches[:3]):
+                        failure_details.append(f'  [{i+1}] row {match["row_index"]}: {match["row"]}')
+                        failure_details.append(f'      failures: {", ".join(match["failed_columns"])}')
+                    
+                    return TestResult.failed(failure_details)
+                else:
+                    return TestResult.failed([
+                        f'no matching row found for pattern: {entry_pattern}',
+                        'no rows found in CSV file to analyze'
+                    ])
             except FileNotFoundError:
                 return TestResult.execution_error(None, f'file with path {self.parameter.dst} does not exist')
             except (PermissionError, OSError) as e:

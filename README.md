@@ -19,22 +19,23 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
     - [ ] use nicegui to interactively test and create playbook and tests -> e.g. crop images extract icons ... 
 - [ ] install requirements of testfunctions if given into poetry somehow!
 - [ ] built a way to better validate playbooks (e.g. two variables with saame name through variables or save_timestamp ..., check that used variables are defined before, check if filters are correct)
-
+- [ ] make all output available as csv/json/yaml
 
 #### QOL
 - [ ] update documentation
-- [ ] make all output available as csv/json/yaml
+  - [ ] add sections about timezones -> since vm syncs with local time do not interfer -> when tool uses utc all good when tool uses localtime use | localtime filter!
 - [ ] screenshot not via websockets but via shared files (to make faster?)
 - [ ] add easier way to updated/test new testfunctions
 - [ ] improve code quality in general
   - [x] split virtualbox api into multiple files
   - [ ] we use the username/password dummy when we with virtualbox do not need the commands ... -> find a better solution!
-  - [ ] split resolving variables logic from playbook controller!
+  - [x] split resolving variables logic from playbook controller!
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
 - [ ] built in the testfunction methods variables info what variable tyes are allwoed 
-- [ ] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;))
-- [ ] add option like --runlog that saves a runlog in the logs directory! 
+- [ ] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;)
+- [x] add option like --runlog that saves a runlog in the logs directory! 
 - [ ] let a user run multiple exepriments -> requires more advanced snapshot handling -> so vm needs to uploaded 
+- [ ] rethink testfunction result -> at the moment lists -> how is it saved in databse plain json? (then dicts would be better?)
 
 #### Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there

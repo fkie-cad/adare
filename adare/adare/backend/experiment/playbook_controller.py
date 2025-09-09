@@ -1498,7 +1498,7 @@ class PlaybookController:
             if hasattr(self.playbook, 'variables') and self.playbook.variables:
                 from adarelib.common.variables import Variable, VariableType
                 import datetime
-                timestamp_dt = datetime.datetime.fromtimestamp(current_timestamp)
+                timestamp_dt = datetime.datetime.utcfromtimestamp(current_timestamp)
                 timestamp_var = Variable(timestamp_dt, VariableType.TIMESTAMP)
                 self.playbook.variables.add(action.variable, timestamp_var)
                 log.debug(f"Added timestamp variable '{action.variable}' to variable registry")
