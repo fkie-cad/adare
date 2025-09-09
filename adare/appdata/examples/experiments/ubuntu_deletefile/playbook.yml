@@ -57,7 +57,7 @@ tests:
       content: |
         [Trash Info]
         Path=/home/adare/Documents/testfile.txt
-        DeletionDate={{ deletion_timestamp | format('%Y-%m-%dT%H:%M:%S') | tolerance(5, -5) }}
+        DeletionDate={{ deletion_timestamp | localtime | format('%Y-%m-%dT%H:%M:%S') | tolerance(5, -5) }}
 
 actions:
   - command:

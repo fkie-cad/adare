@@ -674,3 +674,49 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin):
                 return False
         
         return self.manager.run(_store_ovf_hash)
+
+    # !keep unused at the moment but maybe use later -> makes clock weird. Timezone and time do not match in vm
+    async def disable_time_sync(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+        """
+        Disable time synchronization for the VM to prevent syncing with host time
+        and configure RTC to use UTC.
+        
+        Args:
+            ctx_manager: Context manager for operation tracking
+            stop_event: Event to check for cancellation
+            log_file: Optional log file for output
+            silent: Whether to suppress output
+        
+        Returns:
+            Return code (0 for success)
+        """
+        async def _disable_time_sync_async():
+            log.info(f"Disabling time synchronization and configuring RTC for VM '{self.vm_name}'")
+            
+            # Commands to configure time settings
+            commands = [
+                ["setextradata", self.vm_name, "VBoxInternal/Devices/VMMDev/0/Config/GetHostTimeDisabled", "1"],
+                ["modifyvm", self.vm_name, "--rtcuseutc", "on"]
+            ]
+            
+            total_return_value = 0
+            for args in commands:
+                return_value, _, _ = await self._execute_streaming_command_async(
+                    args,
+                    log_file=log_file,
+                    stop_event=stop_event,
+                    silent=silent,
+                    ctx_manager=ctx_manager,
+                    operation_name=f"Time config: {args[0]}"
+                )
+                if return_value != 0:
+                    total_return_value = return_value
+                    log.error(f"Failed to execute {args[0]} for VM '{self.vm_name}': return code {return_value}")
+                    break
+            
+            if total_return_value == 0:
+                log.info(f"Successfully disabled time synchronization and set RTC to UTC for VM '{self.vm_name}'")
+            
+            return total_return_value
+        
+        return await self.manager.run_async(_disable_time_sync_async)

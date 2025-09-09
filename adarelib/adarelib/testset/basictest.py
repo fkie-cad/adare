@@ -163,15 +163,14 @@ class BasicTest:
         
         # Has tolerance - do timestamp comparison
         try:
-            import dateutil.parser
             import datetime
             
-            # Parse actual timestamp
-            actual_dt = dateutil.parser.parse(actual_value)
+            # Parse actual timestamp using format metadata if available
+            actual_dt = self._parse_timestamp_with_format(actual_value, metadata)
             
-            # Parse original timestamp
+            # Parse original timestamp (raw_value should be in ISO format)
             raw_value = metadata.get('raw_value', '')
-            original_dt = dateutil.parser.parse(raw_value)
+            original_dt = self._parse_timestamp_with_format(raw_value, metadata, is_original=True)
             
             # Get tolerance range - handle both single value and array
             tolerance = metadata.get('tolerance', 0)
@@ -201,6 +200,32 @@ class BasicTest:
             expected = metadata.get('resolved_value', '')
             success = actual_value == expected
             return success, f"Tolerance comparison failed ({e}), used string comparison"
+    
+    def _parse_timestamp_with_format(self, timestamp_str: str, metadata: dict, is_original: bool = False) -> 'datetime.datetime':
+        """Parse timestamp using format metadata, assuming UTC timezone."""
+        import datetime
+        
+        # Check if format metadata is available
+        format_str = metadata.get('format')
+        if format_str and not is_original:
+            # Use format to parse CSV timestamp, assuming UTC
+            try:
+                dt = datetime.datetime.strptime(timestamp_str, format_str)
+                # Assume parsed timestamp is in UTC (timezone conversion already applied when formatting)
+                return dt.replace(tzinfo=datetime.timezone.utc)
+            except ValueError as e:
+                log.debug(f"Failed to parse timestamp '{timestamp_str}' with format '{format_str}': {e}")
+        
+        # Fallback to dateutil parser for original timestamps or when format parsing fails
+        try:
+            import dateutil.parser
+            dt = dateutil.parser.parse(timestamp_str)
+            # If no timezone info, assume UTC
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
+            return dt
+        except Exception as e:
+            raise ValueError(f"Unable to parse timestamp '{timestamp_str}': {e}")
 
     def _handle_placeholders_comparison(self, actual_content: str, expected_template: str) -> Tuple[bool, str]:
         """Handle comparison when placeholders are present using string splitting approach."""

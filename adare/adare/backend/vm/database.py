@@ -16,51 +16,6 @@ from adare.backend.vm.exceptions import VMNotFoundError
 log = logging.getLogger(__name__)
 
 
-async def disable_vm_time_sync(vm_name: str) -> bool:
-    """
-    Disable time synchronization for a VirtualBox VM to prevent syncing with host time
-    and configure RTC to use UTC.
-    
-    Args:
-        vm_name: Name of the VM in VirtualBox
-        
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager
-        
-        # Create a temporary VM instance to use the existing VBoxManage infrastructure
-        manager = VirtualBoxManager()
-        temp_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy")
-        
-        # Commands to configure time settings
-        commands = [
-            ["setextradata", vm_name, "VBoxInternal/Devices/VMMDev/0/Config/GetHostTimeDisabled", "1"],
-            ["modifyvm", vm_name, "--rtcuseutc", "on"]
-        ]
-        
-        total_return_value = 0
-        for args in commands:
-            return_value, _, _ = await temp_vm._execute_streaming_command_async(
-                args,
-                silent=True,
-                operation_name=f"Time config: {args[0]}"
-            )
-            if return_value != 0:
-                total_return_value = return_value
-                log.warning(f"Failed to execute {args[0]} for VM '{vm_name}': return code {return_value}")
-                break
-        
-        if total_return_value == 0:
-            log.info(f"Disabled time synchronization and set RTC to UTC for VM '{vm_name}'")
-            return True
-        else:
-            return False
-            
-    except ImportError as e:
-        log.warning(f"Error importing VirtualBox API for VM '{vm_name}': {e}")
-        return False
 
 
 def get_vm_by_hash(file_hash: str, project_id: str = None, fields: list[str] = None) -> Optional[Vm] | dict | None:
@@ -444,7 +399,7 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
         await vbox_vm.create_from_ovf_or_ova(vm_file, silent=True)
         
         # Disable time synchronization to prevent VM from syncing with host time
-        await disable_vm_time_sync(vbox_vm_name)
+        # await vbox_vm.disable_time_sync(silent=True)  # Commented out - makes clock weird
         
         # Capture UUID after successful import using the VirtualBox VM name
         if capture_uuid_after_import:

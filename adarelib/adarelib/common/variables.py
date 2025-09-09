@@ -149,10 +149,43 @@ class TimestampMetadata:
             # Fallback: return original value if variable not found
             return value
         
+        def localtime_filter(value):
+            """Convert timestamp to account for host's local timezone offset."""
+            import datetime
+            import time
+            
+            # Find the variable this filter is being applied to
+            source_var = self._find_variable_by_value(variable_registry, value, VariableType.TIMESTAMP)
+            if source_var and isinstance(source_var.value, datetime.datetime):
+                try:
+                    # Get the current local timezone offset in seconds
+                    local_offset = -time.timezone
+                    if time.daylight and time.localtime().tm_isdst:
+                        local_offset = -time.altzone
+                    
+                    # Apply the offset to the timestamp
+                    adjusted_timestamp = source_var.value + datetime.timedelta(seconds=local_offset)
+                    
+                    # Update the variable's value directly
+                    source_var.value = adjusted_timestamp
+                    
+                    log.debug(f"Applied localtime filter: adjusted timestamp by {local_offset} seconds ({local_offset/3600:.1f} hours)")
+                    
+                    # Return the adjusted timestamp for continued processing
+                    return adjusted_timestamp
+                    
+                except Exception as e:
+                    log.warning(f"Failed to apply localtime filter: {e}")
+                    return value
+            
+            # Return original value if not a timestamp variable or conversion failed
+            return value
+
         return {
             'timezone': timezone_filter,
             'format': format_filter,
-            'tolerance': tolerance_filter
+            'tolerance': tolerance_filter,
+            'localtime': localtime_filter
         }
     
     def _find_variable_by_value(self, variable_registry: 'VariableRegistry', value: Any, var_type: VariableType) -> Optional['Variable']:
