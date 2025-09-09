@@ -609,6 +609,10 @@ def step_prepare_run_environment(context: ExperimentRunCtx):
         run_dir.create()
         context.experiment_run_directory = run_dir
         
+        # Copy adare log to run directory if runlog is enabled
+        if context.config.runlog:
+            _copy_adare_log_to_run_directory(run_dir)
+        
         # Initialize MCP server with log file
         from adare.backend.experiment.mcp_server_manager import MCPServerManager
         context.mcp_server = MCPServerManager(log_file=run_dir.mcp_gui_log_file)
@@ -844,14 +848,14 @@ def __start_event_listeners(experiment_run_ulid: str):
     return cli_thread, db_thread
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = False, debug_screenshots: bool = False, preserve_snapshot: bool = False):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = False, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True):
     import signal
     import asyncio
 
     log.info(f"Starting experiment run {experiment_name} in project {project_path}")
 
     # Create the experiment context and initialize it.
-    config = ExperimentConfig(project_path, experiment_name, environment_name, preserve_snapshot=preserve_snapshot)
+    config = ExperimentConfig(project_path, experiment_name, environment_name, preserve_snapshot=preserve_snapshot, runlog=runlog)
     experiment_run_context = ExperimentRunCtx(config)
     experiment_run_context.debug_screenshots = debug_screenshots
     if test:
@@ -1098,5 +1102,26 @@ def experiment_download(project: Path, experiment_ulid: str):
     experiment_name = download_experiment(experiment_ulid, project.experiments)
     log.info(f'experiment {experiment_ulid} downloaded')
     print(f'experiment {experiment_name} ({experiment_ulid}) downloaded successfully')
+
+
+def _copy_adare_log_to_run_directory(run_directory: ExperimentRunDirectory):
+    """Copy the current adare log file to the experiment run directory.
+    
+    Args:
+        run_directory: The experiment run directory where the log should be copied
+    """
+    import shutil
+    from adare.logger.logger import get_current_logfile
+    
+    current_logfile = get_current_logfile()
+    if current_logfile:
+        try:
+            target_path = run_directory.log_directory / 'adare.log'
+            shutil.copy2(current_logfile, target_path)
+            log.info(f'Copied adare log to {target_path}')
+        except Exception as e:
+            log.warning(f'Failed to copy adare log to run directory: {e}')
+    else:
+        log.info('No active log file found, skipping adare log copy')
 
 

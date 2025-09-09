@@ -16,7 +16,6 @@ from typing import ClassVar, Optional, Union
 from adarelib.testset.basictest import BasicTest, Parameter
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
-import adarelib.testset.yaml.customtags as yml
 
 # configure logging
 import logging
@@ -215,32 +214,57 @@ class FileContentMatchesRegex(BasicTest):
             return TestResult.execution_error(e, "Unexpected error in file content regex test")
 
 
-def _row_match(row, comparison_list):
-    for item_index, item in enumerate(row):
-        match = False
-        comparison_element = comparison_list[item_index]
-        if type(comparison_element) in yml.YAML_CUSTOM_TAGS:
-            match = comparison_element.compare(item)
-        elif comparison_element == item:
-            match = True
-        if not match:
-            return False
+def _row_matches_pattern(test_instance, row, entry_pattern):
+    """Check if a CSV row matches the expected pattern using placeholder system."""
+    if len(row) != len(entry_pattern):
+        return False
+    
+    failed_columns = []
+    
+    # Check each column individually
+    for i, (actual_value, expected_pattern) in enumerate(zip(row, entry_pattern)):
+        expected_str = str(expected_pattern)
+        
+        if test_instance.has_placeholders(expected_str):
+            # Has placeholder - use tolerance comparison
+            placeholder_names = test_instance.get_placeholders(expected_str)
+            if len(placeholder_names) == 1:
+                placeholder_name = placeholder_names[0]
+                try:
+                    success, message = test_instance.compare_with_placeholder(placeholder_name, actual_value)
+                    if not success:
+                        failed_columns.append(f"col{i}({message})")
+                except Exception as e:
+                    log.error(f"Error in placeholder comparison for column {i}: {e}")
+                    failed_columns.append(f"col{i}(error)")
+            else:
+                failed_columns.append(f"col{i}(bad placeholder)")
+        else:
+            # Direct string comparison
+            if actual_value != expected_str:
+                failed_columns.append(f"col{i}('{actual_value}' != '{expected_str}')")
+    
+    # Log failures only if there were any
+    if failed_columns:
+        log.info(f"Row {row} failed on: {', '.join(failed_columns)}")
+        return False
+    
     return True
 
 
 @attrs.define
-class CsvContainsLineMatchingRegexParameter(Parameter):
+class CsvContainsLineParameter(Parameter):
     dst: str
     entry: list
 
 
 @attrs.define
-class CsvContainsLineMatchingRegex(BasicTest):
-    testname: ClassVar[str] = 'csv_contains_line_matching_regex'
+class CsvContainsLine(BasicTest):
+    testname: ClassVar[str] = 'csv_contains_line'
     testdescription: ClassVar[str] = 'tests if row in a csv file exists that matches the given entry layout'
 
     name: str
-    parameter: CsvContainsLineMatchingRegexParameter
+    parameter: CsvContainsLineParameter
     description: Optional[str] = ''
     variable_metadata: Optional[dict] = None
 
@@ -260,20 +284,25 @@ class CsvContainsLineMatchingRegex(BasicTest):
                 return TestResult.execution_error(None, f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}')
 
             log.debug(f'dst file {dst} will be used for test {self.name}')
-            comparison_list = []
-            for entry in self.parameter.entry:
-                if entry is str:
-                    comparison_list.append(yml.YamlString(entry))
-                else:
-                    comparison_list.append(entry)
+            
+            # The entry pattern will be used directly with the placeholder system
+            entry_pattern = self.parameter.entry
 
             try:
                 with open(dst, 'r') as f:
                     reader = csv.reader(f)
-                    for row in reader:
-                        if _row_match(row, comparison_list):
+                    rows = list(reader)
+                    for i, row in enumerate(rows):
+                        if _row_matches_pattern(self, row, entry_pattern):
                             return TestResult.success()
-                return TestResult.failed([f'entry {self.parameter.entry} does not exist in file'])
+                
+                # Log file contents for debugging when test fails
+                log.info(f"CSV file '{dst}' contents for failed test '{self.name}':")
+                for i, row in enumerate(rows):
+                    log.info(f"  Row {i}: {row}")
+                log.info(f"Expected entry pattern: {entry_pattern}")
+                    
+                return TestResult.failed([f'No matching row found for pattern {entry_pattern}'])
             except FileNotFoundError:
                 return TestResult.execution_error(None, f'file with path {self.parameter.dst} does not exist')
             except (PermissionError, OSError) as e:

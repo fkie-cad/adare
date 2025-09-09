@@ -1371,11 +1371,55 @@ class PlaybookController:
             return None
     
     def _resolve_test_content(self, test_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Recursively apply variable substitution to test content with test-aware context."""
+        """Enhanced test content resolution using unified variable resolver."""
+        from adare.backend.experiment.variable_resolver import VariableResolver
+        
+        variable_registry = getattr(self.playbook, 'variables', None) if hasattr(self, 'playbook') else None
+        
+        # Create enhanced resolver with Jinja environment
+        jinja_env = self._create_jinja_environment()
+        template_context = self._get_formatted_context(for_tests=True)
+        
+        resolver = VariableResolver(
+            variable_registry=variable_registry, 
+            jinja_env=jinja_env
+        )
+        
+        # Single call handles everything - YAML tags AND Jinja templates
+        resolved_test = resolver.process_data(test_data, template_context)
+        
+        # Add metadata to resolved test
+        metadata = resolver.get_placeholder_metadata()
+        if metadata:
+            resolved_test['_VARIABLE_METADATA'] = metadata
+            log.info(f"Added unified variable metadata: {list(metadata.keys())}")
+        
+        log.debug(f"Unified resolver completed processing")
+        
+        return resolved_test
+    
+    def _create_jinja_environment(self):
+        """Create Jinja environment with all necessary filters."""
+        import jinja2
+        
+        # Get filters from variable registry if available
+        filters = {}
+        if hasattr(self.playbook, 'variables') and self.playbook.variables:
+            from adarelib.common.variables import TimestampMetadata
+            metadata = TimestampMetadata()  # Create temp metadata object
+            filters.update(metadata.get_jinja_filters(self.playbook.variables))
+        
+        env = jinja2.Environment()
+        env.filters.update(filters)
+        log.debug(f"Created Jinja environment with filters: {list(filters.keys())}")
+        return env
+    
+    def _resolve_test_content_recursive(self, test_data: Any) -> Any:
+        """Recursively apply variable substitution without re-processing YAML custom tags."""
         if isinstance(test_data, dict):
-            return {key: self._resolve_test_content(value) for key, value in test_data.items()}
+            return {key: self._resolve_test_content_recursive(value) for key, value in test_data.items()}
         elif isinstance(test_data, list):
-            return [self._resolve_test_content(item) for item in test_data]
+            return [self._resolve_test_content_recursive(item) for item in test_data]
         elif isinstance(test_data, str):
             return self._replace_variables_for_tests(test_data)
         else:
@@ -1385,6 +1429,14 @@ class PlaybookController:
         """Replace variables in test content using test-aware context with smart resolution."""
         if not text or '{{' not in text:
             return text
+        
+        # Skip processing our variable resolver placeholders - they should stay as placeholders
+        if '_resolved' in text and '{{' in text and '}}' in text:
+            # Check if this looks like one of our placeholders (regex_N_resolved, timestamp_N_resolved, etc.)
+            import re
+            if re.match(r'^\{\{\s*(regex|timestamp)_\d+_resolved\s*\}\}$', text.strip()):
+                log.debug(f"Skipping variable replacement for placeholder: '{text}'")
+                return text
         
         try:
             # Use test-aware context that creates placeholders for variables with test-specific filters

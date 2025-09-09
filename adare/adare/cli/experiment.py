@@ -46,7 +46,7 @@ def exec_experiment_run(arguments):
         import asyncio
         try:
             experiment_load(project_directory, arguments.experiment, force=False, silent=True)
-            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot))
+            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot, runlog=arguments.runlog))
         except LoggedException as e:
             e.print()
             if isinstance(e, LoggedErrorException):

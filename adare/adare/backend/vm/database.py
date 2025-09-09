@@ -16,6 +16,53 @@ from adare.backend.vm.exceptions import VMNotFoundError
 log = logging.getLogger(__name__)
 
 
+async def disable_vm_time_sync(vm_name: str) -> bool:
+    """
+    Disable time synchronization for a VirtualBox VM to prevent syncing with host time
+    and configure RTC to use UTC.
+    
+    Args:
+        vm_name: Name of the VM in VirtualBox
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager
+        
+        # Create a temporary VM instance to use the existing VBoxManage infrastructure
+        manager = VirtualBoxManager()
+        temp_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy")
+        
+        # Commands to configure time settings
+        commands = [
+            ["setextradata", vm_name, "VBoxInternal/Devices/VMMDev/0/Config/GetHostTimeDisabled", "1"],
+            ["modifyvm", vm_name, "--rtcuseutc", "on"]
+        ]
+        
+        total_return_value = 0
+        for args in commands:
+            return_value, _, _ = await temp_vm._execute_streaming_command_async(
+                args,
+                silent=True,
+                operation_name=f"Time config: {args[0]}"
+            )
+            if return_value != 0:
+                total_return_value = return_value
+                log.warning(f"Failed to execute {args[0]} for VM '{vm_name}': return code {return_value}")
+                break
+        
+        if total_return_value == 0:
+            log.info(f"Disabled time synchronization and set RTC to UTC for VM '{vm_name}'")
+            return True
+        else:
+            return False
+            
+    except ImportError as e:
+        log.warning(f"Error importing VirtualBox API for VM '{vm_name}': {e}")
+        return False
+
+
 def get_vm_by_hash(file_hash: str, project_id: str = None, fields: list[str] = None) -> Optional[Vm] | dict | None:
     """
     Get VM by file hash.
@@ -350,29 +397,33 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
     from adare.virtualbox.api import VirtualBoxVM
     from adare.database.api.vm import VmApi
     
-    # First check if VM is already imported
+    # Check if a VM with the same name already exists in VirtualBox
+    original_vm_name = vm.name
+    vbox_vm_name = vm.name  # This will be the name used in VirtualBox
+    
     try:
-        existing_uuid = VirtualBoxVM.get_vm_uuid_by_name(vm.name)
+        existing_uuid = VirtualBoxVM.get_vm_uuid_by_name(vbox_vm_name)
         if existing_uuid:
-            log.info(f"VM '{vm.name}' already exists in VirtualBox with UUID: {existing_uuid}")
-            if capture_uuid_after_import:
-                # Update database with existing UUID
-                with VmApi() as api:
-                    success = api.update_vm_uuid_and_snapshot_info(
-                        vm.id, 
-                        vbox_uuid=existing_uuid,
-                        base_snapshot_name=f"adare_base_{vm.hash[:8]}",
-                        use_snapshots=True
-                    )
-                if success:
-                    vm = get_vm_by_id(vm.id)  # Refresh with UUID
-            return vm
+            log.warning(f"⚠️  WARNING: VM with name '{vbox_vm_name}' already exists in VirtualBox!")
+            log.warning(f"⚠️  Instead of reusing, creating a NEW VM with unique name for clean state.")
+            log.warning(f"⚠️  You may have a RELICT VM '{vbox_vm_name}' in VirtualBox that needs manual cleanup!")
+            log.warning(f"⚠️  Consider running: VBoxManage unregistervm '{vbox_vm_name}' --delete")
+            
+            # Generate unique VM name for VirtualBox to avoid conflicts
+            import time
+            import random
+            timestamp = int(time.time())
+            unique_suffix = f"_{timestamp}_{random.randint(1000, 9999)}"
+            vbox_vm_name = f"{original_vm_name}{unique_suffix}"
+            
+            log.warning(f"⚠️  Creating NEW VM in VirtualBox with unique name: '{vbox_vm_name}'")
+                
     except Exception as e:
-        log.debug(f"VM '{vm.name}' not found in VirtualBox, proceeding with import: {e}")
+        log.debug(f"VM '{vbox_vm_name}' not found in VirtualBox, proceeding with import: {e}")
     
     # Actually import the VM to VirtualBox
     try:
-        log.info(f"Importing VM '{vm.name}' to VirtualBox from file: {vm.file}")
+        log.info(f"Importing VM '{vbox_vm_name}' to VirtualBox from file: {vm.file}")
         vm_file = Path(vm.file)
         
         # Get OS info from environment if available
@@ -384,20 +435,28 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
             except:
                 log.debug(f"Could not get OS info from environment {environment_ulid}, using default")
         
-        # Create VirtualBoxVM instance and import
+        # Create VirtualBoxVM instance and import using the unique name
         from adare.virtualbox.api import VirtualBoxManager
         from adare.config import get_vm_credentials
         manager = VirtualBoxManager()
         username, password = get_vm_credentials(guest_os)
-        vbox_vm = VirtualBoxVM(vm.name, guest_os, manager, username, password)
+        vbox_vm = VirtualBoxVM(vbox_vm_name, guest_os, manager, username, password)
         await vbox_vm.create_from_ovf_or_ova(vm_file, silent=True)
         
-        # Capture UUID after successful import
+        # Disable time synchronization to prevent VM from syncing with host time
+        await disable_vm_time_sync(vbox_vm_name)
+        
+        # Capture UUID after successful import using the VirtualBox VM name
         if capture_uuid_after_import:
-            vbox_uuid = VirtualBoxVM.get_vm_uuid_by_name(vm.name)
+            vbox_uuid = VirtualBoxVM.get_vm_uuid_by_name(vbox_vm_name)
             if vbox_uuid:
-                # Update the VM with the captured UUID
+                # Update the VM with the captured UUID and actual VirtualBox name
                 with VmApi() as api:
+                    # If we used a different name in VirtualBox, update the database name too
+                    if vbox_vm_name != original_vm_name:
+                        log.info(f"Updating VM database name from '{original_vm_name}' to '{vbox_vm_name}' to match VirtualBox")
+                        api.update_vm_name(vm.id, vbox_vm_name)
+                    
                     success = api.update_vm_uuid_and_snapshot_info(
                         vm.id, 
                         vbox_uuid=vbox_uuid,
@@ -405,15 +464,15 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
                         use_snapshots=True
                     )
                 if success:
-                    log.info(f"Successfully imported VM '{vm.name}' with UUID: {vbox_uuid}")
-                    vm = get_vm_by_id(vm.id)  # Refresh with UUID
+                    log.info(f"Successfully imported VM '{vbox_vm_name}' with UUID: {vbox_uuid}")
+                    vm = get_vm_by_id(vm.id)  # Refresh with updated data
                 else:
-                    log.error(f"Failed to update UUID in database for VM '{vm.name}'")
+                    log.error(f"Failed to update UUID in database for VM '{vbox_vm_name}'")
             else:
-                log.warning(f"Could not capture UUID for VM '{vm.name}' after import")
+                log.warning(f"Could not capture UUID for VM '{vbox_vm_name}' after import")
         
     except Exception as e:
-        log.error(f"Failed to import VM '{vm.name}' to VirtualBox: {e}")
+        log.error(f"Failed to import VM '{vbox_vm_name}' to VirtualBox: {e}")
         raise
     
     return vm

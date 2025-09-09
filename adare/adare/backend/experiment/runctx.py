@@ -18,6 +18,7 @@ class ExperimentConfig:
     disable_printing: bool = False
     test_mode: bool = False
     preserve_snapshot: bool = False
+    runlog: bool = True
     vm_cpus: int = 4
     vm_memory: int = 4096
     vm_resolution: Tuple[int, int] = (1920, 1080)
