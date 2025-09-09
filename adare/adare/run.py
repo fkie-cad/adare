@@ -237,9 +237,10 @@ def load(experiment, environment, force, project):
 @click.option('--test', '-t', is_flag=True, help='Run the experiment in test mode - delete results afterwards and do not block changes')
 @click.option('--debug-screenshots', is_flag=True, help='Save screenshots to experiment run directory for debugging')
 @click.option('--preserve-snapshot', '-s', is_flag=True, help='Create experiment snapshot for preservation (default: only reset to base snapshot)')
+@click.option('--no-runlog', is_flag=True, help='Do not save adare log to the run/logs directory')
 @click.option('--project', '-p', help='Name of the project')
 @click.pass_context
-def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot, project):
+def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot, no_runlog, project):
     """Run an experiment in a given environment."""
     args = SimpleNamespace(
         experiment=experiment,
@@ -247,6 +248,7 @@ def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot
         test=test,
         debug_screenshots=debug_screenshots,
         preserve_snapshot=preserve_snapshot,
+        runlog=not no_runlog,
         project=project,
         verbose=ctx.obj.verbose,
         very_verbose=ctx.obj.very_verbose

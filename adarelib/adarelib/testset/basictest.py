@@ -127,11 +127,35 @@ class BasicTest:
         metadata = self.get_placeholder_metadata(placeholder_name)
         return 'tolerance' in metadata and bool(metadata['tolerance'])
     
-    def compare_with_tolerance(self, placeholder_name: str, actual_value: str) -> Tuple[bool, str]:
-        """Compare actual value with placeholder using tolerance."""
+    def compare_with_placeholder(self, placeholder_name: str, actual_value: str) -> Tuple[bool, str]:
+        """Compare actual value with placeholder based on its type (regex, timestamp, string)."""
         metadata = self.get_placeholder_metadata(placeholder_name)
+        placeholder_type = metadata.get('type', 'string')
         
-        if not self.has_tolerance_metadata(placeholder_name):
+        if placeholder_type == 'regex':
+            import re
+            try:
+                regex_pattern = metadata.get('resolved_value', metadata.get('raw_value', '.*'))
+                compiled_regex = re.compile(regex_pattern)
+                if compiled_regex.match(actual_value):
+                    return True, f"Regex match: '{actual_value}' matches pattern '{regex_pattern}'"
+                else:
+                    return False, f"Regex no match: '{actual_value}' doesn't match pattern '{regex_pattern}'"
+            except re.error as e:
+                return False, f"Regex error: Invalid pattern '{regex_pattern}' - {e}"
+        
+        elif placeholder_type == 'timestamp':
+            return self._compare_timestamp_with_tolerance(metadata, actual_value)
+        
+        else:
+            # Default: exact string comparison
+            expected = metadata.get('resolved_value', '')
+            success = actual_value == expected
+            return success, f"Exact comparison: {'match' if success else 'no match'}"
+
+    def _compare_timestamp_with_tolerance(self, metadata: dict, actual_value: str) -> Tuple[bool, str]:
+        """Compare timestamp values with tolerance."""
+        if 'tolerance' not in metadata or not metadata['tolerance']:
             # No tolerance - do exact comparison  
             expected = metadata.get('resolved_value', '')
             success = actual_value == expected
@@ -149,10 +173,17 @@ class BasicTest:
             raw_value = metadata.get('raw_value', '')
             original_dt = dateutil.parser.parse(raw_value)
             
-            # Get tolerance range
-            tolerance = metadata.get('tolerance', [0, 0])
-            upper_tolerance = tolerance[0] if len(tolerance) > 0 else 0
-            lower_tolerance = tolerance[1] if len(tolerance) > 1 else -upper_tolerance
+            # Get tolerance range - handle both single value and array
+            tolerance = metadata.get('tolerance', 0)
+            if isinstance(tolerance, (int, float)):
+                upper_tolerance = tolerance
+                lower_tolerance = -tolerance
+            elif isinstance(tolerance, list) and len(tolerance) >= 1:
+                upper_tolerance = tolerance[0]
+                lower_tolerance = tolerance[1] if len(tolerance) > 1 else -upper_tolerance
+            else:
+                upper_tolerance = 0
+                lower_tolerance = 0
             
             # Calculate difference
             diff_seconds = (actual_dt - original_dt).total_seconds()

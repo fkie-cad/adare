@@ -85,7 +85,7 @@ class YamlPath(YamlCustomTag):
 class YamlTimestamp(YamlCustomTag):
     yaml_tag = u'!timestamp'
 
-    def __init__(self, timestamp, timestamp_format_comparison=None, timestamp_format_in_entry=None, tolerance=1, timezone=None, format=None):
+    def __init__(self, timestamp, timestamp_format_comparison=None, timestamp_format_in_entry=None, tolerance=None, timezone=None, format=None):
         self.string = timestamp
         self.timestamp_format_comparison = timestamp_format_comparison
         self.timestamp_format_in_entry = timestamp_format_in_entry
@@ -99,7 +99,7 @@ class YamlTimestamp(YamlCustomTag):
             self.metadata['timezone'] = timezone
         if format:
             self.metadata['format'] = format
-        if tolerance != 1:  # Only store non-default tolerance
+        if tolerance is not None:  # Only store explicitly set tolerance
             self.metadata['tolerance'] = [tolerance, tolerance]
 
     def __repr__(self):
@@ -128,7 +128,8 @@ class YamlTimestamp(YamlCustomTag):
                 return ComparisonResult(False, f'data timestamp couldn\'t be parsed', e)
 
         timediff = abs(data_timestamp - timestamp)
-        if timediff < datetime.timedelta(seconds=self.tolerance):
+        tolerance_seconds = self.tolerance if self.tolerance is not None else 1  # Default to 1 second if not specified
+        if timediff < datetime.timedelta(seconds=tolerance_seconds):
             return ComparisonResult(True, f'the timestamp had a difference of {timediff}')
         return ComparisonResult(False, f'the timestamp had a difference of {timediff}')
 

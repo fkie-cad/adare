@@ -29,11 +29,17 @@ All relevant information can be found in the documentation. (`docs/html/index.ht
 - [ ] improve code quality in general
   - [x] split virtualbox api into multiple files
   - [ ] we use the username/password dummy when we with virtualbox do not need the commands ... -> find a better solution!
+  - [ ] split resolving variables logic from playbook controller!
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
+- [ ] built in the testfunction methods variables info what variable tyes are allwoed 
+- [ ] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;))
+- [ ] add option like --runlog that saves a runlog in the logs directory! 
+- [ ] let a user run multiple exepriments -> requires more advanced snapshot handling -> so vm needs to uploaded 
 
 #### Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 - [ ] vm files are not write protected in project directory
+- [x] no new vm create when we create new project still reuse the old one!
 
 #### Test
 - [ ] built more unit tests / integration tests / ... (maybe with claude)

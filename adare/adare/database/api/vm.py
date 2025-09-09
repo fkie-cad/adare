@@ -247,6 +247,30 @@ class VMDatabaseApi(EnhancedDatabaseApi):
             log.debug(f"Updated VM '{vm.name}' with UUID {vbox_uuid}")
             return True
     
+    def update_vm_name(self, vm_id: str, new_name: str) -> bool:
+        """
+        Update VM name in the database.
+        
+        Args:
+            vm_id: VM database ID
+            new_name: New name for the VM
+            
+        Returns:
+            True if updated successfully
+        """
+        with self:
+            vm = self._session.query(Vm).filter_by(id=vm_id).first()
+            if not vm:
+                log.error(f"VM with ID {vm_id} not found for name update")
+                return False
+            
+            old_name = vm.name
+            vm.name = new_name
+            
+            self._session.commit()
+            log.debug(f"Updated VM name from '{old_name}' to '{new_name}'")
+            return True
+    
     def create_snapshot_record(self, vm_id: str, snapshot_name: str, snapshot_type: str,
                               experiment_id: str = None, description: str = None) -> bool:
         """

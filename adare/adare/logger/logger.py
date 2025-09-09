@@ -14,6 +14,7 @@ import adare.config as config
 
 APP_LOGGER_NAME = config.NAME
 
+
 # Log level to visual indicator mapping
 LOG_LEVEL_PREFIXES = {
     logging.DEBUG: "[+]",
@@ -162,3 +163,18 @@ def update_console_level(level: int) -> None:
     for handler in root_logger.handlers:
         if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
             handler.setLevel(level)
+
+
+def get_current_logfile() -> Optional[str]:
+    """Get the path to the current log file by examining active handlers.
+    
+    Returns:
+        Path to current log file or None if no file logging is active
+    """
+    root_logger = logging.getLogger()
+    
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.FileHandler):
+            return handler.baseFilename
+    
+    return None

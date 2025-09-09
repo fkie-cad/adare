@@ -46,16 +46,19 @@ tests:
       dst: '{{filepath}}'
   - name: trashbin_check
     description: 'check if file metadata exists in CSV with correct timestamp'
-    function: csv_contains_line_matching_regex
+    function: csv_contains_line
     parameter:
       dst: '{{trashbin_csv}}'
       entry:
         - !re '.*'  # Any value in first column
         - '$I'      # Recycle bin identifier
-        - 'C:\\Users\\{{username}}\\Documents\\testfile' 
+        - 'C:\Users\{{username}}\Documents\testfile.txt' 
         - !re '.*'  # Any value in fourth column 
         - !timestamp
           timestamp: '{{deletion_timestamp}}'
+          tolerance: 5
+          timezone: 'utc'
+          format: '%Y-%m-%d %H:%M:%S'
 
 actions:
   - command:
@@ -69,7 +72,7 @@ actions:
         image: "explorer.png"
       description: "Open File Explorer"
   - idle:
-      duration: 2.0
+      duration: 5.0
       description: "Wait additional time for File Explorer to open since some systems are slow"
   - click:
       target:
@@ -89,7 +92,7 @@ actions:
       description: "Save the timestamp of file deletion for later verification"
       variable: deletion_timestamp
   - idle:
-      duration: 1.0
+      duration: 3.0
       description: "Wait for file deletion to complete"
   - test: testfile_deleted
   - block:
@@ -99,6 +102,6 @@ actions:
             name: "RBCmd"
             description: "Run RBCmd.exe to check file metadata"
             tool: RBCmd.exe
-            command: 'RBCmd.exe -d "C:" --csv "C:/Users/{{username}}/Documents/trashbin"'
+            command: 'RBCmd.exe -d C:\$recycle.bin --csv C:/Users/{{username}}/Documents/trashbin'
             timeout: 180
         - test: trashbin_check
