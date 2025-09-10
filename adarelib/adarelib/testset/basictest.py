@@ -155,6 +155,9 @@ class BasicTest:
 
     def _compare_timestamp_with_tolerance(self, metadata: dict, actual_value: str) -> Tuple[bool, str]:
         """Compare timestamp values with tolerance."""
+        log.info(f"CLAUDE: Starting tolerance comparison - metadata: {metadata}")
+        log.info(f"CLAUDE: Actual value from file: '{actual_value}'")
+        
         if 'tolerance' not in metadata or not metadata['tolerance']:
             # No tolerance - do exact comparison  
             expected = metadata.get('resolved_value', '')
@@ -167,13 +170,45 @@ class BasicTest:
             
             # Parse actual timestamp using format metadata if available
             actual_dt = self._parse_timestamp_with_format(actual_value, metadata)
+            log.info(f"CLAUDE: Parsed actual timestamp: {actual_dt}")
             
             # Parse original timestamp (raw_value should be in ISO format)
             raw_value = metadata.get('raw_value', '')
-            original_dt = self._parse_timestamp_with_format(raw_value, metadata, is_original=True)
+            log.info(f"CLAUDE: Raw timestamp value: '{raw_value}'")
+            
+            # Check if timestamp needs runtime resolution
+            if metadata.get('needs_runtime_resolution', False) and '{{' in raw_value and '}}' in raw_value:
+                log.info(f"CLAUDE: Template '{raw_value}' marked for runtime resolution")
+                
+                # Runtime resolution will be handled by the test execution system
+                # The test execution context should have the updated variables
+                # For now, we need to get the resolved timestamp from somewhere else
+                
+                # This is a limitation - we can't easily get the execution context here
+                # But the test system should re-resolve templates with current context
+                log.warning(f"Template '{raw_value}' requires runtime resolution but execution context not available in test function")
+                
+                # Try to extract variable name and use it if available from test parameter resolution
+                # This is a workaround - ideally test resolution should happen after all variables are set
+                import re
+                template_match = re.search(r'\{\{\s*(\w+)\s*\}\}', raw_value)
+                if template_match:
+                    var_name = template_match.group(1)
+                    log.info(f"CLAUDE: Extracted variable name '{var_name}' from template")
+                    # The template should have been resolved during test processing
+                    # If we're still seeing the template here, it means the variable was empty during test resolution
+            
+            # Use resolved_value instead of raw_value for comparison - this should contain the properly resolved timestamp
+            comparison_value = metadata.get('resolved_value', raw_value)
+            log.info(f"CLAUDE: Using resolved_value for comparison: '{comparison_value}'")
+            
+            original_dt = self._parse_timestamp_with_format(comparison_value, metadata, is_original=True)
+            log.info(f"CLAUDE: Parsed original timestamp: {original_dt}")
             
             # Get tolerance range - handle both single value and array
             tolerance = metadata.get('tolerance', 0)
+            log.info(f"CLAUDE: Tolerance from metadata: {tolerance}")
+            
             if isinstance(tolerance, (int, float)):
                 upper_tolerance = tolerance
                 lower_tolerance = -tolerance
@@ -183,12 +218,16 @@ class BasicTest:
             else:
                 upper_tolerance = 0
                 lower_tolerance = 0
+                
+            log.info(f"CLAUDE: Calculated tolerance range: {lower_tolerance}s to {upper_tolerance}s")
             
             # Calculate difference
             diff_seconds = (actual_dt - original_dt).total_seconds()
+            log.info(f"CLAUDE: Time difference: {diff_seconds}s")
             
             # Check if within tolerance
             within_range = lower_tolerance <= diff_seconds <= upper_tolerance
+            log.info(f"CLAUDE: Within tolerance? {within_range} ({lower_tolerance} <= {diff_seconds} <= {upper_tolerance})")
             
             if within_range:
                 return True, f"Within tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)"
@@ -260,11 +299,28 @@ class BasicTest:
                 next_delimiter = text_parts[i + 1]
                 delimiter_pos = actual_content.find(next_delimiter, current_pos)
                 if delimiter_pos == -1:
-                    return False, f"Couldn't find delimiter '{next_delimiter}' after placeholder '{placeholders[i]}'"
-                
-                # Extract value between current position and delimiter
-                placeholder_value = actual_content[current_pos:delimiter_pos]
-                current_pos = delimiter_pos
+                    # If delimiter not found, handle special cases
+                    if next_delimiter.strip() == "" and current_pos >= len(actual_content.rstrip()):
+                        # Delimiter is trailing whitespace - extract to end of content
+                        placeholder_value = actual_content[current_pos:].rstrip()
+                        current_pos = len(actual_content)
+                    elif next_delimiter == '\n':
+                        # Special case: newline delimiter - extract to end of current line
+                        line_end = actual_content.find('\n', current_pos)
+                        if line_end == -1:
+                            # No newline found - take to end of content
+                            placeholder_value = actual_content[current_pos:]
+                            current_pos = len(actual_content)
+                        else:
+                            # Extract to the newline
+                            placeholder_value = actual_content[current_pos:line_end]
+                            current_pos = line_end
+                    else:
+                        return False, f"Couldn't find delimiter '{repr(next_delimiter)}' after placeholder '{placeholders[i]}'"
+                else:
+                    # Extract value between current position and delimiter
+                    placeholder_value = actual_content[current_pos:delimiter_pos]
+                    current_pos = delimiter_pos
             elif i + 1 < len(text_parts) and not text_parts[i + 1] and i + 1 < len(placeholders):
                 # Empty delimiter between placeholders (not at end) - this is an error
                 return False, f"Empty delimiter after '{placeholders[i]}' - cannot determine where placeholder ends. Please add text between placeholders."
@@ -290,7 +346,7 @@ class BasicTest:
         for i, placeholder in enumerate(placeholders):
             actual_value = extracted_values[i]
             
-            success, msg = self.compare_with_tolerance(placeholder, actual_value)
+            success, msg = self.compare_with_placeholder(placeholder, actual_value)
             validation_messages.append(f"{placeholder}: {msg}")
             
             if not success:

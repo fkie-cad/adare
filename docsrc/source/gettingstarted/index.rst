@@ -218,11 +218,10 @@ More detailed explanation as well as details on creating an experiment can be fo
 
 Now that we have created the experiment, we can finally run it::
 
-    adare experiment run ubuntu_deletefile -e ubuntu24043 --fake
+    adare experiment run ubuntu_deletefile -e ubuntu24043
 
 This will start the virtual machine and execute the experiment on it.
 While the experiment is running, the user can see the progress of the experiment in the terminal.
-The ``--fake`` flag runs the experiment in a test mode for development purposes.
 
 To later see more detailed information about the run, a user can run::
 

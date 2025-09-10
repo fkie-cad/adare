@@ -166,13 +166,6 @@ class SaveTimestampAction:
     description: str = ''
 
 
-@attrs.define  
-class ActionResult:
-    success: bool
-    message: str = ''
-    data: Optional[dict] = None
-    execution_time: Optional[float] = None
-
 @attrs.define
 class BlockAction:
     actions: List[ActionType]  # Remove quotes
