@@ -1,0 +1,833 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Playbook Actions &mdash; ADARE  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=903d06c1" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="CLI Reference" href="../cli-reference/index.html" />
+    <link rel="prev" title="Playbook Guide" href="playbooks.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart/index.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Documentation:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="projects.html">Project Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="environments.html">Environment Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="playbooks.html">Playbook Guide</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Playbook Actions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#gui-actions">GUI Actions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#click-actions">Click Actions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#mouse-actions">Mouse Actions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#keyboard-actions">Keyboard Actions</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#system-actions">System Actions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#command-execution">Command Execution</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#file-operations">File Operations</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#flow-control-actions">Flow Control Actions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#conditional-logic">Conditional Logic</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#loops-and-iteration">Loops and Iteration</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#error-handling">Error Handling</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#timing-control-actions">Timing Control Actions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#delays-and-pauses">Delays and Pauses</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#wait-conditions">Wait Conditions</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#evidence-collection-actions">Evidence Collection Actions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#screenshots">Screenshots</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#timestamp-recording">Timestamp Recording</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#system-state-snapshots">System State Snapshots</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#block-actions">Block Actions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#grouping-actions">Grouping Actions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conditional-blocks">Conditional Blocks</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#advanced-action-patterns">Advanced Action Patterns</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#retry-mechanisms">Retry Mechanisms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#parallel-execution">Parallel Execution</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#complex-forensic-scenarios">Complex Forensic Scenarios</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#best-practices">Best Practices</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#action-naming">Action Naming</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#error-handling-strategy">Error Handling Strategy</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#performance-optimization">Performance Optimization</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#next-steps">Next Steps</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#daily-workflow">Daily Workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#quick-reference">Quick Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#best-practices">Best Practices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#getting-help">Getting Help</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#what-s-next">What’s Next?</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Technical Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ADARE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">User Guide</a></li>
+      <li class="breadcrumb-item active">Playbook Actions</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/user-guide/playbook-actions.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="playbook-actions">
+<h1>Playbook Actions<a class="headerlink" href="#playbook-actions" title="Link to this heading"></a></h1>
+<p>Complete reference for all playbook action types with detailed examples.</p>
+<nav class="contents local" id="quick-navigation">
+<p class="topic-title">Quick Navigation</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#gui-actions" id="id1">GUI Actions</a></p>
+<ul>
+<li><p><a class="reference internal" href="#click-actions" id="id2">Click Actions</a></p></li>
+<li><p><a class="reference internal" href="#mouse-actions" id="id3">Mouse Actions</a></p></li>
+<li><p><a class="reference internal" href="#keyboard-actions" id="id4">Keyboard Actions</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#system-actions" id="id5">System Actions</a></p>
+<ul>
+<li><p><a class="reference internal" href="#command-execution" id="id6">Command Execution</a></p></li>
+<li><p><a class="reference internal" href="#file-operations" id="id7">File Operations</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#flow-control-actions" id="id8">Flow Control Actions</a></p>
+<ul>
+<li><p><a class="reference internal" href="#conditional-logic" id="id9">Conditional Logic</a></p></li>
+<li><p><a class="reference internal" href="#loops-and-iteration" id="id10">Loops and Iteration</a></p></li>
+<li><p><a class="reference internal" href="#error-handling" id="id11">Error Handling</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#timing-control-actions" id="id12">Timing Control Actions</a></p>
+<ul>
+<li><p><a class="reference internal" href="#delays-and-pauses" id="id13">Delays and Pauses</a></p></li>
+<li><p><a class="reference internal" href="#wait-conditions" id="id14">Wait Conditions</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#evidence-collection-actions" id="id15">Evidence Collection Actions</a></p>
+<ul>
+<li><p><a class="reference internal" href="#screenshots" id="id16">Screenshots</a></p></li>
+<li><p><a class="reference internal" href="#timestamp-recording" id="id17">Timestamp Recording</a></p></li>
+<li><p><a class="reference internal" href="#system-state-snapshots" id="id18">System State Snapshots</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#block-actions" id="id19">Block Actions</a></p>
+<ul>
+<li><p><a class="reference internal" href="#grouping-actions" id="id20">Grouping Actions</a></p></li>
+<li><p><a class="reference internal" href="#conditional-blocks" id="id21">Conditional Blocks</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#advanced-action-patterns" id="id22">Advanced Action Patterns</a></p>
+<ul>
+<li><p><a class="reference internal" href="#retry-mechanisms" id="id23">Retry Mechanisms</a></p></li>
+<li><p><a class="reference internal" href="#parallel-execution" id="id24">Parallel Execution</a></p></li>
+<li><p><a class="reference internal" href="#complex-forensic-scenarios" id="id25">Complex Forensic Scenarios</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#best-practices" id="id26">Best Practices</a></p>
+<ul>
+<li><p><a class="reference internal" href="#action-naming" id="id27">Action Naming</a></p></li>
+<li><p><a class="reference internal" href="#error-handling-strategy" id="id28">Error Handling Strategy</a></p></li>
+<li><p><a class="reference internal" href="#performance-optimization" id="id29">Performance Optimization</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#next-steps" id="id30">Next Steps</a></p></li>
+</ul>
+</nav>
+<section id="gui-actions">
+<h2><a class="toc-backref" href="#id1" role="doc-backlink">GUI Actions</a><a class="headerlink" href="#gui-actions" title="Link to this heading"></a></h2>
+<section id="click-actions">
+<h3><a class="toc-backref" href="#id2" role="doc-backlink">Click Actions</a><a class="headerlink" href="#click-actions" title="Link to this heading"></a></h3>
+<p><strong>Basic Clicking</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Click by image recognition</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;save_button.png&quot;</span>
+<span class="w">        </span><span class="nt">confidence</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.8</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Click</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">Save</span><span class="nv"> </span><span class="s">button&quot;</span>
+
+<span class="w">  </span><span class="c1"># Click by text recognition</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;OK&quot;</span>
+<span class="w">        </span><span class="nt">case_sensitive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Click</span><span class="nv"> </span><span class="s">OK</span><span class="nv"> </span><span class="s">dialog</span><span class="nv"> </span><span class="s">button&quot;</span>
+
+<span class="w">  </span><span class="c1"># Click at specific coordinates</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">coordinates</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">150</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">300</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Click</span><span class="nv"> </span><span class="s">at</span><span class="nv"> </span><span class="s">specific</span><span class="nv"> </span><span class="s">location&quot;</span>
+</pre></div>
+</div>
+<p><strong>Advanced Click Strategies</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Handle multiple matches</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete&quot;</span>
+<span class="w">        </span><span class="nt">strategy</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">SweepStrategy</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">index</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span><span class="w">            </span><span class="c1"># Click 3rd &quot;Delete&quot; button found</span>
+<span class="w">      </span><span class="nt">retry</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">attempts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">        </span><span class="nt">delay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+
+<span class="w">  </span><span class="c1"># Fallback options</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Save&quot;</span>
+<span class="w">      </span><span class="nt">fallback</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;SAVE&quot;</span><span class="p p-Indicator">}</span><span class="w">        </span><span class="c1"># All caps</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;save&quot;</span><span class="p p-Indicator">}</span><span class="w">        </span><span class="c1"># Lowercase</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;save.png&quot;</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># Image fallback</span>
+</pre></div>
+</div>
+</section>
+<section id="mouse-actions">
+<h3><a class="toc-backref" href="#id3" role="doc-backlink">Mouse Actions</a><a class="headerlink" href="#mouse-actions" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Double-click</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">double_click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file_icon.png&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Open</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">by</span><span class="nv"> </span><span class="s">double-clicking&quot;</span>
+
+<span class="w">  </span><span class="c1"># Right-click for context menu</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">right_click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;filename.txt&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Right-click</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">context</span><span class="nv"> </span><span class="s">menu&quot;</span>
+
+<span class="w">  </span><span class="c1"># Drag and drop</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">drag</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">from</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">coordinates</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">100</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">200</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">to</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">coordinates</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">300</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">400</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Drag</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">trash&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="keyboard-actions">
+<h3><a class="toc-backref" href="#id4" role="doc-backlink">Keyboard Actions</a><a class="headerlink" href="#keyboard-actions" title="Link to this heading"></a></h3>
+<p><strong>Text Input</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Type text</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;forensic</span><span class="nv"> </span><span class="s">evidence</span><span class="nv"> </span><span class="s">data&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Enter</span><span class="nv"> </span><span class="s">evidence</span><span class="nv"> </span><span class="s">data&quot;</span>
+
+<span class="w">  </span><span class="c1"># Type with variables</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Case</span><span class="nv"> </span><span class="s">ID:</span><span class="nv"> </span><span class="s">{{case_id}}&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Enter</span><span class="nv"> </span><span class="s">case</span><span class="nv"> </span><span class="s">information&quot;</span>
+</pre></div>
+</div>
+<p><strong>Keyboard Shortcuts</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Simple shortcuts</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;ctrl&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;s&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Save</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">Ctrl+S&quot;</span>
+
+<span class="w">  </span><span class="c1"># Complex key sequences</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;ctrl&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;shift&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;del&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Open</span><span class="nv"> </span><span class="s">delete</span><span class="nv"> </span><span class="s">confirmation&quot;</span>
+
+<span class="w">  </span><span class="c1"># Special keys</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;delete&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Press</span><span class="nv"> </span><span class="s">Delete</span><span class="nv"> </span><span class="s">key&quot;</span>
+
+<span class="w">  </span><span class="c1"># Function keys</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;f5&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Refresh</span><span class="nv"> </span><span class="s">view&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="system-actions">
+<h2><a class="toc-backref" href="#id5" role="doc-backlink">System Actions</a><a class="headerlink" href="#system-actions" title="Link to this heading"></a></h2>
+<section id="command-execution">
+<h3><a class="toc-backref" href="#id6" role="doc-backlink">Command Execution</a><a class="headerlink" href="#command-execution" title="Link to this heading"></a></h3>
+<p><strong>Basic Commands</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Simple commands</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">Evidence</span><span class="nv"> </span><span class="s">Directory&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;mkdir</span><span class="nv"> </span><span class="s">-p</span><span class="nv"> </span><span class="s">/evidence/{{case_id}}&quot;</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="c1"># Commands with output capture</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;List</span><span class="nv"> </span><span class="s">Files&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ls</span><span class="nv"> </span><span class="s">-la</span><span class="nv"> </span><span class="s">/evidence/&quot;</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">capture_output</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">save_to</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file_listing&quot;</span>
+</pre></div>
+</div>
+<p><strong>Advanced Command Options</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Admin/elevated commands</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Install</span><span class="nv"> </span><span class="s">Forensic</span><span class="nv"> </span><span class="s">Tool&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;msi</span><span class="nv"> </span><span class="s">/i</span><span class="nv"> </span><span class="s">ForensicTool.msi</span><span class="nv"> </span><span class="s">/quiet&quot;</span>
+<span class="w">      </span><span class="nt">admin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">              </span><span class="c1"># Windows: Run as Administrator</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
+
+<span class="w">  </span><span class="c1"># Multi-line commands</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Complex</span><span class="nv"> </span><span class="s">Setup&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">        </span><span class="no">cd /evidence</span>
+<span class="w">        </span><span class="no">mkdir case_{{case_id}}</span>
+<span class="w">        </span><span class="no">chmod 755 case_{{case_id}}</span>
+<span class="w">        </span><span class="no">echo &quot;Case started: {{now()}}&quot; &gt; case_{{case_id}}/log.txt</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="c1"># Environment-specific commands</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Platform-specific</span><span class="nv"> </span><span class="s">cleanup&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">        </span><span class="no">{% if os_platform == &quot;windows&quot; %}</span>
+<span class="w">        </span><span class="no">del /Q C:\temp\*</span>
+<span class="w">        </span><span class="no">{% else %}</span>
+<span class="w">        </span><span class="no">rm -rf /tmp/*</span>
+<span class="w">        </span><span class="no">{% endif %}</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+</section>
+<section id="file-operations">
+<h3><a class="toc-backref" href="#id7" role="doc-backlink">File Operations</a><a class="headerlink" href="#file-operations" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># File copy</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">file_copy</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/source/evidence.txt&quot;</span>
+<span class="w">      </span><span class="nt">destination</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/copied_evidence.txt&quot;</span>
+<span class="w">      </span><span class="nt">preserve_metadata</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="c1"># File move</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">file_move</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/tmp/temp_evidence.txt&quot;</span>
+<span class="w">      </span><span class="nt">destination</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/final_evidence.txt&quot;</span>
+
+<span class="w">  </span><span class="c1"># File deletion (for testing deletion artifacts)</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">file_delete</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/to_be_deleted.txt&quot;</span>
+<span class="w">      </span><span class="nt">secure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">            </span><span class="c1"># Normal deletion (creates artifacts)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="flow-control-actions">
+<h2><a class="toc-backref" href="#id8" role="doc-backlink">Flow Control Actions</a><a class="headerlink" href="#flow-control-actions" title="Link to this heading"></a></h2>
+<section id="conditional-logic">
+<h3><a class="toc-backref" href="#id9" role="doc-backlink">Conditional Logic</a><a class="headerlink" href="#conditional-logic" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Simple conditionals</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">conditional</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{os_platform}}</span><span class="nv"> </span><span class="s">==</span><span class="nv"> </span><span class="s">&quot;windows&quot;&#39;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;del</span><span class="nv"> </span><span class="s">&quot;{{temp_file}}&quot;&#39;</span>
+<span class="w">      </span><span class="nt">else</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;rm</span><span class="nv"> </span><span class="s">&quot;{{temp_file}}&quot;&#39;</span>
+
+<span class="w">  </span><span class="c1"># Multiple conditions</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">conditional</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{file_count}}</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">0</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">{{cleanup_enabled}}&#39;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;echo</span><span class="nv"> </span><span class="s">&quot;Cleaning</span><span class="nv"> </span><span class="s">up</span><span class="nv"> </span><span class="s">{{file_count}}</span><span class="nv"> </span><span class="s">files&quot;&#39;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file&quot;</span>
+<span class="w">            </span><span class="nt">values</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{files_to_clean}}&#39;</span>
+<span class="w">            </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">              </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">file_delete</span><span class="p">:</span>
+<span class="w">                  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{file}}&#39;</span>
+</pre></div>
+</div>
+</section>
+<section id="loops-and-iteration">
+<h3><a class="toc-backref" href="#id10" role="doc-backlink">Loops and Iteration</a><a class="headerlink" href="#loops-and-iteration" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Loop over list</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;test_file&quot;</span>
+<span class="w">      </span><span class="nt">values</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{test_files}}&#39;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;echo</span><span class="nv"> </span><span class="s">&quot;Processing</span><span class="nv"> </span><span class="s">{{test_file}}&quot;&#39;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{test_file}}&#39;</span>
+
+<span class="w">  </span><span class="c1"># Numeric loop</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;i&quot;</span>
+<span class="w">      </span><span class="nt">range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5</span><span class="p p-Indicator">]</span><span class="w">            </span><span class="c1"># Loop from 1 to 5</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;touch</span><span class="nv"> </span><span class="s">/evidence/file_{{i}}.txt&#39;</span>
+
+<span class="w">  </span><span class="c1"># Loop with conditions</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;item&quot;</span>
+<span class="w">      </span><span class="nt">values</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{all_items}}&#39;</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{item.process</span><span class="nv"> </span><span class="s">==</span><span class="nv"> </span><span class="s">True}}&#39;</span><span class="w">  </span><span class="c1"># Only process certain items</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{item.name}}&#39;</span>
+</pre></div>
+</div>
+</section>
+<section id="error-handling">
+<h3><a class="toc-backref" href="#id11" role="doc-backlink">Error Handling</a><a class="headerlink" href="#error-handling" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Try-catch blocks</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">try</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Advanced</span><span class="nv"> </span><span class="s">Settings&quot;</span>
+<span class="w">      </span><span class="nt">catch</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">log</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">message</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Advanced</span><span class="nv"> </span><span class="s">Settings</span><span class="nv"> </span><span class="s">not</span><span class="nv"> </span><span class="s">found,</span><span class="nv"> </span><span class="s">trying</span><span class="nv"> </span><span class="s">basic</span><span class="nv"> </span><span class="s">settings&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Settings&quot;</span>
+<span class="w">      </span><span class="nt">finally</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;settings_opened&quot;</span>
+
+<span class="w">  </span><span class="c1"># Ignore errors and continue</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">try</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;risky_command_that_might_fail&quot;</span>
+<span class="w">      </span><span class="nt">catch</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">log</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">message</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Command</span><span class="nv"> </span><span class="s">failed,</span><span class="nv"> </span><span class="s">continuing</span><span class="nv"> </span><span class="s">anyway&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="timing-control-actions">
+<h2><a class="toc-backref" href="#id12" role="doc-backlink">Timing Control Actions</a><a class="headerlink" href="#timing-control-actions" title="Link to this heading"></a></h2>
+<section id="delays-and-pauses">
+<h3><a class="toc-backref" href="#id13" role="doc-backlink">Delays and Pauses</a><a class="headerlink" href="#delays-and-pauses" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Simple delays</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.5</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">application</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">load&quot;</span>
+
+<span class="w">  </span><span class="c1"># Variable delays</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{load_time}}&#39;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">configurable</span><span class="nv"> </span><span class="s">load</span><span class="nv"> </span><span class="s">time&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="wait-conditions">
+<h3><a class="toc-backref" href="#id14" role="doc-backlink">Wait Conditions</a><a class="headerlink" href="#wait-conditions" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Wait for file to exist</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_for</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file_exists&quot;</span>
+<span class="w">      </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/processing_complete.flag&quot;</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">processing</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">complete&quot;</span>
+
+<span class="w">  </span><span class="c1"># Wait for GUI element</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_for</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;element_visible&quot;</span>
+<span class="w">      </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Process</span><span class="nv"> </span><span class="s">Complete&quot;</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">completion</span><span class="nv"> </span><span class="s">dialog&quot;</span>
+
+<span class="w">  </span><span class="c1"># Wait for process to stop</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_for</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;process_not_running&quot;</span>
+<span class="w">      </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">process_name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;analyzer.exe&quot;</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">120</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">analyzer</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">finish&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="evidence-collection-actions">
+<h2><a class="toc-backref" href="#id15" role="doc-backlink">Evidence Collection Actions</a><a class="headerlink" href="#evidence-collection-actions" title="Link to this heading"></a></h2>
+<section id="screenshots">
+<h3><a class="toc-backref" href="#id16" role="doc-backlink">Screenshots</a><a class="headerlink" href="#screenshots" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Full screen capture</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;evidence_screen_{{timestamp}}&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Capture</span><span class="nv"> </span><span class="s">current</span><span class="nv"> </span><span class="s">screen</span><span class="nv"> </span><span class="s">state&quot;</span>
+
+<span class="w">  </span><span class="c1"># Region capture</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;dialog_capture&quot;</span>
+<span class="w">      </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">100</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">100</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">400</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">300</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># x, y, width, height</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Capture</span><span class="nv"> </span><span class="s">dialog</span><span class="nv"> </span><span class="s">box</span><span class="nv"> </span><span class="s">only&quot;</span>
+
+<span class="w">  </span><span class="c1"># High-quality evidence capture</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;forensic_evidence&quot;</span>
+<span class="w">      </span><span class="nt">quality</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="w">      </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;png&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;High-quality</span><span class="nv"> </span><span class="s">evidence</span><span class="nv"> </span><span class="s">capture&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="timestamp-recording">
+<h3><a class="toc-backref" href="#id17" role="doc-backlink">Timestamp Recording</a><a class="headerlink" href="#timestamp-recording" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Simple timestamp</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;deletion_start&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Record</span><span class="nv"> </span><span class="s">when</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">deletion</span><span class="nv"> </span><span class="s">began&quot;</span>
+
+<span class="w">  </span><span class="c1"># Timestamp with custom format</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;evidence_time&quot;</span>
+<span class="w">      </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;%Y-%m-%d</span><span class="nv"> </span><span class="s">%H:%M:%S.%f&quot;</span>
+<span class="w">      </span><span class="nt">timezone</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;UTC&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Precise</span><span class="nv"> </span><span class="s">forensic</span><span class="nv"> </span><span class="s">timestamp&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="system-state-snapshots">
+<h3><a class="toc-backref" href="#id18" role="doc-backlink">System State Snapshots</a><a class="headerlink" href="#system-state-snapshots" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># VM snapshot for forensic preservation</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snapshot</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pre_incident_state&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Capture</span><span class="nv"> </span><span class="s">clean</span><span class="nv"> </span><span class="s">system</span><span class="nv"> </span><span class="s">state&quot;</span>
+
+<span class="w">  </span><span class="c1"># Registry export (Windows)</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">export_registry</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;HKEY_CURRENT_USER\\Software&quot;</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/registry_before.reg&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Export</span><span class="nv"> </span><span class="s">user</span><span class="nv"> </span><span class="s">software</span><span class="nv"> </span><span class="s">registry&quot;</span>
+
+<span class="w">  </span><span class="c1"># Process list capture</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">capture_processes</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/processes_{{timestamp}}.csv&quot;</span>
+<span class="w">      </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;csv&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Capture</span><span class="nv"> </span><span class="s">running</span><span class="nv"> </span><span class="s">processes&quot;</span>
+
+<span class="w">  </span><span class="c1"># Memory dump (advanced)</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">memory_dump</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/memory_{{timestamp}}.dmp&quot;</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;full&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Full</span><span class="nv"> </span><span class="s">memory</span><span class="nv"> </span><span class="s">dump</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">analysis&quot;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="block-actions">
+<h2><a class="toc-backref" href="#id19" role="doc-backlink">Block Actions</a><a class="headerlink" href="#block-actions" title="Link to this heading"></a></h2>
+<section id="grouping-actions">
+<h3><a class="toc-backref" href="#id20" role="doc-backlink">Grouping Actions</a><a class="headerlink" href="#grouping-actions" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Group related actions</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Evidence</span><span class="nv"> </span><span class="s">File</span><span class="nv"> </span><span class="s">Setup&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Prepare</span><span class="nv"> </span><span class="s">evidence</span><span class="nv"> </span><span class="s">files</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">testing&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;mkdir</span><span class="nv"> </span><span class="s">/evidence&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;touch</span><span class="nv"> </span><span class="s">/evidence/test.txt&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_created_successfully</span>
+
+<span class="w">  </span><span class="c1"># Nested blocks</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;File</span><span class="nv"> </span><span class="s">Deletion</span><span class="nv"> </span><span class="s">Test&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Select</span><span class="nv"> </span><span class="s">File&quot;</span>
+<span class="w">            </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">              </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;test.txt&quot;</span><span class="p p-Indicator">}}</span>
+<span class="w">              </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file_selected&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete</span><span class="nv"> </span><span class="s">File&quot;</span>
+<span class="w">            </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">              </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;delete&quot;</span><span class="p p-Indicator">]}</span>
+<span class="w">              </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;deletion_time&quot;</span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+</section>
+<section id="conditional-blocks">
+<h3><a class="toc-backref" href="#id21" role="doc-backlink">Conditional Blocks</a><a class="headerlink" href="#conditional-blocks" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Conditional execution of entire blocks</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">conditional</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{run_cleanup}}&#39;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Cleanup</span><span class="nv"> </span><span class="s">Operations&quot;</span>
+<span class="w">            </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">              </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;rm</span><span class="nv"> </span><span class="s">-rf</span><span class="nv"> </span><span class="s">/tmp/test*&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">              </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;Cleanup</span><span class="nv"> </span><span class="s">complete&#39;&quot;</span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="advanced-action-patterns">
+<h2><a class="toc-backref" href="#id22" role="doc-backlink">Advanced Action Patterns</a><a class="headerlink" href="#advanced-action-patterns" title="Link to this heading"></a></h2>
+<section id="retry-mechanisms">
+<h3><a class="toc-backref" href="#id23" role="doc-backlink">Retry Mechanisms</a><a class="headerlink" href="#retry-mechanisms" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Action-level retry</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;unstable_button.png&quot;</span>
+<span class="w">      </span><span class="nt">retry</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">attempts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+<span class="w">        </span><span class="nt">delay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="w">        </span><span class="nt">backoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.5</span><span class="w">        </span><span class="c1"># Increase delay by 50% each retry</span>
+
+<span class="w">  </span><span class="c1"># Block-level retry</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Flaky</span><span class="nv"> </span><span class="s">Operation&quot;</span>
+<span class="w">      </span><span class="nt">retry</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">attempts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">        </span><span class="nt">delay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Submit&quot;</span><span class="p p-Indicator">}}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_for</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;element_visible&quot;</span><span class="p p-Indicator">,</span><span class="nt"> parameter</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Success&quot;</span><span class="p p-Indicator">}}</span>
+</pre></div>
+</div>
+</section>
+<section id="parallel-execution">
+<h3><a class="toc-backref" href="#id24" role="doc-backlink">Parallel Execution</a><a class="headerlink" href="#parallel-execution" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Run actions in parallel (use with caution)</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">parallel</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;long_running_process_1&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;long_running_process_2&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;long_running_process_3&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
+
+<span class="w">  </span><span class="c1"># Wait for all to complete</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_for</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;all_processes_complete&quot;</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60</span>
+</pre></div>
+</div>
+</section>
+<section id="complex-forensic-scenarios">
+<h3><a class="toc-backref" href="#id25" role="doc-backlink">Complex Forensic Scenarios</a><a class="headerlink" href="#complex-forensic-scenarios" title="Link to this heading"></a></h3>
+<p><strong>File System Timeline Analysis</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Create baseline</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snapshot</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;baseline&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;baseline_time&quot;</span><span class="p p-Indicator">}</span>
+
+<span class="w">  </span><span class="c1"># Perform actions that create artifacts</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Evidence</span><span class="nv"> </span><span class="s">Creation</span><span class="nv"> </span><span class="s">Sequence&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;echo</span><span class="nv"> </span><span class="s">&quot;evidence&quot;</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">/tmp/critical.txt&#39;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file_created&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;chmod</span><span class="nv"> </span><span class="s">755</span><span class="nv"> </span><span class="s">/tmp/critical.txt&#39;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;permissions_changed&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;mv</span><span class="nv"> </span><span class="s">/tmp/critical.txt</span><span class="nv"> </span><span class="s">/evidence/&#39;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file_moved&quot;</span><span class="p p-Indicator">}</span>
+
+<span class="w">  </span><span class="c1"># Capture final state</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snapshot</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;post_evidence&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">export_filesystem_timeline</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/timeline.csv&quot;</span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="best-practices">
+<h2><a class="toc-backref" href="#id26" role="doc-backlink">Best Practices</a><a class="headerlink" href="#best-practices" title="Link to this heading"></a></h2>
+<section id="action-naming">
+<h3><a class="toc-backref" href="#id27" role="doc-backlink">Action Naming</a><a class="headerlink" href="#action-naming" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Good: Clear, descriptive names</span>
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete</span><span class="nv"> </span><span class="s">selected</span><span class="nv"> </span><span class="s">evidence</span><span class="nv"> </span><span class="s">file&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Export</span><span class="nv"> </span><span class="s">Registry</span><span class="nv"> </span><span class="s">Evidence&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;reg</span><span class="nv"> </span><span class="s">export</span><span class="nv"> </span><span class="s">HKCU\\Software</span><span class="nv"> </span><span class="s">evidence_registry.reg&quot;</span>
+
+<span class="c1"># Bad: Generic, unclear names</span>
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete&quot;</span><span class="p p-Indicator">}}</span><span class="w">  </span><span class="c1"># No description</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;reg</span><span class="nv"> </span><span class="s">export&quot;</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># No name</span>
+</pre></div>
+</div>
+</section>
+<section id="error-handling-strategy">
+<h3><a class="toc-backref" href="#id28" role="doc-backlink">Error Handling Strategy</a><a class="headerlink" href="#error-handling-strategy" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">on_error</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;continue&quot;</span><span class="w">        </span><span class="c1"># or &quot;stop&quot;, &quot;retry&quot;</span>
+
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Always include error handling for critical operations</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">try</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;critical_button.png&quot;</span><span class="p p-Indicator">}}</span>
+<span class="w">      </span><span class="nt">catch</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">log</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">message</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Critical</span><span class="nv"> </span><span class="s">button</span><span class="nv"> </span><span class="s">not</span><span class="nv"> </span><span class="s">found&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;error_state&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fail</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">message</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Cannot</span><span class="nv"> </span><span class="s">proceed</span><span class="nv"> </span><span class="s">without</span><span class="nv"> </span><span class="s">critical</span><span class="nv"> </span><span class="s">button&quot;</span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+</section>
+<section id="performance-optimization">
+<h3><a class="toc-backref" href="#id29" role="doc-backlink">Performance Optimization</a><a class="headerlink" href="#performance-optimization" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Minimize unnecessary delays</span>
+<span class="nt">settings</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span><span class="w">              </span><span class="c1"># Reduce default delays</span>
+
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Use efficient selectors</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">coordinates</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">150</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">300</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># Fastest - direct coordinates</span>
+<span class="w">      </span><span class="c1"># vs</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;button.png&quot;</span><span class="w">      </span><span class="c1"># Slower - image matching</span>
+<span class="w">      </span><span class="c1"># vs</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Button&quot;</span><span class="w">           </span><span class="c1"># Slowest - OCR required</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="next-steps">
+<h2><a class="toc-backref" href="#id30" role="doc-backlink">Next Steps</a><a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
+<p><strong>Related Documentation:</strong>
+- <strong>Playbook Guide</strong>: <a class="reference internal" href="playbooks.html"><span class="doc">Playbook Guide</span></a> - Basic playbook structure and concepts
+- <strong>Variable Reference</strong>: <span class="xref std std-doc">playbook-variables</span> - Variable types and filters
+- <strong>Test Functions</strong>: <span class="xref std std-doc">../advanced/testfunctions</span> - Custom validation functions</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="playbooks.html" class="btn btn-neutral float-left" title="Playbook Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../cli-reference/index.html" class="btn btn-neutral float-right" title="CLI Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

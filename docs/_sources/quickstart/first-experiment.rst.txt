@@ -460,7 +460,6 @@ Next Steps
 
 Now you're ready for advanced ADARE usage:
 
-- **Custom Test Functions**: :doc:`../advanced/testfunctions` - Create specialized forensic tests
-- **Performance Tuning**: :doc:`../advanced/performance` - Optimize experiment execution
-- **CI/CD Integration**: :doc:`../advanced/integration` - Automate forensic testing pipelines
-- **Multi-VM Scenarios**: :doc:`../advanced/vm-management` - Test across multiple systems simultaneously
+- **Advanced Topics**: :doc:`../advanced/index` - Custom functions, performance tuning, and advanced techniques
+- **CLI Reference**: :doc:`../cli-reference/index` - Complete command documentation
+- **User Guide**: :doc:`../user-guide/index` - Daily usage patterns and best practices

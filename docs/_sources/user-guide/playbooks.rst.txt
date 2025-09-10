@@ -199,7 +199,7 @@ ADARE uses Jinja2 templating for dynamic content:
            {% endfor %}
 
 Variable Filters
-===============
+================
 
 .. warning::
    **Variable Filter Validation Limitation**
@@ -767,7 +767,7 @@ Best Practices
 **************
 
 Playbook Organization
-====================
+=====================
 
 **Use Descriptive Names**
 
@@ -958,6 +958,5 @@ Next Steps
 
 With playbook fundamentals mastered:
 
-- **Run Experiments**: :doc:`running-experiments` - Execute your playbooks
-- **Analyze Results**: :doc:`results` - Review forensic evidence
+- **CLI Reference**: :doc:`../cli-reference/index` - Complete command documentation
 - **Advanced Techniques**: :doc:`../advanced/index` - Custom functions and optimization

@@ -311,7 +311,7 @@ Learn More
 ==========
 
 - **User Guide**: :doc:`../user-guide/index` - Complete daily usage guide
-- **Playbook Reference**: :doc:`../reference/playbook-reference` - Full YAML syntax
+- **Playbook Guide**: :doc:`../user-guide/playbooks` - Complete YAML automation guide
 - **CLI Reference**: :doc:`../cli-reference/index` - All available commands
 - **Advanced Topics**: :doc:`../advanced/index` - Custom functions and performance
 

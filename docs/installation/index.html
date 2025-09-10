@@ -59,16 +59,8 @@
 <li class="toctree-l3"><a class="reference internal" href="#test-your-setup">4. Test Your Setup</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#troubleshooting-installation">Troubleshooting Installation</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#virtualbox-issues">VirtualBox Issues</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#python-issues">Python Issues</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#permission-issues">Permission Issues</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#getting-help">Getting Help</a></li>
-</ul>
-</li>
 <li class="toctree-l2"><a class="reference internal" href="#tested-configurations">Tested Configurations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#next-steps">Next Steps</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#development-installation">Development Installation</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../quickstart/index.html">Quick Start</a></li>
@@ -234,51 +226,6 @@
 <p>This should display the main help menu without errors.</p>
 </section>
 </section>
-<section id="troubleshooting-installation">
-<h2>Troubleshooting Installation<a class="headerlink" href="#troubleshooting-installation" title="Link to this heading"></a></h2>
-<section id="virtualbox-issues">
-<h3>VirtualBox Issues<a class="headerlink" href="#virtualbox-issues" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Error: VirtualBox not found</strong></dt><dd><p>Ensure VirtualBox is installed and the <code class="docutils literal notranslate"><span class="pre">VBoxManage</span></code> command is available in your PATH.</p>
-</dd>
-<dt><strong>Error: VM creation fails</strong></dt><dd><ul class="simple">
-<li><p>Check that virtualization is enabled in your BIOS/UEFI</p></li>
-<li><p>On Windows, ensure Hyper-V is disabled</p></li>
-<li><p>Verify you have sufficient RAM and disk space</p></li>
-</ul>
-</dd>
-</dl>
-</section>
-<section id="python-issues">
-<h3>Python Issues<a class="headerlink" href="#python-issues" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Error: Python version too old</strong></dt><dd><p>ADARE requires Python 3.10+. Install a newer version or use pyenv to manage multiple Python versions.</p>
-</dd>
-<dt><strong>Error: Poetry not found</strong></dt><dd><p>Ensure Poetry is installed and added to your PATH. You may need to restart your terminal after installation.</p>
-</dd>
-</dl>
-</section>
-<section id="permission-issues">
-<h3>Permission Issues<a class="headerlink" href="#permission-issues" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Error: Permission denied during installation</strong></dt><dd><ul class="simple">
-<li><p>On Linux/macOS: Don’t use <code class="docutils literal notranslate"><span class="pre">sudo</span></code> with the install command</p></li>
-<li><p>Ensure you have write permissions to the installation directory</p></li>
-<li><p>Check that your user has VirtualBox permissions</p></li>
-</ul>
-</dd>
-</dl>
-</section>
-<section id="getting-help">
-<h3>Getting Help<a class="headerlink" href="#getting-help" title="Link to this heading"></a></h3>
-<p>If you encounter issues:</p>
-<ol class="arabic simple">
-<li><p>Check the <a class="reference internal" href="../troubleshooting/index.html"><span class="doc">Troubleshooting</span></a> section</p></li>
-<li><p>Search existing issues on <a class="reference external" href="https://github.com/fkie-cad/Adare/issues">GitHub</a></p></li>
-<li><p>Create a new issue with your system details and error messages</p></li>
-</ol>
-</section>
-</section>
 <section id="tested-configurations">
 <h2>Tested Configurations<a class="headerlink" href="#tested-configurations" title="Link to this heading"></a></h2>
 <p>ADARE has been tested with the following software versions:</p>
@@ -331,25 +278,8 @@
 <p>After successful installation:</p>
 <ol class="arabic simple">
 <li><p><strong>Quick Start</strong>: Follow the <a class="reference internal" href="../quickstart/index.html"><span class="doc">Quick Start</span></a> guide</p></li>
-<li><p><strong>First Experiment</strong>: Create your <a class="reference internal" href="../quickstart/first-experiment.html"><span class="doc">First Experiment</span></a></p></li>
 <li><p><strong>User Guide</strong>: Learn about <a class="reference internal" href="../user-guide/index.html"><span class="doc">User Guide</span></a> for daily usage</p></li>
 </ol>
-</section>
-<section id="development-installation">
-<h2>Development Installation<a class="headerlink" href="#development-installation" title="Link to this heading"></a></h2>
-<p>If you plan to contribute to ADARE or need the development environment:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Clone with development branch</span>
-git<span class="w"> </span>clone<span class="w"> </span>-b<span class="w"> </span>dev<span class="w"> </span>https://github.com/fkie-cad/Adare.git
-<span class="nb">cd</span><span class="w"> </span>Adare
-
-<span class="c1"># Install in development mode</span>
-make<span class="w"> </span>install-dev
-
-<span class="c1"># Run tests to verify</span>
-make<span class="w"> </span><span class="nb">test</span>
-</pre></div>
-</div>
-<p>This installs additional development dependencies and sets up pre-commit hooks.</p>
 </section>
 </section>
 

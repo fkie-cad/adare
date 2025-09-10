@@ -79,46 +79,28 @@ Here's what a simple ADARE experiment looks like:
 Getting Started
 ---------------
 
-Ready to start? Follow our step-by-step guide:
+Ready to start? 
 
 1. **Install ADARE** → :doc:`installation/index`
 2. **Quick Tutorial** → :doc:`quickstart/index`
-3. **Create Your First Experiment** → :doc:`quickstart/first-experiment`
 
 Documentation Structure
 -----------------------
 
-.. grid:: 2 2 2 2
+**🚀 Quick Start**
+  :doc:`quickstart/index` - Get up and running with ADARE in minutes
 
-   .. grid-item-card:: 🚀 Quick Start
-      :link: quickstart/index
-      :link-type: doc
-      
-      Get up and running with ADARE in minutes
+**👤 User Guide**  
+  :doc:`user-guide/index` - Complete guide for daily ADARE usage
 
-   .. grid-item-card:: 👤 User Guide
-      :link: user-guide/index
-      :link-type: doc
-      
-      Complete guide for daily ADARE usage
+**💻 CLI Reference**
+  :doc:`cli-reference/index` - Complete command-line interface documentation
 
-   .. grid-item-card:: 💻 CLI Reference
-      :link: cli-reference/index
-      :link-type: doc
-      
-      Complete command-line interface documentation
+**🏗️ Architecture**
+  :doc:`architecture/index` - Understanding how ADARE works internally
 
-   .. grid-item-card:: 🏗️ Architecture
-      :link: architecture/index
-      :link-type: doc
-      
-      Understanding how ADARE works internally
-
-   .. grid-item-card:: ⚡ Advanced Topics
-      :link: advanced/index
-      :link-type: doc
-      
-      Custom test functions, VM management, and performance tuning
+**⚡ Advanced Topics**
+  :doc:`advanced/index` - Custom test functions, VM management, and performance tuning
 
 
 .. toctree::
@@ -144,4 +126,3 @@ Documentation Structure
 
    architecture/index
    advanced/index
-   developer/index
