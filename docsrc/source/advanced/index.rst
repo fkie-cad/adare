@@ -8,4 +8,3 @@ Advanced
    :caption: Contents:
 
    testfunction
-   vmcreation

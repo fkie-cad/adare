@@ -1,9 +1,13 @@
-Create Your Custom ADARE VM
-***************************
+********************
+VM Setup Guide  
+********************
 
-Setting up a VirtualBox VM compatible with ADARE can be done in just a few steps.
-It make sense to create a new VM in one of two cases: 1. None of the provided VMs has the operating system/distribution you need, or 2. You need specific software that takes a while to installing-with-the-official-installer
-You therefore can either create a new VM from scratch or adapt an existing one, as long as the requirements below are met. 
+This guide shows you how to set up a virtual machine that's compatible with ADARE. You'll need to create a custom VM if:
+
+- None of the provided VMs have the OS/distribution you need
+- You need specific software pre-installed
+- You want a customized forensic analysis environment
+
 Once configured, export the VM as an ``.ova`` or ``.ovf`` file in **OVF 1.0 format**.
 
 Windows Setup

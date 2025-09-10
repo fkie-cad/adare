@@ -151,6 +151,10 @@ VM Image Sources
 **Pre-built Images**
   Download from `ADARE Web <https://adare.seclab-bonn.de/>`_
 
+**Create Custom VM**
+  
+Follow the :doc:`../installation/vm-setup` guide to create ADARE-compatible VMs
+
 **Export from VirtualBox**
   
 .. code-block:: bash
