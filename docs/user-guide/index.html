@@ -64,15 +64,6 @@
 <li class="toctree-l3"><a class="reference internal" href="#configuration-files">Configuration Files</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#best-practices">Best Practices</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#organization">Organization</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#performance">Performance</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#security">Security</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#troubleshooting">Troubleshooting</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#getting-help">Getting Help</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#what-s-next">What’s Next?</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
@@ -261,92 +252,6 @@ adare<span class="w"> </span>run<span class="w"> </span><span class="nb">export<
 </pre></div>
 </div>
 </section>
-</section>
-<section id="best-practices">
-<h2>Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading"></a></h2>
-<section id="organization">
-<h3>Organization<a class="headerlink" href="#organization" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Use Descriptive Names</strong></dt><dd><p><code class="docutils literal notranslate"><span class="pre">browser-history-analysis</span></code> not <code class="docutils literal notranslate"><span class="pre">test1</span></code></p>
-</dd>
-<dt><strong>Logical Grouping</strong></dt><dd><p>Group related experiments in the same environment</p>
-</dd>
-<dt><strong>Version Control</strong></dt><dd><p>Track changes to playbooks and configurations</p>
-</dd>
-<dt><strong>Documentation</strong></dt><dd><p>Include clear descriptions and comments</p>
-</dd>
-</dl>
-</section>
-<section id="performance">
-<h3>Performance<a class="headerlink" href="#performance" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Optimize Images</strong></dt><dd><p>Use small, high-contrast screenshots for matching</p>
-</dd>
-<dt><strong>Appropriate Timeouts</strong></dt><dd><p>Balance speed vs. reliability with idle times</p>
-</dd>
-<dt><strong>Resource Management</strong></dt><dd><p>Clean up old VMs and results regularly</p>
-</dd>
-<dt><strong>Parallel Execution</strong></dt><dd><p>Run compatible experiments simultaneously</p>
-</dd>
-</dl>
-</section>
-<section id="security">
-<h3>Security<a class="headerlink" href="#security" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>VM Isolation</strong></dt><dd><p>Keep test VMs isolated from production networks</p>
-</dd>
-<dt><strong>Sensitive Data</strong></dt><dd><p>Don’t include real passwords or personal data</p>
-</dd>
-<dt><strong>Clean Snapshots</strong></dt><dd><p>Ensure base VM snapshots are clean and trusted</p>
-</dd>
-<dt><strong>Access Control</strong></dt><dd><p>Limit access to experiment results and VMs</p>
-</dd>
-</dl>
-</section>
-<section id="troubleshooting">
-<h3>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h3>
-<p>When things go wrong:</p>
-<ol class="arabic simple">
-<li><p><strong>Check Logs</strong>: <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">run</span> <span class="pre">info</span> <span class="pre">&lt;run_id&gt;</span> <span class="pre">--logs</span></code></p></li>
-<li><p><strong>Screenshot Analysis</strong>: Review captured screenshots</p></li>
-<li><p><strong>VM Status</strong>: <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">vm</span> <span class="pre">list</span></code> to check VM health</p></li>
-<li><p><strong>Resource Usage</strong>: Monitor disk space and memory</p></li>
-<li><p><strong>Network Issues</strong>: Verify MCP server connectivity</p></li>
-</ol>
-</section>
-</section>
-<section id="getting-help">
-<h2>Getting Help<a class="headerlink" href="#getting-help" title="Link to this heading"></a></h2>
-<p>Resources for learning and support:</p>
-<dl class="simple">
-<dt><strong>Documentation</strong></dt><dd><ul class="simple">
-<li><p><a class="reference internal" href="../cli-reference/index.html"><span class="doc">CLI Reference</span></a> - Complete command reference</p></li>
-<li><p><a class="reference internal" href="../architecture/index.html"><span class="doc">Architecture</span></a> - Technical architecture documentation</p></li>
-</ul>
-</dd>
-<dt><strong>Community</strong></dt><dd><ul class="simple">
-<li><p><a class="reference external" href="https://adare.seclab-bonn.de/">ADARE Web</a> - Experiment sharing platform</p></li>
-<li><p><a class="reference external" href="https://github.com/fkie-cad/Adare/issues">GitHub Issues</a> - Bug reports and feature requests</p></li>
-<li><p><a class="reference external" href="https://github.com/fkie-cad/Adare/discussions">GitHub Discussions</a> - Community help</p></li>
-</ul>
-</dd>
-<dt><strong>Professional Support</strong></dt><dd><p>Contact the development team for enterprise support and custom development.</p>
-</dd>
-</dl>
-</section>
-<section id="what-s-next">
-<h2>What’s Next?<a class="headerlink" href="#what-s-next" title="Link to this heading"></a></h2>
-<p>Choose your learning path based on your role:</p>
-<dl class="simple">
-<dt><strong>New Users</strong></dt><dd><p>Start with <a class="reference internal" href="projects.html"><span class="doc">Project Management</span></a> to understand the basics</p>
-</dd>
-<dt><strong>Forensic Researchers</strong></dt><dd><p>Focus on <a class="reference internal" href="playbooks.html"><span class="doc">Playbook Guide</span></a> for automation and testing</p>
-</dd>
-<dt><strong>System Administrators</strong></dt><dd><p>Emphasize <a class="reference internal" href="environments.html"><span class="doc">Environment Management</span></a> and VM management</p>
-</dd>
-<dt><strong>Advanced Users</strong></dt><dd><p>Explore <a class="reference internal" href="../advanced/index.html"><span class="doc">Advanced</span></a> for customization and performance tuning</p>
-</dd>
-</dl>
 </section>
 </section>
 
