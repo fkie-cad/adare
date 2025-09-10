@@ -27,6 +27,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] improve code quality in general
   - [ ] we use the username/password dummy when we with virtualbox do not need the commands ... -> find a better solution!
   - [ ] variable resolving uses regex to track resolved - can we do this without regex?
+  - [ ] remove all tessdata relicts
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
 - [ ] built in the testfunction methods variables info what variable tyes are allwoed 
 - [ ] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;)

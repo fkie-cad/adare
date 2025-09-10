@@ -53,20 +53,17 @@ This creates a project structure:
 
    forensics-tutorial/
    ├── programs/          # Shared tools and utilities
-   ├── tessdata/          # OCR data for text recognition
    └── environments/      # VM environments (created later)
 
 Step 2: Set Up a VM Environment
 ********************************
 
-Environments define the virtual machines where experiments run. Create an environment configuration file:
+Environments define the virtual machines where experiments run. Create an environment configuration file `ubuntu24043.yml`:
 
-.. code-block:: bash
+.. code-block:: yaml
 
-   # Create environment config
-   cat > ubuntu-env.yml << EOF
    name: ubuntu24043
-   vm: "/path/to/your/ubuntu-vm.ova"  # Update this path!
+   vm: "/path/to/your/ubuntu-vm.ova"  # Update this path to your VM file
    os:
      os: "Ubuntu"
      platform: "linux"
@@ -76,7 +73,7 @@ Environments define the virtual machines where experiments run. Create an enviro
    tags:
      - linux
      - ubuntu
-   EOF
+
 
 .. important::
    Update the ``vm:`` path to point to your actual VM image file!
@@ -85,7 +82,7 @@ Load the environment:
 
 .. code-block:: bash
 
-   adare environment load ubuntu-env.yml
+   adare environment load ubuntu24043
 
 Step 3: Create Your First Experiment
 *************************************
@@ -94,13 +91,13 @@ Let's create a simple but realistic forensic experiment that deletes a file and 
 
 .. code-block:: bash
 
-   adare experiment create file-deletion-analysis
+   adare experiment create deletefileexample
 
 This creates the experiment structure:
 
 .. code-block:: text
 
-   experiments/file-deletion-analysis/
+   experiments/deletefileexample/
    ├── playbook.yml      # Automation script
    ├── metadata.yml      # Experiment metadata  
    └── img/              # Screenshots for GUI automation
@@ -108,7 +105,7 @@ This creates the experiment structure:
 Configure the experiment metadata:
 
 .. code-block:: yaml
-   :caption: experiments/file-deletion-analysis/metadata.yml
+   :caption: experiments/deletefileexample/metadata.yml
 
    environments:
      - ubuntu24043
@@ -116,7 +113,7 @@ Configure the experiment metadata:
 Now create the main playbook:
 
 .. code-block:: yaml
-   :caption: experiments/file-deletion-analysis/playbook.yml
+   :caption: experiments/deletefileexample/playbook.yml
 
    settings:
      idle: 1.0              # Pause between actions
@@ -226,7 +223,7 @@ The experiment uses image recognition to find GUI elements. Download the require
 .. code-block:: bash
 
    # Create img directory
-   mkdir -p experiments/file-deletion-analysis/img
+   mkdir -p experiments/deletefileexample/img
    
    # Download nautilus taskbar image (or create your own)
    # For now, we'll skip this and use text-based targeting instead
@@ -241,27 +238,11 @@ Now run your forensic experiment:
 
 .. code-block:: bash
 
-   adare experiment run file-deletion-analysis -e ubuntu24043
+   adare experiment run deletefileexample -e ubuntu24043
 
-You'll see output like:
+You'll then see an dynamic console output showing progress, actions, and test results.
+At the end, a summary of the experiment run will be displayed.
 
-.. code-block:: text
-
-   🚀 Starting experiment: file-deletion-analysis
-   📋 Environment: ubuntu24043
-   ⚡ VM: Starting Ubuntu VM...
-   🎬 Executing playbook actions...
-   ✅ Test: file_exists_before - PASSED
-   🖱️ Action: Opening file manager...
-   🖱️ Action: Clicking Documents folder...  
-   🖱️ Action: Selecting evidence.txt...
-   ⌨️ Action: Pressing Delete key...
-   ✅ Test: file_deleted_after - PASSED
-   ✅ Test: trash_file_exists - PASSED  
-   ✅ Test: trash_info_exists - PASSED
-   
-   🎉 Experiment completed successfully!
-   📊 Results saved to: environments/ubuntu24043/results/file-deletion-analysis_<timestamp>/
 
 Step 6: View Your Results
 **************************
@@ -270,10 +251,13 @@ Check the experiment results:
 
 .. code-block:: bash
 
-   # List recent runs
+   # Show details of most recent run
+  adare run info
+
+   # List runs
    adare run list
 
-   # View detailed results (replace ULID with actual run ID)
+   # View detailed results of a specific run (replace ULID with actual run ID)
    adare run info 01ARZ3NDEKTSV4RRFFQ69G5FAV
 
 The results include:
