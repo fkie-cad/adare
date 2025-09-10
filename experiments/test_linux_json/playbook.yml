@@ -1,0 +1,339 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+  continue_on_test_failure: true
+
+# Variables for Linux JSON testing
+variables:
+  username:
+    type: string
+    value: "adare"
+    description: "System username"
+  
+  test_dir:
+    type: path
+    value: "/home/{{username}}/test_json"
+    description: "Base directory for JSON testing"
+  
+  config_json:
+    type: path
+    value: "{{test_dir}}/config.json"
+    description: "Configuration JSON file"
+  
+  users_json:
+    type: path
+    value: "{{test_dir}}/users.json"
+    description: "Users JSON file"
+  
+  nested_json:
+    type: path
+    value: "{{test_dir}}/nested.json"
+    description: "Deeply nested JSON file"
+  
+  malformed_json:
+    type: path
+    value: "{{test_dir}}/malformed.json"
+    description: "Malformed JSON file"
+  
+  empty_json:
+    type: path
+    value: "{{test_dir}}/empty.json"
+    description: "Empty JSON file"
+
+# Test definitions for JSON functions
+tests:
+  # JSON key existence tests
+  - name: test_json_contains_key_root_level
+    description: 'Test json_contains_key with root level key'
+    function: json_contains_key
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'app_name'
+  
+  - name: test_json_contains_key_nested
+    description: 'Test json_contains_key with nested key'
+    function: json_contains_key
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'database.host'
+  
+  - name: test_json_contains_key_deep_nested
+    description: 'Test json_contains_key with deeply nested key'
+    function: json_contains_key
+    parameter:
+      dst: '{{nested_json}}'
+      key_path: 'level1.level2.level3.value'
+  
+  - name: test_json_contains_key_not_found
+    description: 'Test json_contains_key with non-existent key'
+    function: json_contains_key
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'nonexistent.key'
+  
+  # JSON value matching tests
+  - name: test_json_value_matches_string
+    description: 'Test json_value_matches with string value'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'app_name'
+      expected_value: 'TestApplication'
+  
+  - name: test_json_value_matches_integer
+    description: 'Test json_value_matches with integer value'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'database.port'
+      expected_value: 5432
+  
+  - name: test_json_value_matches_boolean_true
+    description: 'Test json_value_matches with boolean true'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'debug_mode'
+      expected_value: true
+  
+  - name: test_json_value_matches_boolean_false
+    description: 'Test json_value_matches with boolean false'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'production_mode'
+      expected_value: false
+  
+  - name: test_json_value_matches_null
+    description: 'Test json_value_matches with null value'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'api_key'
+      expected_value: null
+  
+  - name: test_json_value_matches_regex
+    description: 'Test json_value_matches with regex pattern'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'version'
+      expected_value: '^\d+\.\d+\.\d+$'
+      regex_match: true
+  
+  - name: test_json_value_matches_wrong_value
+    description: 'Test json_value_matches with wrong expected value'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'app_name'
+      expected_value: 'WrongApplicationName'
+  
+  # JSON array contains tests
+  - name: test_json_array_contains_string
+    description: 'Test json_array_contains with string element'
+    function: json_array_contains
+    parameter:
+      dst: '{{config_json}}'
+      array_path: 'features'
+      expected_element: 'logging'
+  
+  - name: test_json_array_contains_integer
+    description: 'Test json_array_contains with integer element'
+    function: json_array_contains
+    parameter:
+      dst: '{{users_json}}'
+      array_path: 'user_ids'
+      expected_element: 123
+  
+  - name: test_json_array_contains_object
+    description: 'Test json_array_contains with object element'
+    function: json_array_contains
+    parameter:
+      dst: '{{users_json}}'
+      array_path: 'permissions'
+      expected_element: {"action": "read", "resource": "users"}
+  
+  - name: test_json_array_contains_not_found
+    description: 'Test json_array_contains with non-existent element'
+    function: json_array_contains
+    parameter:
+      dst: '{{config_json}}'
+      array_path: 'features'
+      expected_element: 'nonexistent_feature'
+  
+  - name: test_json_array_contains_not_array
+    description: 'Test json_array_contains with non-array path'
+    function: json_array_contains
+    parameter:
+      dst: '{{config_json}}'
+      array_path: 'app_name'
+      expected_element: 'anything'
+  
+  # Edge cases
+  - name: test_json_key_not_found_file
+    description: 'Test JSON functions with non-existent file'
+    function: json_contains_key
+    parameter:
+      dst: '{{test_dir}}/nonexistent.json'
+      key_path: 'any.key'
+  
+  - name: test_json_malformed_file
+    description: 'Test JSON functions with malformed JSON'
+    function: json_contains_key
+    parameter:
+      dst: '{{malformed_json}}'
+      key_path: 'any.key'
+  
+  - name: test_json_empty_file
+    description: 'Test JSON functions with empty file'
+    function: json_contains_key
+    parameter:
+      dst: '{{empty_json}}'
+      key_path: 'any.key'
+
+actions:
+  # Setup test environment
+  - command:
+      name: "Create Test Directory"
+      description: "Create base directory for JSON testing"
+      command: "mkdir -p {{test_dir}}"
+      shell: true
+  
+  # Create configuration JSON file
+  - command:
+      name: "Create Config JSON"
+      description: "Create configuration JSON file with various data types"
+      command: |
+        cat > {{config_json}} << 'EOF'
+        {
+          "app_name": "TestApplication",
+          "version": "1.2.3",
+          "debug_mode": true,
+          "production_mode": false,
+          "api_key": null,
+          "database": {
+            "host": "localhost",
+            "port": 5432,
+            "name": "test_db",
+            "ssl": true
+          },
+          "features": [
+            "logging",
+            "authentication",
+            "authorization",
+            "caching"
+          ],
+          "timeout": 30,
+          "retry_count": 3
+        }
+        EOF
+      shell: true
+  
+  # Create users JSON file
+  - command:
+      name: "Create Users JSON"
+      description: "Create users JSON file with arrays and objects"
+      command: |
+        cat > {{users_json}} << 'EOF'
+        {
+          "users": [
+            {
+              "id": 1,
+              "name": "John Doe",
+              "email": "john@example.com",
+              "active": true
+            },
+            {
+              "id": 2,
+              "name": "Jane Smith",
+              "email": "jane@example.com",
+              "active": false
+            }
+          ],
+          "user_ids": [123, 456, 789],
+          "permissions": [
+            {"action": "read", "resource": "users"},
+            {"action": "write", "resource": "posts"},
+            {"action": "delete", "resource": "comments"}
+          ],
+          "total_count": 2
+        }
+        EOF
+      shell: true
+  
+  # Create nested JSON file
+  - command:
+      name: "Create Nested JSON"
+      description: "Create deeply nested JSON file"
+      command: |
+        cat > {{nested_json}} << 'EOF'
+        {
+          "level1": {
+            "level2": {
+              "level3": {
+                "value": "deeply_nested_value",
+                "array": [1, 2, 3],
+                "object": {
+                  "nested_key": "nested_value"
+                }
+              }
+            }
+          },
+          "simple_key": "simple_value"
+        }
+        EOF
+      shell: true
+  
+  # Create malformed JSON file
+  - command:
+      name: "Create Malformed JSON"
+      description: "Create malformed JSON file"
+      command: |
+        cat > {{malformed_json}} << 'EOF'
+        {
+          "valid_key": "valid_value",
+          "missing_comma": "value"
+          "invalid_syntax": true,
+          "unclosed_string": "this string is not closed
+        }
+        EOF
+      shell: true
+  
+  # Create empty JSON file
+  - command:
+      name: "Create Empty JSON"
+      description: "Create empty JSON file"
+      command: "touch {{empty_json}}"
+      shell: true
+  
+  # Run all JSON tests
+  - test: test_json_contains_key_root_level
+  - test: test_json_contains_key_nested
+  - test: test_json_contains_key_deep_nested
+  - test: test_json_contains_key_not_found
+  - test: test_json_value_matches_string
+  - test: test_json_value_matches_integer
+  - test: test_json_value_matches_boolean_true
+  - test: test_json_value_matches_boolean_false
+  - test: test_json_value_matches_null
+  - test: test_json_value_matches_regex
+  - test: test_json_value_matches_wrong_value
+  - test: test_json_array_contains_string
+  - test: test_json_array_contains_integer
+  - test: test_json_array_contains_object
+  - test: test_json_array_contains_not_found
+  - test: test_json_array_contains_not_array
+  - test: test_json_key_not_found_file
+  - test: test_json_malformed_file
+  - test: test_json_empty_file
+  
+  # Cleanup
+  - command:
+      name: "Cleanup Test Directory"
+      description: "Remove test directory and files"
+      command: "rm -rf {{test_dir}}"
+      shell: true

@@ -21,7 +21,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="First Experiment" href="first-experiment.html" />
-    <link rel="prev" title="VM Setup Guide" href="../installation/vm-setup.html" /> 
+    <link rel="prev" title="Installation Guide" href="../installation/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -129,7 +129,7 @@
 <p>You’ll need a virtual machine image to run experiments. Options include:</p>
 <ul class="simple">
 <li><p><strong>Pre-built Images</strong>: Download from <a class="reference external" href="https://adare.seclab-bonn.de/">ADARE Web</a></p></li>
-<li><p><strong>Create Custom VM</strong>: Follow the <a class="reference internal" href="../installation/vm-setup.html"><span class="doc">VM Setup Guide</span></a> guide</p></li>
+<li><p><strong>Create Custom VM</strong>: Follow the <a class="reference internal" href="../user-guide/vm-setup.html"><span class="doc">VM Setup Guide</span></a> guide</p></li>
 <li><p><strong>Your Own VMs</strong>: Export existing VMs as .ova files</p></li>
 <li><p><strong>Public Images</strong>: Use publicly available VM images (ensure they’re clean)</p></li>
 </ul>
@@ -325,8 +325,21 @@ mkdir<span class="w"> </span>-p<span class="w"> </span>experiments/deletefileexa
 <section id="step-5-run-your-experiment">
 <h2>Step 5: Run Your Experiment<a class="headerlink" href="#step-5-run-your-experiment" title="Link to this heading"></a></h2>
 <p>Now run your forensic experiment:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>deletefileexample<span class="w"> </span>-e<span class="w"> </span>ubuntu24043
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># For development/testing (allows playbook modifications)</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>deletefileexample<span class="w"> </span>-e<span class="w"> </span>ubuntu24043<span class="w"> </span>--test
+
+<span class="c1"># For final execution (locks experiment from further changes)</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>deletefileexample<span class="w"> </span>-e<span class="w"> </span>ubuntu24043
 </pre></div>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><strong>Development vs Production Runs</strong></p>
+<ul class="simple">
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">--test</span></code> flag during development to keep experimenting with playbook changes</p></li>
+<li><p>Once you run <strong>without</strong> <code class="docutils literal notranslate"><span class="pre">--test</span></code>, the experiment becomes locked</p></li>
+<li><p>To continue development after a non-test run, copy the experiment directory first</p></li>
+</ul>
 </div>
 <p>You’ll then see an dynamic console output showing progress, actions, and test results.
 At the end, a summary of the experiment run will be displayed.</p>
@@ -372,7 +385,7 @@ adare<span class="w"> </span>run<span class="w"> </span>info<span class="w"> </s
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../installation/vm-setup.html" class="btn btn-neutral float-left" title="VM Setup Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../installation/index.html" class="btn btn-neutral float-left" title="Installation Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="first-experiment.html" class="btn btn-neutral float-right" title="First Experiment" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

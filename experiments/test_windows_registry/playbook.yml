@@ -1,0 +1,93 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+  continue_on_test_failure: true
+
+# Variables for Windows registry testing
+variables:
+  test_key_path:
+    type: string
+    value: "HKEY_CURRENT_USER\\Software\\TestApp"
+    description: "Test registry key path"
+  
+  system_key_path:
+    type: string
+    value: "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion"
+    description: "System registry key for testing"
+
+# Test definitions for Windows registry functions
+tests:
+  # Registry key existence tests
+  - name: test_registry_key_exists_system
+    description: 'Test registry_key_exists with system key'
+    function: registry_key_exists
+    parameter:
+      key_path: '{{system_key_path}}'
+  
+  - name: test_registry_key_exists_custom
+    description: 'Test registry_key_exists with custom created key'
+    function: registry_key_exists
+    parameter:
+      key_path: '{{test_key_path}}'
+  
+  - name: test_registry_key_does_not_exist
+    description: 'Test registry_key_exists with non-existent key'
+    function: registry_key_exists
+    parameter:
+      key_path: 'HKEY_CURRENT_USER\\Software\\NonExistentApp'
+  
+  # Registry value tests
+  - name: test_registry_value_string
+    description: 'Test registry_value_matches with string value'
+    function: registry_value_matches
+    parameter:
+      key_path: '{{test_key_path}}'
+      value_name: 'StringValue'
+      expected_value: 'TestStringValue'
+      value_type: 'REG_SZ'
+  
+  - name: test_registry_value_dword
+    description: 'Test registry_value_matches with DWORD value'
+    function: registry_value_matches
+    parameter:
+      key_path: '{{test_key_path}}'
+      value_name: 'DwordValue'
+      expected_value: 42
+      value_type: 'REG_DWORD'
+
+actions:
+  # Create test registry entries
+  - command:
+      name: "Create Test Registry Key"
+      description: "Create test registry key structure"
+      command: 'reg add "{{test_key_path}}" /f'
+      shell: true
+  
+  - command:
+      name: "Add String Registry Value"
+      description: "Add test string value to registry"
+      command: 'reg add "{{test_key_path}}" /v "StringValue" /t REG_SZ /d "TestStringValue" /f'
+      shell: true
+  
+  - command:
+      name: "Add DWORD Registry Value"
+      description: "Add test DWORD value to registry"
+      command: 'reg add "{{test_key_path}}" /v "DwordValue" /t REG_DWORD /d 42 /f'
+      shell: true
+  
+  # Run registry tests
+  - test: test_registry_key_exists_system
+  - test: test_registry_key_exists_custom
+  - test: test_registry_key_does_not_exist
+  - test: test_registry_value_string
+  - test: test_registry_value_dword
+  
+  # Cleanup test registry entries
+  - command:
+      name: "Cleanup Test Registry Key"
+      description: "Remove test registry key and all values"
+      command: 'reg delete "{{test_key_path}}" /f'
+      shell: true

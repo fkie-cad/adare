@@ -3,14 +3,9 @@
 This document tracks ongoing development tasks, planned features, quality of life improvements, known bugs for ADARE.
 
 ## Current Development Tasks
-- [x] built windows vm new from fresh installation -> done; test it
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
-- [x] built furhter testfunction; and filters/variables 
 - [ ] built tests/test experiments for new testfunctions
-- [ ] check if we can easily add new testfunctionsets? 
 - [ ] test if we can still run adare if we delete cloned repo
-- [x] test if we can run dev experiments that allow for easy change of experiments for testing -> we then need to make the experiment.yml not write-protected?! -> DONE: disabled file protection temporarily
-- [ ] check experiment development/test flag features? what does what? document and maybe improve
 
 ## Planned Features
 - [ ] test and enable ydotool to make it work on wayland linux distros as well
@@ -18,6 +13,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
     - [ ] use nicegui to interactively test and create playbook and tests -> e.g. crop images extract icons ... 
 - [ ] built a way to better validate playbooks (e.g. two variables with saame name through variables or save_timestamp ..., check that used variables are defined before, check if filters are correct)
 - [ ] make all output available as csv/json/yaml
+- [ ] some way to test vms; maybe with simple command adare vm test 
 
 ## Quality of Life Improvements
 - [ ] update documentation
@@ -36,7 +32,6 @@ This document tracks ongoing development tasks, planned features, quality of lif
 
 ## Known Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
-- [ ] vm files are not write protected in project directory
 - [ ] requirements of testfunction are not installed within adarevm
 - [ ] real testunfction error (so no failed test) are not displayed properly in flowconsole but markes as failed test
 - [ ] by default on run no specific log is saved to adare run log dir if not --logfile is set as well?!

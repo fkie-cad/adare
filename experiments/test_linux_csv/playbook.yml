@@ -1,0 +1,212 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+  continue_on_test_failure: true
+
+# Variables for Linux CSV testing
+variables:
+  username:
+    type: string
+    value: "adare"
+    description: "System username"
+  
+  test_dir:
+    type: path
+    value: "/home/{{username}}/test_csv"
+    description: "Base directory for CSV testing"
+  
+  users_csv:
+    type: path
+    value: "{{test_dir}}/users.csv"
+    description: "Users CSV file"
+  
+  logs_csv:
+    type: path
+    value: "{{test_dir}}/access_logs.csv"
+    description: "Access logs CSV file"
+  
+  empty_csv:
+    type: path
+    value: "{{test_dir}}/empty.csv"
+    description: "Empty CSV file"
+  
+  malformed_csv:
+    type: path
+    value: "{{test_dir}}/malformed.csv"
+    description: "Malformed CSV file"
+
+# Test definitions for CSV functions
+tests:
+  # Basic CSV line matching tests
+  - name: test_csv_contains_line_exact_match
+    description: 'Test csv_contains_line with exact match'
+    function: csv_contains_line
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['1', 'John Doe', 'john@example.com', 'Admin']
+  
+  - name: test_csv_contains_line_second_row
+    description: 'Test csv_contains_line with second row'
+    function: csv_contains_line
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['2', 'Jane Smith', 'jane@example.com', 'User']
+  
+  - name: test_csv_contains_line_not_found
+    description: 'Test csv_contains_line with non-existent entry'
+    function: csv_contains_line
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['999', 'Nonexistent User', 'none@example.com', 'Guest']
+  
+  # CSV with different data types
+  - name: test_csv_contains_line_mixed_types
+    description: 'Test csv_contains_line with mixed data types'
+    function: csv_contains_line
+    parameter:
+      dst: '{{logs_csv}}'
+      entry: ['2024-01-15', '10:30:45', '192.168.1.100', 'GET', '/api/users', '200']
+  
+  - name: test_csv_contains_line_timestamp_match
+    description: 'Test csv_contains_line with timestamp matching'
+    function: csv_contains_line
+    parameter:
+      dst: '{{logs_csv}}'
+      entry: ['2024-01-15', '10:31:12', '192.168.1.101', 'POST', '/api/login', '401']
+  
+  # Edge cases
+  - name: test_csv_contains_line_empty_file
+    description: 'Test csv_contains_line with empty CSV file'
+    function: csv_contains_line
+    parameter:
+      dst: '{{empty_csv}}'
+      entry: ['any', 'data']
+  
+  - name: test_csv_contains_line_file_not_found
+    description: 'Test csv_contains_line with non-existent file'
+    function: csv_contains_line
+    parameter:
+      dst: '{{test_dir}}/nonexistent.csv'
+      entry: ['test', 'data']
+  
+  - name: test_csv_contains_line_wrong_column_count
+    description: 'Test csv_contains_line with wrong column count'
+    function: csv_contains_line
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['1', 'John Doe']  # Missing columns
+  
+  - name: test_csv_contains_line_extra_columns
+    description: 'Test csv_contains_line with extra columns'
+    function: csv_contains_line
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['1', 'John Doe', 'john@example.com', 'Admin', 'Extra', 'Columns']
+  
+  # Partial matching scenarios
+  - name: test_csv_contains_line_partial_match
+    description: 'Test csv_contains_line with partial match (should fail)'
+    function: csv_contains_line
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['1', 'John Doe', 'different@example.com', 'Admin']
+  
+  # CSV with special characters
+  - name: test_csv_contains_line_special_chars
+    description: 'Test csv_contains_line with special characters'
+    function: csv_contains_line
+    parameter:
+      dst: '{{logs_csv}}'
+      entry: ['2024-01-15', '10:35:00', '192.168.1.105', 'GET', '/api/search?q=test&sort=date', '200']
+  
+  # Testing with malformed CSV
+  - name: test_csv_contains_line_malformed
+    description: 'Test csv_contains_line with malformed CSV file'
+    function: csv_contains_line
+    parameter:
+      dst: '{{malformed_csv}}'
+      entry: ['corrupted', 'data']
+
+actions:
+  # Setup test environment
+  - command:
+      name: "Create Test Directory"
+      description: "Create base directory for CSV testing"
+      command: "mkdir -p {{test_dir}}"
+      shell: true
+  
+  # Create users CSV file
+  - command:
+      name: "Create Users CSV"
+      description: "Create users CSV file with sample data"
+      command: |
+        cat > {{users_csv}} << 'EOF'
+        id,name,email,role
+        1,John Doe,john@example.com,Admin
+        2,Jane Smith,jane@example.com,User
+        3,Bob Johnson,bob@example.com,Manager
+        4,Alice Brown,alice@example.com,User
+        5,Charlie Wilson,charlie@example.com,Admin
+        EOF
+      shell: true
+  
+  # Create access logs CSV file
+  - command:
+      name: "Create Access Logs CSV"
+      description: "Create access logs CSV file with sample data"
+      command: |
+        cat > {{logs_csv}} << 'EOF'
+        date,time,ip,method,url,status
+        2024-01-15,10:30:45,192.168.1.100,GET,/api/users,200
+        2024-01-15,10:31:12,192.168.1.101,POST,/api/login,401
+        2024-01-15,10:32:30,192.168.1.102,GET,/api/dashboard,200
+        2024-01-15,10:33:15,192.168.1.103,DELETE,/api/users/123,403
+        2024-01-15,10:34:22,192.168.1.104,PUT,/api/users/456,200
+        2024-01-15,10:35:00,192.168.1.105,GET,/api/search?q=test&sort=date,200
+        EOF
+      shell: true
+  
+  # Create empty CSV file
+  - command:
+      name: "Create Empty CSV"
+      description: "Create empty CSV file"
+      command: "touch {{empty_csv}}"
+      shell: true
+  
+  # Create malformed CSV file
+  - command:
+      name: "Create Malformed CSV"
+      description: "Create malformed CSV file with inconsistent structure"
+      command: |
+        cat > {{malformed_csv}} << 'EOF'
+        id,name,email
+        1,John,john@example.com,extra_column
+        2,Jane
+        3,Bob,bob@example.com,role,another_extra
+        "unclosed quote,field
+        EOF
+      shell: true
+  
+  # Run all CSV tests
+  - test: test_csv_contains_line_exact_match
+  - test: test_csv_contains_line_second_row
+  - test: test_csv_contains_line_not_found
+  - test: test_csv_contains_line_mixed_types
+  - test: test_csv_contains_line_timestamp_match
+  - test: test_csv_contains_line_empty_file
+  - test: test_csv_contains_line_file_not_found
+  - test: test_csv_contains_line_wrong_column_count
+  - test: test_csv_contains_line_extra_columns
+  - test: test_csv_contains_line_partial_match
+  - test: test_csv_contains_line_special_chars
+  - test: test_csv_contains_line_malformed
+  
+  # Cleanup
+  - command:
+      name: "Cleanup Test Directory"
+      description: "Remove test directory and files"
+      command: "rm -rf {{test_dir}}"
+      shell: true

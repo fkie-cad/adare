@@ -10,7 +10,7 @@ ADARE enables researchers and forensic analysts to create reproducible experimen
 
 ## Documentation
 
-All comprehensive information can be found in the main documentation: **`docs/html/index.html`**
+All comprehensive information can be found in the main documentation: **`docs/index.html`**
 
 
 ## Development

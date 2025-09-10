@@ -30,7 +30,7 @@ Getting VM Images
 You'll need a virtual machine image to run experiments. Options include:
 
 - **Pre-built Images**: Download from `ADARE Web <https://adare.seclab-bonn.de/>`_
-- **Create Custom VM**: Follow the :doc:`../installation/vm-setup` guide
+- **Create Custom VM**: Follow the :doc:`../user-guide/vm-setup` guide
 - **Your Own VMs**: Export existing VMs as .ova files
 - **Public Images**: Use publicly available VM images (ensure they're clean)
 
@@ -242,7 +242,18 @@ Now run your forensic experiment:
 
 .. code-block:: bash
 
+   # For development/testing (allows playbook modifications)
+   adare experiment run deletefileexample -e ubuntu24043 --test
+   
+   # For final execution (locks experiment from further changes)
    adare experiment run deletefileexample -e ubuntu24043
+
+.. warning::
+   **Development vs Production Runs**
+   
+   - Use ``--test`` flag during development to keep experimenting with playbook changes
+   - Once you run **without** ``--test``, the experiment becomes locked
+   - To continue development after a non-test run, copy the experiment directory first
 
 You'll then see an dynamic console output showing progress, actions, and test results.
 At the end, a summary of the experiment run will be displayed.

@@ -196,6 +196,7 @@ class ToolRegistry:
     # Test Management
     UPLOAD_TESTFUNCTIONS = "upload_testfunctions"
     UPLOAD_TESTSET = "upload_testset"
+    INSTALL_DEPENDENCIES = "install_dependencies"
     SET_VARIABLES = "set_variables"
     RUN_TEST = "run_test"
     RUN_ALL_TESTS = "run_all_tests"

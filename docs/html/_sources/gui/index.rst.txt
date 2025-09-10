@@ -1,3 +1,0 @@
-Graphical User Interface
-************************
-

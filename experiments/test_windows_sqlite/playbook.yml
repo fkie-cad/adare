@@ -1,0 +1,60 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+  continue_on_test_failure: true
+
+# Variables for Windows SQLite testing
+variables:
+  username:
+    type: string
+    value: "adare"
+    description: "System username"
+  
+  test_dir:
+    type: path
+    value: "C:\\Users\\{{username}}\\test_sqlite"
+    description: "Base directory for SQLite testing"
+  
+  test_db:
+    type: path
+    value: "{{test_dir}}\\test.db"
+    description: "Test SQLite database"
+
+# Test definitions for SQLite functions on Windows
+tests:
+  - name: test_sqlite_query_windows
+    description: 'Test sqlite_query_result on Windows'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{test_db}}'
+      query: 'SELECT COUNT(*) as count FROM users'
+      expected_rows: 1
+
+actions:
+  # Setup test environment
+  - command:
+      name: "Create Test Directory"
+      description: "Create base directory for SQLite testing"
+      command: 'mkdir "{{test_dir}}"'
+      shell: true
+  
+  - command:
+      name: "Create Test Database"
+      description: "Create SQLite database with sample data"
+      command: |
+        sqlite3 "{{test_db}}" "CREATE TABLE users (id INTEGER, name TEXT);"
+        sqlite3 "{{test_db}}" "INSERT INTO users VALUES (1, 'John Doe');"
+      shell: true
+  
+  # Run SQLite tests
+  - test: test_sqlite_query_windows
+  
+  # Cleanup
+  - command:
+      name: "Cleanup Test Directory"
+      description: "Remove test directory and files"
+      command: 'rmdir /s /q "{{test_dir}}"'
+      shell: true

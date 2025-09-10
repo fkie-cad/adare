@@ -47,6 +47,23 @@ class TestLoader:
         """
         log.info("Loading testfunctions and testset...")
         
+        # First, install dependencies for testfunctions
+        dependencies = self._collect_testfunction_dependencies()
+        if dependencies:
+            log.info(f"Installing {len(dependencies)} testfunction dependencies in VM...")
+            try:
+                result = await websocket_client.install_testfunction_dependencies(dependencies)
+                if result.get("status") != "success":
+                    log.error(f"Failed to install dependencies: {result.get('message')}")
+                    # Continue anyway - some tests might still work
+                else:
+                    log.info("Successfully installed all testfunction dependencies")
+            except Exception as e:
+                log.error(f"Failed to install testfunction dependencies: {e}")
+                # Continue anyway - some tests might still work
+        else:
+            log.debug("No testfunction dependencies to install")
+        
         # Upload testfunctions directory (Python classes) from project directory
         testfunctions_path = self.project_dir / "testfunctions"
         if testfunctions_path.exists():
@@ -60,6 +77,49 @@ class TestLoader:
         
         # Individual tests are sent via WebSocket when executed
         # No need to upload entire testset file to VM
+    
+    def _collect_testfunction_dependencies(self) -> List[str]:
+        """Collect all dependencies from loaded testfunctions in the project."""
+        dependencies = set()
+        
+        try:
+            # Get testfunction data from database for this project
+            from adare.backend.testfunction.database import get_testfunction_files_data
+            testfunction_files = get_testfunction_files_data(
+                project_path=self.project_dir,
+                fields=['requirements_path']
+            )
+            
+            # Read each requirements file and collect dependencies
+            for tf_data in testfunction_files:
+                requirements_path = tf_data.get('requirements_path')
+                if requirements_path:
+                    req_file = Path(requirements_path)
+                    if req_file.exists():
+                        log.debug(f"Reading requirements from: {req_file}")
+                        try:
+                            content = req_file.read_text().strip()
+                            if content:
+                                # Parse requirements.txt format
+                                for line in content.splitlines():
+                                    line = line.strip()
+                                    # Skip comments and empty lines
+                                    if line and not line.startswith('#'):
+                                        dependencies.add(line)
+                        except (OSError, IOError, UnicodeDecodeError) as e:
+                            log.warning(f"Failed to read requirements from {req_file}: {e}")
+            
+            dependencies_list = list(dependencies)
+            if dependencies_list:
+                log.info(f"Collected {len(dependencies_list)} unique dependencies: {dependencies_list}")
+            else:
+                log.debug("No dependencies found in testfunctions")
+            
+            return dependencies_list
+            
+        except ImportError as e:
+            log.error(f"Failed to import testfunction database module: {e}")
+            return []
     
     async def resolve_test_locally(self, test_name: str) -> Optional[Dict[str, Any]]:
         """Load and resolve a specific test locally with variable substitution."""
