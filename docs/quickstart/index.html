@@ -149,28 +149,24 @@ adare<span class="w"> </span>project<span class="w"> </span>create<span class="w
 <p>This creates a project structure:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>forensics-tutorial/
 ├── programs/          # Shared tools and utilities
-├── tessdata/          # OCR data for text recognition
 └── environments/      # VM environments (created later)
 </pre></div>
 </div>
 </section>
 <section id="step-2-set-up-a-vm-environment">
 <h2>Step 2: Set Up a VM Environment<a class="headerlink" href="#step-2-set-up-a-vm-environment" title="Link to this heading"></a></h2>
-<p>Environments define the virtual machines where experiments run. Create an environment configuration file:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create environment config</span>
-cat<span class="w"> </span>&gt;<span class="w"> </span>ubuntu-env.yml<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
-<span class="s">name: ubuntu24043</span>
-<span class="s">vm: &quot;/path/to/your/ubuntu-vm.ova&quot;  # Update this path!</span>
-<span class="s">os:</span>
-<span class="s">  os: &quot;Ubuntu&quot;</span>
-<span class="s">  platform: &quot;linux&quot;</span>
-<span class="s">  distribution: &quot;Noble Numbat&quot;</span>
-<span class="s">  version: &quot;24.04.3&quot;</span>
-<span class="s">  language: &quot;English&quot;</span>
-<span class="s">tags:</span>
-<span class="s">  - linux</span>
-<span class="s">  - ubuntu</span>
-<span class="s">EOF</span>
+<p>Environments define the virtual machines where experiments run. Create an environment configuration file <cite>ubuntu24043.yml</cite>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu24043</span>
+<span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/your/ubuntu-vm.ova&quot;</span><span class="w">  </span><span class="c1"># Update this path to your VM file</span>
+<span class="nt">os</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Ubuntu&quot;</span>
+<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;linux&quot;</span>
+<span class="w">  </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Noble</span><span class="nv"> </span><span class="s">Numbat&quot;</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;24.04.3&quot;</span>
+<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;English&quot;</span>
+<span class="nt">tags</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">linux</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu</span>
 </pre></div>
 </div>
 <div class="admonition important">
@@ -178,18 +174,18 @@ cat<span class="w"> </span>&gt;<span class="w"> </span>ubuntu-env.yml<span class
 <p>Update the <code class="docutils literal notranslate"><span class="pre">vm:</span></code> path to point to your actual VM image file!</p>
 </div>
 <p>Load the environment:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>environment<span class="w"> </span>load<span class="w"> </span>ubuntu-env.yml
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>environment<span class="w"> </span>load<span class="w"> </span>ubuntu24043
 </pre></div>
 </div>
 </section>
 <section id="step-3-create-your-first-experiment">
 <h2>Step 3: Create Your First Experiment<a class="headerlink" href="#step-3-create-your-first-experiment" title="Link to this heading"></a></h2>
 <p>Let’s create a simple but realistic forensic experiment that deletes a file and analyzes the resulting artifacts:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>experiment<span class="w"> </span>create<span class="w"> </span>file-deletion-analysis
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>experiment<span class="w"> </span>create<span class="w"> </span>deletefileexample
 </pre></div>
 </div>
 <p>This creates the experiment structure:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>experiments/file-deletion-analysis/
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>experiments/deletefileexample/
 ├── playbook.yml      # Automation script
 ├── metadata.yml      # Experiment metadata
 └── img/              # Screenshots for GUI automation
@@ -197,7 +193,7 @@ cat<span class="w"> </span>&gt;<span class="w"> </span>ubuntu-env.yml<span class
 </div>
 <p>Configure the experiment metadata:</p>
 <div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text">experiments/file-deletion-analysis/metadata.yml</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">experiments/deletefileexample/metadata.yml</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">environments</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu24043</span>
 </pre></div>
@@ -205,7 +201,7 @@ cat<span class="w"> </span>&gt;<span class="w"> </span>ubuntu-env.yml<span class
 </div>
 <p>Now create the main playbook:</p>
 <div class="literal-block-wrapper docutils container" id="id3">
-<div class="code-block-caption"><span class="caption-text">experiments/file-deletion-analysis/playbook.yml</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">experiments/deletefileexample/playbook.yml</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span><span class="w">              </span><span class="c1"># Pause between actions</span>
 <span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span><span class="w">           </span><span class="c1"># Max experiment time</span>
@@ -313,7 +309,7 @@ cat<span class="w"> </span>&gt;<span class="w"> </span>ubuntu-env.yml<span class
 <h2>Step 4: Add Required Images<a class="headerlink" href="#step-4-add-required-images" title="Link to this heading"></a></h2>
 <p>The experiment uses image recognition to find GUI elements. Download the required image:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create img directory</span>
-mkdir<span class="w"> </span>-p<span class="w"> </span>experiments/file-deletion-analysis/img
+mkdir<span class="w"> </span>-p<span class="w"> </span>experiments/deletefileexample/img
 
 <span class="c1"># Download nautilus taskbar image (or create your own)</span>
 <span class="c1"># For now, we&#39;ll skip this and use text-based targeting instead</span>
@@ -327,36 +323,23 @@ mkdir<span class="w"> </span>-p<span class="w"> </span>experiments/file-deletion
 <section id="step-5-run-your-experiment">
 <h2>Step 5: Run Your Experiment<a class="headerlink" href="#step-5-run-your-experiment" title="Link to this heading"></a></h2>
 <p>Now run your forensic experiment:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>file-deletion-analysis<span class="w"> </span>-e<span class="w"> </span>ubuntu24043
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>deletefileexample<span class="w"> </span>-e<span class="w"> </span>ubuntu24043
 </pre></div>
 </div>
-<p>You’ll see output like:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>🚀 Starting experiment: file-deletion-analysis
-📋 Environment: ubuntu24043
-⚡ VM: Starting Ubuntu VM...
-🎬 Executing playbook actions...
-✅ Test: file_exists_before - PASSED
-🖱️ Action: Opening file manager...
-🖱️ Action: Clicking Documents folder...
-🖱️ Action: Selecting evidence.txt...
-⌨️ Action: Pressing Delete key...
-✅ Test: file_deleted_after - PASSED
-✅ Test: trash_file_exists - PASSED
-✅ Test: trash_info_exists - PASSED
-
-🎉 Experiment completed successfully!
-📊 Results saved to: environments/ubuntu24043/results/file-deletion-analysis_&lt;timestamp&gt;/
-</pre></div>
-</div>
+<p>You’ll then see an dynamic console output showing progress, actions, and test results.
+At the end, a summary of the experiment run will be displayed.</p>
 </section>
 <section id="step-6-view-your-results">
 <h2>Step 6: View Your Results<a class="headerlink" href="#step-6-view-your-results" title="Link to this heading"></a></h2>
 <p>Check the experiment results:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List recent runs</span>
-adare<span class="w"> </span>run<span class="w"> </span>list
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="w"> </span><span class="c1"># Show details of most recent run</span>
+adare<span class="w"> </span>run<span class="w"> </span>info
 
-<span class="c1"># View detailed results (replace ULID with actual run ID)</span>
-adare<span class="w"> </span>run<span class="w"> </span>info<span class="w"> </span>01ARZ3NDEKTSV4RRFFQ69G5FAV
+<span class="w"> </span><span class="c1"># List runs</span>
+<span class="w"> </span>adare<span class="w"> </span>run<span class="w"> </span>list
+
+<span class="w"> </span><span class="c1"># View detailed results of a specific run (replace ULID with actual run ID)</span>
+<span class="w"> </span>adare<span class="w"> </span>run<span class="w"> </span>info<span class="w"> </span>01ARZ3NDEKTSV4RRFFQ69G5FAV
 </pre></div>
 </div>
 <p>The results include:</p>

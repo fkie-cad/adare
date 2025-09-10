@@ -18,12 +18,11 @@ System Requirements
 ===================
 
 .. list-table::
-   :widths: 20 40 40
+   :widths: 20 40
    :header-rows: 1
 
    * - Component
      - Minimum
-     - Recommended
    * - **RAM**
      - 16 GB or more 
    * - **Storage**
@@ -44,12 +43,8 @@ Required Software
    .. code-block:: bash
    
       python3 --version
-   
-   If you need to install Python 3.10+:
-   
-   - **Ubuntu/Debian**: ``sudo apt update && sudo apt install python3.10 python3.10-venv``
-   - **macOS**: Use Homebrew: ``brew install python@3.10``
-   - **Windows**: Download from `python.org <https://www.python.org/downloads/>`_
+
+   If below 3.10 or not installed, download and install from `python.org <https://www.python.org/downloads/>`_ or use your package manager.
 
 2. **Poetry** (Python package manager)
    
@@ -71,10 +66,8 @@ Required Software
       - Restart your computer
 
 4. **Make** (build tool)
-   
-   - **Ubuntu/Debian**: ``sudo apt install build-essential``
-   - **macOS**: Install Xcode Command Line Tools: ``xcode-select --install``
-   - **Windows**: Use WSL2 or install via chocolatey: ``choco install make``
+
+   Make sure to have `make` installed. 
 
 Installation Steps
 ******************
@@ -84,8 +77,8 @@ Installation Steps
 
 .. code-block:: bash
 
-   git clone https://github.com/fkie-cad/Adare.git
-   cd Adare
+   git clone https://github.com/fkie-cad/adare.git
+   cd adare
 
 2. Install ADARE
 ================
@@ -125,7 +118,7 @@ Run a quick system check:
 
 .. code-block:: bash
 
-   adare help
+   adare --help
    
 This should display the main help menu without errors.
 
@@ -143,23 +136,17 @@ ADARE has been tested with the following software versions:
      - Version
      - Platform
    * - **Python**
-     - 3.10.2, 3.11.x, 3.12.x
+     - 3.13.2
      - All platforms
    * - **Poetry**
-     - 1.8.2+
+     - 1.8.2
      - All platforms  
    * - **VirtualBox**
      - 7.0.26+
      - All platforms
    * - **Ubuntu**
-     - 20.04, 22.04, 24.04
+     - 22.04
      - Recommended
-   * - **macOS**
-     - 12.0+ (Monterey)
-     - Supported
-   * - **Windows**
-     - 10, 11
-     - Supported
 
 .. note::
    While later versions should work, earlier versions (especially Python < 3.10) are not supported due to language features used by ADARE.
