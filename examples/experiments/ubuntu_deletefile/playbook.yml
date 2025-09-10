@@ -1,0 +1,100 @@
+settings:
+  # Default pause between actions (seconds) -> make this also configurable to be randomized in a specific range
+  idle: 1.0
+  
+  # Overall timeout for the experiment (seconds)
+  timeout: 300
+  
+  # Default screenshot settings
+  screenshot:
+    format: "png"
+    quality: 95
+
+# Variables that can be used throughout the playbook
+variables:
+  username:
+    type: string
+    value: "adare"
+    description: "Username for the target system"
+  
+  filepath:
+    type: path
+    value: "/home/{{username}}/Documents/testfile.txt"
+    description: "Full path to the test file"
+  
+  trashbin_path:
+    type: path  
+    value: "/home/{{username}}/.local/share/Trash"
+    description: "Path to user's trash bin"
+
+# Test definitions
+tests:
+  - name: testfile_created
+    description: 'Verify test file does exist before experiment'
+    function: file_exists
+    parameter:
+      dst: '{{filepath}}'
+  - name: testfile_deleted
+    description: 'Verify test file was deleted successfully'
+    function: file_does_not_exist
+    parameter:
+      dst: '{{filepath}}'
+  - name: trashbin_check_file
+    description: 'check if file exists in trashbin'
+    function: file_exists
+    parameter:
+      dst: '{{trashbin_path}}/files/testfile.txt'
+  - name: trahsbin_check_info_file
+    description: 'check if info file exists in trashbin'
+    function: file_exists
+    parameter:
+      dst: '{{trashbin_path}}/info/testfile.txt.trashinfo'
+  - name: trashbin_check_info_date
+    description: 'check if deletion date in info file is correct'
+    function: file_content_equals
+    parameter:
+      dst: '/home/adare/.local/share/Trash/info/testfile.txt.trashinfo'
+      content: |
+        [Trash Info]
+        Path=/home/adare/Documents/testfile.txt
+        DeletionDate={{ deletion_timestamp | localtime | format('%Y-%m-%dT%H:%M:%S') | tolerance(5, -5) }}
+
+actions:
+  - command:
+      name: "Create Test File"
+      description: "create the to deleted file"
+      command: "echo 'This is a test file.' > {{ filepath }}"
+      shell: true
+  - test: testfile_created
+  - click:
+      target:
+        image: "nautilus_taskbar.png"
+      description: "Open Ubuntu File Explorer"
+  - idle:
+      duration: 2.0
+      description: "Wait additional time for File Explorer to open since some systems are slow"
+  - click:
+      target:
+        text: "Documents"
+        strategy:
+          SweepStrategy:
+            index: 2
+      description: "Navigate to Documents folder"
+  - click:
+      target:
+        text: "testfile.txt"
+      description: "Select the test file to delete it with shortcut"
+  - keyboard:
+      combination: ["delete"]
+      description: "Delete the test file using keyboard shortcut"
+  - save_timestamp:
+      description: "Save the timestamp of file deletion for later verification"
+      variable: deletion_timestamp
+  - idle:
+      duration: 1.0
+      description: "Wait for file deletion to complete"
+  - test: testfile_deleted
+  - test: trashbin_check_file
+  - test: trahsbin_check_info_file
+  - test: trashbin_check_info_date
+  

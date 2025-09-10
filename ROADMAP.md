@@ -39,3 +39,4 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] requirements of testfunction are not installed within adarevm
 - [ ] real testunfction error (so no failed test) are not displayed properly in flowconsole but markes as failed test
 - [ ] by default on run no specific log is saved to adare run log dir if not --logfile is set as well?!
+- [ ] look into timezone+localtime if this all really works like expetected together with tolerance filter -> so timestamp/timezone do not work really well -> we did some localtime resolving on adarevm/maybe also adjust for timezone

@@ -513,20 +513,23 @@ class VariableRegistry:
             if var.structured_metadata and isinstance(var.structured_metadata, TimestampMetadata):
                 metadata = var.structured_metadata
                 
+                # TODO: check here if its done twice both on server and client?!
+
                 # Apply localtime conversion first (convert local time to UTC)
-                if metadata.localtime:
-                    try:
-                        import time
-                        # Get the current local timezone offset in seconds
-                        local_offset = time.timezone
-                        if time.daylight and time.localtime().tm_isdst:
-                            local_offset = time.altzone
+                # if metadata.localtime:
+                #     try:
+                #         import time
+                #         # Get the current local timezone offset in seconds
+                #         local_offset = time.timezone
+                #         if time.daylight and time.localtime().tm_isdst:
+                #             local_offset = time.altzone
                         
-                        # Subtract the offset to convert local time to UTC
-                        result = result - datetime.timedelta(seconds=local_offset)
-                        log.info(f"Applied localtime conversion: adjusted timestamp by {-local_offset} seconds ({-local_offset/3600:.1f} hours) to convert to UTC")
-                    except Exception as e:
-                        log.warning(f"Failed to apply localtime conversion: {e}")
+                #         # Subtract the offset to convert local time to UTC
+                #         result = result - datetime.timedelta(seconds=local_offset)
+                #         log.info(f"Applied localtime conversion: adjusted timestamp by {-local_offset} seconds ({-local_offset/3600:.1f} hours) to convert to UTC")
+                #     except Exception as e:
+                #         log.warning(f"Failed to apply localtime conversion: {e}")
+                
                 
                 # Apply timezone conversion
                 if metadata.timezone:

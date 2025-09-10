@@ -201,7 +201,7 @@ class BasicTest:
             # Use resolved_value instead of raw_value for comparison - this should contain the properly resolved timestamp
             comparison_value = metadata.get('resolved_value', raw_value)
             log.info(f"CLAUDE: Using resolved_value for comparison: '{comparison_value}'")
-            
+
             original_dt = self._parse_timestamp_with_format(comparison_value, metadata, is_original=True)
             log.info(f"CLAUDE: Parsed original timestamp: {original_dt}")
             
@@ -241,28 +241,60 @@ class BasicTest:
             return success, f"Tolerance comparison failed ({e}), used string comparison"
     
     def _parse_timestamp_with_format(self, timestamp_str: str, metadata: dict, is_original: bool = False) -> 'datetime.datetime':
-        """Parse timestamp using format metadata, assuming UTC timezone."""
+        """
+        Parse timestamp using format metadata.
+        Rule:
+        - Only when is_original == False:
+            - If metadata['localtime'] is True: label as system-local (no clock shift).
+            - Else: treat as UTC and convert to system local time.
+        - When is_original == True: never convert; just ensure tz-aware (assume UTC if naive).
+        """
         import datetime
-        
-        # Check if format metadata is available
-        format_str = metadata.get('format')
-        if format_str and not is_original:
-            # Use format to parse CSV timestamp, assuming UTC
+        from dateutil import parser as _parser
+
+        # Helper: system local tzinfo (no external deps)
+        _SYSTEM_TZ = datetime.datetime.now().astimezone().tzinfo
+
+        def _finalize(dt: datetime.datetime) -> datetime.datetime:
+            """Apply the conversion rules based on flags."""
+            if is_original:
+                # No conversion; just ensure tz-aware (assume UTC if naive)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                return dt
+
+            # Non-original: apply requested behavior
+            if metadata.get('localtime', False):
+                # Input is already local clock time -> label as local (no shift)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=_SYSTEM_TZ)
+                else:
+                    # If it oddly came with a tz, keep it; we don't convert in 'localtime' mode
+                    pass
+                return dt
+            else:
+                # Input is UTC clock time -> label UTC if naive, then convert to system local
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                return dt.astimezone(_SYSTEM_TZ)
+
+        fmt = metadata.get('format')
+
+        # Prefer explicit format if available
+        if fmt:
             try:
-                dt = datetime.datetime.strptime(timestamp_str, format_str)
-                # Assume parsed timestamp is in UTC (timezone conversion already applied when formatting)
-                return dt.replace(tzinfo=datetime.timezone.utc)
+                dt = datetime.datetime.strptime(timestamp_str, fmt)
+                return _finalize(dt)
             except ValueError as e:
-                log.debug(f"Failed to parse timestamp '{timestamp_str}' with format '{format_str}': {e}")
-        
-        # Fallback to dateutil parser for original timestamps or when format parsing fails
+                log.debug(f"Failed to parse timestamp '{timestamp_str}' with format '{fmt}': {e}")
+
+        # Fallback: flexible parser
         try:
-            import dateutil.parser
-            dt = dateutil.parser.parse(timestamp_str)
-            # If no timezone info, assume UTC
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=datetime.timezone.utc)
-            return dt
+            dt = _parser.parse(timestamp_str)
+
+            # If parser gave us an aware dt, keep it; _finalize() will decide whether to convert or not.
+            # If naive, _finalize() will attach UTC or local as needed.
+            return _finalize(dt)
         except Exception as e:
             raise ValueError(f"Unable to parse timestamp '{timestamp_str}': {e}")
 
