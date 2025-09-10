@@ -569,8 +569,17 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
 
 def step_validate_integrity(context: ExperimentRunCtx):
     """Consolidated step: Check experiment and project integrity."""
-    with StageCtxManager(ValidateIntegrityStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+    with StageCtxManager(ValidateIntegrityStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
+        # Skip integrity checks in test mode to allow development
+        if context.test_mode:
+            stage_ctx.stage.sub_msg = "SKIPPED - Development/Test Mode"
+            stage_ctx.set_status(stage_ctx.stage.status)
+            log.info('Skipping integrity checks - running in test/development mode')
+            return
+            
         # Check experiment integrity
+        stage_ctx.stage.sub_msg = "Checking experiment integrity..."
+        stage_ctx.set_status(stage_ctx.stage.status)
         __experiment_integrity_check(
             context.config.project_path,
             context.config.experiment_name,
@@ -579,6 +588,8 @@ def step_validate_integrity(context: ExperimentRunCtx):
         )
         
         # Check project integrity
+        stage_ctx.stage.sub_msg = "Checking project integrity..."
+        stage_ctx.set_status(stage_ctx.stage.status)
         testfunction_files = experiment_database.get_experiment_testfunction_files(
             context.config.project_path, context.config.environment_name, context.config.experiment_name
         )
@@ -590,6 +601,10 @@ def step_validate_integrity(context: ExperimentRunCtx):
             environments=[context.environment_file],
             testfunctions=testfunction_files
         )
+        
+        # Clear sub message when done
+        stage_ctx.stage.sub_msg = ""
+        stage_ctx.set_status(stage_ctx.stage.status)
 
 def step_prepare_run_environment(context: ExperimentRunCtx):
     """Consolidated step: Check application data and create run directory."""
@@ -858,6 +873,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     config = ExperimentConfig(project_path, experiment_name, environment_name, preserve_snapshot=preserve_snapshot, runlog=runlog)
     experiment_run_context = ExperimentRunCtx(config)
     experiment_run_context.debug_screenshots = debug_screenshots
+    experiment_run_context.test_mode = test  # Store test mode flag for later use
     if test:
         step_initialize(experiment_run_context, fake=True)
     else:

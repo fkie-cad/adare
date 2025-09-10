@@ -56,14 +56,6 @@
 <li class="toctree-l2"><a class="reference internal" href="environments.html">Environment Management</a></li>
 <li class="toctree-l2"><a class="reference internal" href="playbooks.html">Playbook Guide</a></li>
 <li class="toctree-l2"><a class="reference internal" href="playbook-actions.html">Playbook Actions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#daily-workflow">Daily Workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#quick-reference">Quick Reference</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#common-commands">Common Commands</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#file-locations">File Locations</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#configuration-files">Configuration Files</a></li>
-</ul>
-</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
@@ -105,28 +97,14 @@
 <p class="caption" role="heading"><span class="caption-text">User Guide:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="projects.html">Project Management</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="projects.html#understanding-projects">Understanding Projects</a></li>
-<li class="toctree-l2"><a class="reference internal" href="projects.html#project-structure">Project Structure</a></li>
 <li class="toctree-l2"><a class="reference internal" href="projects.html#creating-projects">Creating Projects</a></li>
 <li class="toctree-l2"><a class="reference internal" href="projects.html#managing-projects">Managing Projects</a></li>
-<li class="toctree-l2"><a class="reference internal" href="projects.html#working-with-shared-resources">Working with Shared Resources</a></li>
-<li class="toctree-l2"><a class="reference internal" href="projects.html#project-configuration">Project Configuration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="projects.html#collaboration-workflows">Collaboration Workflows</a></li>
-<li class="toctree-l2"><a class="reference internal" href="projects.html#project-templates">Project Templates</a></li>
-<li class="toctree-l2"><a class="reference internal" href="projects.html#best-practices">Best Practices</a></li>
-<li class="toctree-l2"><a class="reference internal" href="projects.html#next-steps">Next Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="projects.html#project-structure">Project Structure</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="environments.html">Environment Management</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="environments.html#understanding-environments">Understanding Environments</a></li>
-<li class="toctree-l2"><a class="reference internal" href="environments.html#creating-environments">Creating Environments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="environments.html#environment-configuration">Environment Configuration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="environments.html#managing-environments">Managing Environments</a></li>
-<li class="toctree-l2"><a class="reference internal" href="environments.html#working-with-vms">Working with VMs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="environments.html#network-configuration">Network Configuration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="environments.html#advanced-configuration">Advanced Configuration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="environments.html#environment-templates">Environment Templates</a></li>
-<li class="toctree-l2"><a class="reference internal" href="environments.html#best-practices">Best Practices</a></li>
-<li class="toctree-l2"><a class="reference internal" href="environments.html#next-steps">Next Steps</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="playbooks.html">Playbook Guide</a><ul>
@@ -153,106 +131,6 @@
 </li>
 </ul>
 </div>
-<section id="overview">
-<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
-<p>ADARE’s user interface consists of several key areas:</p>
-<dl class="simple">
-<dt><strong>Project Management</strong></dt><dd><p>Organize your forensic research into logical groups</p>
-</dd>
-<dt><strong>Environment Configuration</strong></dt><dd><p>Set up virtual machines for different testing scenarios</p>
-</dd>
-<dt><strong>Experiment Development</strong></dt><dd><p>Create automated forensic tests and artifact analysis</p>
-</dd>
-<dt><strong>Execution &amp; Results</strong></dt><dd><p>Run experiments and analyze forensic evidence</p>
-</dd>
-<dt><strong>Sharing &amp; Collaboration</strong></dt><dd><p>Share experiments via ADARE Web platform</p>
-</dd>
-</dl>
-</section>
-<section id="daily-workflow">
-<h2>Daily Workflow<a class="headerlink" href="#daily-workflow" title="Link to this heading"></a></h2>
-<p>A typical ADARE workflow follows this pattern:</p>
-<ol class="arabic simple">
-<li><p><strong>Create/Select Project</strong> → Organize your work</p></li>
-<li><p><strong>Configure Environment</strong> → Set up test VM</p></li>
-<li><p><strong>Design Experiment</strong> → Create forensic test scenario</p></li>
-<li><p><strong>Run &amp; Iterate</strong> → Execute and refine experiments</p></li>
-<li><p><strong>Analyze Results</strong> → Review forensic evidence</p></li>
-<li><p><strong>Share Findings</strong> → Publish to community</p></li>
-</ol>
-</section>
-<section id="quick-reference">
-<h2>Quick Reference<a class="headerlink" href="#quick-reference" title="Link to this heading"></a></h2>
-<section id="common-commands">
-<h3>Common Commands<a class="headerlink" href="#common-commands" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Project management</span>
-adare<span class="w"> </span>project<span class="w"> </span>create<span class="w"> </span>my-research
-adare<span class="w"> </span>project<span class="w"> </span>list
-
-<span class="c1"># Environment setup</span>
-adare<span class="w"> </span>environment<span class="w"> </span>load<span class="w"> </span>config.yml
-adare<span class="w"> </span>environment<span class="w"> </span>list
-
-<span class="c1"># Experiment workflow</span>
-adare<span class="w"> </span>experiment<span class="w"> </span>create<span class="w"> </span>test-scenario
-adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>test-scenario<span class="w"> </span>-e<span class="w"> </span>my-env
-adare<span class="w"> </span>run<span class="w"> </span>list
-
-<span class="c1"># Results analysis</span>
-adare<span class="w"> </span>run<span class="w"> </span>info<span class="w"> </span>&lt;run_id&gt;
-adare<span class="w"> </span>run<span class="w"> </span><span class="nb">export</span><span class="w"> </span>&lt;run_id&gt;<span class="w"> </span>--format<span class="w"> </span>json
-</pre></div>
-</div>
-</section>
-<section id="file-locations">
-<h3>File Locations<a class="headerlink" href="#file-locations" title="Link to this heading"></a></h3>
-<p>Understanding where ADARE stores files helps with organization:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>my-project/
-├── environments/
-│   └── my-env/
-│       ├── experiments/           # Experiment definitions
-│       │   └── test-scenario/
-│       │       ├── playbook.yml   # Automation script
-│       │       ├── metadata.yml   # Experiment info
-│       │       └── img/           # GUI screenshots
-│       ├── results/               # Experiment results
-│       │   └── test-scenario_&lt;timestamp&gt;/
-│       └── logs/                  # Execution logs
-├── programs/                      # Shared utilities
-└── tessdata/                      # OCR data
-</pre></div>
-</div>
-</section>
-<section id="configuration-files">
-<h3>Configuration Files<a class="headerlink" href="#configuration-files" title="Link to this heading"></a></h3>
-<p>Key configuration file formats:</p>
-<p><strong>Environment Config</strong> (YAML)</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">windows-test</span>
-<span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/vm.ova&quot;</span>
-<span class="nt">os</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows&quot;</span>
-<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span>
-<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;11&quot;</span>
-</pre></div>
-</div>
-<p><strong>Playbook</strong> (YAML)</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
-
-<span class="nt">actions</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;File&quot;</span><span class="p p-Indicator">}}</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;ctrl&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;s&quot;</span><span class="p p-Indicator">]}</span>
-</pre></div>
-</div>
-<p><strong>Metadata</strong> (YAML)</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;windows-test&quot;</span><span class="p p-Indicator">]</span>
-<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Test</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">save</span><span class="nv"> </span><span class="s">behavior&quot;</span>
-<span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;filesystem&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;gui&quot;</span><span class="p p-Indicator">]</span>
-</pre></div>
-</div>
-</section>
-</section>
 </section>
 
 

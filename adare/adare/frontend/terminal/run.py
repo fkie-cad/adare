@@ -26,9 +26,10 @@ class ExperimentRunHeader:
     osinfo: str
     box: str
     published: bool
+    fake: bool
 
     def __init__(self, experiment_name: str, experiment_ulid: str, environment_ulid: str, environment_name: str,
-                 project_name: str, duration: pd.Timedelta, start_time: str, end_time: str, vm: str, osinfo: str, published: bool):
+                 project_name: str, duration: pd.Timedelta, start_time: str, end_time: str, vm: str, osinfo: str, published: bool, fake: bool = False):
         self.experiment_name = experiment_name
         self.experiment_ulid = experiment_ulid
         self.environment_ulid = environment_ulid

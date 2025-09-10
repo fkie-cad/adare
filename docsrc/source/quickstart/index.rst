@@ -52,8 +52,12 @@ This creates a project structure:
 .. code-block:: text
 
    forensics-tutorial/
-   ├── programs/          # Shared tools and utilities
-   └── environments/      # VM environments (created later)
+   ├── environments/      # Environment configuration files
+   ├── experiments/       # Individual experiment directories  
+   ├── shared/            # Shared resources with data/ and tools/ subdirectories
+   ├── testfunctions/     # Test function modules
+   ├── vm/                # Virtual machine files
+   └── run/               # Experiment execution results and logs (created during runs)
 
 Step 2: Set Up a VM Environment
 ********************************

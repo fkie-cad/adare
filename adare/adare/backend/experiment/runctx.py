@@ -48,3 +48,4 @@ class ExperimentRunCtx:
     mcp_server: Optional[MCPServerManager] = None
     debug_screenshots: bool = False
     playbook: Optional[Playbook] = None
+    test_mode: bool = False
