@@ -72,7 +72,7 @@ actions:
         image: "explorer.png"
       description: "Open File Explorer"
   - idle:
-      duration: 5.0
+      duration: 10.0
       description: "Wait additional time for File Explorer to open since some systems are slow"
   - click:
       target:

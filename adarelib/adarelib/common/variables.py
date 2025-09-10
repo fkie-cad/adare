@@ -34,12 +34,13 @@ class ValidationError(Exception):
 
 @attrs.define
 class TimestampMetadata:
-    """Metadata for timestamp variables supporting timezone, format, and tolerance."""
+    """Metadata for timestamp variables supporting timezone, format, tolerance, and localtime conversion."""
     
     timezone: Optional[str] = None
     format_str: Optional[str] = None
     tolerance_upper: int = 0
     tolerance_lower: int = 0
+    localtime: bool = False
     
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dict."""
@@ -50,6 +51,8 @@ class TimestampMetadata:
             result['format'] = self.format_str
         if self.tolerance_upper or self.tolerance_lower:
             result['tolerance'] = [self.tolerance_upper, self.tolerance_lower]
+        if self.localtime:
+            result['localtime'] = self.localtime
         return result
     
     @classmethod
@@ -67,7 +70,8 @@ class TimestampMetadata:
             timezone=data.get('timezone'),
             format_str=data.get('format'),
             tolerance_upper=tolerance_upper,
-            tolerance_lower=tolerance_lower
+            tolerance_lower=tolerance_lower,
+            localtime=data.get('localtime', False)
         )
     
     def get_jinja_filters(self, variable_registry: 'VariableRegistry') -> Dict[str, Any]:
@@ -150,35 +154,18 @@ class TimestampMetadata:
             return value
         
         def localtime_filter(value):
-            """Convert timestamp to account for host's local timezone offset."""
-            import datetime
-            import time
-            
+            """Capture localtime filter metadata for server-side processing."""
             # Find the variable this filter is being applied to
             source_var = self._find_variable_by_value(variable_registry, value, VariableType.TIMESTAMP)
-            if source_var and isinstance(source_var.value, datetime.datetime):
-                try:
-                    # Get the current local timezone offset in seconds
-                    local_offset = -time.timezone
-                    if time.daylight and time.localtime().tm_isdst:
-                        local_offset = -time.altzone
-                    
-                    # Apply the offset to the timestamp
-                    adjusted_timestamp = source_var.value + datetime.timedelta(seconds=local_offset)
-                    
-                    # Update the variable's value directly
-                    source_var.value = adjusted_timestamp
-                    
-                    log.debug(f"Applied localtime filter: adjusted timestamp by {local_offset} seconds ({local_offset/3600:.1f} hours)")
-                    
-                    # Return the adjusted timestamp for continued processing
-                    return adjusted_timestamp
-                    
-                except Exception as e:
-                    log.warning(f"Failed to apply localtime filter: {e}")
-                    return value
+            if source_var:
+                # Update the variable's metadata
+                if not source_var.structured_metadata:
+                    source_var.structured_metadata = TimestampMetadata()
+                source_var.structured_metadata.localtime = True
+                source_var.metadata['localtime'] = True
+                log.debug(f"Captured localtime filter for variable")
             
-            # Return original value if not a timestamp variable or conversion failed
+            # Return the original value for continued processing (like timezone/format filters)
             return value
 
         return {
@@ -496,10 +483,18 @@ class VariableRegistry:
         context = {}
         
         for name, var in self.variables.items():
-            # Always fully resolve variables - filters will create their own placeholders if needed
-            resolved_value = self._get_variable_resolved_value(var)
+            if for_tests and self._has_test_specific_filters(var):
+                # For tests with test-specific filters: use placeholder resolution
+                log.debug(f"Variable '{name}' has test-specific filters, using placeholder resolution")
+                # The filter system will create placeholders for this variable
+                # We just use the raw value here, filters handle placeholder creation
+                resolved_value = var.get_string_value()
+            else:
+                # For actions or tests without test-specific filters: full resolution
+                resolved_value = self._get_variable_resolved_value(var)
+            
             context[name] = resolved_value
-            log.debug(f"Resolved variable '{name}' to '{resolved_value}'")
+            log.debug(f"Resolved variable '{name}' to '{resolved_value}' (for_tests={for_tests})")
         
         # Add any placeholder metadata that was created by filters
         if hasattr(self, '_placeholder_metadata') and self._placeholder_metadata:
@@ -517,6 +512,21 @@ class VariableRegistry:
             # Apply variable-level transformations (not test-specific ones)
             if var.structured_metadata and isinstance(var.structured_metadata, TimestampMetadata):
                 metadata = var.structured_metadata
+                
+                # Apply localtime conversion first (convert local time to UTC)
+                if metadata.localtime:
+                    try:
+                        import time
+                        # Get the current local timezone offset in seconds
+                        local_offset = time.timezone
+                        if time.daylight and time.localtime().tm_isdst:
+                            local_offset = time.altzone
+                        
+                        # Subtract the offset to convert local time to UTC
+                        result = result - datetime.timedelta(seconds=local_offset)
+                        log.info(f"Applied localtime conversion: adjusted timestamp by {-local_offset} seconds ({-local_offset/3600:.1f} hours) to convert to UTC")
+                    except Exception as e:
+                        log.warning(f"Failed to apply localtime conversion: {e}")
                 
                 # Apply timezone conversion
                 if metadata.timezone:

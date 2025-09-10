@@ -7,7 +7,7 @@ extracting and formatting results received from adarevm.
 
 import logging
 from typing import Dict, Any, List
-from adare.types.playbook import ActionResult
+from adare.backend.experiment.action_executor import ActionResult
 
 log = logging.getLogger(__name__)
 
