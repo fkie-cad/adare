@@ -473,36 +473,6 @@ Security
 **Network Isolation**
   Isolate test VMs from production networks
 
-Troubleshooting
-***************
-
-Common Issues
-=============
-
-**"Not in a project directory"**
-  Navigate to a project directory or create one
-
-**"Project already exists"**  
-  Choose a different name or remove the existing project
-
-**"Permission denied"**
-  Check file permissions and disk space
-
-**"Cannot find programs"**
-  Verify shared tools are in the correct ``programs/`` subdirectory
-
-Performance Issues
-==================
-
-**Large Projects**
-  - Split large projects into smaller, focused ones
-  - Regular cleanup of old results and logs
-  - Use ``.gitignore`` to exclude large binary files
-
-**Storage Problems**
-  - Monitor disk usage: ``df -h``
-  - Clean up old VM snapshots
-  - Compress or archive old experiment results
 
 Next Steps
 **********
@@ -510,5 +480,5 @@ Next Steps
 With projects mastered, continue to:
 
 - **Environment Setup**: :doc:`environments` - Configure virtual machines
-- **Experiment Creation**: :doc:`experiments` - Design forensic tests
+- **Playbook Creation**: :doc:`playbooks` - Design forensic automation
 - **Advanced Organization**: :doc:`../advanced/index` - Complex project structures

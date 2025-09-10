@@ -103,15 +103,11 @@
 <li class="toctree-l4"><a class="reference internal" href="#organization">Organization</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="#troubleshooting">Troubleshooting</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#common-issues">Common Issues</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#advanced-troubleshooting">Advanced Troubleshooting</a></li>
-</ul>
-</li>
 <li class="toctree-l3"><a class="reference internal" href="#next-steps">Next Steps</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="playbooks.html">Playbook Guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="playbook-actions.html">Playbook Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="index.html#overview">Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="index.html#daily-workflow">Daily Workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="index.html#quick-reference">Quick Reference</a></li>
@@ -624,64 +620,12 @@ adare<span class="w"> </span>environment<span class="w"> </span>create<span clas
 </dl>
 </section>
 </section>
-<section id="troubleshooting">
-<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
-<section id="common-issues">
-<h3>Common Issues<a class="headerlink" href="#common-issues" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>VM Won’t Start</strong></dt><dd><ul class="simple">
-<li><p>Check VirtualBox installation</p></li>
-<li><p>Verify sufficient system resources</p></li>
-<li><p>Ensure VM image file exists and is accessible</p></li>
-</ul>
-</dd>
-<dt><strong>Network Problems</strong></dt><dd><ul class="simple">
-<li><p>Verify network adapter configuration</p></li>
-<li><p>Check firewall settings on host</p></li>
-<li><p>Test with different network types</p></li>
-</ul>
-</dd>
-<dt><strong>Performance Issues</strong></dt><dd><ul class="simple">
-<li><p>Increase VM memory allocation</p></li>
-<li><p>Add more CPU cores</p></li>
-<li><p>Check host system resource usage</p></li>
-<li><p>Disable unnecessary VM features</p></li>
-</ul>
-</dd>
-<dt><strong>Storage Problems</strong></dt><dd><ul class="simple">
-<li><p>Monitor disk space usage</p></li>
-<li><p>Clean up old snapshots</p></li>
-<li><p>Compress VM disk images</p></li>
-</ul>
-</dd>
-</dl>
-</section>
-<section id="advanced-troubleshooting">
-<h3>Advanced Troubleshooting<a class="headerlink" href="#advanced-troubleshooting" title="Link to this heading"></a></h3>
-<p><strong>VirtualBox Logs</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># View VirtualBox logs</span>
-VBoxManage<span class="w"> </span>showvminfo<span class="w"> </span>&lt;vm-name&gt;<span class="w"> </span>--log<span class="w"> </span><span class="m">0</span>
-</pre></div>
-</div>
-<p><strong>ADARE Logs</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># View environment creation logs</span>
-adare<span class="w"> </span>environment<span class="w"> </span>info<span class="w"> </span>&lt;env-name&gt;<span class="w"> </span>--logs
-</pre></div>
-</div>
-<p><strong>VM Console Access</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Access VM console for debugging</span>
-VBoxManage<span class="w"> </span>startvm<span class="w"> </span>&lt;vm-name&gt;<span class="w"> </span>--type<span class="w"> </span>gui
-</pre></div>
-</div>
-</section>
-</section>
 <section id="next-steps">
 <h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
 <p>With environments configured, move on to:</p>
 <ul class="simple">
-<li><p><strong>Creating Experiments</strong>: <span class="xref std std-doc">experiments</span> - Design forensic tests</p></li>
 <li><p><strong>Writing Playbooks</strong>: <a class="reference internal" href="playbooks.html"><span class="doc">Playbook Guide</span></a> - Automate GUI interactions</p></li>
-<li><p><strong>Running Experiments</strong>: <span class="xref std std-doc">running-experiments</span> - Execute and monitor tests</p></li>
+<li><p><strong>CLI Reference</strong>: <a class="reference internal" href="../cli-reference/index.html"><span class="doc">CLI Reference</span></a> - Complete command documentation</p></li>
 </ul>
 </section>
 </section>

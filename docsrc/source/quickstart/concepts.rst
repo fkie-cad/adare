@@ -455,7 +455,7 @@ Next Steps
 
 With these concepts mastered, you're ready to:
 
-- **Create Complex Experiments**: :doc:`../user-guide/experiments`
+- **Create Complex Playbooks**: :doc:`../user-guide/playbooks`
 - **Master the CLI**: :doc:`../cli-reference/index` 
 - **Understand Architecture**: :doc:`../architecture/index`
 - **Advanced Techniques**: :doc:`../advanced/index`

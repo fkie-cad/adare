@@ -3,7 +3,6 @@
 This document tracks ongoing development tasks, planned features, quality of life improvements, known bugs for ADARE.
 
 ## Current Development Tasks
-
 - [x] built windows vm new from fresh installation -> done; test it
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
 - [x] built furhter testfunction; and filters/variables 
@@ -11,6 +10,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] check if we can easily add new testfunctionsets? 
 - [ ] test if we can still run adare if we delete cloned repo
 - [ ] test if we can run dev experiments that allow for easy change of experiments for testing -> we then need to make the experiment.yml not write-protected?!
+- [ ] check experiment development/test flag features? what does what? document and maybe improve
 
 ## Planned Features
 - [ ] test and enable ydotool to make it work on wayland linux distros as well
@@ -40,7 +40,3 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] real testunfction error (so no failed test) are not displayed properly in flowconsole but markes as failed test
 - [ ] by default on run no specific log is saved to adare run log dir if not --logfile is set as well?!
 - [ ] look into timezone+localtime if this all really works like expetected together with tolerance filter -> so timestamp/timezone do not work really well -> we did some localtime resolving on adarevm/maybe also adjust for timezone
-
-
-1) does the docs include how to use variables in playbooks with filter.... And add that currently the validation is not fully implemted for this so be cautios or errors will only we discovered during a run! 
-2) does the docs still include the vm creation part? 

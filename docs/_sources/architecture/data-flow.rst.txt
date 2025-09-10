@@ -622,6 +622,6 @@ Next Steps
 
 Understanding ADARE's data flow helps with:
 
-- **Performance Tuning**: :doc:`../advanced/performance` - Optimize data processing
+- **Advanced Topics**: :doc:`../advanced/index` - Performance tuning and optimization
 - **Troubleshooting**: :doc:`../troubleshooting/index` - Debug data flow issues
-- **Custom Development**: :doc:`../developer/index` - Extend data processing capabilities
+- **CLI Reference**: :doc:`../cli-reference/index` - Command documentation for data operations

@@ -127,45 +127,6 @@ Run a quick system check:
    
 This should display the main help menu without errors.
 
-Troubleshooting Installation
-****************************
-
-VirtualBox Issues
-=================
-
-**Error: VirtualBox not found**
-   Ensure VirtualBox is installed and the ``VBoxManage`` command is available in your PATH.
-
-**Error: VM creation fails**
-   - Check that virtualization is enabled in your BIOS/UEFI
-   - On Windows, ensure Hyper-V is disabled
-   - Verify you have sufficient RAM and disk space
-
-Python Issues
-=============
-
-**Error: Python version too old**
-   ADARE requires Python 3.10+. Install a newer version or use pyenv to manage multiple Python versions.
-
-**Error: Poetry not found**
-   Ensure Poetry is installed and added to your PATH. You may need to restart your terminal after installation.
-
-Permission Issues
-=================
-
-**Error: Permission denied during installation**
-   - On Linux/macOS: Don't use ``sudo`` with the install command
-   - Ensure you have write permissions to the installation directory
-   - Check that your user has VirtualBox permissions
-
-Getting Help
-============
-
-If you encounter issues:
-
-1. Check the :doc:`../troubleshooting/index` section
-2. Search existing issues on `GitHub <https://github.com/fkie-cad/Adare/issues>`_
-3. Create a new issue with your system details and error messages
 
 Tested Configurations
 *********************
@@ -207,24 +168,4 @@ Next Steps
 After successful installation:
 
 1. **Quick Start**: Follow the :doc:`../quickstart/index` guide
-2. **First Experiment**: Create your :doc:`../quickstart/first-experiment`
-3. **User Guide**: Learn about :doc:`../user-guide/index` for daily usage
-
-Development Installation
-************************
-
-If you plan to contribute to ADARE or need the development environment:
-
-.. code-block:: bash
-
-   # Clone with development branch
-   git clone -b dev https://github.com/fkie-cad/Adare.git
-   cd Adare
-   
-   # Install in development mode
-   make install-dev
-   
-   # Run tests to verify
-   make test
-
-This installs additional development dependencies and sets up pre-commit hooks.
+2. **User Guide**: Learn about :doc:`../user-guide/index` for daily usage

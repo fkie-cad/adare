@@ -10,10 +10,8 @@ This comprehensive guide covers everything you need for daily ADARE usage. Wheth
 
    projects
    environments  
-   experiments
    playbooks
-   running-experiments
-   results
+   playbook-actions
 
 Overview
 ********
@@ -194,9 +192,8 @@ Getting Help
 Resources for learning and support:
 
 **Documentation**
-  - :doc:`../troubleshooting/index` - Common issues and solutions
   - :doc:`../cli-reference/index` - Complete command reference
-  - :doc:`../reference/index` - Configuration file formats
+  - :doc:`../architecture/index` - Technical architecture documentation
 
 **Community**
   - `ADARE Web <https://adare.seclab-bonn.de/>`_ - Experiment sharing platform
@@ -215,7 +212,7 @@ Choose your learning path based on your role:
   Start with :doc:`projects` to understand the basics
 
 **Forensic Researchers**  
-  Focus on :doc:`experiments` and :doc:`playbooks`
+  Focus on :doc:`playbooks` for automation and testing
 
 **System Administrators**
   Emphasize :doc:`environments` and VM management

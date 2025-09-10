@@ -517,62 +517,11 @@ Organization
 **Regular Maintenance**
   Periodically update and clean environments
 
-Troubleshooting
-***************
-
-Common Issues
-=============
-
-**VM Won't Start**
-  - Check VirtualBox installation
-  - Verify sufficient system resources
-  - Ensure VM image file exists and is accessible
-
-**Network Problems**
-  - Verify network adapter configuration
-  - Check firewall settings on host
-  - Test with different network types
-
-**Performance Issues**
-  - Increase VM memory allocation
-  - Add more CPU cores
-  - Check host system resource usage
-  - Disable unnecessary VM features
-
-**Storage Problems**
-  - Monitor disk space usage
-  - Clean up old snapshots
-  - Compress VM disk images
-
-Advanced Troubleshooting
-========================
-
-**VirtualBox Logs**
-
-.. code-block:: bash
-
-   # View VirtualBox logs
-   VBoxManage showvminfo <vm-name> --log 0
-
-**ADARE Logs**  
-
-.. code-block:: bash
-
-   # View environment creation logs
-   adare environment info <env-name> --logs
-
-**VM Console Access**
-
-.. code-block:: bash
-
-   # Access VM console for debugging
-   VBoxManage startvm <vm-name> --type gui
 
 Next Steps
 **********
 
 With environments configured, move on to:
 
-- **Creating Experiments**: :doc:`experiments` - Design forensic tests
 - **Writing Playbooks**: :doc:`playbooks` - Automate GUI interactions  
-- **Running Experiments**: :doc:`running-experiments` - Execute and monitor tests
+- **CLI Reference**: :doc:`../cli-reference/index` - Complete command documentation

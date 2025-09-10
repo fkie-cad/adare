@@ -319,4 +319,4 @@ To dive deeper into ADARE's architecture:
 
 - **Data Flow**: :doc:`data-flow` - How data moves through the system
 - **Module Structure**: :doc:`module_structure` - Detailed code organization  
-- **Developer Guide**: :doc:`../developer/index` - Contributing to ADARE development
+- **Advanced Topics**: :doc:`../advanced/index` - Advanced configuration and customization

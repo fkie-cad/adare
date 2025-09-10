@@ -20,7 +20,7 @@ User Account Configuration
 - Enable **autologin** so the VM boots directly into the ``adare`` user's desktop.
 
 Additional Configuration
-----------------------
+------------------------
 
 1. **Disable User Account Control (UAC):**
 
@@ -51,7 +51,7 @@ Additional Configuration
    - Perform a clean shutdown to apply all security changes
 
 Required Software Installation
------------------------------
+------------------------------
 
 Install the following software:
 
