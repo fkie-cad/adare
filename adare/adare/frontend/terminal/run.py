@@ -41,6 +41,7 @@ class ExperimentRunHeader:
         self.vm = vm
         self.osinfo = osinfo
         self.published = published
+        self.fake = fake
 
     def __rich__(self) -> Panel:
         title = f'[b medium_turquoise]info[/b medium_turquoise]'
@@ -64,7 +65,8 @@ class ExperimentRunHeader:
             f"vm: {self.vm}",
         )
         published_str = "published" if self.published else "not published"
-        grid.add_row("", published_str)
+        run_type_str = "[red bold]TEST/FAKE RUN[/red bold]" if self.fake else published_str
+        grid.add_row("", run_type_str)
         return Panel(grid, title=title, border_style="blue", title_align='left', style='')
 
 
@@ -409,6 +411,7 @@ def print_run(run_ulid: str):
             vm=data['vm'].values[0].name,
             osinfo=data['osinfo'].values[0],
             published=data['published'].values[0],
+            fake=bool(data['fake'].values[0]) if 'fake' in data.columns else False,
         ))
 
         title = f'[b gold3]{project_name}.{environment_name}.{experiment_name} - [i]{experiment_ulid}[/i][/b gold3]'
