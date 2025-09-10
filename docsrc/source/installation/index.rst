@@ -25,17 +25,14 @@ System Requirements
      - Minimum
      - Recommended
    * - **RAM**
-     - 8 GB
-     - 16 GB or more (for running VMs)
+     - 16 GB or more 
    * - **Storage**
-     - 50 GB free
-     - 200 GB+ (for VM images and results)
+     - 50 GB (for windows VM more)
    * - **CPU**
-     - 4 cores
-     - 8+ cores with virtualization support
+     - 6+ cores with virtualization support
    * - **OS**
-     - Linux, macOS, Windows 10+
-     - Linux (Ubuntu 20.04+) or macOS
+     - Ubuntu, Windows 10+
+
 
 Required Software
 =================
