@@ -1,0 +1,588 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>First Experiment &mdash; ADARE  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=903d06c1" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Key Concepts" href="concepts.html" />
+    <link rel="prev" title="Quick Start" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Quick Start</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="index.html#what-you-ll-learn">What You’ll Learn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-1-create-your-first-project">Step 1: Create Your First Project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-2-set-up-a-vm-environment">Step 2: Set Up a VM Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-3-create-your-first-experiment">Step 3: Create Your First Experiment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-4-add-required-images">Step 4: Add Required Images</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-5-run-your-experiment">Step 5: Run Your Experiment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-6-view-your-results">Step 6: View Your Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#what-you-ve-accomplished">What You’ve Accomplished</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="index.html#next-steps">Next Steps</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="index.html#advanced-experiments">Advanced Experiments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="index.html#learn-more">Learn More</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="index.html#get-help">Get Help</a><ul class="current">
+<li class="toctree-l4 current"><a class="current reference internal" href="#">First Experiment</a></li>
+<li class="toctree-l4"><a class="reference internal" href="concepts.html">Key Concepts</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Technical Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ADARE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Quick Start</a></li>
+      <li class="breadcrumb-item active">First Experiment</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/quickstart/first-experiment.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="first-experiment">
+<h1>First Experiment<a class="headerlink" href="#first-experiment" title="Link to this heading"></a></h1>
+<p>This detailed tutorial walks you through creating a comprehensive forensic experiment from scratch. You’ll build a Windows registry analysis experiment that demonstrates advanced ADARE features.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>We’ll create an experiment that:</p>
+<ul class="simple">
+<li><p>Modifies Windows registry keys</p></li>
+<li><p>Captures before/after snapshots</p></li>
+<li><p>Analyzes registry forensic artifacts</p></li>
+<li><p>Tests across different Windows versions</p></li>
+<li><p>Demonstrates advanced GUI automation</p></li>
+</ul>
+</section>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
+<p>For this tutorial, you need:</p>
+<ul class="simple">
+<li><p>ADARE installed and working</p></li>
+<li><p>A Windows VM image (Windows 10/11)</p></li>
+<li><p>Basic knowledge of Windows registry</p></li>
+<li><p>Completed the <a class="reference internal" href="index.html"><span class="doc">Quick Start</span></a> tutorial</p></li>
+</ul>
+</section>
+<section id="project-setup">
+<h2>Project Setup<a class="headerlink" href="#project-setup" title="Link to this heading"></a></h2>
+<p>If you haven’t already, create a new project for advanced experiments:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>project<span class="w"> </span>create<span class="w"> </span>advanced-forensics
+<span class="nb">cd</span><span class="w"> </span>advanced-forensics
+</pre></div>
+</div>
+</section>
+<section id="environment-configuration">
+<h2>Environment Configuration<a class="headerlink" href="#environment-configuration" title="Link to this heading"></a></h2>
+<p>Create a Windows environment:</p>
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text">windows11-env.yml</span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">win11-test</span>
+<span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/Windows11.ova&quot;</span><span class="w">  </span><span class="c1"># Update path!</span>
+<span class="nt">os</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows&quot;</span>
+<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span>
+<span class="w">  </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Pro&quot;</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;11</span><span class="nv"> </span><span class="s">22H2&quot;</span>
+<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;English&quot;</span>
+<span class="nt">tags</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">windows</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">win11</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry</span>
+</pre></div>
+</div>
+</div>
+<p>Load the environment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>environment<span class="w"> </span>load<span class="w"> </span>windows11-env.yml
+</pre></div>
+</div>
+</section>
+<section id="registry-analysis-experiment">
+<h2>Registry Analysis Experiment<a class="headerlink" href="#registry-analysis-experiment" title="Link to this heading"></a></h2>
+<p>Create the experiment structure:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>experiment<span class="w"> </span>create<span class="w"> </span>registry-modification-analysis
+</pre></div>
+</div>
+<section id="experiment-metadata">
+<h3>Experiment Metadata<a class="headerlink" href="#experiment-metadata" title="Link to this heading"></a></h3>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text">experiments/registry-modification-analysis/metadata.yml</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">environments</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">win11-test</span>
+<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Analyze</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">artifacts</span><span class="nv"> </span><span class="s">from</span><span class="nv"> </span><span class="s">software</span><span class="nv"> </span><span class="s">installation</span><span class="nv"> </span><span class="s">simulation&quot;</span>
+<span class="nt">tags</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">windows-artifacts</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forensics</span>
+<span class="nt">author</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Your</span><span class="nv"> </span><span class="s">Name&quot;</span>
+<span class="nt">created</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2025-09-10&quot;</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="advanced-playbook">
+<h3>Advanced Playbook<a class="headerlink" href="#advanced-playbook" title="Link to this heading"></a></h3>
+<p>Create a comprehensive playbook that demonstrates advanced features:</p>
+<div class="literal-block-wrapper docutils container" id="id3">
+<div class="code-block-caption"><span class="caption-text">experiments/registry-modification-analysis/playbook.yml</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.5</span>
+<span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
+<span class="w">  </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;png&quot;</span>
+<span class="w">    </span><span class="nt">quality</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">95</span>
+<span class="w">    </span><span class="nt">on_action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">    </span><span class="c1"># Screenshot every action</span>
+
+<span class="w">  </span><span class="nt">retry</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">attempts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span><span class="w">        </span><span class="c1"># Retry failed actions</span>
+<span class="w">    </span><span class="nt">delay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+
+<span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">app_name</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;TestForensicsApp&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Simulated</span><span class="nv"> </span><span class="s">application</span><span class="nv"> </span><span class="s">name&quot;</span>
+
+<span class="w">  </span><span class="nt">registry_key</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;HKEY_CURRENT_USER\\Software\\{{app_name}}&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Registry</span><span class="nv"> </span><span class="s">key</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">create&quot;</span>
+
+<span class="w">  </span><span class="nt">install_path</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;C:\\Program</span><span class="nv"> </span><span class="s">Files\\{{app_name}}&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Simulated</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">location&quot;</span>
+
+<span class="w">  </span><span class="nt">username</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;forensics&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">username&quot;</span>
+
+<span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Pre-experiment tests</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_key_absent_before</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">key</span><span class="nv"> </span><span class="s">doesn&#39;t</span><span class="nv"> </span><span class="s">exist</span><span class="nv"> </span><span class="s">initially&quot;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_key_does_not_exist</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{registry_key}}&#39;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">install_dir_absent_before</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">directory</span><span class="nv"> </span><span class="s">doesn&#39;t</span><span class="nv"> </span><span class="s">exist&quot;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">directory_does_not_exist</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{install_path}}&#39;</span>
+
+<span class="w">  </span><span class="c1"># Post-experiment tests</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_key_created</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">key</span><span class="nv"> </span><span class="s">was</span><span class="nv"> </span><span class="s">created&quot;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_key_exists</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{registry_key}}&#39;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_value_correct</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">value</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">correct&quot;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_value_equals</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{registry_key}}&#39;</span>
+<span class="w">      </span><span class="nt">value_name</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;InstallPath&#39;</span>
+<span class="w">      </span><span class="nt">expected</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{install_path}}&#39;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">install_dir_created</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">installation</span><span class="nv"> </span><span class="s">directory</span><span class="nv"> </span><span class="s">created&quot;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">directory_exists</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{install_path}}&#39;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uninstall_entry_created</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">uninstall</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">entry&quot;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_key_exists</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{{app_name}}&#39;</span>
+
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Initial state verification</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_key_absent_before</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">install_dir_absent_before</span>
+
+<span class="w">  </span><span class="c1"># Take system snapshot</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snapshot</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pre_install_state&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Capture</span><span class="nv"> </span><span class="s">system</span><span class="nv"> </span><span class="s">state</span><span class="nv"> </span><span class="s">before</span><span class="nv"> </span><span class="s">installation&quot;</span>
+
+<span class="w">  </span><span class="c1"># Simulate software installation via registry</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">Registry</span><span class="nv"> </span><span class="s">Key&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">main</span><span class="nv"> </span><span class="s">application</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">key&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;reg</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">&quot;{{registry_key}}&quot;</span><span class="nv"> </span><span class="s">/f&#39;</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">admin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Set</span><span class="nv"> </span><span class="s">Install</span><span class="nv"> </span><span class="s">Path&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Set</span><span class="nv"> </span><span class="s">installation</span><span class="nv"> </span><span class="s">path</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">registry&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;reg</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">&quot;{{registry_key}}&quot;</span><span class="nv"> </span><span class="s">/v</span><span class="nv"> </span><span class="s">&quot;InstallPath&quot;</span><span class="nv"> </span><span class="s">/t</span><span class="nv"> </span><span class="s">REG_SZ</span><span class="nv"> </span><span class="s">/d</span><span class="nv"> </span><span class="s">&quot;{{install_path}}&quot;</span><span class="nv"> </span><span class="s">/f&#39;</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">admin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Set</span><span class="nv"> </span><span class="s">Version</span><span class="nv"> </span><span class="s">Info&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Add</span><span class="nv"> </span><span class="s">version</span><span class="nv"> </span><span class="s">information&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;reg</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">&quot;{{registry_key}}&quot;</span><span class="nv"> </span><span class="s">/v</span><span class="nv"> </span><span class="s">&quot;Version&quot;</span><span class="nv"> </span><span class="s">/t</span><span class="nv"> </span><span class="s">REG_SZ</span><span class="nv"> </span><span class="s">/d</span><span class="nv"> </span><span class="s">&quot;1.0.0&quot;</span><span class="nv"> </span><span class="s">/f&#39;</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">admin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="c1"># Create installation directory</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">Install</span><span class="nv"> </span><span class="s">Directory&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">program</span><span class="nv"> </span><span class="s">installation</span><span class="nv"> </span><span class="s">directory&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;mkdir</span><span class="nv"> </span><span class="s">&quot;{{install_path}}&quot;&#39;</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">admin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">Executable</span><span class="nv"> </span><span class="s">Stub&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">fake</span><span class="nv"> </span><span class="s">executable</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">realism&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;echo</span><span class="nv"> </span><span class="s">&quot;Fake</span><span class="nv"> </span><span class="s">executable&quot;</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">&quot;{{install_path}}\\{{app_name}}.exe&quot;&#39;</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">admin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="c1"># Add uninstall information</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Add</span><span class="nv"> </span><span class="s">Uninstall</span><span class="nv"> </span><span class="s">Entry&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">Windows</span><span class="nv"> </span><span class="s">uninstall</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">entry&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">        </span><span class="no">reg add &quot;HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{{app_name}}&quot; /f</span>
+<span class="w">        </span><span class="no">reg add &quot;HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{{app_name}}&quot; /v &quot;DisplayName&quot; /t REG_SZ /d &quot;{{app_name}}&quot; /f</span>
+<span class="w">        </span><span class="no">reg add &quot;HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{{app_name}}&quot; /v &quot;InstallLocation&quot; /t REG_SZ /d &quot;{{install_path}}&quot; /f</span>
+<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">admin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="c1"># Record installation timestamp</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Record</span><span class="nv"> </span><span class="s">installation</span><span class="nv"> </span><span class="s">completion</span><span class="nv"> </span><span class="s">time&quot;</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">install_timestamp</span>
+
+<span class="w">  </span><span class="c1"># GUI verification - open registry editor</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;win&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;r&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Open</span><span class="nv"> </span><span class="s">Run</span><span class="nv"> </span><span class="s">dialog&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;regedit&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Type</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">editor</span><span class="nv"> </span><span class="s">command&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;enter&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Launch</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">editor&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.0</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">editor</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">open&quot;</span>
+
+<span class="w">  </span><span class="c1"># Navigate to our registry key</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;HKEY_CURRENT_USER&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Expand</span><span class="nv"> </span><span class="s">HKEY_CURRENT_USER&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Software&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Navigate</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">Software</span><span class="nv"> </span><span class="s">key&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{app_name}}&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Find</span><span class="nv"> </span><span class="s">our</span><span class="nv"> </span><span class="s">application</span><span class="nv"> </span><span class="s">key&quot;</span>
+
+<span class="w">  </span><span class="c1"># Take screenshot of registry for evidence</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;registry_evidence&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Capture</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">state</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">forensic</span><span class="nv"> </span><span class="s">evidence&quot;</span>
+
+<span class="w">  </span><span class="c1"># Close registry editor</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;alt&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;f4&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Close</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">editor&quot;</span>
+
+<span class="w">  </span><span class="c1"># Post-installation verification</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_key_created</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_value_correct</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">install_dir_created</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uninstall_entry_created</span>
+
+<span class="w">  </span><span class="c1"># Create final system snapshot</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snapshot</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;post_install_state&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Capture</span><span class="nv"> </span><span class="s">final</span><span class="nv"> </span><span class="s">system</span><span class="nv"> </span><span class="s">state&quot;</span>
+
+<span class="w">  </span><span class="c1"># Generate forensic report</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">generate_report</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Registry</span><span class="nv"> </span><span class="s">Analysis</span><span class="nv"> </span><span class="s">Report&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Comprehensive</span><span class="nv"> </span><span class="s">forensic</span><span class="nv"> </span><span class="s">analysis</span><span class="nv"> </span><span class="s">of</span><span class="nv"> </span><span class="s">registry</span><span class="nv"> </span><span class="s">changes&quot;</span>
+<span class="w">      </span><span class="nt">include</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_diff</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_system_changes</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">timestamps</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">screenshots</span>
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+<section id="advanced-features-demonstrated">
+<h2>Advanced Features Demonstrated<a class="headerlink" href="#advanced-features-demonstrated" title="Link to this heading"></a></h2>
+<p>This experiment showcases several advanced ADARE capabilities:</p>
+<section id="conditional-logic">
+<h3>Conditional Logic<a class="headerlink" href="#conditional-logic" title="Link to this heading"></a></h3>
+<p>Add conditional tests that only run on certain Windows versions:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">conditional</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{os_version}}</span><span class="nv"> </span><span class="s">&gt;=</span><span class="nv"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">10&quot;&#39;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">modern_registry_features</span>
+<span class="w">      </span><span class="nt">else</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">legacy_registry_features</span>
+</pre></div>
+</div>
+</section>
+<section id="loops-and-iteration">
+<h3>Loops and Iteration<a class="headerlink" href="#loops-and-iteration" title="Link to this heading"></a></h3>
+<p>Test multiple registry keys:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;test_key&quot;</span>
+<span class="w">      </span><span class="nt">values</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;TestKey1&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;TestKey2&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;TestKey3&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;reg</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">&quot;HKEY_CURRENT_USER\Software\{{test_key}}&quot;</span><span class="nv"> </span><span class="s">/f&#39;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;verify_{{test_key}}_created&quot;</span>
+<span class="w">            </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry_key_exists</span>
+<span class="w">            </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;HKEY_CURRENT_USER\Software\{{test_key}}&#39;</span>
+</pre></div>
+</div>
+</section>
+<section id="error-handling">
+<h3>Error Handling<a class="headerlink" href="#error-handling" title="Link to this heading"></a></h3>
+<p>Handle failures gracefully:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">try</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;reg</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">&quot;HKEY_LOCAL_MACHINE\Software\TestKey&quot;</span><span class="nv"> </span><span class="s">/f&#39;</span>
+<span class="w">            </span><span class="nt">admin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">catch</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">log</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">message</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Failed</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">create</span><span class="nv"> </span><span class="s">HKLM</span><span class="nv"> </span><span class="s">key,</span><span class="nv"> </span><span class="s">trying</span><span class="nv"> </span><span class="s">HKCU</span><span class="nv"> </span><span class="s">instead&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;reg</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">&quot;HKEY_CURRENT_USER\Software\TestKey&quot;</span><span class="nv"> </span><span class="s">/f&#39;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="running-the-experiment">
+<h2>Running the Experiment<a class="headerlink" href="#running-the-experiment" title="Link to this heading"></a></h2>
+<p>Execute your advanced experiment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run with debug screenshots enabled</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>registry-modification-analysis<span class="w"> </span>-e<span class="w"> </span>win11-test<span class="w"> </span>--debug-screenshots
+
+<span class="c1"># Run in development mode for iterative testing</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>develop<span class="w"> </span>registry-modification-analysis<span class="w"> </span>-e<span class="w"> </span>win11-test
+
+<span class="c1"># Run and preserve VM snapshot for later analysis</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>registry-modification-analysis<span class="w"> </span>-e<span class="w"> </span>win11-test<span class="w"> </span>--preserve-snapshot
+</pre></div>
+</div>
+</section>
+<section id="analyzing-results">
+<h2>Analyzing Results<a class="headerlink" href="#analyzing-results" title="Link to this heading"></a></h2>
+<p>The experiment generates comprehensive forensic data:</p>
+<section id="registry-diff-report">
+<h3>Registry Diff Report<a class="headerlink" href="#registry-diff-report" title="Link to this heading"></a></h3>
+<p>View changes to the Windows registry:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>run<span class="w"> </span>info<span class="w"> </span>&lt;run_id&gt;<span class="w"> </span>--section<span class="w"> </span>registry
+</pre></div>
+</div>
+<p>This shows:</p>
+<ul class="simple">
+<li><p>New registry keys created</p></li>
+<li><p>Modified registry values</p></li>
+<li><p>Timestamps of all changes</p></li>
+<li><p>Before/after comparisons</p></li>
+</ul>
+</section>
+<section id="file-system-changes">
+<h3>File System Changes<a class="headerlink" href="#file-system-changes" title="Link to this heading"></a></h3>
+<p>Analyze file system modifications:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>run<span class="w"> </span>info<span class="w"> </span>&lt;run_id&gt;<span class="w"> </span>--section<span class="w"> </span>filesystem
+</pre></div>
+</div>
+</section>
+<section id="screenshots-timeline">
+<h3>Screenshots Timeline<a class="headerlink" href="#screenshots-timeline" title="Link to this heading"></a></h3>
+<p>Review GUI interactions:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Open results directory</span>
+<span class="nb">cd</span><span class="w"> </span>environments/win11-test/results/registry-modification-analysis_&lt;timestamp&gt;/screenshots
+
+<span class="c1"># View screenshot timeline</span>
+ls<span class="w"> </span>-la<span class="w"> </span>*.png
+</pre></div>
+</div>
+</section>
+<section id="custom-analysis">
+<h3>Custom Analysis<a class="headerlink" href="#custom-analysis" title="Link to this heading"></a></h3>
+<p>Export data for external forensic tools:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Export registry changes as JSON</span>
+adare<span class="w"> </span>run<span class="w"> </span><span class="nb">export</span><span class="w"> </span>&lt;run_id&gt;<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>--output<span class="w"> </span>registry_analysis.json
+
+<span class="c1"># Export timeline data</span>
+adare<span class="w"> </span>run<span class="w"> </span><span class="nb">export</span><span class="w"> </span>&lt;run_id&gt;<span class="w"> </span>--format<span class="w"> </span>timeline<span class="w"> </span>--output<span class="w"> </span>forensic_timeline.csv
+</pre></div>
+</div>
+</section>
+</section>
+<section id="best-practices-learned">
+<h2>Best Practices Learned<a class="headerlink" href="#best-practices-learned" title="Link to this heading"></a></h2>
+<p>From this advanced experiment, you’ve learned:</p>
+<dl class="simple">
+<dt><strong>Forensic Methodology</strong></dt><dd><ul class="simple">
+<li><p>Always capture before/after system state</p></li>
+<li><p>Document every change with timestamps</p></li>
+<li><p>Verify artifacts are created as expected</p></li>
+</ul>
+</dd>
+<dt><strong>Automation Design</strong></dt><dd><ul class="simple">
+<li><p>Use variables for maintainable playbooks</p></li>
+<li><p>Include comprehensive error handling</p></li>
+<li><p>Test on multiple OS versions</p></li>
+</ul>
+</dd>
+<dt><strong>Evidence Collection</strong></dt><dd><ul class="simple">
+<li><p>Take screenshots at key moments</p></li>
+<li><p>Generate reports for non-technical audiences</p></li>
+<li><p>Export data in standard forensic formats</p></li>
+</ul>
+</dd>
+<dt><strong>Performance Optimization</strong></dt><dd><ul class="simple">
+<li><p>Use appropriate idle delays</p></li>
+<li><p>Optimize image recognition for reliability</p></li>
+<li><p>Leverage conditional logic to avoid unnecessary steps</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="next-steps">
+<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
+<p>Now you’re ready for advanced ADARE usage:</p>
+<ul class="simple">
+<li><p><strong>Custom Test Functions</strong>: <span class="xref std std-doc">../advanced/testfunctions</span> - Create specialized forensic tests</p></li>
+<li><p><strong>Performance Tuning</strong>: <span class="xref std std-doc">../advanced/performance</span> - Optimize experiment execution</p></li>
+<li><p><strong>CI/CD Integration</strong>: <span class="xref std std-doc">../advanced/integration</span> - Automate forensic testing pipelines</p></li>
+<li><p><strong>Multi-VM Scenarios</strong>: <span class="xref std std-doc">../advanced/vm-management</span> - Test across multiple systems simultaneously</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Quick Start" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="concepts.html" class="btn btn-neutral float-right" title="Key Concepts" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

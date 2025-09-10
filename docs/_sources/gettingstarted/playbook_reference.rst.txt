@@ -606,26 +606,12 @@ Error Handling Pattern
                 target:
                   text: "Try Again"
 
-Best Practices
-**************
-
-1. **Use Descriptive Names**: Always include meaningful descriptions for actions
-2. **Strategic Waits**: Use ``idle`` actions after opening applications or before critical actions
-3. **Error Handling**: Use conditional blocks to handle different UI states
-4. **Screenshot Documentation**: Take screenshots at key points for debugging
-5. **Timestamp Recording**: Save timestamps around important events for testing
-6. **Variable Usage**: Use variables for repeated values and user-specific paths
-7. **Strategy Selection**: Use appropriate selection strategies when multiple elements match
-8. **Modular Blocks**: Group related actions in blocks with descriptive names
-
 Common Pitfalls
 ***************
 
 1. **Missing Waits**: Not allowing enough time for UI elements to appear
 2. **Ambiguous Targets**: Text or images that match multiple elements without strategies
-3. **Hard-coded Paths**: Using fixed paths instead of variables with usernames
-4. **No Error Handling**: Not accounting for different possible UI states
-5. **Overly Complex Conditions**: Making conditional logic too complicated to debug
+3. **No Error Handling**: Not accounting for different possible UI states
 
 Complete Parameter Reference
 ****************************

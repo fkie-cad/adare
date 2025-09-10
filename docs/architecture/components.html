@@ -1,0 +1,477 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Components &mdash; ADARE  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=903d06c1" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Data Flow" href="data-flow.html" />
+    <link rel="prev" title="Architecture" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart/index.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Technical Documentation:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Architecture</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Components</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#system-architecture">System Architecture</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#component-details">Component Details</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#adare-host-client">ADARE Host Client</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#adare-vm-agent">ADARE VM Agent</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#mcp-server">MCP Server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#shared-libraries">Shared Libraries</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#communication-flow">Communication Flow</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#experiment-execution-flow">Experiment Execution Flow</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#data-flow-diagram">Data Flow Diagram</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#security-architecture">Security Architecture</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#network-isolation">Network Isolation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#data-protection">Data Protection</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#process-isolation">Process Isolation</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#deployment-architecture">Deployment Architecture</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#single-host-deployment">Single-Host Deployment</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#distributed-deployment">Distributed Deployment</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#scalability-considerations">Scalability Considerations</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#horizontal-scaling">Horizontal Scaling</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#performance-optimization">Performance Optimization</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#monitoring-and-observability">Monitoring and Observability</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#extension-points">Extension Points</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plugin-architecture">Plugin Architecture</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#api-integration">API Integration</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#next-steps">Next Steps</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="data-flow.html">Data Flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="module_structure.html">Module Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#terminology">Terminology</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#files-and-directories">Files and Directories</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ADARE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Architecture</a></li>
+      <li class="breadcrumb-item active">Components</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/components.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="components">
+<h1>Components<a class="headerlink" href="#components" title="Link to this heading"></a></h1>
+<p>ADARE consists of three main components that work together to provide automated forensic analysis capabilities.</p>
+<section id="system-architecture">
+<h2>System Architecture<a class="headerlink" href="#system-architecture" title="Link to this heading"></a></h2>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
+│   Host System       │    │  Virtual Machine    │    │   MCP Server        │
+│   (adare client)    │    │   (adarevm agent)   │    │ (GUI automation)    │
+└─────────────────────┘    └─────────────────────┘    └─────────────────────┘
+           │                           │                           │
+           │        WebSocket          │         HTTP API          │
+           ├───────────────────────────┼───────────────────────────┤
+           │                           │                           │
+           │ • Project Management      │ • Playbook Execution      │ • Screenshot Analysis
+           │ • VM Lifecycle Control    │ • Test Runner             │ • Image Recognition
+           │ • Result Storage          │ • Artifact Collection     │ • Text Extraction
+           │ • Web Platform Access     │ • System Monitoring       │ • Coordinate Mapping
+           └───────────────────────────┴───────────────────────────┴─────────────────────
+</pre></div>
+</div>
+</section>
+<section id="component-details">
+<h2>Component Details<a class="headerlink" href="#component-details" title="Link to this heading"></a></h2>
+<section id="adare-host-client">
+<h3>ADARE Host Client<a class="headerlink" href="#adare-host-client" title="Link to this heading"></a></h3>
+<p><strong>Location</strong>: <code class="docutils literal notranslate"><span class="pre">adare/</span></code> directory
+<strong>Role</strong>: Main orchestration and user interface component
+<strong>Language</strong>: Python</p>
+<p><strong>Responsibilities</strong></p>
+<ul class="simple">
+<li><p><strong>Project Management</strong>: Create, organize, and manage forensic research projects</p></li>
+<li><p><strong>Environment Configuration</strong>: Set up and maintain virtual machine environments</p></li>
+<li><p><strong>Experiment Orchestration</strong>: Coordinate experiment execution across VMs</p></li>
+<li><p><strong>VM Lifecycle Management</strong>: Start, stop, snapshot, and reset virtual machines</p></li>
+<li><p><strong>Result Collection &amp; Analysis</strong>: Gather, store, and analyze experiment results</p></li>
+<li><p><strong>Web Platform Integration</strong>: Sync with ADARE Web for sharing experiments</p></li>
+<li><p><strong>User Interfaces</strong>: Provide CLI and web interfaces for user interaction</p></li>
+</ul>
+<p><strong>Key Modules</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>adare/
+├── cli/                    # Command-line interface
+├── web/                    # Web interface
+├── backend/
+│   ├── project/           # Project management
+│   ├── environment/       # Environment handling
+│   ├── experiment/        # Experiment orchestration
+│   ├── vm/               # VirtualBox integration
+│   └── events/           # Event processing
+├── database/             # Data persistence
+├── virtualbox/           # VirtualBox API wrapper
+└── types/               # Core data structures
+</pre></div>
+</div>
+<p><strong>Communication Protocols</strong></p>
+<ul class="simple">
+<li><p><strong>VirtualBox API</strong>: Control VM lifecycle and snapshots</p></li>
+<li><p><strong>WebSocket</strong>: Real-time communication with VM agents</p></li>
+<li><p><strong>HTTP REST</strong>: Communication with MCP server</p></li>
+<li><p><strong>Database</strong>: SQLite for local data storage</p></li>
+<li><p><strong>File System</strong>: Project and result storage</p></li>
+</ul>
+</section>
+<section id="adare-vm-agent">
+<h3>ADARE VM Agent<a class="headerlink" href="#adare-vm-agent" title="Link to this heading"></a></h3>
+<p><strong>Location</strong>: <code class="docutils literal notranslate"><span class="pre">adarevm/</span></code> directory
+<strong>Role</strong>: In-VM execution agent for forensic experiments
+<strong>Language</strong>: Python</p>
+<p><strong>Responsibilities</strong></p>
+<ul class="simple">
+<li><p><strong>Playbook Execution</strong>: Parse and execute YAML-based automation scripts</p></li>
+<li><p><strong>GUI Automation</strong>: Perform mouse clicks, keyboard input, and screen captures</p></li>
+<li><p><strong>System Command Execution</strong>: Run shell commands and system operations</p></li>
+<li><p><strong>Test Validation</strong>: Execute forensic tests and artifact verification</p></li>
+<li><p><strong>Artifact Collection</strong>: Gather and analyze forensic evidence</p></li>
+<li><p><strong>Real-time Communication</strong>: Report progress and results to host</p></li>
+</ul>
+<p><strong>Key Modules</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>adarevm/
+├── core/                  # Core agent functionality
+├── automation/            # GUI automation engine
+│   ├── actions/          # Action implementations
+│   ├── targets/          # Target selection strategies
+│   └── screenshot/       # Screen capture utilities
+├── testing/              # Test framework
+│   ├── functions/        # Built-in test functions
+│   └── validators/       # Result validation
+├── platforms/            # OS-specific implementations
+│   ├── windows/          # Windows-specific code
+│   └── linux/            # Linux-specific code
+└── clients/              # Communication clients
+</pre></div>
+</div>
+<p><strong>Supported Platforms</strong></p>
+<ul class="simple">
+<li><p><strong>Windows</strong>: Windows 10, 11 (GUI automation, registry access, file operations)</p></li>
+<li><p><strong>Linux</strong>: Ubuntu, CentOS, Fedora (X11/Wayland GUI, file system operations)</p></li>
+<li><p><strong>macOS</strong>: Basic support (limited GUI automation capabilities)</p></li>
+</ul>
+</section>
+<section id="mcp-server">
+<h3>MCP Server<a class="headerlink" href="#mcp-server" title="Link to this heading"></a></h3>
+<p><strong>Location</strong>: <code class="docutils literal notranslate"><span class="pre">adare-mcp-server/</span></code> directory
+<strong>Role</strong>: External GUI automation and computer vision service
+<strong>Language</strong>: Python (with OpenCV and Tesseract)</p>
+<p><strong>Responsibilities</strong></p>
+<ul class="simple">
+<li><p><strong>Screenshot Analysis</strong>: Process VM screenshots for GUI elements</p></li>
+<li><p><strong>Image Recognition</strong>: Match UI elements using template matching</p></li>
+<li><p><strong>Text Extraction</strong>: OCR capabilities for finding text on screen</p></li>
+<li><p><strong>Coordinate Calculation</strong>: Determine click coordinates for GUI elements</p></li>
+<li><p><strong>Multi-language Support</strong>: Handle different UI languages and fonts</p></li>
+</ul>
+<p><strong>Key Features</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>adare-mcp-server/
+├── vision/               # Computer vision algorithms
+│   ├── image_matching/   # Template matching algorithms
+│   ├── text_detection/   # OCR and text recognition
+│   └── preprocessing/    # Image enhancement
+├── api/                  # HTTP API endpoints
+├── models/              # Machine learning models
+└── config/              # Server configuration
+</pre></div>
+</div>
+<p><strong>Computer Vision Capabilities</strong></p>
+<ul class="simple">
+<li><p><strong>Template Matching</strong>: Find UI elements using reference images</p></li>
+<li><p><strong>Feature Detection</strong>: Identify UI components automatically</p></li>
+<li><p><strong>OCR (Optical Character Recognition)</strong>: Extract text from screenshots</p></li>
+<li><p><strong>Multi-scale Analysis</strong>: Handle different screen resolutions and DPI</p></li>
+<li><p><strong>Fuzzy Matching</strong>: Handle slight variations in UI appearance</p></li>
+</ul>
+</section>
+<section id="shared-libraries">
+<h3>Shared Libraries<a class="headerlink" href="#shared-libraries" title="Link to this heading"></a></h3>
+<p><strong>Location</strong>: <code class="docutils literal notranslate"><span class="pre">adarelib/</span></code> directory
+<strong>Role</strong>: Common utilities and test functions
+<strong>Language</strong>: Python</p>
+<p><strong>Components</strong></p>
+<ul class="simple">
+<li><p><strong>Common Utilities</strong>: Shared helper functions and data structures</p></li>
+<li><p><strong>Test Functions</strong>: Reusable forensic test implementations</p></li>
+<li><p><strong>Variable Handling</strong>: Template processing and variable substitution</p></li>
+<li><p><strong>Validation Framework</strong>: Common validation and verification utilities</p></li>
+</ul>
+</section>
+</section>
+<section id="communication-flow">
+<h2>Communication Flow<a class="headerlink" href="#communication-flow" title="Link to this heading"></a></h2>
+<section id="experiment-execution-flow">
+<h3>Experiment Execution Flow<a class="headerlink" href="#experiment-execution-flow" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Host</strong> receives experiment request from user</p></li>
+<li><p><strong>Host</strong> starts VM and ensures agent is running</p></li>
+<li><p><strong>Host</strong> sends playbook to <strong>VM Agent</strong> via WebSocket</p></li>
+<li><p><strong>VM Agent</strong> begins playbook execution</p></li>
+<li><p>For GUI actions:
+a. <strong>VM Agent</strong> takes screenshot
+b. <strong>VM Agent</strong> sends screenshot to <strong>MCP Server</strong>
+c. <strong>MCP Server</strong> analyzes image and returns coordinates
+d. <strong>VM Agent</strong> performs click/action at coordinates</p></li>
+<li><p><strong>VM Agent</strong> executes tests and collects artifacts</p></li>
+<li><p><strong>VM Agent</strong> sends results back to <strong>Host</strong></p></li>
+<li><p><strong>Host</strong> stores results and generates reports</p></li>
+</ol>
+</section>
+<section id="data-flow-diagram">
+<h3>Data Flow Diagram<a class="headerlink" href="#data-flow-diagram" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>User Command
+     │
+     ▼
+┌─────────┐    Playbook    ┌──────────┐    Screenshot    ┌─────────────┐
+│  Host   │─────────────►  │ VM Agent │─────────────────► │ MCP Server  │
+│ Client  │                │          │                   │             │
+└─────────┘                └──────────┘                   └─────────────┘
+     │                           │                               │
+     │         Results           │         Coordinates           │
+     │◄──────────────────────────┼───────────────────────────────┘
+     │                           │
+     ▼                           ▼
+[Results DB]              [Artifacts &amp; Logs]
+</pre></div>
+</div>
+</section>
+</section>
+<section id="security-architecture">
+<h2>Security Architecture<a class="headerlink" href="#security-architecture" title="Link to this heading"></a></h2>
+<section id="network-isolation">
+<h3>Network Isolation<a class="headerlink" href="#network-isolation" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>VM Network Isolation</strong>: Test VMs can be isolated from production networks</p></li>
+<li><p><strong>Controlled Communication</strong>: Only required protocols (WebSocket, HTTP) are used</p></li>
+<li><p><strong>Local-first</strong>: All processing can run locally without internet access</p></li>
+<li><p><strong>Firewall Integration</strong>: Works with host firewall configurations</p></li>
+</ul>
+</section>
+<section id="data-protection">
+<h3>Data Protection<a class="headerlink" href="#data-protection" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Encrypted Communication</strong>: WebSocket connections use TLS when configured</p></li>
+<li><p><strong>Local Storage</strong>: Sensitive data stays on local machine</p></li>
+<li><p><strong>Access Control</strong>: File system permissions protect experiment data</p></li>
+<li><p><strong>Clean Snapshots</strong>: VMs reset to clean state between experiments</p></li>
+</ul>
+</section>
+<section id="process-isolation">
+<h3>Process Isolation<a class="headerlink" href="#process-isolation" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Containerization Ready</strong>: Components can run in containers</p></li>
+<li><p><strong>Privilege Separation</strong>: MCP server runs with minimal privileges</p></li>
+<li><p><strong>VM Sandboxing</strong>: VirtualBox provides hardware-level isolation</p></li>
+<li><p><strong>Resource Limits</strong>: Configurable limits on CPU, memory, and disk usage</p></li>
+</ul>
+</section>
+</section>
+<section id="deployment-architecture">
+<h2>Deployment Architecture<a class="headerlink" href="#deployment-architecture" title="Link to this heading"></a></h2>
+<section id="single-host-deployment">
+<h3>Single-Host Deployment<a class="headerlink" href="#single-host-deployment" title="Link to this heading"></a></h3>
+<p>All components run on one machine:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>┌─────────────────────────────────────────────────────────┐
+│                    Host Machine                         │
+│                                                         │
+│  ┌────────────┐  ┌─────────────────┐  ┌──────────────┐  │
+│  │    ADARE   │  │   VirtualBox    │  │ MCP Server   │  │
+│  │   Client   │  │      VMs        │  │   (local)    │  │
+│  └────────────┘  └─────────────────┘  └──────────────┘  │
+└─────────────────────────────────────────────────────────┘
+</pre></div>
+</div>
+<p><strong>Pros</strong>: Simple setup, low latency, complete isolation
+<strong>Cons</strong>: Resource limitations, single point of failure</p>
+</section>
+<section id="distributed-deployment">
+<h3>Distributed Deployment<a class="headerlink" href="#distributed-deployment" title="Link to this heading"></a></h3>
+<p>Components spread across multiple machines:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>┌──────────────┐    ┌──────────────────┐    ┌────────────────┐
+│ Control Host │    │  VM Host Farm    │    │  MCP Cluster   │
+│              │    │                  │    │                │
+│ ┌──────────┐ │    │ ┌──────────────┐ │    │ ┌────────────┐ │
+│ │  ADARE   │ │    │ │ VirtualBox   │ │    │ │    MCP     │ │
+│ │ Client   │◄┼────┼►│     VMs      │◄┼────┼►│  Servers   │ │
+│ └──────────┘ │    │ └──────────────┘ │    │ └────────────┘ │
+└──────────────┘    └──────────────────┘    └────────────────┘
+</pre></div>
+</div>
+<p><strong>Pros</strong>: Scalability, resource distribution, fault tolerance
+<strong>Cons</strong>: Network complexity, configuration overhead</p>
+</section>
+</section>
+<section id="scalability-considerations">
+<h2>Scalability Considerations<a class="headerlink" href="#scalability-considerations" title="Link to this heading"></a></h2>
+<section id="horizontal-scaling">
+<h3>Horizontal Scaling<a class="headerlink" href="#horizontal-scaling" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Multiple VM Hosts</strong>: Distribute VMs across multiple machines</p></li>
+<li><p><strong>MCP Server Clusters</strong>: Load balance computer vision processing</p></li>
+<li><p><strong>Parallel Experiments</strong>: Run multiple experiments simultaneously</p></li>
+<li><p><strong>Resource Pooling</strong>: Share computational resources efficiently</p></li>
+</ul>
+</section>
+<section id="performance-optimization">
+<h3>Performance Optimization<a class="headerlink" href="#performance-optimization" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Snapshot Management</strong>: Optimize VM snapshot creation and restoration</p></li>
+<li><p><strong>Image Caching</strong>: Cache commonly-used GUI images for faster matching</p></li>
+<li><p><strong>Database Indexing</strong>: Optimize result queries and searches</p></li>
+<li><p><strong>Compression</strong>: Compress screenshots and artifacts for storage efficiency</p></li>
+</ul>
+</section>
+<section id="monitoring-and-observability">
+<h3>Monitoring and Observability<a class="headerlink" href="#monitoring-and-observability" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>Health Checks</strong>: Monitor component health and connectivity</p></li>
+<li><p><strong>Performance Metrics</strong>: Track experiment execution times and resource usage</p></li>
+<li><p><strong>Logging Integration</strong>: Centralized logging for troubleshooting</p></li>
+<li><p><strong>Alerting</strong>: Notify on experiment failures or resource issues</p></li>
+</ul>
+</section>
+</section>
+<section id="extension-points">
+<h2>Extension Points<a class="headerlink" href="#extension-points" title="Link to this heading"></a></h2>
+<section id="plugin-architecture">
+<h3>Plugin Architecture<a class="headerlink" href="#plugin-architecture" title="Link to this heading"></a></h3>
+<p>ADARE supports extensions through:</p>
+<ul class="simple">
+<li><p><strong>Custom Test Functions</strong>: Add new forensic validation capabilities</p></li>
+<li><p><strong>Action Plugins</strong>: Implement new automation actions</p></li>
+<li><p><strong>Platform Support</strong>: Add support for new operating systems</p></li>
+<li><p><strong>Result Exporters</strong>: Create custom report formats</p></li>
+</ul>
+</section>
+<section id="api-integration">
+<h3>API Integration<a class="headerlink" href="#api-integration" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>REST APIs</strong>: HTTP endpoints for external integration</p></li>
+<li><p><strong>WebHook Support</strong>: Real-time notifications to external systems</p></li>
+<li><p><strong>Database Access</strong>: Direct database integration for custom tools</p></li>
+<li><p><strong>File System Integration</strong>: Access to experiment data and results</p></li>
+</ul>
+</section>
+</section>
+<section id="next-steps">
+<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
+<p>To dive deeper into ADARE’s architecture:</p>
+<ul class="simple">
+<li><p><strong>Data Flow</strong>: <a class="reference internal" href="data-flow.html"><span class="doc">Data Flow</span></a> - How data moves through the system</p></li>
+<li><p><strong>Module Structure</strong>: <a class="reference internal" href="module_structure.html"><span class="doc">Module Structure</span></a> - Detailed code organization</p></li>
+<li><p><strong>Developer Guide</strong>: <span class="xref std std-doc">../developer/index</span> - Contributing to ADARE development</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Architecture" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="data-flow.html" class="btn btn-neutral float-right" title="Data Flow" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

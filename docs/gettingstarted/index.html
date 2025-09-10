@@ -19,9 +19,7 @@
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
-    <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Create an Environment" href="environment.html" />
-    <link rel="prev" title="Installation Guide" href="../installation/index.html" /> 
+    <link rel="search" title="Search" href="../search.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -44,30 +42,19 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul class="current">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Getting Started</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#walkthrough-quick-start-guide">Walkthrough: Quick Start Guide</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="environment.html">Create an Environment</a></li>
-<li class="toctree-l3"><a class="reference internal" href="experiment.html">Create an Experiment</a></li>
-<li class="toctree-l3"><a class="reference internal" href="experiment.html#common-actions">Common Actions</a></li>
-<li class="toctree-l3"><a class="reference internal" href="experiment.html#develop-and-run-an-experiment">Develop and Run an Experiment</a></li>
-<li class="toctree-l3"><a class="reference internal" href="playbook_reference.html">Complete Playbook Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart/index.html">Quick Start</a></li>
 </ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#create-an-environment">Create an Environment</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#create-an-experiment">Create an Experiment</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#testset-file">Testset File</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#playbook-file">Playbook File</a></li>
+<p class="caption" role="heading"><span class="caption-text">User Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
 </ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#common-actions">Common Actions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#develop-and-run-an-experiment">Develop and Run an Experiment</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Structure and Concepts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
+<p class="caption" role="heading"><span class="caption-text">Technical Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
 </ul>
 
@@ -100,20 +87,16 @@
 <p>The following sections will help you get started with using ADARE.</p>
 <section id="walkthrough-quick-start-guide">
 <h2>Walkthrough: Quick Start Guide<a class="headerlink" href="#walkthrough-quick-start-guide" title="Link to this heading"></a></h2>
-<p>This walkthrough provides information on how to setup ADARE to run downloaded experiments and to create new experiments.
-ADARE uses YAML-based playbooks for GUI automation, making experiments easy to create and maintain without Python coding.</p>
-<p>To use ADARE you must setup a project, which is basically a directory containing data used for the experiments.
-This can be simply done by navigating to the directory where you want to create the project and run the following command:</p>
+<p>ADARE automates GUI testing using YAML playbooks - no Python coding required.</p>
+<p><strong>Step 1: Create a Project</strong></p>
+<p>Navigate to your desired location and run:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">project</span> <span class="n">create</span> <span class="o">&lt;</span><span class="n">project_name</span><span class="o">&gt;</span>
+<span class="n">cd</span> <span class="o">&lt;</span><span class="n">project_name</span><span class="o">&gt;</span>
 </pre></div>
 </div>
-<p>This will create a directory with the name <code class="docutils literal notranslate"><span class="pre">&lt;project_name&gt;</span></code> and within it data, such as data used for the text recognition within the experiments.
-To further work within that project, you must navigate to the project directory:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cd</span> <span class="o">&lt;</span><span class="n">project_name</span><span class="o">&gt;</span>
-</pre></div>
-</div>
-<p>Within this project a user must create an environment, dedicated to contain configurations related to one specific virtual machine.
-This can be done by running the following command, when providing an environment config file:</p>
+<p>This creates a project directory with required data files.</p>
+<p><strong>Step 2: Create an Environment</strong></p>
+<p>Create an environment config file and load it:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">environment</span> <span class="n">load</span> <span class="o">&lt;</span><span class="n">environment_config_file</span><span class="o">&gt;.</span><span class="n">yml</span>
 </pre></div>
 </div>
@@ -133,18 +116,18 @@ In the section <a class="reference internal" href="environment.html#create-an-en
 </div>
 <p>Notably <code class="docutils literal notranslate"><span class="pre">&lt;path_or_link_to_ova_or_ovf_file&gt;</span></code> is the path to a virtual machine image file, such as an OVA or OVF file.
 We provide a link to a list of downloadable virtual machines in <a class="reference external" href="https://adare.seclab-bonn.de/">Adare Web</a>.
-For Windows 11 with our provided VM, a YAML file would look like this:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">win11</span>
-<span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TODOADDREALLINKHERE</span>
+For Ubuntu 24.04 with our provided VM, a YAML file would look like this:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu24043</span>
+<span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/ubuntu-vm.ova&quot;</span>
 <span class="nt">os</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">11&quot;</span>
-<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span>
-<span class="w">  </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Home&quot;</span>
-<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;23H1&quot;</span>
+<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Ubuntu&quot;</span>
+<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;linux&quot;</span>
+<span class="w">  </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Noble</span><span class="nv"> </span><span class="s">Numbat&quot;</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;24.04.3&quot;</span>
 <span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;English&quot;</span>
 <span class="nt">tags</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">test</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">example</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">linux</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu</span>
 </pre></div>
 </div>
 <p>Now that we have specified the environment and therefore the virtual machine to be used, we can specify what we want to do and test on this machine.
@@ -157,66 +140,28 @@ Therefore a user can create an experiment template with the following command:</
 ├── experiments/
 │   ├── ...
 │   └── &lt;experiment_name&gt;/
-│       ├── playbook.yaml
-│       ├── testset.yml
+│       ├── playbook.yml
 │       ├── metadata.yml
 │       └── img/
 └── ...
 </pre></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">metadata.yml</span></code> file contains information about the experiment, especially the names of the environments it can be run on.
-The <code class="docutils literal notranslate"><span class="pre">testset.yml</span></code> file contains all tests that can be run within the experiment.
-The <code class="docutils literal notranslate"><span class="pre">playbook.yaml</span></code> file contains the YAML-based GUI automation instructions, such as mouse clicks or keyboard inputs, as well as calls to the tests specified in the testset file.
+The <code class="docutils literal notranslate"><span class="pre">playbook.yml</span></code> file contains everything needed for the experiment: variables, test definitions, and YAML-based GUI automation instructions such as mouse clicks or keyboard inputs.
 The directory <code class="docutils literal notranslate"><span class="pre">img</span></code> contains images used for GUI automation.</p>
-<p>In the following we will create a simple example experiment to delete a file from the Documents folder to the trash bin on a Windows 11 machine.
+<p>In the following we will create a simple example experiment to delete a file from the Documents folder to the trash bin on Ubuntu.
 We therefore start by creating the experiment template:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">create</span> <span class="n">TrashBinDeleteFile</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">create</span> <span class="n">ubuntu_deletefile</span>
 </pre></div>
 </div>
 <p>We start with the metadata file, which would look like this:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">environments</span><span class="p">:</span>
-<span class="w"> </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">win11</span>
+<span class="w"> </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu24043</span>
 </pre></div>
 </div>
-<p>We then create the tests within the testset file.
-It contains a list of tests, as well as the name of the experiment.
-Each test must specify a name, a description, a function and parameters.
-The function specifies the test to be performed, such as checking if a file exists or checking if a file contains a specific line.
-The parameters specify the file or directory to be checked, the line to be checked or the regex to be checked.
-An example testset file in our example would look like this:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TrashBinDeleteFile</span>
-<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Test</span><span class="nv"> </span><span class="s">experiment</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">delete</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">it</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">moved</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">trash</span><span class="nv"> </span><span class="s">bin&#39;</span>
-<span class="nt">tests</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testfile_created</span>
-<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Verify</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">does</span><span class="nv"> </span><span class="s">not</span><span class="nv"> </span><span class="s">exist</span><span class="nv"> </span><span class="s">before</span><span class="nv"> </span><span class="s">experiment&#39;</span>
-<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_exists</span>
-<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/testfile.txt&#39;</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testfile_deleted</span>
-<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Verify</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">was</span><span class="nv"> </span><span class="s">deleted</span><span class="nv"> </span><span class="s">successfully&#39;</span>
-<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_does_not_exist</span>
-<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/testfile.txt&#39;</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trashbin_check</span>
-<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">metadata</span><span class="nv"> </span><span class="s">exists&#39;</span>
-<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csv_contains_line_matching_regex</span>
-<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;C:/Users/vagrant/Documents/trashbin/*.csv&#39;</span>
-<span class="w">      </span><span class="nt">entry</span><span class="p">:</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!re</span><span class="w"> </span><span class="s">&#39;.*&#39;</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;$I&#39;</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;C:\Users\vagrant\Documents\testfile&#39;</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!re</span><span class="w"> </span><span class="s">&#39;.*&#39;</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="kt">!timestamp</span>
-<span class="w">          </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{</span><span class="nv"> </span><span class="s">TIMESTAMP.DELETIONDATE</span><span class="nv"> </span><span class="s">}}&#39;</span>
-<span class="w">          </span><span class="nt">tolerance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
-</pre></div>
-</div>
-<p>This file contains three tests: one checking if the test file exists initially, one checking if the file was deleted successfully, and one checking if the trash bin artifact (when parsed with RBCmd to a CSV file) contains a line in a given format.
-We can save variables within the playbook and use them in the testset file (as shown with <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">TIMESTAMP.DELETIONDATE</span> <span class="pre">}}</span></code>).</p>
-<p>We now create the playbook file, which contains the YAML-based GUI automation steps.
-The playbook uses a declarative approach where you specify actions like clicks, keyboard input, and test executions.
-An example playbook file for our example would look like this:</p>
+<p>We then create the playbook file, which contains everything needed for the experiment including variables, tests, and actions.
+The playbook uses a declarative approach where you specify settings, variables, test definitions, and actions like clicks, keyboard input, and test executions all in one file.</p>
+<p>An example playbook file for our Ubuntu file deletion experiment would look like this:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
 <span class="w">  </span><span class="c1"># Default pause between actions (seconds)</span>
 <span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
@@ -231,20 +176,64 @@ An example playbook file for our example would look like this:</p>
 
 <span class="c1"># Variables that can be used throughout the playbook</span>
 <span class="nt">variables</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;vagrant&quot;</span>
-<span class="w">  </span><span class="nt">filepath</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;C:/Users/{{</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">}}/Documents/testfile.txt&quot;</span>
+<span class="w">  </span><span class="nt">username</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;adare&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Username</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">target</span><span class="nv"> </span><span class="s">system&quot;</span>
+
+<span class="w">  </span><span class="nt">filepath</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/home/{{username}}/Documents/testfile.txt&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Full</span><span class="nv"> </span><span class="s">path</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file&quot;</span>
+
+<span class="w">  </span><span class="nt">trashbin_path</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/home/{{username}}/.local/share/Trash&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Path</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">user&#39;s</span><span class="nv"> </span><span class="s">trash</span><span class="nv"> </span><span class="s">bin&quot;</span>
+
+<span class="c1"># Test definitions</span>
+<span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testfile_created</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Verify</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">does</span><span class="nv"> </span><span class="s">exist</span><span class="nv"> </span><span class="s">before</span><span class="nv"> </span><span class="s">experiment&#39;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_exists</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{filepath}}&#39;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testfile_deleted</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Verify</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">was</span><span class="nv"> </span><span class="s">deleted</span><span class="nv"> </span><span class="s">successfully&#39;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_does_not_exist</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{filepath}}&#39;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trashbin_check_file</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">exists</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">trashbin&#39;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_exists</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{trashbin_path}}/files/testfile.txt&#39;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trahsbin_check_info_file</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">info</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">exists</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">trashbin&#39;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_exists</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{trashbin_path}}/info/testfile.txt.trashinfo&#39;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trashbin_check_info_date</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">deletion</span><span class="nv"> </span><span class="s">date</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">info</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">correct&#39;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_equals</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;/home/adare/.local/share/Trash/info/testfile.txt.trashinfo&#39;</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">        </span><span class="no">[Trash Info]</span>
+<span class="w">        </span><span class="no">Path=/home/adare/Documents/testfile.txt</span>
+<span class="w">        </span><span class="no">DeletionDate={{ deletion_timestamp | format(&#39;%Y-%m-%dT%H:%M:%S&#39;) | tolerance(5, -5) }}</span>
 
 <span class="nt">actions</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">Test</span><span class="nv"> </span><span class="s">File&quot;</span>
 <span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;create</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">deleted</span><span class="nv"> </span><span class="s">file&quot;</span>
-<span class="w">      </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;This</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file.&#39;</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">filepath</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;This</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file.&#39;</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">filepath</span><span class="nv"> </span><span class="s">}}&quot;</span>
 <span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testfile_created</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">target</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;explorer.png&quot;</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Open</span><span class="nv"> </span><span class="s">File</span><span class="nv"> </span><span class="s">Explorer&quot;</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nautilus_taskbar.png&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Open</span><span class="nv"> </span><span class="s">Ubuntu</span><span class="nv"> </span><span class="s">File</span><span class="nv"> </span><span class="s">Explorer&quot;</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
 <span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">additional</span><span class="nv"> </span><span class="s">time</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">File</span><span class="nv"> </span><span class="s">Explorer</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">open</span><span class="nv"> </span><span class="s">since</span><span class="nv"> </span><span class="s">some</span><span class="nv"> </span><span class="s">systems</span><span class="nv"> </span><span class="s">are</span><span class="nv"> </span><span class="s">slow&quot;</span>
@@ -257,27 +246,21 @@ An example playbook file for our example would look like this:</p>
 <span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Navigate</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">Documents</span><span class="nv"> </span><span class="s">folder&quot;</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">target</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testfile&quot;</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testfile.txt&quot;</span>
 <span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Select</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">delete</span><span class="nv"> </span><span class="s">it</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">shortcut&quot;</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;delete&quot;</span><span class="p p-Indicator">]</span>
 <span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">test</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">using</span><span class="nv"> </span><span class="s">keyboard</span><span class="nv"> </span><span class="s">shortcut&quot;</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Save</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">timestamp</span><span class="nv"> </span><span class="s">of</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">deletion</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">later</span><span class="nv"> </span><span class="s">verification&quot;</span>
-<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TIMESTAMP.DELETIONDATE</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deletion_timestamp</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
 <span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">deletion</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">complete&quot;</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testfile_deleted</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Check</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">metadata</span><span class="nv"> </span><span class="s">exists</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">trash</span><span class="nv"> </span><span class="s">bin&quot;</span>
-<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
-<span class="w">            </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;RBCmd&quot;</span>
-<span class="w">            </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Run</span><span class="nv"> </span><span class="s">RBCmd.exe</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">check</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">metadata&quot;</span>
-<span class="w">            </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RBCmd.exe</span>
-<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;RBCmd.exe</span><span class="nv"> </span><span class="s">-d</span><span class="nv"> </span><span class="s">C:\</span><span class="nv"> </span><span class="s">--csv</span><span class="nv"> </span><span class="s">C:/Users/vagrant/Documents/trashbin&#39;</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trashbin_check</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trashbin_check_file</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trahsbin_check_info_file</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trashbin_check_info_date</span>
 </pre></div>
 </div>
 <p>As you can see, the playbook uses YAML syntax and provides several types of actions:</p>
@@ -286,20 +269,19 @@ An example playbook file for our example would look like this:</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">click</span></code>: Mouse clicks using image recognition or text finding</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">keyboard</span></code>: Keyboard input and key combinations</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">idle</span></code>: Wait/pause actions</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">test</span></code>: Execute tests from the testset file</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test</span></code>: Execute tests defined in the playbook</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">save_timestamp</span></code>: Save timestamps for later use in tests</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">block</span></code>: Group actions together</p></li>
 </ul>
 <p>The playbook can use images to find elements on the screen. To provide these images, you must place them in the <code class="docutils literal notranslate"><span class="pre">img</span></code> folder within the experiment directory.
-For this example you can download the images from <a class="reference external" href="https://github.com/fkie-cad/adare/tree/dev/adare/appdata/examples/experiments/TrashBinDeleteFile/img">GitHub</a>.
+For this example you can download the images from <a class="reference external" href="https://github.com/fkie-cad/adare/tree/dev/adare/appdata/examples/experiments/ubuntu_deletefile/img">GitHub</a>.
 More detailed explanation as well as details on creating an experiment can be found in <a class="reference internal" href="experiment.html#create-an-experiment"><span class="std std-ref">Create an Experiment</span></a>.</p>
 <p>Now that we have created the experiment, we can finally run it:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="n">TrashBinDeleteFile</span> <span class="o">-</span><span class="n">e</span> <span class="n">win11</span> <span class="o">--</span><span class="n">fake</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="n">ubuntu_deletefile</span> <span class="o">-</span><span class="n">e</span> <span class="n">ubuntu24043</span>
 </pre></div>
 </div>
 <p>This will start the virtual machine and execute the experiment on it.
-While the experiment is running, the user can see the progress of the experiment in the terminal.
-The <code class="docutils literal notranslate"><span class="pre">--fake</span></code> flag runs the experiment in a test mode for development purposes.</p>
+While the experiment is running, the user can see the progress of the experiment in the terminal.</p>
 <p>To later see more detailed information about the run, a user can run:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">show</span> <span class="n">run</span> <span class="o">&lt;</span><span class="n">run_ulid</span><span class="o">&gt;</span>
 </pre></div>
@@ -505,10 +487,7 @@ It also allows the user to rerun the action multiple times with in between modif
 
            </div>
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../installation/index.html" class="btn btn-neutral float-left" title="Installation Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="environment.html" class="btn btn-neutral float-right" title="Create an Environment" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-    </div>
+          <footer>
 
   <hr/>
 

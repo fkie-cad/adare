@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Welcome to ADARE’s documentation! &mdash; ADARE  documentation</title>
+  <title>ADARE Documentation &mdash; ADARE  documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="_static/css/custom.css?v=903d06c1" />
@@ -43,12 +43,19 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation/index.html">Installation Guide</a></li>
-<li class="toctree-l1"><a class="reference internal" href="gettingstarted/index.html">Getting Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="architecture/index.html">Structure and Concepts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cli/index.html">Command Line Interface (CLI)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart/index.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli-reference/index.html">CLI Reference</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Technical Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="architecture/index.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="advanced/index.html">Advanced</a></li>
 </ul>
 
@@ -66,7 +73,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Welcome to ADARE’s documentation!</li>
+      <li class="breadcrumb-item active">ADARE Documentation</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -76,16 +83,84 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="welcome-to-adare-s-documentation">
-<h1>Welcome to ADARE’s documentation!<a class="headerlink" href="#welcome-to-adare-s-documentation" title="Link to this heading"></a></h1>
-<p>Welcome to the documentation of <em>ADARE</em> - the <span class="boldprimary">A</span>utomated <span class="boldprimary">D</span>esktop <span class="boldprimary">A</span>nalysis framework for <span class="boldprimary">R</span>eproducible <span class="boldprimary">E</span>xperiments.</p>
-<p>ADARE is a framework designed to detect changes in forensic artifacts or forensic tools across different software and operating system versions.
-By combining automated GUI actions that mimic user behavior with structured tests to validate expected artifact behavior, ADARE enables comprehensive forensic experimentation within a virtual machine environment.</p>
-<p>Users can leverage ADARE to reproduce and validate existing experiments or create their own forensic experiments.
-Additionally,  <a class="reference external" href="https://adare.seclab-bonn.de/">Adare Web</a> provides a platform for sharing experiments and results with the community.</p>
-<p>For a step-by-step guide on using ADARE, it is recommended to start with the <a class="reference internal" href="gettingstarted/index.html#walkthrough-quick-start-guide"><span class="std std-ref">Walkthrough: Quick Start Guide</span></a> chapter, which explains how to create and run experiments.</p>
+  <section id="adare-documentation">
+<h1>ADARE Documentation<a class="headerlink" href="#adare-documentation" title="Link to this heading"></a></h1>
+<p><strong>Automated Desktop Analysis framework for Reproducible Experiments</strong></p>
+<a class="reference internal image-reference" href="_images/logo.png"><img alt="ADARE Logo" class="align-right" src="_images/logo.png" style="width: 150px;" />
+</a>
+<p>ADARE is a powerful framework designed for <strong>forensic artifact analysis</strong> and <strong>digital forensics research</strong>. It automates desktop interactions within virtual machines to detect and analyze changes in forensic artifacts across different software and operating system versions.</p>
+<section id="what-makes-adare-unique">
+<h2>What makes ADARE unique?<a class="headerlink" href="#what-makes-adare-unique" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>🔬 <strong>Forensic Focus</strong></dt><dd><p>Specifically designed for digital forensics research with built-in artifact analysis capabilities</p>
+</dd>
+<dt>🤖 <strong>GUI Automation</strong></dt><dd><p>Uses advanced computer vision and GUI automation to simulate realistic user interactions</p>
+</dd>
+<dt>📊 <strong>Reproducible Experiments</strong></dt><dd><p>YAML-based playbooks ensure experiments can be shared, reproduced, and validated by others</p>
+</dd>
+<dt>🔄 <strong>Cross-Platform Testing</strong></dt><dd><p>Test forensic tools and artifacts across multiple OS versions and software configurations</p>
+</dd>
+<dt>🌐 <strong>Community Sharing</strong></dt><dd><p>Integration with <a class="reference external" href="https://adare.seclab-bonn.de/">ADARE Web</a> for sharing experiments and results</p>
+</dd>
+</dl>
+</section>
+<section id="key-use-cases">
+<h2>Key Use Cases<a class="headerlink" href="#key-use-cases" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>Forensic Tool Validation</strong></dt><dd><p>Test how forensic tools behave across different OS versions and validate their reliability</p>
+</dd>
+<dt><strong>Artifact Analysis</strong></dt><dd><p>Analyze how user actions create, modify, or delete forensic artifacts (registry entries, file timestamps, browser history, etc.)</p>
+</dd>
+<dt><strong>Research &amp; Education</strong></dt><dd><p>Create reproducible experiments for forensic research papers or educational content</p>
+</dd>
+<dt><strong>Compliance Testing</strong></dt><dd><p>Ensure forensic procedures work consistently across different system configurations</p>
+</dd>
+</dl>
+</section>
+<section id="quick-example">
+<h2>Quick Example<a class="headerlink" href="#quick-example" title="Link to this heading"></a></h2>
+<p>Here’s what a simple ADARE experiment looks like:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Delete a file and verify trash bin artifacts</span>
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file_explorer.png&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;testfile.txt&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;delete&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_deleted</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_does_not_exist</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/home/user/testfile.txt&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trash_artifact_created</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_exists</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/home/user/.local/share/Trash/files/testfile.txt&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="getting-started">
+<h2>Getting Started<a class="headerlink" href="#getting-started" title="Link to this heading"></a></h2>
+<p>Ready to start? Follow our step-by-step guide:</p>
+<ol class="arabic simple">
+<li><p><strong>Install ADARE</strong> → <a class="reference internal" href="installation/index.html"><span class="doc">Installation Guide</span></a></p></li>
+<li><p><strong>Quick Tutorial</strong> → <a class="reference internal" href="quickstart/index.html"><span class="doc">Quick Start</span></a></p></li>
+<li><p><strong>Create Your First Experiment</strong> → <a class="reference internal" href="quickstart/first-experiment.html"><span class="doc">First Experiment</span></a></p></li>
+</ol>
+</section>
+<section id="documentation-structure">
+<h2>Documentation Structure<a class="headerlink" href="#documentation-structure" title="Link to this heading"></a></h2>
 <div class="toctree-wrapper compound">
 </div>
+<div class="toctree-wrapper compound">
+</div>
+<div class="toctree-wrapper compound">
+</div>
+</section>
 </section>
 
 
