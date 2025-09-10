@@ -9,7 +9,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] built tests/test experiments for new testfunctions
 - [ ] check if we can easily add new testfunctionsets? 
 - [ ] test if we can still run adare if we delete cloned repo
-- [ ] test if we can run dev experiments that allow for easy change of experiments for testing -> we then need to make the experiment.yml not write-protected?!
+- [x] test if we can run dev experiments that allow for easy change of experiments for testing -> we then need to make the experiment.yml not write-protected?! -> DONE: disabled file protection temporarily
 - [ ] check experiment development/test flag features? what does what? document and maybe improve
 
 ## Planned Features

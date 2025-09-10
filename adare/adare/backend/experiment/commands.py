@@ -1125,3 +1125,32 @@ def _copy_adare_log_to_run_directory(run_directory: ExperimentRunDirectory):
         log.info('No active log file found, skipping adare log copy')
 
 
+def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
+    """Test an experiment in development mode - creates fake run that gets cleaned up.
+    
+    This function provides a development-friendly way to test experiments without
+    creating persistent runs or requiring integrity checks. Perfect for iterative
+    development and testing of experiment playbooks.
+    
+    Args:
+        project_path: Path to the project directory
+        experiment_name: Name of the experiment to test
+        environment_name: Name of the environment to use
+    """
+    import asyncio
+    
+    log.info(f'Starting experiment test: {experiment_name} in environment {environment_name}')
+    
+    # Run experiment in test mode (creates fake run that gets cleaned up)
+    asyncio.run(experiment_run(
+        project_path=project_path, 
+        experiment_name=experiment_name, 
+        environment_name=environment_name, 
+        disable_printing=False,  # Show output for development feedback
+        test=True,  # This creates fake runs that are cleaned up automatically
+        debug_screenshots=True,  # Enable debug screenshots for development
+        preserve_snapshot=False,  # Don't preserve snapshots in test mode
+        runlog=False  # Don't save logs for test runs
+    ))
+
+
