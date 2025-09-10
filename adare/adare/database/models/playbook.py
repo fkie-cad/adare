@@ -58,7 +58,7 @@ class PlaybookItem(Base):
     playbook = relationship("Playbook", back_populates="items")
     parent = relationship("PlaybookItem", remote_side=[id], back_populates="children")
     children = relationship("PlaybookItem", back_populates="parent", cascade="all, delete-orphan")
-    executions = relationship("ActionExecution", back_populates="playbook_item")
+    executions = relationship("ActionExecution", back_populates="playbook_item", cascade="all, delete-orphan")
 
 
 class ActionExecution(Base):

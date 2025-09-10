@@ -53,63 +53,14 @@
 <ul class="current">
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Project Management</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#understanding-projects">Understanding Projects</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#what-is-a-project">What is a Project?</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#project-structure">Project Structure</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#directory-layout">Directory Layout</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#shared-resources">Shared Resources</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#creating-projects">Creating Projects</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#basic-project-creation">Basic Project Creation</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#project-naming-best-practices">Project Naming Best Practices</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#project-directory-navigation">Project Directory Navigation</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#managing-projects">Managing Projects</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#listing-projects">Listing Projects</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#project-information">Project Information</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#removing-projects">Removing Projects</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#working-with-shared-resources">Working with Shared Resources</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#programs-directory">Programs Directory</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#ocr-language-data">OCR Language Data</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#project-configuration">Project Configuration</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#project-metadata">Project Metadata</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#environment-defaults">Environment Defaults</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#git-integration">Git Integration</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#collaboration-workflows">Collaboration Workflows</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#sharing-projects">Sharing Projects</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#team-workflows">Team Workflows</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#project-templates">Project Templates</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#creating-templates">Creating Templates</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#using-templates">Using Templates</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#best-practices">Best Practices</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#organization">Organization</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#resource-management">Resource Management</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#security">Security</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#next-steps">Next Steps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#creating-projects">Creating Projects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#managing-projects">Managing Projects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#project-structure">Project Structure</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="environments.html">Environment Management</a></li>
 <li class="toctree-l2"><a class="reference internal" href="playbooks.html">Playbook Guide</a></li>
 <li class="toctree-l2"><a class="reference internal" href="playbook-actions.html">Playbook Actions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="index.html#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="index.html#daily-workflow">Daily Workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="index.html#quick-reference">Quick Reference</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
@@ -147,439 +98,42 @@
              
   <section id="project-management">
 <h1>Project Management<a class="headerlink" href="#project-management" title="Link to this heading"></a></h1>
-<p>Projects are the top-level organizational unit in ADARE. They group related environments, experiments, and shared resources for specific research areas or use cases.</p>
-<section id="understanding-projects">
-<h2>Understanding Projects<a class="headerlink" href="#understanding-projects" title="Link to this heading"></a></h2>
-<section id="what-is-a-project">
-<h3>What is a Project?<a class="headerlink" href="#what-is-a-project" title="Link to this heading"></a></h3>
-<p>A project in ADARE is:</p>
-<ul class="simple">
-<li><p><strong>A directory structure</strong> that organizes your forensic research</p></li>
-<li><p><strong>A logical grouping</strong> of related environments and experiments</p></li>
-<li><p><strong>A shared workspace</strong> for tools, templates, and resources</p></li>
-<li><p><strong>A unit of collaboration</strong> that can be shared with others</p></li>
-</ul>
-</section>
-</section>
-<section id="project-structure">
-<h2>Project Structure<a class="headerlink" href="#project-structure" title="Link to this heading"></a></h2>
-<section id="directory-layout">
-<h3>Directory Layout<a class="headerlink" href="#directory-layout" title="Link to this heading"></a></h3>
-<p>When you create a project, ADARE generates this structure:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>my-project/
-├── environments/              # Virtual machine environments
-│   ├── windows-10/           # Environment-specific directories
-│   └── ubuntu-22/
-├── programs/                 # Shared tools and utilities
-│   ├── custom-tools/         # Your forensic tools
-│   └── third-party/          # External utilities
-├── tessdata/                 # OCR language data
-│   ├── eng.traineddata       # English language model
-│   └── deu.traineddata       # German language model (example)
-└── .adare-project            # Project metadata (hidden)
-</pre></div>
-</div>
-</section>
-<section id="shared-resources">
-<h3>Shared Resources<a class="headerlink" href="#shared-resources" title="Link to this heading"></a></h3>
-<p>Projects provide shared resources accessible to all environments:</p>
-<dl class="simple">
-<dt><strong>programs/</strong></dt><dd><p>Custom forensic tools, scripts, and utilities used across experiments</p>
-</dd>
-<dt><strong>tessdata/</strong></dt><dd><p>Tesseract OCR language models for text recognition in different languages</p>
-</dd>
-<dt><strong>Templates</strong></dt><dd><p>Reusable playbook templates and configuration files</p>
-</dd>
-<dt><strong>Documentation</strong></dt><dd><p>Project-specific guides, procedures, and findings</p>
-</dd>
-</dl>
-</section>
-</section>
+<p>Projects organize related experiments and provide shared resources.</p>
 <section id="creating-projects">
 <h2>Creating Projects<a class="headerlink" href="#creating-projects" title="Link to this heading"></a></h2>
-<section id="basic-project-creation">
-<h3>Basic Project Creation<a class="headerlink" href="#basic-project-creation" title="Link to this heading"></a></h3>
-<p>Create a new project:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create project in current directory</span>
-adare<span class="w"> </span>project<span class="w"> </span>create<span class="w"> </span>forensics-research
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create a new project</span>
+adare<span class="w"> </span>project<span class="w"> </span>create<span class="w"> </span>my-project
 
-<span class="c1"># Create project with description</span>
-adare<span class="w"> </span>project<span class="w"> </span>create<span class="w"> </span>mobile-analysis<span class="w"> </span>--description<span class="w"> </span><span class="s2">&quot;iOS and Android artifact analysis&quot;</span>
-
-<span class="c1"># Create project in specific location</span>
-<span class="nb">cd</span><span class="w"> </span>/research/projects
-adare<span class="w"> </span>project<span class="w"> </span>create<span class="w"> </span>windows-registry-study
+<span class="c1"># Create with description</span>
+adare<span class="w"> </span>project<span class="w"> </span>create<span class="w"> </span>my-project<span class="w"> </span>--description<span class="w"> </span><span class="s2">&quot;Research project&quot;</span>
 </pre></div>
 </div>
-</section>
-<section id="project-naming-best-practices">
-<h3>Project Naming Best Practices<a class="headerlink" href="#project-naming-best-practices" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Use Descriptive Names</strong></dt><dd><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">browser-forensics</span></code> ✓</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">project1</span></code> ✗</p></li>
-</ul>
-</dd>
-<dt><strong>Include Context</strong></dt><dd><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">2024-thesis-malware-analysis</span></code> ✓</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">malware</span></code> ✗ (too generic)</p></li>
-</ul>
-</dd>
-<dt><strong>Use Consistent Convention</strong></dt><dd><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">forensics-browser-chrome</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">forensics-registry-hive</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">forensics-mobile-ios</span></code></p></li>
-</ul>
-</dd>
-<dt><strong>Avoid Special Characters</strong></dt><dd><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">network-analysis</span></code> ✓</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">network</span> <span class="pre">&amp;</span> <span class="pre">analysis</span></code> ✗</p></li>
-</ul>
-</dd>
-</dl>
-</section>
-<section id="project-directory-navigation">
-<h3>Project Directory Navigation<a class="headerlink" href="#project-directory-navigation" title="Link to this heading"></a></h3>
-<p>After creating a project, navigate to it:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Move into project directory</span>
-<span class="nb">cd</span><span class="w"> </span>forensics-research
-
-<span class="c1"># Verify you&#39;re in a project</span>
-adare<span class="w"> </span>project<span class="w"> </span>list
-
-<span class="c1"># View project structure</span>
-ls<span class="w"> </span>-la
-</pre></div>
-</div>
-</section>
 </section>
 <section id="managing-projects">
 <h2>Managing Projects<a class="headerlink" href="#managing-projects" title="Link to this heading"></a></h2>
-<section id="listing-projects">
-<h3>Listing Projects<a class="headerlink" href="#listing-projects" title="Link to this heading"></a></h3>
-<p>View all projects in your system:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List all projects</span>
 adare<span class="w"> </span>project<span class="w"> </span>list
 
-<span class="c1"># Output example:</span>
-<span class="c1"># Projects:</span>
-<span class="c1"># ├── forensics-research        /home/user/forensics-research</span>
-<span class="c1"># ├── mobile-analysis          /home/user/research/mobile-analysis</span>
-<span class="c1"># └── registry-study           /home/user/projects/registry-study</span>
-</pre></div>
-</div>
-</section>
-<section id="project-information">
-<h3>Project Information<a class="headerlink" href="#project-information" title="Link to this heading"></a></h3>
-<p>Get detailed project information:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Show current project info (run from project directory)</span>
+<span class="c1"># Show project information</span>
 adare<span class="w"> </span>project<span class="w"> </span>info
 
-<span class="c1"># Show specific project info</span>
-adare<span class="w"> </span>project<span class="w"> </span>info<span class="w"> </span>forensics-research
+<span class="c1"># Remove project</span>
+adare<span class="w"> </span>project<span class="w"> </span>remove<span class="w"> </span>my-project
 </pre></div>
 </div>
 </section>
-<section id="removing-projects">
-<h3>Removing Projects<a class="headerlink" href="#removing-projects" title="Link to this heading"></a></h3>
-<p>Remove projects you no longer need:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Remove project (will prompt for confirmation)</span>
-adare<span class="w"> </span>project<span class="w"> </span>remove<span class="w"> </span>old-research
-
-<span class="c1"># Force removal without confirmation</span>
-adare<span class="w"> </span>project<span class="w"> </span>remove<span class="w"> </span>old-research<span class="w"> </span>--force
-</pre></div>
-</div>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>Removing a project deletes all environments, experiments, and results. This action cannot be undone!</p>
-</div>
-</section>
-</section>
-<section id="working-with-shared-resources">
-<h2>Working with Shared Resources<a class="headerlink" href="#working-with-shared-resources" title="Link to this heading"></a></h2>
-<section id="programs-directory">
-<h3>Programs Directory<a class="headerlink" href="#programs-directory" title="Link to this heading"></a></h3>
-<p>The <code class="docutils literal notranslate"><span class="pre">programs/</span></code> directory stores tools used across all environments in the project.</p>
-<p><strong>Adding Custom Tools</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Add your forensic analysis script</span>
-cp<span class="w"> </span>~/my-forensic-tool.py<span class="w"> </span>programs/custom-tools/
-
-<span class="c1"># Make it executable</span>
-chmod<span class="w"> </span>+x<span class="w"> </span>programs/custom-tools/my-forensic-tool.py
-</pre></div>
-</div>
-<p><strong>Organizing Tools</strong></p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>programs/
-├── custom-tools/
-│   ├── registry-parser.py
-│   ├── timeline-analyzer.sh
-│   └── artifact-extractor.py
-├── third-party/
-│   ├── volatility/
-│   ├── autopsy-plugins/
-│   └── yara-rules/
-└── templates/
-    ├── playbook-templates/
-    └── config-templates/
-</pre></div>
-</div>
-<p><strong>Using Tools in Experiments</strong></p>
-<p>Reference shared tools in your playbooks:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Run</span><span class="nv"> </span><span class="s">Custom</span><span class="nv"> </span><span class="s">Registry</span><span class="nv"> </span><span class="s">Parser&quot;</span>
-<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;python3</span><span class="nv"> </span><span class="s">/project/programs/custom-tools/registry-parser.py&quot;</span>
-<span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-</pre></div>
-</div>
-</section>
-<section id="ocr-language-data">
-<h3>OCR Language Data<a class="headerlink" href="#ocr-language-data" title="Link to this heading"></a></h3>
-<p>The <code class="docutils literal notranslate"><span class="pre">tessdata/</span></code> directory contains language models for optical character recognition.</p>
-<p><strong>Adding Languages</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Download German language data</span>
-wget<span class="w"> </span>https://github.com/tesseract-ocr/tessdata/raw/main/deu.traineddata
-mv<span class="w"> </span>deu.traineddata<span class="w"> </span>tessdata/
-
-<span class="c1"># Download French language data</span>
-wget<span class="w"> </span>https://github.com/tesseract-ocr/tessdata/raw/main/fra.traineddata
-mv<span class="w"> </span>fra.traineddata<span class="w"> </span>tessdata/
-</pre></div>
-</div>
-<p><strong>Using Different Languages</strong></p>
-<p>Configure OCR language in playbooks:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">ocr</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;deu&quot;</span><span class="w">  </span><span class="c1"># Use German OCR</span>
-
-<span class="nt">actions</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Datei&quot;</span><span class="w">      </span><span class="c1"># German for &quot;File&quot;</span>
-<span class="w">        </span><span class="nt">ocr_language</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;deu&quot;</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="project-configuration">
-<h2>Project Configuration<a class="headerlink" href="#project-configuration" title="Link to this heading"></a></h2>
-<section id="project-metadata">
-<h3>Project Metadata<a class="headerlink" href="#project-metadata" title="Link to this heading"></a></h3>
-<p>Project settings are stored in <code class="docutils literal notranslate"><span class="pre">.adare-project</span></code>:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;forensics-research&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Digital forensics research project&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;created&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2025-09-10T10:00:00Z&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1.0&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;settings&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;default_timeout&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">300</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;screenshot_quality&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">95</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;ocr_languages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;eng&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;deu&quot;</span><span class="p">]</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-</section>
-<section id="environment-defaults">
-<h3>Environment Defaults<a class="headerlink" href="#environment-defaults" title="Link to this heading"></a></h3>
-<p>Set project-wide defaults for all environments:</p>
-<div class="literal-block-wrapper docutils container" id="id1">
-<div class="code-block-caption"><span class="caption-text">.adare-defaults.yml</span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Default settings for all environments</span>
-<span class="nt">vm</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4096&quot;</span>
-<span class="w">  </span><span class="nt">cpus</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
-
-<span class="nt">playbook</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.5</span>
-<span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
-<span class="w">  </span><span class="nt">screenshot</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;png&quot;</span>
-<span class="w">    </span><span class="nt">quality</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">95</span>
-
-<span class="nt">ocr</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">languages</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;eng&quot;</span><span class="p p-Indicator">]</span>
-<span class="w">  </span><span class="nt">confidence</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.8</span>
-</pre></div>
-</div>
-</div>
-</section>
-<section id="git-integration">
-<h3>Git Integration<a class="headerlink" href="#git-integration" title="Link to this heading"></a></h3>
-<p>Projects work well with version control:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Initialize git repository</span>
-<span class="nb">cd</span><span class="w"> </span>forensics-research
-git<span class="w"> </span>init
-
-<span class="c1"># Create .gitignore for ADARE</span>
-cat<span class="w"> </span>&gt;<span class="w"> </span>.gitignore<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
-<span class="s"># VM files and results</span>
-<span class="s">environments/*/results/</span>
-<span class="s">environments/*/logs/</span>
-<span class="s">environments/*/run/</span>
-<span class="s">*.vdi</span>
-<span class="s">*.vmdk</span>
-<span class="s">*.vbox</span>
-
-<span class="s"># Temporary files</span>
-<span class="s">.tmp/</span>
-<span class="s">*.log</span>
-
-<span class="s"># OS-specific files</span>
-<span class="s">.DS_Store</span>
-<span class="s">Thumbs.db</span>
-<span class="s">EOF</span>
-
-<span class="c1"># Add and commit project structure</span>
-git<span class="w"> </span>add<span class="w"> </span>.
-git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Initial project structure&quot;</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="collaboration-workflows">
-<h2>Collaboration Workflows<a class="headerlink" href="#collaboration-workflows" title="Link to this heading"></a></h2>
-<section id="sharing-projects">
-<h3>Sharing Projects<a class="headerlink" href="#sharing-projects" title="Link to this heading"></a></h3>
-<p><strong>Via Git Repository</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Push to shared repository</span>
-git<span class="w"> </span>remote<span class="w"> </span>add<span class="w"> </span>origin<span class="w"> </span>https://github.com/team/forensics-research.git
-git<span class="w"> </span>push<span class="w"> </span>-u<span class="w"> </span>origin<span class="w"> </span>main
-
-<span class="c1"># Others can clone the project</span>
-git<span class="w"> </span>clone<span class="w"> </span>https://github.com/team/forensics-research.git
-<span class="nb">cd</span><span class="w"> </span>forensics-research
-</pre></div>
-</div>
-<p><strong>Via ADARE Web Platform</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Login to ADARE Web</span>
-adare<span class="w"> </span>web<span class="w"> </span>login
-
-<span class="c1"># Publish project structure (without VM files)</span>
-adare<span class="w"> </span>web<span class="w"> </span>publish<span class="w"> </span>--project-template
-
-<span class="c1"># Others can download the template</span>
-adare<span class="w"> </span>web<span class="w"> </span>download<span class="w"> </span>project<span class="w"> </span>forensics-research
-</pre></div>
-</div>
-</section>
-<section id="team-workflows">
-<h3>Team Workflows<a class="headerlink" href="#team-workflows" title="Link to this heading"></a></h3>
-<p><strong>Role-Based Access</strong></p>
+<section id="project-structure">
+<h2>Project Structure<a class="headerlink" href="#project-structure" title="Link to this heading"></a></h2>
+<p>Each project contains:</p>
 <ul class="simple">
-<li><p><strong>Project Lead</strong>: Creates structure, manages environments</p></li>
-<li><p><strong>Researchers</strong>: Create experiments, analyze results</p></li>
-<li><p><strong>IT Support</strong>: Manages VMs and infrastructure</p></li>
-<li><p><strong>Reviewers</strong>: Access results and reports</p></li>
+<li><p><strong>environments/</strong>: Environment configuration files</p></li>
+<li><p><strong>experiments/</strong>: Individual experiment directories</p></li>
+<li><p><strong>shared/</strong>: Shared resources with data/ and tools/ subdirectories</p></li>
+<li><p><strong>testfunctions/</strong>: Test function modules</p></li>
+<li><p><strong>vm/</strong>: Virtual machine files</p></li>
+<li><p><strong>run/</strong>: Experiment execution results and logs</p></li>
 </ul>
-<p><strong>Branch-Based Development</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create feature branch for new experiment</span>
-git<span class="w"> </span>checkout<span class="w"> </span>-b<span class="w"> </span>experiment/browser-history-analysis
-
-<span class="c1"># Develop experiment</span>
-adare<span class="w"> </span>experiment<span class="w"> </span>create<span class="w"> </span>browser-history-analysis
-<span class="c1"># ... work on experiment ...</span>
-
-<span class="c1"># Commit and merge</span>
-git<span class="w"> </span>add<span class="w"> </span>.
-git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Add browser history analysis experiment&quot;</span>
-git<span class="w"> </span>checkout<span class="w"> </span>main
-git<span class="w"> </span>merge<span class="w"> </span>experiment/browser-history-analysis
-</pre></div>
-</div>
-</section>
-</section>
-<section id="project-templates">
-<h2>Project Templates<a class="headerlink" href="#project-templates" title="Link to this heading"></a></h2>
-<section id="creating-templates">
-<h3>Creating Templates<a class="headerlink" href="#creating-templates" title="Link to this heading"></a></h3>
-<p>Save successful project structures as templates:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create template from existing project</span>
-adare<span class="w"> </span>project<span class="w"> </span>template<span class="w"> </span>create<span class="w"> </span>--from<span class="w"> </span>forensics-research<span class="w"> </span>--name<span class="w"> </span><span class="s2">&quot;Digital Forensics Template&quot;</span>
-</pre></div>
-</div>
-<p><strong>Template Structure</strong></p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>forensics-template/
-├── environments/
-│   └── template-configs/
-│       ├── windows-10.yml
-│       ├── windows-11.yml
-│       └── ubuntu-22.yml
-├── experiments/
-│   └── example-experiments/
-│       ├── file-deletion-analysis/
-│       └── registry-modification/
-├── programs/
-│   └── common-tools/
-└── documentation/
-    ├── setup-guide.md
-    └── best-practices.md
-</pre></div>
-</div>
-</section>
-<section id="using-templates">
-<h3>Using Templates<a class="headerlink" href="#using-templates" title="Link to this heading"></a></h3>
-<p>Start new projects from templates:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create project from template</span>
-adare<span class="w"> </span>project<span class="w"> </span>create<span class="w"> </span>my-new-research<span class="w"> </span>--from-template<span class="w"> </span><span class="s2">&quot;Digital Forensics Template&quot;</span>
-
-<span class="c1"># List available templates</span>
-adare<span class="w"> </span>project<span class="w"> </span>template<span class="w"> </span>list
-</pre></div>
-</div>
-</section>
-</section>
-<section id="best-practices">
-<h2>Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading"></a></h2>
-<section id="organization">
-<h3>Organization<a class="headerlink" href="#organization" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Clear Naming Conventions</strong></dt><dd><p>Establish and follow consistent naming patterns</p>
-</dd>
-<dt><strong>Logical Grouping</strong></dt><dd><p>Group related work in the same project</p>
-</dd>
-<dt><strong>Regular Cleanup</strong></dt><dd><p>Remove old experiments and unused resources</p>
-</dd>
-<dt><strong>Documentation</strong></dt><dd><p>Document project purpose, setup, and procedures</p>
-</dd>
-</dl>
-</section>
-<section id="resource-management">
-<h3>Resource Management<a class="headerlink" href="#resource-management" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Shared Tools</strong></dt><dd><p>Place commonly-used tools in <code class="docutils literal notranslate"><span class="pre">programs/</span></code> directory</p>
-</dd>
-<dt><strong>Template Reuse</strong></dt><dd><p>Create templates for repeated project patterns</p>
-</dd>
-<dt><strong>Version Control</strong></dt><dd><p>Track changes to experiments and configurations</p>
-</dd>
-<dt><strong>Backup Strategy</strong></dt><dd><p>Regular backups of project data and results</p>
-</dd>
-</dl>
-</section>
-<section id="security">
-<h3>Security<a class="headerlink" href="#security" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Access Control</strong></dt><dd><p>Limit project access to authorized team members</p>
-</dd>
-<dt><strong>Sensitive Data</strong></dt><dd><p>Keep real case data in separate, secured projects</p>
-</dd>
-<dt><strong>VM Security</strong></dt><dd><p>Ensure VM images are clean and from trusted sources</p>
-</dd>
-<dt><strong>Network Isolation</strong></dt><dd><p>Isolate test VMs from production networks</p>
-</dd>
-</dl>
-</section>
-</section>
-<section id="next-steps">
-<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
-<p>With projects mastered, continue to:</p>
-<ul class="simple">
-<li><p><strong>Environment Setup</strong>: <a class="reference internal" href="environments.html"><span class="doc">Environment Management</span></a> - Configure virtual machines</p></li>
-<li><p><strong>Playbook Creation</strong>: <a class="reference internal" href="playbooks.html"><span class="doc">Playbook Guide</span></a> - Design forensic automation</p></li>
-<li><p><strong>Advanced Organization</strong>: <a class="reference internal" href="../advanced/index.html"><span class="doc">Advanced</span></a> - Complex project structures</p></li>
-</ul>
+<p>The project directory serves as the working directory for all ADARE commands.</p>
 </section>
 </section>
 

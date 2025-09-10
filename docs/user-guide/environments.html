@@ -54,63 +54,16 @@
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="projects.html">Project Management</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Environment Management</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#understanding-environments">Understanding Environments</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#what-is-an-environment">What is an Environment?</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#environment-vs-vm">Environment vs. VM</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#creating-environments">Creating Environments</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#environment-configuration-file">Environment Configuration File</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#environment-configuration">Environment Configuration</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#required-fields">Required Fields</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#loading-environments">Loading Environments</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#vm-image-sources">VM Image Sources</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#vm-image-preparation">VM Image Preparation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#optional-fields">Optional Fields</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="#managing-environments">Managing Environments</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#listing-environments">Listing Environments</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#environment-information">Environment Information</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#updating-environments">Updating Environments</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#deleting-environments">Deleting Environments</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#working-with-vms">Working with VMs</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#vm-lifecycle">VM Lifecycle</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#vm-status-and-control">VM Status and Control</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#vm-resource-management">VM Resource Management</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#snapshots-and-state-management">Snapshots and State Management</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#network-configuration">Network Configuration</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#network-types">Network Types</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#security-considerations">Security Considerations</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#advanced-configuration">Advanced Configuration</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#environment-variables">Environment Variables</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#custom-scripts">Custom Scripts</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#software-management">Software Management</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#environment-templates">Environment Templates</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#creating-templates">Creating Templates</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#using-templates">Using Templates</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#best-practices">Best Practices</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#vm-image-management">VM Image Management</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#resource-planning">Resource Planning</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#organization">Organization</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#next-steps">Next Steps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#managing-environments">Managing Environments</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="playbooks.html">Playbook Guide</a></li>
 <li class="toctree-l2"><a class="reference internal" href="playbook-actions.html">Playbook Actions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="index.html#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="index.html#daily-workflow">Daily Workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="index.html#quick-reference">Quick Reference</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
@@ -148,484 +101,60 @@
              
   <section id="environment-management">
 <h1>Environment Management<a class="headerlink" href="#environment-management" title="Link to this heading"></a></h1>
-<p>Environments in ADARE define virtual machine configurations and contain the experiments that run on those VMs. They represent specific testing scenarios like “Windows 11 with Office 365” or “Ubuntu 22.04 Server.”</p>
-<section id="understanding-environments">
-<h2>Understanding Environments<a class="headerlink" href="#understanding-environments" title="Link to this heading"></a></h2>
-<section id="what-is-an-environment">
-<h3>What is an Environment?<a class="headerlink" href="#what-is-an-environment" title="Link to this heading"></a></h3>
-<p>An environment consists of:</p>
-<ul class="simple">
-<li><p><strong>Virtual Machine Configuration</strong>: OS, software, and settings</p></li>
-<li><p><strong>Experiment Collection</strong>: All tests that run on this VM setup</p></li>
-<li><p><strong>Shared Context</strong>: Common variables and resources for experiments</p></li>
-<li><p><strong>Execution History</strong>: Results and logs from experiment runs</p></li>
-</ul>
-</section>
-<section id="environment-vs-vm">
-<h3>Environment vs. VM<a class="headerlink" href="#environment-vs-vm" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Environment</strong> (Logical)</dt><dd><p>The configuration, experiments, and metadata</p>
-</dd>
-<dt><strong>Virtual Machine</strong> (Physical)</dt><dd><p>The actual VM instance running the environment</p>
-</dd>
-</dl>
-<p>One environment can have multiple VM instances (snapshots, parallel runs, etc.).</p>
-</section>
-</section>
-<section id="creating-environments">
-<h2>Creating Environments<a class="headerlink" href="#creating-environments" title="Link to this heading"></a></h2>
-<section id="environment-configuration-file">
-<h3>Environment Configuration File<a class="headerlink" href="#environment-configuration-file" title="Link to this heading"></a></h3>
-<p>Environments are defined using YAML configuration files:</p>
-<div class="literal-block-wrapper docutils container" id="id1">
-<div class="code-block-caption"><span class="caption-text">windows11-forensics.yml</span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">win11-forensics</span>
-<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">11</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">forensic</span><span class="nv"> </span><span class="s">analysis</span><span class="nv"> </span><span class="s">tools&quot;</span>
-<span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/vms/Windows11-Forensics.ova&quot;</span>
-
-<span class="nt">os</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows&quot;</span>
-<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span>
-<span class="w">  </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Pro&quot;</span>
-<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;11</span><span class="nv"> </span><span class="s">22H2&quot;</span>
-<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;English&quot;</span>
-<span class="w">  </span><span class="nt">architecture</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;x64&quot;</span>
-
-<span class="nt">hardware</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;8192&quot;</span><span class="w">        </span><span class="c1"># MB</span>
-<span class="w">  </span><span class="nt">cpus</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
-<span class="w">  </span><span class="nt">disk_space</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;100&quot;</span><span class="w">     </span><span class="c1"># GB</span>
-
-<span class="nt">network</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;NAT&quot;</span><span class="w">           </span><span class="c1"># or &quot;Bridged&quot;, &quot;Host-only&quot;</span>
-<span class="w">  </span><span class="nt">isolated</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">        </span><span class="c1"># Block internet access</span>
-
-<span class="nt">software</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Autopsy&quot;</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4.19.3&quot;</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Volatility&quot;</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;3.0&quot;</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;YARA&quot;</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4.2&quot;</span>
-
-<span class="nt">credentials</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;forensics&quot;</span>
-<span class="w">  </span><span class="c1"># Note: passwords should be managed securely</span>
-
-<span class="nt">tags</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">windows</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forensics</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gui-automation</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifact-analysis</span>
-
-<span class="nt">settings</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">auto_login</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">  </span><span class="nt">disable_updates</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">  </span><span class="nt">disable_defender</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># Keep for realistic testing</span>
-</pre></div>
-</div>
-</div>
-</section>
-<section id="required-fields">
-<h3>Required Fields<a class="headerlink" href="#required-fields" title="Link to this heading"></a></h3>
-<p><strong>Minimal Configuration</strong></p>
+<p>Environments define virtual machine configurations for running experiments.</p>
+<section id="environment-configuration">
+<h2>Environment Configuration<a class="headerlink" href="#environment-configuration" title="Link to this heading"></a></h2>
+<p>Environments are defined using YAML files with these key fields:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-environment</span>
 <span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/vm.ova&quot;</span>
 <span class="nt">os</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows&quot;</span>
 <span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span><span class="w">  </span><span class="c1"># or &quot;linux&quot;</span>
+<span class="w">  </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Pro&quot;</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;11&quot;</span>
+<span class="w">  </span><span class="nt">architecture</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;x64&quot;</span>
+
+<span class="nt">postsetupinstallations</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Install</span><span class="nv"> </span><span class="s">Tool&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;setup.exe</span><span class="nv"> </span><span class="s">/S&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Install</span><span class="nv"> </span><span class="s">custom</span><span class="nv"> </span><span class="s">tool&quot;</span>
+<span class="w">    </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+
+<span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;windows&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;forensics&quot;</span><span class="p p-Indicator">]</span>
+<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">11</span><span class="nv"> </span><span class="s">forensics</span><span class="nv"> </span><span class="s">environment&quot;</span>
 </pre></div>
 </div>
-<p><strong>Complete Configuration</strong></p>
-<p>All optional fields with descriptions:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment-name</span><span class="w">              </span><span class="c1"># Required: unique identifier</span>
-<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Environment</span><span class="nv"> </span><span class="s">purpose&quot;</span><span class="w">  </span><span class="c1"># Optional: human description</span>
-<span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/vm.ova&quot;</span><span class="w">              </span><span class="c1"># Required: VM image path</span>
-
-<span class="nt">os</span><span class="p">:</span><span class="w">                                </span><span class="c1"># Required: OS information</span>
-<span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows&quot;</span><span class="w">                    </span><span class="c1"># OS name (display)</span>
-<span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span><span class="w">             </span><span class="c1"># Required: &quot;windows&quot; or &quot;linux&quot;</span>
-<span class="w">  </span><span class="nt">distribution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Pro&quot;</span><span class="w">              </span><span class="c1"># Edition/distribution</span>
-<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;11&quot;</span><span class="w">                    </span><span class="c1"># Version number</span>
-<span class="w">  </span><span class="nt">language</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;English&quot;</span><span class="w">              </span><span class="c1"># UI language</span>
-<span class="w">  </span><span class="nt">architecture</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;x64&quot;</span><span class="w">              </span><span class="c1"># CPU architecture</span>
-
-<span class="nt">hardware</span><span class="p">:</span><span class="w">                          </span><span class="c1"># Optional: VM resources</span>
-<span class="w">  </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4096&quot;</span><span class="w">                   </span><span class="c1"># RAM in MB</span>
-<span class="w">  </span><span class="nt">cpus</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span><span class="w">                          </span><span class="c1"># CPU cores</span>
-<span class="w">  </span><span class="nt">disk_space</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;50&quot;</span><span class="w">                 </span><span class="c1"># Disk in GB</span>
-
-<span class="nt">network</span><span class="p">:</span><span class="w">                           </span><span class="c1"># Optional: network config</span>
-<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;NAT&quot;</span><span class="w">                      </span><span class="c1"># Network adapter type</span>
-<span class="w">  </span><span class="nt">isolated</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">                  </span><span class="c1"># Block internet access</span>
-
-<span class="nt">software</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">                       </span><span class="c1"># Optional: installed software list</span>
-<span class="nt">credentials</span><span class="p">:</span><span class="w">                       </span><span class="c1"># Optional: login info</span>
-<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;user&quot;</span>
-<span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">                          </span><span class="c1"># Optional: categorization tags</span>
-<span class="nt">settings</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">                      </span><span class="c1"># Optional: environment-specific settings</span>
-</pre></div>
-</div>
+<section id="required-fields">
+<h3>Required Fields<a class="headerlink" href="#required-fields" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>name</strong>: Environment identifier</p></li>
+<li><p><strong>vm</strong>: Path to VM image file (.ova)</p></li>
+<li><p><strong>os.platform</strong>: Either “windows” or “linux”</p></li>
+</ul>
 </section>
-<section id="loading-environments">
-<h3>Loading Environments<a class="headerlink" href="#loading-environments" title="Link to this heading"></a></h3>
-<p>Create the environment in ADARE:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load environment from config file</span>
-adare<span class="w"> </span>environment<span class="w"> </span>load<span class="w"> </span>windows11-forensics.yml
-
-<span class="c1"># Load with specific project</span>
-adare<span class="w"> </span>environment<span class="w"> </span>load<span class="w"> </span>config.yml<span class="w"> </span>--project<span class="w"> </span>forensics-research
-
-<span class="c1"># Force update existing environment</span>
-adare<span class="w"> </span>environment<span class="w"> </span>load<span class="w"> </span>config.yml<span class="w"> </span>--force
-</pre></div>
-</div>
-</section>
-<section id="vm-image-sources">
-<h3>VM Image Sources<a class="headerlink" href="#vm-image-sources" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Pre-built Images</strong></dt><dd><p>Download from <a class="reference external" href="https://adare.seclab-bonn.de/">ADARE Web</a></p>
-</dd>
-</dl>
-<p><strong>Create Custom VM</strong></p>
-<p>Follow the <a class="reference internal" href="../installation/vm-setup.html"><span class="doc">VM Setup Guide</span></a> guide to create ADARE-compatible VMs</p>
-<p><strong>Export from VirtualBox</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Export existing VM as OVA</span>
-VBoxManage<span class="w"> </span><span class="nb">export</span><span class="w"> </span><span class="s2">&quot;MyVM&quot;</span><span class="w"> </span>--output<span class="w"> </span><span class="s2">&quot;/path/to/MyVM.ova&quot;</span>
-</pre></div>
-</div>
-<p><strong>Convert from Other Formats</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Convert VMware VMDK to OVA</span>
-<span class="c1"># (requires additional tools like ovftool)</span>
-ovftool<span class="w"> </span>source.vmx<span class="w"> </span>output.ova
-</pre></div>
-</div>
-</section>
-<section id="vm-image-preparation">
-<h3>VM Image Preparation<a class="headerlink" href="#vm-image-preparation" title="Link to this heading"></a></h3>
-<p>Before using a VM image:</p>
-<ol class="arabic simple">
-<li><p><strong>Clean Installation</strong>: Fresh, minimal OS install</p></li>
-<li><p><strong>Updates</strong>: Apply security patches</p></li>
-<li><p><strong>Software</strong>: Install required tools and applications</p></li>
-<li><p><strong>Configuration</strong>: Disable auto-updates, configure users</p></li>
-<li><p><strong>Snapshot</strong>: Create clean baseline snapshot</p></li>
-<li><p><strong>Export</strong>: Export as OVA for ADARE</p></li>
-</ol>
+<section id="optional-fields">
+<h3>Optional Fields<a class="headerlink" href="#optional-fields" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>postsetupinstallations</strong>: Commands to run after VM boot</p></li>
+<li><p><strong>tags</strong>: Labels for organization</p></li>
+<li><p><strong>description</strong>: Environment purpose</p></li>
+<li><p><strong>vagrantbox</strong>: Legacy Vagrant box (backward compatibility)</p></li>
+</ul>
 </section>
 </section>
 <section id="managing-environments">
 <h2>Managing Environments<a class="headerlink" href="#managing-environments" title="Link to this heading"></a></h2>
-<section id="listing-environments">
-<h3>Listing Environments<a class="headerlink" href="#listing-environments" title="Link to this heading"></a></h3>
-<p>View all environments in current project:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List environments</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load environment from config file</span>
+adare<span class="w"> </span>environment<span class="w"> </span>load<span class="w"> </span>config.yml
+
+<span class="c1"># List environments</span>
 adare<span class="w"> </span>environment<span class="w"> </span>list
 
-<span class="c1"># Example output:</span>
-<span class="c1"># Environments in project &#39;forensics-research&#39;:</span>
-<span class="c1"># ├── win11-forensics     [Windows 11 Pro]     4 experiments</span>
-<span class="c1"># ├── ubuntu-22-desktop  [Ubuntu 22.04]       2 experiments</span>
-<span class="c1"># └── macos-monterey     [macOS Monterey]     1 experiment</span>
+<span class="c1"># Delete environment</span>
+adare<span class="w"> </span>environment<span class="w"> </span>delete<span class="w"> </span>my-environment
 </pre></div>
 </div>
-</section>
-<section id="environment-information">
-<h3>Environment Information<a class="headerlink" href="#environment-information" title="Link to this heading"></a></h3>
-<p>Get detailed environment information:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Show environment details</span>
-adare<span class="w"> </span>environment<span class="w"> </span>info<span class="w"> </span>win11-forensics
-
-<span class="c1"># Show with dotnotation (project.environment)</span>
-adare<span class="w"> </span>environment<span class="w"> </span>info<span class="w"> </span>forensics-research.win11-forensics
-</pre></div>
-</div>
-</section>
-<section id="updating-environments">
-<h3>Updating Environments<a class="headerlink" href="#updating-environments" title="Link to this heading"></a></h3>
-<p>Modify environment configuration:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Update environment from new config</span>
-adare<span class="w"> </span>environment<span class="w"> </span>load<span class="w"> </span>updated-config.yml<span class="w"> </span>--force
-
-<span class="c1"># This will:</span>
-<span class="c1"># - Update metadata and settings</span>
-<span class="c1"># - Preserve existing experiments</span>
-<span class="c1"># - Update VM configuration if needed</span>
-</pre></div>
-</div>
-</section>
-<section id="deleting-environments">
-<h3>Deleting Environments<a class="headerlink" href="#deleting-environments" title="Link to this heading"></a></h3>
-<p>Remove environments you no longer need:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Delete environment (prompts for confirmation)</span>
-adare<span class="w"> </span>environment<span class="w"> </span>delete<span class="w"> </span>win11-forensics
-
-<span class="c1"># Delete by ULID</span>
-adare<span class="w"> </span>environment<span class="w"> </span>delete<span class="w"> </span>01ARZ3NDEKTSV4RRFFQ69G5FAV<span class="w"> </span>--force
-</pre></div>
-</div>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>Deleting an environment removes all associated experiments, results, and VM data!</p>
-</div>
-</section>
-</section>
-<section id="working-with-vms">
-<h2>Working with VMs<a class="headerlink" href="#working-with-vms" title="Link to this heading"></a></h2>
-<section id="vm-lifecycle">
-<h3>VM Lifecycle<a class="headerlink" href="#vm-lifecycle" title="Link to this heading"></a></h3>
-<p>Understanding the VM lifecycle helps with troubleshooting:</p>
-<ol class="arabic simple">
-<li><p><strong>Import</strong>: VM image imported into VirtualBox</p></li>
-<li><p><strong>Configure</strong>: Hardware and network settings applied</p></li>
-<li><p><strong>Start</strong>: VM boots for experiment execution</p></li>
-<li><p><strong>Snapshot</strong>: System state captured at key points</p></li>
-<li><p><strong>Reset</strong>: VM restored to clean snapshot</p></li>
-<li><p><strong>Stop</strong>: VM shut down after experiment</p></li>
-</ol>
-</section>
-<section id="vm-status-and-control">
-<h3>VM Status and Control<a class="headerlink" href="#vm-status-and-control" title="Link to this heading"></a></h3>
-<p>Monitor and control VMs:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List all VMs</span>
-adare<span class="w"> </span>vm<span class="w"> </span>list
-
-<span class="c1"># Get VM information</span>
-adare<span class="w"> </span>vm<span class="w"> </span>info<span class="w"> </span>&lt;vm-id&gt;
-
-<span class="c1"># Delete specific VM</span>
-adare<span class="w"> </span>vm<span class="w"> </span>delete<span class="w"> </span>&lt;vm-id&gt;
-
-<span class="c1"># Clean up all VMs for environment</span>
-adare<span class="w"> </span>vm<span class="w"> </span>clear<span class="w"> </span>environment<span class="w"> </span>&lt;env-id&gt;<span class="w"> </span>--force
-</pre></div>
-</div>
-</section>
-<section id="vm-resource-management">
-<h3>VM Resource Management<a class="headerlink" href="#vm-resource-management" title="Link to this heading"></a></h3>
-<p><strong>Memory Allocation</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">hardware</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;8192&quot;</span><span class="w">  </span><span class="c1"># 8GB RAM</span>
-
-<span class="c1"># Consider:</span>
-<span class="c1"># - Host system RAM</span>
-<span class="c1"># - Other running VMs</span>
-<span class="c1"># - VM OS requirements</span>
-</pre></div>
-</div>
-<p><strong>CPU Allocation</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">hardware</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">cpus</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
-
-<span class="c1"># Guidelines:</span>
-<span class="c1"># - Don&#39;t exceed host CPU cores</span>
-<span class="c1"># - More CPUs = faster GUI automation</span>
-<span class="c1"># - Balance with other VMs</span>
-</pre></div>
-</div>
-<p><strong>Disk Space</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">hardware</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">disk_space</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;100&quot;</span><span class="w">  </span><span class="c1"># 100GB</span>
-
-<span class="c1"># Plan for:</span>
-<span class="c1"># - OS and software requirements</span>
-<span class="c1"># - Experiment artifacts</span>
-<span class="c1"># - VM snapshots (can be large)</span>
-</pre></div>
-</div>
-</section>
-<section id="snapshots-and-state-management">
-<h3>Snapshots and State Management<a class="headerlink" href="#snapshots-and-state-management" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Base Snapshots</strong></dt><dd><p>Clean system state for consistent experiment starts</p>
-</dd>
-<dt><strong>Checkpoint Snapshots</strong></dt><dd><p>Save points during long experiments</p>
-</dd>
-<dt><strong>Evidence Snapshots</strong></dt><dd><p>Preserve system state for forensic analysis</p>
-</dd>
-</dl>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List VM snapshots</span>
-adare<span class="w"> </span>vm<span class="w"> </span>info<span class="w"> </span>&lt;vm-id&gt;<span class="w"> </span>--snapshots
-
-<span class="c1"># Delete old snapshots</span>
-adare<span class="w"> </span>vm<span class="w"> </span>delete-snapshot<span class="w"> </span>&lt;vm-id&gt;<span class="w"> </span>&lt;snapshot-name&gt;
-</pre></div>
-</div>
-</section>
-</section>
-<section id="network-configuration">
-<h2>Network Configuration<a class="headerlink" href="#network-configuration" title="Link to this heading"></a></h2>
-<section id="network-types">
-<h3>Network Types<a class="headerlink" href="#network-types" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>NAT (Network Address Translation)</strong></dt><dd><ul class="simple">
-<li><p>VM can access internet through host</p></li>
-<li><p>VM not directly accessible from network</p></li>
-<li><p>Good for: downloading updates, web browsing tests</p></li>
-</ul>
-</dd>
-<dt><strong>Host-Only</strong></dt><dd><ul class="simple">
-<li><p>VM can communicate with host only</p></li>
-<li><p>No internet access</p></li>
-<li><p>Good for: isolated forensic analysis</p></li>
-</ul>
-</dd>
-<dt><strong>Bridged</strong></dt><dd><ul class="simple">
-<li><p>VM gets IP on same network as host</p></li>
-<li><p>Direct network access</p></li>
-<li><p>Good for: network forensic tests</p></li>
-</ul>
-</dd>
-<dt><strong>Internal Network</strong></dt><dd><ul class="simple">
-<li><p>VMs communicate only with each other</p></li>
-<li><p>No host or internet access</p></li>
-<li><p>Good for: multi-VM scenarios</p></li>
-</ul>
-</dd>
-</dl>
-</section>
-<section id="security-considerations">
-<h3>Security Considerations<a class="headerlink" href="#security-considerations" title="Link to this heading"></a></h3>
-<p><strong>Isolation for Forensic Work</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">network</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Host-only&quot;</span><span class="w">     </span><span class="c1"># Isolate from internet</span>
-<span class="w">  </span><span class="nt">isolated</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">        </span><span class="c1"># Block all network access</span>
-</pre></div>
-</div>
-<p><strong>Controlled Internet Access</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">network</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;NAT&quot;</span>
-<span class="w">  </span><span class="nt">isolated</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">       </span><span class="c1"># Allow internet</span>
-<span class="w">  </span><span class="c1"># Use firewall rules for fine-grained control</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="advanced-configuration">
-<h2>Advanced Configuration<a class="headerlink" href="#advanced-configuration" title="Link to this heading"></a></h2>
-<section id="environment-variables">
-<h3>Environment Variables<a class="headerlink" href="#environment-variables" title="Link to this heading"></a></h3>
-<p>Define environment-wide variables:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">variables</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">forensics_tools_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;C:\\Tools\\Forensics&quot;</span>
-<span class="w">  </span><span class="nt">case_directory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;C:\\Cases&quot;</span>
-<span class="w">  </span><span class="nt">analyst_name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{username}}&quot;</span>
-
-<span class="c1"># Available in all experiments as {{forensics_tools_path}}</span>
-</pre></div>
-</div>
-</section>
-<section id="custom-scripts">
-<h3>Custom Scripts<a class="headerlink" href="#custom-scripts" title="Link to this heading"></a></h3>
-<p>Run setup scripts when environment loads:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">scripts</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">setup</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/project/programs/setup-forensic-tools.sh&quot;</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Install</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">configure</span><span class="nv"> </span><span class="s">forensic</span><span class="nv"> </span><span class="s">tools&quot;</span>
-<span class="w">      </span><span class="nt">run_as</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;admin&quot;</span>
-
-<span class="w">  </span><span class="nt">teardown</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/project/programs/cleanup.sh&quot;</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Clean</span><span class="nv"> </span><span class="s">up</span><span class="nv"> </span><span class="s">temporary</span><span class="nv"> </span><span class="s">files&quot;</span>
-</pre></div>
-</div>
-</section>
-<section id="software-management">
-<h3>Software Management<a class="headerlink" href="#software-management" title="Link to this heading"></a></h3>
-<p>Document installed software for reproducibility:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">software</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Autopsy&quot;</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4.19.3&quot;</span>
-<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;https://autopsy.com/download/&quot;</span>
-<span class="w">    </span><span class="nt">license</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Apache</span><span class="nv"> </span><span class="s">2.0&quot;</span>
-
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Volatility&quot;</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;3.0.1&quot;</span>
-<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pip</span><span class="nv"> </span><span class="s">install</span><span class="nv"> </span><span class="s">volatility3&quot;</span>
-<span class="w">    </span><span class="nt">notes</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Installed</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">Python</span><span class="nv"> </span><span class="s">virtual</span><span class="nv"> </span><span class="s">environment&quot;</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="environment-templates">
-<h2>Environment Templates<a class="headerlink" href="#environment-templates" title="Link to this heading"></a></h2>
-<section id="creating-templates">
-<h3>Creating Templates<a class="headerlink" href="#creating-templates" title="Link to this heading"></a></h3>
-<p>Save successful environment configurations as templates:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Export environment as template</span>
-adare<span class="w"> </span>environment<span class="w"> </span>template<span class="w"> </span>create<span class="w"> </span>--from<span class="w"> </span>win11-forensics<span class="w"> </span>--name<span class="w"> </span><span class="s2">&quot;Windows 11 Forensics&quot;</span>
-</pre></div>
-</div>
-<p><strong>Template Structure</strong></p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>templates/
-└── windows-11-forensics/
-    ├── environment.yml     # Environment configuration
-    ├── setup-scripts/      # Automated setup scripts
-    ├── software-lists/     # Required software
-    └── documentation/      # Setup instructions
-</pre></div>
-</div>
-</section>
-<section id="using-templates">
-<h3>Using Templates<a class="headerlink" href="#using-templates" title="Link to this heading"></a></h3>
-<p>Create new environments from templates:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List available templates</span>
-adare<span class="w"> </span>environment<span class="w"> </span>template<span class="w"> </span>list
-
-<span class="c1"># Create from template</span>
-adare<span class="w"> </span>environment<span class="w"> </span>create<span class="w"> </span>win11-case-analysis<span class="w"> </span>--from-template<span class="w"> </span><span class="s2">&quot;Windows 11 Forensics&quot;</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="best-practices">
-<h2>Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading"></a></h2>
-<section id="vm-image-management">
-<h3>VM Image Management<a class="headerlink" href="#vm-image-management" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Version Control</strong></dt><dd><p>Track VM image versions and changes</p>
-</dd>
-<dt><strong>Documentation</strong></dt><dd><p>Document software installed and configuration changes</p>
-</dd>
-<dt><strong>Security</strong></dt><dd><p>Use clean, trusted VM images</p>
-</dd>
-<dt><strong>Storage</strong></dt><dd><p>Compress and archive old VM images</p>
-</dd>
-</dl>
-</section>
-<section id="resource-planning">
-<h3>Resource Planning<a class="headerlink" href="#resource-planning" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>System Resources</strong></dt><dd><p>Plan VM resources based on host capabilities</p>
-</dd>
-<dt><strong>Parallel Execution</strong></dt><dd><p>Consider resource requirements for concurrent experiments</p>
-</dd>
-<dt><strong>Storage Growth</strong></dt><dd><p>Monitor disk usage for VMs, snapshots, and results</p>
-</dd>
-<dt><strong>Network Bandwidth</strong></dt><dd><p>Account for VM network usage in planning</p>
-</dd>
-</dl>
-</section>
-<section id="organization">
-<h3>Organization<a class="headerlink" href="#organization" title="Link to this heading"></a></h3>
-<dl class="simple">
-<dt><strong>Naming Conventions</strong></dt><dd><p>Use consistent, descriptive environment names</p>
-</dd>
-<dt><strong>Tagging System</strong></dt><dd><p>Apply consistent tags for easy filtering</p>
-</dd>
-<dt><strong>Environment Separation</strong></dt><dd><p>Separate environments for different use cases</p>
-</dd>
-<dt><strong>Regular Maintenance</strong></dt><dd><p>Periodically update and clean environments</p>
-</dd>
-</dl>
-</section>
-</section>
-<section id="next-steps">
-<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
-<p>With environments configured, move on to:</p>
-<ul class="simple">
-<li><p><strong>Writing Playbooks</strong>: <a class="reference internal" href="playbooks.html"><span class="doc">Playbook Guide</span></a> - Automate GUI interactions</p></li>
-<li><p><strong>CLI Reference</strong>: <a class="reference internal" href="../cli-reference/index.html"><span class="doc">CLI Reference</span></a> - Complete command documentation</p></li>
-</ul>
+<p>The environment configuration determines what VM is used and any setup commands that run before experiments execute.</p>
 </section>
 </section>
 

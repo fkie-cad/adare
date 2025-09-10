@@ -45,7 +45,31 @@ def exec_experiment_run(arguments):
     if project_directory := determine_projectdirectory(arguments.project):
         import asyncio
         try:
-            experiment_load(project_directory, arguments.experiment, force=False, silent=True)
+            # In test mode, check for existing runs before allowing force update
+            if arguments.test:
+                from adare.backend.experiment import database as experiment_database
+                experiment_ulid = experiment_database.get_experiment_by_project_and_name(
+                    project_directory, arguments.experiment, trigger_error=False
+                )
+                if experiment_ulid:
+                    run_count = experiment_database.get_experiment_run_count(experiment_ulid)
+                    if run_count > 0:
+                        raise LoggedException(log, 
+                            f'Cannot run test mode on experiment "{arguments.experiment}" with existing runs ({run_count} runs found).\n'
+                            f'Test mode with file modifications could overwrite real experiment data.\n'
+                            f'Use a different experiment name for testing or remove existing runs first.',
+                            possible_solutions=[
+                                f'Create a new experiment: adare experiment create {arguments.experiment}_test',
+                                f'Remove existing runs (if safe): adare run list --filter {arguments.experiment}',
+                                'Use --force flag only if you understand the risks'
+                            ]
+                        )
+                # Allow force loading in test mode to handle file changes during development
+                experiment_load(project_directory, arguments.experiment, force=True, silent=True)
+            else:
+                # Normal mode - no force loading
+                experiment_load(project_directory, arguments.experiment, force=False, silent=True)
+                
             asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot, runlog=arguments.runlog))
         except LoggedException as e:
             e.print()
