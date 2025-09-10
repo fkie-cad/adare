@@ -1,6 +1,6 @@
 # ADARE Development Roadmap
 
-This document tracks ongoing development tasks, planned features, quality of life improvements, known bugs, and testing initiatives for ADARE.
+This document tracks ongoing development tasks, planned features, quality of life improvements, known bugs for ADARE.
 
 ## Current Development Tasks
 
@@ -40,3 +40,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] real testunfction error (so no failed test) are not displayed properly in flowconsole but markes as failed test
 - [ ] by default on run no specific log is saved to adare run log dir if not --logfile is set as well?!
 - [ ] look into timezone+localtime if this all really works like expetected together with tolerance filter -> so timestamp/timezone do not work really well -> we did some localtime resolving on adarevm/maybe also adjust for timezone
+
+
+1) does the docs include how to use variables in playbooks with filter.... And add that currently the validation is not fully implemted for this so be cautios or errors will only we discovered during a run! 
+2) does the docs still include the vm creation part? 

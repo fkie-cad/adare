@@ -1,0 +1,595 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Key Concepts &mdash; ADARE  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=903d06c1" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="User Guide" href="../user-guide/index.html" />
+    <link rel="prev" title="First Experiment" href="first-experiment.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Quick Start</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="index.html#what-you-ll-learn">What You’ll Learn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-1-create-your-first-project">Step 1: Create Your First Project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-2-set-up-a-vm-environment">Step 2: Set Up a VM Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-3-create-your-first-experiment">Step 3: Create Your First Experiment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-4-add-required-images">Step 4: Add Required Images</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-5-run-your-experiment">Step 5: Run Your Experiment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#step-6-view-your-results">Step 6: View Your Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#what-you-ve-accomplished">What You’ve Accomplished</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="index.html#next-steps">Next Steps</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="index.html#advanced-experiments">Advanced Experiments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="index.html#learn-more">Learn More</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="index.html#get-help">Get Help</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="first-experiment.html">First Experiment</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">Key Concepts</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Technical Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ADARE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Quick Start</a></li>
+      <li class="breadcrumb-item active">Key Concepts</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/quickstart/concepts.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="key-concepts">
+<h1>Key Concepts<a class="headerlink" href="#key-concepts" title="Link to this heading"></a></h1>
+<p>Understanding these core concepts will help you work effectively with ADARE and create better forensic experiments.</p>
+<section id="forensic-artifacts">
+<h2>Forensic Artifacts<a class="headerlink" href="#forensic-artifacts" title="Link to this heading"></a></h2>
+<p><strong>What are forensic artifacts?</strong></p>
+<p>Forensic artifacts are digital traces left behind by user activities or system processes. In digital forensics, these artifacts provide evidence of what happened on a system.</p>
+<section id="common-artifact-types">
+<h3>Common Artifact Types<a class="headerlink" href="#common-artifact-types" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>File System Artifacts</strong></dt><dd><ul class="simple">
+<li><p>File creation, modification, deletion timestamps</p></li>
+<li><p>Temporary files and caches</p></li>
+<li><p>Trash/Recycle bin contents</p></li>
+<li><p>File metadata and attributes</p></li>
+</ul>
+</dd>
+<dt><strong>Registry Artifacts</strong> (Windows)</dt><dd><ul class="simple">
+<li><p>Application installation records</p></li>
+<li><p>User activity traces</p></li>
+<li><p>System configuration changes</p></li>
+<li><p>Recent document lists</p></li>
+</ul>
+</dd>
+<dt><strong>Browser Artifacts</strong></dt><dd><ul class="simple">
+<li><p>Browsing history and bookmarks</p></li>
+<li><p>Cookies and session data</p></li>
+<li><p>Downloads and form data</p></li>
+<li><p>Cache files</p></li>
+</ul>
+</dd>
+<dt><strong>System Artifacts</strong></dt><dd><ul class="simple">
+<li><p>Event logs and audit trails</p></li>
+<li><p>Process execution evidence</p></li>
+<li><p>Network connection logs</p></li>
+<li><p>User login/logout records</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="why-adare-matters-for-artifacts">
+<h3>Why ADARE Matters for Artifacts<a class="headerlink" href="#why-adare-matters-for-artifacts" title="Link to this heading"></a></h3>
+<p>Traditional forensic analysis is manual and time-consuming. ADARE automates:</p>
+<ul class="simple">
+<li><p><strong>Artifact Creation</strong>: Simulate user actions that create artifacts</p></li>
+<li><p><strong>Artifact Validation</strong>: Verify artifacts exist and contain expected data</p></li>
+<li><p><strong>Cross-Platform Testing</strong>: Test how artifacts behave across OS versions</p></li>
+<li><p><strong>Reproducibility</strong>: Ensure findings can be replicated by others</p></li>
+</ul>
+</section>
+</section>
+<section id="adare-architecture">
+<h2>ADARE Architecture<a class="headerlink" href="#adare-architecture" title="Link to this heading"></a></h2>
+<p>Understanding ADARE’s architecture helps you design better experiments.</p>
+<section id="components-overview">
+<h3>Components Overview<a class="headerlink" href="#components-overview" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Host System   │    │  Virtual Machine │    │   MCP Server    │
+│                 │    │                 │    │                 │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │    adare    │◄┼────┼►│   adarevm   │◄┼────┼►│ GUI Analysis│ │
+│ │   (client)  │ │    │ │  (agent)    │ │    │ │   Server    │ │
+│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+│                 │    │                 │    │                 │
+│ • Project Mgmt  │    │ • Playbook Exec │    │ • Screenshot    │
+│ • VM Control    │    │ • Test Runner   │    │ • Image Match   │
+│ • Result Store  │    │ • Artifact Scan │    │ • Text Extract  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>adare (Host Client)</strong></dt><dd><ul class="simple">
+<li><p>Manages projects, environments, experiments</p></li>
+<li><p>Controls virtual machine lifecycle</p></li>
+<li><p>Stores and analyzes results</p></li>
+<li><p>Provides CLI and web interfaces</p></li>
+</ul>
+</dd>
+<dt><strong>adarevm (VM Agent)</strong></dt><dd><ul class="simple">
+<li><p>Runs inside virtual machines</p></li>
+<li><p>Executes playbook actions</p></li>
+<li><p>Performs forensic tests</p></li>
+<li><p>Collects artifacts and evidence</p></li>
+</ul>
+</dd>
+<dt><strong>MCP Server (GUI Automation)</strong></dt><dd><ul class="simple">
+<li><p>Analyzes screenshots for GUI elements</p></li>
+<li><p>Matches images and text on screen</p></li>
+<li><p>Provides coordinates for clicking</p></li>
+<li><p>Handles OCR and computer vision</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="data-flow">
+<h3>Data Flow<a class="headerlink" href="#data-flow" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Host</strong> starts VM and loads playbook</p></li>
+<li><p><strong>VM Agent</strong> receives playbook and begins execution</p></li>
+<li><p><strong>Actions</strong> are performed (clicks, typing, commands)</p></li>
+<li><p><strong>Screenshots</strong> sent to MCP Server for analysis</p></li>
+<li><p><strong>Tests</strong> validate artifacts and system state</p></li>
+<li><p><strong>Results</strong> collected and sent back to host</p></li>
+<li><p><strong>Reports</strong> generated with forensic evidence</p></li>
+</ol>
+</section>
+</section>
+<section id="projects-environments-experiments">
+<h2>Projects, Environments &amp; Experiments<a class="headerlink" href="#projects-environments-experiments" title="Link to this heading"></a></h2>
+<p>ADARE uses a hierarchical organization system:</p>
+<section id="project-hierarchy">
+<h3>Project Hierarchy<a class="headerlink" href="#project-hierarchy" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Project (e.g., &quot;Windows Forensics Research&quot;)
+│
+├── Environment 1: &quot;Windows 10 Pro&quot;
+│   ├── Experiment A: &quot;Registry Analysis&quot;
+│   ├── Experiment B: &quot;Browser Artifacts&quot;
+│   └── Experiment C: &quot;File Deletion&quot;
+│
+├── Environment 2: &quot;Windows 11 Home&quot;
+│   ├── Experiment A: &quot;Registry Analysis&quot;
+│   ├── Experiment B: &quot;Browser Artifacts&quot;
+│   └── Experiment D: &quot;USB Device Detection&quot;
+│
+└── Shared Resources
+    ├── Custom test functions
+    ├── Common utilities
+    └── Reference images
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Projects</strong></dt><dd><p>Top-level containers for related forensic research. Examples:</p>
+<ul class="simple">
+<li><p>“Mobile Device Forensics”</p></li>
+<li><p>“Network Artifact Analysis”</p></li>
+<li><p>“Malware Behavior Study”</p></li>
+</ul>
+</dd>
+<dt><strong>Environments</strong></dt><dd><p>Specific VM configurations for testing. Examples:</p>
+<ul class="simple">
+<li><p>“iOS 16.1 Jailbroken”</p></li>
+<li><p>“Ubuntu 22.04 Server”</p></li>
+<li><p>“Windows 11 with Office 365”</p></li>
+</ul>
+</dd>
+<dt><strong>Experiments</strong></dt><dd><p>Individual forensic tests or scenarios. Examples:</p>
+<ul class="simple">
+<li><p>“WhatsApp Message Deletion”</p></li>
+<li><p>“SSH Key Extraction”</p></li>
+<li><p>“Word Document Metadata Analysis”</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="why-this-structure">
+<h3>Why This Structure?<a class="headerlink" href="#why-this-structure" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>Reusability</strong></dt><dd><p>Run the same experiment across multiple OS versions</p>
+</dd>
+<dt><strong>Organization</strong></dt><dd><p>Logically group related forensic research</p>
+</dd>
+<dt><strong>Sharing</strong></dt><dd><p>Share specific experiments or entire project templates</p>
+</dd>
+<dt><strong>Scalability</strong></dt><dd><p>Manage hundreds of experiments across dozens of environments</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="playbooks-and-actions">
+<h2>Playbooks and Actions<a class="headerlink" href="#playbooks-and-actions" title="Link to this heading"></a></h2>
+<p>Playbooks are YAML files that define automated forensic scenarios.</p>
+<section id="playbook-structure">
+<h3>Playbook Structure<a class="headerlink" href="#playbook-structure" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Experiment configuration</span>
+<span class="nt">settings</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span><span class="w">              </span><span class="c1"># Default pause between actions</span>
+<span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span><span class="w">           </span><span class="c1"># Maximum experiment duration</span>
+
+<span class="c1"># Reusable variables</span>
+<span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;forensics&quot;</span>
+<span class="w">  </span><span class="nt">evidence_file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/home/{{username}}/evidence.txt&quot;</span>
+
+<span class="c1"># Validation tests</span>
+<span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_deleted</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_does_not_exist</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{evidence_file}}&#39;</span>
+
+<span class="c1"># Automation sequence</span>
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;touch</span><span class="nv"> </span><span class="s">{{evidence_file}}&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;evidence.txt&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;delete&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_deleted</span>
+</pre></div>
+</div>
+</section>
+<section id="action-types">
+<h3>Action Types<a class="headerlink" href="#action-types" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>GUI Actions</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">click</span></code>: Mouse clicks on images or text</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">double_click</span></code>: Double-click actions</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">right_click</span></code>: Context menu interactions</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">type</span></code>: Keyboard text input</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">keyboard</span></code>: Key combinations and shortcuts</p></li>
+</ul>
+</dd>
+<dt><strong>System Actions</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">command</span></code>: Execute shell commands</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">file_operation</span></code>: File/directory operations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">registry</span></code>: Windows registry modifications</p></li>
+</ul>
+</dd>
+<dt><strong>Test Actions</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">test</span></code>: Execute validation tests</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">assert</span></code>: Inline assertions</p></li>
+</ul>
+</dd>
+<dt><strong>Flow Control</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">idle</span></code>: Pause execution</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">block</span></code>: Group related actions</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conditional</span></code>: Execute based on conditions</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">loop</span></code>: Repeat actions</p></li>
+</ul>
+</dd>
+<dt><strong>Evidence Collection</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">screenshot</span></code>: Capture screen images</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">save_timestamp</span></code>: Record precise timing</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">snapshot</span></code>: VM state snapshots</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="variables-and-templating">
+<h3>Variables and Templating<a class="headerlink" href="#variables-and-templating" title="Link to this heading"></a></h3>
+<p>Use Jinja2 templating for dynamic playbooks:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">os_type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows&quot;</span>
+<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;admin&quot;</span>
+<span class="w">  </span><span class="nt">test_files</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;document1.pdf&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;spreadsheet.xlsx&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;presentation.pptx&quot;</span>
+
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Conditional logic</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">conditional</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{os_type}}</span><span class="nv"> </span><span class="s">==</span><span class="nv"> </span><span class="s">&quot;windows&quot;&#39;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;del</span><span class="nv"> </span><span class="s">&quot;{{item}}&quot;&#39;</span>
+
+<span class="w">  </span><span class="c1"># Loop over files</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;item&quot;</span>
+<span class="w">      </span><span class="nt">values</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{test_files}}&#39;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{item}}&#39;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="tests-and-validation">
+<h2>Tests and Validation<a class="headerlink" href="#tests-and-validation" title="Link to this heading"></a></h2>
+<p>Tests verify that forensic artifacts behave as expected.</p>
+<section id="test-functions">
+<h3>Test Functions<a class="headerlink" href="#test-functions" title="Link to this heading"></a></h3>
+<p>ADARE provides built-in test functions:</p>
+<dl class="simple">
+<dt><strong>File System Tests</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">file_exists</span></code> / <code class="docutils literal notranslate"><span class="pre">file_does_not_exist</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">directory_exists</span></code> / <code class="docutils literal notranslate"><span class="pre">directory_does_not_exist</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">file_content_equals</span></code> / <code class="docutils literal notranslate"><span class="pre">file_content_contains</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">file_size_equals</span></code> / <code class="docutils literal notranslate"><span class="pre">file_modified_since</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>Registry Tests</strong> (Windows)</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">registry_key_exists</span></code> / <code class="docutils literal notranslate"><span class="pre">registry_key_does_not_exist</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">registry_value_equals</span></code> / <code class="docutils literal notranslate"><span class="pre">registry_value_contains</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">registry_key_has_subkeys</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>System Tests</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">process_running</span></code> / <code class="docutils literal notranslate"><span class="pre">process_not_running</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">service_running</span></code> / <code class="docutils literal notranslate"><span class="pre">service_stopped</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">port_open</span></code> / <code class="docutils literal notranslate"><span class="pre">port_closed</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>Forensic Tests</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">artifact_timestamp_within</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">hash_matches</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">metadata_contains</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="test-parameters">
+<h3>Test Parameters<a class="headerlink" href="#test-parameters" title="Link to this heading"></a></h3>
+<p>Tests use parameters to specify what to validate:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">check_file_timestamp</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">was</span><span class="nv"> </span><span class="s">modified</span><span class="nv"> </span><span class="s">recently&quot;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_modified_since</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/important.txt&quot;</span>
+<span class="w">      </span><span class="nt">since</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2025-01-01</span><span class="nv"> </span><span class="s">00:00:00&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">verify_hash</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Confirm</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">integrity&quot;</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hash_matches</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/critical.bin&quot;</span>
+<span class="w">      </span><span class="nt">algorithm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;sha256&quot;</span>
+<span class="w">      </span><span class="nt">expected</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;abc123def456...&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="custom-test-functions">
+<h3>Custom Test Functions<a class="headerlink" href="#custom-test-functions" title="Link to this heading"></a></h3>
+<p>Create specialized tests for your research:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># In testfunctions/custom/my_tests.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">browser_history_contains_url</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">browser</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;chrome&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if browser history contains specific URL&quot;&quot;&quot;</span>
+    <span class="c1"># Implementation here</span>
+    <span class="k">return</span> <span class="n">found</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">registry_mru_contains_file</span><span class="p">(</span><span class="n">filepath</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if Windows MRU contains file reference&quot;&quot;&quot;</span>
+    <span class="c1"># Implementation here</span>
+    <span class="k">return</span> <span class="n">found</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="gui-automation-concepts">
+<h2>GUI Automation Concepts<a class="headerlink" href="#gui-automation-concepts" title="Link to this heading"></a></h2>
+<p>Understanding GUI automation helps create reliable experiments.</p>
+<section id="target-selection">
+<h3>Target Selection<a class="headerlink" href="#target-selection" title="Link to this heading"></a></h3>
+<p>ADARE can find GUI elements using multiple strategies:</p>
+<dl>
+<dt><strong>Image Matching</strong></dt><dd><p>Match visual elements using reference screenshots:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">click</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;firefox_icon.png&quot;</span>
+<span class="w">    </span><span class="nt">confidence</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.8</span>
+</pre></div>
+</div>
+</dd>
+<dt><strong>Text Recognition</strong></dt><dd><p>Find elements by their visible text:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">click</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;File&quot;</span>
+<span class="w">    </span><span class="nt">case_sensitive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</pre></div>
+</div>
+</dd>
+<dt><strong>Coordinate-Based</strong></dt><dd><p>Click at specific screen coordinates:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">click</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">coordinates</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">100</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">200</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+</dd>
+<dt><strong>Smart Strategies</strong></dt><dd><p>Handle multiple matches intelligently:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">click</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete&quot;</span>
+<span class="w">    </span><span class="nt">strategy</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">SweepStrategy</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">index</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span><span class="w">  </span><span class="c1"># Click the 3rd &quot;Delete&quot; button found</span>
+</pre></div>
+</div>
+</dd>
+</dl>
+</section>
+<section id="reliability-best-practices">
+<h3>Reliability Best Practices<a class="headerlink" href="#reliability-best-practices" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>Use Multiple Approaches</strong></dt><dd><p>Combine image and text matching for robustness</p>
+</dd>
+<dt><strong>Add Appropriate Delays</strong></dt><dd><p>Allow time for GUI elements to load</p>
+</dd>
+<dt><strong>Handle Failures Gracefully</strong></dt><dd><p>Include retry logic and error handling</p>
+</dd>
+<dt><strong>Test Across Resolutions</strong></dt><dd><p>Verify experiments work at different screen sizes</p>
+</dd>
+<dt><strong>Screenshot Everything</strong></dt><dd><p>Visual evidence is crucial for forensic work</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="vm-and-snapshot-management">
+<h2>VM and Snapshot Management<a class="headerlink" href="#vm-and-snapshot-management" title="Link to this heading"></a></h2>
+<p>Understanding VM management optimizes experiment performance.</p>
+<section id="vm-lifecycle">
+<h3>VM Lifecycle<a class="headerlink" href="#vm-lifecycle" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Base VM Creation</strong>: Clean system state</p></li>
+<li><p><strong>Environment Setup</strong>: Install required software</p></li>
+<li><p><strong>Base Snapshot</strong>: Save clean, configured state</p></li>
+<li><p><strong>Experiment Execution</strong>: Run forensic tests</p></li>
+<li><p><strong>Results Collection</strong>: Gather artifacts and evidence</p></li>
+<li><p><strong>VM Reset</strong>: Return to base snapshot</p></li>
+<li><p><strong>Cleanup</strong>: Remove temporary data</p></li>
+</ol>
+</section>
+<section id="snapshot-strategy">
+<h3>Snapshot Strategy<a class="headerlink" href="#snapshot-strategy" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>Base Snapshots</strong></dt><dd><p>Clean system with required software installed</p>
+</dd>
+<dt><strong>Checkpoint Snapshots</strong></dt><dd><p>Key points during experiment execution</p>
+</dd>
+<dt><strong>Evidence Snapshots</strong></dt><dd><p>Preserve system state for later analysis</p>
+</dd>
+<dt><strong>Performance Snapshots</strong></dt><dd><p>Optimize for repeated experiment runs</p>
+</dd>
+</dl>
+</section>
+<section id="storage-management">
+<h3>Storage Management<a class="headerlink" href="#storage-management" title="Link to this heading"></a></h3>
+<p>VMs and results consume significant storage:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Monitor disk usage</span>
+adare<span class="w"> </span>vm<span class="w"> </span>list<span class="w"> </span>--storage
+
+<span class="c1"># Clean up old results</span>
+adare<span class="w"> </span>vm<span class="w"> </span>clear<span class="w"> </span>environment<span class="w"> </span>&lt;env_id&gt;<span class="w"> </span>--older-than<span class="w"> </span>30d
+
+<span class="c1"># Compress snapshots</span>
+adare<span class="w"> </span>vm<span class="w"> </span>compress<span class="w"> </span>&lt;vm_id&gt;
+</pre></div>
+</div>
+</section>
+</section>
+<section id="next-steps">
+<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
+<p>With these concepts mastered, you’re ready to:</p>
+<ul class="simple">
+<li><p><strong>Create Complex Experiments</strong>: <span class="xref std std-doc">../user-guide/experiments</span></p></li>
+<li><p><strong>Master the CLI</strong>: <a class="reference internal" href="../cli-reference/index.html"><span class="doc">CLI Reference</span></a></p></li>
+<li><p><strong>Understand Architecture</strong>: <a class="reference internal" href="../architecture/index.html"><span class="doc">Architecture</span></a></p></li>
+<li><p><strong>Advanced Techniques</strong>: <a class="reference internal" href="../advanced/index.html"><span class="doc">Advanced</span></a></p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="first-experiment.html" class="btn btn-neutral float-left" title="First Experiment" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../user-guide/index.html" class="btn btn-neutral float-right" title="User Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

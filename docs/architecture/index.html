@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Structure and Concepts &mdash; ADARE  documentation</title>
+  <title>Architecture &mdash; ADARE  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=903d06c1" />
@@ -20,8 +20,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Module Structure" href="module_structure.html" />
-    <link rel="prev" title="Complete Playbook Reference" href="../gettingstarted/playbook_reference.html" /> 
+    <link rel="next" title="Components" href="components.html" />
+    <link rel="prev" title="CLI Reference" href="../cli-reference/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -44,19 +44,27 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul class="current">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Structure and Concepts</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart/index.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Technical Documentation:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="components.html">Components</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data-flow.html">Data Flow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="module_structure.html">Module Structure</a></li>
-<li class="toctree-l2"><a class="reference internal" href="actionsetfile.html">Action Set File</a></li>
-<li class="toctree-l2"><a class="reference internal" href="testsetfile.html">Test Set File</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#terminology">Terminology</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#files-and-directories">Files and Directories</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
 </ul>
 
@@ -74,7 +82,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Structure and Concepts</li>
+      <li class="breadcrumb-item active">Architecture</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/architecture/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -84,12 +92,22 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="structure-and-concepts">
-<h1>Structure and Concepts<a class="headerlink" href="#structure-and-concepts" title="Link to this heading"></a></h1>
+  <section id="architecture">
+<h1>Architecture<a class="headerlink" href="#architecture" title="Link to this heading"></a></h1>
+<p>This section provides a comprehensive overview of ADARE’s architecture, components, and design principles. Understanding these concepts will help you work effectively with ADARE and troubleshoot issues.</p>
 <div class="toctree-wrapper compound">
 </div>
-<p>The ADARE framework consists of several components, whose terms are frequently used in the documentation.
-This section aims to provide a concise overview of the framework’s structure and its associated terminology.</p>
+<nav class="contents local" id="quick-navigation">
+<p class="topic-title">Quick Navigation</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#overview" id="id3">Overview</a></p></li>
+<li><p><a class="reference internal" href="#terminology" id="id4">Terminology</a></p></li>
+<li><p><a class="reference internal" href="#files-and-directories" id="id5">Files and Directories</a></p></li>
+</ul>
+</nav>
+<section id="overview">
+<h2><a class="toc-backref" href="#id3" role="doc-backlink">Overview</a><a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>ADARE is a distributed system designed for automated forensic artifact analysis. It consists of multiple cooperating components that work together to execute forensic experiments in virtual machines.</p>
 <a class="reference internal image-reference" href="../_images/structure.png"><img alt="../_images/structure.png" src="../_images/structure.png" style="width: 100%;" />
 </a>
 <p>The core functionality of this framework lies in running experiments in virtual machines and facilitating both the viewing and publishing of their results.
@@ -108,8 +126,9 @@ The relevant directory tree is depicted in the structure overview above.
 A <a class="reference internal" href="#term-testset"><span class="xref std std-term">testset</span></a> is defined in a separate YAML file, also within the experiment directory.
 To create an <a class="reference internal" href="#term-environment"><span class="xref std std-term">environment</span></a>, a YAML file known as the :term:<a href="#id1"><span class="problematic" id="id2">`</span></a>environment setup file ` is required.
 This file contains details about the Vagrant box and other information like the guest operating system.</p>
+</section>
 <section id="terminology">
-<h2>Terminology<a class="headerlink" href="#terminology" title="Link to this heading"></a></h2>
+<h2><a class="toc-backref" href="#id4" role="doc-backlink">Terminology</a><a class="headerlink" href="#terminology" title="Link to this heading"></a></h2>
 <p>Below is a list of terms that are used throughout the documentation and their meaning.</p>
 <dl class="simple glossary">
 <dt id="term-project">project<a class="headerlink" href="#term-project" title="Link to this term"></a></dt><dd><p>A project is a collection of <a class="reference internal" href="#term-environment"><span class="xref std std-term">environments</span></a>.
@@ -154,7 +173,7 @@ It can be used to group related environments and experiments.</p>
 </dl>
 </section>
 <section id="files-and-directories">
-<h2>Files and Directories<a class="headerlink" href="#files-and-directories" title="Link to this heading"></a></h2>
+<h2><a class="toc-backref" href="#id5" role="doc-backlink">Files and Directories</a><a class="headerlink" href="#files-and-directories" title="Link to this heading"></a></h2>
 <p>The ADARE framework uses a directory structure to organize its files.
 As experiments are grouped into environments and environments into projects, the directory structure reflects this hierarchy.
 The following shows the directory structure of a project.</p>
@@ -196,8 +215,8 @@ For the environment <code class="docutils literal notranslate"><span class="pre"
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../gettingstarted/playbook_reference.html" class="btn btn-neutral float-left" title="Complete Playbook Reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="module_structure.html" class="btn btn-neutral float-right" title="Module Structure" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../cli-reference/index.html" class="btn btn-neutral float-left" title="CLI Reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="components.html" class="btn btn-neutral float-right" title="Components" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

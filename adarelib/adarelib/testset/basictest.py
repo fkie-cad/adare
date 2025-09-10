@@ -243,60 +243,67 @@ class BasicTest:
     def _parse_timestamp_with_format(self, timestamp_str: str, metadata: dict, is_original: bool = False) -> 'datetime.datetime':
         """
         Parse timestamp using format metadata.
-        Rule:
-        - Only when is_original == False:
-            - If metadata['localtime'] is True: label as system-local (no clock shift).
-            - Else: treat as UTC and convert to system local time.
-        - When is_original == True: never convert; just ensure tz-aware (assume UTC if naive).
+
+        Behavior:
+        - is_original == True (template/expected side):
+            * Never convert timezones.
+            * If naive, assume UTC and attach tzinfo=UTC (label only, no clock change).
+            * If aware, return as-is.
+
+        - is_original == False (actual/observed side):
+            * DEFAULT: Treat naive strings as LOCAL wall time (label with system tz, no clock change).
+            This avoids the "assume UTC then convert to local" double-shift.
+            * If metadata['localtime'] is explicitly False, treat naive as UTC and convert to system local.
+            * If the parsed value is already tz-aware, convert to system local for consistent comparison display.
+
+        Notes:
+        - Subtraction of tz-aware datetimes is done on absolute instants, so comparison is correct.
+        - Provide `metadata['format']` for deterministic parsing when possible.
         """
         import datetime
         from dateutil import parser as _parser
 
-        # Helper: system local tzinfo (no external deps)
         _SYSTEM_TZ = datetime.datetime.now().astimezone().tzinfo
 
         def _finalize(dt: datetime.datetime) -> datetime.datetime:
-            """Apply the conversion rules based on flags."""
             if is_original:
-                # No conversion; just ensure tz-aware (assume UTC if naive)
+                # Original: ensure tz-aware, but NO conversion.
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)  # label as UTC, no clock shift
                 return dt
 
-            # Non-original: apply requested behavior
-            if metadata.get('localtime', False):
-                # Input is already local clock time -> label as local (no shift)
+            # Actual: apply interpretation rules.
+            treat_as_local = metadata.get('localtime', True)  # default True to avoid double shift
+
+            if treat_as_local:
+                # Naive actuals are LOCAL wall time → label as local (no shift).
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=_SYSTEM_TZ)
                 else:
-                    # If it oddly came with a tz, keep it; we don't convert in 'localtime' mode
-                    pass
+                    # If already aware, normalize to local for consistency.
+                    dt = dt.astimezone(_SYSTEM_TZ)
                 return dt
             else:
-                # Input is UTC clock time -> label UTC if naive, then convert to system local
+                # Explicitly treat as UTC wall time → attach UTC if naive, then convert to local.
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)  # label as UTC
+                # Convert aware/UTC to system local for display/consistency.
                 return dt.astimezone(_SYSTEM_TZ)
 
         fmt = metadata.get('format')
 
-        # Prefer explicit format if available
+        # Try explicit format first
         if fmt:
             try:
                 dt = datetime.datetime.strptime(timestamp_str, fmt)
                 return _finalize(dt)
-            except ValueError as e:
-                log.debug(f"Failed to parse timestamp '{timestamp_str}' with format '{fmt}': {e}")
+            except ValueError:
+                # Fall through to flexible parser
+                pass
 
-        # Fallback: flexible parser
-        try:
-            dt = _parser.parse(timestamp_str)
-
-            # If parser gave us an aware dt, keep it; _finalize() will decide whether to convert or not.
-            # If naive, _finalize() will attach UTC or local as needed.
-            return _finalize(dt)
-        except Exception as e:
-            raise ValueError(f"Unable to parse timestamp '{timestamp_str}': {e}")
+        # Flexible parsing fallback
+        dt = _parser.parse(timestamp_str)
+        return _finalize(dt)
 
     def _handle_placeholders_comparison(self, actual_content: str, expected_template: str) -> Tuple[bool, str]:
         """Handle comparison when placeholders are present using string splitting approach."""

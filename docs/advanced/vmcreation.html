@@ -43,16 +43,28 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul class="current">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Structure and Concepts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart/index.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Technical Documentation:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Advanced</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="testfunction.html">Write your own Testfunction</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Create Your Custom ADARE VM</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#windows-setup">Windows Setup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#windows-setup">Windows Setup</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#user-account-configuration">User Account Configuration</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#additional-configuration">Additional Configuration</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#required-software-installation">Required Software Installation</a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="#linux-setup">Linux Setup</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#base-configuration-all-environments">Base Configuration (all environments)</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#desktop-environmentspecific-setup">Desktop Environment–Specific Setup</a></li>
@@ -97,7 +109,8 @@ You therefore can either create a new VM from scratch or adapt an existing one, 
 Once configured, export the VM as an <code class="docutils literal notranslate"><span class="pre">.ova</span></code> or <code class="docutils literal notranslate"><span class="pre">.ovf</span></code> file in <strong>OVF 1.0 format</strong>.</p>
 <section id="windows-setup">
 <h2>Windows Setup<a class="headerlink" href="#windows-setup" title="Link to this heading"></a></h2>
-<p>Inside the VM, ensure the following configuration:</p>
+<section id="user-account-configuration">
+<h3>User Account Configuration<a class="headerlink" href="#user-account-configuration" title="Link to this heading"></a></h3>
 <ul class="simple">
 <li><p>Create a user account with:</p>
 <ul>
@@ -106,11 +119,53 @@ Once configured, export the VM as an <code class="docutils literal notranslate">
 </ul>
 </li>
 <li><p>Enable <strong>autologin</strong> so the VM boots directly into the <code class="docutils literal notranslate"><span class="pre">adare</span></code> user’s desktop.</p></li>
-<li><p>Install:
-- Python 3.10 or newer
-- <a class="reference external" href="https://python-poetry.org/docs/#installing-with-the-official-installer">Poetry</a>
-- VirtualBox Guest Additions</p></li>
 </ul>
+</section>
+<section id="additional-configuration">
+<h3>Additional Configuration<a class="headerlink" href="#additional-configuration" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p><strong>Disable User Account Control (UAC):</strong></p>
+<ul class="simple">
+<li><p>Go to Control Panel → <code class="docutils literal notranslate"><span class="pre">User</span> <span class="pre">Accounts</span></code> → <code class="docutils literal notranslate"><span class="pre">User</span> <span class="pre">Accounts</span></code> → <code class="docutils literal notranslate"><span class="pre">Change</span> <span class="pre">User</span> <span class="pre">Account</span> <span class="pre">Control</span> <span class="pre">settings</span></code></p></li>
+<li><p>Set the slider to the bottom (<code class="docutils literal notranslate"><span class="pre">Never</span> <span class="pre">notify</span></code>)</p></li>
+</ul>
+</li>
+<li><p><strong>Enable Developer Mode:</strong></p>
+<ul class="simple">
+<li><p>In Windows Settings, search for <code class="docutils literal notranslate"><span class="pre">For</span> <span class="pre">Developers</span></code></p></li>
+<li><p>Toggle the switch to enable Developer Mode</p></li>
+<li><p>This is required to set up shared directories properly</p></li>
+</ul>
+</li>
+<li><p><strong>Configure Windows Defender Firewall:</strong></p>
+<ol class="loweralpha simple">
+<li><p>Press <code class="docutils literal notranslate"><span class="pre">Win</span> <span class="pre">+</span> <span class="pre">R</span></code>, type <code class="docutils literal notranslate"><span class="pre">wf.msc</span></code>, and press Enter</p></li>
+<li><p>In the left panel, right-click <strong>Windows Defender Firewall with Advanced Security on Local Computer</strong> → <strong>Properties</strong></p></li>
+<li><p>For each profile tab (<strong>Domain Profile</strong>, <strong>Private Profile</strong>, and <strong>Public Profile</strong>), configure:</p>
+<ul class="simple">
+<li><p><strong>Inbound connections:</strong> Allow</p></li>
+<li><p><strong>Outbound connections:</strong> Allow (default)</p></li>
+</ul>
+</li>
+<li><p>Click <strong>OK</strong></p></li>
+</ol>
+</li>
+<li><p><strong>Apply Changes:</strong></p>
+<ul class="simple">
+<li><p>Perform a clean shutdown to apply all security changes</p></li>
+</ul>
+</li>
+</ol>
+</section>
+<section id="required-software-installation">
+<h3>Required Software Installation<a class="headerlink" href="#required-software-installation" title="Link to this heading"></a></h3>
+<p>Install the following software:</p>
+<ul class="simple">
+<li><p><strong>Python 3.10 or newer</strong></p></li>
+<li><p><strong>Poetry</strong> (<a class="reference external" href="https://python-poetry.org/docs/#installing-with-the-official-installer">Installation Guide</a>)</p></li>
+<li><p><strong>VirtualBox Guest Additions</strong></p></li>
+</ul>
+</section>
 </section>
 <section id="linux-setup">
 <h2>Linux Setup<a class="headerlink" href="#linux-setup" title="Link to this heading"></a></h2>

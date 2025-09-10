@@ -1,0 +1,800 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Flow &mdash; ADARE  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=903d06c1" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Module Structure" href="module_structure.html" />
+    <link rel="prev" title="Components" href="components.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation/index.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart/index.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Technical Documentation:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Architecture</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="components.html">Components</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Data Flow</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#experiment-lifecycle-data-flow">Experiment Lifecycle Data Flow</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#detailed-flow-stages">Detailed Flow Stages</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#stage-1-experiment-definition">Stage 1: Experiment Definition</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#input-sources">Input Sources</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#data-validation">Data Validation</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#stage-2-environment-preparation">Stage 2: Environment Preparation</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#vm-state-management">VM State Management</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#agent-initialization">Agent Initialization</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#stage-3-playbook-execution">Stage 3: Playbook Execution</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#action-processing-pipeline">Action Processing Pipeline</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#screenshot-processing">Screenshot Processing</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#stage-4-test-validation">Stage 4: Test Validation</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#test-execution-data">Test Execution Data</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#artifact-collection">Artifact Collection</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#stage-5-result-collection">Stage 5: Result Collection</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#result-aggregation">Result Aggregation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#storage-and-indexing">Storage and Indexing</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#communication-protocols">Communication Protocols</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#websocket-protocol">WebSocket Protocol</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#http-api-protocol">HTTP API Protocol</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#data-persistence-strategy">Data Persistence Strategy</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#local-storage">Local Storage</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#remote-storage-integration">Remote Storage Integration</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#performance-optimization">Performance Optimization</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#data-flow-optimization">Data Flow Optimization</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#memory-management">Memory Management</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#next-steps">Next Steps</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="module_structure.html">Module Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#terminology">Terminology</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#files-and-directories">Files and Directories</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ADARE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Architecture</a></li>
+      <li class="breadcrumb-item active">Data Flow</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/architecture/data-flow.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="data-flow">
+<h1>Data Flow<a class="headerlink" href="#data-flow" title="Link to this heading"></a></h1>
+<p>Understanding how data flows through ADARE helps with troubleshooting, optimization, and extending the framework. This section details the complete data flow from experiment creation to result analysis.</p>
+<nav class="contents local" id="quick-navigation">
+<p class="topic-title">Quick Navigation</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#experiment-lifecycle-data-flow" id="id1">Experiment Lifecycle Data Flow</a></p>
+<ul>
+<li><p><a class="reference internal" href="#overview" id="id2">Overview</a></p></li>
+<li><p><a class="reference internal" href="#detailed-flow-stages" id="id3">Detailed Flow Stages</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#stage-1-experiment-definition" id="id4">Stage 1: Experiment Definition</a></p>
+<ul>
+<li><p><a class="reference internal" href="#input-sources" id="id5">Input Sources</a></p></li>
+<li><p><a class="reference internal" href="#data-validation" id="id6">Data Validation</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#stage-2-environment-preparation" id="id7">Stage 2: Environment Preparation</a></p>
+<ul>
+<li><p><a class="reference internal" href="#vm-state-management" id="id8">VM State Management</a></p></li>
+<li><p><a class="reference internal" href="#agent-initialization" id="id9">Agent Initialization</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#stage-3-playbook-execution" id="id10">Stage 3: Playbook Execution</a></p>
+<ul>
+<li><p><a class="reference internal" href="#action-processing-pipeline" id="id11">Action Processing Pipeline</a></p></li>
+<li><p><a class="reference internal" href="#screenshot-processing" id="id12">Screenshot Processing</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#stage-4-test-validation" id="id13">Stage 4: Test Validation</a></p>
+<ul>
+<li><p><a class="reference internal" href="#test-execution-data" id="id14">Test Execution Data</a></p></li>
+<li><p><a class="reference internal" href="#artifact-collection" id="id15">Artifact Collection</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#stage-5-result-collection" id="id16">Stage 5: Result Collection</a></p>
+<ul>
+<li><p><a class="reference internal" href="#result-aggregation" id="id17">Result Aggregation</a></p></li>
+<li><p><a class="reference internal" href="#storage-and-indexing" id="id18">Storage and Indexing</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#communication-protocols" id="id19">Communication Protocols</a></p>
+<ul>
+<li><p><a class="reference internal" href="#websocket-protocol" id="id20">WebSocket Protocol</a></p></li>
+<li><p><a class="reference internal" href="#http-api-protocol" id="id21">HTTP API Protocol</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#data-persistence-strategy" id="id22">Data Persistence Strategy</a></p>
+<ul>
+<li><p><a class="reference internal" href="#local-storage" id="id23">Local Storage</a></p></li>
+<li><p><a class="reference internal" href="#remote-storage-integration" id="id24">Remote Storage Integration</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#performance-optimization" id="id25">Performance Optimization</a></p>
+<ul>
+<li><p><a class="reference internal" href="#data-flow-optimization" id="id26">Data Flow Optimization</a></p></li>
+<li><p><a class="reference internal" href="#memory-management" id="id27">Memory Management</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#next-steps" id="id28">Next Steps</a></p></li>
+</ul>
+</nav>
+<section id="experiment-lifecycle-data-flow">
+<h2><a class="toc-backref" href="#id1" role="doc-backlink">Experiment Lifecycle Data Flow</a><a class="headerlink" href="#experiment-lifecycle-data-flow" title="Link to this heading"></a></h2>
+<section id="overview">
+<h3><a class="toc-backref" href="#id2" role="doc-backlink">Overview</a><a class="headerlink" href="#overview" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>User Input → Playbook → VM Execution → Artifact Collection → Results Storage
+    │             │           │               │                    │
+    │             │           │               │                    │
+[CLI/Web]    [YAML Files]  [Screenshots]  [Forensic Data]    [Database]
+                                │               │                    │
+                                │               │                    │
+                           [MCP Server]    [Test Results]      [File System]
+</pre></div>
+</div>
+</section>
+<section id="detailed-flow-stages">
+<h3><a class="toc-backref" href="#id3" role="doc-backlink">Detailed Flow Stages</a><a class="headerlink" href="#detailed-flow-stages" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>Stage 1: Experiment Definition</strong></dt><dd><p>User creates playbook and test definitions</p>
+</dd>
+<dt><strong>Stage 2: Environment Preparation</strong></dt><dd><p>VM is started and configured for experiment</p>
+</dd>
+<dt><strong>Stage 3: Playbook Execution</strong></dt><dd><p>Actions are performed and screenshots captured</p>
+</dd>
+<dt><strong>Stage 4: Test Validation</strong></dt><dd><p>Forensic tests verify expected artifacts</p>
+</dd>
+<dt><strong>Stage 5: Result Collection</strong></dt><dd><p>All data is gathered and stored for analysis</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="stage-1-experiment-definition">
+<h2><a class="toc-backref" href="#id4" role="doc-backlink">Stage 1: Experiment Definition</a><a class="headerlink" href="#stage-1-experiment-definition" title="Link to this heading"></a></h2>
+<section id="input-sources">
+<h3><a class="toc-backref" href="#id5" role="doc-backlink">Input Sources</a><a class="headerlink" href="#input-sources" title="Link to this heading"></a></h3>
+<p><strong>User-Created Files</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>experiments/&lt;name&gt;/
+├── playbook.yml         # User-defined automation sequence
+├── metadata.yml         # Experiment configuration
+└── img/                 # Reference images for GUI automation
+</pre></div>
+</div>
+<p><strong>Configuration Data</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Example playbook data structure</span>
+<span class="nt">settings</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
+
+<span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;forensics&quot;</span>
+<span class="w">  </span><span class="nt">test_file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/test.txt&quot;</span>
+
+<span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_exists</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_exists</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{test_file}}&#39;</span>
+
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;icon.png&quot;</span><span class="p p-Indicator">}}</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_exists</span>
+</pre></div>
+</div>
+</section>
+<section id="data-validation">
+<h3><a class="toc-backref" href="#id6" role="doc-backlink">Data Validation</a><a class="headerlink" href="#data-validation" title="Link to this heading"></a></h3>
+<p>Before execution, ADARE validates:</p>
+<ul class="simple">
+<li><p>YAML syntax correctness</p></li>
+<li><p>Required fields presence</p></li>
+<li><p>Variable reference validity</p></li>
+<li><p>Test function availability</p></li>
+<li><p>Image file accessibility</p></li>
+</ul>
+<p><strong>Validation Flow</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>playbook.yml → Parser → Validator → Error Check → Execution Queue
+                  │         │           │              │
+                  │         │           │              │
+           [Syntax Tree] [Validation] [Error List] [Ready State]
+</pre></div>
+</div>
+</section>
+</section>
+<section id="stage-2-environment-preparation">
+<h2><a class="toc-backref" href="#id7" role="doc-backlink">Stage 2: Environment Preparation</a><a class="headerlink" href="#stage-2-environment-preparation" title="Link to this heading"></a></h2>
+<section id="vm-state-management">
+<h3><a class="toc-backref" href="#id8" role="doc-backlink">VM State Management</a><a class="headerlink" href="#vm-state-management" title="Link to this heading"></a></h3>
+<p><strong>VM Lifecycle Data</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Environment Config → VM Import → Snapshot Creation → Agent Start
+      │                 │             │                │
+      │                 │             │                │
+[YAML Config]      [VirtualBox]  [VM Snapshots]  [WebSocket]
+</pre></div>
+</div>
+<p><strong>Data Structures</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># VM State Information</span>
+<span class="n">vm_state</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;vm_id&quot;</span><span class="p">:</span> <span class="s2">&quot;01ARZ3NDEKTSV4RRFFQ69G5FAV&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;forensics-win11-001&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;running&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;snapshots&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;base&quot;</span><span class="p">,</span> <span class="s2">&quot;experiment-start&quot;</span><span class="p">],</span>
+    <span class="s2">&quot;network&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;NAT&quot;</span><span class="p">,</span> <span class="s2">&quot;isolated&quot;</span><span class="p">:</span> <span class="n">true</span><span class="p">},</span>
+    <span class="s2">&quot;resources&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;memory&quot;</span><span class="p">:</span> <span class="mi">8192</span><span class="p">,</span> <span class="s2">&quot;cpus&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="agent-initialization">
+<h3><a class="toc-backref" href="#id9" role="doc-backlink">Agent Initialization</a><a class="headerlink" href="#agent-initialization" title="Link to this heading"></a></h3>
+<p><strong>Communication Establishment</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Host → WebSocket Connection → VM Agent → Ready Signal → Host
+ │            │                  │           │          │
+ │            │                  │           │          │
+[Start]   [Connection]      [Agent Boot]  [Handshake] [Proceed]
+</pre></div>
+</div>
+<p><strong>Agent State Data</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;agent_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vm-agent-001&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;platform&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;windows&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;capabilities&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;gui&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;filesystem&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;registry&quot;</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;screen_resolution&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1920x1080&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;ready&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="stage-3-playbook-execution">
+<h2><a class="toc-backref" href="#id10" role="doc-backlink">Stage 3: Playbook Execution</a><a class="headerlink" href="#stage-3-playbook-execution" title="Link to this heading"></a></h2>
+<section id="action-processing-pipeline">
+<h3><a class="toc-backref" href="#id11" role="doc-backlink">Action Processing Pipeline</a><a class="headerlink" href="#action-processing-pipeline" title="Link to this heading"></a></h3>
+<p><strong>Action Execution Flow</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Action → Preprocessing → Target Resolution → Execution → Result Capture
+   │          │               │                │             │
+   │          │               │                │             │
+[YAML]   [Variable Sub]  [Coordinates]    [System Call]  [Screenshot]
+</pre></div>
+</div>
+<p><strong>Data Transformation</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Action data transformation example</span>
+
+<span class="c1"># Original YAML</span>
+<span class="n">action</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;click&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;target&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;{{button_name}}&quot;</span><span class="p">},</span>
+        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Click the {{button_name}} button&quot;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1"># After variable substitution</span>
+<span class="n">processed_action</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;click&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;target&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;Save&quot;</span><span class="p">},</span>
+        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Click the Save button&quot;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1"># After target resolution (from MCP server)</span>
+<span class="n">resolved_action</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;click&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;coordinates&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">150</span><span class="p">,</span> <span class="mi">300</span><span class="p">],</span>
+        <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="mf">0.95</span><span class="p">,</span>
+        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Click the Save button&quot;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="screenshot-processing">
+<h3><a class="toc-backref" href="#id12" role="doc-backlink">Screenshot Processing</a><a class="headerlink" href="#screenshot-processing" title="Link to this heading"></a></h3>
+<p><strong>Screenshot Data Flow</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>VM Screen → Screenshot → Compression → MCP Server → Analysis → Coordinates
+    │           │            │            │           │           │
+    │           │            │            │           │           │
+[Display]   [Raw PNG]   [Optimized]   [HTTP POST]  [CV Process] [X,Y Coords]
+</pre></div>
+</div>
+<p><strong>Image Analysis Pipeline</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Screenshot analysis data</span>
+<span class="n">screenshot_analysis</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="s2">&quot;2025-09-10T10:30:00Z&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;resolution&quot;</span><span class="p">:</span> <span class="s2">&quot;1920x1080&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;file_size&quot;</span><span class="p">:</span> <span class="mi">2048576</span><span class="p">,</span>
+    <span class="s2">&quot;analysis_results&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;text_matches&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;Save&quot;</span><span class="p">,</span> <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="mf">0.98</span><span class="p">,</span> <span class="s2">&quot;coords&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">150</span><span class="p">,</span> <span class="mi">300</span><span class="p">]},</span>
+            <span class="p">{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;Cancel&quot;</span><span class="p">,</span> <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="mf">0.92</span><span class="p">,</span> <span class="s2">&quot;coords&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">250</span><span class="p">,</span> <span class="mi">300</span><span class="p">]}</span>
+        <span class="p">],</span>
+        <span class="s2">&quot;image_matches&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span><span class="s2">&quot;template&quot;</span><span class="p">:</span> <span class="s2">&quot;button.png&quot;</span><span class="p">,</span> <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="mf">0.85</span><span class="p">,</span> <span class="s2">&quot;coords&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">150</span><span class="p">,</span> <span class="mi">300</span><span class="p">]}</span>
+        <span class="p">]</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="stage-4-test-validation">
+<h2><a class="toc-backref" href="#id13" role="doc-backlink">Stage 4: Test Validation</a><a class="headerlink" href="#stage-4-test-validation" title="Link to this heading"></a></h2>
+<section id="test-execution-data">
+<h3><a class="toc-backref" href="#id14" role="doc-backlink">Test Execution Data</a><a class="headerlink" href="#test-execution-data" title="Link to this heading"></a></h3>
+<p><strong>Test Processing Pipeline</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Test Def → Parameter Resolution → Function Execution → Result Validation
+   │             │                      │                    │
+   │             │                      │                    │
+[YAML]      [Variables]          [System Query]        [Pass/Fail]
+</pre></div>
+</div>
+<p><strong>Test Data Structures</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Test execution data</span>
+<span class="n">test_execution</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;test_name&quot;</span><span class="p">:</span> <span class="s2">&quot;file_exists_check&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="s2">&quot;file_exists&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;dst&quot;</span><span class="p">:</span> <span class="s2">&quot;/evidence/test.txt&quot;</span><span class="p">},</span>
+    <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="s2">&quot;2025-09-10T10:30:15Z&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;duration&quot;</span><span class="p">:</span> <span class="mf">0.25</span><span class="p">,</span>  <span class="c1"># seconds</span>
+    <span class="s2">&quot;result&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;PASS&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;File exists at /evidence/test.txt&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;evidence&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;file_stats&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="mi">1024</span><span class="p">,</span>
+                <span class="s2">&quot;created&quot;</span><span class="p">:</span> <span class="s2">&quot;2025-09-10T10:29:45Z&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;modified&quot;</span><span class="p">:</span> <span class="s2">&quot;2025-09-10T10:29:45Z&quot;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="artifact-collection">
+<h3><a class="toc-backref" href="#id15" role="doc-backlink">Artifact Collection</a><a class="headerlink" href="#artifact-collection" title="Link to this heading"></a></h3>
+<p><strong>Forensic Data Gathering</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>System State → Artifact Scanner → Evidence Collector → Data Storage
+     │              │                   │                 │
+     │              │                   │                 │
+[File System]   [Registry]         [Hash Values]      [Database]
+[Registry]      [Metadata]         [Timestamps]       [File System]
+[Memory]        [Hashes]           [Signatures]
+</pre></div>
+</div>
+<p><strong>Artifact Data Format</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Collected artifact data</span>
+<span class="n">artifact_collection</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;collection_timestamp&quot;</span><span class="p">:</span> <span class="s2">&quot;2025-09-10T10:30:20Z&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;artifacts&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;filesystem&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;files_created&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;/evidence/test.txt&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;files_modified&quot;</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">&quot;files_deleted&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;/tmp/original.txt&quot;</span><span class="p">]</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;registry&quot;</span><span class="p">:</span> <span class="p">{</span>  <span class="c1"># Windows only</span>
+            <span class="s2">&quot;keys_created&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;HKCU</span><span class="se">\\</span><span class="s2">Software</span><span class="se">\\</span><span class="s2">TestApp&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;values_modified&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;HKCU</span><span class="se">\\</span><span class="s2">Software</span><span class="se">\\</span><span class="s2">TestApp&quot;</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Version&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0&quot;</span><span class="p">}</span>
+            <span class="p">]</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;processes&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;started&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;notepad.exe&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;terminated&quot;</span><span class="p">:</span> <span class="p">[]</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;evidence_hashes&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;/evidence/test.txt&quot;</span><span class="p">:</span> <span class="s2">&quot;sha256:abc123...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;registry_export.reg&quot;</span><span class="p">:</span> <span class="s2">&quot;sha256:def456...&quot;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="stage-5-result-collection">
+<h2><a class="toc-backref" href="#id16" role="doc-backlink">Stage 5: Result Collection</a><a class="headerlink" href="#stage-5-result-collection" title="Link to this heading"></a></h2>
+<section id="result-aggregation">
+<h3><a class="toc-backref" href="#id17" role="doc-backlink">Result Aggregation</a><a class="headerlink" href="#result-aggregation" title="Link to this heading"></a></h3>
+<p><strong>Data Consolidation</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Screenshots → Test Results → Artifacts → Logs → Final Report
+    │             │            │          │          │
+    │             │            │          │          │
+[Image Files] [JSON Data]  [Evidence]  [Text]  [Database]
+                                                   │
+                                                   │
+                                             [File System]
+</pre></div>
+</div>
+<p><strong>Result Data Structure</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Complete experiment result</span>
+<span class="n">experiment_result</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;run_id&quot;</span><span class="p">:</span> <span class="s2">&quot;01ARZ3NDEKTSV4RRFFQ69G5FAV&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;experiment&quot;</span><span class="p">:</span> <span class="s2">&quot;file-deletion-analysis&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;environment&quot;</span><span class="p">:</span> <span class="s2">&quot;win11-forensics&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;start_time&quot;</span><span class="p">:</span> <span class="s2">&quot;2025-09-10T10:30:00Z&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;end_time&quot;</span><span class="p">:</span> <span class="s2">&quot;2025-09-10T10:35:30Z&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;duration&quot;</span><span class="p">:</span> <span class="mi">330</span><span class="p">,</span>  <span class="c1"># seconds</span>
+    <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;COMPLETED&quot;</span><span class="p">,</span>
+
+    <span class="s2">&quot;execution_summary&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;total_actions&quot;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span>
+        <span class="s2">&quot;successful_actions&quot;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span>
+        <span class="s2">&quot;failed_actions&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="s2">&quot;total_tests&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+        <span class="s2">&quot;passed_tests&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+        <span class="s2">&quot;failed_tests&quot;</span><span class="p">:</span> <span class="mi">0</span>
+    <span class="p">},</span>
+
+    <span class="s2">&quot;artifacts_collected&quot;</span><span class="p">:</span> <span class="mi">47</span><span class="p">,</span>
+    <span class="s2">&quot;screenshots_captured&quot;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span>
+    <span class="s2">&quot;log_entries&quot;</span><span class="p">:</span> <span class="mi">234</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="storage-and-indexing">
+<h3><a class="toc-backref" href="#id18" role="doc-backlink">Storage and Indexing</a><a class="headerlink" href="#storage-and-indexing" title="Link to this heading"></a></h3>
+<p><strong>Database Schema</strong></p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="c1">-- Core experiment tracking</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">experiment_runs</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">    </span><span class="n">experiment_name</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">environment_name</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">start_time</span><span class="w"> </span><span class="k">TIMESTAMP</span><span class="p">,</span>
+<span class="w">    </span><span class="n">end_time</span><span class="w"> </span><span class="k">TIMESTAMP</span><span class="p">,</span>
+<span class="w">    </span><span class="n">status</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">result_summary</span><span class="w"> </span><span class="n">JSON</span>
+<span class="p">);</span>
+
+<span class="c1">-- Test execution results</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">test_results</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">    </span><span class="n">run_id</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">test_name</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">status</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">execution_time</span><span class="w"> </span><span class="nb">REAL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">result_data</span><span class="w"> </span><span class="n">JSON</span><span class="p">,</span>
+<span class="w">    </span><span class="k">FOREIGN</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="p">(</span><span class="n">run_id</span><span class="p">)</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">experiment_runs</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
+<span class="p">);</span>
+
+<span class="c1">-- Artifact tracking</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">artifacts</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">    </span><span class="n">run_id</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">artifact_type</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">file_path</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">hash_value</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">metadata</span><span class="w"> </span><span class="n">JSON</span><span class="p">,</span>
+<span class="w">    </span><span class="k">FOREIGN</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="p">(</span><span class="n">run_id</span><span class="p">)</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">experiment_runs</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
+<span class="p">);</span>
+</pre></div>
+</div>
+<p><strong>File System Organization</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>results/&lt;run_id&gt;/
+├── metadata.json           # Experiment metadata
+├── execution_log.txt       # Detailed execution log
+├── test_results.json       # All test results
+├── artifacts/              # Collected forensic artifacts
+│   ├── filesystem/         # File system evidence
+│   ├── registry/           # Registry exports (Windows)
+│   └── memory/             # Memory dumps (if collected)
+├── screenshots/            # All captured screenshots
+│   ├── 001_action_start.png
+│   ├── 002_click_button.png
+│   └── ...
+└── reports/                # Generated reports
+    ├── summary.html        # Human-readable summary
+    ├── timeline.csv        # Forensic timeline
+    └── evidence.json       # Machine-readable evidence
+</pre></div>
+</div>
+</section>
+</section>
+<section id="communication-protocols">
+<h2><a class="toc-backref" href="#id19" role="doc-backlink">Communication Protocols</a><a class="headerlink" href="#communication-protocols" title="Link to this heading"></a></h2>
+<section id="websocket-protocol">
+<h3><a class="toc-backref" href="#id20" role="doc-backlink">WebSocket Protocol</a><a class="headerlink" href="#websocket-protocol" title="Link to this heading"></a></h3>
+<p><strong>Message Format</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;action_request&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;req_001&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2025-09-10T10:30:00Z&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;click&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;target&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;text&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Save&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;options&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;timeout&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;action_response&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;req_001&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2025-09-10T10:30:05Z&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;coordinates&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">150</span><span class="p">,</span><span class="w"> </span><span class="mi">300</span><span class="p">],</span>
+<span class="w">    </span><span class="nt">&quot;execution_time&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.5</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Protocol Flow</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Host                    VM Agent
+ │                         │
+ ├── Connection Request ──→│
+ │←── Connection Accept ───┤
+ │                         │
+ ├── Playbook Data ──────→│
+ │←── Acknowledge ─────────┤
+ │                         │
+ ├── Action Request ─────→│
+ │←── Screenshot ──────────┤
+ │←── Action Complete ─────┤
+ │                         │
+ ├── Test Request ───────→│
+ │←── Test Results ────────┤
+</pre></div>
+</div>
+</section>
+<section id="http-api-protocol">
+<h3><a class="toc-backref" href="#id21" role="doc-backlink">HTTP API Protocol</a><a class="headerlink" href="#http-api-protocol" title="Link to this heading"></a></h3>
+<p><strong>MCP Server API</strong></p>
+<div class="highlight-http notranslate"><div class="highlight"><pre><span></span><span class="err">POST /api/v1/analyze_image</span>
+<span class="err">Content-Type: application/json</span>
+
+<span class="err">{</span>
+<span class="err">  &quot;image&quot;: &quot;base64_encoded_screenshot&quot;,</span>
+<span class="err">  &quot;targets&quot;: [</span>
+<span class="err">    {&quot;type&quot;: &quot;text&quot;, &quot;value&quot;: &quot;Save&quot;, &quot;confidence&quot;: 0.8},</span>
+<span class="err">    {&quot;type&quot;: &quot;image&quot;, &quot;template&quot;: &quot;button_template.png&quot;}</span>
+<span class="err">  ]</span>
+<span class="err">}</span>
+</pre></div>
+</div>
+<p><strong>Response Format</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;analysis_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;analysis_001&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2025-09-10T10:30:00Z&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;results&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;target_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;text&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;target_value&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Save&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;matches&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span><span class="nt">&quot;coordinates&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">150</span><span class="p">,</span><span class="w"> </span><span class="mi">300</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;confidence&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.95</span><span class="p">}</span>
+<span class="w">      </span><span class="p">]</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;processing_time&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.125</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="data-persistence-strategy">
+<h2><a class="toc-backref" href="#id22" role="doc-backlink">Data Persistence Strategy</a><a class="headerlink" href="#data-persistence-strategy" title="Link to this heading"></a></h2>
+<section id="local-storage">
+<h3><a class="toc-backref" href="#id23" role="doc-backlink">Local Storage</a><a class="headerlink" href="#local-storage" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>SQLite Database</strong></dt><dd><ul class="simple">
+<li><p>Experiment metadata and results</p></li>
+<li><p>Test execution history</p></li>
+<li><p>Performance metrics</p></li>
+<li><p>Index data for fast queries</p></li>
+</ul>
+</dd>
+<dt><strong>File System</strong></dt><dd><ul class="simple">
+<li><p>Screenshots and images</p></li>
+<li><p>Forensic artifacts</p></li>
+<li><p>Log files</p></li>
+<li><p>Generated reports</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="remote-storage-integration">
+<h3><a class="toc-backref" href="#id24" role="doc-backlink">Remote Storage Integration</a><a class="headerlink" href="#remote-storage-integration" title="Link to this heading"></a></h3>
+<p><strong>ADARE Web Platform</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Upload data structure</span>
+<span class="n">web_upload</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;experiment_id&quot;</span><span class="p">:</span> <span class="s2">&quot;01ARZ3NDEKTSV4RRFFQ69G5FAV&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span>          <span class="c1"># Experiment info</span>
+    <span class="s2">&quot;results_summary&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span>   <span class="c1"># High-level results</span>
+    <span class="s2">&quot;artifacts&quot;</span><span class="p">:</span> <span class="p">[</span><span class="o">...</span><span class="p">],</span>         <span class="c1"># Evidence files</span>
+    <span class="s2">&quot;privacy_level&quot;</span><span class="p">:</span> <span class="s2">&quot;public&quot;</span><span class="p">,</span>  <span class="c1"># Sharing settings</span>
+    <span class="s2">&quot;tags&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;forensics&quot;</span><span class="p">,</span> <span class="s2">&quot;registry&quot;</span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Synchronization Flow</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Local Results → Privacy Filter → Upload Queue → Web Platform
+     │              │               │              │
+     │              │               │              │
+[Full Data]   [Public Only]    [Batch Upload]  [Shared DB]
+</pre></div>
+</div>
+</section>
+</section>
+<section id="performance-optimization">
+<h2><a class="toc-backref" href="#id25" role="doc-backlink">Performance Optimization</a><a class="headerlink" href="#performance-optimization" title="Link to this heading"></a></h2>
+<section id="data-flow-optimization">
+<h3><a class="toc-backref" href="#id26" role="doc-backlink">Data Flow Optimization</a><a class="headerlink" href="#data-flow-optimization" title="Link to this heading"></a></h3>
+<p><strong>Streaming vs. Batch Processing</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span># Real-time streaming (low latency)
+Screenshot → Immediate Analysis → Quick Action
+
+# Batch processing (high throughput)
+Multiple Screenshots → Batch Analysis → Bulk Actions
+</pre></div>
+</div>
+<p><strong>Compression and Caching</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Screenshot optimization</span>
+<span class="n">optimization_pipeline</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;capture&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;format&quot;</span><span class="p">:</span> <span class="s2">&quot;PNG&quot;</span><span class="p">,</span> <span class="s2">&quot;quality&quot;</span><span class="p">:</span> <span class="mi">95</span><span class="p">},</span>
+    <span class="s2">&quot;compression&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;algorithm&quot;</span><span class="p">:</span> <span class="s2">&quot;zlib&quot;</span><span class="p">,</span> <span class="s2">&quot;level&quot;</span><span class="p">:</span> <span class="mi">6</span><span class="p">},</span>
+    <span class="s2">&quot;caching&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;enabled&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;ttl&quot;</span><span class="p">:</span> <span class="mi">300</span><span class="p">},</span>
+    <span class="s2">&quot;transmission&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;chunk_size&quot;</span><span class="p">:</span> <span class="mi">8192</span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="memory-management">
+<h3><a class="toc-backref" href="#id27" role="doc-backlink">Memory Management</a><a class="headerlink" href="#memory-management" title="Link to this heading"></a></h3>
+<p><strong>Data Lifecycle Management</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Capture → Process → Store → Archive → Cleanup
+   │         │        │        │         │
+   │         │        │        │         │
+[Memory]  [Memory]   [Disk]   [Archive] [Delete]
+</pre></div>
+</div>
+<p><strong>Resource Monitoring</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Resource usage tracking</span>
+<span class="n">resource_metrics</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;memory_usage&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;host_client&quot;</span><span class="p">:</span> <span class="s2">&quot;256 MB&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;vm_agent&quot;</span><span class="p">:</span> <span class="s2">&quot;128 MB&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;mcp_server&quot;</span><span class="p">:</span> <span class="s2">&quot;512 MB&quot;</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;disk_usage&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;screenshots&quot;</span><span class="p">:</span> <span class="s2">&quot;2.1 GB&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;artifacts&quot;</span><span class="p">:</span> <span class="s2">&quot;450 MB&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;logs&quot;</span><span class="p">:</span> <span class="s2">&quot;125 MB&quot;</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;network_bandwidth&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;websocket_traffic&quot;</span><span class="p">:</span> <span class="s2">&quot;1.2 MB/s&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;http_api_traffic&quot;</span><span class="p">:</span> <span class="s2">&quot;3.4 MB/s&quot;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="next-steps">
+<h2><a class="toc-backref" href="#id28" role="doc-backlink">Next Steps</a><a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
+<p>Understanding ADARE’s data flow helps with:</p>
+<ul class="simple">
+<li><p><strong>Performance Tuning</strong>: <span class="xref std std-doc">../advanced/performance</span> - Optimize data processing</p></li>
+<li><p><strong>Troubleshooting</strong>: <a class="reference internal" href="../troubleshooting/index.html"><span class="doc">Troubleshooting</span></a> - Debug data flow issues</p></li>
+<li><p><strong>Custom Development</strong>: <span class="xref std std-doc">../developer/index</span> - Extend data processing capabilities</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="components.html" class="btn btn-neutral float-left" title="Components" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="module_structure.html" class="btn btn-neutral float-right" title="Module Structure" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Fraunhofer FKIE.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

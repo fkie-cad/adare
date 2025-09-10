@@ -1,18 +1,26 @@
-**********************
-Structure and Concepts
-**********************
+************
+Architecture
+************
+
+This section provides a comprehensive overview of ADARE's architecture, components, and design principles. Understanding these concepts will help you work effectively with ADARE and troubleshoot issues.
 
 .. toctree::
    :hidden:
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Architecture:
 
+   components
+   data-flow
    module_structure
-   actionsetfile
-   testsetfile
 
-The ADARE framework consists of several components, whose terms are frequently used in the documentation.
-This section aims to provide a concise overview of the framework's structure and its associated terminology.
+.. contents:: Quick Navigation
+   :local:
+   :depth: 2
+
+Overview
+********
+
+ADARE is a distributed system designed for automated forensic artifact analysis. It consists of multiple cooperating components that work together to execute forensic experiments in virtual machines.
 
 .. image:: ../_static/img/structure.png
    :width: 100%

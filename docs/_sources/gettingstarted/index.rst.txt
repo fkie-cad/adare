@@ -10,21 +10,20 @@ The following sections will help you get started with using ADARE.
 Walkthrough: Quick Start Guide
 ******************************
 
-This walkthrough provides information on how to setup ADARE to run downloaded experiments and to create new experiments.
-ADARE uses YAML-based playbooks for GUI automation, making experiments easy to create and maintain without Python coding.
+ADARE automates GUI testing using YAML playbooks - no Python coding required.
 
-To use ADARE you must setup a project, which is basically a directory containing data used for the experiments.
-This can be simply done by navigating to the directory where you want to create the project and run the following command::
+**Step 1: Create a Project**
+
+Navigate to your desired location and run::
 
     adare project create <project_name>
-
-This will create a directory with the name ``<project_name>`` and within it data, such as data used for the text recognition within the experiments.
-To further work within that project, you must navigate to the project directory::
-
     cd <project_name>
 
-Within this project a user must create an environment, dedicated to contain configurations related to one specific virtual machine.
-This can be done by running the following command, when providing an environment config file::
+This creates a project directory with required data files.
+
+**Step 2: Create an Environment**
+
+Create an environment config file and load it::
 
     adare environment load <environment_config_file>.yml
 
@@ -46,21 +45,21 @@ In the section :ref:`gettingstarted/environment:Create an Environment` you can f
 
 Notably ``<path_or_link_to_ova_or_ovf_file>`` is the path to a virtual machine image file, such as an OVA or OVF file.
 We provide a link to a list of downloadable virtual machines in `Adare Web <https://adare.seclab-bonn.de/>`_.
-For Windows 11 with our provided VM, a YAML file would look like this:
+For Ubuntu 24.04 with our provided VM, a YAML file would look like this:
 
 .. code-block:: yaml
 
-    name: win11
-    vm: TODOADDREALLINKHERE
+    name: ubuntu24043
+    vm: "/path/to/ubuntu-vm.ova"
     os:
-      os: "Windows 11"
-      platform: "windows"
-      distribution: "Home"
-      version: "23H1"
+      os: "Ubuntu"
+      platform: "linux"
+      distribution: "Noble Numbat"
+      version: "24.04.3"
       language: "English"
     tags:
-      - test
-      - example
+      - linux
+      - ubuntu
 
 Now that we have specified the environment and therefore the virtual machine to be used, we can specify what we want to do and test on this machine.
 Therefore a user can create an experiment template with the following command::
@@ -75,71 +74,31 @@ This will create a directory in the project's experiment directory with the foll
     ├── experiments/
     │   ├── ...
     │   └── <experiment_name>/
-    │       ├── playbook.yaml
-    │       ├── testset.yml
+    │       ├── playbook.yml
     │       ├── metadata.yml
     │       └── img/
     └── ...
 
 The ``metadata.yml`` file contains information about the experiment, especially the names of the environments it can be run on.
-The ``testset.yml`` file contains all tests that can be run within the experiment.
-The ``playbook.yaml`` file contains the YAML-based GUI automation instructions, such as mouse clicks or keyboard inputs, as well as calls to the tests specified in the testset file.
+The ``playbook.yml`` file contains everything needed for the experiment: variables, test definitions, and YAML-based GUI automation instructions such as mouse clicks or keyboard inputs.
 The directory ``img`` contains images used for GUI automation.
 
-In the following we will create a simple example experiment to delete a file from the Documents folder to the trash bin on a Windows 11 machine.
+In the following we will create a simple example experiment to delete a file from the Documents folder to the trash bin on Ubuntu.
 We therefore start by creating the experiment template::
 
-    adare experiment create TrashBinDeleteFile
+    adare experiment create ubuntu_deletefile
 
 We start with the metadata file, which would look like this:
 
 .. code-block:: yaml
 
     environments:
-     - win11
+     - ubuntu24043
 
-We then create the tests within the testset file.
-It contains a list of tests, as well as the name of the experiment.
-Each test must specify a name, a description, a function and parameters.
-The function specifies the test to be performed, such as checking if a file exists or checking if a file contains a specific line.
-The parameters specify the file or directory to be checked, the line to be checked or the regex to be checked.
-An example testset file in our example would look like this:
+We then create the playbook file, which contains everything needed for the experiment including variables, tests, and actions.
+The playbook uses a declarative approach where you specify settings, variables, test definitions, and actions like clicks, keyboard input, and test executions all in one file.
 
-.. code-block:: yaml
-
-    name: TrashBinDeleteFile
-    description: 'Test experiment to delete a file and check if it is moved to the trash bin'
-    tests:
-      - name: testfile_created
-        description: 'Verify test file does not exist before experiment'
-        function: file_exists
-        parameter:
-          dst: 'C:/Users/vagrant/Documents/testfile.txt'
-      - name: testfile_deleted
-        description: 'Verify test file was deleted successfully'
-        function: file_does_not_exist
-        parameter:
-          dst: 'C:/Users/vagrant/Documents/testfile.txt'
-      - name: trashbin_check
-        description: 'check if file metadata exists'
-        function: csv_contains_line_matching_regex
-        parameter:
-          dst: 'C:/Users/vagrant/Documents/trashbin/*.csv'
-          entry:
-            - !re '.*'
-            - '$I'
-            - 'C:\Users\vagrant\Documents\testfile'
-            - !re '.*'
-            - !timestamp
-              timestamp: '{{ TIMESTAMP.DELETIONDATE }}'
-              tolerance: 30
-
-This file contains three tests: one checking if the test file exists initially, one checking if the file was deleted successfully, and one checking if the trash bin artifact (when parsed with RBCmd to a CSV file) contains a line in a given format.
-We can save variables within the playbook and use them in the testset file (as shown with ``{{ TIMESTAMP.DELETIONDATE }}``).
-
-We now create the playbook file, which contains the YAML-based GUI automation steps.
-The playbook uses a declarative approach where you specify actions like clicks, keyboard input, and test executions.
-An example playbook file for our example would look like this:
+An example playbook file for our Ubuntu file deletion experiment would look like this:
 
 .. code-block:: yaml
 
@@ -157,20 +116,64 @@ An example playbook file for our example would look like this:
 
     # Variables that can be used throughout the playbook
     variables:
-      username: "vagrant"
-      filepath: "C:/Users/{{ username }}/Documents/testfile.txt"
+      username:
+        type: string
+        value: "adare"
+        description: "Username for the target system"
+      
+      filepath:
+        type: path
+        value: "/home/{{username}}/Documents/testfile.txt"
+        description: "Full path to the test file"
+      
+      trashbin_path:
+        type: path  
+        value: "/home/{{username}}/.local/share/Trash"
+        description: "Path to user's trash bin"
+
+    # Test definitions
+    tests:
+      - name: testfile_created
+        description: 'Verify test file does exist before experiment'
+        function: file_exists
+        parameter:
+          dst: '{{filepath}}'
+      - name: testfile_deleted
+        description: 'Verify test file was deleted successfully'
+        function: file_does_not_exist
+        parameter:
+          dst: '{{filepath}}'
+      - name: trashbin_check_file
+        description: 'check if file exists in trashbin'
+        function: file_exists
+        parameter:
+          dst: '{{trashbin_path}}/files/testfile.txt'
+      - name: trahsbin_check_info_file
+        description: 'check if info file exists in trashbin'
+        function: file_exists
+        parameter:
+          dst: '{{trashbin_path}}/info/testfile.txt.trashinfo'
+      - name: trashbin_check_info_date
+        description: 'check if deletion date in info file is correct'
+        function: file_content_equals
+        parameter:
+          dst: '/home/adare/.local/share/Trash/info/testfile.txt.trashinfo'
+          content: |
+            [Trash Info]
+            Path=/home/adare/Documents/testfile.txt
+            DeletionDate={{ deletion_timestamp | format('%Y-%m-%dT%H:%M:%S') | tolerance(5, -5) }}
 
     actions:
       - command:
           name: "Create Test File"
           description: "create the to deleted file"
-          cmd: "echo 'This is a test file.' > {{ filepath }}"
+          command: "echo 'This is a test file.' > {{ filepath }}"
           shell: true
       - test: testfile_created
       - click:
           target:
-            image: "explorer.png"
-          description: "Open File Explorer"
+            image: "nautilus_taskbar.png"
+          description: "Open Ubuntu File Explorer"
       - idle:
           duration: 2.0
           description: "Wait additional time for File Explorer to open since some systems are slow"
@@ -183,27 +186,21 @@ An example playbook file for our example would look like this:
           description: "Navigate to Documents folder"
       - click:
           target:
-            text: "testfile"
+            text: "testfile.txt"
           description: "Select the test file to delete it with shortcut"
       - keyboard:
           combination: ["delete"]
           description: "Delete the test file using keyboard shortcut"
       - save_timestamp:
           description: "Save the timestamp of file deletion for later verification"
-          variable: TIMESTAMP.DELETIONDATE
+          variable: deletion_timestamp
       - idle:
           duration: 1.0
           description: "Wait for file deletion to complete"
       - test: testfile_deleted
-      - block:
-          description: "Check if file metadata exists in trash bin"
-          actions:
-            - command:
-                name: "RBCmd"
-                description: "Run RBCmd.exe to check file metadata"
-                tool: RBCmd.exe
-                command: 'RBCmd.exe -d C:\ --csv C:/Users/vagrant/Documents/trashbin'
-            - test: trashbin_check
+      - test: trashbin_check_file
+      - test: trahsbin_check_info_file
+      - test: trashbin_check_info_date
 
 As you can see, the playbook uses YAML syntax and provides several types of actions:
 
@@ -211,21 +208,20 @@ As you can see, the playbook uses YAML syntax and provides several types of acti
 - ``click``: Mouse clicks using image recognition or text finding
 - ``keyboard``: Keyboard input and key combinations
 - ``idle``: Wait/pause actions
-- ``test``: Execute tests from the testset file
+- ``test``: Execute tests defined in the playbook
 - ``save_timestamp``: Save timestamps for later use in tests
 - ``block``: Group actions together
 
 The playbook can use images to find elements on the screen. To provide these images, you must place them in the ``img`` folder within the experiment directory.
-For this example you can download the images from `GitHub <https://github.com/fkie-cad/adare/tree/dev/adare/appdata/examples/experiments/TrashBinDeleteFile/img>`_.
+For this example you can download the images from `GitHub <https://github.com/fkie-cad/adare/tree/dev/adare/appdata/examples/experiments/ubuntu_deletefile/img>`_.
 More detailed explanation as well as details on creating an experiment can be found in :ref:`gettingstarted/experiment:Create an Experiment`.
 
 Now that we have created the experiment, we can finally run it::
 
-    adare experiment run TrashBinDeleteFile -e win11 --fake
+    adare experiment run ubuntu_deletefile -e ubuntu24043
 
 This will start the virtual machine and execute the experiment on it.
 While the experiment is running, the user can see the progress of the experiment in the terminal.
-The ``--fake`` flag runs the experiment in a test mode for development purposes.
 
 To later see more detailed information about the run, a user can run::
 

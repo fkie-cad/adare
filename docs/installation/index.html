@@ -20,8 +20,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Getting Started" href="../gettingstarted/index.html" />
-    <link rel="prev" title="Welcome to ADARE’s documentation!" href="../index.html" /> 
+    <link rel="next" title="Quick Start" href="../quickstart/index.html" />
+    <link rel="prev" title="ADARE Documentation" href="../index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -44,16 +44,43 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Installation Guide</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#requirements">Requirements</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#tested-configurations">Tested Configurations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#system-requirements">System Requirements</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#required-software">Required Software</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../gettingstarted/index.html">Getting Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Structure and Concepts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Interface (CLI)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installation-steps">Installation Steps</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#clone-the-repository">1. Clone the Repository</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#install-adare">2. Install ADARE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#verify-installation">3. Verify Installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#test-your-setup">4. Test Your Setup</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting-installation">Troubleshooting Installation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#virtualbox-issues">VirtualBox Issues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#python-issues">Python Issues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#permission-issues">Permission Issues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#getting-help">Getting Help</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#tested-configurations">Tested Configurations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#next-steps">Next Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#development-installation">Development Installation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart/index.html">Quick Start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-reference/index.html">CLI Reference</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Technical Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/index.html">Advanced</a></li>
 </ul>
 
@@ -83,42 +110,246 @@
              
   <section id="installation-guide">
 <h1>Installation Guide<a class="headerlink" href="#installation-guide" title="Link to this heading"></a></h1>
-<p>To install adare, make sure to install make as well as the python packaging tool <a class="reference external" href="https://python-poetry.org/docs/#installing-with-the-official-installer">poetry</a>.
-Afterwards clone the <a class="reference external" href="https://github.com/fkie-cad/Adare">repository</a>, navigate into the directory and run <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install</span></code>.
-Make sure to have make installed on your system.
-To check whether the tool is successfully installed and ready to use run <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">--version</span></code>.</p>
-<section id="requirements">
-<h2>Requirements<a class="headerlink" href="#requirements" title="Link to this heading"></a></h2>
-<p>One of the necessary tools to use adare is <a class="reference external" href="https://www.virtualbox.org/">VirtualBox</a>.
-Moreover, if you run adare from a Windows machine, you need to make sure that Hyper-V is disabled, since Hyper-V and the VirtualBox hypervisor interfere each other, which can cause slow and hanging machines.</p>
-</section>
-<section id="tested-configurations">
-<h2>Tested Configurations<a class="headerlink" href="#tested-configurations" title="Link to this heading"></a></h2>
-<p>The tool was tested with the following versions of Python, Vagrant, and VirtualBox:</p>
+<p>This guide will walk you through installing ADARE on your system. ADARE supports Linux, macOS, and Windows platforms.</p>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
+<p>Before installing ADARE, ensure you have the following prerequisites:</p>
+<section id="system-requirements">
+<h3>System Requirements<a class="headerlink" href="#system-requirements" title="Link to this heading"></a></h3>
 <table class="docutils align-default">
 <colgroup>
-<col style="width: 45.5%" />
-<col style="width: 54.5%" />
+<col style="width: 20.0%" />
+<col style="width: 40.0%" />
+<col style="width: 40.0%" />
 </colgroup>
 <thead>
-<tr class="row-odd"><th class="head"><p>program</p></th>
-<th class="head"><p>versions</p></th>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p>Minimum</p></th>
+<th class="head"><p>Recommended</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Python</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">3.10.2</span></code></p></td>
+<tr class="row-even"><td><p><strong>RAM</strong></p></td>
+<td><p>8 GB</p></td>
+<td><p>16 GB or more (for running VMs)</p></td>
 </tr>
-<tr class="row-odd"><td><p>poetry</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">1.8.2</span></code></p></td>
+<tr class="row-odd"><td><p><strong>Storage</strong></p></td>
+<td><p>50 GB free</p></td>
+<td><p>200 GB+ (for VM images and results)</p></td>
 </tr>
-<tr class="row-even"><td><p>VirtualBox</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">7.0.26</span></code></p></td>
+<tr class="row-even"><td><p><strong>CPU</strong></p></td>
+<td><p>4 cores</p></td>
+<td><p>8+ cores with virtualization support</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>OS</strong></p></td>
+<td><p>Linux, macOS, Windows 10+</p></td>
+<td><p>Linux (Ubuntu 20.04+) or macOS</p></td>
 </tr>
 </tbody>
 </table>
-<p>Later versions of the programs should also work, but have not been tested yet.
-Earlier versions especially of Python might not work, since adare uses some features that were introduced in Python 3.10.</p>
+</section>
+<section id="required-software">
+<h3>Required Software<a class="headerlink" href="#required-software" title="Link to this heading"></a></h3>
+<ol class="arabic">
+<li><p><strong>Python 3.10 or higher</strong></p>
+<p>Check your Python version:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>--version
+</pre></div>
+</div>
+<p>If you need to install Python 3.10+:</p>
+<ul class="simple">
+<li><p><strong>Ubuntu/Debian</strong>: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">update</span> <span class="pre">&amp;&amp;</span> <span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">python3.10</span> <span class="pre">python3.10-venv</span></code></p></li>
+<li><p><strong>macOS</strong>: Use Homebrew: <code class="docutils literal notranslate"><span class="pre">brew</span> <span class="pre">install</span> <span class="pre">python&#64;3.10</span></code></p></li>
+<li><p><strong>Windows</strong>: Download from <a class="reference external" href="https://www.python.org/downloads/">python.org</a></p></li>
+</ul>
+</li>
+<li><p><strong>Poetry</strong> (Python package manager)</p>
+<p>Install using the official installer:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-sSL<span class="w"> </span>https://install.python-poetry.org<span class="w"> </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-
+</pre></div>
+</div>
+</li>
+<li><p><strong>VirtualBox</strong></p>
+<p>Download and install from <a class="reference external" href="https://www.virtualbox.org/">virtualbox.org</a></p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>On Windows, ensure <strong>Hyper-V is disabled</strong> as it conflicts with VirtualBox:</p>
+<ul class="simple">
+<li><p>Open “Turn Windows features on or off”</p></li>
+<li><p>Uncheck “Hyper-V”</p></li>
+<li><p>Restart your computer</p></li>
+</ul>
+</div>
+</li>
+<li><p><strong>Make</strong> (build tool)</p>
+<ul class="simple">
+<li><p><strong>Ubuntu/Debian</strong>: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">apt</span> <span class="pre">install</span> <span class="pre">build-essential</span></code></p></li>
+<li><p><strong>macOS</strong>: Install Xcode Command Line Tools: <code class="docutils literal notranslate"><span class="pre">xcode-select</span> <span class="pre">--install</span></code></p></li>
+<li><p><strong>Windows</strong>: Use WSL2 or install via chocolatey: <code class="docutils literal notranslate"><span class="pre">choco</span> <span class="pre">install</span> <span class="pre">make</span></code></p></li>
+</ul>
+</li>
+</ol>
+</section>
+</section>
+<section id="installation-steps">
+<h2>Installation Steps<a class="headerlink" href="#installation-steps" title="Link to this heading"></a></h2>
+<section id="clone-the-repository">
+<h3>1. Clone the Repository<a class="headerlink" href="#clone-the-repository" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/fkie-cad/Adare.git
+<span class="nb">cd</span><span class="w"> </span>Adare
+</pre></div>
+</div>
+</section>
+<section id="install-adare">
+<h3>2. Install ADARE<a class="headerlink" href="#install-adare" title="Link to this heading"></a></h3>
+<p>Run the installation script:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>make<span class="w"> </span>install
+</pre></div>
+</div>
+<p>This will:</p>
+<ul class="simple">
+<li><p>Set up a Python virtual environment</p></li>
+<li><p>Install all dependencies via Poetry</p></li>
+<li><p>Install ADARE command-line tools</p></li>
+<li><p>Configure the development environment</p></li>
+</ul>
+</section>
+<section id="verify-installation">
+<h3>3. Verify Installation<a class="headerlink" href="#verify-installation" title="Link to this heading"></a></h3>
+<p>Check that ADARE is installed correctly:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span>--version
+</pre></div>
+</div>
+<p>You should see output similar to:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>ADARE version 0.1.0
+</pre></div>
+</div>
+</section>
+<section id="test-your-setup">
+<h3>4. Test Your Setup<a class="headerlink" href="#test-your-setup" title="Link to this heading"></a></h3>
+<p>Run a quick system check:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>adare<span class="w"> </span><span class="nb">help</span>
+</pre></div>
+</div>
+<p>This should display the main help menu without errors.</p>
+</section>
+</section>
+<section id="troubleshooting-installation">
+<h2>Troubleshooting Installation<a class="headerlink" href="#troubleshooting-installation" title="Link to this heading"></a></h2>
+<section id="virtualbox-issues">
+<h3>VirtualBox Issues<a class="headerlink" href="#virtualbox-issues" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>Error: VirtualBox not found</strong></dt><dd><p>Ensure VirtualBox is installed and the <code class="docutils literal notranslate"><span class="pre">VBoxManage</span></code> command is available in your PATH.</p>
+</dd>
+<dt><strong>Error: VM creation fails</strong></dt><dd><ul class="simple">
+<li><p>Check that virtualization is enabled in your BIOS/UEFI</p></li>
+<li><p>On Windows, ensure Hyper-V is disabled</p></li>
+<li><p>Verify you have sufficient RAM and disk space</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="python-issues">
+<h3>Python Issues<a class="headerlink" href="#python-issues" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>Error: Python version too old</strong></dt><dd><p>ADARE requires Python 3.10+. Install a newer version or use pyenv to manage multiple Python versions.</p>
+</dd>
+<dt><strong>Error: Poetry not found</strong></dt><dd><p>Ensure Poetry is installed and added to your PATH. You may need to restart your terminal after installation.</p>
+</dd>
+</dl>
+</section>
+<section id="permission-issues">
+<h3>Permission Issues<a class="headerlink" href="#permission-issues" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>Error: Permission denied during installation</strong></dt><dd><ul class="simple">
+<li><p>On Linux/macOS: Don’t use <code class="docutils literal notranslate"><span class="pre">sudo</span></code> with the install command</p></li>
+<li><p>Ensure you have write permissions to the installation directory</p></li>
+<li><p>Check that your user has VirtualBox permissions</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="getting-help">
+<h3>Getting Help<a class="headerlink" href="#getting-help" title="Link to this heading"></a></h3>
+<p>If you encounter issues:</p>
+<ol class="arabic simple">
+<li><p>Check the <a class="reference internal" href="../troubleshooting/index.html"><span class="doc">Troubleshooting</span></a> section</p></li>
+<li><p>Search existing issues on <a class="reference external" href="https://github.com/fkie-cad/Adare/issues">GitHub</a></p></li>
+<li><p>Create a new issue with your system details and error messages</p></li>
+</ol>
+</section>
+</section>
+<section id="tested-configurations">
+<h2>Tested Configurations<a class="headerlink" href="#tested-configurations" title="Link to this heading"></a></h2>
+<p>ADARE has been tested with the following software versions:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 40.0%" />
+<col style="width: 26.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Software</p></th>
+<th class="head"><p>Version</p></th>
+<th class="head"><p>Platform</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Python</strong></p></td>
+<td><p>3.10.2, 3.11.x, 3.12.x</p></td>
+<td><p>All platforms</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Poetry</strong></p></td>
+<td><p>1.8.2+</p></td>
+<td><p>All platforms</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>VirtualBox</strong></p></td>
+<td><p>7.0.26+</p></td>
+<td><p>All platforms</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ubuntu</strong></p></td>
+<td><p>20.04, 22.04, 24.04</p></td>
+<td><p>Recommended</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>macOS</strong></p></td>
+<td><p>12.0+ (Monterey)</p></td>
+<td><p>Supported</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Windows</strong></p></td>
+<td><p>10, 11</p></td>
+<td><p>Supported</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>While later versions should work, earlier versions (especially Python &lt; 3.10) are not supported due to language features used by ADARE.</p>
+</div>
+</section>
+<section id="next-steps">
+<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
+<p>After successful installation:</p>
+<ol class="arabic simple">
+<li><p><strong>Quick Start</strong>: Follow the <a class="reference internal" href="../quickstart/index.html"><span class="doc">Quick Start</span></a> guide</p></li>
+<li><p><strong>First Experiment</strong>: Create your <a class="reference internal" href="../quickstart/first-experiment.html"><span class="doc">First Experiment</span></a></p></li>
+<li><p><strong>User Guide</strong>: Learn about <a class="reference internal" href="../user-guide/index.html"><span class="doc">User Guide</span></a> for daily usage</p></li>
+</ol>
+</section>
+<section id="development-installation">
+<h2>Development Installation<a class="headerlink" href="#development-installation" title="Link to this heading"></a></h2>
+<p>If you plan to contribute to ADARE or need the development environment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Clone with development branch</span>
+git<span class="w"> </span>clone<span class="w"> </span>-b<span class="w"> </span>dev<span class="w"> </span>https://github.com/fkie-cad/Adare.git
+<span class="nb">cd</span><span class="w"> </span>Adare
+
+<span class="c1"># Install in development mode</span>
+make<span class="w"> </span>install-dev
+
+<span class="c1"># Run tests to verify</span>
+make<span class="w"> </span><span class="nb">test</span>
+</pre></div>
+</div>
+<p>This installs additional development dependencies and sets up pre-commit hooks.</p>
 </section>
 </section>
 
@@ -126,8 +357,8 @@ Earlier versions especially of Python might not work, since adare uses some feat
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../index.html" class="btn btn-neutral float-left" title="Welcome to ADARE’s documentation!" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../gettingstarted/index.html" class="btn btn-neutral float-right" title="Getting Started" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../index.html" class="btn btn-neutral float-left" title="ADARE Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../quickstart/index.html" class="btn btn-neutral float-right" title="Quick Start" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

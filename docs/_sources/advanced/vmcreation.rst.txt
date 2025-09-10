@@ -9,19 +9,55 @@ Once configured, export the VM as an ``.ova`` or ``.ovf`` file in **OVF 1.0 form
 Windows Setup
 =============
 
-Inside the VM, ensure the following configuration:
+User Account Configuration
+--------------------------
 
 - Create a user account with:
 
   - **Username:** ``adare``
   - **Password:** ``adare``
 
-- Enable **autologin** so the VM boots directly into the ``adare`` user’s desktop.
+- Enable **autologin** so the VM boots directly into the ``adare`` user's desktop.
 
-- Install:
-  - Python 3.10 or newer
-  - `Poetry <https://python-poetry.org/docs/#installing-with-the-official-installer>`_
-  - VirtualBox Guest Additions
+Additional Configuration
+----------------------
+
+1. **Disable User Account Control (UAC):**
+
+   - Go to Control Panel → ``User Accounts`` → ``User Accounts`` → ``Change User Account Control settings``
+   - Set the slider to the bottom (``Never notify``)
+
+2. **Enable Developer Mode:**
+
+   - In Windows Settings, search for ``For Developers``
+   - Toggle the switch to enable Developer Mode
+   - This is required to set up shared directories properly
+
+3. **Configure Windows Defender Firewall:**
+
+   a. Press ``Win + R``, type ``wf.msc``, and press Enter
+   
+   b. In the left panel, right-click **Windows Defender Firewall with Advanced Security on Local Computer** → **Properties**
+   
+   c. For each profile tab (**Domain Profile**, **Private Profile**, and **Public Profile**), configure:
+   
+      - **Inbound connections:** Allow
+      - **Outbound connections:** Allow (default)
+   
+   d. Click **OK**
+
+4. **Apply Changes:**
+
+   - Perform a clean shutdown to apply all security changes
+
+Required Software Installation
+-----------------------------
+
+Install the following software:
+
+- **Python 3.10 or newer**
+- **Poetry** (`Installation Guide <https://python-poetry.org/docs/#installing-with-the-official-installer>`_)
+- **VirtualBox Guest Additions**
   
 
 Linux Setup
