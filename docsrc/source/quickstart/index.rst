@@ -252,7 +252,7 @@ Check the experiment results:
 .. code-block:: bash
 
    # Show details of most recent run
-  adare run info
+   adare run info
 
    # List runs
    adare run list
@@ -260,36 +260,11 @@ Check the experiment results:
    # View detailed results of a specific run (replace ULID with actual run ID)
    adare run info 01ARZ3NDEKTSV4RRFFQ69G5FAV
 
-The results include:
-
-- **Test Results**: Pass/fail status for each forensic test
-- **Screenshots**: Visual record of each GUI action
-- **Timestamps**: Precise timing of forensic events  
-- **Artifacts**: Forensic artifacts created/modified during the experiment
-- **Logs**: Detailed execution logs for troubleshooting
-
-What You've Accomplished
-************************
-
-Congratulations! You've just:
-
-🔬 **Created a forensic experiment** that simulates realistic user behavior  
-📊 **Automated artifact analysis** by testing file system changes  
-🕵️ **Validated trash bin behavior** across different system configurations  
-📸 **Documented the process** with automated screenshots and logs  
 
 Next Steps
 **********
 
 Now that you have the basics down, explore these areas:
-
-Advanced Experiments
-====================
-
-- **Registry Analysis**: Test Windows registry changes
-- **Browser Forensics**: Analyze web browser artifacts  
-- **Timeline Analysis**: Create detailed forensic timelines
-- **Multi-VM Testing**: Test across different OS versions
 
 Learn More
 ==========
@@ -302,8 +277,6 @@ Learn More
 Get Help
 ========
 
-- **Troubleshooting**: :doc:`../troubleshooting/index` - Common issues and solutions
-- **Community**: `ADARE Web <https://adare.seclab-bonn.de/>`_ - Share experiments and get help
 - **Issues**: `GitHub Issues <https://github.com/fkie-cad/Adare/issues>`_ - Report bugs and feature requests
 
 .. toctree::

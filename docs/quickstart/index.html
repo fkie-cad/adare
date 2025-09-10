@@ -59,9 +59,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#step-4-add-required-images">Step 4: Add Required Images</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#step-5-run-your-experiment">Step 5: Run Your Experiment</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#step-6-view-your-results">Step 6: View Your Results</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#what-you-ve-accomplished">What You’ve Accomplished</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#next-steps">Next Steps</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#advanced-experiments">Advanced Experiments</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#learn-more">Learn More</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#get-help">Get Help</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="first-experiment.html">First Experiment</a></li>
@@ -192,16 +190,16 @@ adare<span class="w"> </span>project<span class="w"> </span>create<span class="w
 </pre></div>
 </div>
 <p>Configure the experiment metadata:</p>
-<div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text">experiments/deletefileexample/metadata.yml</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text">experiments/deletefileexample/metadata.yml</span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">environments</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu24043</span>
 </pre></div>
 </div>
 </div>
 <p>Now create the main playbook:</p>
-<div class="literal-block-wrapper docutils container" id="id3">
-<div class="code-block-caption"><span class="caption-text">experiments/deletefileexample/playbook.yml</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text">experiments/deletefileexample/playbook.yml</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span><span class="w">              </span><span class="c1"># Pause between actions</span>
 <span class="w">  </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span><span class="w">           </span><span class="c1"># Max experiment time</span>
@@ -332,45 +330,20 @@ At the end, a summary of the experiment run will be displayed.</p>
 <section id="step-6-view-your-results">
 <h2>Step 6: View Your Results<a class="headerlink" href="#step-6-view-your-results" title="Link to this heading"></a></h2>
 <p>Check the experiment results:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="w"> </span><span class="c1"># Show details of most recent run</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Show details of most recent run</span>
 adare<span class="w"> </span>run<span class="w"> </span>info
 
-<span class="w"> </span><span class="c1"># List runs</span>
-<span class="w"> </span>adare<span class="w"> </span>run<span class="w"> </span>list
+<span class="c1"># List runs</span>
+adare<span class="w"> </span>run<span class="w"> </span>list
 
-<span class="w"> </span><span class="c1"># View detailed results of a specific run (replace ULID with actual run ID)</span>
-<span class="w"> </span>adare<span class="w"> </span>run<span class="w"> </span>info<span class="w"> </span>01ARZ3NDEKTSV4RRFFQ69G5FAV
+<span class="c1"># View detailed results of a specific run (replace ULID with actual run ID)</span>
+adare<span class="w"> </span>run<span class="w"> </span>info<span class="w"> </span>01ARZ3NDEKTSV4RRFFQ69G5FAV
 </pre></div>
 </div>
-<p>The results include:</p>
-<ul class="simple">
-<li><p><strong>Test Results</strong>: Pass/fail status for each forensic test</p></li>
-<li><p><strong>Screenshots</strong>: Visual record of each GUI action</p></li>
-<li><p><strong>Timestamps</strong>: Precise timing of forensic events</p></li>
-<li><p><strong>Artifacts</strong>: Forensic artifacts created/modified during the experiment</p></li>
-<li><p><strong>Logs</strong>: Detailed execution logs for troubleshooting</p></li>
-</ul>
-</section>
-<section id="what-you-ve-accomplished">
-<h2>What You’ve Accomplished<a class="headerlink" href="#what-you-ve-accomplished" title="Link to this heading"></a></h2>
-<p>Congratulations! You’ve just:</p>
-<p>🔬 <strong>Created a forensic experiment</strong> that simulates realistic user behavior
-📊 <strong>Automated artifact analysis</strong> by testing file system changes
-🕵️ <strong>Validated trash bin behavior</strong> across different system configurations
-📸 <strong>Documented the process</strong> with automated screenshots and logs</p>
 </section>
 <section id="next-steps">
 <h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
 <p>Now that you have the basics down, explore these areas:</p>
-<section id="advanced-experiments">
-<h3>Advanced Experiments<a class="headerlink" href="#advanced-experiments" title="Link to this heading"></a></h3>
-<ul class="simple">
-<li><p><strong>Registry Analysis</strong>: Test Windows registry changes</p></li>
-<li><p><strong>Browser Forensics</strong>: Analyze web browser artifacts</p></li>
-<li><p><strong>Timeline Analysis</strong>: Create detailed forensic timelines</p></li>
-<li><p><strong>Multi-VM Testing</strong>: Test across different OS versions</p></li>
-</ul>
-</section>
 <section id="learn-more">
 <h3>Learn More<a class="headerlink" href="#learn-more" title="Link to this heading"></a></h3>
 <ul class="simple">
@@ -383,8 +356,6 @@ adare<span class="w"> </span>run<span class="w"> </span>info
 <section id="get-help">
 <h3>Get Help<a class="headerlink" href="#get-help" title="Link to this heading"></a></h3>
 <ul class="simple">
-<li><p><strong>Troubleshooting</strong>: <a class="reference internal" href="../troubleshooting/index.html"><span class="doc">Troubleshooting</span></a> - Common issues and solutions</p></li>
-<li><p><strong>Community</strong>: <a class="reference external" href="https://adare.seclab-bonn.de/">ADARE Web</a> - Share experiments and get help</p></li>
 <li><p><strong>Issues</strong>: <a class="reference external" href="https://github.com/fkie-cad/Adare/issues">GitHub Issues</a> - Report bugs and feature requests</p></li>
 </ul>
 <div class="toctree-wrapper compound">
