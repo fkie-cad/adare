@@ -21,7 +21,6 @@ Before starting, ensure you have:
 
 - ADARE installed (:doc:`../installation/index`)
 - A VM image file (.ova/.ovf) - see :ref:`vm-images` for options
-- Basic understanding of forensic concepts
 
 .. _vm-images:
 
@@ -31,6 +30,7 @@ Getting VM Images
 You'll need a virtual machine image to run experiments. Options include:
 
 - **Pre-built Images**: Download from `ADARE Web <https://adare.seclab-bonn.de/>`_
+- **Create Custom VM**: Follow the :doc:`../installation/vm-setup` guide
 - **Your Own VMs**: Export existing VMs as .ova files
 - **Public Images**: Use publicly available VM images (ensure they're clean)
 
