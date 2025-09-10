@@ -1,0 +1,70 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+  continue_on_test_failure: true
+
+# Variables for Windows JSON testing
+variables:
+  username:
+    type: string
+    value: "adare"
+    description: "System username"
+  
+  test_dir:
+    type: path
+    value: "C:\\Users\\{{username}}\\test_json"
+    description: "Base directory for JSON testing"
+  
+  config_json:
+    type: path
+    value: "{{test_dir}}\\config.json"
+    description: "Configuration JSON file"
+
+# Test definitions for JSON functions on Windows
+tests:
+  - name: test_json_contains_key_windows
+    description: 'Test json_contains_key on Windows'
+    function: json_contains_key
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'app_name'
+  
+  - name: test_json_value_matches_windows
+    description: 'Test json_value_matches on Windows'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'app_name'
+      expected_value: 'WindowsTestApp'
+
+actions:
+  # Setup test environment
+  - command:
+      name: "Create Test Directory"
+      description: "Create base directory for JSON testing"
+      command: 'mkdir "{{test_dir}}"'
+      shell: true
+  
+  - command:
+      name: "Create Config JSON"
+      description: "Create configuration JSON file"
+      command: |
+        echo { > "{{config_json}}"
+        echo   "app_name": "WindowsTestApp", >> "{{config_json}}"
+        echo   "version": "1.0.0" >> "{{config_json}}"
+        echo } >> "{{config_json}}"
+      shell: true
+  
+  # Run JSON tests
+  - test: test_json_contains_key_windows
+  - test: test_json_value_matches_windows
+  
+  # Cleanup
+  - command:
+      name: "Cleanup Test Directory"
+      description: "Remove test directory and files"
+      command: 'rmdir /s /q "{{test_dir}}"'
+      shell: true

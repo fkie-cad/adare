@@ -331,6 +331,20 @@ class AdareVMClient:
             "testfunctions_data": zip_data
         })
     
+    async def install_testfunction_dependencies(self, dependencies: List[str]) -> Dict[str, Any]:
+        """
+        Install testfunction dependencies in the VM.
+        
+        Args:
+            dependencies: List of dependency strings (e.g., ["requests>=2.0.0", "numpy"])
+            
+        Returns:
+            Installation result
+        """
+        return await self.call_tool(ToolRegistry.INSTALL_DEPENDENCIES, {
+            "dependencies": dependencies
+        })
+    
     async def set_variables(self, variables: Dict[str, Any]) -> Dict[str, Any]:
         """Set variables for test execution."""
         return await self.call_tool(ToolRegistry.SET_VARIABLES, {

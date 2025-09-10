@@ -60,6 +60,7 @@ class AdareVMServer:
             "idle": self._idle,
             "screenshot_window": self._screenshot_window,
             "upload_testfunctions": self._upload_testfunctions,
+            "install_dependencies": self._install_dependencies,
             "set_variables": self._set_variables,
             "run_test": self._run_test,
             "execute_shell": self._execute_shell,
@@ -336,6 +337,60 @@ class AdareVMServer:
             await self.send_event(websocket, EventType.ERROR, {"message": f"Upload failed: {e}"})
             return {"status": "error", "message": str(e)}
     
+    async def _install_dependencies(self, websocket, dependencies: List[str]):
+        """Install Python dependencies using Poetry."""
+        await self.send_event(websocket, EventType.LOG, {"message": f"Installing {len(dependencies)} dependencies with Poetry..."})
+        
+        try:
+            if not dependencies:
+                log.info("No dependencies to install")
+                return {"status": "success", "message": "No dependencies to install"}
+            
+            log.info(f"Installing dependencies with Poetry: {dependencies}")
+            
+            # Use subprocess to run poetry add
+            import subprocess
+            
+            # Install all dependencies in one command for efficiency
+            cmd = ["poetry", "add"] + dependencies
+            log.info(f"Running command: {' '.join(cmd)}")
+            await self.send_event(websocket, EventType.LOG, {"message": f"Running: {' '.join(cmd)}"})
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=600  # 10 minute timeout for all dependencies
+            )
+            
+            if result.returncode != 0:
+                error_msg = f"Poetry add failed: {result.stderr}"
+                log.error(error_msg)
+                await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
+                return {"status": "error", "message": error_msg}
+            else:
+                success_msg = f"Successfully installed all {len(dependencies)} dependencies with Poetry"
+                log.info(success_msg)
+                log.debug(f"Poetry output: {result.stdout}")
+                await self.send_event(websocket, EventType.LOG, {"message": success_msg})
+                
+                return {
+                    "status": "success",
+                    "message": success_msg,
+                    "installed_count": len(dependencies),
+                    "poetry_output": result.stdout
+                }
+            
+        except subprocess.TimeoutExpired as e:
+            error_msg = f"Poetry dependency installation timed out: {e}"
+            log.error(error_msg)
+            await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
+            return {"status": "error", "message": error_msg}
+        except (subprocess.SubprocessError, OSError, FileNotFoundError) as e:
+            error_msg = f"Poetry dependency installation failed: {e}"
+            log.error(error_msg)
+            await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
+            return {"status": "error", "message": error_msg}
     
     async def _set_variables(self, websocket, variables: str):
         """Set variables for test execution."""

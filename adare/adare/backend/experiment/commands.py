@@ -626,7 +626,7 @@ def step_prepare_run_environment(context: ExperimentRunCtx):
         
         # Copy adare log to run directory if runlog is enabled
         if context.config.runlog:
-            _copy_adare_log_to_run_directory(run_dir)
+            _ensure_and_copy_adare_log_to_run_directory(run_dir)
         
         # Initialize MCP server with log file
         from adare.backend.experiment.mcp_server_manager import MCPServerManager
@@ -1120,25 +1120,51 @@ def experiment_download(project: Path, experiment_ulid: str):
     print(f'experiment {experiment_name} ({experiment_ulid}) downloaded successfully')
 
 
-def _copy_adare_log_to_run_directory(run_directory: ExperimentRunDirectory):
-    """Copy the current adare log file to the experiment run directory.
+def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDirectory):
+    """Ensure a log file exists and copy it to the experiment run directory.
+    
+    If no log file is currently active (e.g., when --logfile is not specified),
+    this function will create a temporary log file in the run directory and
+    configure logging to use it, ensuring the experiment run has log output.
     
     Args:
         run_directory: The experiment run directory where the log should be copied
     """
     import shutil
+    import logging
     from adare.logger.logger import get_current_logfile
     
     current_logfile = get_current_logfile()
+    target_path = run_directory.log_directory / 'adare.log'
+    
     if current_logfile:
+        # Copy existing log file
         try:
-            target_path = run_directory.log_directory / 'adare.log'
             shutil.copy2(current_logfile, target_path)
             log.info(f'Copied adare log to {target_path}')
         except Exception as e:
             log.warning(f'Failed to copy adare log to run directory: {e}')
     else:
-        log.info('No active log file found, skipping adare log copy')
+        # No active log file - create one in the run directory and configure logging
+        log.info('No active log file found, creating new log file for experiment run')
+        try:
+            # Create the log file and add a file handler
+            from adare.logger.logger import FileHandlerFormatter
+            file_handler = logging.FileHandler(target_path, encoding='utf-8')
+            file_handler.setFormatter(FileHandlerFormatter())
+            file_handler.setLevel(logging.DEBUG)
+            
+            # Add handler to root logger to capture all log messages
+            root_logger = logging.getLogger()
+            root_logger.addHandler(file_handler)
+            
+            # Ensure root logger level allows DEBUG messages to be captured
+            if root_logger.level > logging.DEBUG:
+                root_logger.setLevel(logging.DEBUG)
+            
+            log.info(f'Created new log file at {target_path} and configured logging')
+        except Exception as e:
+            log.warning(f'Failed to create log file in run directory: {e}')
 
 
 def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
@@ -1166,7 +1192,7 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
         test=True,  # This creates fake runs that are cleaned up automatically
         debug_screenshots=True,  # Enable debug screenshots for development
         preserve_snapshot=False,  # Don't preserve snapshots in test mode
-        runlog=False  # Don't save logs for test runs
+        runlog=True   # Save logs for test runs to aid debugging
     ))
 
 

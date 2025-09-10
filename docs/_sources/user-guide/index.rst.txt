@@ -9,7 +9,8 @@ This comprehensive guide covers everything you need for daily ADARE usage. Wheth
    :caption: User Guide:
 
    projects
-   environments  
+   environments
+   vm-setup
    playbooks
    playbook-actions
 

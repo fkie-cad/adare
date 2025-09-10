@@ -210,19 +210,23 @@ class BasicTest:
             log.info(f"CLAUDE: Tolerance from metadata: {tolerance}")
             
             if isinstance(tolerance, (int, float)):
-                upper_tolerance = tolerance
-                lower_tolerance = -tolerance
+                # Single value: create symmetric range around original timestamp
+                abs_tolerance = abs(tolerance)
+                lower_tolerance = -abs_tolerance
+                upper_tolerance = abs_tolerance
             elif isinstance(tolerance, list) and len(tolerance) >= 1:
-                upper_tolerance = tolerance[0]
-                lower_tolerance = tolerance[1] if len(tolerance) > 1 else -upper_tolerance
+                # For array [a, b], interpret as [lower_bound, upper_bound] relative to original timestamp
+                # So [0, 5] means actual can be from original+0 to original+5
+                lower_tolerance = tolerance[0]
+                upper_tolerance = tolerance[1] if len(tolerance) > 1 else tolerance[0]
             else:
-                upper_tolerance = 0
                 lower_tolerance = 0
+                upper_tolerance = 0
                 
             log.info(f"CLAUDE: Calculated tolerance range: {lower_tolerance}s to {upper_tolerance}s")
             
             # Calculate difference
-            diff_seconds = (actual_dt - original_dt).total_seconds()
+            diff_seconds = (original_dt - actual_dt).total_seconds()
             log.info(f"CLAUDE: Time difference: {diff_seconds}s")
             
             # Check if within tolerance

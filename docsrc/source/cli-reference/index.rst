@@ -101,10 +101,26 @@ Experiments contain the actual test automation logic using YAML-based playbooks.
   
   Options:
     * ``--environment TEXT`` - Name of the environment (required)
-    * ``--test`` - Run in test mode (delete results afterwards, don't block changes)
+    * ``--test`` - Run in test mode for development (see :ref:`test-mode-development`)
     * ``--debug-screenshots`` - Save screenshots to experiment run directory for debugging
     * ``--preserve-snapshot`` - Create experiment snapshot for preservation (default: only reset to base)
     * ``--project TEXT`` - Name of the project
+
+.. _test-mode-development:
+
+**Test Mode Development (--test)**
+
+The ``--test`` flag enables iterative experiment development:
+
+* **Purpose**: Allows continuous modification and testing of playbook files
+* **Behavior**: Results are deleted after execution, experiment remains unlocked
+* **Use Case**: Perfect for developing and debugging experiments
+
+**Important**: Once you run an experiment **without** ``--test``, the experiment becomes locked and cannot be modified. To continue development after a non-test run:
+
+1. Copy the experiment directory to a new location
+2. Run the copied experiment with ``--test`` flag
+3. Develop and iterate on the copied version
 
 ``adare experiment develop <experiment>``
   Run an experiment in development/test mode for iterative development.

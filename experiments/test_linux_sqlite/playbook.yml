@@ -1,0 +1,214 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+  continue_on_test_failure: true
+
+# Variables for Linux SQLite testing
+variables:
+  username:
+    type: string
+    value: "adare"
+    description: "System username"
+  
+  test_dir:
+    type: path
+    value: "/home/{{username}}/test_sqlite"
+    description: "Base directory for SQLite testing"
+  
+  test_db:
+    type: path
+    value: "{{test_dir}}/test.db"
+    description: "Test SQLite database"
+  
+  empty_db:
+    type: path
+    value: "{{test_dir}}/empty.db"
+    description: "Empty SQLite database"
+
+# Test definitions for SQLite functions
+tests:
+  # Basic query tests
+  - name: test_sqlite_query_count
+    description: 'Test sqlite_query_result with COUNT query'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{test_db}}'
+      query: 'SELECT COUNT(*) as count FROM users'
+      expected_rows: 1
+  
+  - name: test_sqlite_query_specific_result
+    description: 'Test sqlite_query_result with specific expected result'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{test_db}}'
+      query: 'SELECT COUNT(*) as count FROM users WHERE role = "Admin"'
+      expected_result: [{"count": 2}]
+  
+  - name: test_sqlite_query_all_users
+    description: 'Test sqlite_query_result returning all users'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{test_db}}'
+      query: 'SELECT name, role FROM users ORDER BY id'
+      expected_rows: 5
+  
+  - name: test_sqlite_query_single_user
+    description: 'Test sqlite_query_result with single user lookup'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{test_db}}'
+      query: 'SELECT * FROM users WHERE name = "John Doe"'
+      expected_rows: 1
+  
+  - name: test_sqlite_query_no_results
+    description: 'Test sqlite_query_result with query returning no results'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{test_db}}'
+      query: 'SELECT * FROM users WHERE name = "Nonexistent User"'
+      expected_rows: 0
+  
+  - name: test_sqlite_query_wrong_count
+    description: 'Test sqlite_query_result with wrong expected count'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{test_db}}'
+      query: 'SELECT * FROM users'
+      expected_rows: 10
+  
+  # Query with joins
+  - name: test_sqlite_query_join
+    description: 'Test sqlite_query_result with JOIN query'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{test_db}}'
+      query: 'SELECT u.name, p.project_name FROM users u JOIN projects p ON u.id = p.user_id'
+      expected_rows: 3
+  
+  # Complex queries
+  - name: test_sqlite_query_aggregation
+    description: 'Test sqlite_query_result with aggregation'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{test_db}}'
+      query: 'SELECT role, COUNT(*) as count FROM users GROUP BY role'
+      expected_rows: 3
+  
+  # Edge cases
+  - name: test_sqlite_query_empty_db
+    description: 'Test sqlite_query_result with empty database'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{empty_db}}'
+      query: 'SELECT name FROM sqlite_master WHERE type="table"'
+      expected_rows: 0
+  
+  - name: test_sqlite_query_invalid_table
+    description: 'Test sqlite_query_result with invalid table'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{test_db}}'
+      query: 'SELECT * FROM nonexistent_table'
+      expected_rows: 0
+  
+  - name: test_sqlite_query_file_not_found
+    description: 'Test sqlite_query_result with non-existent database file'
+    function: sqlite_query_result
+    parameter:
+      dst: '{{test_dir}}/nonexistent.db'
+      query: 'SELECT 1'
+      expected_rows: 1
+
+actions:
+  # Setup test environment
+  - command:
+      name: "Create Test Directory"
+      description: "Create base directory for SQLite testing"
+      command: "mkdir -p {{test_dir}}"
+      shell: true
+  
+  # Create test database with sample data
+  - command:
+      name: "Create Test Database"
+      description: "Create SQLite database with sample tables and data"
+      command: |
+        sqlite3 {{test_db}} << 'EOF'
+        -- Create users table
+        CREATE TABLE users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          role TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Insert sample users
+        INSERT INTO users (name, email, role) VALUES 
+          ('John Doe', 'john@example.com', 'Admin'),
+          ('Jane Smith', 'jane@example.com', 'User'),
+          ('Bob Johnson', 'bob@example.com', 'Manager'),
+          ('Alice Brown', 'alice@example.com', 'User'),
+          ('Charlie Wilson', 'charlie@example.com', 'Admin');
+        
+        -- Create projects table
+        CREATE TABLE projects (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_name TEXT NOT NULL,
+          user_id INTEGER,
+          status TEXT DEFAULT 'active',
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+        
+        -- Insert sample projects
+        INSERT INTO projects (project_name, user_id) VALUES 
+          ('Project Alpha', 1),
+          ('Project Beta', 2),
+          ('Project Gamma', 3);
+        
+        -- Create logs table
+        CREATE TABLE logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER,
+          action TEXT NOT NULL,
+          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+        
+        -- Insert sample logs
+        INSERT INTO logs (user_id, action) VALUES 
+          (1, 'login'),
+          (2, 'view_dashboard'),
+          (1, 'create_project'),
+          (3, 'update_profile');
+        EOF
+      shell: true
+  
+  # Create empty database
+  - command:
+      name: "Create Empty Database"
+      description: "Create empty SQLite database"
+      command: "sqlite3 {{empty_db}} 'SELECT 1;'"
+      shell: true
+  
+  # Run all SQLite tests
+  - test: test_sqlite_query_count
+  - test: test_sqlite_query_specific_result
+  - test: test_sqlite_query_all_users
+  - test: test_sqlite_query_single_user
+  - test: test_sqlite_query_no_results
+  - test: test_sqlite_query_wrong_count
+  - test: test_sqlite_query_join
+  - test: test_sqlite_query_aggregation
+  - test: test_sqlite_query_empty_db
+  - test: test_sqlite_query_invalid_table
+  - test: test_sqlite_query_file_not_found
+  
+  # Cleanup
+  - command:
+      name: "Cleanup Test Directory"
+      description: "Remove test directory and files"
+      command: "rm -rf {{test_dir}}"
+      shell: true

@@ -1,0 +1,2 @@
+# Linux-specific dependencies
+psutil>=5.8.0

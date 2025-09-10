@@ -54,6 +54,7 @@
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">User Guide</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="projects.html">Project Management</a></li>
 <li class="toctree-l2"><a class="reference internal" href="environments.html">Environment Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="vm-setup.html">VM Setup Guide</a></li>
 <li class="toctree-l2"><a class="reference internal" href="playbooks.html">Playbook Guide</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Playbook Actions</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#gui-actions">GUI Actions</a><ul>
@@ -89,19 +90,6 @@
 <li class="toctree-l4"><a class="reference internal" href="#conditional-blocks">Conditional Blocks</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="#advanced-action-patterns">Advanced Action Patterns</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#retry-mechanisms">Retry Mechanisms</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#parallel-execution">Parallel Execution</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#complex-forensic-scenarios">Complex Forensic Scenarios</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#best-practices">Best Practices</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#action-naming">Action Naming</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#error-handling-strategy">Error Handling Strategy</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#performance-optimization">Performance Optimization</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#next-steps">Next Steps</a></li>
 </ul>
 </li>
 </ul>
@@ -184,21 +172,6 @@
 <li><p><a class="reference internal" href="#conditional-blocks" id="id21">Conditional Blocks</a></p></li>
 </ul>
 </li>
-<li><p><a class="reference internal" href="#advanced-action-patterns" id="id22">Advanced Action Patterns</a></p>
-<ul>
-<li><p><a class="reference internal" href="#retry-mechanisms" id="id23">Retry Mechanisms</a></p></li>
-<li><p><a class="reference internal" href="#parallel-execution" id="id24">Parallel Execution</a></p></li>
-<li><p><a class="reference internal" href="#complex-forensic-scenarios" id="id25">Complex Forensic Scenarios</a></p></li>
-</ul>
-</li>
-<li><p><a class="reference internal" href="#best-practices" id="id26">Best Practices</a></p>
-<ul>
-<li><p><a class="reference internal" href="#action-naming" id="id27">Action Naming</a></p></li>
-<li><p><a class="reference internal" href="#error-handling-strategy" id="id28">Error Handling Strategy</a></p></li>
-<li><p><a class="reference internal" href="#performance-optimization" id="id29">Performance Optimization</a></p></li>
-</ul>
-</li>
-<li><p><a class="reference internal" href="#next-steps" id="id30">Next Steps</a></p></li>
 </ul>
 </nav>
 <section id="gui-actions">
@@ -652,144 +625,6 @@
 </pre></div>
 </div>
 </section>
-</section>
-<section id="advanced-action-patterns">
-<h2><a class="toc-backref" href="#id22" role="doc-backlink">Advanced Action Patterns</a><a class="headerlink" href="#advanced-action-patterns" title="Link to this heading"></a></h2>
-<section id="retry-mechanisms">
-<h3><a class="toc-backref" href="#id23" role="doc-backlink">Retry Mechanisms</a><a class="headerlink" href="#retry-mechanisms" title="Link to this heading"></a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
-<span class="w">  </span><span class="c1"># Action-level retry</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;unstable_button.png&quot;</span>
-<span class="w">      </span><span class="nt">retry</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">attempts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
-<span class="w">        </span><span class="nt">delay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
-<span class="w">        </span><span class="nt">backoff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.5</span><span class="w">        </span><span class="c1"># Increase delay by 50% each retry</span>
-
-<span class="w">  </span><span class="c1"># Block-level retry</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Flaky</span><span class="nv"> </span><span class="s">Operation&quot;</span>
-<span class="w">      </span><span class="nt">retry</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">attempts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
-<span class="w">        </span><span class="nt">delay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Submit&quot;</span><span class="p p-Indicator">}}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_for</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;element_visible&quot;</span><span class="p p-Indicator">,</span><span class="nt"> parameter</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Success&quot;</span><span class="p p-Indicator">}}</span>
-</pre></div>
-</div>
-</section>
-<section id="parallel-execution">
-<h3><a class="toc-backref" href="#id24" role="doc-backlink">Parallel Execution</a><a class="headerlink" href="#parallel-execution" title="Link to this heading"></a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
-<span class="w">  </span><span class="c1"># Run actions in parallel (use with caution)</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">parallel</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;long_running_process_1&quot;</span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;long_running_process_2&quot;</span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;long_running_process_3&quot;</span><span class="p p-Indicator">}</span>
-<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
-
-<span class="w">  </span><span class="c1"># Wait for all to complete</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_for</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;all_processes_complete&quot;</span>
-<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60</span>
-</pre></div>
-</div>
-</section>
-<section id="complex-forensic-scenarios">
-<h3><a class="toc-backref" href="#id25" role="doc-backlink">Complex Forensic Scenarios</a><a class="headerlink" href="#complex-forensic-scenarios" title="Link to this heading"></a></h3>
-<p><strong>File System Timeline Analysis</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
-<span class="w">  </span><span class="c1"># Create baseline</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snapshot</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;baseline&quot;</span><span class="p p-Indicator">}</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;baseline_time&quot;</span><span class="p p-Indicator">}</span>
-
-<span class="w">  </span><span class="c1"># Perform actions that create artifacts</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Evidence</span><span class="nv"> </span><span class="s">Creation</span><span class="nv"> </span><span class="s">Sequence&quot;</span>
-<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;echo</span><span class="nv"> </span><span class="s">&quot;evidence&quot;</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">/tmp/critical.txt&#39;</span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file_created&quot;</span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;chmod</span><span class="nv"> </span><span class="s">755</span><span class="nv"> </span><span class="s">/tmp/critical.txt&#39;</span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;permissions_changed&quot;</span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="nv">1.0</span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;mv</span><span class="nv"> </span><span class="s">/tmp/critical.txt</span><span class="nv"> </span><span class="s">/evidence/&#39;</span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;file_moved&quot;</span><span class="p p-Indicator">}</span>
-
-<span class="w">  </span><span class="c1"># Capture final state</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snapshot</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;post_evidence&quot;</span><span class="p p-Indicator">}</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">export_filesystem_timeline</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/evidence/timeline.csv&quot;</span><span class="p p-Indicator">}</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="best-practices">
-<h2><a class="toc-backref" href="#id26" role="doc-backlink">Best Practices</a><a class="headerlink" href="#best-practices" title="Link to this heading"></a></h2>
-<section id="action-naming">
-<h3><a class="toc-backref" href="#id27" role="doc-backlink">Action Naming</a><a class="headerlink" href="#action-naming" title="Link to this heading"></a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Good: Clear, descriptive names</span>
-<span class="nt">actions</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete&quot;</span><span class="p p-Indicator">}</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete</span><span class="nv"> </span><span class="s">selected</span><span class="nv"> </span><span class="s">evidence</span><span class="nv"> </span><span class="s">file&quot;</span>
-
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Export</span><span class="nv"> </span><span class="s">Registry</span><span class="nv"> </span><span class="s">Evidence&quot;</span>
-<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;reg</span><span class="nv"> </span><span class="s">export</span><span class="nv"> </span><span class="s">HKCU\\Software</span><span class="nv"> </span><span class="s">evidence_registry.reg&quot;</span>
-
-<span class="c1"># Bad: Generic, unclear names</span>
-<span class="nt">actions</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Delete&quot;</span><span class="p p-Indicator">}}</span><span class="w">  </span><span class="c1"># No description</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;reg</span><span class="nv"> </span><span class="s">export&quot;</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># No name</span>
-</pre></div>
-</div>
-</section>
-<section id="error-handling-strategy">
-<h3><a class="toc-backref" href="#id28" role="doc-backlink">Error Handling Strategy</a><a class="headerlink" href="#error-handling-strategy" title="Link to this heading"></a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">on_error</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;continue&quot;</span><span class="w">        </span><span class="c1"># or &quot;stop&quot;, &quot;retry&quot;</span>
-
-<span class="nt">actions</span><span class="p">:</span>
-<span class="w">  </span><span class="c1"># Always include error handling for critical operations</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">try</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;critical_button.png&quot;</span><span class="p p-Indicator">}}</span>
-<span class="w">      </span><span class="nt">catch</span><span class="p">:</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">log</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">message</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Critical</span><span class="nv"> </span><span class="s">button</span><span class="nv"> </span><span class="s">not</span><span class="nv"> </span><span class="s">found&quot;</span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">screenshot</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;error_state&quot;</span><span class="p p-Indicator">}</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">fail</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">message</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Cannot</span><span class="nv"> </span><span class="s">proceed</span><span class="nv"> </span><span class="s">without</span><span class="nv"> </span><span class="s">critical</span><span class="nv"> </span><span class="s">button&quot;</span><span class="p p-Indicator">}</span>
-</pre></div>
-</div>
-</section>
-<section id="performance-optimization">
-<h3><a class="toc-backref" href="#id29" role="doc-backlink">Performance Optimization</a><a class="headerlink" href="#performance-optimization" title="Link to this heading"></a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Minimize unnecessary delays</span>
-<span class="nt">settings</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span><span class="w">              </span><span class="c1"># Reduce default delays</span>
-
-<span class="nt">actions</span><span class="p">:</span>
-<span class="w">  </span><span class="c1"># Use efficient selectors</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">coordinates</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">150</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">300</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># Fastest - direct coordinates</span>
-<span class="w">      </span><span class="c1"># vs</span>
-<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;button.png&quot;</span><span class="w">      </span><span class="c1"># Slower - image matching</span>
-<span class="w">      </span><span class="c1"># vs</span>
-<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Button&quot;</span><span class="w">           </span><span class="c1"># Slowest - OCR required</span>
-</pre></div>
-</div>
-</section>
-</section>
-<section id="next-steps">
-<h2><a class="toc-backref" href="#id30" role="doc-backlink">Next Steps</a><a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
-<p><strong>Related Documentation:</strong>
-- <strong>Playbook Guide</strong>: <a class="reference internal" href="playbooks.html"><span class="doc">Playbook Guide</span></a> - Basic playbook structure and concepts
-- <strong>Variable Reference</strong>: <span class="xref std std-doc">playbook-variables</span> - Variable types and filters
-- <strong>Test Functions</strong>: <span class="xref std std-doc">../advanced/testfunctions</span> - Custom validation functions</p>
 </section>
 </section>
 
