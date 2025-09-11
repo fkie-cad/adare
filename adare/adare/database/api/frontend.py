@@ -326,6 +326,8 @@ class DataRetrievalApi(DatabaseApi):
         data['timestamp_end'] = data['object_run'].apply(lambda obj: getattr(obj, 'timestamp_end', ''))
         # Add published field through sync_metadata if available
         data['published'] = data['object_run'].apply(lambda obj: obj.sync_metadata.is_synced if hasattr(obj, 'sync_metadata') and obj.sync_metadata else False)
+        # Add fake field
+        data['fake'] = data['object_run'].apply(lambda obj: getattr(obj, 'fake', False))
         # remove object_run column
         data = data.drop(columns=['object_run', 'object_environment'])
         return data

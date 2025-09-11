@@ -182,8 +182,14 @@ def environment_load(project: Path, environment: str, force: bool = False):
                 log.error(f'Failed to download VM from URL {environment_metadata.vm}: {e}')
                 raise
         else:
-            # Handle local file path (existing behavior)
+            # Handle local file path - support both relative (to project) and absolute paths
             vm_path = Path(environment_metadata.vm)
+            if not vm_path.is_absolute():
+                # For relative paths, resolve relative to project directory
+                vm_path = (project / vm_path).resolve()
+            else:
+                # For absolute paths, just resolve to normalize the path
+                vm_path = vm_path.resolve()
         
         if vm_path.exists():
             from adare.backend.vm.commands import load_vm_file_for_environment
