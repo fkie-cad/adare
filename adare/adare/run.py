@@ -33,7 +33,7 @@ from adare.cli.testfunction import (
     exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 )
 from adare.cli.vm import (
-    exec_vm_list, exec_vm_info, exec_vm_delete, exec_vm_delete_snapshot, exec_vm_clear_all, exec_vm_clear_by_environment
+    exec_vm_list, exec_vm_info, exec_vm_delete, exec_vm_delete_snapshot, exec_vm_clear_all, exec_vm_clear_by_environment, exec_vm_test
 )
 from adare.cli.mcp import (
     exec_mcp_test_icon, exec_mcp_test_text, exec_mcp_get_all_text
@@ -414,6 +414,47 @@ def delete_snapshot(vm_id, snapshot_name):
     """Delete a single snapshot from a specific VM."""
     args = SimpleNamespace(vm_id=vm_id, snapshot_name=snapshot_name)
     exec_with_error_printing(exec_vm_delete_snapshot, args)
+
+@vm.command()
+@click.argument('ova_file', type=click.Path(exists=True))
+@click.option('--platform', '-p', required=True, type=click.Choice(['linux', 'windows']), help='VM platform (required)')
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output with detailed error information')
+@click.option('--keep-vm', is_flag=True, help='Keep the test VM after completion (for further testing)')
+@click.option('--remove-vm', is_flag=True, help='Automatically remove the test VM after completion')
+def test(ova_file, platform, verbose, keep_vm, remove_vm):
+    """Test OVA file compatibility with ADARE.
+    
+    This command validates an .ova file by:
+    - Importing the VM temporarily 
+    - Setting up shared directories and mounting them
+    - Installing poetry dependencies and starting adarevm
+    - Establishing WebSocket connection
+    - Taking a screenshot and performing a test click
+    - Cleaning up all temporary resources
+    
+    Example: adare vm test ubuntu22.ova --platform linux
+    Example: adare vm test windows11.ova --platform windows --verbose
+    Example: adare vm test ubuntu22.ova --platform linux --keep-vm
+    Example: adare vm test ubuntu22.ova --platform linux --remove-vm
+    """
+    # Handle cleanup options
+    if keep_vm and remove_vm:
+        click.echo("Error: Cannot specify both --keep-vm and --remove-vm", err=True)
+        return
+    
+    vm_cleanup_mode = 'prompt'  # Default
+    if keep_vm:
+        vm_cleanup_mode = 'keep'
+    elif remove_vm:
+        vm_cleanup_mode = 'remove'
+    
+    args = SimpleNamespace(
+        ova_file=ova_file, 
+        platform=platform, 
+        verbose=verbose,
+        vm_cleanup_mode=vm_cleanup_mode
+    )
+    exec_with_error_printing(exec_vm_test, args)
 
 # Nested group for VM cleanup commands
 @vm.group()

@@ -216,9 +216,12 @@ class BasicTest:
                 upper_tolerance = abs_tolerance
             elif isinstance(tolerance, list) and len(tolerance) >= 1:
                 # For array [a, b], interpret as [lower_bound, upper_bound] relative to original timestamp
-                # So [0, 5] means actual can be from original+0 to original+5
-                lower_tolerance = tolerance[0]
-                upper_tolerance = tolerance[1] if len(tolerance) > 1 else tolerance[0]
+                # So [5, -5] means actual can be from original-5 to original+5
+                # The tolerance values should be sorted to create a valid range
+                val1 = tolerance[0]
+                val2 = tolerance[1] if len(tolerance) > 1 else tolerance[0]
+                lower_tolerance = min(val1, val2)
+                upper_tolerance = max(val1, val2)
             else:
                 lower_tolerance = 0
                 upper_tolerance = 0

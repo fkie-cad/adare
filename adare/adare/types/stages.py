@@ -396,3 +396,92 @@ class VMExperimentSnapshotStage(Stage):
     msg: ClassVar[str] = 'Creating experiment snapshot'
     description: ClassVar[str] = 'Creating snapshot for experiment recovery/debugging'
     parent: ClassVar[str] = 'cleanup_shutdown'
+
+@register_stage
+@attrs.define
+class VMTestSetupStage(Stage):
+    name: ClassVar[str] = 'vm_test_setup'
+    msg: ClassVar[str] = 'VM Compatibility Test Setup'
+    description: ClassVar[str] = 'Setting up VM compatibility test environment'
+    parent: ClassVar[typing.Optional[str]] = None
+
+@register_stage
+@attrs.define
+class VMCompatibilityTestStage(Stage):
+    name: ClassVar[str] = 'vm_compatibility_test'
+    msg: ClassVar[str] = 'VM Compatibility Testing'
+    description: ClassVar[str] = 'Running ADARE compatibility tests on the VM'
+    parent: ClassVar[typing.Optional[str]] = None
+
+@register_stage
+@attrs.define
+class VMTestCleanupStage(Stage):
+    name: ClassVar[str] = 'vm_test_cleanup'
+    msg: ClassVar[str] = 'VM Test Cleanup'
+    description: ClassVar[str] = 'Cleaning up VM test resources'
+    parent: ClassVar[typing.Optional[str]] = None
+
+# VM Test Substages - Individual compatibility tests
+@register_stage
+@attrs.define
+class VMResponseTestStage(Stage):
+    name: ClassVar[str] = 'vm_response_test'
+    msg: ClassVar[str] = 'Testing VM command responsiveness'
+    description: ClassVar[str] = 'Verify VM can execute basic commands'
+    parent: ClassVar[str] = 'vm_compatibility_test'
+
+@register_stage
+@attrs.define
+class VMSharedFoldersTestStage(Stage):
+    name: ClassVar[str] = 'vm_shared_folders_test'
+    msg: ClassVar[str] = 'Testing shared folder accessibility'
+    description: ClassVar[str] = 'Verify VM can access mounted shared folders'
+    parent: ClassVar[str] = 'vm_compatibility_test'
+
+@register_stage
+@attrs.define
+class VMPythonTestStage(Stage):
+    name: ClassVar[str] = 'vm_python_test'
+    msg: ClassVar[str] = 'Testing Python installation'
+    description: ClassVar[str] = 'Verify Python is available in VM'
+    parent: ClassVar[str] = 'vm_compatibility_test'
+
+@register_stage
+@attrs.define
+class VMPoetryTestStage(Stage):
+    name: ClassVar[str] = 'vm_poetry_test'
+    msg: ClassVar[str] = 'Testing Poetry installation'
+    description: ClassVar[str] = 'Verify Poetry package manager is available'
+    parent: ClassVar[str] = 'vm_compatibility_test'
+
+@register_stage
+@attrs.define
+class VMAdareServerTestStage(Stage):
+    name: ClassVar[str] = 'vm_adare_server_test'
+    msg: ClassVar[str] = 'Starting AdareVM server'
+    description: ClassVar[str] = 'Install dependencies and start AdareVM WebSocket server'
+    parent: ClassVar[str] = 'vm_compatibility_test'
+
+@register_stage
+@attrs.define
+class VMWebSocketTestStage(Stage):
+    name: ClassVar[str] = 'vm_websocket_test'
+    msg: ClassVar[str] = 'Testing WebSocket connection'
+    description: ClassVar[str] = 'Establish WebSocket connection to AdareVM server'
+    parent: ClassVar[str] = 'vm_compatibility_test'
+
+@register_stage
+@attrs.define
+class VMScreenshotTestStage(Stage):
+    name: ClassVar[str] = 'vm_screenshot_test'
+    msg: ClassVar[str] = 'Testing screenshot capture'
+    description: ClassVar[str] = 'Verify screenshot functionality via WebSocket'
+    parent: ClassVar[str] = 'vm_compatibility_test'
+
+@register_stage
+@attrs.define
+class VMClickTestStage(Stage):
+    name: ClassVar[str] = 'vm_click_test'
+    msg: ClassVar[str] = 'Testing mouse click commands'
+    description: ClassVar[str] = 'Verify mouse click functionality via WebSocket'
+    parent: ClassVar[str] = 'vm_compatibility_test'

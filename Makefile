@@ -7,13 +7,18 @@ else
 endif
 
 .DEFAULT_GOAL = help
-.PHONY = help adare
+.PHONY = help install adare-clean docs
 
 help:
-	@echo "---------------HELP-----------------"
-	@echo "------------------------------------"
+	@echo "--------------- HELP -----------------"
+	@echo "Available targets:"
+	@echo "  help            Show this help message."
+	@echo "  install         Run the installer (PowerShell on Windows, shell on *nix)."
+	@echo "  adare-clean     Reset adare state."
+	@echo "  docs            Build HTML documentation with Sphinx."
+	@echo "---------------------------------------"
 
-adare:
+install:
 ifeq ($(OS),Windows_NT)
 	@echo "Running PowerShell script..."
 	@powershell.exe -File ./adare/install/install.ps1
@@ -25,15 +30,6 @@ endif
 
 adare-clean:
 	adare manage reset
-
-adarevm:
-ifeq ($(OS),Windows_NT)
-	@echo "Running PowerShell script..."
-	@powershell.exe -File ./adarevm/install/install.ps1
-else
-	@echo "Running shell script..."
-	@./adarevm/install/install.sh
-endif
 
 docs:
 	poetry run sphinx-build -b html -a -E docsrc/source docs
