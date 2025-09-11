@@ -27,7 +27,6 @@ This document tracks ongoing development tasks, planned features, quality of lif
   - [ ] variable resolving uses regex to track resolved - can we do this without regex?
   - [ ] remove all tessdata relicts
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
-- [ ] built in the testfunction methods variables info what variable tyes are allwoed 
 - [x] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;)
 - [ ] let a user run multiple exepriments -> requires more advanced snapshot handling -> so vm needs to uploaded 
 - [ ] rethink testfunction result -> at the moment lists -> how is it saved in databse plain json? (then dicts would be better?)
@@ -37,8 +36,11 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 - [ ] real testunfction error (so no failed test) are not displayed properly in flowconsole but markes as failed test
 - [ ] by default on run no specific log is saved to adare run log dir if not --logfile is set as well?! -> test if fixed?!
-- [ ] look into timezone+localtime if this all really works like expetected together with tolerance filter -> so timestamp/timezone do not work really well -> we did some localtime resolving on adarevm/maybe also adjust for timezone
+- [x] look into timezone+localtime if this all really works like expetected together with tolerance filter -> so timestamp/timezone do not work really well -> we did some localtime resolving on adarevm/maybe also adjust for timezone
 - [x] testfunction list should show testfunction set with . before at least if not standard
 - [ ] default ram for linux box 4gb and windows box 8gb. Custom set during experiment run or? - can we do this? If not implement fix!
 - [x] update makefile (make adare does not work we need -B why?); update help message; in docs reference make adare
 - [ ] check if its possible that vm path in environment is relative to project directory
+- [ ] nested variables cause issues - need to be fixed -> worked on command but not on dst paramter somehow?! so maybe nested works but not for all paraemter values?!
+- [ ] does svg as icons in playbook work? 
+- [ ] testfunction standard should be loaded on project creation!
