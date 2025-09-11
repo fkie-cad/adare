@@ -102,3 +102,36 @@ def exec_vm_clear_by_environment(arguments):
             
     except Exception as e:
         log.error(f"Failed to clear environment VMs: {e}")
+
+
+async def exec_vm_test(arguments):
+    """Test OVA file compatibility with ADARE."""
+    from adare.backend.experiment.commands import ova_test
+    from pathlib import Path
+    import sys
+    
+    ova_path = Path(arguments.ova_file).resolve()
+    
+    try:
+        log.info("CLAUDE: Starting VM test for OVA file compatibility")
+        success = await ova_test(
+            ova_file_path=ova_path,
+            guest_platform=arguments.platform,
+            verbose=arguments.verbose,
+            vm_cleanup_mode=getattr(arguments, 'vm_cleanup_mode', 'prompt')
+        )
+        
+        if success:
+            print("✅ VM test completed successfully! OVA file is compatible with ADARE.")
+            sys.exit(0)
+        else:
+            print("❌ VM test failed! OVA file may not be compatible with ADARE.")
+            sys.exit(1)
+            
+    except Exception as e:
+        log.error(f"VM test error: {e}")
+        print(f"❌ VM test failed with error: {e}")
+        if arguments.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)

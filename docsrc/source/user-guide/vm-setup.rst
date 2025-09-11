@@ -59,7 +59,7 @@ Required Software Installation
 
 Install the following software:
 
-- **Python 3.10 or newer**
+- **Python 3.9 or newer**
 - **Poetry** (`Installation Guide <https://python-poetry.org/docs/#installing-with-the-official-installer>`_)
 - **VirtualBox Guest Additions**
   
@@ -82,7 +82,7 @@ Base Configuration (all environments)
 - Install:
 
   - Python 3.10 or newer
-  - `Poetry <https://python-poetry.org/docs/#installing-with-the-official-installer>`_
+  - `Poetry <https://python-poetry.org/docs/#installing-with-the-official-installer>`_ and make sure it's in the PATH for the ``adare`` user. So open a new terminal and run ``poetry --version`` to confirm.
   - VirtualBox Guest Additions
   - ``python3-tk``
   - ``python3-dev``

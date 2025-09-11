@@ -33,3 +33,8 @@ class VMCopyError(VMError):
 class VMStorageError(VMError):
     """VM storage directory issues."""
     pass
+
+
+class VMImportError(VMError):
+    """VirtualBox import operation failed."""
+    pass

@@ -393,10 +393,15 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
         # Create VirtualBoxVM instance and import using the unique name
         from adare.virtualbox.api import VirtualBoxManager
         from adare.config import get_vm_credentials
+        from adare.backend.vm.exceptions import VMImportError
         manager = VirtualBoxManager()
         username, password = get_vm_credentials(guest_os)
         vbox_vm = VirtualBoxVM(vbox_vm_name, guest_os, manager, username, password)
-        await vbox_vm.create_from_ovf_or_ova(vm_file, silent=True)
+        import_result = await vbox_vm.create_from_ovf_or_ova(vm_file, silent=True)
+        
+        # Check if import was successful 
+        if import_result != 0:
+            raise VMImportError(log, f"VirtualBox import failed with return code {import_result}. Check VirtualBox installation and VM file validity.")
         
         # Disable time synchronization to prevent VM from syncing with host time
         # await vbox_vm.disable_time_sync(silent=True)  # Commented out - makes clock weird
