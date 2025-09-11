@@ -15,7 +15,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] built a way to better validate playbooks (e.g. two variables with saame name through variables or save_timestamp ..., check that used variables are defined before, check if filters are correct)
 - [ ] make all output available as csv/json/yaml
 - [x] some way to test vms; maybe with simple command adare vm test
-- [ ] enhance `adare vm test` with automatic platform detection and desktop environment detection for platform-specific tests 
+- [ ] enhance `adare vm test` with automatic platform detection and desktop environment detection for platform-specific tests -> complexer than thought since we need database indendent experiment run with own stages and own flow console
 
 ## Quality of Life Improvements
 - [ ] update documentation
