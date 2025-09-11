@@ -1,13 +1,5 @@
-ifeq ($(OS),Windows_NT)
-    detected_OS := Windows
-    PYTHON = py
-else
-    detected_OS := $(shell uname)  # same as "uname -s"
-    PYTHON = python3
-endif
-
 .DEFAULT_GOAL = help
-.PHONY = help install adare-clean docs
+.PHONY: help install adare-clean docs
 
 help:
 	@echo "--------------- HELP -----------------"

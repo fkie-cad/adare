@@ -19,6 +19,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 ## Quality of Life Improvements
 - [ ] update documentation
   - [ ] add sections about timezones -> since vm syncs with local time do not interfer -> when tool uses utc all good when tool uses localtime use | localtime filter!
+  - [ ] add some info about the testfunctions in the different set and what variables are allowed in the different fields
 - [ ] screenshot not via websockets but via shared files (to make faster?)
 - [ ] add easier way to updated/test new testfunctions
 - [ ] improve code quality in general
