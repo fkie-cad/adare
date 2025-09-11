@@ -6,5 +6,3 @@ Advanced
    :hidden:
    :maxdepth: 2
    :caption: Contents:
-
-   testfunction
