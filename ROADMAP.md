@@ -6,7 +6,6 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
 - [x] built tests/test experiments for new testfunctions
 - [ ] test if we can still run adare if we delete cloned repo
-- [ ] what python version is required on the remote system try if 3.8 still works? 
 
 ## Planned Features
 - [ ] test and enable ydotool to make it work on wayland linux distros as well
@@ -31,12 +30,14 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [x] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;)
 - [ ] let a user run multiple exepriments -> requires more advanced snapshot handling -> so vm needs to uploaded 
 - [ ] rethink testfunction result -> at the moment lists -> how is it saved in databse plain json? (then dicts would be better?)
+- [ ] add some automatic variables -> e.g. adare_user_home als automatische Variable, die im Playbook verwendet werden kann und zum entsprechenden Home-Verzeichnis auflöst
 
 ## Known Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 - [ ] real testunfction error (so no failed test) are not displayed properly in flowconsole but markes as failed test
 - [ ] by default on run no specific log is saved to adare run log dir if not --logfile is set as well?! -> test if fixed?!
 - [ ] look into timezone+localtime if this all really works like expetected together with tolerance filter -> so timestamp/timezone do not work really well -> we did some localtime resolving on adarevm/maybe also adjust for timezone
-- [ ] testfunction list should show testfunction set with . before at least if not standard
+- [x] testfunction list should show testfunction set with . before at least if not standard
 - [ ] default ram for linux box 4gb and windows box 8gb. Custom set during experiment run or? - can we do this? If not implement fix!
-- [ ] update makefile (make adare does not work we need -B why?); update help message; in docs reference make adare
+- [x] update makefile (make adare does not work we need -B why?); update help message; in docs reference make adare
+- [ ] check if its possible that vm path in environment is relative to project directory

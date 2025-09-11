@@ -23,14 +23,19 @@ class RunListPanel:
         table = Table()
         table.add_column("ulid", justify="left", style="cyan", no_wrap=True)
         table.add_column("experiment", justify="left", style="cyan", no_wrap=True)
+        table.add_column("type", justify="left", style="cyan", no_wrap=True)
         table.add_column("flow status", justify="left", style="cyan", no_wrap=True)
         table.add_column("tests status", justify="left", style="cyan", no_wrap=True)
         table.add_column("duration", justify="left", style="cyan", no_wrap=True)
 
         for _, row in self.runs.iterrows():
+            # Determine if run is fake or real
+            run_type = "[red]fake[/red]" if row.get('fake', False) else "[green]real[/green]"
+            
             table.add_row(
                 row['id'],
                 row['experiment_dotnotation'],
+                run_type,
                 StatusEnum.get_icon(row['status'], color=True),
                 StatusEnum.get_icon(row['result_status'], color=True),
                 timedelta_to_str(row['duration']) if row['duration'] else '...',
