@@ -53,6 +53,9 @@ logging.getLogger('httpcore').setLevel(logging.WARNING)
 class StageCtxManagerLite:
     """Lightweight StageCtxManager for VM tests - calls flow console directly (no database/events)."""
     
+    # Class-level registry to track active parent stages for hierarchy validation
+    _active_stages = {}  # stage_name -> stage_instance
+    
     def __init__(self, stage, flow_console, level=0):
         self.stage = stage  # Reuse existing Stage classes
         self.flow_console = flow_console  # Direct flow console access
@@ -63,6 +66,15 @@ class StageCtxManagerLite:
         
     async def __aenter__(self):
         from datetime import datetime, timezone
+        
+        # Validate parent stage hierarchy (like original StageCtxManager)
+        if hasattr(self.stage, 'parent') and self.stage.parent:
+            if self.stage.parent not in self._active_stages:
+                # For VM tests, be more lenient - just log a warning instead of raising error
+                log.warning(f"VM Test Stage '{self.stage.name}' expects parent '{self.stage.parent}' but no parent stage is active. Continuing anyway for VM tests.")
+        
+        # Add this stage to active stages registry
+        self._active_stages[self.stage.name] = self.stage
         
         # Set stage start time (reuse Stage lifecycle logic)
         self.start_time = datetime.now(timezone.utc)
@@ -81,6 +93,9 @@ class StageCtxManagerLite:
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         from datetime import datetime, timezone
+        
+        # Remove this stage from active stages registry
+        self._active_stages.pop(self.stage.name, None)
         
         # Set stage end time and calculate duration
         self.end_time = datetime.now(timezone.utc)
@@ -1265,117 +1280,21 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
 
 async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = False, vm_cleanup_mode: str = 'prompt') -> bool:
     """
-    Test OVA file compatibility with ADARE using separate workflow that reuses existing steps.
+    Test OVA file compatibility with ADARE.
+    
+    This function has been moved to vm_test.py for better code organization.
     
     Args:
         ova_file_path: Path to the .ova file to test
         guest_platform: Platform type ('windows' or 'linux') - required
         verbose: Enable verbose logging
+        vm_cleanup_mode: VM cleanup mode ('keep' or 'prompt')
         
     Returns:
         True if VM is compatible with ADARE, False otherwise
     """
-    if not ova_file_path.exists():
-        raise LoggedException(log, f"OVA file not found: {ova_file_path}")
-    
-    if guest_platform not in ['linux', 'windows']:
-        raise LoggedException(log, f"Invalid platform '{guest_platform}'. Must be 'linux' or 'windows'")
-    
-    import time
-    start_time = time.time()
-    
-    log.info(f"CLAUDE: ova_test function started - Testing OVA file: {ova_file_path}")
-    log.info(f"CLAUDE: Platform: {guest_platform}")
-    
-    # Create and start flow console for better visibility
-    user_interrupt_event = threading.Event()
-    flow_console = __create_and_start_flow_console("vm_test", disable_printing=False, external_stop_event=user_interrupt_event)
-    flow_console.start_experiment_timer(f"VM Test: {ova_file_path.name}")
-    
-    # Start stage event coordinator for stage management
-    from adare.backend.events.coordinator import start_stage_coordinator
-    start_stage_coordinator()
-    __start_event_listeners("vm_test")
-    
-    # Create minimal context for OVA test
-    context = _create_ova_test_context(ova_file_path, guest_platform)
-    context.user_interrupt_event = user_interrupt_event
-    
-    # Create step runner for consistent execution 
-    import asyncio
-    stop_event = asyncio.Event()
-    context.stop_event = stop_event
-    step_runner = ExperimentStepRunner(stop_event, user_interrupt_event)
-    vm_manager = VMLifecycleManager()
-    
-    try:
-        # VM Test Setup Phase
-        if not stop_event.is_set():
-            log.info("CLAUDE: Starting VM Test Setup Phase...")
-            async with StageCtxManagerLite(VMTestSetupStage(), flow_console, level=1):
-                setup_steps = [
-                    lambda ctx: _import_ova_for_test(ctx),
-                    lambda ctx: _setup_shared_folders_for_test(ctx),
-                ]
-                for setup_step in setup_steps:
-                    await step_runner.run_async_step(setup_step, context)
-        
-        # VM Setup Phase - Use existing VM lifecycle manager
-        if not stop_event.is_set():
-            async with StageCtxManagerLite(VirtualMachineSetupStage(), flow_console, level=1):
-                await step_runner.run_async_step(vm_manager.start_vm, context)
-                await step_runner.run_async_step(vm_manager.wait_until_ready, context)
-                await step_runner.run_async_step(vm_manager.mount_shared_directories, context)
-        
-        # VM Compatibility Testing Phase
-        vm_compatibility_success = False
-        if not stop_event.is_set():
-            async with StageCtxManagerLite(VMCompatibilityTestStage(), flow_console, level=1):
-                vm_compatibility_success = await step_runner.run_async_step(lambda ctx: _test_vm_compatibility(ctx, flow_console), context)
-        
-        # Check if VM compatibility tests passed
-        if not vm_compatibility_success:
-            log.error("CLAUDE: ❌ VM compatibility tests failed - VM may not be fully compatible with ADARE")
-            flow_console.finish_experiment_timer(success=False)
-            return False
-        
-        elapsed_time = time.time() - start_time
-        log.info(f"CLAUDE: ✅ OVA test completed successfully! File is compatible with ADARE. (took {elapsed_time:.1f} seconds)")
-        flow_console.finish_experiment_timer(success=True)
-        return True
-        
-    except Exception as e:
-        log.error(f"CLAUDE: ❌ OVA test failed with unexpected error: {e}")
-        # Always show traceback for debugging VM test failures
-        import traceback
-        traceback.print_exc()
-        flow_console.finish_experiment_timer(success=False)
-        return False
-    finally:
-        # VM Test Cleanup Phase  
-        try:
-            async with StageCtxManagerLite(VMTestCleanupStage(), flow_console, level=1):
-                # Determine VM cleanup behavior - default is remove unless --keep-vm specified
-                keep_vm = False
-                if context.vm:
-                    if vm_cleanup_mode == 'keep':
-                        keep_vm = True
-                        log.info("CLAUDE: Keeping VM for further testing (--keep-vm specified)")
-                    else:
-                        keep_vm = False
-                        log.info("CLAUDE: Removing VM automatically (default behavior)")
-                
-                await _cleanup_test_vm(context, keep_vm=keep_vm)
-        except Exception as cleanup_error:
-            log.error(f"CLAUDE: Error during cleanup: {cleanup_error}")
-        
-        # Stop the flow console
-        try:
-            from adare.backend.events.coordinator import stop_stage_coordinator
-            stop_stage_coordinator()
-            flow_console.stop()
-        except Exception as e:
-            log.error(f"Error stopping flow console: {e}")
+    from adare.backend.experiment.vm_test import ova_test as vm_ova_test
+    return await vm_ova_test(ova_file_path, guest_platform, verbose, vm_cleanup_mode)
 
 
 def _create_ova_test_context(ova_file_path: Path, guest_platform: str):
