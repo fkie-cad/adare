@@ -73,6 +73,7 @@ class Settings:
     idle: float = 0.1
     timeout: Optional[float] = None
     screenshot: Optional[dict] = None
+    continue_on_test_failure: bool = False
 
 @attrs.define
 class Target:

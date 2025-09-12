@@ -70,7 +70,7 @@ def exec_experiment_run(arguments):
                 # Normal mode - no force loading
                 experiment_load(project_directory, arguments.experiment, force=False, silent=True)
                 
-            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot, runlog=arguments.runlog))
+            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot, runlog=arguments.runlog, vm_memory=arguments.vm_memory, vm_cpus=arguments.vm_cpus))
         except LoggedException as e:
             e.print()
             if isinstance(e, LoggedErrorException):

@@ -38,18 +38,6 @@ def exec_remove_project(arguments):
     project_remove(path)
 
 
-def exec_download_tessdata(arguments):
-    """
-    downloads the tessdata for the given language
-
-    :param arguments: arguments parsed via input
-    """
-    from adare.backend.project.commands import project_add_tessdata
-    path = determine_projectdirectory(arguments.name)
-    if not path:
-        log.error("no valid project directory provided")
-        exit(1)
-    project_add_tessdata(path, arguments.language)
 
 
 def exec_list_projects(arguments):

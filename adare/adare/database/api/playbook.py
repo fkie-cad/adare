@@ -117,9 +117,19 @@ class PlaybookApi(DatabaseApi):
         if not config.settings:
             return {}
         
-        return {
+        result = {
             "idle": config.settings.idle
         }
+        
+        # Add optional settings if they exist
+        if hasattr(config.settings, 'timeout') and config.settings.timeout is not None:
+            result["timeout"] = config.settings.timeout
+        if hasattr(config.settings, 'screenshot') and config.settings.screenshot is not None:
+            result["screenshot"] = config.settings.screenshot
+        if hasattr(config.settings, 'continue_on_test_failure'):
+            result["continue_on_test_failure"] = config.settings.continue_on_test_failure
+        
+        return result
     
     def _target_to_json(self, target) -> Dict[str, Any]:
         """Convert Target object to JSON."""

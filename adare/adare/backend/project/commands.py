@@ -9,6 +9,7 @@ from adare.helperfunctions.cli import print_df
 from adare.backend.project.exceptions import ProjectDirectoryCreationError, ProjectDirectoryRemovalError, \
     ProjectDirectoryCopyError, ProjectDirectoryMissingError, ProjectMissingInDatabaseError, NoProjectsFoundMessage
 from adare.database.exceptions import DatabaseProjectCreationError
+from adare.console import print_success_message
 
 # configure logging
 import logging
@@ -36,6 +37,21 @@ def project_create(path: Path, name: str, description: str = ''):
         raise e
 
     log.info(f'project in path {path} created')
+    
+    # Provide clear user feedback with loaded testfunction sets and next steps
+    next_steps = [
+        f'Create an environment with: adare environment create <environment_name>',
+        f'Create an experiment with: adare experiment create <experiment_name>',
+        f'Use the 15 standard test functions for file operations, JSON validation, SQLite queries, and more',
+        f'Run your first experiment with: adare experiment run <experiment> -e <environment>'
+    ]
+    
+    print_success_message(
+        title=f'Project "{name}" created successfully!',
+        location=str(path),
+        next_steps=next_steps,
+        tip='Standard testfunction set loaded with file operations (exists, content, permissions), data validation (JSON, CSV, SQLite), and forensic analysis capabilities'
+    )
 
 
 def project_remove(path: Path):

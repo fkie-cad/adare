@@ -238,9 +238,11 @@ def load(experiment, environment, force, project):
 @click.option('--debug-screenshots', is_flag=True, help='Save screenshots to experiment run directory for debugging')
 @click.option('--preserve-snapshot', '-s', is_flag=True, help='Create experiment snapshot for preservation (default: only reset to base snapshot)')
 @click.option('--no-runlog', is_flag=True, help='Do not save adare log to the run/logs directory')
+@click.option('--vm-memory', type=int, help='VM RAM in MB (default: 4096 for Linux, 8192 for Windows)')
+@click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
 @click.option('--project', '-p', help='Name of the project')
 @click.pass_context
-def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot, no_runlog, project):
+def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, project):
     """Run an experiment in a given environment."""
     args = SimpleNamespace(
         experiment=experiment,
@@ -249,6 +251,8 @@ def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot
         debug_screenshots=debug_screenshots,
         preserve_snapshot=preserve_snapshot,
         runlog=not no_runlog,
+        vm_memory=vm_memory,
+        vm_cpus=vm_cpus,
         project=project,
         verbose=ctx.obj.verbose,
         very_verbose=ctx.obj.very_verbose
