@@ -35,6 +35,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
   - [ ] we use the username/password dummy when we with virtualbox do not need the commands ... -> find a better solution!
   - [ ] variable resolving uses regex to track resolved - can we do this without regex?
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
+  - [ ] thereby replace claude logging details with different levels and be less noicy and clearer to see what went wrong? 
 - [x] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;)
 - [ ] rethink testfunction result -> at the moment lists -> how is it saved in databse plain json? (then dicts would be better?)
 - [x] add some automatic variables -> e.g. adare_user_home als automatische Variable, die im Playbook verwendet werden kann und zum entsprechenden Home-Verzeichnis auflöst 
@@ -43,4 +44,6 @@ This document tracks ongoing development tasks, planned features, quality of lif
 
 ## Known Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
-- [ ] does test runs are stored in databse? it seems like not but they should or and only marked as fake?!
+- [ ] interrupt on verify does not work!
+- [ ] adding/removing a pull does not trigger reload of experiment?! -> this means run do not work -> try to load on every run?!
+- [ ] stored logs contain logs from prev. experiments?!

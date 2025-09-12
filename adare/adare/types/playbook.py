@@ -108,8 +108,8 @@ class ClickAction:
 
 @attrs.define
 class DragAction:
-    source: Target
-    destination: Target
+    src: Target
+    dst: Target
     description: str = ''
 
 @attrs.define
@@ -160,8 +160,8 @@ class SaveTimestampAction:
 
 @attrs.define
 class PullAction:
-    source: str  # Path to file/directory in VM to pull
-    destination: Optional[str] = None  # Optional destination name in artifacts folder
+    src: str  # Path to file/directory in VM to pull
+    dst: Optional[str] = None  # Optional destination name in artifacts folder
     description: str = ''
     # Note: Always pulls recursively - no need for recursive parameter
 

@@ -320,8 +320,8 @@ class ActionExecutor:
         """Execute drag action - special handling for two targets."""
         try:
             # Resolve both targets (each will emit their own find steps with proper parent)
-            src_coords = await self._resolve_target_with_steps(action.source, parent_event_id, event_emitter)
-            dst_coords = await self._resolve_target_with_steps(action.destination, parent_event_id, event_emitter)
+            src_coords = await self._resolve_target_with_steps(action.src, parent_event_id, event_emitter)
+            dst_coords = await self._resolve_target_with_steps(action.dst, parent_event_id, event_emitter)
             
             if not src_coords or not dst_coords:
                 return ActionResult(success=False, message="Could not resolve targets")
@@ -362,7 +362,7 @@ class ActionExecutor:
                 success=success,
                 message=result.get('message', ''),
                 coordinates=src_coords,
-                data={'source': action.source, 'destination': action.destination, 'source_coordinates': src_coords, 'dest_coordinates': dst_coords}
+                data={'source': action.src, 'destination': action.dst, 'source_coordinates': src_coords, 'dest_coordinates': dst_coords}
             )
             
         except Exception as e:
@@ -623,46 +623,61 @@ class ActionExecutor:
             # Create artifacts directory if it doesn't exist
             artifacts_dir = Path(self.experiment_run_directory) / "artifacts"
             artifacts_dir.mkdir(exist_ok=True)
+            log.info(f"CLAUDE: Pull operation - artifacts directory: {artifacts_dir}")
             
             # Determine destination path
-            if action.destination:
+            if action.dst:
                 # Use custom destination relative to artifacts directory
-                dest_path = artifacts_dir / action.destination
+                dest_path = artifacts_dir / action.dst
+                log.info(f"CLAUDE: Pull operation - using custom destination: {action.src} -> {dest_path} (dst specified: {action.dst})")
             else:
                 # Preserve full guest path structure relative to artifacts directory
                 # Remove leading slash to make it relative, then append to artifacts
-                guest_path = Path(action.source)
+                guest_path = Path(action.src)
                 relative_guest_path = guest_path.relative_to('/') if guest_path.is_absolute() else guest_path
                 dest_path = artifacts_dir / relative_guest_path
+                log.info(f"CLAUDE: Pull operation - preserving structure: {action.src} -> {dest_path} (relative: {relative_guest_path})")
             
             # Create parent directories if they don't exist
             dest_path.parent.mkdir(parents=True, exist_ok=True)
+            log.info(f"CLAUDE: Pull operation - created parent directories for: {dest_path.parent}")
             
-            # Use VirtualBox guest control to copy files (always recursive)
+            # No internal execution step events needed - main action events handle the spinner
+            
+            # Execute the pull operation
+            start_time = time.time()
+            log.info(f"CLAUDE: Starting pull operation - VM copy_from_guest: guest_path='{action.src}' -> host_path='{dest_path}' (recursive=True)")
             success = await self.vm.copy_from_guest(
-                guest_path=action.source,
+                guest_path=action.src,
                 host_path=str(dest_path),
                 recursive=True
             )
+            execution_time = time.time() - start_time
+            log.info(f"CLAUDE: Pull operation completed - success={success}, execution_time={execution_time:.2f}s")
             
             if success:
-                log.info(f"Successfully pulled {action.source} to {dest_path}")
+                log.info(f"CLAUDE: Pull SUCCESS - {action.src} -> {dest_path}")
+                log.info(f"Successfully pulled {action.src} to {dest_path}")
                 return ActionResult(
                     success=True,
-                    message=f"Pulled {action.source} to artifacts/{dest_path.name}",
+                    message=f"Pulled {action.src} to artifacts/{dest_path.name}",
+                    execution_time=execution_time,
                     data={
-                        "source": action.source,
+                        "source": action.src,
                         "destination": str(dest_path),
                         "artifacts_path": f"artifacts/{dest_path.name}"
                     }
                 )
             else:
+                log.error(f"CLAUDE: Pull FAILED - {action.src} -> {dest_path}")
                 return ActionResult(
                     success=False,
-                    message=f"Failed to pull {action.source}"
+                    message=f"Failed to pull {action.src}",
+                    execution_time=execution_time
                 )
             
         except Exception as e:
+            log.error(f"CLAUDE: Pull EXCEPTION - {action.src} -> {getattr(locals().get('dest_path'), 'path', 'unknown')}: {e}")
             log.error(f"Error in pull operation: {e}")
             return ActionResult(
                 success=False,

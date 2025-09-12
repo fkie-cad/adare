@@ -592,10 +592,10 @@ class VariableResolver:
         
         # Resolve Source/Destination targets for DragAction
         if isinstance(action, DragAction):
-            if resolved_action.source:
-                resolved_action.source = self.resolve_target_variables(resolved_action.source, execution_context)
-            if resolved_action.destination:
-                resolved_action.destination = self.resolve_target_variables(resolved_action.destination, execution_context)
+            if resolved_action.src:
+                resolved_action.src = self.resolve_target_variables(resolved_action.src, execution_context)
+            if resolved_action.dst:
+                resolved_action.dst = self.resolve_target_variables(resolved_action.dst, execution_context)
         
         return resolved_action
     
