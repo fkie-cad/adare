@@ -2,10 +2,18 @@
 import attrs
 import platform
 import subprocess
-import pwd
-import grp
 from pathlib import Path
 from typing import ClassVar, Optional, List
+
+# Check if Unix modules are available (Linux/Unix only)
+try:
+    import pwd
+    import grp
+    UNIX_MODULES_AVAILABLE = True
+except ImportError:
+    UNIX_MODULES_AVAILABLE = False
+    pwd = None
+    grp = None
 
 # internal imports
 from adarelib.testset.basictest import BasicTest, Parameter
@@ -143,6 +151,10 @@ class UserExists(BasicTest):
     def test(self):
         if platform.system() != 'Linux':
             return TestResult.execution_error(None, "This test only runs on Linux")
+        
+        if not UNIX_MODULES_AVAILABLE:
+            return TestResult.execution_error(None, "Unix modules (pwd, grp) not available")
+            
         try:
             username = self.parameter.username
             expected_uid = self.parameter.uid

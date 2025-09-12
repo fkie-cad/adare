@@ -5,6 +5,41 @@ from types import SimpleNamespace
 import click
 from trogon import tui
 
+
+class AliasedGroup(click.Group):
+    """A Click Group that supports command aliases."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.aliases = {}
+    
+    def add_alias(self, alias, command_name):
+        """Add an alias for a command."""
+        self.aliases[alias] = command_name
+    
+    def get_command(self, ctx, cmd_name):
+        # First try the alias mapping
+        if cmd_name in self.aliases:
+            cmd_name = self.aliases[cmd_name]
+        
+        rv = click.Group.get_command(self, ctx, cmd_name)
+        if rv is not None:
+            return rv
+            
+        # If no exact match, try prefix matching
+        matches = [x for x in self.list_commands(ctx)
+                   if x.startswith(cmd_name)]
+        if not matches:
+            return None
+        elif len(matches) == 1:
+            return click.Group.get_command(self, ctx, matches[0])
+        ctx.fail(f'Too many matches: {", ".join(sorted(matches))}')
+    
+    def list_commands(self, ctx):
+        """Return both commands and aliases."""
+        commands = super().list_commands(ctx)
+        return sorted(commands + list(self.aliases.keys()))
+
 # Internal imports
 from adare.cli.project import (
     exec_create_project, exec_remove_project, exec_list_projects
@@ -68,7 +103,7 @@ START_TIME = time.time()
 
 # Global CLI group with logging and version options
 @tui()
-@click.group()
+@click.group(cls=AliasedGroup)
 @click.option('--logfile', type=click.Path(), help='Path to logfile')
 @click.option('--verbose', is_flag=True, help='Verbose output (loglevel=INFO)')
 @click.option('--very-verbose', is_flag=True, help='Very verbose output (loglevel=DEBUG)')
@@ -85,6 +120,12 @@ def cli(ctx, logfile, verbose, very_verbose, log_level):
     ctx.obj.very_verbose = very_verbose
     ctx.obj.log_level = log_level
     setup_logging(ctx.obj, sys.argv)
+
+
+# Add aliases after CLI group is defined
+cli.add_alias('exp', 'experiment')
+cli.add_alias('env', 'environment') 
+cli.add_alias('tf', 'testfunction')
 
 
 # ------------------------------
@@ -142,7 +183,7 @@ def list_projects():
 # ------------------------------
 # Environment commands
 # ------------------------------
-@cli.group(name='environment', aliases=['env'])
+@cli.group(name='environment')
 def environment():
     """Environment-related commands."""
     pass
@@ -207,7 +248,7 @@ def info(dotnotation):
 # ------------------------------
 # Experiment commands
 # ------------------------------
-@cli.group(name='experiment', aliases=['exp'])
+@cli.group(name='experiment')
 def experiment():
     """Experiment-related commands."""
     pass
@@ -335,7 +376,7 @@ def info(name, ulid, dotnotation):
 # ------------------------------
 # Testfunction commands
 # ------------------------------
-@cli.group(aliases=['tf'])
+@cli.group()
 def testfunction():
     """Testfunction-related commands."""
     pass
@@ -366,9 +407,10 @@ def load(name, project):
 
 @testfunction.command(name='list')
 @click.option('--project', '-p', help='Name of the project')
-def list_testfunctions(project):
+@click.option('--set', help='Filter testfunctions by set (e.g., standard)')
+def list_testfunctions(project, set):
     """List all testfunctions."""
-    args = SimpleNamespace(project=project)
+    args = SimpleNamespace(project=project, set=set)
     exec_with_error_printing(exec_list_testfunctions, args)
 
 @testfunction.command()

@@ -42,4 +42,4 @@ def exec_load_testfunction(arguments):
 
 def exec_list_testfunctions(arguments):
     from adare.backend.testfunction.commands import testfunction_list
-    testfunction_list()
+    testfunction_list(testfunction_set=getattr(arguments, 'set', None))
