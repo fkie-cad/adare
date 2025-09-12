@@ -28,13 +28,14 @@ class TestResultProcessor:
     SUCCESS_STATUSES = {STATUS_SUCCESS}
     
     @classmethod
-    def process_test_result(cls, test_name: str, ws_result: Dict[str, Any]) -> ActionResult:
+    def process_test_result(cls, test_name: str, ws_result: Dict[str, Any], expect_to_fail: bool = False) -> ActionResult:
         """
         Process test result received from WebSocket.
         
         Args:
             test_name: Name of the test that was executed
             ws_result: Result dictionary from WebSocket call
+            expect_to_fail: If True, invert SUCCESS/FAILED status (errors remain errors)
             
         Returns:
             ActionResult with processed test information
@@ -47,16 +48,36 @@ class TestResultProcessor:
         # Categorize the result for better logging
         result_category = cls._categorize_result(test_status)
         
-        # Log test result on host side with category
-        cls._log_test_result(test_name, test_status, test_details, result_category)
+        # Apply expect_to_fail logic - only invert test success/failure, not execution errors
+        modified_test_details = list(test_details)
+        if expect_to_fail and ws_result.get('status') == 'success':
+            # Only invert if the test actually executed (no execution errors)
+            if test_status == cls.STATUS_SUCCESS:
+                # Test succeeded but we expected it to fail
+                test_success = False
+                # Add note to details about expectation
+                modified_test_details.append("Expected to fail but succeeded")
+            elif test_status == cls.STATUS_FAILED:
+                # Test failed but we expected it to fail - this is success
+                test_success = True
+                # Add note to details about expectation
+                modified_test_details.append("Expected to fail and did fail")
+            else:
+                # For success/unknown status, use normal logic
+                test_success = test_status in cls.SUCCESS_STATUSES
+        else:
+            # Normal logic when expect_to_fail is False or there was an execution error
+            test_success = test_status in cls.SUCCESS_STATUSES
         
-        # Create detailed message with result category
+        # Log test result on host side with category (use modified details for logging)
+        cls._log_test_result(test_name, test_status, modified_test_details, result_category)
+        
+        # Create detailed message with result category (use modified details)
         base_message = ws_result.get('message', '')
-        detailed_message = cls._create_detailed_message(base_message, test_status, test_details, result_category)
+        detailed_message = cls._create_detailed_message(base_message, test_status, modified_test_details, result_category)
         
         # Determine overall success
         execution_success = ws_result.get('status') == 'success'
-        test_success = test_status in cls.SUCCESS_STATUSES
         overall_success = execution_success and test_success
         
         return ActionResult(

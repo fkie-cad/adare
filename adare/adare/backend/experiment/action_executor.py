@@ -477,9 +477,12 @@ class ActionExecutor:
                 # Send resolved test to VM for execution
                 result = await self.client.run_test(action.name, resolved_test)
                 
+                # Extract expect_to_fail flag from resolved test
+                expect_to_fail = resolved_test.get('expect_to_fail', False)
+                
                 # Use TestResultProcessor to handle result processing
                 from adare.backend.experiment.test_result_processor import TestResultProcessor
-                return TestResultProcessor.process_test_result(action.name, result)
+                return TestResultProcessor.process_test_result(action.name, result, expect_to_fail)
             else:
                 return ActionResult(
                     success=False,
