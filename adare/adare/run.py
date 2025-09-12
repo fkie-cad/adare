@@ -142,7 +142,7 @@ def list_projects():
 # ------------------------------
 # Environment commands
 # ------------------------------
-@cli.group(name='environment')
+@cli.group(name='environment', aliases=['env'])
 def environment():
     """Environment-related commands."""
     pass
@@ -207,7 +207,7 @@ def info(dotnotation):
 # ------------------------------
 # Experiment commands
 # ------------------------------
-@cli.group(name='experiment')
+@cli.group(name='experiment', aliases=['exp'])
 def experiment():
     """Experiment-related commands."""
     pass
@@ -335,7 +335,7 @@ def info(name, ulid, dotnotation):
 # ------------------------------
 # Testfunction commands
 # ------------------------------
-@cli.group()
+@cli.group(aliases=['tf'])
 def testfunction():
     """Testfunction-related commands."""
     pass

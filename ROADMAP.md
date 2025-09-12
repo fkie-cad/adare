@@ -19,7 +19,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] enhance `adare vm test` with automatic platform detection and desktop environmadaent detection for platform-specific tests -> complexer than thought since we need database indendent experiment run with own stages and own flow console
 - [ ] use proper directory for installation; maybe convert instllation from ps1,sh to python script to use platformdirs to get installation location; also use for database then later!
 - [ ] build conditionlogic , wait until we find, retry logic for playbook
-- [ ] autocomplete for commands / abbreviations like env/exp
+- [x] autocomplete for commands / abbreviations like env/exp
  
 ## Quality of Life Improvements
 - [ ] update documentation
@@ -31,6 +31,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
   - [ ] add automatic variables to docs
   - [ ] add info about default cores and ram for vm and how to set this 
   - [ ] svg are not supported for icons at the moment!
+  - [ ] in installation add: eval "$(_ADARE_COMPLETE=zsh_source adare)" and tutorial how to enable autocomplete
 - [ ] improve code quality in general
   - [ ] we use the username/password dummy when we with virtualbox do not need the commands ... -> find a better solution!
   - [ ] variable resolving uses regex to track resolved - can we do this without regex?
@@ -46,4 +47,3 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 - [ ] interrupt on verify does not work!
 - [ ] adding/removing a pull does not trigger reload of experiment?! -> this means run do not work -> try to load on every run?!
-- [ ] stored logs contain logs from prev. experiments?!
