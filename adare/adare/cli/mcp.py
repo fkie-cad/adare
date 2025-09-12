@@ -18,11 +18,12 @@ log = logging.getLogger(__name__)
 class MCPServerManager:
     """Manages the MCP server lifecycle."""
     
-    def __init__(self, host='localhost', port=13109):
+    def __init__(self, host='localhost', port=13109, log_file=None):
         self.host = host
         self.port = port
         self.process = None
         self.server_url = f"http://{host}:{port}/mcp"
+        self.log_file = log_file
     
     async def start_server(self):
         """Start the MCP server if not already running."""
@@ -34,12 +35,28 @@ class MCPServerManager:
         print(f"🚀 Starting MCP server at {self.server_url}")
         
         try:
-            # Start the server process
-            self.process = subprocess.Popen([
+            # Prepare command
+            cmd = [
                 'adare-mcp-server', 
                 '--host', self.host, 
-                '--port', str(self.port)
-            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                '--port', str(self.port),
+                '--debug'  # Always use debug for detailed logs
+            ]
+            
+            # Set up log file redirection if specified
+            if self.log_file:
+                log_file_handle = open(self.log_file, 'w')
+                print(f"📋 MCP server logs will be saved to: {self.log_file}")
+                # Start the server process with logs redirected to file
+                self.process = subprocess.Popen(cmd, 
+                                              stdout=log_file_handle, 
+                                              stderr=subprocess.STDOUT)
+                self._log_file_handle = log_file_handle
+            else:
+                # Start the server process with logs captured but not shown
+                self.process = subprocess.Popen(cmd, 
+                                              stdout=subprocess.PIPE, 
+                                              stderr=subprocess.PIPE)
             
             # Wait for server to start
             for attempt in range(30):  # 30 second timeout
@@ -80,6 +97,12 @@ class MCPServerManager:
                 self.process.kill()
                 self.process.wait()
             self.process = None
+            
+            # Close log file handle if it exists
+            if hasattr(self, '_log_file_handle'):
+                self._log_file_handle.close()
+                delattr(self, '_log_file_handle')
+                
             print("✅ MCP server stopped")
     
     async def __aenter__(self):
@@ -132,8 +155,9 @@ async def exec_mcp_test_icon(args):
     host = getattr(args, 'host', 'localhost')
     port = getattr(args, 'port', 13109)
     threshold = getattr(args, 'threshold', 0.6)
+    mcplog_path = getattr(args, 'mcplog_path', None)
     
-    async with MCPServerManager(host, port) as server_manager:
+    async with MCPServerManager(host, port, log_file=mcplog_path) as server_manager:
         # Start the server 
         if not await server_manager.start_server():
             return
@@ -166,9 +190,11 @@ async def exec_mcp_test_icon(args):
                 if "locations" in response:
                     locations = response["locations"]
                     similarities = response.get("similarities", [])
+                    method_used = response.get("method_used", "template")  # Get detection method
                     
                     # Debug: check what we got
                     print(f"🔍 Debug - Got {len(similarities)} similarities: {similarities[:5]}")  # Show first 5
+                    print(f"🔍 Debug - Detection method used: {method_used}")
                     
                     if locations:
                         print(f"✅ Found {len(locations)} icon matches:")
@@ -263,19 +289,32 @@ async def exec_mcp_test_icon(args):
                                     similarity = similarities[i] if i < len(similarities) else None
                                     color = similarity_to_color(similarity)
                                     
+                                    # Handle coordinates differently based on detection method
+                                    if method_used in ["sift", "orb"]:
+                                        # SIFT and ORB return center coordinates
+                                        center_x = x
+                                        center_y = y
+                                        # Calculate top-left for rectangle
+                                        rect_x = x - icon_width // 2
+                                        rect_y = y - icon_height // 2
+                                    else:
+                                        # Template matching returns top-left coordinates
+                                        center_x = x + icon_width // 2
+                                        center_y = y + icon_height // 2
+                                        rect_x = x
+                                        rect_y = y
+                                    
                                     # Draw colored circle at center of found icon
-                                    center_x = x + icon_width // 2
-                                    center_y = y + icon_height // 2
                                     draw.ellipse([center_x-8, center_y-8, center_x+8, center_y+8], fill=color)
                                     
                                     # Draw colored rectangle around the match
-                                    draw.rectangle([x, y, x + icon_width, y + icon_height], outline=color, width=3)
+                                    draw.rectangle([rect_x, rect_y, rect_x + icon_width, rect_y + icon_height], outline=color, width=3)
                                     
                                     # Add similarity text near the match
                                     try:
                                         sim_text = f"{float(similarity):.2f}"
-                                        text_x = x + icon_width + 5
-                                        text_y = y
+                                        text_x = rect_x + icon_width + 5
+                                        text_y = rect_y
                                         draw.text([text_x, text_y], sim_text, fill=color)
                                     except (ValueError, TypeError):
                                         pass  # Skip text if similarity can't be converted

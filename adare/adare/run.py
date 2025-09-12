@@ -600,7 +600,8 @@ def mcp():
 @click.option('--host', default='localhost', help='MCP server host (default: localhost)')
 @click.option('--port', type=int, default=13109, help='MCP server port (default: 13109)')
 @click.option('--threshold', type=float, default=0.6, help='Match threshold (0.0-1.0, default: 0.6)')
-def test_icon(icon, screenshot, output, host, port, threshold):
+@click.option('--mcplog', type=click.Path(), help='Path to save MCP server logs')
+def test_icon(icon, screenshot, output, host, port, threshold, mcplog):
     """Test MCP server icon finding functionality.
     
     Automatically starts MCP server, finds an icon in a screenshot, 
@@ -613,7 +614,8 @@ def test_icon(icon, screenshot, output, host, port, threshold):
         output_path=output,
         host=host,
         port=port,
-        threshold=threshold
+        threshold=threshold,
+        mcplog_path=mcplog
     )
     exec_with_error_printing(exec_mcp_test_icon, args)
 
