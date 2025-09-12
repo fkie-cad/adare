@@ -103,16 +103,7 @@ class KeyboardAction:
 @attrs.define
 class ClickAction:
     target: Target
-    description: str = ''
-
-@attrs.define
-class RightClickAction:
-    target: Target
-    description: str = ''
-
-@attrs.define
-class DoubleClickAction:
-    target: Target
+    type: str = 'left'  # 'left', 'right', 'double'
     description: str = ''
 
 @attrs.define
@@ -167,6 +158,12 @@ class SaveTimestampAction:
     variable: str
     description: str = ''
 
+@attrs.define
+class PullAction:
+    source: str  # Path to file/directory in VM to pull
+    destination: Optional[str] = None  # Optional destination name in artifacts folder
+    description: str = ''
+    # Note: Always pulls recursively - no need for recursive parameter
 
 @attrs.define
 class BlockAction:
@@ -176,9 +173,9 @@ class BlockAction:
 
 # Now define ActionType after all classes
 ActionType = Union[
-    ClickAction, RightClickAction, DoubleClickAction, DragAction,
+    ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, ActionTestAction, 
-    CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction
+    CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, PullAction
 ]
 
 @attrs.define
@@ -250,10 +247,6 @@ def parse_playbook(yaml_path: Union[str, Path], vm_os: str = None, vm_user: str 
 def _structure_action(obj, converter):
     if 'click' in obj:
         return converter.structure(obj['click'], ClickAction)
-    if 'right_click' in obj:
-        return converter.structure(obj['right_click'], RightClickAction)
-    if 'double_click' in obj:
-        return converter.structure(obj['double_click'], DoubleClickAction)
     if 'drag' in obj:
         return converter.structure(obj['drag'], DragAction)
     if 'keyboard' in obj:
@@ -279,6 +272,8 @@ def _structure_action(obj, converter):
         return converter.structure(obj['screenshot'], ScreenshotAction)
     if 'save_timestamp' in obj:
         return converter.structure(obj['save_timestamp'], SaveTimestampAction)
+    if 'pull' in obj:
+        return converter.structure(obj['pull'], PullAction)
     raise ValueError(f"Unknown action: {obj}")
 
 def _structure_condition(obj, converter):
@@ -358,10 +353,10 @@ def _register_strict_hooks(converter):
         return strict_structure_hook
     
     # Register hooks for all main attrs classes
-    for cls in [Target, Settings, ClickAction, RightClickAction, DoubleClickAction, 
+    for cls in [Target, Settings, ClickAction, 
                 DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,
                 ActionTestAction, CommandAction, ScreenshotAction, BlockAction,
-                SaveTimestampAction, ExistsCondition, NotExistsCondition,
+                SaveTimestampAction, PullAction, ExistsCondition, NotExistsCondition,
                 SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
                 TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
                 BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook]:

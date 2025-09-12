@@ -125,40 +125,6 @@ class ClickActionCompleteEvent(ActionCompleteEvent):
         return EventType.CLICK_COMPLETE
 
 
-@attrs.define
-class RightClickActionStartEvent(ActionStartEvent):
-    """Event for right-click action start."""
-    target_info: Optional[Dict[str, Any]] = None
-    
-    def get_event_type(self) -> EventType:
-        return EventType.CLICK_START
-
-
-@attrs.define
-class RightClickActionCompleteEvent(ActionCompleteEvent):
-    """Event for right-click action completion."""
-    coordinates: Optional[Tuple[int, int]] = None
-    
-    def get_event_type(self) -> EventType:
-        return EventType.CLICK_COMPLETE
-
-
-@attrs.define
-class DoubleClickActionStartEvent(ActionStartEvent):
-    """Event for double-click action start."""
-    target_info: Optional[Dict[str, Any]] = None
-    
-    def get_event_type(self) -> EventType:
-        return EventType.CLICK_START
-
-
-@attrs.define
-class DoubleClickActionCompleteEvent(ActionCompleteEvent):
-    """Event for double-click action completion."""
-    coordinates: Optional[Tuple[int, int]] = None
-    
-    def get_event_type(self) -> EventType:
-        return EventType.CLICK_COMPLETE
 
 
 # -------------------------------
@@ -375,6 +341,32 @@ class SaveTimestampActionCompleteEvent(ActionCompleteEvent):
     
     def get_event_type(self) -> EventType:
         return EventType.SAVETIMESTAMP_COMPLETE
+
+
+# -------------------------------
+# Pull Action Events
+# -------------------------------
+
+@attrs.define
+class PullActionStartEvent(ActionStartEvent):
+    """Event for pull action start."""
+    source: Optional[str] = None
+    destination: Optional[str] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.PULL_START
+
+
+@attrs.define
+class PullActionCompleteEvent(ActionCompleteEvent):
+    """Event for pull action completion."""
+    source: Optional[str] = None
+    destination: Optional[str] = None
+    files_copied: Optional[int] = None
+    total_size: Optional[int] = None
+    
+    def get_event_type(self) -> EventType:
+        return EventType.PULL_COMPLETE
 
 
 # -------------------------------

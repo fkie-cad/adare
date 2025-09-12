@@ -41,8 +41,6 @@ from .playbook import (
     Target,
     ActionType,
     ClickAction,
-    RightClickAction,
-    DoubleClickAction,
     DragAction,
     KeyboardAction,
     IdleAction,

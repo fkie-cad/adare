@@ -555,8 +555,7 @@ class VariableResolver:
         Returns a copy of the action with variables resolved in applicable fields.
         """
         from adare.types.playbook import (
-            CommandAction, KeyboardAction, ActionTestAction, SaveTimestampAction,
-            Target, ClickAction, RightClickAction, DoubleClickAction, GotoAction, DragAction
+            CommandAction, KeyboardAction, ActionTestAction, SaveTimestampAction, DragAction
         )
         
         # Create a deep copy to avoid modifying the original

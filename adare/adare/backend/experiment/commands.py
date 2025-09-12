@@ -872,7 +872,9 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             screenshots_dir=context.experiment_run_directory.screenshots_directory if context.debug_screenshots else None,
             playbook=context.playbook,  # Pass pre-parsed playbook
             experiment_id=experiment_id,
-            experiment_run_id=context.experiment_run_ulid
+            experiment_run_id=context.experiment_run_ulid,
+            vm=context.vm,  # Pass VM for pull operations
+            experiment_run_directory=context.experiment_run_directory.path  # Pass run directory for artifacts
         )
         
         # Execute complete experiment (playbook + tests)

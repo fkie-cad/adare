@@ -13,10 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from adare.types.playbook import (
-    ActionType, ClickAction, RightClickAction, DoubleClickAction, DragAction,
+    ActionType, ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, 
     CommandAction, ScreenshotAction, BlockAction, ActionTestAction,
-    SaveTimestampAction
+    SaveTimestampAction, PullAction
 )
 from adare.backend.experiment.websocket_client import AdareVMClient
 from adare.backend.experiment.target_resolver import MCPTargetResolver, MCPConditionChecker
@@ -49,7 +49,8 @@ class ActionExecutor:
     def __init__(self, websocket_client: AdareVMClient, target_resolver: MCPTargetResolver, 
                  condition_checker: MCPConditionChecker, experiment_run_id: Optional[str] = None,
                  playbook = None, execution_context: Dict[str, Any] = None,
-                 debug_screenshots: bool = False, screenshots_dir: Optional[Path] = None):
+                 debug_screenshots: bool = False, screenshots_dir: Optional[Path] = None,
+                 vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Optional[Path] = None):
         """
         Initialize the action executor.
         
@@ -72,13 +73,20 @@ class ActionExecutor:
         self.debug_screenshots = debug_screenshots
         self.screenshots_dir = screenshots_dir
         self.screenshot_counter = 0
+        self.vm = vm  # VirtualBox VM instance for file operations
+        self.experiment_run_directory = experiment_run_directory  # Run directory for artifacts
         
-        # Initialize action handlers mapping
-        self._action_handlers = {
-            ClickAction: lambda x, y: self.client.click(x, y),
-            RightClickAction: lambda x, y: self.client.right_click(x, y),
-            DoubleClickAction: lambda x, y: self.client.double_click(x, y),
-        }
+        # Initialize action handlers mapping - now handled by _get_click_handler
+        self._action_handlers = {}
+    
+    def _get_click_handler(self, click_type: str):
+        """Get the appropriate click handler based on click type."""
+        if click_type == 'right':
+            return lambda x, y: self.client.right_click(x, y)
+        elif click_type == 'double':
+            return lambda x, y: self.client.double_click(x, y)
+        else:  # 'left' or default
+            return lambda x, y: self.client.click(x, y)
     
     async def execute_action(self, action: ActionType, parent_event_id: str = None, 
                            event_emitter = None, variable_resolver = None) -> ActionResult:
@@ -108,10 +116,6 @@ class ActionExecutor:
             # Dispatch to appropriate handler using resolved action
             if isinstance(resolved_action, ClickAction):
                 return await self._execute_click(resolved_action, parent_event_id, event_emitter)
-            elif isinstance(resolved_action, RightClickAction):
-                return await self._execute_right_click(resolved_action, parent_event_id, event_emitter)
-            elif isinstance(resolved_action, DoubleClickAction):
-                return await self._execute_double_click(resolved_action, parent_event_id, event_emitter)
             elif isinstance(resolved_action, DragAction):
                 return await self._execute_drag(resolved_action, parent_event_id, event_emitter)
             elif isinstance(resolved_action, KeyboardAction):
@@ -132,6 +136,8 @@ class ActionExecutor:
                 return await self._execute_block(resolved_action, parent_event_id, event_emitter, variable_resolver)
             elif isinstance(resolved_action, SaveTimestampAction):
                 return await self._execute_save_timestamp(resolved_action, parent_event_id, event_emitter)
+            elif isinstance(resolved_action, PullAction):
+                return await self._execute_pull(resolved_action, parent_event_id, event_emitter)
             else:
                 return ActionResult(
                     success=False,
@@ -289,32 +295,25 @@ class ActionExecutor:
     
     async def _execute_action_with_target(self, action, parent_event_id: str = None, event_emitter = None) -> ActionResult:
         """Execute any action that requires target resolution with steps."""
-        action_type = type(action)
-        if action_type in self._action_handlers:
+        if isinstance(action, ClickAction):
+            # Use the click type to get the appropriate handler
+            handler = self._get_click_handler(action.type)
             return await self._execute_action_with_steps(
                 action,
-                self._action_handlers[action_type],
+                handler,
                 parent_event_id,
                 event_emitter
             )
         else:
             return ActionResult(
                 success=False,
-                message=f"No handler found for action type: {action_type.__name__}"
+                message=f"No handler found for action type: {type(action).__name__}"
             )
     
     # Individual action execution methods
     
     async def _execute_click(self, action: ClickAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
         """Execute click action with steps."""
-        return await self._execute_action_with_target(action, parent_event_id, event_emitter)
-    
-    async def _execute_right_click(self, action: RightClickAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
-        """Execute right-click action with steps."""
-        return await self._execute_action_with_target(action, parent_event_id, event_emitter)
-    
-    async def _execute_double_click(self, action: DoubleClickAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
-        """Execute double-click action with steps."""
         return await self._execute_action_with_target(action, parent_event_id, event_emitter)
     
     async def _execute_drag(self, action: DragAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
@@ -605,6 +604,70 @@ class ActionExecutor:
             )
         except Exception as e:
             return ActionResult(success=False, message=str(e))
+
+    async def _execute_pull(self, action: PullAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
+        """Pull files/directories from VM to host artifacts directory."""
+        try:
+            if not self.vm:
+                return ActionResult(
+                    success=False,
+                    message="VM instance not available for pull operation"
+                )
+            
+            if not self.experiment_run_directory:
+                return ActionResult(
+                    success=False,
+                    message="Experiment run directory not available for pull operation"
+                )
+            
+            # Create artifacts directory if it doesn't exist
+            artifacts_dir = Path(self.experiment_run_directory) / "artifacts"
+            artifacts_dir.mkdir(exist_ok=True)
+            
+            # Determine destination path
+            if action.destination:
+                # Use custom destination relative to artifacts directory
+                dest_path = artifacts_dir / action.destination
+            else:
+                # Preserve full guest path structure relative to artifacts directory
+                # Remove leading slash to make it relative, then append to artifacts
+                guest_path = Path(action.source)
+                relative_guest_path = guest_path.relative_to('/') if guest_path.is_absolute() else guest_path
+                dest_path = artifacts_dir / relative_guest_path
+            
+            # Create parent directories if they don't exist
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Use VirtualBox guest control to copy files (always recursive)
+            success = await self.vm.copy_from_guest(
+                guest_path=action.source,
+                host_path=str(dest_path),
+                recursive=True
+            )
+            
+            if success:
+                log.info(f"Successfully pulled {action.source} to {dest_path}")
+                return ActionResult(
+                    success=True,
+                    message=f"Pulled {action.source} to artifacts/{dest_path.name}",
+                    data={
+                        "source": action.source,
+                        "destination": str(dest_path),
+                        "artifacts_path": f"artifacts/{dest_path.name}"
+                    }
+                )
+            else:
+                return ActionResult(
+                    success=False,
+                    message=f"Failed to pull {action.source}"
+                )
+            
+        except Exception as e:
+            log.error(f"Error in pull operation: {e}")
+            return ActionResult(
+                success=False,
+                message=f"Pull operation failed: {str(e)}"
+            )
     
     # Utility methods
     

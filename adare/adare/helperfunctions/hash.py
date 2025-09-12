@@ -13,8 +13,7 @@ def hash_dict_sha256(data: dict):
     # write dict to yaml byte array
     yaml_data = yaml.dump(data).encode()
     h = hashlib.sha256()
-    for b in iter(lambda : yaml_data.read(4096), b''):
-        h.update(b)
+    h.update(yaml_data)
     return h.hexdigest()
 
 

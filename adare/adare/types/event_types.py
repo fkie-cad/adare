@@ -38,6 +38,8 @@ class EventType(Enum):
     GOTO_COMPLETE = "goto_complete"
     SAVETIMESTAMP_START = "savetimestamp_start"
     SAVETIMESTAMP_COMPLETE = "savetimestamp_complete"
+    PULL_START = "pull_start"
+    PULL_COMPLETE = "pull_complete"
     BLOCK_START = "block_start"
     BLOCK_COMPLETE = "block_complete"
 
@@ -57,6 +59,7 @@ class ActionType(Enum):
     DRAG = "drag"
     GOTO = "goto"
     SAVETIMESTAMP = "savetimestamp"
+    PULL = "pull"
     BLOCK = "block"
     
     # Internal step action types (not used in playbook YAML)
@@ -91,6 +94,8 @@ class EventTypeResolver:
             "GotoCompleteEvent": EventType.GOTO_COMPLETE,
             "SavetimestampStartEvent": EventType.SAVETIMESTAMP_START,
             "SavetimestampCompleteEvent": EventType.SAVETIMESTAMP_COMPLETE,
+            "PullActionStartEvent": EventType.PULL_START,
+            "PullActionCompleteEvent": EventType.PULL_COMPLETE,
             "BlockActionStartEvent": EventType.BLOCK_START,
             "BlockActionCompleteEvent": EventType.BLOCK_COMPLETE,
         }
@@ -151,6 +156,8 @@ class EventTypeResolver:
             return EventType.GOTO_COMPLETE if is_complete else EventType.GOTO_START
         elif action_type_raw == "savetimestamp":
             return EventType.SAVETIMESTAMP_COMPLETE if is_complete else EventType.SAVETIMESTAMP_START
+        elif action_type_raw == "pull":
+            return EventType.PULL_COMPLETE if is_complete else EventType.PULL_START
         elif action_type_raw == "block":
             return EventType.BLOCK_COMPLETE if is_complete else EventType.BLOCK_START
         elif action_type_raw == "find":
@@ -186,6 +193,8 @@ class EventTypeResolver:
             return ActionType.GOTO
         elif event_name.startswith("savetimestamp_"):
             return ActionType.SAVETIMESTAMP
+        elif event_name.startswith("pull_"):
+            return ActionType.PULL
         elif event_name.startswith("block_"):
             return ActionType.BLOCK
         else:
