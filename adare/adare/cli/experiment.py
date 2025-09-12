@@ -54,7 +54,7 @@ def exec_experiment_run(arguments):
                 if experiment_ulid:
                     run_count = experiment_database.get_experiment_run_count(experiment_ulid)
                     if run_count > 0:
-                        raise LoggedException(log, 
+                        raise LoggedErrorException(log, 
                             f'Cannot run test mode on experiment "{arguments.experiment}" with existing runs ({run_count} runs found).\n'
                             f'Test mode with file modifications could overwrite real experiment data.\n'
                             f'Use a different experiment name for testing or remove existing runs first.',
