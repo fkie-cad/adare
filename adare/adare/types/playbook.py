@@ -187,7 +187,7 @@ class Playbook:
     variables: Optional[VariableRegistry] = None
     tests: List[Test] = attrs.Factory(list)
 
-def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or str
+def parse_playbook(yaml_path: Union[str, Path], vm_os: str = None, vm_user: str = None) -> Playbook:  # Accept Path or str
     yaml_path = Path(yaml_path)  # Ensure it's a Path object
     
     # Use custom YAML loader to handle our custom tags
@@ -196,10 +196,18 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
     with yaml_path.open('r') as f:
         data = yaml.load(f, Loader=get_custom_loader())
     
-    # Convert variables to VariableRegistry if present
+    # Get automatic variables
+    from adarelib.common.automatic_variables import AutomaticVariables
+    automatic_vars = AutomaticVariables.get_automatic_variables(vm_os=vm_os, vm_user=vm_user)
+    
+    # Convert variables to VariableRegistry if present and merge with automatic variables
     if 'variables' in data and data['variables']:
         from adarelib.common.variables import VariableRegistry
-        data['variables'] = VariableRegistry.from_dict(data['variables'])
+        user_vars = VariableRegistry.from_dict(data['variables'])
+        data['variables'] = AutomaticVariables.merge_with_user_variables(automatic_vars, user_vars)
+    else:
+        # No user variables, just use automatic ones
+        data['variables'] = automatic_vars
     
     # Tests will be converted by cattrs when structuring the Playbook object
     # No need to convert them here

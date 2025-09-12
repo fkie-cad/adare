@@ -588,11 +588,17 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                 # Fallback to file-based parsing for new/untracked experiments
                 log.info("Experiment not found in database, falling back to file-based parsing")
                 from adare.types.playbook import parse_playbook
+                from adare.config import get_vm_credentials
                 playbook_path = context.experiment_directory.path / "playbook.yml"
                 if not playbook_path.exists():
                     log.warning("No playbook.yml found - experiment cannot run GUI actions (experiment may be incomplete)")
                     return
-                context.playbook = parse_playbook(playbook_path)
+                # Get VM OS and user for automatic variables
+                vm_os = context.guest_platform if context.guest_platform else None
+                vm_user = None
+                if vm_os:
+                    vm_user, _ = get_vm_credentials(vm_os)
+                context.playbook = parse_playbook(playbook_path, vm_os=vm_os, vm_user=vm_user)
                 log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
                 return
             
@@ -607,11 +613,17 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                     # Fallback to file parsing if database doesn't have the content
                     log.warning(f"Database playbook load failed: {e}, falling back to file parsing")
                     from adare.types.playbook import parse_playbook
+                    from adare.config import get_vm_credentials
                     playbook_path = context.experiment_directory.path / "playbook.yml"
                     if not playbook_path.exists():
                         log.warning("No playbook.yml found - experiment cannot run GUI actions (experiment may be incomplete)")
                         return
-                    context.playbook = parse_playbook(playbook_path)
+                    # Get VM OS and user for automatic variables
+                    vm_os = context.guest_platform if context.guest_platform else None
+                    vm_user = None
+                    if vm_os:
+                        vm_user, _ = get_vm_credentials(vm_os)
+                    context.playbook = parse_playbook(playbook_path, vm_os=vm_os, vm_user=vm_user)
                     log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
                     
         except Exception as e:

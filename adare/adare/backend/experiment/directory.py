@@ -161,6 +161,7 @@ class ExperimentDirectory(Directory):
         from adare.types.playbook import parse_playbook
         from adarelib.testset.type import TestsetFile
         
+        # Use default auto-detection for OS and user since we don't have context here
         playbook = parse_playbook(self.playbookfile)
         
         # Return TestsetFile constructed from playbook tests
