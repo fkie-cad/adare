@@ -7,6 +7,7 @@ separation of action handling logic from the main controller orchestration.
 
 import logging
 import time
+import base64
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,7 +48,8 @@ class ActionExecutor:
     
     def __init__(self, websocket_client: AdareVMClient, target_resolver: MCPTargetResolver, 
                  condition_checker: MCPConditionChecker, experiment_run_id: Optional[str] = None,
-                 playbook = None, execution_context: Dict[str, Any] = None):
+                 playbook = None, execution_context: Dict[str, Any] = None,
+                 debug_screenshots: bool = False, screenshots_dir: Optional[Path] = None):
         """
         Initialize the action executor.
         
@@ -58,6 +60,8 @@ class ActionExecutor:
             experiment_run_id: Experiment run ID for event emission
             playbook: Playbook reference for variable access
             execution_context: Execution context for variable resolution
+            debug_screenshots: Whether to save screenshots for debugging
+            screenshots_dir: Directory to save debug screenshots
         """
         self.client = websocket_client
         self.target_resolver = target_resolver
@@ -65,6 +69,9 @@ class ActionExecutor:
         self.experiment_run_id = experiment_run_id
         self.playbook = playbook
         self.execution_context = execution_context or {}
+        self.debug_screenshots = debug_screenshots
+        self.screenshots_dir = screenshots_dir
+        self.screenshot_counter = 0
         
         # Initialize action handlers mapping
         self._action_handlers = {
@@ -596,6 +603,37 @@ class ActionExecutor:
     
     # Utility methods
     
+    async def _save_debug_screenshot(self, screenshot_base64: str):
+        """
+        Save screenshot to disk for debugging purposes.
+        
+        Args:
+            screenshot_base64: Base64 encoded screenshot data
+        """
+        if not self.debug_screenshots or not self.screenshots_dir:
+            return
+            
+        try:
+            # Create screenshots directory if it doesn't exist
+            self.screenshots_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate filename with counter
+            filename = f"screenshot_{self.screenshot_counter}.png"
+            filepath = self.screenshots_dir / filename
+            
+            # Increment counter for next screenshot
+            self.screenshot_counter += 1
+            
+            # Decode and save the image
+            image_data = base64.b64decode(screenshot_base64)
+            with open(filepath, 'wb') as f:
+                f.write(image_data)
+                
+            log.debug(f"Debug screenshot saved: {filepath}")
+            
+        except Exception as e:
+            log.error(f"Failed to save debug screenshot: {e}")
+    
     async def _get_current_screenshot(self) -> Optional[str]:
         """
         Get current screenshot from WebSocket client.
@@ -612,6 +650,9 @@ class ActionExecutor:
                     screenshot_base64 = result['image']['data']
                 else:
                     screenshot_base64 = result['image']
+                
+                # Save screenshot to disk if debug mode is enabled
+                await self._save_debug_screenshot(screenshot_base64)
                 
                 log.debug("Screenshot captured")
                 return screenshot_base64

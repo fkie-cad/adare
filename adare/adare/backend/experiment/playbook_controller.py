@@ -127,7 +127,9 @@ class PlaybookController:
             condition_checker=self.condition_checker,
             experiment_run_id=self.experiment_run_id,
             playbook=self.playbook,
-            execution_context=self.execution_context
+            execution_context=self.execution_context,
+            debug_screenshots=self.debug_screenshots,
+            screenshots_dir=self.screenshots_dir
         )
         
         # Test loader for test loading and resolution

@@ -13,9 +13,9 @@ This document tracks ongoing development tasks, planned features, quality of lif
     - [ ] use nicegui to interactively test and create playbook and tests -> e.g. crop images extract icons ... 
 - [ ] built a way to better validate playbooks (e.g. two variables with saame name through variables or save_timestamp ..., check that used variables are defined before, check if filters are correct)
 - [ ] make all output available as csv/json/yaml
-- [x] some way to test vms; maybe with simple command adare vm test
 - [ ] enhance `adare vm test` with automatic platform detection and desktop environment detection for platform-specific tests -> complexer than thought since we need database indendent experiment run with own stages and own flow console
 - [x] add expect_to_fail field for tests to be successfuly if test failed and vice versa! Important an error outside the test stays an error/expcetion! We should only reverse this for the test result! -> add to docs
+- [ ] use proper directory for installation; maybe convert instllation from ps1,sh to python script to use platformdirs to get installation location; also use for database then later!
 
 ## Quality of Life Improvements
 - [ ] update documentation
@@ -40,3 +40,5 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [x] default ram for linux box 4gb and windows box 8gb. Custom set during experiment run or? -> add to docs
 - [x] check if its possible that vm path in environment is relative to project directory -> add to docs
 - [ ] keypress with special keys e.g. windows key? -> add to docs
+- [ ] does resetting to base snapshot work at beginning of experiment?! seems like it does not!
+- [x] --debug-screenshots does not work together so no screenshots get created?

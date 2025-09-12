@@ -45,6 +45,7 @@ class ExperimentRunDirectory(Directory):
         self.path.parent.mkdir(parents=False, exist_ok=True)
         self.path.mkdir(parents=False)
         self.log_directory.mkdir(parents=False)
+        self.screenshots_directory.mkdir(parents=False, exist_ok=True)
 
 
     def clean(self):
