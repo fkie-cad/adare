@@ -17,6 +17,7 @@ class Test:
     description: str = ''
     parameter: dict = {}
     variables: Optional[VariableRegistry] = None
+    expect_to_fail: bool = False
 
 
 @attrs.define
