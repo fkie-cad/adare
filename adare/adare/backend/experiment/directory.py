@@ -186,9 +186,47 @@ class ExperimentDirectory(Directory):
     @property
     def sha256_playbook(self) -> str:
         return hash_file_sha256(self.playbookfile)
+    
+    @property
+    def sha256_playbook_semantic(self) -> str:
+        """
+        Hash playbook based on semantic content, excluding infrastructure actions
+        that don't affect the core experimental logic.
+        """
+        # Parse the playbook to get structured data
+        from adare.types.playbook import parse_playbook
+        from adarelib.testset.yaml.customloader import get_custom_loader
+        import yaml
+        
+        with self.playbookfile.open('r') as f:
+            playbook_data = yaml.load(f, Loader=get_custom_loader())
+        
+        # Create a copy to avoid modifying original
+        semantic_data = playbook_data.copy() if playbook_data else {}
+        
+        # Define infrastructure actions to exclude from integrity hash
+        infrastructure_actions = {'pull'}
+        
+        # Filter actions to keep only core experimental actions
+        if 'actions' in semantic_data:
+            filtered_actions = []
+            for action in semantic_data['actions']:
+                # Check if this is an infrastructure action
+                is_infrastructure = any(action_type in action for action_type in infrastructure_actions)
+                
+                # Keep non-infrastructure actions
+                if not is_infrastructure:
+                    filtered_actions.append(action)
+            
+            semantic_data['actions'] = filtered_actions
+        
+        # Hash the semantic content using existing utility
+        from adare.helperfunctions.hash import hash_dict_sha256
+        return hash_dict_sha256(semantic_data)
 
     @property
     def sha256(self) -> str:
         # Since testset is now part of playbook, only use playbook hash
         # to avoid double-counting the same content
-        return self.sha256_playbook
+        # Use semantic hash to exclude infrastructure actions like 'pull'
+        return self.sha256_playbook_semantic

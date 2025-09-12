@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any
 import time
 
 from adare.types.playbook import (
-    ActionType, ClickAction, RightClickAction, DoubleClickAction, DragAction,
+    ActionType, ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, 
     CommandAction, ScreenshotAction, BlockAction, ActionTestAction,
     SaveTimestampAction
@@ -20,8 +20,6 @@ from adare.types.playbook import (
 from adare.types.step_actions import FindAction, ExecuteAction
 from adare.types.actions import (
     ClickActionStartEvent, ClickActionCompleteEvent,
-    RightClickActionStartEvent, RightClickActionCompleteEvent,
-    DoubleClickActionStartEvent, DoubleClickActionCompleteEvent,
     KeyboardActionStartEvent, KeyboardActionCompleteEvent,
     CommandActionStartEvent, CommandActionCompleteEvent,
     TestActionStartEvent, TestActionCompleteEvent,
@@ -76,10 +74,6 @@ class EventManager:
         # Create type-specific start event
         if isinstance(action, ClickAction):
             return ClickActionStartEvent(target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
-        elif isinstance(action, RightClickAction):
-            return RightClickActionStartEvent(target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
-        elif isinstance(action, DoubleClickAction):
-            return DoubleClickActionStartEvent(target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
         elif isinstance(action, KeyboardAction):
             return KeyboardActionStartEvent(keys=getattr(action, 'keys', None), **event_data)
         elif isinstance(action, CommandAction):
@@ -141,10 +135,6 @@ class EventManager:
         # Create type-specific complete event
         if isinstance(action, ClickAction):
             event = ClickActionCompleteEvent(coordinates=result.coordinates, target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
-        elif isinstance(action, RightClickAction):
-            event = RightClickActionCompleteEvent(coordinates=result.coordinates, target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
-        elif isinstance(action, DoubleClickAction):
-            event = DoubleClickActionCompleteEvent(coordinates=result.coordinates, target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
         elif isinstance(action, KeyboardAction):
             event = KeyboardActionCompleteEvent(keys_sent=getattr(action, 'keys', None), **event_data)
         elif isinstance(action, CommandAction):

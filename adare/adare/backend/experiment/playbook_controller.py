@@ -62,7 +62,8 @@ class PlaybookController:
     def __init__(self, websocket_client: AdareVMClient, experiment_dir: Path, project_dir: Path, 
                  mcp_gui_url: str = "http://localhost:13109/mcp", debug_screenshots: bool = False, 
                  screenshots_dir: Path = None, playbook: Optional[Playbook] = None, 
-                 experiment_id: Optional[str] = None, experiment_run_id: Optional[str] = None):
+                 experiment_id: Optional[str] = None, experiment_run_id: Optional[str] = None,
+                 vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Optional[Path] = None):
         """
         Initialize the playbook controller.
         
@@ -85,6 +86,8 @@ class PlaybookController:
         self.debug_screenshots = debug_screenshots
         self.screenshots_dir = screenshots_dir
         self.playbook = playbook
+        self.vm = vm  # VirtualBox VM instance for file operations
+        self.experiment_run_directory = experiment_run_directory  # Run directory for artifacts
         
         # Database integration
         self.experiment_id = experiment_id
@@ -129,7 +132,9 @@ class PlaybookController:
             playbook=self.playbook,
             execution_context=self.execution_context,
             debug_screenshots=self.debug_screenshots,
-            screenshots_dir=self.screenshots_dir
+            screenshots_dir=self.screenshots_dir,
+            vm=self.vm,
+            experiment_run_directory=self.experiment_run_directory
         )
         
         # Test loader for test loading and resolution

@@ -3,8 +3,11 @@
 This document tracks ongoing development tasks, planned features, quality of life improvements, known bugs for ADARE.
 
 ## Current Development Tasks
+- [ ] check/build testfunctions
+  - [ ] doe we have file_contains test method to test if file contains a certain string?
+  - [ ] does filecontentequals works with pure regex? -> test
+- [ ] update docs to acceptable amount!
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
-- [x] built tests/test experiments for new testfunctions
 - [ ] test if we can still run adare if we delete cloned repo
 
 ## Planned Features
@@ -16,7 +19,8 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] enhance `adare vm test` with automatic platform detection and desktop environmadaent detection for platform-specific tests -> complexer than thought since we need database indendent experiment run with own stages and own flow console
 - [ ] use proper directory for installation; maybe convert instllation from ps1,sh to python script to use platformdirs to get installation location; also use for database then later!
 - [ ] build conditionlogic , wait until we find, retry logic for playbook
-
+- [ ] autocomplete for commands / abbreviations like env/exp
+ 
 ## Quality of Life Improvements
 - [ ] update documentation
   - [ ] add sections about timezones -> since vm syncs with local time do not interfer -> when tool uses utc all good when tool uses localtime use | localtime filter!
@@ -27,7 +31,6 @@ This document tracks ongoing development tasks, planned features, quality of lif
   - [ ] add automatic variables to docs
   - [ ] add info about default cores and ram for vm and how to set this 
   - [ ] svg are not supported for icons at the moment!
-- [ ] screenshot not via websockets but via shared files (to make faster?)
 - [ ] improve code quality in general
   - [ ] we use the username/password dummy when we with virtualbox do not need the commands ... -> find a better solution!
   - [ ] variable resolving uses regex to track resolved - can we do this without regex?
@@ -36,11 +39,8 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] rethink testfunction result -> at the moment lists -> how is it saved in databse plain json? (then dicts would be better?)
 - [x] add some automatic variables -> e.g. adare_user_home als automatische Variable, die im Playbook verwendet werden kann und zum entsprechenden Home-Verzeichnis auflöst 
 - [ ] improve adare-mcp-server code quality; maybe tweak functionality
+- [ ] reconsider if fake runs are deleted from database or kept until we wipe them manually
 
 ## Known Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
-- [x] look into timezone+localtime if this all really works like expetected together with tolerance filter -> so timestamp/timezone do not work really well -> we did some localtime resolving on adarevm/maybe also adjust for timezone -> test if fix
-- [x] check if its possible that vm path in environment is relative to project directory -> add to docs
-- [x] keypress with special keys e.g. windows key? -> add to docs (combinations: [""] keys: "asd" )
-- [ ] does resetting to base snapshot work at beginning of experiment?! seems like it does not! -> watch further
-- [x] --debug-screenshots does not work together so no screenshots get created?
+- [ ] does test runs are stored in databse? it seems like not but they should or and only marked as fake?!

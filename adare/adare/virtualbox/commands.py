@@ -392,3 +392,34 @@ class CommandExecutionMixin:
             args.insert(5, self.password)
         
         return args
+
+    async def copy_from_guest(self, guest_path: str, host_path: str, recursive: bool = True) -> bool:
+        """
+        Copy files/directories from guest to host using VBoxManage guestcontrol copyfrom.
+        
+        Args:
+            guest_path: Path on the guest VM to copy from
+            host_path: Path on the host to copy to
+            recursive: Whether to copy directories recursively
+            
+        Returns:
+            True if copy was successful
+        """
+        args = [
+            "guestcontrol", self.vm_name, "copyfrom",
+            "--username", self.username,
+            "--password", self.password
+        ]
+        
+        if recursive:
+            args.append("--recursive")
+            
+        args.extend([guest_path, host_path])
+        
+        try:
+            lines = await self._stream_vboxmanage_command_async(args)
+            log.info(f"Successfully copied {guest_path} from guest to {host_path}")
+            return True
+        except subprocess.CalledProcessError as e:
+            log.error(f"Failed to copy {guest_path} from guest: {e}")
+            return False
