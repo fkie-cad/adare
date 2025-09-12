@@ -13,7 +13,7 @@ from adare.types.playbook import (
     ActionType, ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, 
     CommandAction, ScreenshotAction, BlockAction, ActionTestAction,
-    SaveTimestampAction
+    SaveTimestampAction, PullAction
 )
 
 # Action event imports for flow console display
@@ -30,6 +30,7 @@ from adare.types.actions import (
     GotoActionStartEvent, GotoActionCompleteEvent,
     BlockActionStartEvent, BlockActionCompleteEvent,
     SaveTimestampActionStartEvent, SaveTimestampActionCompleteEvent,
+    PullActionStartEvent, PullActionCompleteEvent,
     FindActionStartEvent, FindActionCompleteEvent,
     ExecuteActionStartEvent, ExecuteActionCompleteEvent
 )
@@ -92,8 +93,8 @@ class EventManager:
             return IdleActionStartEvent(duration=getattr(action, 'duration', None), **event_data)
         elif isinstance(action, DragAction):
             return DragActionStartEvent(
-                source_target=self._get_target_info(getattr(action, 'source', None)),
-                dest_target=self._get_target_info(getattr(action, 'target', None)),
+                source_target=self._get_target_info(getattr(action, 'src', None)),
+                dest_target=self._get_target_info(getattr(action, 'dst', None)),
                 **event_data
             )
         elif isinstance(action, GotoAction):
@@ -106,6 +107,12 @@ class EventManager:
             )
         elif isinstance(action, SaveTimestampAction):
             return SaveTimestampActionStartEvent(variable=getattr(action, 'variable', None), **event_data)
+        elif isinstance(action, PullAction):
+            return PullActionStartEvent(
+                source=getattr(action, 'src', None),
+                destination=getattr(action, 'dst', None),
+                **event_data
+            )
         elif isinstance(action, FindAction):
             return FindActionStartEvent(target_info=getattr(action, 'target_info', None), **event_data)
         elif isinstance(action, ExecuteAction):
@@ -179,6 +186,14 @@ class EventManager:
             event = SaveTimestampActionCompleteEvent(
                 variable=getattr(action, 'variable', None),
                 timestamp_value=result.data.get(getattr(action, 'variable', 'timestamp')) if result.data else None,
+                **event_data
+            )
+        elif isinstance(action, PullAction):
+            event = PullActionCompleteEvent(
+                source=getattr(action, 'src', None),
+                destination=getattr(action, 'dst', None),
+                files_copied=result.data.get('files_copied') if result.data else None,
+                total_size=result.data.get('total_size') if result.data else None,
                 **event_data
             )
         elif isinstance(action, FindAction):

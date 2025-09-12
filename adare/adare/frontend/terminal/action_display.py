@@ -129,6 +129,13 @@ def get_action_display_info(action_type: ActionType, action_data: dict, is_compl
             return f"executing at ({coordinates[0]}, {coordinates[1]})"
         return "executing action"
     
+    elif action_type == ActionType.PULL:
+        src = action_data.get('src') or action_data.get('source')
+        
+        if src:
+            return f"pull {src}"
+        return "pull files"
+    
     else:
         # Throw exception for unhandled action types to catch missing cases
         raise ValueError(f"Unhandled action type in get_action_display_info: {action_type} (value: {action_type.value})")
