@@ -248,7 +248,7 @@ class TestfunctionDbApi(ExperimentApi):
 
     def __serialize_testfunction(self, testfunction: TestFunction):
         return {
-            'name': f".{testfunction.dotnotation}",
+            'name': testfunction.dotnotation,
             'description': testfunction.description,
             'parameters': ",".join([param.name for param in testfunction.parameters])
         }

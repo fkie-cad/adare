@@ -14,6 +14,54 @@ import logging
 log = logging.getLogger(__name__)
 
 
+def _cleanup_vm_file_if_unused(vm_file_path: Path, project_path: Path, db):
+    """
+    Clean up VM file if it's not used by any other environments in the project.
+    
+    Args:
+        vm_file_path: Path to the VM file that might need cleanup
+        project_path: Path to the project directory
+        db: Database API instance (already within context)
+    """
+    if not vm_file_path or not project_path:
+        return
+    
+    # Only clean up files that are in the project's vm directory
+    from adare.backend.project.directory import ProjectDirectory
+    project_dir = ProjectDirectory(project_path)
+    
+    try:
+        # Check if the VM file is within the project's vm directory
+        vm_file_resolved = vm_file_path.resolve()
+        project_vm_dir_resolved = project_dir.vm.resolve()
+        
+        # If the VM file is not within the project's vm directory, don't delete it
+        # This protects VM files that are stored outside the project (e.g., global VMs)
+        if not vm_file_resolved.is_relative_to(project_vm_dir_resolved):
+            log.debug(f"VM file {vm_file_path} is outside project vm directory, skipping cleanup")
+            return
+        
+        # Check if any other environments in this project are using the same VM file
+        all_project_environments = db.get_environments(project_path)
+        
+        for env in all_project_environments:
+            if env.vm and env.vm.file and Path(env.vm.file).resolve() == vm_file_resolved:
+                log.debug(f"VM file {vm_file_path} still in use by environment {env.name}, skipping cleanup")
+                return
+        
+        # No other environments are using this VM file, safe to delete
+        if vm_file_path.exists():
+            vm_file_path.unlink()
+            log.info(f"CLAUDE: Cleaned up unused VM file: {vm_file_path}")
+        else:
+            log.debug(f"VM file {vm_file_path} already deleted or doesn't exist")
+            
+    except (OSError, PermissionError) as e:
+        log.warning(f"CLAUDE: Failed to cleanup VM file {vm_file_path}: {e}")
+    except ValueError as e:
+        log.warning(f"CLAUDE: Invalid path during VM file cleanup {vm_file_path}: {e}")
+
+
 
 def _get_environment_or_raise(db, ulid: str, log, not_found_msg: str, fields: list[str] = None):
     """
@@ -182,6 +230,32 @@ def delete_environment(environment_ulid: str, force: bool = False):
             log,
             f'environment with ulid {environment_ulid} does not exist in the database',
         )
+        
+        # Store VM info before deletion for cleanup
+        vm_file_path = None
+        project_path = None
+        if environment.vm and environment.vm.file:
+            vm_file_path = Path(environment.vm.file)
+            if environment.project:
+                project_path = Path(environment.project.path)
+        
+        # Check for experiments that would become orphaned (have only this environment)
+        orphaned_experiments = []
+        for experiment in environment.experiments:
+            if len(experiment.environments) == 1:
+                orphaned_experiments.append(experiment.name)
+        
+        if orphaned_experiments and not force:
+            experiments_list = ', '.join(orphaned_experiments)
+            raise EnvironmentDeletionError(
+                log,
+                f'environment {environment.id} cannot be deleted because the following experiments would become orphaned (they only use this environment): {experiments_list}',
+                possible_solutions=[
+                    'run with --force to delete the environment and all orphaned experiments',
+                    'add other environments to the experiments first',
+                    'delete the experiments first',
+                ])
+        
         if environment.runs:
             if not force:
                 raise EnvironmentDeletionError(
@@ -195,8 +269,21 @@ def delete_environment(environment_ulid: str, force: bool = False):
             for run in environment.runs:
                 db.delete_experiment_run(run)
                 log.info(f'deleted run {run.id}')
+        
+        # Delete orphaned experiments if force is used
+        if orphaned_experiments and force:
+            experiments_list = ', '.join(orphaned_experiments)
+            log.info(f'environment {environment.id} deletion with --force -> deleting orphaned experiments: {experiments_list}')
+            for experiment in list(environment.experiments):  # Use list() to avoid modification during iteration
+                if len(experiment.environments) == 1:
+                    log.info(f'deleting orphaned experiment {experiment.name} ({experiment.id})')
+                    db.delete_experiment(experiment)
+        
         db.delete_environment(environment)
         log.info(f'deleted environment {environment.id}')
+        
+        # Clean up VM file if no other environments in the project use it
+        _cleanup_vm_file_if_unused(vm_file_path, project_path, db)
 
 
 def get_environments_ulids(project_path: Path = None) -> list[str]:

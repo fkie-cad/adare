@@ -576,8 +576,8 @@ class VariableResolver:
                 resolved_action.env = {k: self.replace_variables(str(v), execution_context) for k, v in resolved_action.env.items()}
         
         elif isinstance(action, KeyboardAction):
-            if resolved_action.keys:
-                resolved_action.keys = self.replace_variables(resolved_action.keys, execution_context)
+            if resolved_action.text:
+                resolved_action.text = self.replace_variables(resolved_action.text, execution_context)
         
         elif isinstance(action, ActionTestAction):
             if resolved_action.name:

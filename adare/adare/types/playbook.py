@@ -94,8 +94,9 @@ class NotExistsCondition:
 
 @attrs.define
 class KeyboardAction:
-    keys: Optional[str] = None
-    combination: Optional[List[str]] = None
+    key: Optional[str] = None  # Single key press -> pyautogui.press()
+    text: Optional[str] = None  # Text typing -> pyautogui.typewrite()
+    combination: Optional[List[str]] = None  # Key combinations -> pyautogui.hotkey()
     when: Optional[List[Union['ExistsCondition', 'NotExistsCondition']]] = None
     description: str = ''
 
