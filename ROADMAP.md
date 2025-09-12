@@ -15,7 +15,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] make all output available as csv/json/yaml
 - [x] some way to test vms; maybe with simple command adare vm test
 - [ ] enhance `adare vm test` with automatic platform detection and desktop environment detection for platform-specific tests -> complexer than thought since we need database indendent experiment run with own stages and own flow console
-- [x] add expect_to_fail field for tests to be successfuly if test failed and vice versa! Important an error outside the test stays an error/expcetion! We should only reverse this for the test result!
+- [x] add expect_to_fail field for tests to be successfuly if test failed and vice versa! Important an error outside the test stays an error/expcetion! We should only reverse this for the test result! -> add to docs
 
 ## Quality of Life Improvements
 - [ ] update documentation
@@ -28,9 +28,8 @@ This document tracks ongoing development tasks, planned features, quality of lif
   - [ ] variable resolving uses regex to track resolved - can we do this without regex?
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
 - [x] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;)
-- [ ] let a user run multiple exepriments -> requires more advanced snapshot handling -> so vm needs to uploaded 
 - [ ] rethink testfunction result -> at the moment lists -> how is it saved in databse plain json? (then dicts would be better?)
-- [ ] add some automatic variables -> e.g. adare_user_home als automatische Variable, die im Playbook verwendet werden kann und zum entsprechenden Home-Verzeichnis auflöst
+- [x] add some automatic variables -> e.g. adare_user_home als automatische Variable, die im Playbook verwendet werden kann und zum entsprechenden Home-Verzeichnis auflöst -> add to docs
 - [ ] does svg as icons in playbook work? 
 
 ## Known Bugs
@@ -38,8 +37,6 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] real testunfction error (so no failed test) are not displayed properly in flowconsole but markes as failed test
 - [ ] by default on run no specific log is saved to adare run log dir if not --logfile is set as well?! -> test if fixed?!
 - [x] look into timezone+localtime if this all really works like expetected together with tolerance filter -> so timestamp/timezone do not work really well -> we did some localtime resolving on adarevm/maybe also adjust for timezone
-- [x] default ram for linux box 4gb and windows box 8gb. Custom set during experiment run or? - can we do this? If not implement fix!
-- [x] update makefile (make adare does not work we need -B why?); update help message; in docs reference make adare
-- [ ] check if its possible that vm path in environment is relative to project directory
-- [x] nested variables cause issues - need to be fixed -> worked on command but not on dst paramter somehow?! so maybe nested works but not for all paraemter values?!
-- [x] testfunction standard should be loaded on project creation!
+- [x] default ram for linux box 4gb and windows box 8gb. Custom set during experiment run or? -> add to docs
+- [x] check if its possible that vm path in environment is relative to project directory -> add to docs
+- [ ] keypress with special keys e.g. windows key? -> add to docs
