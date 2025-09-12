@@ -372,15 +372,20 @@ class ActionExecutor:
     async def _execute_keyboard(self, action: KeyboardAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
         """Execute keyboard action."""
         try:
-            if action.keys:
-                result = await self.client.keyboard("type", action.keys)
+            if action.key:
+                # Single key press -> pyautogui.press()
+                result = await self.client.keyboard("press", action.key)
+            elif action.text:
+                # Text typing -> pyautogui.typewrite()
+                result = await self.client.keyboard("type", action.text)
             elif action.combination:
+                # Key combinations -> pyautogui.hotkey()
                 combo = "+".join(action.combination)
                 result = await self.client.keyboard("hotkey", combo)
             else:
                 return ActionResult(
                     success=False,
-                    message="No keys or combination specified"
+                    message="No key, text, or combination specified"
                 )
             
             return ActionResult(

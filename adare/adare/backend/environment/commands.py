@@ -18,6 +18,7 @@ from adare.exceptions import NotLoggedInError
 from adare.helperfunctions.web.download import download
 from urllib.parse import urlparse
 import hashlib
+from adare.console import print_success_message
 
 # configure logging
 import logging
@@ -216,6 +217,31 @@ def environment_load(project: Path, environment: str, force: bool = False):
     log.info(f'Protected {len(protected_files)} environment files')
     
     log.info(f'environment file {environment_file} loaded')
+    
+    # Generate next steps based on environment configuration
+    next_steps = [
+        f'Run experiments in this environment with: adare experiment run <experiment> -e {environment}',
+        f'List available environments with: adare environment list',
+        f'View environment details with: adare environment show {environment}'
+    ]
+    
+    # Add VM-specific info if VM was processed
+    if vm_id:
+        next_steps.insert(1, f'VM successfully configured and ready for use')
+    
+    # Create tip based on environment features
+    tip = f'Environment "{environment}" is now ready for experiments'
+    if environment_metadata.vm:
+        tip += f' with VM "{environment_metadata.vm}"'
+    if hasattr(environment_metadata, 'description') and environment_metadata.description:
+        tip += f' - {environment_metadata.description}'
+    
+    print_success_message(
+        title=f'Environment "{environment}" loaded successfully!',
+        location=str(environment_file),
+        next_steps=next_steps,
+        tip=tip
+    )
 
 
 def environment_create(project: Path, environment: str, vm_path: Path = None):

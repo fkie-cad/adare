@@ -167,9 +167,13 @@ def create(name, project, with_vm):
 
 @environment.command()
 @click.argument('ulid')
-@click.option('--force', '-f', is_flag=True, help='Force deletion of the environment')
+@click.option('--force', '-f', is_flag=True, help='Force deletion of the environment and any orphaned experiments')
 def delete(ulid, force):
-    """Delete an environment."""
+    """Delete an environment.
+    
+    WARNING: If this environment is the only one used by experiments,
+    those experiments will become orphaned and be deleted when using --force.
+    Without --force, deletion will fail to prevent data loss."""
     args = SimpleNamespace(ulid=ulid, force=force)
     exec_with_error_printing(exec_environment_delete, args)
 

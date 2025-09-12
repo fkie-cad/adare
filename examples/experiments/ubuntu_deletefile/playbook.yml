@@ -19,12 +19,12 @@ variables:
   
   filepath:
     type: path
-    value: "/home/{{username}}/Documents/testfile.txt"
+    value: "{{ adare_user_home }}/Documents/testfile.txt"
     description: "Full path to the test file"
   
   trashbin_path:
     type: path  
-    value: "/home/{{username}}/.local/share/Trash"
+    value: "{{ adare_user_home }}/.local/share/Trash"
     description: "Path to user's trash bin"
 
 # Test definitions
