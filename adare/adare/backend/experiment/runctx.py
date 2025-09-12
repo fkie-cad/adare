@@ -20,7 +20,7 @@ class ExperimentConfig:
     preserve_snapshot: bool = False
     runlog: bool = True
     vm_cpus: int = 4
-    vm_memory: int = 4096
+    vm_memory: int = 4096  # Default, can be overridden based on guest platform or CLI
     vm_resolution: Tuple[int, int] = (1920, 1080)
     websocket_port: int = 18765
     shared_directories: Dict[str, Dict[str, Path]] = field(default_factory=dict)

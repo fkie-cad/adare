@@ -945,7 +945,7 @@ def __start_event_listeners(experiment_run_ulid: str):
     return cli_thread, db_thread
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = False, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = False, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None):
     import signal
     import asyncio
 
@@ -953,6 +953,50 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
     # Create the experiment context and initialize it.
     config = ExperimentConfig(project_path, experiment_name, environment_name, preserve_snapshot=preserve_snapshot, runlog=runlog)
+    
+    # Determine guest platform early to set platform-specific defaults
+    # We need to get the environment info to determine the platform
+    try:
+        environment_file = None
+        if environment_name:
+            from adare.backend.environment import database as environment_database
+            environment_file = environment_database.get_environment_path_by_project_and_name(
+                project_path, environment_name
+            )
+        
+        if environment_file:
+            from adare.types.environment import parse_environment_file
+            environment_metadata = parse_environment_file(environment_file)
+            guest_platform = environment_metadata.os.platform
+            
+            # Set platform-specific defaults if not overridden by CLI
+            if vm_memory is None:
+                if 'windows' in guest_platform.lower():
+                    config.vm_memory = 8192  # 8GB for Windows
+                    log.info(f"Using Windows default VM memory: 8192MB")
+                else:
+                    config.vm_memory = 4096  # 4GB for Linux
+                    log.info(f"Using Linux default VM memory: 4096MB")
+            else:
+                config.vm_memory = vm_memory
+                log.info(f"Using custom VM memory: {vm_memory}MB")
+        else:
+            # Fallback: apply CLI override or keep default
+            if vm_memory is not None:
+                config.vm_memory = vm_memory
+                log.info(f"Using custom VM memory: {vm_memory}MB")
+    except Exception as e:
+        log.warning(f"Could not determine guest platform for memory defaults: {e}")
+        # Fallback: apply CLI override or keep default
+        if vm_memory is not None:
+            config.vm_memory = vm_memory
+            log.info(f"Using custom VM memory: {vm_memory}MB")
+    
+    # Override VM CPU settings if provided via CLI
+    if vm_cpus is not None:
+        config.vm_cpus = vm_cpus
+        log.info(f"Using custom VM CPUs: {vm_cpus}")
+    
     experiment_run_context = ExperimentRunCtx(config)
     experiment_run_context.debug_screenshots = debug_screenshots
     experiment_run_context.test_mode = test  # Store test mode flag for later use

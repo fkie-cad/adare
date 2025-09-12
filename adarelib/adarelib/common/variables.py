@@ -569,20 +569,48 @@ class VariableRegistry:
         try:
             import jinja2
             
-            # Create a simple context with just the variable names and values (no metadata)
-            simple_context = {}
-            for name, var in self.variables.items():
-                if var.type == VariableType.TIMESTAMP and isinstance(var.value, datetime.datetime):
-                    simple_context[name] = var.value.isoformat()
-                else:
-                    # Use basic string value to avoid infinite recursion
-                    simple_context[name] = var.get_string_value()
+            result = text
+            max_iterations = 10  # Prevent infinite loops
+            previous_results = set()  # Track previous results to detect cycles
             
-            # Apply template resolution
-            template = jinja2.Template(text)
-            resolved = template.render(simple_context)
-            log.debug(f"Resolved nested template '{text}' to '{resolved}'")
-            return resolved
+            for i in range(max_iterations):
+                # If no more variables to replace, we're done
+                if '{{' not in result:
+                    break
+                
+                # Check for cycles (same result appearing again)
+                if result in previous_results:
+                    log.warning(f"Circular variable reference detected in nested template: {text}")
+                    break
+                
+                previous_results.add(result)
+                
+                # Create a simple context with just the variable names and values (no metadata)
+                simple_context = {}
+                for name, var in self.variables.items():
+                    if var.type == VariableType.TIMESTAMP and isinstance(var.value, datetime.datetime):
+                        simple_context[name] = var.value.isoformat()
+                    else:
+                        # Use basic string value to avoid infinite recursion
+                        simple_context[name] = var.get_string_value()
+                
+                # Apply template resolution
+                template = jinja2.Template(result)
+                new_result = template.render(simple_context)
+                log.debug(f"Nested template resolution iteration {i+1}: '{result}' -> '{new_result}'")
+                
+                # If no change occurred, break to avoid infinite loops
+                if new_result == result:
+                    break
+                    
+                result = new_result
+            
+            # Warn if we hit max iterations (possible infinite loop)
+            if i == max_iterations - 1 and '{{' in result:
+                log.warning(f"Nested template resolution hit max iterations for: {text}")
+            
+            log.debug(f"Final nested template resolution: '{text}' -> '{result}'")
+            return result
             
         except Exception as e:
             log.warning(f"Failed to resolve nested template '{text}': {e}")

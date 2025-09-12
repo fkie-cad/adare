@@ -14,7 +14,7 @@ import time
 
 # Playbook and test imports
 from adare.types.playbook import (
-    parse_playbook, Playbook, ActionType
+    parse_playbook, Playbook, ActionType, ActionTestAction
 )
 
 # WebSocket client import
@@ -308,8 +308,18 @@ class PlaybookController:
             
             if not result.success:
                 log.error(f"Action {i+1} failed: {result.message}")
-                # Stop execution by default after failed action
-                break
+                
+                # Check if we should continue on test failure
+                should_continue = False
+                if self._is_test_action(resolved_action):
+                    # This is a test action - check continue_on_test_failure setting
+                    if hasattr(playbook, 'settings') and playbook.settings and playbook.settings.continue_on_test_failure:
+                        log.info(f"Test action failed but continuing due to continue_on_test_failure setting")
+                        should_continue = True
+                
+                if not should_continue:
+                    # Stop execution after failed action
+                    break
             
             # Apply global idle setting
             if hasattr(playbook, 'settings') and playbook.settings and playbook.settings.idle:
@@ -373,6 +383,10 @@ class PlaybookController:
                 log.debug(f"Updated execution record {execution_id}")
         except Exception as e:
             log.warning(f"Failed to update execution record {execution_id}: {e}")
+    
+    def _is_test_action(self, action: ActionType) -> bool:
+        """Check if an action is a test action."""
+        return isinstance(action, ActionTestAction)
     
     def _is_test_action_result(self, action_result: ActionResult) -> bool:
         """Check if an action result corresponds to a test execution."""

@@ -15,6 +15,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] make all output available as csv/json/yaml
 - [x] some way to test vms; maybe with simple command adare vm test
 - [ ] enhance `adare vm test` with automatic platform detection and desktop environment detection for platform-specific tests -> complexer than thought since we need database indendent experiment run with own stages and own flow console
+- [ ] add expect_to_fail field for tests to be successfuly if test failed and vice versa! Important an error outside the test stays an error/expcetion! We should only reverse this for the test result!
 
 ## Quality of Life Improvements
 - [ ] update documentation
@@ -25,7 +26,6 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] improve code quality in general
   - [ ] we use the username/password dummy when we with virtualbox do not need the commands ... -> find a better solution!
   - [ ] variable resolving uses regex to track resolved - can we do this without regex?
-  - [ ] remove all tessdata relicts
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
 - [x] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;)
 - [ ] let a user run multiple exepriments -> requires more advanced snapshot handling -> so vm needs to uploaded 
@@ -38,9 +38,9 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] by default on run no specific log is saved to adare run log dir if not --logfile is set as well?! -> test if fixed?!
 - [x] look into timezone+localtime if this all really works like expetected together with tolerance filter -> so timestamp/timezone do not work really well -> we did some localtime resolving on adarevm/maybe also adjust for timezone
 - [x] testfunction list should show testfunction set with . before at least if not standard
-- [ ] default ram for linux box 4gb and windows box 8gb. Custom set during experiment run or? - can we do this? If not implement fix!
+- [x] default ram for linux box 4gb and windows box 8gb. Custom set during experiment run or? - can we do this? If not implement fix!
 - [x] update makefile (make adare does not work we need -B why?); update help message; in docs reference make adare
 - [ ] check if its possible that vm path in environment is relative to project directory
-- [ ] nested variables cause issues - need to be fixed -> worked on command but not on dst paramter somehow?! so maybe nested works but not for all paraemter values?!
+- [x] nested variables cause issues - need to be fixed -> worked on command but not on dst paramter somehow?! so maybe nested works but not for all paraemter values?!
 - [ ] does svg as icons in playbook work? 
 - [ ] testfunction standard should be loaded on project creation!
