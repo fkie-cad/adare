@@ -60,7 +60,7 @@ class VMLifecycleManager:
             'adare': {'host': context.adarevm.parent, 'vm': shared_root / 'app'},
             'experiment': {'host': context.experiment_directory.path, 'vm': shared_root / 'experiment'},
             'testfunctions': {'host': context.project_directory.testfunctions, 'vm': shared_root / 'testfunctions'},
-            'shared': {'host': context.project_directory.shared, 'vm': shared_root / 'shared'},
+            'shared': {'host': context.experiment_directory.shared, 'vm': shared_root / 'shared'},
         }
         
         # Create VirtualBox VM instance

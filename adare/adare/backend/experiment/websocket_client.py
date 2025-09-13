@@ -306,27 +306,41 @@ class AdareVMClient:
     
     # Test Management Methods
     
-    async def upload_testfunctions(self, testfunctions_path: Path) -> Dict[str, Any]:
+    async def upload_testfunctions(self, testfunctions_path: Path, specific_files: set[Path] = None) -> Dict[str, Any]:
         """
         Upload testfunctions to the VM.
-        
+
         Args:
             testfunctions_path: Path to directory containing testfunctions
-            
+            specific_files: Optional set of specific file paths to upload. If None, uploads all files.
+
         Returns:
             Upload result
         """
         # Create zip file in memory
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            for file_path in testfunctions_path.rglob('*'):
-                if file_path.is_file():
-                    arcname = file_path.relative_to(testfunctions_path)
-                    zip_file.write(file_path, arcname)
-        
+            if specific_files:
+                # Upload only specific files
+                for file_path in specific_files:
+                    if file_path.is_file():
+                        # Calculate relative path from testfunctions directory
+                        try:
+                            arcname = file_path.relative_to(testfunctions_path)
+                            zip_file.write(file_path, arcname)
+                        except ValueError:
+                            # File is not relative to testfunctions_path, skip it
+                            log.warning(f"Skipping file outside testfunctions directory: {file_path}")
+            else:
+                # Upload all files (original behavior)
+                for file_path in testfunctions_path.rglob('*'):
+                    if file_path.is_file():
+                        arcname = file_path.relative_to(testfunctions_path)
+                        zip_file.write(file_path, arcname)
+
         # Encode as base64
         zip_data = base64.b64encode(zip_buffer.getvalue()).decode('utf-8')
-        
+
         return await self.call_tool(ToolRegistry.UPLOAD_TESTFUNCTIONS, {
             "testfunctions_data": zip_data
         })
