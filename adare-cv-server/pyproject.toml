@@ -1,13 +1,13 @@
 [tool.poetry]
-name = "adare-mcp-server"
+name = "adare-cv-server"
 version = "0.1.0"
-description = "MCP server for computer vision and OCR capabilities for Adare"
+description = "Computer vision and OCR server for Adare framework"
 authors = ["miqsoft <mksaxhandball@gmail.com>"]
 readme = "README.md"
-packages = [{include = "adare_mcp_server"}]
+packages = [{include = "adare_cv_server"}]
 
 [tool.poetry.scripts]
-adare-mcp-server = "adare_mcp_server.server:main"
+adare-cv-server = "adare_cv_server.server:main"
 
 [tool.poetry.dependencies]
 python = "^3.10"

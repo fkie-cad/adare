@@ -15,15 +15,15 @@ if (Get-Command poetry -ErrorAction SilentlyContinue) {
     exit
 }
 
-# Install adare-mcp-server package
-Write-Host "`nInstalling adare-mcp-server package...`n"
-$mcpServerDirectory = "..\adare-mcp-server"
+# Install adare-cv-server package
+Write-Host "`nInstalling adare-cv-server package...`n"
+$mcpServerDirectory = "..\adare-cv-server"
 if (Test-Path $mcpServerDirectory) {
     Set-Location $mcpServerDirectory
     poetry install
     Set-Location "..\adare"
 } else {
-    Write-Host "`nDirectory 'adare-mcp-server' not found. Exiting...`n"
+    Write-Host "`nDirectory 'adare-cv-server' not found. Exiting...`n"
     exit
 }
 
@@ -36,11 +36,11 @@ if (-not $adareExecutable) {
     Write-Host "`nAdare executable found at: $adareExecutable`n"
 }
 
-# Attempt to find the adare-mcp-server CMD executable
+# Attempt to find the adare-cv-server CMD executable
 Set-Location $mcpServerDirectory
-$mcpServerExecutable = $(poetry run where adare-mcp-server | Where-Object { $_ -like "*.cmd" })
+$mcpServerExecutable = $(poetry run where adare-cv-server | Where-Object { $_ -like "*.cmd" })
 if (-not $mcpServerExecutable) {
-    Write-Host "`nThe 'adare-mcp-server' executable could not be found. Ensure it's available via Poetry.`n"
+    Write-Host "`nThe 'adare-cv-server' executable could not be found. Ensure it's available via Poetry.`n"
     exit
 } else {
     Write-Host "`nAdare MCP Server executable found at: $mcpServerExecutable`n"
@@ -61,7 +61,7 @@ if (-not $userPath.Contains($mcpServerBinPath) -and $mcpServerBinPath -ne $poetr
 }
 
 if ($pathsToAdd.Count -gt 0) {
-    Write-Host "Please manually add the following paths to your system PATH to ensure 'adare' and 'adare-mcp-server' can be executed globally:"
+    Write-Host "Please manually add the following paths to your system PATH to ensure 'adare' and 'adare-cv-server' can be executed globally:"
     foreach ($path in $pathsToAdd) {
         Write-Host "  - $path"
     }

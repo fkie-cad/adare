@@ -111,7 +111,7 @@ ADARE VM Agent
 MCP Server
 ===========
 
-**Location**: ``adare-mcp-server/`` directory  
+**Location**: ``adare-cv-server/`` directory  
 **Role**: External GUI automation and computer vision service  
 **Language**: Python (with OpenCV and Tesseract)
 
@@ -127,7 +127,7 @@ MCP Server
 
 .. code-block:: text
 
-   adare-mcp-server/
+   adare-cv-server/
    ├── vision/               # Computer vision algorithms
    │   ├── image_matching/   # Template matching algorithms
    │   ├── text_detection/   # OCR and text recognition  

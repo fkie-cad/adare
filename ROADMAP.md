@@ -6,6 +6,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] check/build testfunctions
   - [ ] doe we have file_contains test method to test if file contains a certain string?
   - [ ] does filecontentequals works with pure regex? -> test
+- [ ] make adare experiment run ... without env run all experiments in that env after another. Lets at the end add some summary telling what succeded which failed.
 - [ ] update docs to acceptable amount!
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
 - [ ] test if we can still run adare if we delete cloned repo
@@ -37,17 +38,15 @@ This document tracks ongoing development tasks, planned features, quality of lif
   - [ ] in installation add: eval "$(_ADARE_COMPLETE=zsh_source adare)" and tutorial how to enable autocomplete
 - [ ] improve code quality in general
   - [ ] we use the username/password dummy when we with virtualbox do not need the commands ... -> find a better solution!
-  - [ ] variable resolving uses regex to track resolved - can we do this without regex?
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
   - [ ] thereby replace claude logging details with different levels and be less noicy and clearer to see what went wrong? 
 - [x] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;)
 - [ ] rethink testfunction result -> at the moment lists -> how is it saved in databse plain json? (then dicts would be better?)
 - [x] add some automatic variables -> e.g. adare_user_home als automatische Variable, die im Playbook verwendet werden kann und zum entsprechenden Home-Verzeichnis auflöst 
-- [ ] improve adare-mcp-server code quality; maybe tweak functionality
+- [x] improve adare-cv-server code quality; maybe tweak functionality
 - [ ] reconsider if fake runs are deleted from database or kept until we wipe them manually
 
 ## Known Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 - [ ] interrupt on verify does not work!
-- [ ] somehow it does not work if test execution error is displayed same as test error this should not happen!
 - [ ] adding/removing a pull does not trigger reload of experiment?! -> this means run do not work -> try to load on every run?!

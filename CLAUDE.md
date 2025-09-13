@@ -5,7 +5,7 @@ Framework for detecting forensic artifact changes across OS/software versions us
 ## Architecture
 - **adare/** – Host client: manages projects, VMs, experiments  
 - **adarevm/** – Guest agent: runs inside VM, executes playbooks via WebSocket  
-- **adare-mcp-server/** – External GUI automation server (screenshot analysis)  
+- **adare-cv-server/** – External GUI automation server (screenshot analysis)  
 - **adarelib/** – Shared utilities & test functions  
 - **docsrc/** – Documentation  
 
