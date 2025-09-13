@@ -45,6 +45,7 @@ tests:
   - name: test_file_exists_negative
     description: 'Test file_exists with non-existent file'
     function: file_exists
+    expect_to_fail: true
     parameter:
       dst: '{{test_dir}}/nonexistent.txt'
   
@@ -57,6 +58,7 @@ tests:
   - name: test_file_does_not_exist_negative
     description: 'Test file_does_not_exist with existing file'
     function: file_does_not_exist
+    expect_to_fail: true
     parameter:
       dst: '{{test_file}}'
   
@@ -70,6 +72,7 @@ tests:
   - name: test_dir_exists_negative
     description: 'Test dir_exists with non-existent directory'
     function: dir_exists
+    expect_to_fail: true
     parameter:
       dst: '{{test_dir}}/nonexistent_dir'
   
@@ -82,6 +85,7 @@ tests:
   - name: test_dir_does_not_exist_negative
     description: 'Test dir_does_not_exist with existing directory'
     function: dir_does_not_exist
+    expect_to_fail: true
     parameter:
       dst: '{{test_dir}}'
   
@@ -96,6 +100,7 @@ tests:
   - name: test_dir_content_missing_files
     description: 'Test dir_content with missing files (should fail)'
     function: dir_content
+    expect_to_fail: true
     parameter:
       dst: '{{test_dir}}'
       files: ['test_file.txt', 'missing_file.txt']
@@ -111,6 +116,7 @@ tests:
   - name: test_file_content_equals_negative
     description: 'Test file_content_equals with non-matching content'
     function: file_content_equals
+    expect_to_fail: true
     parameter:
       dst: '{{test_file}}'
       content: 'Different content'
@@ -125,6 +131,7 @@ tests:
   - name: test_file_content_matches_regex_negative
     description: 'Test file_content_matches_regex with non-matching pattern'
     function: file_content_matches_regex
+    expect_to_fail: true
     parameter:
       dst: '{{test_file}}'
       regex: '^Windows.*content$'
@@ -141,6 +148,7 @@ tests:
   - name: test_file_hash_matches_negative
     description: 'Test file_hash_matches with incorrect hash'
     function: file_hash_matches
+    expect_to_fail: true
     parameter:
       dst: '{{test_file}}'
       expected_hash: '{{expected_hash}}'
@@ -157,6 +165,7 @@ tests:
   - name: test_file_permissions_negative
     description: 'Test file_permissions with incorrect permissions'
     function: file_permissions
+    expect_to_fail: true
     parameter:
       dst: '{{test_file}}'
       expected_permissions: '755'
@@ -174,6 +183,7 @@ tests:
   - name: test_file_timestamps_not_within_last
     description: 'Test file_timestamps not within last time (should fail)'
     function: file_timestamps
+    expect_to_fail: true
     parameter:
       dst: '{{test_file}}'
       timestamp_type: 'modified'

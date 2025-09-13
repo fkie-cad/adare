@@ -22,6 +22,11 @@ variables:
     type: path
     value: "{{test_dir}}\\config.json"
     description: "Configuration JSON file"
+  
+  users_json:
+    type: path
+    value: "{{test_dir}}\\users.json"
+    description: "Users JSON file for wildcard testing"
 
 # Test definitions for JSON functions on Windows
 tests:
@@ -39,6 +44,51 @@ tests:
       dst: '{{config_json}}'
       key_path: 'app_name'
       expected_value: 'WindowsTestApp'
+  
+  # Wildcard tests for Windows
+  - name: test_json_wildcard_array_any_windows
+    description: 'Test json_value_matches with array wildcard [*] in any mode on Windows'
+    function: json_value_matches
+    parameter:
+      dst: '{{users_json}}'
+      key_path: 'employees[*].active'
+      expected_value: true
+      wildcard_mode: 'any'
+  
+  - name: test_json_wildcard_object_all_windows
+    description: 'Test json_value_matches with object wildcard * in all mode on Windows'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'settings.*'
+      expected_value: true
+      wildcard_mode: 'all'
+  
+  - name: test_json_wildcard_regex_windows
+    description: 'Test json_value_matches with wildcard and direct regex on Windows'
+    function: json_value_matches
+    parameter:
+      dst: '{{users_json}}'
+      key_path: 'employees[*].department'
+      expected_value: !re '^(IT|HR|Finance)$'
+      wildcard_mode: 'any'
+  
+  # Additional placeholder tests for Windows
+  - name: test_json_regex_direct_windows
+    description: 'Test json_value_matches with direct regex on Windows version'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'version'
+      expected_value: !re '^\d+\.\d+\.\d+$'
+  
+  - name: test_json_timestamp_tolerance_windows
+    description: 'Test json_value_matches with timestamp and tolerance on Windows'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'created_at'
+      expected_value: "{{ now | tolerance(60) | format('%Y-%m-%d %H:%M:%S') }}"
 
 actions:
   # Setup test environment
@@ -48,19 +98,64 @@ actions:
       command: 'mkdir "{{test_dir}}"'
       shell: true
   
+  # Save current timestamp for later comparison
+  - save_timestamp:
+      name: "Save Current Timestamp"
+      description: "Save current timestamp in 'now' variable for timestamp tolerance tests"
+      variable: "now"
+  
   - command:
       name: "Create Config JSON"
       description: "Create configuration JSON file"
       command: |
         echo { > "{{config_json}}"
         echo   "app_name": "WindowsTestApp", >> "{{config_json}}"
-        echo   "version": "1.0.0" >> "{{config_json}}"
+        echo   "version": "1.0.0", >> "{{config_json}}"
+        echo   "created_at": "%date:~10,4%-%date:~4,2%-%date:~7,2% %time:~0,8%", >> "{{config_json}}"
+        echo   "settings": { >> "{{config_json}}"
+        echo     "debug_mode": true, >> "{{config_json}}"
+        echo     "auto_save": true, >> "{{config_json}}"
+        echo     "notifications": true >> "{{config_json}}"
+        echo   } >> "{{config_json}}"
         echo } >> "{{config_json}}"
+      shell: true
+  
+  - command:
+      name: "Create Users JSON"
+      description: "Create users JSON file for wildcard testing"
+      command: |
+        echo { > "{{users_json}}"
+        echo   "employees": [ >> "{{users_json}}"
+        echo     { >> "{{users_json}}"
+        echo       "id": 1, >> "{{users_json}}"
+        echo       "name": "John Doe", >> "{{users_json}}"
+        echo       "department": "IT", >> "{{users_json}}"
+        echo       "active": true >> "{{users_json}}"
+        echo     }, >> "{{users_json}}"
+        echo     { >> "{{users_json}}"
+        echo       "id": 2, >> "{{users_json}}"
+        echo       "name": "Jane Smith", >> "{{users_json}}"
+        echo       "department": "HR", >> "{{users_json}}"
+        echo       "active": false >> "{{users_json}}"
+        echo     }, >> "{{users_json}}"
+        echo     { >> "{{users_json}}"
+        echo       "id": 3, >> "{{users_json}}"
+        echo       "name": "Bob Wilson", >> "{{users_json}}"
+        echo       "department": "Finance", >> "{{users_json}}"
+        echo       "active": true >> "{{users_json}}"
+        echo     } >> "{{users_json}}"
+        echo   ] >> "{{users_json}}"
+        echo } >> "{{users_json}}"
       shell: true
   
   # Run JSON tests
   - test: test_json_contains_key_windows
   - test: test_json_value_matches_windows
+  - test: test_json_wildcard_array_any_windows
+  - test: test_json_wildcard_object_all_windows
+  - test: test_json_wildcard_regex_windows
+  - test: test_json_regex_direct_windows
+  - test: test_json_timestamp_tolerance_windows
   
   # Cleanup
   - command:

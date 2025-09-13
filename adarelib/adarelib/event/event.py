@@ -4,6 +4,7 @@ import attrs
 import cattrs
 from datetime import datetime
 import ulid
+import traceback
 
 from adarelib.constants import StatusEnum, TIMESTAMP_FORMAT
 
@@ -58,10 +59,20 @@ class TestResult:
     @classmethod
     def execution_error(cls, exception: Exception, context: str = None):
         """Create an error result from an exception."""
+        if exception is None:
+            # Handle cases where exception is None (some tests pass None)
+            error_msg = context if context else "Unknown error"
+            return cls(status=StatusEnum.ERROR, details=[error_msg])
+
+        # Create basic error message
         error_msg = f"{type(exception).__name__}: {str(exception)}"
         if context:
             error_msg = f"{context} - {error_msg}"
-        return cls(status=StatusEnum.ERROR, details=[error_msg])
+
+        # Add full stack trace
+        stack_trace = ''.join(traceback.format_exception(type(exception), exception, exception.__traceback__))
+
+        return cls(status=StatusEnum.ERROR, details=[error_msg, f"Stack trace:\n{stack_trace}"])
 
 
 @attrs.define

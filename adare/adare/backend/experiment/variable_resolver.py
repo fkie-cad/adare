@@ -241,17 +241,60 @@ class VariableResolver:
     def _process_recursive(self, data: Any) -> Any:
         """
         Recursively process data structure for YAML custom tags.
-        
+
         Args:
             data: Any data that might contain custom tags
-            
+
         Returns:
             Processed data with placeholders
         """
+        from adarelib.testset.yaml.customtags import YamlRegexString, YamlTimestamp
+
         if isinstance(data, dict):
             return {key: self._process_recursive(value) for key, value in data.items()}
         elif isinstance(data, list):
             return self._process_entry_list(data)  # Use specialized entry list processing
+        elif isinstance(data, YamlRegexString):
+            # Convert single regex object to placeholder
+            placeholder_name = self._create_placeholder_name('regex')
+            self._add_regex_metadata(placeholder_name, data.string)
+            log.info(f"Converted single YamlRegexString('{data.string}') to placeholder '{placeholder_name}'")
+            return f'{{{{ {placeholder_name} }}}}'
+        elif isinstance(data, YamlTimestamp):
+            # Handle single timestamp objects (similar to list processing logic)
+            has_tolerance = self._tolerance_detector.has_yaml_tolerance(data)
+            log.info(f"CLAUDE: Processing single YamlTimestamp '{data.string}', has_tolerance={has_tolerance}")
+
+            if has_tolerance:
+                placeholder_name = self._create_placeholder_name('timestamp')
+                timestamp_value = data.string
+                # Resolve any templates within the timestamp value
+                if '{{' in str(timestamp_value) and '}}' in str(timestamp_value):
+                    if hasattr(self, '_current_template_context'):
+                        resolved_timestamp = self._resolve_template_with_context(timestamp_value, self._current_template_context)
+                        if not resolved_timestamp or resolved_timestamp.isspace():
+                            resolved_timestamp = timestamp_value
+                    else:
+                        resolved_timestamp = timestamp_value
+                else:
+                    resolved_timestamp = timestamp_value
+
+                self._add_timestamp_metadata(placeholder_name, resolved_timestamp, getattr(data, 'tolerance', None))
+                log.info(f"CLAUDE: Converted single YamlTimestamp with tolerance to placeholder '{placeholder_name}'")
+                return f'{{{{ {placeholder_name} }}}}'
+            else:
+                # No tolerance - resolve directly
+                timestamp_value = data.string
+                if '{{' in str(timestamp_value) and '}}' in str(timestamp_value):
+                    if hasattr(self, '_current_template_context'):
+                        resolved_timestamp = self._resolve_template_with_context(timestamp_value, self._current_template_context)
+                    else:
+                        resolved_timestamp = timestamp_value
+                    log.info(f"CLAUDE: Resolved single YamlTimestamp WITHOUT tolerance to '{resolved_timestamp}'")
+                    return resolved_timestamp
+                else:
+                    log.info(f"Using single YamlTimestamp value directly: '{timestamp_value}'")
+                    return timestamp_value
         else:
             return data
     

@@ -33,6 +33,18 @@ variables:
     value: "{{test_dir}}/nested.json"
     description: "Deeply nested JSON file"
   
+  # Placeholder examples for advanced matching
+  version_regex:
+    type: regex
+    value: '^\d+\.\d+\.\d+$'
+    description: "Regex pattern for version matching"
+  
+  current_timestamp:
+    type: timestamp
+    value: "{{now}}"
+    tolerance: 30
+    description: "Current timestamp with 30s tolerance"
+  
   malformed_json:
     type: path
     value: "{{test_dir}}/malformed.json"
@@ -70,6 +82,7 @@ tests:
   - name: test_json_contains_key_not_found
     description: 'Test json_contains_key with non-existent key'
     function: json_contains_key
+    expect_to_fail: true
     parameter:
       dst: '{{config_json}}'
       key_path: 'nonexistent.key'
@@ -127,6 +140,7 @@ tests:
   - name: test_json_value_matches_wrong_value
     description: 'Test json_value_matches with wrong expected value'
     function: json_value_matches
+    expect_to_fail: true
     parameter:
       dst: '{{config_json}}'
       key_path: 'app_name'
@@ -160,6 +174,7 @@ tests:
   - name: test_json_array_contains_not_found
     description: 'Test json_array_contains with non-existent element'
     function: json_array_contains
+    expect_to_fail: true
     parameter:
       dst: '{{config_json}}'
       array_path: 'features'
@@ -168,15 +183,101 @@ tests:
   - name: test_json_array_contains_not_array
     description: 'Test json_array_contains with non-array path'
     function: json_array_contains
+    expect_to_fail: true
     parameter:
       dst: '{{config_json}}'
       array_path: 'app_name'
       expected_element: 'anything'
   
+  # Wildcard matching tests
+  - name: test_json_value_matches_array_wildcard_any
+    description: 'Test json_value_matches with array wildcard [*] in any mode'
+    function: json_value_matches
+    parameter:
+      dst: '{{users_json}}'
+      key_path: 'users[*].active'
+      expected_value: true
+      wildcard_mode: 'any'
+  
+  - name: test_json_value_matches_array_wildcard_all_fail
+    description: 'Test json_value_matches with array wildcard [*] in all mode (should fail)'
+    function: json_value_matches
+    expect_to_fail: true
+    parameter:
+      dst: '{{users_json}}'
+      key_path: 'users[*].active'
+      expected_value: true
+      wildcard_mode: 'all'
+  
+  - name: test_json_value_matches_array_wildcard_all_pass
+    description: 'Test json_value_matches with array wildcard [*] in all mode (should pass)'
+    function: json_value_matches
+    parameter:
+      dst: '{{users_json}}'
+      key_path: 'users[*].id'
+      expected_value: '^\d+$'
+      wildcard_mode: 'all'
+      regex_match: true
+  
+  - name: test_json_value_matches_object_wildcard_any
+    description: 'Test json_value_matches with object wildcard * in any mode'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'database.*'
+      expected_value: 'localhost'
+      wildcard_mode: 'any'
+  
+  - name: test_json_value_matches_object_wildcard_regex
+    description: 'Test json_value_matches with object wildcard and regex'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'database.*'
+      expected_value: '^(localhost|test_db|\d+|true)$'
+      wildcard_mode: 'any'
+      regex_match: true
+  
+  - name: test_json_value_matches_nested_array_wildcard
+    description: 'Test json_value_matches with nested wildcard path'
+    function: json_value_matches
+    parameter:
+      dst: '{{users_json}}'
+      key_path: 'permissions[*].action'
+      expected_value: 'read'
+      wildcard_mode: 'any'
+  
+  # Placeholder-based matching tests
+  - name: test_json_value_matches_regex_direct
+    description: 'Test json_value_matches with direct regex pattern'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'version'
+      expected_value: !re '^\d+\.\d+\.\d+$'
+  
+  - name: test_json_value_matches_wildcard_email_regex
+    description: 'Test json_value_matches with wildcard and direct email regex'
+    function: json_value_matches
+    parameter:
+      dst: '{{users_json}}'
+      key_path: 'users[*].email'
+      expected_value: !re '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+      wildcard_mode: 'any'
+  
+  - name: test_json_value_matches_timestamp_with_tolerance
+    description: 'Test json_value_matches with timestamp filter (if JSON has timestamp field)'
+    function: json_value_matches
+    parameter:
+      dst: '{{config_json}}'
+      key_path: 'created_at'
+      expected_value: "{{ now | tolerance(60) | format('%Y-%m-%d %H:%M:%S') }}"
+  
   # Edge cases
   - name: test_json_key_not_found_file
     description: 'Test JSON functions with non-existent file'
     function: json_contains_key
+    expect_to_fail: true
     parameter:
       dst: '{{test_dir}}/nonexistent.json'
       key_path: 'any.key'
@@ -184,6 +285,7 @@ tests:
   - name: test_json_malformed_file
     description: 'Test JSON functions with malformed JSON'
     function: json_contains_key
+    expect_to_fail: true
     parameter:
       dst: '{{malformed_json}}'
       key_path: 'any.key'
@@ -191,6 +293,7 @@ tests:
   - name: test_json_empty_file
     description: 'Test JSON functions with empty file'
     function: json_contains_key
+    expect_to_fail: true
     parameter:
       dst: '{{empty_json}}'
       key_path: 'any.key'
@@ -203,18 +306,25 @@ actions:
       command: "mkdir -p {{test_dir}}"
       shell: true
   
+  # Save current timestamp for later comparison
+  - save_timestamp:
+      name: "Save Current Timestamp"
+      description: "Save current timestamp in 'now' variable for timestamp tolerance tests"
+      variable: "now"
+  
   # Create configuration JSON file
   - command:
       name: "Create Config JSON"
       description: "Create configuration JSON file with various data types"
       command: |
-        cat > {{config_json}} << 'EOF'
+        cat > {{config_json}} << EOF
         {
           "app_name": "TestApplication",
           "version": "1.2.3",
           "debug_mode": true,
           "production_mode": false,
           "api_key": null,
+          "created_at": "$(date '+%Y-%m-%d %H:%M:%S')",
           "database": {
             "host": "localhost",
             "port": 5432,
@@ -327,10 +437,50 @@ actions:
   - test: test_json_array_contains_object
   - test: test_json_array_contains_not_found
   - test: test_json_array_contains_not_array
+  - test: test_json_value_matches_array_wildcard_any
+  - test: test_json_value_matches_array_wildcard_all_fail
+  - test: test_json_value_matches_array_wildcard_all_pass
+  - test: test_json_value_matches_object_wildcard_any
+  - test: test_json_value_matches_object_wildcard_regex
+  - test: test_json_value_matches_nested_array_wildcard
+  - test: test_json_value_matches_regex_direct
+  - test: test_json_value_matches_wildcard_email_regex
+  - test: test_json_value_matches_timestamp_with_tolerance
   - test: test_json_key_not_found_file
   - test: test_json_malformed_file
   - test: test_json_empty_file
-  
+
+  # Pull created files
+  - pull:
+      name: "Pull Config JSON"
+      description: "Retrieve the configuration JSON file"
+      src: "{{config_json}}"
+      dst: "config.json"
+
+  - pull:
+      name: "Pull Users JSON"
+      description: "Retrieve the users JSON file"
+      src: "{{users_json}}"
+      dst: "users.json"
+
+  - pull:
+      name: "Pull Nested JSON"
+      description: "Retrieve the nested JSON file"
+      src: "{{nested_json}}"
+      dst: "nested.json"
+
+  - pull:
+      name: "Pull Malformed JSON"
+      description: "Retrieve the malformed JSON file"
+      src: "{{malformed_json}}"
+      dst: "malformed.json"
+
+  - pull:
+      name: "Pull Empty JSON"
+      description: "Retrieve the empty JSON file"
+      src: "{{empty_json}}"
+      dst: "empty.json"
+
   # Cleanup
   - command:
       name: "Cleanup Test Directory"

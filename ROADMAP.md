@@ -9,6 +9,8 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] update docs to acceptable amount!
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
 - [ ] test if we can still run adare if we delete cloned repo
+- [ ] add xml testfunctions in separate xml module
+- [ ] support yaml with same logic/function as for json!
 
 ## Planned Features
 - [ ] test and enable ydotool to make it work on wayland linux distros as well
@@ -46,4 +48,5 @@ This document tracks ongoing development tasks, planned features, quality of lif
 ## Known Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 - [ ] interrupt on verify does not work!
+- [ ] somehow it does not work if test execution error is displayed same as test error this should not happen!
 - [ ] adding/removing a pull does not trigger reload of experiment?! -> this means run do not work -> try to load on every run?!

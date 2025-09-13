@@ -74,6 +74,7 @@ tests:
   - name: test_sqlite_query_wrong_count
     description: 'Test sqlite_query_result with wrong expected count'
     function: sqlite_query_result
+    expect_to_fail: true
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT * FROM users'
@@ -109,6 +110,7 @@ tests:
   - name: test_sqlite_query_invalid_table
     description: 'Test sqlite_query_result with invalid table'
     function: sqlite_query_result
+    expect_to_fail: true
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT * FROM nonexistent_table'
@@ -117,6 +119,7 @@ tests:
   - name: test_sqlite_query_file_not_found
     description: 'Test sqlite_query_result with non-existent database file'
     function: sqlite_query_result
+    expect_to_fail: true
     parameter:
       dst: '{{test_dir}}/nonexistent.db'
       query: 'SELECT 1'

@@ -452,18 +452,8 @@ class SqliteQueryResult(BasicTest):
             
             log.debug(f'dst database {dst} will be used for test {self.name}')
             
-            # Handle variables in query and expected results
             query = self.parameter.query
-            if self.has_placeholders(query):
-                query = self.resolve_variables(query)
-            
             expected_result = self.parameter.expected_result
-            if expected_result and self.has_placeholders(str(expected_result)):
-                expected_result = self.resolve_variables(str(expected_result))
-                try:
-                    expected_result = json.loads(expected_result) if isinstance(expected_result, str) else expected_result
-                except json.JSONDecodeError:
-                    pass
             
             try:
                 conn = sqlite3.connect(dst)
@@ -485,8 +475,20 @@ class SqliteQueryResult(BasicTest):
                 
                 # Check expected result content
                 if expected_result is not None:
-                    if result != expected_result:
-                        return TestResult.failed([f'query result does not match expected result. Got: {result}'])
+                    # Check if expected_result has placeholders
+                    expected_str = str(expected_result)
+                    if self.has_placeholders(expected_str):
+                        # For complex result comparison with placeholders, convert to string and use placeholder system
+                        try:
+                            success, message = self._handle_placeholders_comparison(str(result), expected_str)
+                            if not success:
+                                return TestResult.failed([f'query result placeholder comparison failed: {message}'])
+                        except Exception as e:
+                            return TestResult.execution_error(e, f"Error in placeholder comparison: {e}")
+                    else:
+                        # Regular direct comparison
+                        if result != expected_result:
+                            return TestResult.failed([f'query result does not match expected result. Got: {result}'])
                 
                 return TestResult.success([f'query returned {len(result)} rows'])
                 
@@ -530,14 +532,11 @@ class JsonContainsKey(BasicTest):
         try:
             dst, status = self.resolve_globfilepath(self.parameter.dst)
             if not dst:
-                return TestResult.error([f'JSON file {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+                return TestResult.failed([f'JSON file {self.parameter.dst} not found ({status})'])
             
             log.debug(f'dst file {dst} will be used for test {self.name}')
             
-            # Handle variables in key path
             key_path = self.parameter.key_path
-            if self.has_placeholders(key_path):
-                key_path = self.resolve_variables(key_path)
             
             try:
                 with open(dst, 'r') as f:
@@ -567,11 +566,12 @@ class JsonValueMatchesParameter(Parameter):
     key_path: str
     expected_value: Union[str, int, float, bool, None]
     regex_match: Optional[bool] = False
+    wildcard_mode: Optional[str] = "any"  # "any" or "all" - for wildcard matches
 
 @attrs.define
 class JsonValueMatches(BasicTest):
     testname: ClassVar[str] = 'json_value_matches'
-    testdescription: ClassVar[str] = 'tests if JSON value at key path matches expected value or regex'
+    testdescription: ClassVar[str] = 'tests if JSON value at key path matches expected value using placeholders (supports wildcards [*] and * with any/all modes)'
 
     name: str
     parameter: JsonValueMatchesParameter
@@ -579,47 +579,164 @@ class JsonValueMatches(BasicTest):
     variable_metadata: Optional[dict] = None
 
     def _get_nested_value(self, data, key_path):
-        """Navigate nested dictionary using dot notation"""
+        """Navigate nested dictionary using dot notation with wildcard support
+        
+        Supports:
+        - [*] for all array elements (e.g., "users[*].name")
+        - * for all object keys (e.g., "config.*.enabled")
+        
+        Returns:
+        - For exact paths: (value, True) or (None, False)
+        - For wildcard paths: (list_of_values, True) or ([], False)
+        """
         keys = key_path.split('.')
-        current = data
+        current_values = [data]  # Start with data wrapped in list for consistent handling
         
         for key in keys:
-            if isinstance(current, dict) and key in current:
-                current = current[key]
+            next_values = []
+            
+            for current in current_values:
+                if key == '*':
+                    # Wildcard for all keys in dict
+                    if isinstance(current, dict):
+                        next_values.extend(current.values())
+                elif key.endswith('[*]'):
+                    # Array wildcard (e.g., "users[*]")
+                    base_key = key[:-3]  # Remove '[*]'
+                    if isinstance(current, dict) and base_key in current:
+                        array_value = current[base_key]
+                        if isinstance(array_value, list):
+                            next_values.extend(array_value)
+                elif isinstance(current, dict) and key in current:
+                    # Regular key access
+                    next_values.append(current[key])
+            
+            if not next_values:
+                # No matching values found
+                return [], False
+                
+            current_values = next_values
+        
+        # If we have multiple values, it was a wildcard match
+        if len(current_values) > 1:
+            return current_values, True
+        elif len(current_values) == 1:
+            return current_values[0], True
+        else:
+            return None, False
+
+    def _compare_values(self, actual_value, expected_value):
+        """Compare values using the same logic as FileContentEquals"""
+
+        # Check for YamlRegexString objects (!re syntax) - handle like placeholder system
+        try:
+            from adarelib.testset.yaml.customtags import YamlRegexString
+            if isinstance(expected_value, YamlRegexString):
+                try:
+                    pattern = re.compile(expected_value.string)
+                    if pattern.match(str(actual_value)):
+                        return True, f'value "{actual_value}" matches regex "{expected_value.string}"'
+                    else:
+                        return False, f'value "{actual_value}" does not match regex "{expected_value.string}"'
+                except re.error as e:
+                    return False, f'Invalid regex pattern: {expected_value.string} - {e}'
+        except ImportError:
+            pass  # YamlRegexString not available, continue with normal processing
+
+        expected_str = str(expected_value)
+
+        if not self.has_placeholders(expected_str):
+            # No placeholders - check for regex_match flag
+            if self.parameter.regex_match and isinstance(expected_value, str):
+                # Regex matching
+                try:
+                    pattern = re.compile(expected_value)
+                    if pattern.search(str(actual_value)):
+                        return True, f'value "{actual_value}" matches regex "{expected_value}"'
+                    else:
+                        return False, f'value "{actual_value}" does not match regex "{expected_value}"'
+                except re.error as e:
+                    return False, f'Invalid regex pattern: {expected_value} - {e}'
             else:
-                return None, False
-        return current, True
+                # Direct value comparison
+                if actual_value == expected_value:
+                    return True, f'value matches expected: {actual_value}'
+                else:
+                    return False, f'expected "{expected_value}", got "{actual_value}"'
+        else:
+            # Has placeholders - use placeholder system (handles regex and timestamp with tolerance)
+            placeholder_names = self.get_placeholders(expected_str)
+            if len(placeholder_names) == 1:
+                placeholder_name = placeholder_names[0]
+                try:
+                    return self.compare_with_placeholder(placeholder_name, str(actual_value))
+                except Exception as e:
+                    return False, f"placeholder comparison error: {e}"
+            else:
+                return False, f"expected 1 placeholder for single value comparison, got {len(placeholder_names)}"
+
+    def _handle_wildcard_matching(self, values, expected_value, wildcard_mode, key_path):
+        """Handle matching logic for wildcard results with 'any' or 'all' modes"""
+        if not values:
+            return TestResult.failed([f'no values found for wildcard path "{key_path}"'])
+        
+        # Validate wildcard_mode
+        if wildcard_mode not in ['any', 'all']:
+            return TestResult.execution_error(None, f"Invalid wildcard_mode: {wildcard_mode}. Must be 'any' or 'all'")
+        
+        matches = []
+        non_matches = []
+        
+        # Check each value against expected using unified comparison method
+        for i, value in enumerate(values):
+            is_match, message = self._compare_values(value, expected_value)
+            if is_match:
+                matches.append((i, value, message))
+            else:
+                non_matches.append((i, value, message))
+        
+        # Apply wildcard mode logic
+        if wildcard_mode == 'any':
+            if matches:
+                match_details = [f"element[{i}]: {val}" for i, val, _ in matches[:3]]  # Show first 3 matches
+                if len(matches) > 3:
+                    match_details.append(f"... and {len(matches) - 3} more matches")
+                return TestResult.success([
+                    f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: any)',
+                    f'matching values: {", ".join(match_details)}'
+                ])
+            else:
+                return TestResult.failed([
+                    f'wildcard path "{key_path}" matched 0/{len(values)} values (mode: any)',
+                    f'expected: "{expected_value}"',
+                    f'got values: {[val for _, val, _ in non_matches[:5]]}'  # Show first 5 non-matches
+                ])
+        else:  # wildcard_mode == 'all'
+            if not non_matches:
+                return TestResult.success([
+                    f'wildcard path "{key_path}" matched all {len(values)} values (mode: all)',
+                    f'all values equal: "{expected_value}"'
+                ])
+            else:
+                non_match_details = [f"element[{i}]: {val}" for i, val, _ in non_matches[:3]]  # Show first 3 non-matches
+                if len(non_matches) > 3:
+                    non_match_details.append(f"... and {len(non_matches) - 3} more non-matches")
+                return TestResult.failed([
+                    f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: all)',
+                    f'expected: "{expected_value}"',
+                    f'non-matching values: {", ".join(non_match_details)}'
+                ])
 
     def test(self):
         try:
             dst, status = self.resolve_globfilepath(self.parameter.dst)
             if not dst:
-                return TestResult.error([f'JSON file {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+                return TestResult.failed([f'JSON file {self.parameter.dst} not found ({status})'])
             
             log.debug(f'dst file {dst} will be used for test {self.name}')
             
-            # Handle variables in key path and expected value
             key_path = self.parameter.key_path
-            if self.has_placeholders(key_path):
-                key_path = self.resolve_variables(key_path)
-            
             expected_value = self.parameter.expected_value
-            if self.has_placeholders(str(expected_value)):
-                expected_value = self.resolve_variables(str(expected_value))
-                # Try to convert back to appropriate type
-                if expected_value.lower() == 'true':
-                    expected_value = True
-                elif expected_value.lower() == 'false':
-                    expected_value = False
-                elif expected_value.lower() == 'null':
-                    expected_value = None
-                elif expected_value.isdigit():
-                    expected_value = int(expected_value)
-                else:
-                    try:
-                        expected_value = float(expected_value)
-                    except ValueError:
-                        pass  # Keep as string
             
             try:
                 with open(dst, 'r') as f:
@@ -630,22 +747,21 @@ class JsonValueMatches(BasicTest):
                 if not exists:
                     return TestResult.failed([f'key path "{key_path}" does not exist'])
                 
-                if self.parameter.regex_match and isinstance(expected_value, str):
-                    # Regex matching
-                    try:
-                        pattern = re.compile(expected_value)
-                        if pattern.search(str(value)):
-                            return TestResult.success([f'value "{value}" matches regex "{expected_value}"'])
-                        else:
-                            return TestResult.failed([f'value "{value}" does not match regex "{expected_value}"'])
-                    except re.error as e:
-                        return TestResult.execution_error(e, f"Invalid regex pattern: {expected_value}")
+                # Handle wildcard mode - check if we have multiple values
+                wildcard_mode = getattr(self.parameter, 'wildcard_mode', 'any')
+                if isinstance(value, list) and len(value) > 1:
+                    # Multiple values from wildcard matching
+                    return self._handle_wildcard_matching(value, expected_value, wildcard_mode, key_path)
+                elif isinstance(value, list) and len(value) == 1:
+                    # Single value from wildcard (treat as regular match)
+                    value = value[0]
+                
+                # Regular single value matching using unified comparison
+                is_match, message = self._compare_values(value, expected_value)
+                if is_match:
+                    return TestResult.success([message])
                 else:
-                    # Direct value comparison
-                    if value == expected_value:
-                        return TestResult.success([f'value matches expected: {value}'])
-                    else:
-                        return TestResult.failed([f'expected "{expected_value}", got "{value}"'])
+                    return TestResult.failed([message])
                     
             except json.JSONDecodeError as e:
                 return TestResult.execution_error(e, f"Invalid JSON in file {dst}")
@@ -690,23 +806,12 @@ class JsonArrayContains(BasicTest):
         try:
             dst, status = self.resolve_globfilepath(self.parameter.dst)
             if not dst:
-                return TestResult.error([f'JSON file {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+                return TestResult.failed([f'JSON file {self.parameter.dst} not found ({status})'])
             
             log.debug(f'dst file {dst} will be used for test {self.name}')
             
-            # Handle variables in array path and expected element
             array_path = self.parameter.array_path
-            if self.has_placeholders(array_path):
-                array_path = self.resolve_variables(array_path)
-            
-            expected_element = self.parameter.expected_element
-            if self.has_placeholders(str(expected_element)):
-                expected_element = self.resolve_variables(str(expected_element))
-                # Try to parse as JSON if it looks like structured data
-                try:
-                    expected_element = json.loads(expected_element)
-                except json.JSONDecodeError:
-                    pass  # Keep as string
+            expected_element = self.parameter.expected_element  # Keep as string
             
             try:
                 with open(dst, 'r') as f:
@@ -720,10 +825,29 @@ class JsonArrayContains(BasicTest):
                 if not isinstance(array, list):
                     return TestResult.failed([f'path "{array_path}" is not an array, got {type(array).__name__}'])
                 
-                if expected_element in array:
-                    return TestResult.success([f'array contains expected element: {expected_element}'])
+                # Check if expected_element has placeholders for regex/timestamp tolerance
+                expected_str = str(expected_element)
+                if self.has_placeholders(expected_str):
+                    # Use placeholder comparison for each array element
+                    placeholder_names = self.get_placeholders(expected_str)
+                    if len(placeholder_names) == 1:
+                        placeholder_name = placeholder_names[0]
+                        for i, element in enumerate(array):
+                            try:
+                                success, message = self.compare_with_placeholder(placeholder_name, str(element))
+                                if success:
+                                    return TestResult.success([f'array element [{i}] matches placeholder: {message}'])
+                            except Exception as e:
+                                continue  # Try next element
+                        return TestResult.failed([f'no array element matches placeholder "{placeholder_name}"'])
+                    else:
+                        return TestResult.failed([f'expected 1 placeholder for array comparison, got {len(placeholder_names)}'])
                 else:
-                    return TestResult.failed([f'array does not contain expected element: {expected_element}'])
+                    # Regular direct comparison
+                    if expected_element in array:
+                        return TestResult.success([f'array contains expected element: {expected_element}'])
+                    else:
+                        return TestResult.failed([f'array does not contain expected element: {expected_element}'])
                     
             except json.JSONDecodeError as e:
                 return TestResult.execution_error(e, f"Invalid JSON in file {dst}")
@@ -780,10 +904,7 @@ class FileHashMatches(BasicTest):
             
             log.debug(f'dst file {dst} will be used for test {self.name}')
             
-            # Handle variables in expected hash
             expected_hash = self.parameter.expected_hash
-            if self.has_placeholders(expected_hash):
-                expected_hash = self.resolve_variables(expected_hash)
             
             expected_hash = expected_hash.lower()
             
@@ -847,9 +968,7 @@ class FileTimestamps(BasicTest):
         if isinstance(timestamp, (int, float)):
             return float(timestamp)
         
-        # Handle variables
-        if self.has_placeholders(str(timestamp)):
-            timestamp = self.resolve_variables(str(timestamp))
+        timestamp = str(timestamp)
         
         # Try parsing as number first
         try:
@@ -1039,18 +1158,9 @@ class FilePermissions(BasicTest):
             
             log.debug(f'dst file {dst} will be used for test {self.name}')
             
-            # Handle variables in expected permissions
             expected_permissions = self.parameter.expected_permissions
-            if self.has_placeholders(expected_permissions):
-                expected_permissions = self.resolve_variables(expected_permissions)
-            
             check_owner = self.parameter.check_owner
-            if check_owner and self.has_placeholders(check_owner):
-                check_owner = self.resolve_variables(check_owner)
-            
             check_group = self.parameter.check_group
-            if check_group and self.has_placeholders(check_group):
-                check_group = self.resolve_variables(check_group)
             
             try:
                 stat_info = os.stat(dst)
