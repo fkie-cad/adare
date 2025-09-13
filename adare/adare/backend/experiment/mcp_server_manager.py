@@ -60,7 +60,7 @@ class MCPServerManager:
                 log_file_handle.flush()
             
             self.process = subprocess.Popen(
-                ["adare-mcp-server", "--port", str(self.server_port)],
+                ["adare-cv-server", "--port", str(self.server_port)],
                 stdout=log_file_handle or subprocess.PIPE,
                 stderr=subprocess.STDOUT if log_file_handle else subprocess.PIPE,
                 text=True

@@ -37,7 +37,7 @@ class MCPServerManager:
         try:
             # Prepare command
             cmd = [
-                'adare-mcp-server', 
+                'adare-cv-server', 
                 '--host', self.host, 
                 '--port', str(self.port),
                 '--debug'  # Always use debug for detailed logs
@@ -71,7 +71,7 @@ class MCPServerManager:
             return False
             
         except FileNotFoundError:
-            print("❌ adare-mcp-server command not found. Make sure adare-mcp-server package is installed.")
+            print("❌ adare-cv-server command not found. Make sure adare-cv-server package is installed.")
             return False
         except Exception as e:
             print(f"❌ Failed to start server: {e}")

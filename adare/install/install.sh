@@ -11,9 +11,9 @@ else
     exit 1
 fi
 
-# Install adare-mcp-server package
-echo "Installing adare-mcp-server package..."
-cd ../adare-mcp-server || { echo "Directory 'adare-mcp-server' not found. Exiting..."; exit 1; }
+# Install adare-cv-server package
+echo "Installing adare-cv-server package..."
+cd ../adare-cv-server || { echo "Directory 'adare-cv-server' not found. Exiting..."; exit 1; }
 poetry install
 cd ../adare
 
@@ -26,15 +26,15 @@ fi
 
 ln -sf "$ADARE_EXECUTABLE" ~/.local/bin/adare
 
-# Create a symbolic link for the 'adare-mcp-server' executable
-cd ../adare-mcp-server
-ADARE_MCP_SERVER_EXECUTABLE=$(poetry run which adare-mcp-server)
-if [ -z "$ADARE_MCP_SERVER_EXECUTABLE" ]; then
-    echo "The 'adare-mcp-server' executable could not be found. Ensure it's available via Poetry."
+# Create a symbolic link for the 'adare-cv-server' executable
+cd ../adare-cv-server
+ADARE_CV_SERVER_EXECUTABLE=$(poetry run which adare-cv-server)
+if [ -z "$ADARE_CV_SERVER_EXECUTABLE" ]; then
+    echo "The 'adare-cv-server' executable could not be found. Ensure it's available via Poetry."
     exit 1
 fi
 
-ln -sf "$ADARE_MCP_SERVER_EXECUTABLE" ~/.local/bin/adare-mcp-server
+ln -sf "$ADARE_CV_SERVER_EXECUTABLE" ~/.local/bin/adare-cv-server
 cd ../adare
 
 # Ensure ~/.local/bin exists and is in PATH
