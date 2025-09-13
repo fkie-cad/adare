@@ -38,60 +38,60 @@ tests:
   # Service status tests
   - name: test_service_active
     description: 'Test system_service_status with active service'
-    function: system_service_status
+    function: linux.system_service_status
     parameter:
       service_name: '{{active_service}}'
       expected_status: 'active'
-  
+
   - name: test_service_inactive
     description: 'Test system_service_status with inactive service'
-    function: system_service_status
+    function: linux.system_service_status
     parameter:
       service_name: '{{inactive_service}}'
       expected_status: 'inactive'
-  
+
   # Process running tests
   - name: test_process_running_single
     description: 'Test process_running with single instance'
-    function: process_running
+    function: linux.process_running
     parameter:
       process_name: '{{running_process}}'
       min_instances: 1
-  
+
   - name: test_process_not_running
     description: 'Test process_running with non-existent process'
-    function: process_running
+    function: linux.process_running
     expect_to_fail: true
     parameter:
       process_name: 'nonexistent-process-12345'
       min_instances: 1
-  
+
   # User existence tests
   - name: test_user_exists
     description: 'Test user_exists with existing user'
-    function: user_exists
+    function: linux.user_exists
     parameter:
       username: '{{username}}'
-  
+
   - name: test_user_does_not_exist
     description: 'Test user_exists with non-existent user'
-    function: user_exists
+    function: linux.user_exists
     expect_to_fail: true
     parameter:
       username: 'nonexistent-user-12345'
-  
+
   # Log entry tests
   - name: test_log_entry_systemd
     description: 'Test log_entry_exists with systemd pattern'
-    function: log_entry_exists
+    function: linux.log_entry_exists
     parameter:
       log_file: '{{test_log}}'
       pattern: 'systemd'
       max_lines: 1000
-  
+
   - name: test_log_entry_not_found
     description: 'Test log_entry_exists with non-existent pattern'
-    function: log_entry_exists
+    function: linux.log_entry_exists
     expect_to_fail: true
     parameter:
       log_file: '{{test_log}}'

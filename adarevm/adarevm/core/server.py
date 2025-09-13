@@ -372,49 +372,55 @@ class AdareVMServer:
 
             log.info(f"Installing dependencies with Poetry: {dependencies}")
 
-            # Use subprocess to run poetry add
-            import subprocess
-
             # Find the project directory containing pyproject.toml
             project_dir = self._find_project_directory()
 
             # Install all dependencies in one command for efficiency
-            cmd = ["poetry", "add"] + dependencies
+            cmd = ["poetry", "add"] + [f'"{dep}"' for dep in dependencies]
             log.info(f"Running command: {' '.join(cmd)} in directory: {project_dir}")
             await self.send_event(websocket, EventType.LOG, {"message": f"Running: {' '.join(cmd)} in {project_dir}"})
 
-            result = subprocess.run(
-                cmd,
+            # Use asyncio subprocess to avoid blocking the event loop
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
                 cwd=project_dir,
-                capture_output=True,
-                text=True,
-                timeout=600  # 10 minute timeout for all dependencies
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
+
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=600.0  # 10 minute timeout for all dependencies
+            )
+
+            # Decode bytes to string
+            stdout = stdout.decode('utf-8') if stdout else ""
+            stderr = stderr.decode('utf-8') if stderr else ""
             
-            if result.returncode != 0:
-                error_msg = f"Poetry add failed: {result.stderr}"
+            if process.returncode != 0:
+                error_msg = f"Poetry add failed: {stderr}"
                 log.error(error_msg)
                 await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
                 return {"status": "error", "message": error_msg}
             else:
                 success_msg = f"Successfully installed all {len(dependencies)} dependencies with Poetry"
                 log.info(success_msg)
-                log.debug(f"Poetry output: {result.stdout}")
+                log.debug(f"Poetry output: {stdout}")
                 await self.send_event(websocket, EventType.LOG, {"message": success_msg})
-                
+
                 return {
                     "status": "success",
                     "message": success_msg,
                     "installed_count": len(dependencies),
-                    "poetry_output": result.stdout
+                    "poetry_output": stdout
                 }
             
-        except subprocess.TimeoutExpired as e:
+        except asyncio.TimeoutError as e:
             error_msg = f"Poetry dependency installation timed out: {e}"
             log.error(error_msg)
             await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
             return {"status": "error", "message": error_msg}
-        except (subprocess.SubprocessError, OSError, FileNotFoundError) as e:
+        except (OSError, FileNotFoundError) as e:
             error_msg = f"Poetry dependency installation failed: {e}"
             log.error(error_msg)
             await self.send_event(websocket, EventType.ERROR, {"message": error_msg})

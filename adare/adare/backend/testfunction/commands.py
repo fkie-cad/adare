@@ -83,7 +83,7 @@ def testfunction_list(testfunction_set: str = None):
         for tf in data:
             # Add file information to each testfunction
             tf_with_file = tf.copy()
-            tf_with_file['file'] = str(file)
+            tf_with_file['file'] = Path(file).stem
             all_testfunctions.append(tf_with_file)
     
     # Filter by testfunction set if specified

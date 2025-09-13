@@ -96,8 +96,8 @@ class HomographyCalculator:
                 corners = np.float32([[0,0], [w,0], [w,h], [0,h]]).reshape(-1, 1, 2)
                 transformed_corners = cv2.perspectiveTransform(corners, M)
 
-                center_x = int(np.mean(transformed_corners[:, 0, 0]).item())
-                center_y = int(np.mean(transformed_corners[:, 0, 1]).item())
+                center_x = int(np.mean(transformed_corners[:, 0, 0]))
+                center_y = int(np.mean(transformed_corners[:, 0, 1]))
 
                 return center_x, center_y
 
@@ -107,6 +107,6 @@ class HomographyCalculator:
     @staticmethod
     def calculate_centroid(points: np.ndarray) -> Tuple[int, int]:
         """Calculate centroid of a set of points."""
-        center_x = int(np.mean(points[:, 0]).item())
-        center_y = int(np.mean(points[:, 1]).item())
+        center_x = int(np.mean(points[:, 0]))
+        center_y = int(np.mean(points[:, 1]))
         return center_x, center_y

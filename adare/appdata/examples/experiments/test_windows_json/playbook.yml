@@ -32,14 +32,14 @@ variables:
 tests:
   - name: test_json_contains_key_windows
     description: 'Test json_contains_key on Windows'
-    function: json_contains_key
+    function: json.contains_key
     parameter:
       dst: '{{config_json}}'
       key_path: 'app_name'
   
   - name: test_json_value_matches_windows
     description: 'Test json_value_matches on Windows'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'app_name'
@@ -48,7 +48,7 @@ tests:
   # Wildcard tests for Windows
   - name: test_json_wildcard_array_any_windows
     description: 'Test json_value_matches with array wildcard [*] in any mode on Windows'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{users_json}}'
       key_path: 'employees[*].active'
@@ -57,7 +57,7 @@ tests:
   
   - name: test_json_wildcard_object_all_windows
     description: 'Test json_value_matches with object wildcard * in all mode on Windows'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'settings.*'
@@ -66,7 +66,7 @@ tests:
   
   - name: test_json_wildcard_regex_windows
     description: 'Test json_value_matches with wildcard and direct regex on Windows'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{users_json}}'
       key_path: 'employees[*].department'
@@ -76,7 +76,7 @@ tests:
   # Additional placeholder tests for Windows
   - name: test_json_regex_direct_windows
     description: 'Test json_value_matches with direct regex on Windows version'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'version'
@@ -84,7 +84,7 @@ tests:
   
   - name: test_json_timestamp_tolerance_windows
     description: 'Test json_value_matches with timestamp and tolerance on Windows'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'created_at'

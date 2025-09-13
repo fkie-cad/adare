@@ -33,8 +33,16 @@ def project_create(path: Path, name: str, description: str = ''):
     except ProjectDirectoryCopyError as e:
         project_directory.remove()
         project_database.remove_project(path)
-        log.info(f'project directory {path} removed, since standard testfunction could not be copied')
+        log.info(f'project directory {path} removed, since testfunctions could not be copied')
         raise e
+
+    # Auto-load all copied testfunctions
+    try:
+        _auto_load_testfunctions(project_directory)
+        log.info(f'all testfunctions loaded for project {path}')
+    except Exception as e:
+        log.warning(f'some testfunctions could not be loaded: {e}')
+        # Don't fail project creation if testfunction loading fails
 
     log.info(f'project in path {path} created')
     
@@ -42,15 +50,15 @@ def project_create(path: Path, name: str, description: str = ''):
     next_steps = [
         f'Create an environment with: adare environment create <environment_name>',
         f'Create an experiment with: adare experiment create <experiment_name>',
-        f'Use the 15 standard test functions for file operations, JSON validation, SQLite queries, and more',
+        f'Use all available testfunction sets: files, json, csv, sqlite, linux, windows',
         f'Run your first experiment with: adare experiment run <experiment> -e <environment>'
     ]
-    
+
     print_success_message(
         title=f'Project "{name}" created successfully!',
         location=str(path),
         next_steps=next_steps,
-        tip='Standard testfunction set loaded with file operations (exists, content, permissions), data validation (JSON, CSV, SQLite), and forensic analysis capabilities'
+        tip='All testfunction sets loaded with file operations, data validation (JSON, CSV, SQLite), system analysis (Linux, Windows), and forensic capabilities'
     )
 
 
@@ -76,3 +84,28 @@ def project_list():
     projects_data = [(project.name, project.path, project.description, "\n".join([env.name for env in project.environments])) for project in projects]
     df_env = pd.DataFrame(projects_data, columns=columns)
     print_df(df_env, 'Projects:')
+
+
+def _auto_load_testfunctions(project_directory: ProjectDirectory):
+    """Auto-load all testfunctions that were copied to the project"""
+    from adare.backend.testfunction.commands import testfunction_load
+
+    testfunction_sets_loaded = []
+
+    # Iterate through all testfunction directories
+    for testfunction_set_dir in project_directory.testfunctions.iterdir():
+        if testfunction_set_dir.is_dir():
+            # Look for python files in the testfunction set directory
+            python_files = list(testfunction_set_dir.glob("*.py"))
+
+            for python_file in python_files:
+                testfunction_name = testfunction_set_dir.name
+                try:
+                    testfunction_load(project_directory.path, testfunction_name)
+                    testfunction_sets_loaded.append(testfunction_name)
+                    log.info(f'loaded testfunction: {testfunction_name}')
+                except Exception as e:
+                    log.warning(f'failed to load testfunction {testfunction_name}: {e}')
+
+    if testfunction_sets_loaded:
+        log.info(f'loaded {len(testfunction_sets_loaded)} testfunctions: {", ".join(testfunction_sets_loaded)}')

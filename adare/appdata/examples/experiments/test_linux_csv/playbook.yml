@@ -77,21 +77,21 @@ tests:
   # Basic CSV line matching tests
   - name: test_csv_contains_line_exact_match
     description: 'Test csv_contains_line with exact match'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{users_csv}}'
       entry: ['1', 'John Doe', 'john@example.com', 'Admin']
 
   - name: test_csv_contains_line_second_row
     description: 'Test csv_contains_line with second row'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{users_csv}}'
       entry: ['2', 'Jane Smith', 'jane@example.com', 'User']
 
   - name: test_csv_contains_line_not_found
     description: 'Test csv_contains_line with non-existent entry'
-    function: csv_contains_line
+    function: csv.contains_line
     expect_to_fail: true
     parameter:
       dst: '{{users_csv}}'
@@ -100,14 +100,14 @@ tests:
   # CSV with different data types
   - name: test_csv_contains_line_mixed_types
     description: 'Test csv_contains_line with mixed data types'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{logs_csv}}'
       entry: ['2024-01-15', '10:30:45', '192.168.1.100', 'GET', '/api/users', '200']
 
   - name: test_csv_contains_line_timestamp_match
     description: 'Test csv_contains_line with timestamp matching'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{logs_csv}}'
       entry: ['2024-01-15', '10:31:12', '192.168.1.101', 'POST', '/api/login', '401']
@@ -115,28 +115,28 @@ tests:
   # Advanced regex pattern matching tests
   - name: test_csv_contains_line_email_regex
     description: 'Test csv_contains_line with email regex pattern'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{users_csv}}'
       entry: ['1', 'John Doe', '{{email_regex}}', 'Admin']
 
   - name: test_csv_contains_line_ip_regex
     description: 'Test csv_contains_line with IP address regex pattern'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{logs_csv}}'
       entry: ['2024-01-15', '10:30:45', '{{ip_regex}}', 'GET', '/api/users', '200']
 
   - name: test_csv_contains_line_version_regex
     description: 'Test csv_contains_line with version regex pattern'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{transactions_csv}}'
       entry: ['TXN001', '{{version_regex}}', 'processing', '250.50']
 
   - name: test_csv_contains_line_uuid_regex
     description: 'Test csv_contains_line with UUID regex pattern'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{transactions_csv}}'
       entry: ['TXN002', '2.1.0', 'completed', '{{uuid_regex}}']
@@ -144,21 +144,21 @@ tests:
   # Timestamp with tolerance testing
   - name: test_csv_contains_line_current_timestamp
     description: 'Test csv_contains_line with current timestamp and tolerance'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{events_csv}}'
       entry: ['EVENT001', 'user_login', '{{ now | tolerance(30) | format("%Y-%m-%dT%H:%M:%S%z") }}', 'success']
 
   - name: test_csv_contains_line_recent_timestamp
     description: 'Test csv_contains_line with recent timestamp and tolerance'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{events_csv}}'
       entry: ['EVENT002', 'file_access', '{{ now | tolerance(300) | format("%Y-%m-%dT%H:%M:%S%z") }}', 'warning']
 
   - name: test_csv_contains_line_mixed_regex_timestamp
     description: 'Test csv_contains_line with both regex and timestamp'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{events_csv}}'
       entry: ['{{uuid_regex}}', 'system_update', '{{ now | tolerance(30) | format("%Y-%m-%dT%H:%M:%S%z") }}', 'info']
@@ -166,14 +166,14 @@ tests:
   # Complex pattern combinations
   - name: test_csv_contains_line_all_regex_patterns
     description: 'Test csv_contains_line with multiple regex patterns'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{transactions_csv}}'
       entry: ['{{uuid_regex}}', '{{version_regex}}', 'failed', !re '\d+\.\d{2}']
 
   - name: test_csv_contains_line_partial_regex_fail
     description: 'Test csv_contains_line with partial regex match (should fail)'
-    function: csv_contains_line
+    function: csv.contains_line
     expect_to_fail: true
     parameter:
       dst: '{{users_csv}}'
@@ -182,14 +182,14 @@ tests:
   # Tolerance edge cases
   - name: test_csv_contains_line_timestamp_exact
     description: 'Test csv_contains_line with exact timestamp (no tolerance)'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{events_csv}}'
       entry: ['EVENT003', 'exact_time', '2024-03-15T14:30:00Z', 'debug']
 
   - name: test_csv_contains_line_timestamp_outside_tolerance
     description: 'Test csv_contains_line with timestamp outside tolerance (should fail)'
-    function: csv_contains_line
+    function: csv.contains_line
     expect_to_fail: true
     parameter:
       dst: '{{events_csv}}'
@@ -198,14 +198,14 @@ tests:
   # Complex regex patterns
   - name: test_csv_contains_line_decimal_regex
     description: 'Test csv_contains_line with decimal number regex'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{transactions_csv}}'
       entry: ['TXN003', '3.0.1', 'completed', !re '\d+\.\d{2}']
 
   - name: test_csv_contains_line_invalid_regex
     description: 'Test csv_contains_line with invalid regex pattern (should fail)'
-    function: csv_contains_line
+    function: csv.contains_line
     expect_to_fail: true
     parameter:
       dst: '{{users_csv}}'
@@ -214,7 +214,7 @@ tests:
   # Edge cases
   - name: test_csv_contains_line_empty_file
     description: 'Test csv_contains_line with empty CSV file'
-    function: csv_contains_line
+    function: csv.contains_line
     expect_to_fail: true
     parameter:
       dst: '{{empty_csv}}'
@@ -222,7 +222,7 @@ tests:
 
   - name: test_csv_contains_line_file_not_found
     description: 'Test csv_contains_line with non-existent file'
-    function: csv_contains_line
+    function: csv.contains_line
     expect_to_fail: true
     parameter:
       dst: '{{test_dir}}/nonexistent.csv'
@@ -230,7 +230,7 @@ tests:
 
   - name: test_csv_contains_line_wrong_column_count
     description: 'Test csv_contains_line with wrong column count'
-    function: csv_contains_line
+    function: csv.contains_line
     expect_to_fail: true
     parameter:
       dst: '{{users_csv}}'
@@ -238,7 +238,7 @@ tests:
 
   - name: test_csv_contains_line_extra_columns
     description: 'Test csv_contains_line with extra columns'
-    function: csv_contains_line
+    function: csv.contains_line
     expect_to_fail: true
     parameter:
       dst: '{{users_csv}}'
@@ -247,7 +247,7 @@ tests:
   # Partial matching scenarios
   - name: test_csv_contains_line_partial_match
     description: 'Test csv_contains_line with partial match (should fail)'
-    function: csv_contains_line
+    function: csv.contains_line
     expect_to_fail: true
     parameter:
       dst: '{{users_csv}}'
@@ -256,7 +256,7 @@ tests:
   # CSV with special characters
   - name: test_csv_contains_line_special_chars
     description: 'Test csv_contains_line with special characters'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{logs_csv}}'
       entry: ['2024-01-15', '10:35:00', '192.168.1.105', 'GET', '/api/search?q=test&sort=date', '200']
@@ -264,7 +264,7 @@ tests:
   # Testing with malformed CSV
   - name: test_csv_contains_line_malformed
     description: 'Test csv_contains_line with malformed CSV file'
-    function: csv_contains_line
+    function: csv.contains_line
     expect_to_fail: true
     parameter:
       dst: '{{malformed_csv}}'

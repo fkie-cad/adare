@@ -1099,7 +1099,6 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             with StageCtxManager(ExperimentExecutionStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 await step_runner.run_async_step(step_execute_experiment, experiment_run_context)
-                input("Press Enter to continue to cleanup and shutdown...")
 
         # Success: Mark experiment as finished if no exceptions occurred
         if not stop_event.is_set():

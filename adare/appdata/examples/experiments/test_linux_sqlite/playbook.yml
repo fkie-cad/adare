@@ -33,7 +33,7 @@ tests:
   # Basic query tests
   - name: test_sqlite_query_count
     description: 'Test sqlite_query_result with COUNT query'
-    function: sqlite_query_result
+    function: sqlite.query_result
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT COUNT(*) as count FROM users'
@@ -41,7 +41,7 @@ tests:
   
   - name: test_sqlite_query_specific_result
     description: 'Test sqlite_query_result with specific expected result'
-    function: sqlite_query_result
+    function: sqlite.query_result
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT COUNT(*) as count FROM users WHERE role = "Admin"'
@@ -49,7 +49,7 @@ tests:
   
   - name: test_sqlite_query_all_users
     description: 'Test sqlite_query_result returning all users'
-    function: sqlite_query_result
+    function: sqlite.query_result
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT name, role FROM users ORDER BY id'
@@ -57,7 +57,7 @@ tests:
   
   - name: test_sqlite_query_single_user
     description: 'Test sqlite_query_result with single user lookup'
-    function: sqlite_query_result
+    function: sqlite.query_result
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT * FROM users WHERE name = "John Doe"'
@@ -65,7 +65,7 @@ tests:
   
   - name: test_sqlite_query_no_results
     description: 'Test sqlite_query_result with query returning no results'
-    function: sqlite_query_result
+    function: sqlite.query_result
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT * FROM users WHERE name = "Nonexistent User"'
@@ -73,7 +73,7 @@ tests:
   
   - name: test_sqlite_query_wrong_count
     description: 'Test sqlite_query_result with wrong expected count'
-    function: sqlite_query_result
+    function: sqlite.query_result
     expect_to_fail: true
     parameter:
       dst: '{{test_db}}'
@@ -83,7 +83,7 @@ tests:
   # Query with joins
   - name: test_sqlite_query_join
     description: 'Test sqlite_query_result with JOIN query'
-    function: sqlite_query_result
+    function: sqlite.query_result
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT u.name, p.project_name FROM users u JOIN projects p ON u.id = p.user_id'
@@ -92,7 +92,7 @@ tests:
   # Complex queries
   - name: test_sqlite_query_aggregation
     description: 'Test sqlite_query_result with aggregation'
-    function: sqlite_query_result
+    function: sqlite.query_result
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT role, COUNT(*) as count FROM users GROUP BY role'
@@ -101,7 +101,7 @@ tests:
   # Edge cases
   - name: test_sqlite_query_empty_db
     description: 'Test sqlite_query_result with empty database'
-    function: sqlite_query_result
+    function: sqlite.query_result
     parameter:
       dst: '{{empty_db}}'
       query: 'SELECT name FROM sqlite_master WHERE type="table"'
@@ -109,7 +109,7 @@ tests:
   
   - name: test_sqlite_query_invalid_table
     description: 'Test sqlite_query_result with invalid table'
-    function: sqlite_query_result
+    function: sqlite.query_result
     expect_to_fail: true
     parameter:
       dst: '{{test_db}}'
@@ -118,7 +118,7 @@ tests:
   
   - name: test_sqlite_query_file_not_found
     description: 'Test sqlite_query_result with non-existent database file'
-    function: sqlite_query_result
+    function: sqlite.query_result
     expect_to_fail: true
     parameter:
       dst: '{{test_dir}}/nonexistent.db'

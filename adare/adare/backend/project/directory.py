@@ -115,17 +115,28 @@ class ProjectDirectory(Directory):
         log.info('download of tool was successful')
 
 
-    def copy_standard_testfunction(self):
+    def copy_all_testfunctions(self):
         try:
             from adare.helperfunctions.file.copy import copytree_with_progress
-            copytree_with_progress(
-                src=APPDATA_DIR/'testfunctions'/'standard',
-                dst=self.testfunctions/'standard',
-                preserve_metadata=True,
-                dirs_exist_ok=True,
-            )
+            appdata_testfunctions = APPDATA_DIR / 'testfunctions'
+
+            # Copy all testfunction directories from appdata to project
+            for testfunction_dir in appdata_testfunctions.iterdir():
+                if testfunction_dir.is_dir():
+                    copytree_with_progress(
+                        src=testfunction_dir,
+                        dst=self.testfunctions / testfunction_dir.name,
+                        preserve_metadata=True,
+                        dirs_exist_ok=True,
+                    )
+                    log.info(f'copied testfunction set: {testfunction_dir.name}')
+
         except OSError as e:
             raise ProjectDirectoryCopyError(
                 log,
-                message=f'standard testfunction directory ([i]{APPDATA_DIR/"testfunctions"/"standard"}[/i]) could not be copied to project directory ({self.testfunctions/"standard"}): {e.strerror}',
+                message=f'testfunctions directory ([i]{APPDATA_DIR/"testfunctions"}[/i]) could not be copied to project directory ({self.testfunctions}): {e.strerror}',
             ) from e
+
+    def copy_standard_testfunction(self):
+        # Keep for backward compatibility - redirect to copy_all_testfunctions
+        self.copy_all_testfunctions()
