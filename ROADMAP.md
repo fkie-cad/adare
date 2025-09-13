@@ -2,6 +2,7 @@
 
 This document tracks ongoing development tasks, planned features, quality of life improvements, known bugs for ADARE.
 
+
 ## Current Development Tasks
 - [ ] check/build testfunctions
   - [ ] doe we have file_contains test method to test if file contains a certain string?
@@ -37,7 +38,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
   - [ ] svg are not supported for icons at the moment!
   - [ ] in installation add: eval "$(_ADARE_COMPLETE=zsh_source adare)" and tutorial how to enable autocomplete
 - [ ] improve code quality in general
-  - [ ] we use the username/password dummy when we with virtualbox do not need the commands ... -> find a better solution!
+  - [ ] we at many places catch generic Exception - lets not do it but catch more specific exceptions
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
   - [ ] thereby replace claude logging details with different levels and be less noicy and clearer to see what went wrong? 
 - [x] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;)

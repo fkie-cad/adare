@@ -337,27 +337,55 @@ class AdareVMServer:
             await self.send_event(websocket, EventType.ERROR, {"message": f"Upload failed: {e}"})
             return {"status": "error", "message": str(e)}
     
+    def _find_project_directory(self) -> str:
+        """Find the adarevm project directory containing pyproject.toml."""
+        import os
+        from pathlib import Path
+
+        # Common deployment paths to check
+        possible_paths = [
+            "/adare/app",  # Common deployment path
+            "/adare",      # Alternative deployment path
+            Path(__file__).parent.parent.parent,  # Development path (../../../)
+            Path.cwd(),    # Current working directory
+        ]
+
+        for path in possible_paths:
+            path = Path(path)
+            pyproject_path = path / "pyproject.toml"
+            if pyproject_path.exists():
+                log.info(f"Found pyproject.toml at: {path}")
+                return str(path)
+
+        # Fallback to current directory
+        log.warning("Could not find pyproject.toml, falling back to current directory")
+        return str(Path.cwd())
+
     async def _install_dependencies(self, websocket, dependencies: List[str]):
         """Install Python dependencies using Poetry."""
         await self.send_event(websocket, EventType.LOG, {"message": f"Installing {len(dependencies)} dependencies with Poetry..."})
-        
+
         try:
             if not dependencies:
                 log.info("No dependencies to install")
                 return {"status": "success", "message": "No dependencies to install"}
-            
+
             log.info(f"Installing dependencies with Poetry: {dependencies}")
-            
+
             # Use subprocess to run poetry add
             import subprocess
-            
+
+            # Find the project directory containing pyproject.toml
+            project_dir = self._find_project_directory()
+
             # Install all dependencies in one command for efficiency
             cmd = ["poetry", "add"] + dependencies
-            log.info(f"Running command: {' '.join(cmd)}")
-            await self.send_event(websocket, EventType.LOG, {"message": f"Running: {' '.join(cmd)}"})
-            
+            log.info(f"Running command: {' '.join(cmd)} in directory: {project_dir}")
+            await self.send_event(websocket, EventType.LOG, {"message": f"Running: {' '.join(cmd)} in {project_dir}"})
+
             result = subprocess.run(
                 cmd,
+                cwd=project_dir,
                 capture_output=True,
                 text=True,
                 timeout=600  # 10 minute timeout for all dependencies

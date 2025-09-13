@@ -64,14 +64,28 @@ class TestLoader:
         else:
             log.debug("No testfunction dependencies to install")
         
-        # Upload testfunctions directory (Python classes) from project directory
+        # Upload only testfunctions that are actually used in the playbook
         testfunctions_path = self.project_dir / "testfunctions"
         if testfunctions_path.exists():
-            log.info("Uploading testfunctions...")
-            try:
-                await websocket_client.upload_testfunctions(testfunctions_path)
-            except Exception as e:
-                log.error(f"Failed to upload testfunctions: {e}")
+            # Extract which testfunctions are used in the playbook
+            used_function_names = self._extract_used_testfunction_names()
+
+            if used_function_names:
+                # Map function names to their file paths
+                required_files = self._get_testfunction_files_for_functions(used_function_names)
+
+                if required_files:
+                    log.info(f"Uploading {len(required_files)} testfunction files for functions: {sorted(used_function_names)}")
+                    try:
+                        await websocket_client.upload_testfunctions(testfunctions_path, required_files)
+                    except (OSError, IOError) as e:
+                        log.error(f"Failed to upload testfunctions due to file system error: {e}")
+                    except (ValueError, TypeError) as e:
+                        log.error(f"Failed to upload testfunctions due to invalid data: {e}")
+                else:
+                    log.warning("No testfunction files found for the used functions - uploading nothing")
+            else:
+                log.info("No testfunctions used in playbook - skipping testfunction upload")
         else:
             log.warning("No testfunctions directory found")
         
@@ -231,11 +245,81 @@ class TestLoader:
         else:
             return test_data
     
+    def _extract_used_testfunction_names(self) -> set[str]:
+        """Extract all testfunction names used in the current playbook."""
+        try:
+            playbook_path = self.experiment_dir / "playbook.yml"
+            if not playbook_path.exists():
+                log.warning("No playbook.yml found, cannot extract testfunction names")
+                return set()
+
+            from adarelib.testset.yaml.customloader import get_custom_loader
+            playbook_yaml = playbook_path.read_text()
+            playbook_data = yaml.load(playbook_yaml, Loader=get_custom_loader())
+
+            if 'tests' not in playbook_data:
+                log.debug("No tests section in playbook")
+                return set()
+
+            used_functions = set()
+            for test in playbook_data['tests']:
+                if 'function' in test:
+                    function_name = test['function']
+                    used_functions.add(function_name)
+                    log.debug(f"Found testfunction usage: {function_name}")
+
+            log.info(f"Extracted {len(used_functions)} unique testfunction names from playbook: {sorted(used_functions)}")
+            return used_functions
+
+        except (OSError, IOError, UnicodeDecodeError) as e:
+            log.error(f"Failed to read playbook file: {e}")
+            return set()
+        except (yaml.YAMLError, ImportError) as e:
+            log.error(f"Failed to parse playbook YAML: {e}")
+            return set()
+        except (KeyError, TypeError, AttributeError) as e:
+            log.error(f"Failed to extract testfunction names from playbook data: {e}")
+            return set()
+
+    def _get_testfunction_files_for_functions(self, function_names: set[str]) -> set[Path]:
+        """Map testfunction names to their file paths."""
+        try:
+            from adare.database.api.testfunction import TestfunctionDbApi
+
+            testfunction_files = set()
+            with TestfunctionDbApi() as api:
+                # Get all testfunctions grouped by file
+                testfunctions_by_file = api.get_testfunctions_by_file()
+
+                for file_name, testfunctions in testfunctions_by_file.items():
+                    for testfunction in testfunctions:
+                        if testfunction['name'] in function_names:
+                            # Find the actual file path for this testfunction file
+                            testfunction_file_obj = api._session.query(api._session.registry._class_registry['TestFunctionFile']).filter_by(name=file_name).first()
+                            if testfunction_file_obj:
+                                file_path = Path(testfunction_file_obj.path)
+                                testfunction_files.add(file_path)
+                                log.debug(f"Mapped function '{testfunction['name']}' to file: {file_path}")
+                            break
+
+            log.info(f"Mapped {len(function_names)} functions to {len(testfunction_files)} files: {[f.name for f in testfunction_files]}")
+            return testfunction_files
+
+        except (ImportError, AttributeError) as e:
+            log.error(f"Failed to import or access testfunction database API: {e}")
+            return set()
+        except (KeyError, ValueError) as e:
+            log.error(f"Database query or data processing error: {e}")
+            return set()
+        except OSError as e:
+            log.error(f"File system error while mapping testfunction files: {e}")
+            return set()
+
     def _replace_variables_for_tests(self, text: str) -> str:
         """Replace variables in test content using test-aware context with smart resolution."""
         if not text or '{{' not in text:
             return text
-        
+
         # Skip processing our variable resolver placeholders - they should stay as placeholders
         if '_resolved' in text and '{{' in text and '}}' in text:
             # Check if this looks like one of our placeholders (regex_N_resolved, timestamp_N_resolved, etc.)
@@ -243,25 +327,25 @@ class TestLoader:
             if re.match(r'^\{\{\s*(regex|timestamp)_\d+_resolved\s*\}\}$', text.strip()):
                 log.debug(f"Skipping variable replacement for placeholder: '{text}'")
                 return text
-        
+
         try:
             if not self.variable_resolver:
                 log.warning(f"No variable resolver available for test template: '{text}'")
                 return text
-            
+
             # Use test-aware context that creates placeholders for variables with test-specific filters
             formatted_context = self.variable_resolver.get_formatted_context(for_tests=True)
-            
+
             log.debug(f"Processing test template: '{text}' with context keys: {list(formatted_context.keys())}")
             template = jinja2.Template(text)
-            
+
             # Add custom filters for metadata capture
             custom_filters = self.variable_resolver.get_custom_filters() if hasattr(self.variable_resolver, 'get_custom_filters') else {}
             template.environment.filters.update(custom_filters)
-            
+
             result = template.render(formatted_context)
             log.debug(f"Test template result: '{result}'")
-            
+
             return result
         except Exception as e:
             log.warning(f"Failed to replace variables in test text '{text}': {e}")
