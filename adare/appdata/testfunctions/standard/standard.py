@@ -288,7 +288,7 @@ class CsvContainsLine(BasicTest):
                 except Exception:
                     files_info = "Could not list directory contents"
                 
-                return TestResult.execution_error(None, f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}')
+                return TestResult.failed([f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'])
 
             log.debug(f'dst file {dst} will be used for test {self.name}')
             
@@ -347,11 +347,11 @@ class CsvContainsLine(BasicTest):
                         'no rows found in CSV file to analyze'
                     ])
             except FileNotFoundError:
-                return TestResult.execution_error(None, f'file with path {self.parameter.dst} does not exist')
+                return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
             except (PermissionError, OSError) as e:
                 return TestResult.execution_error(e, f"Cannot read CSV file {dst}")
             except csv.Error as e:
-                return TestResult.execution_error(e, f"CSV parsing error in file {dst}")
+                return TestResult.failed([f"CSV parsing error in file {dst}: {e}"])
                 
         except Exception as e:
             return TestResult.execution_error(e, "Unexpected error in CSV line matching test")
@@ -493,7 +493,7 @@ class SqliteQueryResult(BasicTest):
                 return TestResult.success([f'query returned {len(result)} rows'])
                 
             except sqlite3.Error as e:
-                return TestResult.execution_error(e, f"SQLite error executing query: {query}")
+                return TestResult.failed([f"SQLite error executing query: {query} - {e}"])
             except FileNotFoundError:
                 return TestResult.failed([f'database file {dst} does not exist'])
                 
@@ -550,12 +550,12 @@ class JsonContainsKey(BasicTest):
                     return TestResult.failed([f'key path "{key_path}" does not exist'])
                     
             except json.JSONDecodeError as e:
-                return TestResult.execution_error(e, f"Invalid JSON in file {dst}")
+                return TestResult.failed([f"Invalid JSON in file {dst}: {e}"])
             except FileNotFoundError:
                 return TestResult.failed([f'JSON file {dst} does not exist'])
             except (PermissionError, OSError) as e:
                 return TestResult.execution_error(e, f"Cannot read JSON file {dst}")
-                
+
         except Exception as e:
             return TestResult.execution_error(e, "Unexpected error in JSON contains key test")
 
@@ -764,12 +764,12 @@ class JsonValueMatches(BasicTest):
                     return TestResult.failed([message])
                     
             except json.JSONDecodeError as e:
-                return TestResult.execution_error(e, f"Invalid JSON in file {dst}")
+                return TestResult.failed([f"Invalid JSON in file {dst}: {e}"])
             except FileNotFoundError:
                 return TestResult.failed([f'JSON file {dst} does not exist'])
             except (PermissionError, OSError) as e:
                 return TestResult.execution_error(e, f"Cannot read JSON file {dst}")
-                
+
         except Exception as e:
             return TestResult.execution_error(e, "Unexpected error in JSON value matches test")
 
@@ -850,12 +850,12 @@ class JsonArrayContains(BasicTest):
                         return TestResult.failed([f'array does not contain expected element: {expected_element}'])
                     
             except json.JSONDecodeError as e:
-                return TestResult.execution_error(e, f"Invalid JSON in file {dst}")
+                return TestResult.failed([f"Invalid JSON in file {dst}: {e}"])
             except FileNotFoundError:
                 return TestResult.failed([f'JSON file {dst} does not exist'])
             except (PermissionError, OSError) as e:
                 return TestResult.execution_error(e, f"Cannot read JSON file {dst}")
-                
+
         except Exception as e:
             return TestResult.execution_error(e, "Unexpected error in JSON array contains test")
 

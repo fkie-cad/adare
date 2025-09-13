@@ -417,9 +417,14 @@ class CommandExecutionMixin:
         args.extend([guest_path, host_path])
         
         try:
-            lines = await self._stream_vboxmanage_command_async(args)
-            log.info(f"Successfully copied {guest_path} from guest to {host_path}")
-            return True
-        except subprocess.CalledProcessError as e:
-            log.error(f"Failed to copy {guest_path} from guest: {e}")
+            lines, return_code = await self._stream_vboxmanage_command_async(args)
+            if return_code == 0:
+                log.info(f"Successfully copied {guest_path} from guest to {host_path}")
+                return True
+            else:
+                error_output = '\n'.join(lines) if lines else "No error output"
+                log.error(f"Failed to copy {guest_path} from guest (return code {return_code}): {error_output}")
+                return False
+        except Exception as e:
+            log.error(f"Exception during copy from guest {guest_path}: {e}")
             return False

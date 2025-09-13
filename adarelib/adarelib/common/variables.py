@@ -476,12 +476,12 @@ class VariableRegistry:
     
     def to_execution_context(self, for_tests: bool = False) -> Dict[str, Any]:
         """Convert to execution context with smart resolution based on usage.
-        
+
         Args:
             for_tests: If True, uses placeholder resolution for variables with test-specific filters
         """
         context = {}
-        
+
         for name, var in self.variables.items():
             if for_tests and self._has_test_specific_filters(var):
                 # For tests with test-specific filters: use placeholder resolution
@@ -490,29 +490,115 @@ class VariableRegistry:
                 # We just use the raw value here, filters handle placeholder creation
                 resolved_value = var.get_string_value()
             else:
-                # For actions or tests without test-specific filters: full resolution
-                resolved_value = self._get_variable_resolved_value(var)
-            
+                # Check if this variable needs special placeholder treatment based on its type/metadata
+                needs_placeholder = False
+
+                # Check for regex variables
+                if var.type == VariableType.REGEX:
+                    needs_placeholder = True
+                    placeholder_type = 'regex'
+
+                # Check for timestamp variables with tolerance
+                elif var.type == VariableType.TIMESTAMP:
+                    has_tolerance = False
+                    if var.structured_metadata and isinstance(var.structured_metadata, TimestampMetadata):
+                        has_tolerance = (var.structured_metadata.tolerance_upper != 0 or var.structured_metadata.tolerance_lower != 0)
+                    elif var.metadata and 'tolerance' in var.metadata:
+                        tolerance_val = var.metadata['tolerance']
+                        has_tolerance = (tolerance_val is not None and tolerance_val != 0 and tolerance_val != [0, 0])
+
+                    if has_tolerance:
+                        needs_placeholder = True
+                        placeholder_type = 'timestamp'
+
+                if needs_placeholder:
+                    # Create placeholder for special variable types
+                    placeholder_name = f"{name}_resolved"
+                    resolved_value = f"{{{{ {placeholder_name} }}}}"
+
+                    # Create appropriate metadata
+                    if placeholder_type == 'regex':
+                        self._create_regex_metadata(placeholder_name, var)
+                        log.debug(f"Created regex placeholder '{placeholder_name}' for variable '{name}'")
+                    elif placeholder_type == 'timestamp':
+                        self._create_timestamp_tolerance_metadata(placeholder_name, var)
+                        log.debug(f"Created tolerance placeholder '{placeholder_name}' for variable '{name}'")
+                else:
+                    # For regular variables: full resolution
+                    resolved_value = self._get_variable_resolved_value(var)
+
             context[name] = resolved_value
             log.debug(f"Resolved variable '{name}' to '{resolved_value}' (for_tests={for_tests})")
-        
+
         # Add any placeholder metadata that was created by filters
         if hasattr(self, '_placeholder_metadata') and self._placeholder_metadata:
             context['_VARIABLE_METADATA'] = self._placeholder_metadata
             log.debug(f"Added {len(self._placeholder_metadata)} filter-generated placeholders: {list(self._placeholder_metadata.keys())}")
-        
+
         return context
-    
+
+    def _create_regex_metadata(self, placeholder_name: str, var: 'Variable'):
+        """Create placeholder metadata for regex variable."""
+        if not hasattr(self, '_placeholder_metadata'):
+            self._placeholder_metadata = {}
+
+        # Get regex pattern value
+        regex_pattern = var.get_string_value()
+
+        # Create metadata in same format as existing placeholder system
+        self._placeholder_metadata[placeholder_name] = {
+            'raw_value': regex_pattern,
+            'resolved_value': regex_pattern,
+            'type': 'regex'
+        }
+
+        log.debug(f"Created metadata for regex placeholder '{placeholder_name}': pattern='{regex_pattern}'")
+
+    def _create_timestamp_tolerance_metadata(self, placeholder_name: str, var: 'Variable'):
+        """Create placeholder metadata for timestamp variable with tolerance."""
+        if not hasattr(self, '_placeholder_metadata'):
+            self._placeholder_metadata = {}
+
+        # Get base timestamp value
+        if isinstance(var.value, datetime.datetime):
+            base_value = var.value.isoformat()
+        else:
+            base_value = str(var.value)
+
+        # Extract tolerance information
+        tolerance = None
+        if var.structured_metadata and isinstance(var.structured_metadata, TimestampMetadata):
+            metadata = var.structured_metadata
+            if metadata.tolerance_upper != 0 or metadata.tolerance_lower != 0:
+                tolerance = [metadata.tolerance_upper, metadata.tolerance_lower]
+        elif var.metadata and 'tolerance' in var.metadata:
+            tolerance = var.metadata['tolerance']
+
+        # Create metadata in same format as existing placeholder system
+        self._placeholder_metadata[placeholder_name] = {
+            'raw_value': base_value,
+            'resolved_value': base_value,
+            'type': 'timestamp',
+            'tolerance': tolerance
+        }
+
+        log.debug(f"Created metadata for tolerance placeholder '{placeholder_name}': base_value='{base_value}', tolerance={tolerance}")
+
     def _get_variable_resolved_value(self, var: 'Variable') -> Any:
         """Get fully resolved value for variable (apply timezone, format, and template resolution)."""
-        # First get the basic value
+
+        # Note: Regex variables are handled by placeholder system in to_execution_context()
+
+        # Handle TIMESTAMP variables
         if var.type == VariableType.TIMESTAMP and isinstance(var.value, datetime.datetime):
             result = var.value
-            
+
+            # Note: Timestamp variables with tolerance are handled by placeholder system in to_execution_context()
+
             # Apply variable-level transformations (not test-specific ones)
             if var.structured_metadata and isinstance(var.structured_metadata, TimestampMetadata):
                 metadata = var.structured_metadata
-                
+
                 # TODO: check here if its done twice both on server and client?!
 
                 # Apply localtime conversion first (convert local time to UTC)
@@ -523,14 +609,14 @@ class VariableRegistry:
                 #         local_offset = time.timezone
                 #         if time.daylight and time.localtime().tm_isdst:
                 #             local_offset = time.altzone
-                        
+
                 #         # Subtract the offset to convert local time to UTC
                 #         result = result - datetime.timedelta(seconds=local_offset)
                 #         log.info(f"Applied localtime conversion: adjusted timestamp by {-local_offset} seconds ({-local_offset/3600:.1f} hours) to convert to UTC")
                 #     except Exception as e:
                 #         log.warning(f"Failed to apply localtime conversion: {e}")
-                
-                
+
+
                 # Apply timezone conversion
                 if metadata.timezone:
                     try:
@@ -543,20 +629,20 @@ class VariableRegistry:
                         log.debug(f"Applied timezone '{metadata.timezone}' to timestamp")
                     except Exception as e:
                         log.warning(f"Failed to apply timezone '{metadata.timezone}': {e}")
-                
+
                 # Apply format
                 if metadata.format_str:
                     try:
                         return result.strftime(metadata.format_str)
                     except Exception as e:
                         log.warning(f"Failed to apply format '{metadata.format_str}': {e}")
-            
+
             # Return as ISO string if no format specified
             return result.isoformat()
         else:
             # For non-timestamp variables, get string value and apply template resolution
             base_value = var.get_string_value()
-            
+
             # Apply template resolution to resolve nested variables like {{username}}
             resolved_value = self._resolve_nested_templates(base_value)
             return resolved_value

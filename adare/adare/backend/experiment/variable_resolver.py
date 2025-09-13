@@ -437,34 +437,34 @@ class VariableResolver:
     def _process_mixed_template_content(self, content: str, template_context: Dict[str, Any]) -> str:
         """
         Process content that may contain both regular text and Jinja2 templates.
-        
+
         This method finds individual {{ }} template expressions and processes them
         based on their filter analysis, while preserving the surrounding text.
-        
+
         Args:
             content: String containing mix of regular text and templates
             template_context: Context for resolving templates
-            
+
         Returns:
             Processed content with templates resolved or converted to placeholders
         """
         import re
-        
+
         # Find all {{ }} template expressions
         template_pattern = r'\{\{[^}]+\}\}'
         templates = re.finditer(template_pattern, content)
-        
+
         result = content
         offset = 0  # Track offset due to replacements
-        
+
         for match in templates:
             template_expr = match.group(0)
             start_pos = match.start() + offset
             end_pos = match.end() + offset
-            
+
             # Analyze this specific template expression
             filter_analysis = self._tolerance_detector.analyze_jinja_template(template_expr)
-            
+
             if filter_analysis.has_tolerance:
                 # Has tolerance - create placeholder + metadata using variable name
                 if filter_analysis.variable_name:
@@ -483,13 +483,13 @@ class VariableResolver:
                 except (jinja2.TemplateError, jinja2.UndefinedError, KeyError, TypeError, ValueError) as e:
                     log.warning(f"Failed to resolve template '{template_expr}': {e}")
                     replacement = template_expr  # Keep original if resolution fails
-            
+
             # Replace this template in the result
             result = result[:start_pos] + replacement + result[end_pos:]
-            
+
             # Update offset for next replacements
             offset += len(replacement) - len(template_expr)
-        
+
         log.debug(f"Mixed content processing: '{content}' -> '{result}'")
         return result
 
@@ -598,7 +598,7 @@ class VariableResolver:
         Returns a copy of the action with variables resolved in applicable fields.
         """
         from adare.types.playbook import (
-            CommandAction, KeyboardAction, ActionTestAction, SaveTimestampAction, DragAction
+            CommandAction, KeyboardAction, ActionTestAction, SaveTimestampAction, DragAction, PullAction
         )
         
         # Create a deep copy to avoid modifying the original
@@ -628,7 +628,13 @@ class VariableResolver:
         elif isinstance(action, SaveTimestampAction):
             if resolved_action.variable:
                 resolved_action.variable = self.replace_variables(resolved_action.variable, execution_context)
-        
+
+        elif isinstance(action, PullAction):
+            if resolved_action.src:
+                resolved_action.src = self.replace_variables(resolved_action.src, execution_context)
+            if resolved_action.dst:
+                resolved_action.dst = self.replace_variables(resolved_action.dst, execution_context)
+
         # Resolve Target fields for actions that have targets
         if hasattr(resolved_action, 'target') and resolved_action.target:
             resolved_action.target = self.resolve_target_variables(resolved_action.target, execution_context)
