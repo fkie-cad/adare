@@ -75,8 +75,8 @@ class TestfunctionDbApi(ExperimentApi):
                 )
 
         # delete all related tests as well as abstract tests
-        for abstract_test in testfunction_obj.abstracttests:
-            for test in abstract_test.tests:
+        for abstract_test in testfunction_obj.abstract_tests:
+            for test in abstract_test.test_events:
                 self._session.delete(test)
                 log.info(f'Removed test {test.name} from database')
             self._session.delete(abstract_test)
@@ -195,7 +195,7 @@ class TestfunctionDbApi(ExperimentApi):
             if (
                     self._session.query(sqlalchemy.exists().where(
                         AbstractTest.testfunction_id == testfunction_obj.id,
-                        AbstractTest.ulid == TestEvent.abstract_test_id
+                        AbstractTest.id == TestEvent.abstract_test_id
                     )).scalar()
 
             ):

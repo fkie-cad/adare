@@ -58,6 +58,7 @@ tests:
   - name: test_csv_contains_line_not_found
     description: 'Test csv_contains_line with non-existent entry'
     function: csv_contains_line
+    expect_to_fail: true
     parameter:
       dst: '{{users_csv}}'
       entry: ['999', 'Nonexistent User', 'none@example.com', 'Guest']
@@ -81,6 +82,7 @@ tests:
   - name: test_csv_contains_line_empty_file
     description: 'Test csv_contains_line with empty CSV file'
     function: csv_contains_line
+    expect_to_fail: true
     parameter:
       dst: '{{empty_csv}}'
       entry: ['any', 'data']
@@ -88,6 +90,7 @@ tests:
   - name: test_csv_contains_line_file_not_found
     description: 'Test csv_contains_line with non-existent file'
     function: csv_contains_line
+    expect_to_fail: true
     parameter:
       dst: '{{test_dir}}/nonexistent.csv'
       entry: ['test', 'data']
@@ -95,6 +98,7 @@ tests:
   - name: test_csv_contains_line_wrong_column_count
     description: 'Test csv_contains_line with wrong column count'
     function: csv_contains_line
+    expect_to_fail: true
     parameter:
       dst: '{{users_csv}}'
       entry: ['1', 'John Doe']  # Missing columns
@@ -102,6 +106,7 @@ tests:
   - name: test_csv_contains_line_extra_columns
     description: 'Test csv_contains_line with extra columns'
     function: csv_contains_line
+    expect_to_fail: true
     parameter:
       dst: '{{users_csv}}'
       entry: ['1', 'John Doe', 'john@example.com', 'Admin', 'Extra', 'Columns']
@@ -110,6 +115,7 @@ tests:
   - name: test_csv_contains_line_partial_match
     description: 'Test csv_contains_line with partial match (should fail)'
     function: csv_contains_line
+    expect_to_fail: true
     parameter:
       dst: '{{users_csv}}'
       entry: ['1', 'John Doe', 'different@example.com', 'Admin']
@@ -126,6 +132,7 @@ tests:
   - name: test_csv_contains_line_malformed
     description: 'Test csv_contains_line with malformed CSV file'
     function: csv_contains_line
+    expect_to_fail: true
     parameter:
       dst: '{{malformed_csv}}'
       entry: ['corrupted', 'data']

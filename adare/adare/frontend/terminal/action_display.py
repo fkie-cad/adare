@@ -162,8 +162,8 @@ def determine_action_status(action_type: ActionType, action_data: dict):
                 status = StatusEnum.FINISHED  # Test ran successfully but failed condition
                 result_status = StatusEnum.TEST_FAILED
             elif result_category == 'execution_error':
-                status = StatusEnum.FINISHED  # Test completed but had execution issues
-                result_status = StatusEnum.ERROR
+                status = StatusEnum.FAILED  # Test had execution issues - show as failed stage
+                result_status = None  # No result status for execution errors
             else:
                 status = StatusEnum.FINISHED
                 result_status = StatusEnum.SUCCESS
@@ -173,12 +173,13 @@ def determine_action_status(action_type: ActionType, action_data: dict):
     else:
         # Failed action
         if action_type == ActionType.TEST:
-            # Even failed test execution gets finished status, with proper result status
+            # For test actions, check the specific error type
             result_category = action_data.get('result_category', 'execution_error')
-            status = StatusEnum.FINISHED
             if result_category == 'execution_error':
-                result_status = StatusEnum.ERROR
+                status = StatusEnum.FAILED  # Test execution failed - show as failed stage
+                result_status = None  # No result status for execution errors
             else:
+                status = StatusEnum.FINISHED  # Test assertion failed - show as completed with failed result
                 result_status = StatusEnum.TEST_FAILED
         else:
             status = StatusEnum.FAILED
