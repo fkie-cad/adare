@@ -401,6 +401,173 @@ class YamlTagProcessor:
             return data
 
 
+class JinjaTemplateResolver:
+    """Handles all Jinja2 template processing and resolution."""
+
+    def __init__(self, jinja_env=None, tolerance_detector: 'ToleranceDetector' = None,
+                 metadata_manager: MetadataManager = None, yaml_tag_processor: YamlTagProcessor = None):
+        """
+        Initialize Jinja template resolver.
+
+        Args:
+            jinja_env: Jinja2 environment with filters for template processing
+            tolerance_detector: ToleranceDetector instance for analyzing tolerance
+            metadata_manager: MetadataManager instance for storing metadata
+            yaml_tag_processor: YamlTagProcessor for creating placeholders
+        """
+        self.jinja_env = jinja_env
+        self.tolerance_detector = tolerance_detector
+        self.metadata_manager = metadata_manager
+        self.yaml_tag_processor = yaml_tag_processor
+
+    def is_our_placeholder(self, text: str) -> bool:
+        """Check if text is one of our generated placeholders."""
+        import re
+        return bool(re.match(r'^\{\{\s*\w+_resolved\s*\}\}$', text.strip()))
+
+    def resolve_template_with_context(self, template_string: str, template_context: Dict[str, Any]) -> str:
+        """
+        Resolve a Jinja2 template string using the provided template context.
+
+        Args:
+            template_string: Template string to resolve
+            template_context: Context dictionary for template resolution
+
+        Returns:
+            Resolved string with variables substituted
+        """
+        if not template_context:
+            log.warning(f"No template context available to resolve '{template_string}'")
+            return template_string
+
+        try:
+            if self.jinja_env:
+                template = self.jinja_env.from_string(template_string)
+                resolved = template.render(template_context)
+            else:
+                import jinja2
+                template = jinja2.Template(template_string)
+                resolved = template.render(template_context)
+            log.debug(f"Resolved template '{template_string}' to '{resolved}'")
+            return resolved
+        except Exception as e:
+            log.warning(f"Failed to resolve template '{template_string}': {e}")
+            return template_string
+
+    def resolve_template(self, template_string: str, template_context: Dict[str, Any]) -> str:
+        """
+        Resolve a Jinja2 template string using the provided template context.
+
+        Args:
+            template_string: String containing {{}} templates
+            template_context: Template context for resolution
+
+        Returns:
+            Resolved string with variables substituted
+        """
+        if not template_context:
+            log.warning(f"No template context available to resolve '{template_string}'")
+            return template_string
+
+        try:
+            import jinja2
+            template = jinja2.Template(str(template_string))
+            resolved = template.render(template_context)
+            log.debug(f"Resolved template '{template_string}' to '{resolved}'")
+            return resolved
+        except Exception as e:
+            log.warning(f"Failed to resolve template '{template_string}': {e}")
+            return template_string
+
+    def process_mixed_template_content(self, content: str, template_context: Dict[str, Any]) -> str:
+        """
+        Process content that may contain both regular text and Jinja2 templates.
+
+        This method finds individual {{ }} template expressions and processes them
+        based on their filter analysis, while preserving the surrounding text.
+
+        Args:
+            content: String containing mix of regular text and templates
+            template_context: Context for resolving templates
+
+        Returns:
+            Processed content with templates resolved or converted to placeholders
+        """
+        import re
+
+        # Find all {{ }} template expressions
+        template_pattern = r'\{\{[^}]+\}\}'
+        templates = re.finditer(template_pattern, content)
+
+        result = content
+        offset = 0  # Track offset due to replacements
+
+        for match in templates:
+            template_expr = match.group(0)
+            start_pos = match.start() + offset
+            end_pos = match.end() + offset
+
+            # Analyze this specific template expression
+            filter_analysis = self.tolerance_detector.analyze_jinja_template(template_expr)
+
+            if filter_analysis.has_tolerance:
+                # Has tolerance - create placeholder + metadata using variable name
+                if filter_analysis.variable_name:
+                    placeholder_name = f"{filter_analysis.variable_name}_resolved"
+                else:
+                    placeholder_name = self.yaml_tag_processor.create_placeholder_name('timestamp')
+                self.metadata_manager.add_tolerance_metadata_from_analysis(placeholder_name, filter_analysis, template_context)
+                replacement = f'{{{{ {placeholder_name} }}}}'
+                log.info(f"Created tolerance placeholder '{placeholder_name}' for template '{template_expr}' in mixed content")
+            else:
+                # No tolerance - resolve directly
+                try:
+                    template = self.jinja_env.from_string(template_expr)
+                    replacement = template.render(template_context)
+                    log.debug(f"Resolved template '{template_expr}' to '{replacement}' in mixed content")
+                except (jinja2.TemplateError, jinja2.UndefinedError, KeyError, TypeError, ValueError) as e:
+                    log.warning(f"Failed to resolve template '{template_expr}': {e}")
+                    replacement = template_expr  # Keep original if resolution fails
+
+            # Replace this template in the result
+            result = result[:start_pos] + replacement + result[end_pos:]
+
+            # Update offset for next replacements
+            offset += len(replacement) - len(template_expr)
+
+        log.debug(f"Mixed content processing: '{content}' -> '{result}'")
+        return result
+
+    def process_jinja_templates(self, data: Any, template_context: Dict[str, Any]) -> Any:
+        """
+        Process Jinja2 templates with smart resolution based on filter analysis.
+
+        Args:
+            data: Data that may contain Jinja2 templates
+            template_context: Context for resolving templates
+
+        Returns:
+            Processed data with resolved values or placeholders
+        """
+        if isinstance(data, str) and '{{' in data and '}}' in data:
+            # Skip processing our own placeholders that end with '_resolved'
+            if '_resolved' in data and self.is_our_placeholder(data):
+                log.debug(f"Skipping processing of our own placeholder: '{data}'")
+                return data
+
+            # Use new method to handle mixed content (templates embedded in larger text)
+            return self.process_mixed_template_content(data, template_context)
+
+        elif isinstance(data, dict):
+            return {key: self.process_jinja_templates(value, template_context)
+                    for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self.process_jinja_templates(item, template_context)
+                    for item in data]
+
+        return data
+
+
 class ToleranceDetector:
     """Detects tolerance usage in templates and YAML."""
     
@@ -466,6 +633,7 @@ class VariableResolver:
         self._tolerance_detector = ToleranceDetector()
         self._metadata_manager = MetadataManager(variable_registry)
         self._yaml_tag_processor = YamlTagProcessor(self._metadata_manager, self._tolerance_detector)
+        self._jinja_resolver = JinjaTemplateResolver(jinja_env, self._tolerance_detector, self._metadata_manager, self._yaml_tag_processor)
     
     def process_data(self, data: Dict[str, Any], template_context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -484,152 +652,13 @@ class VariableResolver:
         self._current_template_context = template_context or {}
         
         # Phase 1: Process YAML custom tags (existing logic)
-        data = self._yaml_tag_processor.process_yaml_tags(data, template_context, self._resolve_template_with_context)
-        
+        data = self._yaml_tag_processor.process_yaml_tags(data, template_context, self._jinja_resolver.resolve_template_with_context)
+
         # Phase 2: Process Jinja2 templates with filter analysis
         if template_context and self.jinja_env:
-            data = self._process_jinja_templates(data, self._current_template_context)
+            data = self._jinja_resolver.process_jinja_templates(data, self._current_template_context)
         
         return data
-    
-    def _resolve_template(self, template_string: str) -> str:
-        """
-        Resolve a Jinja2 template string using the provided template context.
-        
-        Args:
-            template_string: String containing {{}} templates
-            
-        Returns:
-            Resolved string with variables substituted
-        """
-        if not self.template_context:
-            log.warning(f"No template context available to resolve '{template_string}'")
-            return template_string
-            
-        try:
-            import jinja2
-            template = jinja2.Template(str(template_string))
-            resolved = template.render(self.template_context)
-            log.debug(f"Resolved template '{template_string}' to '{resolved}'")
-            return resolved
-        except Exception as e:
-            log.warning(f"Failed to resolve template '{template_string}': {e}")
-            return template_string
-    
-    def _process_jinja_templates(self, data: Any, template_context: Dict[str, Any]) -> Any:
-        """
-        Process Jinja2 templates with smart resolution based on filter analysis.
-        
-        Args:
-            data: Data that may contain Jinja2 templates
-            template_context: Context for resolving templates
-            
-        Returns:
-            Processed data with resolved values or placeholders
-        """
-        if isinstance(data, str) and '{{' in data and '}}' in data:
-            # Skip processing our own placeholders that end with '_resolved'
-            if '_resolved' in data and self._is_our_placeholder(data):
-                log.debug(f"Skipping processing of our own placeholder: '{data}'")
-                return data
-            
-            # Use new method to handle mixed content (templates embedded in larger text)
-            return self._process_mixed_template_content(data, template_context)
-                    
-        elif isinstance(data, dict):
-            return {key: self._process_jinja_templates(value, template_context) 
-                    for key, value in data.items()}
-        elif isinstance(data, list):
-            return [self._process_jinja_templates(item, template_context) 
-                    for item in data]
-        
-        return data
-    
-    def _process_mixed_template_content(self, content: str, template_context: Dict[str, Any]) -> str:
-        """
-        Process content that may contain both regular text and Jinja2 templates.
-
-        This method finds individual {{ }} template expressions and processes them
-        based on their filter analysis, while preserving the surrounding text.
-
-        Args:
-            content: String containing mix of regular text and templates
-            template_context: Context for resolving templates
-
-        Returns:
-            Processed content with templates resolved or converted to placeholders
-        """
-        import re
-
-        # Find all {{ }} template expressions
-        template_pattern = r'\{\{[^}]+\}\}'
-        templates = re.finditer(template_pattern, content)
-
-        result = content
-        offset = 0  # Track offset due to replacements
-
-        for match in templates:
-            template_expr = match.group(0)
-            start_pos = match.start() + offset
-            end_pos = match.end() + offset
-
-            # Analyze this specific template expression
-            filter_analysis = self._tolerance_detector.analyze_jinja_template(template_expr)
-
-            if filter_analysis.has_tolerance:
-                # Has tolerance - create placeholder + metadata using variable name
-                if filter_analysis.variable_name:
-                    placeholder_name = f"{filter_analysis.variable_name}_resolved"
-                else:
-                    placeholder_name = self._yaml_tag_processor.create_placeholder_name('timestamp')
-                self._metadata_manager.add_tolerance_metadata_from_analysis(placeholder_name, filter_analysis, template_context)
-                replacement = f'{{{{ {placeholder_name} }}}}'
-                log.info(f"Created tolerance placeholder '{placeholder_name}' for template '{template_expr}' in mixed content")
-            else:
-                # No tolerance - resolve directly
-                try:
-                    template = self.jinja_env.from_string(template_expr)
-                    replacement = template.render(template_context)
-                    log.debug(f"Resolved template '{template_expr}' to '{replacement}' in mixed content")
-                except (jinja2.TemplateError, jinja2.UndefinedError, KeyError, TypeError, ValueError) as e:
-                    log.warning(f"Failed to resolve template '{template_expr}': {e}")
-                    replacement = template_expr  # Keep original if resolution fails
-
-            # Replace this template in the result
-            result = result[:start_pos] + replacement + result[end_pos:]
-
-            # Update offset for next replacements
-            offset += len(replacement) - len(template_expr)
-
-        log.debug(f"Mixed content processing: '{content}' -> '{result}'")
-        return result
-
-    def _is_our_placeholder(self, text: str) -> bool:
-        """Check if text is one of our generated placeholders."""
-        import re
-        return bool(re.match(r'^\{\{\s*\w+_resolved\s*\}\}$', text.strip()))
-    
-    def _resolve_template_with_context(self, template_string: str, template_context: Dict[str, Any]) -> str:
-        """
-        Resolve a Jinja2 template string using the provided template context.
-        """
-        if not template_context:
-            log.warning(f"No template context available to resolve '{template_string}'")
-            return template_string
-            
-        try:
-            if self.jinja_env:
-                template = self.jinja_env.from_string(template_string)
-                resolved = template.render(template_context)
-            else:
-                import jinja2
-                template = jinja2.Template(template_string)
-                resolved = template.render(template_context)
-            log.debug(f"Resolved template '{template_string}' to '{resolved}'")
-            return resolved
-        except Exception as e:
-            log.warning(f"Failed to resolve template '{template_string}': {e}")
-            return template_string
     
     def get_placeholder_metadata(self) -> Dict[str, Any]:
         """
