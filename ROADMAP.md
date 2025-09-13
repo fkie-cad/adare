@@ -22,6 +22,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] use proper directory for installation; maybe convert instllation from ps1,sh to python script to use platformdirs to get installation location; also use for database then later!
 - [ ] build conditionlogic , wait until we find, retry logic for playbook
 - [x] autocomplete for commands / abbreviations like env/exp
+- [ ] not only expect_to_fail, but also a expect_to_fail_on: ExceptionType (-> so catch specific Exception either custom written or existing as FileNotFoundError)
  
 ## Quality of Life Improvements
 - [ ] update documentation
