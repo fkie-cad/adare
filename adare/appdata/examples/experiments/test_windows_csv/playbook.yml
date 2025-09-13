@@ -27,7 +27,7 @@ variables:
 tests:
   - name: test_csv_contains_line_windows
     description: 'Test csv_contains_line on Windows'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{users_csv}}'
       entry: ['1', 'John Doe', 'john@example.com', 'Admin']

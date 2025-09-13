@@ -46,7 +46,7 @@ tests:
       dst: '{{filepath}}'
   - name: trashbin_check
     description: 'check if file metadata exists in CSV with correct timestamp'
-    function: csv_contains_line
+    function: csv.contains_line
     parameter:
       dst: '{{trashbin_csv}}'
       entry:

@@ -241,7 +241,7 @@ class ORBMatcher:
             )
 
             if center is not None:
-                avg_distance = np.mean([m.distance for m in cluster_matches])
+                avg_distance = float(np.mean([m.distance for m in cluster_matches]))
                 similarity = max(0.0, 1.0 - (avg_distance / CVConstants.ORB_MAX_DISTANCE_NORMALIZE))
                 log.info(f"CLAUDE: ORB cluster match at {center} with {len(cluster_src)} features, similarity: {similarity:.3f}")
                 return center, similarity
@@ -249,7 +249,7 @@ class ORBMatcher:
         elif len(cluster_src) >= 2:
             # Use centroid for small clusters
             center = HomographyCalculator.calculate_centroid(cluster_dst)
-            avg_distance = np.mean([m.distance for m in cluster_matches])
+            avg_distance = float(np.mean([m.distance for m in cluster_matches]))
             similarity = max(0.0, 1.0 - (avg_distance / CVConstants.ORB_MAX_DISTANCE_NORMALIZE))
             log.info(f"CLAUDE: ORB centroid match at {center} with {len(cluster_src)} features, similarity: {similarity:.3f}")
             return center, similarity
@@ -291,7 +291,7 @@ class TemplateMatcher:
 
         # Find locations above threshold
         locations = np.where(result >= threshold)
-        points = list(zip(locations[1], locations[0]))  # (x, y)
+        points = [(int(x), int(y)) for x, y in zip(locations[1], locations[0])]  # (x, y)
 
         log.info(f"CLAUDE: Found {len(points)} points above threshold {threshold}")
 

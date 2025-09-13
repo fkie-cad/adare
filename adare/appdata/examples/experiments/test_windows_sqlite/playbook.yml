@@ -27,7 +27,7 @@ variables:
 tests:
   - name: test_sqlite_query_windows
     description: 'Test sqlite_query_result on Windows'
-    function: sqlite_query_result
+    function: sqlite.query_result
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT COUNT(*) as count FROM users'

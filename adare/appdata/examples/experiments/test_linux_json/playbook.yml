@@ -60,28 +60,28 @@ tests:
   # JSON key existence tests
   - name: test_json_contains_key_root_level
     description: 'Test json_contains_key with root level key'
-    function: json_contains_key
+    function: json.contains_key
     parameter:
       dst: '{{config_json}}'
       key_path: 'app_name'
   
   - name: test_json_contains_key_nested
     description: 'Test json_contains_key with nested key'
-    function: json_contains_key
+    function: json.contains_key
     parameter:
       dst: '{{config_json}}'
       key_path: 'database.host'
   
   - name: test_json_contains_key_deep_nested
     description: 'Test json_contains_key with deeply nested key'
-    function: json_contains_key
+    function: json.contains_key
     parameter:
       dst: '{{nested_json}}'
       key_path: 'level1.level2.level3.value'
   
   - name: test_json_contains_key_not_found
     description: 'Test json_contains_key with non-existent key'
-    function: json_contains_key
+    function: json.contains_key
     expect_to_fail: true
     parameter:
       dst: '{{config_json}}'
@@ -90,7 +90,7 @@ tests:
   # JSON value matching tests
   - name: test_json_value_matches_string
     description: 'Test json_value_matches with string value'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'app_name'
@@ -98,7 +98,7 @@ tests:
   
   - name: test_json_value_matches_integer
     description: 'Test json_value_matches with integer value'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'database.port'
@@ -106,7 +106,7 @@ tests:
   
   - name: test_json_value_matches_boolean_true
     description: 'Test json_value_matches with boolean true'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'debug_mode'
@@ -114,7 +114,7 @@ tests:
   
   - name: test_json_value_matches_boolean_false
     description: 'Test json_value_matches with boolean false'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'production_mode'
@@ -122,7 +122,7 @@ tests:
   
   - name: test_json_value_matches_null
     description: 'Test json_value_matches with null value'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'api_key'
@@ -130,7 +130,7 @@ tests:
   
   - name: test_json_value_matches_regex
     description: 'Test json_value_matches with regex pattern'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'version'
@@ -139,7 +139,7 @@ tests:
   
   - name: test_json_value_matches_wrong_value
     description: 'Test json_value_matches with wrong expected value'
-    function: json_value_matches
+    function: json.value_matches
     expect_to_fail: true
     parameter:
       dst: '{{config_json}}'
@@ -149,7 +149,7 @@ tests:
   # JSON array contains tests
   - name: test_json_array_contains_string
     description: 'Test json_array_contains with string element'
-    function: json_array_contains
+    function: json.array_contains
     parameter:
       dst: '{{config_json}}'
       array_path: 'features'
@@ -157,7 +157,7 @@ tests:
   
   - name: test_json_array_contains_integer
     description: 'Test json_array_contains with integer element'
-    function: json_array_contains
+    function: json.array_contains
     parameter:
       dst: '{{users_json}}'
       array_path: 'user_ids'
@@ -165,7 +165,7 @@ tests:
   
   - name: test_json_array_contains_object
     description: 'Test json_array_contains with object element'
-    function: json_array_contains
+    function: json.array_contains
     parameter:
       dst: '{{users_json}}'
       array_path: 'permissions'
@@ -173,7 +173,7 @@ tests:
   
   - name: test_json_array_contains_not_found
     description: 'Test json_array_contains with non-existent element'
-    function: json_array_contains
+    function: json.array_contains
     expect_to_fail: true
     parameter:
       dst: '{{config_json}}'
@@ -182,7 +182,7 @@ tests:
   
   - name: test_json_array_contains_not_array
     description: 'Test json_array_contains with non-array path'
-    function: json_array_contains
+    function: json.array_contains
     expect_to_fail: true
     parameter:
       dst: '{{config_json}}'
@@ -192,7 +192,7 @@ tests:
   # Wildcard matching tests
   - name: test_json_value_matches_array_wildcard_any
     description: 'Test json_value_matches with array wildcard [*] in any mode'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{users_json}}'
       key_path: 'users[*].active'
@@ -201,7 +201,7 @@ tests:
   
   - name: test_json_value_matches_array_wildcard_all_fail
     description: 'Test json_value_matches with array wildcard [*] in all mode (should fail)'
-    function: json_value_matches
+    function: json.value_matches
     expect_to_fail: true
     parameter:
       dst: '{{users_json}}'
@@ -211,7 +211,7 @@ tests:
   
   - name: test_json_value_matches_array_wildcard_all_pass
     description: 'Test json_value_matches with array wildcard [*] in all mode (should pass)'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{users_json}}'
       key_path: 'users[*].id'
@@ -221,7 +221,7 @@ tests:
   
   - name: test_json_value_matches_object_wildcard_any
     description: 'Test json_value_matches with object wildcard * in any mode'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'database.*'
@@ -230,7 +230,7 @@ tests:
   
   - name: test_json_value_matches_object_wildcard_regex
     description: 'Test json_value_matches with object wildcard and regex'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'database.*'
@@ -240,7 +240,7 @@ tests:
   
   - name: test_json_value_matches_nested_array_wildcard
     description: 'Test json_value_matches with nested wildcard path'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{users_json}}'
       key_path: 'permissions[*].action'
@@ -250,7 +250,7 @@ tests:
   # Placeholder-based matching tests
   - name: test_json_value_matches_regex_direct
     description: 'Test json_value_matches with direct regex pattern'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'version'
@@ -258,7 +258,7 @@ tests:
   
   - name: test_json_value_matches_wildcard_email_regex
     description: 'Test json_value_matches with wildcard and direct email regex'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{users_json}}'
       key_path: 'users[*].email'
@@ -267,7 +267,7 @@ tests:
   
   - name: test_json_value_matches_timestamp_with_tolerance
     description: 'Test json_value_matches with timestamp filter (if JSON has timestamp field)'
-    function: json_value_matches
+    function: json.value_matches
     parameter:
       dst: '{{config_json}}'
       key_path: 'created_at'
@@ -276,7 +276,7 @@ tests:
   # Edge cases
   - name: test_json_key_not_found_file
     description: 'Test JSON functions with non-existent file'
-    function: json_contains_key
+    function: json.contains_key
     expect_to_fail: true
     parameter:
       dst: '{{test_dir}}/nonexistent.json'
@@ -284,7 +284,7 @@ tests:
   
   - name: test_json_malformed_file
     description: 'Test JSON functions with malformed JSON'
-    function: json_contains_key
+    function: json.contains_key
     expect_to_fail: true
     parameter:
       dst: '{{malformed_json}}'
@@ -292,7 +292,7 @@ tests:
   
   - name: test_json_empty_file
     description: 'Test JSON functions with empty file'
-    function: json_contains_key
+    function: json.contains_key
     expect_to_fail: true
     parameter:
       dst: '{{empty_json}}'

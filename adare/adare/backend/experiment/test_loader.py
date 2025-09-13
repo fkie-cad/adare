@@ -93,9 +93,59 @@ class TestLoader:
         # No need to upload entire testset file to VM
     
     def _collect_testfunction_dependencies(self) -> List[str]:
-        """Collect all dependencies from loaded testfunctions in the project."""
+        """Collect dependencies only from testfunctions actually used in the playbook."""
         dependencies = set()
-        
+
+        try:
+            # First, determine which testfunctions are actually used
+            used_function_names = self._extract_used_testfunction_names()
+            if not used_function_names:
+                log.debug("No testfunctions used in playbook - no dependencies needed")
+                return []
+
+            # Get the files that contain these functions
+            required_files = self._get_testfunction_files_for_functions(used_function_names)
+            if not required_files:
+                log.debug("No testfunction files mapped - no dependencies needed")
+                return []
+
+            log.debug(f"Collecting dependencies only for files: {[f.name for f in required_files]}")
+
+            # Read requirements files only for the required testfunction files
+            for testfunction_file in required_files:
+                # Construct requirements file path (should be in same directory)
+                requirements_file = testfunction_file.parent / "requirements.txt"
+                if requirements_file.exists():
+                    log.debug(f"Reading requirements from: {requirements_file}")
+                    try:
+                        content = requirements_file.read_text().strip()
+                        if content:
+                            # Parse requirements.txt format
+                            for line in content.splitlines():
+                                line = line.strip()
+                                # Skip comments and empty lines
+                                if line and not line.startswith('#'):
+                                    dependencies.add(line)
+                    except (OSError, IOError, UnicodeDecodeError) as e:
+                        log.warning(f"Failed to read requirements from {requirements_file}: {e}")
+
+            dependencies_list = list(dependencies)
+            if dependencies_list:
+                log.info(f"Collected {len(dependencies_list)} unique dependencies for used testfunctions: {dependencies_list}")
+            else:
+                log.debug("No dependencies found in used testfunction files")
+
+            return dependencies_list
+
+        except Exception as e:
+            log.error(f"Failed to collect testfunction dependencies: {e}")
+            # Fallback to collecting all dependencies if there's an error
+            return self._collect_all_testfunction_dependencies()
+
+    def _collect_all_testfunction_dependencies(self) -> List[str]:
+        """Fallback: collect all dependencies from all testfunctions in the project (original behavior)."""
+        dependencies = set()
+
         try:
             # Get testfunction data from database for this project
             from adare.backend.testfunction.database import get_testfunction_files_data
@@ -103,7 +153,7 @@ class TestLoader:
                 project_path=self.project_dir,
                 fields=['requirements_path']
             )
-            
+
             # Read each requirements file and collect dependencies
             for tf_data in testfunction_files:
                 requirements_path = tf_data.get('requirements_path')
@@ -122,19 +172,19 @@ class TestLoader:
                                         dependencies.add(line)
                         except (OSError, IOError, UnicodeDecodeError) as e:
                             log.warning(f"Failed to read requirements from {req_file}: {e}")
-            
+
             dependencies_list = list(dependencies)
             if dependencies_list:
-                log.info(f"Collected {len(dependencies_list)} unique dependencies: {dependencies_list}")
+                log.info(f"Collected {len(dependencies_list)} unique dependencies (fallback - all files): {dependencies_list}")
             else:
-                log.debug("No dependencies found in testfunctions")
-            
+                log.debug("No dependencies found in any testfunctions (fallback)")
+
             return dependencies_list
-            
+
         except ImportError as e:
             log.error(f"Failed to import testfunction database module: {e}")
             return []
-    
+
     async def resolve_test_locally(self, test_name: str) -> Optional[Dict[str, Any]]:
         """Load and resolve a specific test locally with variable substitution."""
         try:
@@ -285,6 +335,7 @@ class TestLoader:
         """Map testfunction names to their file paths."""
         try:
             from adare.database.api.testfunction import TestfunctionDbApi
+            from adare.database.models.experiment import TestFunctionFile
 
             testfunction_files = set()
             with TestfunctionDbApi() as api:
@@ -293,14 +344,27 @@ class TestLoader:
 
                 for file_name, testfunctions in testfunctions_by_file.items():
                     for testfunction in testfunctions:
+                        # Check for exact match first
                         if testfunction['name'] in function_names:
                             # Find the actual file path for this testfunction file
-                            testfunction_file_obj = api._session.query(api._session.registry._class_registry['TestFunctionFile']).filter_by(name=file_name).first()
+                            testfunction_file_obj = api._session.query(TestFunctionFile).filter_by(name=file_name).first()
                             if testfunction_file_obj:
                                 file_path = Path(testfunction_file_obj.path)
                                 testfunction_files.add(file_path)
                                 log.debug(f"Mapped function '{testfunction['name']}' to file: {file_path}")
                             break
+
+                        # Check for unprefixed standard functions (e.g., 'file_exists' should match 'standard.file_exists')
+                        if '.' in testfunction['name']:
+                            collection, func_name = testfunction['name'].split('.', 1)
+                            if collection == 'standard' and func_name in function_names:
+                                # Find the actual file path for this testfunction file
+                                testfunction_file_obj = api._session.query(TestFunctionFile).filter_by(name=file_name).first()
+                                if testfunction_file_obj:
+                                    file_path = Path(testfunction_file_obj.path)
+                                    testfunction_files.add(file_path)
+                                    log.debug(f"Mapped unprefixed function '{func_name}' to standard file: {file_path}")
+                                break
 
             log.info(f"Mapped {len(function_names)} functions to {len(testfunction_files)} files: {[f.name for f in testfunction_files]}")
             return testfunction_files

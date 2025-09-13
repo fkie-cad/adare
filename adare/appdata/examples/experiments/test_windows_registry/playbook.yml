@@ -23,35 +23,35 @@ tests:
   # Registry key existence tests
   - name: test_registry_key_exists_system
     description: 'Test registry_key_exists with system key'
-    function: registry_key_exists
+    function: windows.registry_key_exists
     parameter:
       key_path: '{{system_key_path}}'
-  
+
   - name: test_registry_key_exists_custom
     description: 'Test registry_key_exists with custom created key'
-    function: registry_key_exists
+    function: windows.registry_key_exists
     parameter:
       key_path: '{{test_key_path}}'
-  
+
   - name: test_registry_key_does_not_exist
     description: 'Test registry_key_exists with non-existent key'
-    function: registry_key_exists
+    function: windows.registry_key_exists
     parameter:
       key_path: 'HKEY_CURRENT_USER\\Software\\NonExistentApp'
-  
+
   # Registry value tests
   - name: test_registry_value_string
     description: 'Test registry_value_matches with string value'
-    function: registry_value_matches
+    function: windows.registry_value_matches
     parameter:
       key_path: '{{test_key_path}}'
       value_name: 'StringValue'
       expected_value: 'TestStringValue'
       value_type: 'REG_SZ'
-  
+
   - name: test_registry_value_dword
     description: 'Test registry_value_matches with DWORD value'
-    function: registry_value_matches
+    function: windows.registry_value_matches
     parameter:
       key_path: '{{test_key_path}}'
       value_name: 'DwordValue'

@@ -6,13 +6,13 @@ This document tracks ongoing development tasks, planned features, quality of lif
 ## Current Development Tasks
 - [ ] check/build testfunctions
   - [ ] doe we have file_contains test method to test if file contains a certain string?
-  - [ ] does filecontentequals works with pure regex? -> test
 - [ ] make adare experiment run ... without env run all experiments in that env after another. Lets at the end add some summary telling what succeded which failed.
 - [ ] update docs to acceptable amount!
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
 - [ ] test if we can still run adare if we delete cloned repo
 - [ ] add xml testfunctions in separate xml module
 - [ ] support yaml with same logic/function as for json!
+- [ ] add 
 
 ## Planned Features
 - [ ] test and enable ydotool to make it work on wayland linux distros as well
