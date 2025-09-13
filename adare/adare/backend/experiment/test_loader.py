@@ -152,14 +152,7 @@ class TestLoader:
                     # Apply variable substitution to all string values in the test
                     resolved_test = self._resolve_test_content(test)
                     
-                    # After processing, check if variable registry now has placeholder metadata
-                    if (hasattr(self.playbook, 'variables') and self.playbook.variables and
-                        hasattr(self.playbook.variables, '_placeholder_metadata') and 
-                        self.playbook.variables._placeholder_metadata):
-                        resolved_test['_VARIABLE_METADATA'] = self.playbook.variables._placeholder_metadata
-                        log.info(f"Added variable metadata to resolved test: {list(self.playbook.variables._placeholder_metadata.keys())}")
-                    else:
-                        log.debug("No placeholder metadata found after template processing")
+                    # Metadata is now handled by the unified resolver in _resolve_test_content
                     
                     log.debug(f"Resolved test '{test_name}' data: {resolved_test}")
                     return resolved_test
@@ -170,33 +163,47 @@ class TestLoader:
             return None
     
     def _resolve_test_content(self, test_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Enhanced test content resolution using unified variable resolver."""
+        """Enhanced test content resolution using unified variable resolver with lazy loading."""
         if not self.variable_resolver:
             log.warning("No variable resolver available, returning test data as-is")
             return test_data
-        
+
         variable_registry = getattr(self.playbook, 'variables', None) if hasattr(self, 'playbook') else None
-        
+
+        # Extract variables that are actually referenced in this test
+        referenced_variables = set()
+        if variable_registry:
+            referenced_variables = variable_registry.extract_referenced_variables(test_data)
+            log.debug(f"Test '{test_data.get('name', 'unknown')}' references variables: {referenced_variables}")
+
         # Create enhanced resolver with Jinja environment
         jinja_env = self._create_jinja_environment()
-        template_context = self.variable_resolver.get_formatted_context(for_tests=True)
-        
+
+        # Use lazy context - only process variables that are actually referenced
+        if variable_registry and referenced_variables:
+            template_context = variable_registry.to_execution_context_lazy(referenced_variables, for_tests=True)
+            log.debug(f"Using lazy context with {len(template_context)} variables")
+        else:
+            # Fallback to empty context if no variables referenced
+            template_context = {}
+            log.debug("No variables referenced, using empty context")
+
         # Single call handles everything - YAML tags AND Jinja templates
         resolver = self.variable_resolver.__class__(
-            variable_registry=variable_registry, 
+            variable_registry=variable_registry,
             jinja_env=jinja_env
         )
-        
+
         resolved_test = resolver.process_data(test_data, template_context)
-        
-        # Add metadata to resolved test
+
+        # Add metadata to resolved test (now only contains metadata for referenced variables)
         metadata = resolver.get_placeholder_metadata()
         if metadata:
             resolved_test['_VARIABLE_METADATA'] = metadata
-            log.info(f"Added unified variable metadata: {list(metadata.keys())}")
-        
-        log.debug(f"Unified resolver completed processing")
-        
+            log.info(f"Added lazy variable metadata: {list(metadata.keys())}")
+
+        log.debug(f"Lazy resolver completed processing")
+
         return resolved_test
     
     def _create_jinja_environment(self):

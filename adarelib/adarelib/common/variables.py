@@ -537,28 +537,144 @@ class VariableRegistry:
 
         return context
 
-    def _create_regex_metadata(self, placeholder_name: str, var: 'Variable'):
-        """Create placeholder metadata for regex variable."""
-        if not hasattr(self, '_placeholder_metadata'):
-            self._placeholder_metadata = {}
+    def to_execution_context_lazy(self, referenced_variables: set = None, for_tests: bool = False) -> Dict[str, Any]:
+        """Convert to execution context with lazy resolution - only process referenced variables.
 
+        Args:
+            referenced_variables: Set of variable names that are actually referenced in the test
+            for_tests: If True, uses placeholder resolution for variables with test-specific filters
+        """
+        context = {}
+
+        # If no referenced variables specified, process all (fallback to old behavior)
+        if referenced_variables is None:
+            return self.to_execution_context(for_tests)
+
+        # Track metadata created during this specific call
+        current_call_metadata = {}
+
+        # Only process variables that are actually referenced
+        for name in referenced_variables:
+            if name not in self.variables:
+                log.warning(f"Referenced variable '{name}' not found in registry")
+                continue
+
+            var = self.variables[name]
+
+            if for_tests and self._has_test_specific_filters(var):
+                # For tests with test-specific filters: use placeholder resolution
+                log.debug(f"Variable '{name}' has test-specific filters, using placeholder resolution")
+                # The filter system will create placeholders for this variable
+                # We just use the raw value here, filters handle placeholder creation
+                resolved_value = var.get_string_value()
+            else:
+                # Check if this variable needs special placeholder treatment based on its type/metadata
+                needs_placeholder = False
+
+                # Check for regex variables
+                if var.type == VariableType.REGEX:
+                    needs_placeholder = True
+                    placeholder_type = 'regex'
+
+                # Check for timestamp variables with tolerance
+                elif var.type == VariableType.TIMESTAMP:
+                    has_tolerance = False
+                    if var.structured_metadata and isinstance(var.structured_metadata, TimestampMetadata):
+                        has_tolerance = (var.structured_metadata.tolerance_upper != 0 or var.structured_metadata.tolerance_lower != 0)
+                    elif var.metadata and 'tolerance' in var.metadata:
+                        tolerance_val = var.metadata['tolerance']
+                        has_tolerance = (tolerance_val is not None and tolerance_val != 0 and tolerance_val != [0, 0])
+
+                    if has_tolerance:
+                        needs_placeholder = True
+                        placeholder_type = 'timestamp'
+
+                if needs_placeholder:
+                    # Create placeholder for special variable types
+                    placeholder_name = f"{name}_resolved"
+                    resolved_value = f"{{{{ {placeholder_name} }}}}"
+
+                    # Create appropriate metadata and track it locally
+                    if placeholder_type == 'regex':
+                        metadata = self._create_regex_metadata(placeholder_name, var, local_only=True)
+                        current_call_metadata[placeholder_name] = metadata
+                        log.debug(f"Created regex placeholder '{placeholder_name}' for variable '{name}'")
+                    elif placeholder_type == 'timestamp':
+                        metadata = self._create_timestamp_tolerance_metadata(placeholder_name, var, local_only=True)
+                        current_call_metadata[placeholder_name] = metadata
+                        log.debug(f"Created tolerance placeholder '{placeholder_name}' for variable '{name}'")
+                else:
+                    # For regular variables: full resolution
+                    resolved_value = self._get_variable_resolved_value(var)
+
+            context[name] = resolved_value
+            log.debug(f"Lazy resolved variable '{name}' to '{resolved_value}' (for_tests={for_tests})")
+
+        # Only add metadata that was created during this specific call
+        if current_call_metadata:
+            context['_VARIABLE_METADATA'] = current_call_metadata
+            log.debug(f"Added {len(current_call_metadata)} lazy-generated placeholders for this test: {list(current_call_metadata.keys())}")
+
+        return context
+
+    def extract_referenced_variables(self, data: Any) -> set:
+        """Extract all variable names that are referenced in the data structure.
+
+        This scans through the data structure looking for Jinja2 template references
+        like {{variable_name}} to determine which variables are actually used.
+
+        Args:
+            data: The data structure to scan for variable references
+
+        Returns:
+            Set of variable names that are referenced in the data
+        """
+        referenced_vars = set()
+
+        def _scan_for_variables(obj):
+            if isinstance(obj, str):
+                # Look for {{variable_name}} patterns
+                import re
+                variable_pattern = r'\{\{\s*(\w+)(?:\s*\|[^}]*)?\s*\}\}'
+                matches = re.findall(variable_pattern, obj)
+                for match in matches:
+                    referenced_vars.add(match)
+            elif isinstance(obj, dict):
+                for value in obj.values():
+                    _scan_for_variables(value)
+            elif isinstance(obj, list):
+                for item in obj:
+                    _scan_for_variables(item)
+
+        _scan_for_variables(data)
+        log.debug(f"Extracted referenced variables: {referenced_vars}")
+        return referenced_vars
+
+    def _create_regex_metadata(self, placeholder_name: str, var: 'Variable', local_only: bool = False):
+        """Create placeholder metadata for regex variable."""
         # Get regex pattern value
         regex_pattern = var.get_string_value()
 
         # Create metadata in same format as existing placeholder system
-        self._placeholder_metadata[placeholder_name] = {
+        metadata = {
             'raw_value': regex_pattern,
             'resolved_value': regex_pattern,
             'type': 'regex'
         }
 
-        log.debug(f"Created metadata for regex placeholder '{placeholder_name}': pattern='{regex_pattern}'")
+        if not local_only:
+            # Store globally (original behavior)
+            if not hasattr(self, '_placeholder_metadata'):
+                self._placeholder_metadata = {}
+            self._placeholder_metadata[placeholder_name] = metadata
+            log.debug(f"Created global metadata for regex placeholder '{placeholder_name}': pattern='{regex_pattern}'")
+        else:
+            log.debug(f"Created local metadata for regex placeholder '{placeholder_name}': pattern='{regex_pattern}'")
 
-    def _create_timestamp_tolerance_metadata(self, placeholder_name: str, var: 'Variable'):
+        return metadata
+
+    def _create_timestamp_tolerance_metadata(self, placeholder_name: str, var: 'Variable', local_only: bool = False):
         """Create placeholder metadata for timestamp variable with tolerance."""
-        if not hasattr(self, '_placeholder_metadata'):
-            self._placeholder_metadata = {}
-
         # Get base timestamp value
         if isinstance(var.value, datetime.datetime):
             base_value = var.value.isoformat()
@@ -568,21 +684,30 @@ class VariableRegistry:
         # Extract tolerance information
         tolerance = None
         if var.structured_metadata and isinstance(var.structured_metadata, TimestampMetadata):
-            metadata = var.structured_metadata
-            if metadata.tolerance_upper != 0 or metadata.tolerance_lower != 0:
-                tolerance = [metadata.tolerance_upper, metadata.tolerance_lower]
+            metadata_obj = var.structured_metadata
+            if metadata_obj.tolerance_upper != 0 or metadata_obj.tolerance_lower != 0:
+                tolerance = [metadata_obj.tolerance_upper, metadata_obj.tolerance_lower]
         elif var.metadata and 'tolerance' in var.metadata:
             tolerance = var.metadata['tolerance']
 
         # Create metadata in same format as existing placeholder system
-        self._placeholder_metadata[placeholder_name] = {
+        metadata = {
             'raw_value': base_value,
             'resolved_value': base_value,
             'type': 'timestamp',
             'tolerance': tolerance
         }
 
-        log.debug(f"Created metadata for tolerance placeholder '{placeholder_name}': base_value='{base_value}', tolerance={tolerance}")
+        if not local_only:
+            # Store globally (original behavior)
+            if not hasattr(self, '_placeholder_metadata'):
+                self._placeholder_metadata = {}
+            self._placeholder_metadata[placeholder_name] = metadata
+            log.debug(f"Created global metadata for tolerance placeholder '{placeholder_name}': base_value='{base_value}', tolerance={tolerance}")
+        else:
+            log.debug(f"Created local metadata for tolerance placeholder '{placeholder_name}': base_value='{base_value}', tolerance={tolerance}")
+
+        return metadata
 
     def _get_variable_resolved_value(self, var: 'Variable') -> Any:
         """Get fully resolved value for variable (apply timezone, format, and template resolution)."""
@@ -749,7 +874,7 @@ class VariableRegistry:
             log.debug(f"Added timestamp filters: {list(timestamp_filters.keys())}")
         
         # Also include filters from variables that already have structured metadata
-        for var_name, variable in self.variables.items():
+        for variable in self.variables.values():
             if variable.structured_metadata and hasattr(variable.structured_metadata, 'get_jinja_filters'):
                 var_filters = variable.structured_metadata.get_jinja_filters(self)
                 for filter_name, filter_func in var_filters.items():
