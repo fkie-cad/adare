@@ -23,6 +23,11 @@ variables:
     value: "{{test_dir}}\\test.db"
     description: "Test SQLite database"
 
+  shared_db:
+    type: path
+    value: "{{experiment_dir}}\\shared\\data\\test.db"
+    description: "Pre-created SQLite database with comprehensive test data"
+
 # Test definitions for SQLite functions on Windows
 tests:
   - name: test_sqlite_query_windows
@@ -33,6 +38,22 @@ tests:
       query: 'SELECT COUNT(*) as count FROM users'
       expected_rows: 1
 
+  - name: test_windows_shared_db
+    description: 'Test sqlite_query_result with pre-created database on Windows'
+    function: sqlite.query_result
+    parameter:
+      dst: '{{shared_db}}'
+      query: 'SELECT COUNT(*) as count FROM users WHERE role = "Admin"'
+      expected_result: [{"count": 2}]
+
+  - name: test_windows_departments
+    description: 'Test sqlite_query_result with department data on Windows'
+    function: sqlite.query_result
+    parameter:
+      dst: '{{shared_db}}'
+      query: 'SELECT name FROM departments ORDER BY name'
+      expected_rows: 4
+
 actions:
   # Setup test environment
   - command:
@@ -42,15 +63,15 @@ actions:
       shell: true
   
   - command:
-      name: "Create Test Database"
-      description: "Create SQLite database with sample data"
-      command: |
-        sqlite3 "{{test_db}}" "CREATE TABLE users (id INTEGER, name TEXT);"
-        sqlite3 "{{test_db}}" "INSERT INTO users VALUES (1, 'John Doe');"
+      name: "Copy Test Database"
+      description: "Copy pre-created SQLite database with comprehensive test data"
+      command: 'copy "{{shared_db}}" "{{test_db}}"'
       shell: true
   
   # Run SQLite tests
   - test: test_sqlite_query_windows
+  - test: test_windows_shared_db
+  - test: test_windows_departments
   
   # Cleanup
   - command:

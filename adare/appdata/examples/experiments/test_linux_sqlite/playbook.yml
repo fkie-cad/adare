@@ -22,6 +22,11 @@ variables:
     type: path
     value: "{{test_dir}}/test.db"
     description: "Test SQLite database"
+
+  shared_db:
+    type: path
+    value: "{{experiment_dir}}/shared/data/test.db"
+    description: "Pre-created SQLite database with comprehensive test data"
   
   empty_db:
     type: path
@@ -53,7 +58,7 @@ tests:
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT name, role FROM users ORDER BY id'
-      expected_rows: 5
+      expected_rows: 8
   
   - name: test_sqlite_query_single_user
     description: 'Test sqlite_query_result with single user lookup'
@@ -87,7 +92,7 @@ tests:
     parameter:
       dst: '{{test_db}}'
       query: 'SELECT u.name, p.project_name FROM users u JOIN projects p ON u.id = p.user_id'
-      expected_rows: 3
+      expected_rows: 5
   
   # Complex queries
   - name: test_sqlite_query_aggregation
@@ -125,6 +130,39 @@ tests:
       query: 'SELECT 1'
       expected_rows: 1
 
+  # Tests using pre-created database with richer data
+  - name: test_shared_db_department_count
+    description: 'Test sqlite_query_result with department aggregation from shared DB'
+    function: sqlite.query_result
+    parameter:
+      dst: '{{shared_db}}'
+      query: 'SELECT department, COUNT(*) as count FROM users GROUP BY department ORDER BY department'
+      expected_rows: 4
+
+  - name: test_shared_db_salary_range
+    description: 'Test sqlite_query_result with salary filtering from shared DB'
+    function: sqlite.query_result
+    parameter:
+      dst: '{{shared_db}}'
+      query: 'SELECT COUNT(*) as count FROM users WHERE salary BETWEEN 50000 AND 75000'
+      expected_result: [{"count": 4}]
+
+  - name: test_shared_db_audit_logs
+    description: 'Test sqlite_query_result with audit log analysis from shared DB'
+    function: sqlite.query_result
+    parameter:
+      dst: '{{shared_db}}'
+      query: 'SELECT action, COUNT(*) as count FROM audit_logs WHERE success = 1 GROUP BY action ORDER BY count DESC'
+      expected_rows: 6
+
+  - name: test_shared_db_complex_join
+    description: 'Test sqlite_query_result with complex multi-table JOIN from shared DB'
+    function: sqlite.query_result
+    parameter:
+      dst: '{{shared_db}}'
+      query: 'SELECT d.name as dept_name, COUNT(u.id) as user_count FROM departments d LEFT JOIN users u ON d.name = u.department GROUP BY d.name ORDER BY d.name'
+      expected_rows: 4
+
 actions:
   # Setup test environment
   - command:
@@ -133,60 +171,11 @@ actions:
       command: "mkdir -p {{test_dir}}"
       shell: true
   
-  # Create test database with sample data
+  # Copy pre-created database from shared data
   - command:
-      name: "Create Test Database"
-      description: "Create SQLite database with sample tables and data"
-      command: |
-        sqlite3 {{test_db}} << 'EOF'
-        -- Create users table
-        CREATE TABLE users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          email TEXT UNIQUE NOT NULL,
-          role TEXT NOT NULL,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-        
-        -- Insert sample users
-        INSERT INTO users (name, email, role) VALUES 
-          ('John Doe', 'john@example.com', 'Admin'),
-          ('Jane Smith', 'jane@example.com', 'User'),
-          ('Bob Johnson', 'bob@example.com', 'Manager'),
-          ('Alice Brown', 'alice@example.com', 'User'),
-          ('Charlie Wilson', 'charlie@example.com', 'Admin');
-        
-        -- Create projects table
-        CREATE TABLE projects (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          project_name TEXT NOT NULL,
-          user_id INTEGER,
-          status TEXT DEFAULT 'active',
-          FOREIGN KEY (user_id) REFERENCES users (id)
-        );
-        
-        -- Insert sample projects
-        INSERT INTO projects (project_name, user_id) VALUES 
-          ('Project Alpha', 1),
-          ('Project Beta', 2),
-          ('Project Gamma', 3);
-        
-        -- Create logs table
-        CREATE TABLE logs (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER,
-          action TEXT NOT NULL,
-          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users (id)
-        );
-        
-        -- Insert sample logs
-        INSERT INTO logs (user_id, action) VALUES 
-          (1, 'login'),
-          (2, 'view_dashboard'),
-          (1, 'create_project'),
-          (3, 'update_profile');
-        EOF
+      name: "Copy Test Database"
+      description: "Copy pre-created SQLite database with comprehensive test data"
+      command: "cp {{shared_db}} {{test_db}}"
       shell: true
   
   # Create empty database
@@ -208,6 +197,12 @@ actions:
   - test: test_sqlite_query_empty_db
   - test: test_sqlite_query_invalid_table
   - test: test_sqlite_query_file_not_found
+
+  # Run tests using pre-created database
+  - test: test_shared_db_department_count
+  - test: test_shared_db_salary_range
+  - test: test_shared_db_audit_logs
+  - test: test_shared_db_complex_join
   
   # Cleanup
   - command:
