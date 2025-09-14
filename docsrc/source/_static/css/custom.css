@@ -74,4 +74,16 @@
     border-color: #2a4640;
     box-shadow: 0 0 0 2px rgba(42, 70, 64, 0.25);
 }
-  
+
+/* Simple-DataTables v9 x Furo — LIGHT MODE */
+.datatable-selector, .datatable-input {
+  background: var(--color-background-primary) !important;
+  color: var(--color-foreground-primary) !important;
+  border: 1px solid var(--color-foreground-border) !important;
+  box-shadow: none !important;
+}
+
+.datatable-pagination-list-item.datatable-active {
+    background: var(--color-foreground-muted) !important;
+    color: var(--color-background-primary) !important;
+}

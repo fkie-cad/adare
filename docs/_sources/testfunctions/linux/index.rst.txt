@@ -1,4 +1,4 @@
-Linux Testset
+Linux
 =============
 
 .. role:: status-dev

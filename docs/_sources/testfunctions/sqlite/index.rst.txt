@@ -1,4 +1,4 @@
-SQLite Testset
+SQLite
 ==============
 
 .. role:: status-dev

@@ -40,6 +40,9 @@ ADARE organizes test functions into logical testsets based on their purpose and 
    * - :doc:`csv/index`
      - 1
      - CSV data validation and row pattern matching with regex and timestamp support
+   * - :doc:`xml/index`
+     - 6
+     - XML data validation with XPath, namespace support, regex patterns, and timestamp tolerance
    * - :doc:`sqlite/index`
      - 1
      - SQLite database query execution and result validation
@@ -89,10 +92,12 @@ Overvies of all Test Functions
 .. toctree::
    :maxdepth: 2
    :caption: Test Functions
+   :hidden:
 
    standard/index
    json/index
    csv/index
+   xml/index
    sqlite/index
    linux/index
    windows/index
