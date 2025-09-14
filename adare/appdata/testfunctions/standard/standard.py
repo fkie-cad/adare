@@ -143,7 +143,7 @@ class DirContent(BasicTest):
 
             log.debug(f'dst directory {dst} will be used for test {self.name}')
 
-            dir_content = [str(p) for p in Path(dst).iterdir()]
+            dir_content = [p.name for p in Path(dst).iterdir()]
             expected_missing_files = [
                 file for file in self.parameter.files if file not in dir_content
             ]
@@ -633,7 +633,7 @@ class FilePermissions(BasicTest):
 @attrs.define
 class FileContentContainsParameter(Parameter):
     dst: str
-    content: Union[str, bytes]
+    content: str  # Always string input, parsed to bytes if content_type is 'bytes'
     content_type: str = 'string'  # 'string' or 'bytes'
 
 
@@ -646,6 +646,16 @@ class FileContentContains(BasicTest):
     parameter: FileContentContainsParameter
     description: Optional[str] = ''
     variable_metadata: Optional[dict] = None
+
+    def _parse_escape_sequences(self, text):
+        """Parse Python-style escape sequences in string to actual bytes"""
+        try:
+            # Use codecs to decode escape sequences like \x41, \n, \t, etc.
+            import codecs
+            return codecs.decode(text, 'unicode_escape').encode('latin1')
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            # If parsing fails, fall back to UTF-8 encoding
+            return text.encode('utf-8')
 
     def test(self):
         try:
@@ -661,11 +671,8 @@ class FileContentContains(BasicTest):
                     with open(dst, 'rb') as f:
                         file_data = f.read()
 
-                    # Convert content to bytes if it's a string
-                    if isinstance(self.parameter.content, str):
-                        search_content = self.parameter.content.encode('utf-8')
-                    else:
-                        search_content = self.parameter.content
+                    # Parse escape sequences in the string to get actual bytes
+                    search_content = self._parse_escape_sequences(self.parameter.content)
 
                     if search_content in file_data:
                         return TestResult.success([f'byte pattern found in file'])
@@ -677,7 +684,7 @@ class FileContentContains(BasicTest):
                     with open(dst, 'r', encoding='utf-8', errors='ignore') as f:
                         file_content = f.read()
 
-                    search_string = str(self.parameter.content)
+                    search_string = self.parameter.content
 
                     if search_string in file_content:
                         return TestResult.success([f'string content found in file'])
