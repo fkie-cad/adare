@@ -1,0 +1,4 @@
+# XML processing dependencies
+# Note: xml.etree.ElementTree is part of Python standard library
+# lxml provides more advanced XPath support if needed in the future
+# lxml>=4.6.0

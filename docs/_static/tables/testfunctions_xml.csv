@@ -1,0 +1,7 @@
+Function Name,S,Description,Parameters
+:doc:`element_exists <../xml/element_exists>`,:status-dev:`●`,Tests if XML element exists at specified XPath,"dst (str), xpath (str), namespaces* (dict)"
+:doc:`element_text_matches <../xml/element_text_matches>`,:status-dev:`●`,Tests if XML element text content matches expected value with placeholder support for regex and timestamp tolerance,"dst (str), xpath (str), expected_text (str), regex_match* (bool), case_sensitive* (bool), wildcard_mode* (str), namespaces* (dict)"
+:doc:`attribute_matches <../xml/attribute_matches>`,:status-dev:`●`,Tests if XML element attribute matches expected value with regex and timestamp tolerance support,"dst (str), xpath (str), attribute_name (str), expected_value (str), regex_match* (bool), case_sensitive* (bool), namespaces* (dict)"
+:doc:`element_count <../xml/element_count>`,:status-dev:`●`,Tests the number of XML elements matching XPath expression,"dst (str), xpath (str), expected_count (int), comparison_type* (str), namespaces* (dict)"
+:doc:`xpath_result_matches <../xml/xpath_result_matches>`,:status-dev:`●`,Tests if XPath expression result matches expected value (text/number/boolean),"dst (str), xpath (str), expected_result (str/int/float/bool), result_type* (str), namespaces* (dict)"
+:doc:`namespace_matches <../xml/namespace_matches>`,:status-dev:`●`,Tests if XML namespace declarations match expected namespaces,"dst (str), expected_namespaces (dict), check_mode* (str)"

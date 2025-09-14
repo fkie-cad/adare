@@ -1,4 +1,4 @@
-CSV Testset
+CSV
 ===========
 
 .. role:: status-tested

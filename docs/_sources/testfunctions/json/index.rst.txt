@@ -1,4 +1,4 @@
-JSON Testset
+JSON 
 ============
 
 .. role:: status-tested

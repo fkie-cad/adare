@@ -1,4 +1,4 @@
-Windows Testset
+Windows
 ===============
 
 .. role:: status-dev

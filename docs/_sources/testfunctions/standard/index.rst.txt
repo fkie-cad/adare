@@ -1,4 +1,4 @@
-Standard Testset
+Standard 
 ================
 
 .. role:: status-tested
