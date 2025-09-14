@@ -225,7 +225,61 @@ class TestLoader:
         except Exception as e:
             log.error(f"Failed to resolve test '{test_name}' locally: {e}")
             return None
-    
+
+    async def resolve_test_with_runtime_context(self, test_name: str, runtime_execution_context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Load and resolve a specific test with runtime execution context for variables set during action execution."""
+        try:
+            # Load tests from playbook
+            playbook_path = self.experiment_dir / "playbook.yml"
+            if not playbook_path.exists():
+                return None
+
+            from adarelib.testset.yaml.customloader import get_custom_loader
+            playbook_yaml = playbook_path.read_text()
+            playbook_data = yaml.load(playbook_yaml, Loader=get_custom_loader())
+
+            if 'tests' not in playbook_data:
+                return None
+
+            # Get combined execution context (existing + runtime)
+            if self.variable_resolver:
+                base_context = self.variable_resolver.get_formatted_context(for_tests=True)
+            else:
+                base_context = {}
+
+            # Merge with runtime context (runtime context takes precedence)
+            combined_context = {**base_context, **runtime_execution_context}
+
+            log.info(f"CLAUDE: Resolving test '{test_name}' with runtime context. Base context keys: {list(base_context.keys())}, Runtime context keys: {list(runtime_execution_context.keys())}")
+            log.info(f"CLAUDE: Combined context: {combined_context}")
+
+            # Find the test by name
+            for test in playbook_data['tests']:
+                if test.get('name') == test_name:
+                    log.debug(f"Found test '{test_name}' raw data: {test}")
+
+                    # Re-process with variable resolver using runtime context
+                    if self.variable_resolver:
+                        # Re-run the full variable resolution process with runtime context
+                        resolved_test = self.variable_resolver.process_data(test, combined_context)
+                        log.info(f"CLAUDE: Re-processed test '{test_name}' with variable resolver and runtime context")
+                        log.debug(f"CLAUDE: Resolved test data: {resolved_test}")
+
+                        # Also capture any new metadata generated
+                        metadata = self.variable_resolver.get_placeholder_metadata()
+                        if metadata:
+                            log.info(f"CLAUDE: Generated metadata during runtime resolution: {list(metadata.keys())}")
+
+                        return resolved_test
+                    else:
+                        log.warning("No variable resolver available for runtime resolution")
+                        return test
+
+            return None
+        except Exception as e:
+            log.error(f"Failed to resolve test '{test_name}' with runtime context: {e}")
+            return None
+
     def _resolve_test_content(self, test_data: Dict[str, Any]) -> Dict[str, Any]:
         """Enhanced test content resolution using unified variable resolver with lazy loading."""
         if not self.variable_resolver:

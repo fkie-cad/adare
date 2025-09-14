@@ -161,10 +161,10 @@ class ExperimentDirectory(Directory):
         # Load tests from playbook instead of separate testset file
         from adare.types.playbook import parse_playbook
         from adarelib.testset.type import TestsetFile
-        
-        # Use default auto-detection for OS and user since we don't have context here
+
+        # Parse playbook without automatic variables
         playbook = parse_playbook(self.playbookfile)
-        
+
         # Return TestsetFile constructed from playbook tests
         return TestsetFile(name=self.experiment, tests=playbook.tests)
 

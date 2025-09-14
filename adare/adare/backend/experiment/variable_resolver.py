@@ -740,61 +740,83 @@ class VariableResolver:
 
     def replace_variables(self, text: str, execution_context: Dict[str, Any]) -> str:
         """Replace Jinja2 template variables in text with values or metadata placeholders.
-        
+
         Variables with metadata are resolved to placeholders (e.g., VARTIMESTAMP_RESOLVED)
         and the metadata is captured for server-side processing.
         """
         if not text or '{{' not in text:
             return text
-        
+
         try:
             result = text
             max_iterations = 10  # Prevent infinite loops
             previous_results = set()  # Track previous results to detect cycles
-            
+
             for i in range(max_iterations):
                 # If no more variables to replace, we're done
                 if '{{' not in result:
                     break
-                
+
                 # Check for cycles (same result appearing again)
                 if result in previous_results:
                     log.warning(f"Circular variable reference detected in: {text}")
                     break
-                
+
                 previous_results.add(result)
-                
-                # Create formatted context with metadata-aware variable handling  
+
+                # Create formatted context with metadata-aware variable handling
                 formatted_context = self.get_formatted_context(execution_context, for_tests=False)
-                
+
+                # CLAUDE: Add debug logging for adare_user_home specifically
+                if 'adare_user_home' in result:
+                    log.info(f"CLAUDE: Processing adare_user_home template '{result}'")
+                    log.info(f"CLAUDE: Execution context keys: {list(execution_context.keys())}")
+                    log.info(f"CLAUDE: Formatted context keys: {list(formatted_context.keys())}")
+                    if 'adare_user_home' in formatted_context:
+                        log.info(f"CLAUDE: adare_user_home value: '{formatted_context['adare_user_home']}'")
+                    else:
+                        log.info("CLAUDE: adare_user_home NOT found in formatted context!")
+                        # Check if variable registry has it
+                        if hasattr(self, 'variable_registry') and self.variable_registry:
+                            registry_vars = self.variable_registry.variables
+                            log.info(f"CLAUDE: Variable registry has keys: {list(registry_vars.keys())}")
+                            if 'adare_user_home' in registry_vars:
+                                log.info(f"CLAUDE: Registry adare_user_home value: '{registry_vars['adare_user_home'].value}'")
+
                 # Perform template replacement with metadata capture
                 log.debug(f"Processing template: '{result}' with context keys: {list(formatted_context.keys())}")
                 if 'username' in result:
                     log.info(f"CLAUDE: Processing username template '{result}' with context: {formatted_context}")
                 template = jinja2.Template(result)
-                
+
                 # Add custom filters for metadata capture
                 template.environment.filters.update(self.get_custom_filters())
-                
+
                 new_result = template.render(formatted_context)
                 log.debug(f"Template result: '{new_result}'")
                 if 'username' in result:
                     log.info(f"CLAUDE: Username template result: '{result}' -> '{new_result}'")
-                
+
+                # CLAUDE: Add debug logging for adare_user_home result
+                if 'adare_user_home' in result:
+                    log.info(f"CLAUDE: adare_user_home template result: '{result}' -> '{new_result}'")
+
                 # If no change occurred, break to avoid infinite loops
                 if new_result == result:
                     break
-                    
+
                 result = new_result
-            
+
             # Warn if we hit max iterations (possible infinite loop)
             if i == max_iterations - 1 and '{{' in result:
                 log.warning(f"Variable replacement hit max iterations for: {text}")
-            
+
             return result
         except (jinja2.TemplateError, jinja2.UndefinedError, KeyError, TypeError, ValueError) as e:
             if 'username' in text:
                 log.warning(f"CLAUDE: Failed to replace username variables in '{text}': {e}")
+            elif 'adare_user_home' in text:
+                log.warning(f"CLAUDE: Failed to replace adare_user_home variables in '{text}': {e}")
             else:
                 log.warning(f"Failed to replace variables in '{text}': {e}")
             return text

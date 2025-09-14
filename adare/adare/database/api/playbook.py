@@ -28,8 +28,21 @@ class PlaybookApi(DatabaseApi):
         try:
             # Read original YAML content for storage
             original_yaml_content = playbook_file_path.read_text(encoding='utf-8')
-            
-            # Parse YAML file using existing parser
+
+            # CLAUDE: Extract VM OS and user from experiment's environment for automatic variables
+            vm_os = None
+            vm_user = None
+            if experiment.environments:
+                # Use first environment's OS info
+                env = experiment.environments[0]
+                if env.os_info:
+                    vm_os = env.os_info.platform  # 'windows' or 'linux'
+                    # Get VM user from config - import here to avoid circular imports
+                    from adare.config import get_vm_credentials
+                    if vm_os:
+                        vm_user, _ = get_vm_credentials(vm_os)
+
+            # Parse YAML file using existing parser (automatic variables added during execution)
             config = parse_playbook(playbook_file_path)
             
             # Create or update playbook record
@@ -322,13 +335,13 @@ class PlaybookApi(DatabaseApi):
     
     def load_playbook_from_database(self, experiment_id: str) -> PlaybookType:
         """Load Playbook object from stored YAML in database (no file parsing needed).
-        
+
         Args:
             experiment_id: The experiment ID to load the playbook for
-            
+
         Returns:
-            Parsed Playbook object from stored YAML
-            
+            Parsed Playbook object from stored YAML (automatic variables added during execution)
+
         Raises:
             ValueError: If no playbook found for experiment
         """
@@ -351,7 +364,13 @@ class PlaybookApi(DatabaseApi):
         # Parse YAML content using custom loader for tags like !re
         from adarelib.testset.yaml.customloader import get_custom_loader
         data = yaml.load(playbook.original_yaml_content, Loader=get_custom_loader())
-        
+
+        # Convert variables to VariableRegistry if present (automatic variables added during execution)
+        if 'variables' in data and data['variables']:
+            from adarelib.common.variables import VariableRegistry
+            data['variables'] = VariableRegistry.from_dict(data['variables'])
+        # Note: automatic variables will be merged during variable resolution, not during parsing
+
         # Set up cattrs converter (same as in parse_playbook)
         converter = cattrs.Converter()
         converter.forbid_extra_keys = True

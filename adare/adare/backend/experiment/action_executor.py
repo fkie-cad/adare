@@ -478,19 +478,20 @@ class ActionExecutor:
             # This requires test loading functionality - will be handled by test_loader
             # For now, delegate to the provided test_loader if available
             if hasattr(self, 'test_loader') and self.test_loader:
-                resolved_test = await self.test_loader.resolve_test_locally(action.name)
+                # Pass current execution context to test loader for runtime resolution
+                resolved_test = await self.test_loader.resolve_test_with_runtime_context(action.name, self.execution_context)
                 if not resolved_test:
                     return ActionResult(
                         success=False,
                         message=f"Test '{action.name}' not found in playbook tests"
                     )
-                
+
                 # Send resolved test to VM for execution
                 result = await self.client.run_test(action.name, resolved_test)
-                
+
                 # Extract expect_to_fail flag from resolved test
                 expect_to_fail = resolved_test.get('expect_to_fail', False)
-                
+
                 # Use TestResultProcessor to handle result processing
                 from adare.backend.experiment.test_result_processor import TestResultProcessor
                 return TestResultProcessor.process_test_result(action.name, result, expect_to_fail)
@@ -503,7 +504,7 @@ class ActionExecutor:
             error_msg = str(e)
             if "No testset loaded" in error_msg or "testset" in error_msg.lower():
                 return ActionResult(
-                    success=False, 
+                    success=False,
                     message=f"No tests loaded - ensure playbook.yml contains tests section and loads successfully before test actions"
                 )
             return ActionResult(success=False, message=error_msg)

@@ -185,27 +185,25 @@ class Playbook:
     variables: Optional[VariableRegistry] = None
     tests: List[Test] = attrs.Factory(list)
 
-def parse_playbook(yaml_path: Union[str, Path], vm_os: str = None, vm_user: str = None) -> Playbook:  # Accept Path or str
+def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or str
+    import logging
+    log = logging.getLogger(__name__)
+
     yaml_path = Path(yaml_path)  # Ensure it's a Path object
-    
+
+    log.info(f"CLAUDE: parse_playbook called with path='{yaml_path}'")
+
     # Use custom YAML loader to handle our custom tags
     from adarelib.testset.yaml.customloader import get_custom_loader
-    
+
     with yaml_path.open('r') as f:
         data = yaml.load(f, Loader=get_custom_loader())
-    
-    # Get automatic variables
-    from adarelib.common.automatic_variables import AutomaticVariables
-    automatic_vars = AutomaticVariables.get_automatic_variables(vm_os=vm_os, vm_user=vm_user)
-    
-    # Convert variables to VariableRegistry if present and merge with automatic variables
+
+    # Convert variables to VariableRegistry if present (automatic variables added during resolution)
     if 'variables' in data and data['variables']:
         from adarelib.common.variables import VariableRegistry
-        user_vars = VariableRegistry.from_dict(data['variables'])
-        data['variables'] = AutomaticVariables.merge_with_user_variables(automatic_vars, user_vars)
-    else:
-        # No user variables, just use automatic ones
-        data['variables'] = automatic_vars
+        data['variables'] = VariableRegistry.from_dict(data['variables'])
+    # Note: automatic variables will be merged during variable resolution, not during parsing
     
     # Tests will be converted by cattrs when structuring the Playbook object
     # No need to convert them here
