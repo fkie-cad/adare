@@ -1,0 +1,250 @@
+settings:
+ idle: 1.0
+ timeout: 120
+ screenshot:
+   format: "png"
+   quality: 95
+ continue_on_test_failure: true
+
+# Variables for Windows XML testing
+variables:
+ username:
+   type: string
+   value: "adare"
+   description: "System username"
+
+ test_dir:
+   type: path
+   value: "C:\\Users\\{{username}}\\test_xml"
+   description: "Base directory for XML testing"
+
+ config_xml:
+   type: path
+   value: "{{test_dir}}\\config.xml"
+   description: "Configuration XML file"
+
+ users_xml:
+   type: path
+   value: "{{test_dir}}\\users.xml"
+   description: "Users XML file"
+
+ nested_xml:
+   type: path
+   value: "{{test_dir}}\\nested.xml"
+   description: "Deeply nested XML file"
+
+ app_config_xml:
+   type: path
+   value: "{{test_dir}}\\app.config"
+   description: ".NET app configuration file"
+
+ # Placeholder examples for advanced matching
+ version_regex:
+   type: regex
+   value: '^\d+\.\d+\.\d+\.\d+$'
+   description: "Regex pattern for Windows version format"
+
+ current_timestamp:
+   type: timestamp
+   value: "{{now}}"
+   tolerance: 30
+   description: "Current timestamp with 30s tolerance"
+
+ malformed_xml:
+   type: path
+   value: "{{test_dir}}\\malformed.xml"
+   description: "Malformed XML file for error handling tests"
+
+actions:
+ - type: terminal_run
+   title: "Create test directory for XML files"
+   command: "mkdir \"{{test_dir}}\""
+
+ - type: terminal_run
+   title: "Create sample config XML"
+   command: |
+     echo ^<?xml version="1.0" encoding="UTF-8"?^> > "{{config_xml}}"
+     echo ^<configuration^> >> "{{config_xml}}"
+     echo   ^<appSettings^> >> "{{config_xml}}"
+     echo     ^<add key="DatabaseConnection" value="Server=localhost;Database=TestDB" /^> >> "{{config_xml}}"
+     echo     ^<add key="LogLevel" value="INFO" /^> >> "{{config_xml}}"
+     echo     ^<add key="EnableSSL" value="true" /^> >> "{{config_xml}}"
+     echo   ^</appSettings^> >> "{{config_xml}}"
+     echo   ^<system.web^> >> "{{config_xml}}"
+     echo     ^<httpRuntime maxRequestLength="4096" /^> >> "{{config_xml}}"
+     echo     ^<compilation debug="false" targetFramework="4.8" /^> >> "{{config_xml}}"
+     echo   ^</system.web^> >> "{{config_xml}}"
+     echo   ^<version^>2.1.0.0^</version^> >> "{{config_xml}}"
+     echo   ^<timestamp^>{{now}}^</timestamp^> >> "{{config_xml}}"
+     echo ^</configuration^> >> "{{config_xml}}"
+
+ - type: terminal_run
+   title: "Create users XML file"
+   command: |
+     echo ^<?xml version="1.0" encoding="UTF-8"?^> > "{{users_xml}}"
+     echo ^<users^> >> "{{users_xml}}"
+     echo   ^<user id="1"^> >> "{{users_xml}}"
+     echo     ^<name^>Administrator^</name^> >> "{{users_xml}}"
+     echo     ^<email^>admin@company.com^</email^> >> "{{users_xml}}"
+     echo     ^<domain^>WORKGROUP^</domain^> >> "{{users_xml}}"
+     echo     ^<active^>true^</active^> >> "{{users_xml}}"
+     echo   ^</user^> >> "{{users_xml}}"
+     echo   ^<user id="2"^> >> "{{users_xml}}"
+     echo     ^<name^>TestUser^</name^> >> "{{users_xml}}"
+     echo     ^<email^>testuser@company.com^</email^> >> "{{users_xml}}"
+     echo     ^<domain^>WORKGROUP^</domain^> >> "{{users_xml}}"
+     echo     ^<active^>true^</active^> >> "{{users_xml}}"
+     echo   ^</user^> >> "{{users_xml}}"
+     echo   ^<user id="3"^> >> "{{users_xml}}"
+     echo     ^<name^>Guest^</name^> >> "{{users_xml}}"
+     echo     ^<email^>guest@company.com^</email^> >> "{{users_xml}}"
+     echo     ^<domain^>WORKGROUP^</domain^> >> "{{users_xml}}"
+     echo     ^<active^>false^</active^> >> "{{users_xml}}"
+     echo   ^</user^> >> "{{users_xml}}"
+     echo ^</users^> >> "{{users_xml}}"
+
+ - type: terminal_run
+   title: "Create nested XML structure"
+   command: |
+     echo ^<?xml version="1.0" encoding="UTF-8"?^> > "{{nested_xml}}"
+     echo ^<root^> >> "{{nested_xml}}"
+     echo   ^<system^> >> "{{nested_xml}}"
+     echo     ^<windows^> >> "{{nested_xml}}"
+     echo       ^<registry^> >> "{{nested_xml}}"
+     echo         ^<hklm^> >> "{{nested_xml}}"
+     echo           ^<software^> >> "{{nested_xml}}"
+     echo             ^<data^>Registry nested value^</data^> >> "{{nested_xml}}"
+     echo             ^<count^>256^</count^> >> "{{nested_xml}}"
+     echo           ^</software^> >> "{{nested_xml}}"
+     echo         ^</hklm^> >> "{{nested_xml}}"
+     echo       ^</registry^> >> "{{nested_xml}}"
+     echo     ^</windows^> >> "{{nested_xml}}"
+     echo   ^</system^> >> "{{nested_xml}}"
+     echo   ^<metadata^> >> "{{nested_xml}}"
+     echo     ^<created^>{{now}}^</created^> >> "{{nested_xml}}"
+     echo     ^<platform^>Windows 11^</platform^> >> "{{nested_xml}}"
+     echo   ^</metadata^> >> "{{nested_xml}}"
+     echo ^</root^> >> "{{nested_xml}}"
+
+ - type: terminal_run
+   title: "Create .NET app.config file"
+   command: |
+     echo ^<?xml version="1.0" encoding="utf-8"?^> > "{{app_config_xml}}"
+     echo ^<configuration^> >> "{{app_config_xml}}"
+     echo   ^<startup^> >> "{{app_config_xml}}"
+     echo     ^<supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8" /^> >> "{{app_config_xml}}"
+     echo   ^</startup^> >> "{{app_config_xml}}"
+     echo   ^<appSettings^> >> "{{app_config_xml}}"
+     echo     ^<add key="Environment" value="Development" /^> >> "{{app_config_xml}}"
+     echo     ^<add key="ApiUrl" value="https://api.example.com" /^> >> "{{app_config_xml}}"
+     echo   ^</appSettings^> >> "{{app_config_xml}}"
+     echo   ^<connectionStrings^> >> "{{app_config_xml}}"
+     echo     ^<add name="DefaultConnection" connectionString="Data Source=localhost;Initial Catalog=TestDB" /^> >> "{{app_config_xml}}"
+     echo   ^</connectionStrings^> >> "{{app_config_xml}}"
+     echo ^</configuration^> >> "{{app_config_xml}}"
+
+ - type: terminal_run
+   title: "Create malformed XML for error testing"
+   command: |
+     echo ^<?xml version="1.0" encoding="UTF-8"?^> > "{{malformed_xml}}"
+     echo ^<configuration^> >> "{{malformed_xml}}"
+     echo   ^<appSettings^> >> "{{malformed_xml}}"
+     echo     ^<add key="TestKey" value="TestValue"^> >> "{{malformed_xml}}"
+     echo   ^</appSettings^> >> "{{malformed_xml}}"
+
+# Test section - Windows XML-specific forensic tests
+tests:
+ - type: element_exists
+   name: "Config root element exists"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: "./configuration"
+
+ - type: element_exists
+   name: "App settings section exists"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: ".//appSettings"
+
+ - type: element_attribute_matches
+   name: "Database connection configured"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: ".//add[@key='DatabaseConnection']"
+     attribute: "value"
+     expected_value: "Server=localhost;Database=TestDB"
+
+ - type: element_text_matches
+   name: "Version matches Windows pattern"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: ".//version"
+     expected_text: "{{version_regex}}"
+     regex_match: true
+
+ - type: element_attribute_matches
+   name: "SSL is enabled"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: ".//add[@key='EnableSSL']"
+     attribute: "value"
+     expected_value: "true"
+
+ - type: element_exists
+   name: "Active users exist"
+   parameter:
+     dst: "{{users_xml}}"
+     xpath: ".//user[active='true']"
+
+ - type: element_count_matches
+   name: "Correct number of Windows users"
+   parameter:
+     dst: "{{users_xml}}"
+     xpath: ".//user"
+     expected_count: 3
+
+ - type: element_text_matches
+   name: "Deep registry data accessible"
+   parameter:
+     dst: "{{nested_xml}}"
+     xpath: ".//hklm/software/data"
+     expected_text: "Registry nested value"
+
+ - type: element_text_matches
+   name: "Platform is Windows 11"
+   parameter:
+     dst: "{{nested_xml}}"
+     xpath: ".//platform"
+     expected_text: "Windows 11"
+
+ - type: element_attribute_matches
+   name: ".NET Framework version configured"
+   parameter:
+     dst: "{{app_config_xml}}"
+     xpath: ".//supportedRuntime"
+     attribute: "sku"
+     expected_value: ".NETFramework,Version=v4.8"
+
+ - type: element_text_matches
+   name: "Timestamp within tolerance"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: ".//timestamp"
+     expected_text: "{{current_timestamp}}"
+     timestamp_tolerance: 30
+
+ - type: xml_validation
+   name: "Config XML is well-formed"
+   parameter:
+     dst: "{{config_xml}}"
+
+ - type: xml_validation
+   name: "App.config is well-formed"
+   parameter:
+     dst: "{{app_config_xml}}"
+
+ - type: xml_validation
+   name: "Malformed XML fails validation"
+   parameter:
+     dst: "{{malformed_xml}}"
+   expected_result: false

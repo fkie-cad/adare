@@ -1238,7 +1238,8 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                         was_interrupted=was_interrupted
                     )
             else:
-                step_remove_fake_experiment_run(experiment_run_context)
+                # Fake runs are now kept until manually cleaned with 'adare experiment clean <name>'
+                log.info(f"Fake experiment run {experiment_run_context.experiment_run_ulid} completed and preserved for analysis")
             await asyncio.sleep(1)
             
             # Print debug flow messages before stopping console
@@ -1349,6 +1350,47 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
         preserve_snapshot=False,  # Don't preserve snapshots in test mode
         runlog=True   # Save logs for test runs to aid debugging
     ))
+
+
+def experiment_clean(project_path: Path, experiment_name: str):
+    """Clean fake experiment runs for the specified experiment.
+
+    This function removes all fake runs associated with an experiment,
+    helping to clean up test runs that are preserved for debugging.
+
+    Args:
+        project_path: Path to the project directory
+        experiment_name: Name of the experiment to clean fake runs for
+    """
+    from adare.console import print_success_message
+    from adare.database.api.experiment import ExperimentApi
+
+    log.info(f'Cleaning fake runs for experiment: {experiment_name}')
+
+    try:
+        with ExperimentApi() as api:
+            removed_count = api.remove_fake_experiment_runs_by_experiment_name(project_path, experiment_name)
+
+            if removed_count > 0:
+                log.info(f'Removed {removed_count} fake run(s) for experiment "{experiment_name}"')
+                print_success_message(
+                    title=f'Experiment "{experiment_name}" cleaned successfully!',
+                    location=f'Removed {removed_count} fake run(s)',
+                    next_steps=[
+                        'Fake runs have been permanently deleted from the database',
+                        f'You can continue testing with: adare experiment test {experiment_name} -e <environment>'
+                    ]
+                )
+            else:
+                log.info(f'No fake runs found for experiment "{experiment_name}"')
+                print(f'No fake runs found for experiment "{experiment_name}" - nothing to clean')
+
+    except ValueError as e:
+        from adare.exceptions import LoggedException
+        raise LoggedException(log, str(e))
+    except Exception as e:
+        from adare.exceptions import LoggedException
+        raise LoggedException(log, f'Failed to clean experiment "{experiment_name}": {str(e)}')
 
 
 async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = False, vm_cleanup_mode: str = 'prompt') -> bool:

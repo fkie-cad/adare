@@ -1,0 +1,218 @@
+settings:
+ idle: 1.0
+ timeout: 120
+ screenshot:
+   format: "png"
+   quality: 95
+ continue_on_test_failure: true
+
+# Variables for Linux XML testing
+variables:
+ username:
+   type: string
+   value: "adare"
+   description: "System username"
+
+ test_dir:
+   type: path
+   value: "/home/{{username}}/test_xml"
+   description: "Base directory for XML testing"
+
+ config_xml:
+   type: path
+   value: "{{test_dir}}/config.xml"
+   description: "Configuration XML file"
+
+ users_xml:
+   type: path
+   value: "{{test_dir}}/users.xml"
+   description: "Users XML file"
+
+ nested_xml:
+   type: path
+   value: "{{test_dir}}/nested.xml"
+   description: "Deeply nested XML file"
+
+ # Placeholder examples for advanced matching
+ version_regex:
+   type: regex
+   value: '^\d+\.\d+\.\d+$'
+   description: "Regex pattern for version matching"
+
+ current_timestamp:
+   type: timestamp
+   value: "{{now}}"
+   tolerance: 30
+   description: "Current timestamp with 30s tolerance"
+
+ malformed_xml:
+   type: path
+   value: "{{test_dir}}/malformed.xml"
+   description: "Malformed XML file for error handling tests"
+
+actions:
+ - type: terminal_run
+   title: "Create test directory for XML files"
+   command: "mkdir -p {{test_dir}}"
+
+ - type: terminal_run
+   title: "Create sample config XML"
+   command: |
+     cat > {{config_xml}} << 'EOF'
+     <?xml version="1.0" encoding="UTF-8"?>
+     <configuration>
+       <database>
+         <host>localhost</host>
+         <port>5432</port>
+         <name>testdb</name>
+       </database>
+       <logging>
+         <level>INFO</level>
+         <file>/var/log/app.log</file>
+       </logging>
+       <features>
+         <feature name="authentication" enabled="true"/>
+         <feature name="caching" enabled="false"/>
+       </features>
+       <version>1.2.3</version>
+       <timestamp>{{now}}</timestamp>
+     </configuration>
+     EOF
+
+ - type: terminal_run
+   title: "Create users XML file"
+   command: |
+     cat > {{users_xml}} << 'EOF'
+     <?xml version="1.0" encoding="UTF-8"?>
+     <users>
+       <user id="1">
+         <name>John Doe</name>
+         <email>john@example.com</email>
+         <role>admin</role>
+         <active>true</active>
+       </user>
+       <user id="2">
+         <name>Jane Smith</name>
+         <email>jane@example.com</email>
+         <role>user</role>
+         <active>true</active>
+       </user>
+       <user id="3">
+         <name>Bob Wilson</name>
+         <email>bob@example.com</email>
+         <role>user</role>
+         <active>false</active>
+       </user>
+     </users>
+     EOF
+
+ - type: terminal_run
+   title: "Create nested XML structure"
+   command: |
+     cat > {{nested_xml}} << 'EOF'
+     <?xml version="1.0" encoding="UTF-8"?>
+     <root>
+       <level1>
+         <level2>
+           <level3>
+             <level4>
+               <data>Deep nested value</data>
+               <count>42</count>
+             </level4>
+           </level3>
+         </level2>
+       </level1>
+       <metadata>
+         <created>{{now}}</created>
+         <author>Test System</author>
+       </metadata>
+     </root>
+     EOF
+
+ - type: terminal_run
+   title: "Create malformed XML for error testing"
+   command: |
+     cat > {{malformed_xml}} << 'EOF'
+     <?xml version="1.0" encoding="UTF-8"?>
+     <configuration>
+       <database>
+         <host>localhost</host>
+         <port>5432
+       </database>
+     EOF
+
+# Test section - XML-specific forensic tests
+tests:
+ - type: element_exists
+   name: "Config root element exists"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: "./configuration"
+
+ - type: element_exists
+   name: "Database configuration exists"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: ".//database"
+
+ - type: element_text_matches
+   name: "Database host is localhost"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: ".//host"
+     expected_text: "localhost"
+
+ - type: element_text_matches
+   name: "Version matches pattern"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: ".//version"
+     expected_text: "{{version_regex}}"
+     regex_match: true
+
+ - type: element_attribute_matches
+   name: "Authentication feature is enabled"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: ".//feature[@name='authentication']"
+     attribute: "enabled"
+     expected_value: "true"
+
+ - type: element_exists
+   name: "Active users exist"
+   parameter:
+     dst: "{{users_xml}}"
+     xpath: ".//user[active='true']"
+
+ - type: element_count_matches
+   name: "Correct number of users"
+   parameter:
+     dst: "{{users_xml}}"
+     xpath: ".//user"
+     expected_count: 3
+
+ - type: element_text_matches
+   name: "Deep nested data accessible"
+   parameter:
+     dst: "{{nested_xml}}"
+     xpath: ".//level4/data"
+     expected_text: "Deep nested value"
+
+ - type: element_text_matches
+   name: "Timestamp within tolerance"
+   parameter:
+     dst: "{{config_xml}}"
+     xpath: ".//timestamp"
+     expected_text: "{{current_timestamp}}"
+     timestamp_tolerance: 30
+
+ - type: xml_validation
+   name: "Config XML is well-formed"
+   parameter:
+     dst: "{{config_xml}}"
+
+ - type: xml_validation
+   name: "Malformed XML fails validation"
+   parameter:
+     dst: "{{malformed_xml}}"
+   expected_result: false
