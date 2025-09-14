@@ -44,7 +44,7 @@ So its basic structure looks like the following:
 
 
 Playbook File
-############
+##############
 
 The playbook.yml file defines the GUI automation steps for your experiment using simple YAML syntax. A basic playbook looks like this:
 

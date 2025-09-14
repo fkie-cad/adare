@@ -74,7 +74,7 @@ Environments define virtual machine configurations and contain experiments that 
   Show detailed information about a specific environment using dotnotation (project.environment).
 
 Experiment Management
-====================
+======================
 
 Experiments contain the actual test automation logic using YAML-based playbooks.
 
@@ -136,7 +136,7 @@ Experiments contain the actual test automation logic using YAML-based playbooks.
     * ``--dotnotation TEXT`` - Find by dotnotation (project.environment.experiment)
 
 Testfunction Management
-======================
+========================
 
 Testfunctions are reusable test components that can be shared across experiments.
 
@@ -332,7 +332,7 @@ Creating and Running Your First Experiment
     adare experiment run file-deletion-test -e win11
 
 Interactive Development Workflow **[NOT CURRENTLY AVAILABLE]**
-=============================================================
+===============================================================
 
 *Note: Interactive development mode is currently not implemented and these commands will not work.*
 

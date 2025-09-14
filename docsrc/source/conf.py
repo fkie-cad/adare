@@ -13,7 +13,7 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../../adare'))
-
+sys.path.insert(0, os.path.abspath('./_ext'))
 
 # -- Project information -----------------------------------------------------
 
@@ -30,6 +30,7 @@ author = 'Fraunhofer FKIE'
 extensions = [
     # 'sphinx.ext.autodoc',
     'sphinx.ext.autosectionlabel',
+    'simple_datatables'
 ]
 
 autosectionlabel_prefix_document = True
@@ -48,7 +49,7 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+html_theme = 'furo'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -57,11 +58,19 @@ html_static_path = ['_static']
 
 html_logo = "logo.png"
 html_theme_options = {
-    'logo_only': True,
-    'display_version': False,
+    "sidebar_hide_name": True,
 }
+html_favicon = "favicon.ico"
 
 def setup(app):
     app.add_css_file('css/custom.css')
+    app.add_css_file('css/sdtable.css')
 
 
+
+# simple_datatable_selector = "table.sdtable"
+# simple_datatable_options = {
+#     # examples:
+#     # "perPage": 25,
+#     # "searchable": True,
+# }

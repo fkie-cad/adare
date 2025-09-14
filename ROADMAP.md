@@ -44,7 +44,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] rethink testfunction result -> at the moment lists -> how is it saved in databse plain json? (then dicts would be better?)
 - [x] add some automatic variables -> e.g. adare_user_home als automatische Variable, die im Playbook verwendet werden kann und zum entsprechenden Home-Verzeichnis auflöst 
 - [x] improve adare-cv-server code quality; maybe tweak functionality
-- [ ] reconsider if fake runs are deleted from database or kept until we wipe them manually
+- [ ] reconsider if fake runs are deleted from database or kept until we wipe them manually -> no do not delete them only if we all adare experiment clean "name" -> delete all fake runs
 
 ## Known Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there

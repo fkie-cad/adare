@@ -1,5 +1,5 @@
 .DEFAULT_GOAL = help
-.PHONY: help install adare-clean docs
+.PHONY: help install adare-clean docs docs-sphinx
 
 help:
 	@echo "--------------- HELP -----------------"
@@ -8,6 +8,7 @@ help:
 	@echo "  install         Run the installer (PowerShell on Windows, shell on *nix)."
 	@echo "  adare-clean     Reset adare state."
 	@echo "  docs            Build HTML documentation with Sphinx."
+	@echo "  docs-sphinx     Build HTML documentation with Sphinx."
 	@echo "---------------------------------------"
 
 install:
@@ -23,5 +24,10 @@ endif
 adare-clean:
 	adare manage reset
 
-docs:
+# Documentation targets
+docs: docs-sphinx
+
+docs-sphinx:
+	@echo "Building documentation with Sphinx..."
+	poetry install --with docs
 	poetry run sphinx-build -b html -a -E docsrc/source docs

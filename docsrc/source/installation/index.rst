@@ -1,13 +1,8 @@
 ******************
-Installation Guide
+Installation
 ******************
 
 This guide will walk you through installing ADARE on your system. ADARE supports Linux, macOS, and Windows platforms.
-
-.. toctree::
-   :maxdepth: 1
-   
-   vm-setup
 
 Prerequisites
 *************
