@@ -50,3 +50,6 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 - [ ] interrupt on verify does not work!
 - [ ] adding/removing a pull does not trigger reload of experiment?! -> this means run do not work -> try to load on every run?!
+
+In a next step integrate in our testfunctions what is allowed within its parameters. e.g. something like: "dst: str # interpreted: Path; filters: None; options: glob; str can contain str/timestamp[no tolerance,format,timezone,localtime]"  or "content: str # interpreted: String with variables; allowed_variables (( {{ }})): strings, timestamp[tolerance,format,timezone,localtime]". I am unsure how to find some common logic and good structure to show the user whats possible and whats not for each parameter! for ContainsLineParameter we have list with values. Values can be regex,timestamp[tolerance,format,timezone,localtime].
+Provide me an common syntax how to realize this and show to a user!

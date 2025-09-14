@@ -27,6 +27,11 @@ variables:
     type: string
     value: "Linux filesystem test content"
     description: "Content for test file"
+
+  binary_content:
+    type: string
+    value: "Binary data: \x89PNG\r\n\x1a\n"
+    description: "Binary content with escape sequences"
   
   expected_hash:
     type: string
@@ -95,7 +100,7 @@ tests:
     function: dir_content
     parameter:
       dst: '{{test_dir}}'
-      files: ['test_file.txt', 'empty_file.txt', 'subdir']
+      files: ['test_file.txt', 'empty_file.txt', 'subdir', 'binary_file.bin']
   
   - name: test_dir_content_missing_files
     description: 'Test dir_content with missing files (should fail)'
@@ -190,6 +195,41 @@ tests:
       comparison_type: 'within_last'
       within_duration: '1s'
 
+  # File content contains tests
+  - name: test_file_content_contains_string_positive
+    description: 'Test file_content_contains with matching string'
+    function: file_content_contains
+    parameter:
+      dst: '{{test_file}}'
+      content: 'filesystem test'
+      content_type: 'string'
+
+  - name: test_file_content_contains_string_negative
+    description: 'Test file_content_contains with non-matching string'
+    function: file_content_contains
+    expect_to_fail: true
+    parameter:
+      dst: '{{test_file}}'
+      content: 'Windows system'
+      content_type: 'string'
+
+  - name: test_file_content_contains_bytes_positive
+    description: 'Test file_content_contains with matching bytes'
+    function: file_content_contains
+    parameter:
+      dst: '{{test_dir}}/binary_file.bin'
+      content: '{{binary_content}}'
+      content_type: 'bytes'
+
+  - name: test_file_content_contains_bytes_negative
+    description: 'Test file_content_contains with non-matching bytes'
+    function: file_content_contains
+    expect_to_fail: true
+    parameter:
+      dst: '{{test_dir}}/binary_file.bin'
+      content: '\xff\xfe\xfd'
+      content_type: 'bytes'
+
 actions:
   # Setup test environment
   - command:
@@ -221,6 +261,12 @@ actions:
       description: "Create empty file for hash testing"
       command: "touch {{test_dir}}/empty_file.txt"
       shell: true
+
+  - command:
+      name: "Create Binary File"
+      description: "Create binary file for content contains testing"
+      command: 'printf "{{binary_content}}" > {{test_dir}}/binary_file.bin'
+      shell: true
   
   - idle:
       duration: 2.0
@@ -247,6 +293,10 @@ actions:
   - test: test_file_permissions_negative
   - test: test_file_timestamps_within_last
   - test: test_file_timestamps_not_within_last
+  - test: test_file_content_contains_string_positive
+  - test: test_file_content_contains_string_negative
+  - test: test_file_content_contains_bytes_positive
+  - test: test_file_content_contains_bytes_negative
   
   # Cleanup
   - command:
