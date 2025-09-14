@@ -156,7 +156,7 @@ class BasicTest:
     def _compare_timestamp_with_tolerance(self, metadata: dict, actual_value: str) -> Tuple[bool, str]:
         """Compare timestamp values with tolerance."""
         log.info(f"CLAUDE: Starting tolerance comparison - metadata: {metadata}")
-        log.info(f"CLAUDE: Actual value from file: '{actual_value}'")
+        log.info(f"CLAUDE: VM file timestamp: '{actual_value}'")
         
         if 'tolerance' not in metadata or not metadata['tolerance']:
             # No tolerance - do exact comparison  
@@ -170,7 +170,7 @@ class BasicTest:
             
             # Parse actual timestamp using format metadata if available
             actual_dt = self._parse_timestamp_with_format(actual_value, metadata)
-            log.info(f"CLAUDE: Parsed actual timestamp: {actual_dt}")
+            log.info(f"CLAUDE: Parsed VM timestamp: {actual_dt}")
             
             # Parse original timestamp (raw_value should be in ISO format)
             raw_value = metadata.get('raw_value', '')
@@ -200,10 +200,10 @@ class BasicTest:
             
             # Use resolved_value instead of raw_value for comparison - this should contain the properly resolved timestamp
             comparison_value = metadata.get('resolved_value', raw_value)
-            log.info(f"CLAUDE: Using resolved_value for comparison: '{comparison_value}'")
+            log.info(f"CLAUDE: Host expected timestamp: '{comparison_value}'")
 
-            original_dt = self._parse_timestamp_with_format(comparison_value, metadata, is_original=True)
-            log.info(f"CLAUDE: Parsed original timestamp: {original_dt}")
+            original_dt = self._parse_timestamp_with_format(comparison_value, metadata, is_expected=True)
+            log.info(f"CLAUDE: Parsed host timestamp: {original_dt}")
             
             # Get tolerance range - handle both single value and array
             tolerance = metadata.get('tolerance', 0)
@@ -247,17 +247,17 @@ class BasicTest:
             success = actual_value == expected
             return success, f"Tolerance comparison failed ({e}), used string comparison"
     
-    def _parse_timestamp_with_format(self, timestamp_str: str, metadata: dict, is_original: bool = False) -> 'datetime.datetime':
+    def _parse_timestamp_with_format(self, timestamp_str: str, metadata: dict, is_expected: bool = False) -> 'datetime.datetime':
         """
         Parse timestamp using format metadata.
 
         Behavior:
-        - is_original == True (template/expected side):
+        - is_expected == True (host/template/expected side):
             * Never convert timezones.
             * If naive, assume UTC and attach tzinfo=UTC (label only, no clock change).
             * If aware, return as-is.
 
-        - is_original == False (actual/observed side):
+        - is_expected == False (VM/actual/observed side):
             * DEFAULT: Treat naive strings as LOCAL wall time (label with system tz, no clock change).
             This avoids the "assume UTC then convert to local" double-shift.
             * If metadata['localtime'] is explicitly False, treat naive as UTC and convert to system local.
@@ -273,14 +273,34 @@ class BasicTest:
         _SYSTEM_TZ = datetime.datetime.now().astimezone().tzinfo
 
         def _finalize(dt: datetime.datetime) -> datetime.datetime:
-            if is_original:
-                # Original: ensure tz-aware, but NO conversion.
+            if is_expected:
+                # Expected (host-side): ensure tz-aware, respect localtime flag
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=datetime.timezone.utc)  # label as UTC, no clock shift
+                    if metadata.get('localtime', False):
+                        # If localtime=True, treat as local time
+                        dt = dt.replace(tzinfo=_SYSTEM_TZ)
+                        log.debug(f"CLAUDE: _finalize applied local timezone to expected timestamp")
+                    else:
+                        # Default: treat as UTC (original behavior)
+                        dt = dt.replace(tzinfo=datetime.timezone.utc)
+                        log.debug(f"CLAUDE: _finalize applied UTC timezone to expected timestamp")
                 return dt
 
-            # Actual: apply interpretation rules.
-            treat_as_local = metadata.get('localtime', True)  # default True to avoid double shift
+            # Actual (VM-side): apply interpretation rules.
+            # Default to local time only if localtime flag is explicitly True
+            # If no localtime flag, default to UTC (for compatibility with timezone: utc configs)
+            if 'localtime' in metadata:
+                # Explicit localtime flag takes precedence
+                treat_as_local = metadata['localtime']
+                log.debug(f"CLAUDE: Using explicit localtime={treat_as_local}")
+            elif metadata.get('timezone') == 'utc':
+                # timezone=utc means treat as UTC
+                treat_as_local = False
+                log.debug(f"CLAUDE: Using UTC (timezone=utc)")
+            else:
+                # Default to local time if nothing specified
+                treat_as_local = True
+                log.debug(f"CLAUDE: Using local time (default)")
 
             if treat_as_local:
                 # Naive actuals are LOCAL wall time → label as local (no shift).
@@ -299,7 +319,36 @@ class BasicTest:
 
         fmt = metadata.get('format')
 
-        # Try explicit format first
+        # Check if it's a Unix timestamp first
+        try:
+            # Unix timestamps are numeric strings (with optional decimal)
+            if timestamp_str.replace('.', '').replace('-', '').isdigit():
+                unix_timestamp = float(timestamp_str)
+                # Convert from Unix timestamp to datetime
+                dt = datetime.datetime.utcfromtimestamp(unix_timestamp)
+
+                # Apply localtime conversion if needed for expected timestamps
+                localtime_flag = metadata.get('localtime', False)
+                log.debug(f"Unix timestamp parsing: is_expected={is_expected}, localtime={localtime_flag}")
+
+                if is_expected and localtime_flag:
+                    # Convert UTC to local time
+                    dt = dt.replace(tzinfo=datetime.timezone.utc).astimezone(_SYSTEM_TZ).replace(tzinfo=None)
+                    log.info(f"CLAUDE: Applied localtime conversion to expected Unix timestamp: {dt}")
+
+                # Apply format if specified
+                if fmt:
+                    formatted_str = dt.strftime(fmt)
+                    # Parse the formatted string to get a clean datetime
+                    dt = datetime.datetime.strptime(formatted_str, fmt)
+                    log.debug(f"Applied format '{fmt}' to Unix timestamp")
+
+                return _finalize(dt)
+        except (ValueError, OSError, OverflowError):
+            # Not a valid Unix timestamp, continue with other parsing methods
+            pass
+
+        # Try explicit format parsing
         if fmt:
             try:
                 dt = datetime.datetime.strptime(timestamp_str, fmt)
