@@ -21,6 +21,7 @@ class FilterAnalysis:
     """Analysis of filters applied to a Jinja2 template"""
     has_tolerance: bool = False
     has_format: bool = False
+    has_localtime: bool = False
     tolerance_values: Optional[Tuple[int, int]] = None
     format_string: Optional[str] = None
     original_template: str = ""
@@ -78,7 +79,7 @@ class MetadataManager:
             template_context[placeholder_name] = regex_pattern
             log.debug(f"CLAUDE: Added regex placeholder '{placeholder_name}' to template context with value '{regex_pattern}'")
 
-    def add_timestamp_metadata(self, placeholder_name: str, timestamp_value: str, tolerance: Optional[Any] = None, template_context: Optional[Dict[str, Any]] = None):
+    def add_timestamp_metadata(self, placeholder_name: str, timestamp_value: str, tolerance: Optional[Any] = None, template_context: Optional[Dict[str, Any]] = None, yaml_metadata: Optional[Dict[str, Any]] = None):
         """
         Add timestamp metadata following the existing structure.
 
@@ -106,8 +107,15 @@ class MetadataManager:
             metadata['needs_runtime_resolution'] = True
             log.debug(f"Marked timestamp '{timestamp_value}' for runtime resolution")
 
+        # Include any YAML metadata (timezone, format, etc.)
+        if yaml_metadata:
+            metadata.update(yaml_metadata)
+            log.debug(f"Added YAML metadata to placeholder '{placeholder_name}': {yaml_metadata}")
+
+        # Tolerance parameter takes precedence over tolerance in yaml_metadata
         if tolerance is not None:
             metadata['tolerance'] = tolerance
+            log.debug(f"Overriding tolerance from explicit parameter: {tolerance}")
 
         self.variable_registry._placeholder_metadata[placeholder_name] = metadata
         log.debug(f"Added timestamp metadata for '{placeholder_name}': value='{timestamp_value}', tolerance={tolerance}")
@@ -141,25 +149,9 @@ class MetadataManager:
         if analysis.variable_name and analysis.variable_name in template_context:
             base_timestamp_value = template_context[analysis.variable_name]
 
-        # Apply format filter if present
+        # For tolerance placeholders, keep raw Unix timestamp - let VM handle all filtering
         resolved_value = base_timestamp_value
-        if analysis.has_format and resolved_value:
-            try:
-                # Apply format filter manually
-                import datetime
-                if isinstance(resolved_value, str):
-                    # Parse timestamp string first
-                    import dateutil.parser
-                    dt = dateutil.parser.parse(resolved_value)
-                elif hasattr(resolved_value, 'strftime'):
-                    dt = resolved_value
-                else:
-                    dt = datetime.datetime.fromtimestamp(float(resolved_value))
-
-                resolved_value = dt.strftime(analysis.format_string)
-                log.debug(f"Applied format '{analysis.format_string}' to get '{resolved_value}'")
-            except Exception as e:
-                log.warning(f"Failed to apply format '{analysis.format_string}': {e}")
+        log.debug(f"Keeping raw Unix timestamp for tolerance placeholder: '{resolved_value}'")
 
         # Create metadata
         metadata = {
@@ -170,6 +162,8 @@ class MetadataManager:
 
         if analysis.tolerance_values:
             metadata['tolerance'] = list(analysis.tolerance_values)
+        if analysis.has_localtime:
+            metadata['localtime'] = True
 
         self.variable_registry._placeholder_metadata[placeholder_name] = metadata
         log.debug(f"Added tolerance metadata for '{placeholder_name}': {metadata}")
@@ -267,7 +261,6 @@ class YamlTagProcessor:
         from adarelib.testset.yaml.customtags import YamlRegexString, YamlTimestamp
 
         processed_list = []
-        has_changes = False
 
         for item in entry_list:
             if isinstance(item, YamlRegexString):
@@ -276,7 +269,6 @@ class YamlTagProcessor:
                 self.metadata_manager.add_regex_metadata(placeholder_name, item.string, template_context)
                 processed_list.append(f'{{{{ {placeholder_name} }}}}')
                 log.info(f"Converted YamlRegexString('{item.string}') to placeholder '{placeholder_name}'")
-                has_changes = True
 
             elif isinstance(item, YamlTimestamp):
                 # Apply smart resolution logic for YAML timestamps
@@ -313,10 +305,10 @@ class YamlTagProcessor:
                     else:
                         resolved_timestamp = timestamp_value
 
-                    self.metadata_manager.add_timestamp_metadata(placeholder_name, resolved_timestamp, getattr(item, 'tolerance', None), template_context)
+                    yaml_metadata = getattr(item, 'metadata', {})
+                    self.metadata_manager.add_timestamp_metadata(placeholder_name, resolved_timestamp, getattr(item, 'tolerance', None), template_context, yaml_metadata)
                     processed_list.append(f'{{{{ {placeholder_name} }}}}')
                     log.info(f"CLAUDE: Converted YamlTimestamp with tolerance to placeholder '{placeholder_name}' (resolved_timestamp='{resolved_timestamp}')")
-                    has_changes = True
                 else:
                     # No tolerance - resolve directly
                     timestamp_value = item.string
@@ -330,8 +322,6 @@ class YamlTagProcessor:
                     else:
                         log.info(f"Using YamlTimestamp value directly: '{timestamp_value}'")
                         processed_list.append(timestamp_value)
-                    has_changes = True
-
             else:
                 # Regular item - keep as-is
                 processed_list.append(item)
@@ -381,7 +371,8 @@ class YamlTagProcessor:
                 else:
                     resolved_timestamp = timestamp_value
 
-                self.metadata_manager.add_timestamp_metadata(placeholder_name, resolved_timestamp, getattr(data, 'tolerance', None), template_context)
+                yaml_metadata = getattr(data, 'metadata', {})
+                self.metadata_manager.add_timestamp_metadata(placeholder_name, resolved_timestamp, getattr(data, 'tolerance', None), template_context, yaml_metadata)
                 log.info(f"CLAUDE: Converted single YamlTimestamp with tolerance to placeholder '{placeholder_name}'")
                 return f'{{{{ {placeholder_name} }}}}'
             else:
@@ -573,6 +564,7 @@ class ToleranceDetector:
     
     TOLERANCE_PATTERN = re.compile(r'\|\s*tolerance\s*\(\s*([^,\)]+)(?:\s*,\s*([^,\)]+))?\s*\)')
     FORMAT_PATTERN = re.compile(r'\|\s*format\s*\(\s*["\']([^"\']+)["\']')
+    LOCALTIME_PATTERN = re.compile(r'\|\s*localtime\s*')
     VARIABLE_PATTERN = re.compile(r'{{\s*(\w+)')
     
     def analyze_jinja_template(self, template_str: str) -> FilterAnalysis:
@@ -602,7 +594,13 @@ class ToleranceDetector:
             analysis.has_format = True
             analysis.format_string = format_match.group(1)
             log.debug(f"Found format filter: {analysis.format_string}")
-        
+
+        # Check for localtime filter
+        localtime_match = self.LOCALTIME_PATTERN.search(template_str)
+        if localtime_match:
+            analysis.has_localtime = True
+            log.debug(f"Found localtime filter")
+
         return analysis
     
     def has_yaml_tolerance(self, yaml_obj) -> bool:

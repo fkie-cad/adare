@@ -120,7 +120,7 @@ class TimestampMetadata:
                     source_var.structured_metadata = TimestampMetadata()
                 source_var.structured_metadata.tolerance_upper = upper
                 source_var.structured_metadata.tolerance_lower = lower
-                source_var.metadata['tolerance'] = [upper, lower]
+                source_var.metadata['tolerance'] = [lower, upper]
                 log.debug(f"Captured tolerance filter '{upper},{lower}' for variable '{source_var.name}'")
                 
                 # Create placeholder name and register metadata

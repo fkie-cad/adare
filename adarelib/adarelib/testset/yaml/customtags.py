@@ -100,7 +100,7 @@ class YamlTimestamp(YamlCustomTag):
         if format:
             self.metadata['format'] = format
         if tolerance is not None:  # Only store explicitly set tolerance
-            self.metadata['tolerance'] = [tolerance, tolerance]
+            self.metadata['tolerance'] = [-abs(tolerance), abs(tolerance)]
 
     def __repr__(self):
         return f'{self.yaml_tag} {self.string}'

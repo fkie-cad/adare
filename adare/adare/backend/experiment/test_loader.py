@@ -268,6 +268,7 @@ class TestLoader:
                         # Also capture any new metadata generated
                         metadata = self.variable_resolver.get_placeholder_metadata()
                         if metadata:
+                            resolved_test['_VARIABLE_METADATA'] = metadata
                             log.info(f"CLAUDE: Generated metadata during runtime resolution: {list(metadata.keys())}")
 
                         return resolved_test
