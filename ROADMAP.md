@@ -10,7 +10,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] update docs to acceptable amount!
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
 - [ ] test if we can still run adare if we delete cloned repo
-- [ ] add xml testfunctions in separate xml module
+- [x] add xml testfunctions in separate xml module
 - [ ] support yaml with same logic/function as for json!
 
 ## Planned Features
@@ -44,12 +44,9 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] rethink testfunction result -> at the moment lists -> how is it saved in databse plain json? (then dicts would be better?)
 - [x] add some automatic variables -> e.g. adare_user_home als automatische Variable, die im Playbook verwendet werden kann und zum entsprechenden Home-Verzeichnis auflöst 
 - [x] improve adare-cv-server code quality; maybe tweak functionality
-- [ ] reconsider if fake runs are deleted from database or kept until we wipe them manually -> no do not delete them only if we all adare experiment clean "name" -> delete all fake runs
+- [x] reconsider if fake runs are deleted from database or kept until we wipe them manually -> no do not delete them only if we all adare experiment clean "name" -> delete all fake runs
 
 ## Known Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 - [ ] interrupt on verify does not work!
 - [ ] adding/removing a pull does not trigger reload of experiment?! -> this means run do not work -> try to load on every run?!
-
-In a next step integrate in our testfunctions what is allowed within its parameters. e.g. something like: "dst: str # interpreted: Path; filters: None; options: glob; str can contain str/timestamp[no tolerance,format,timezone,localtime]"  or "content: str # interpreted: String with variables; allowed_variables (( {{ }})): strings, timestamp[tolerance,format,timezone,localtime]". I am unsure how to find some common logic and good structure to show the user whats possible and whats not for each parameter! for ContainsLineParameter we have list with values. Values can be regex,timestamp[tolerance,format,timezone,localtime].
-Provide me an common syntax how to realize this and show to a user!

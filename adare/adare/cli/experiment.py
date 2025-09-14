@@ -86,7 +86,7 @@ def exec_experiment_test(arguments):
     from adare.backend.experiment.commands import experiment_test, experiment_load
     from adare.exceptions import LoggedException, LoggedErrorException
     import sys
-    
+
     if project_directory := determine_projectdirectory(arguments.project):
         try:
             experiment_load(project_directory, arguments.experiment, force=False, silent=True)
@@ -99,5 +99,24 @@ def exec_experiment_test(arguments):
                 sys.exit(0)
         except KeyboardInterrupt:
             log.info("Keyboard interrupt received, shutting down gracefully...")
+    else:
+        raise NoProjectFoundError(log, message='no project directory found')
+
+
+def exec_experiment_clean(arguments):
+    """Execute experiment clean command to remove fake runs."""
+    from adare.backend.experiment.commands import experiment_clean
+    from adare.exceptions import LoggedException, LoggedErrorException
+    import sys
+
+    if project_directory := determine_projectdirectory(arguments.project):
+        try:
+            experiment_clean(project_directory, arguments.experiment)
+        except LoggedException as e:
+            e.print()
+            if isinstance(e, LoggedErrorException):
+                sys.exit(-1)
+            else:
+                sys.exit(0)
     else:
         raise NoProjectFoundError(log, message='no project directory found')

@@ -48,7 +48,7 @@ from adare.cli.environment import (
     exec_environment_load, exec_environment_create, exec_environment_delete, exec_environment_example
 )
 from adare.cli.experiment import (
-    exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example
+    exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example, exec_experiment_clean
 )
 from adare.cli.interactive import (
     exec_experiment_dev
@@ -371,6 +371,21 @@ def info(name, ulid, dotnotation):
         dotnotation=dotnotation
     )
     exec_with_error_printing(exec_show_experiment, args)
+
+@experiment.command()
+@click.argument('experiment')
+@click.option('--project', '-p', help='Name of the project')
+def clean(experiment, project):
+    """Remove all fake experiment runs for the specified experiment.
+
+    Fake runs are created during testing and development. This command
+    permanently deletes all fake runs associated with the experiment.
+    """
+    args = SimpleNamespace(
+        experiment=experiment,
+        project=project
+    )
+    exec_with_error_printing(exec_experiment_clean, args)
 
 
 # ------------------------------

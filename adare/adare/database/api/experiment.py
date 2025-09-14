@@ -353,3 +353,33 @@ class ExperimentApi(ProjectDbApi):
             experiments = [experiment for environment in environments for experiment in environment.experiments]
             return experiments
         return self._session.query(Experiment).all()
+
+    def remove_fake_experiment_runs_by_experiment_name(self, project_path: Path, experiment_name: str) -> int:
+        """
+        Remove all fake experiment runs for a given experiment by name.
+
+        Args:
+            project_path: Path to the project containing the experiment
+            experiment_name: Name of the experiment to clean fake runs for
+
+        Returns:
+            Number of fake runs removed
+        """
+        # Get the experiment
+        experiment = self.get_experiment_by_project_and_name(project_path, experiment_name)
+        if not experiment:
+            raise ValueError(f'experiment "{experiment_name}" not found in project {project_path}')
+
+        # Find all fake runs for this experiment
+        fake_runs = self._session.query(ExperimentRun).filter(
+            ExperimentRun.experiment_id == experiment.ulid,
+            ExperimentRun.fake == True
+        ).all()
+
+        # Count and delete them
+        count = len(fake_runs)
+        for fake_run in fake_runs:
+            self._session.delete(fake_run)
+
+        self._session.commit()
+        return count
