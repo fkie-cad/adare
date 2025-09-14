@@ -1,0 +1,2 @@
+Function Name,S,Description,Parameters
+:doc:`contains_line <../csv/contains_line>`,:status-tested:`●`,Tests if row in a CSV file exists that matches the given entry layout,"dst (str), entry (list)"
