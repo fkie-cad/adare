@@ -235,13 +235,39 @@
 <li class="toctree-l3"><a class="reference internal" href="standard/file_permissions.html">file_permissions</a></li>
 </ul>
 </li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="json/index.html">JSON Testset</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><div class="visually-hidden">Toggle navigation of JSON Testset</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="json/contains_key.html">contains_key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="json/value_matches.html">value_matches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="json/array_contains.html">array_contains</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="csv/index.html">CSV Testset</a><input class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><div class="visually-hidden">Toggle navigation of CSV Testset</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="csv/contains_line.html">contains_line</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="sqlite/index.html">SQLite Testset</a><input class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><div class="visually-hidden">Toggle navigation of SQLite Testset</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="sqlite/query_result.html">query_result</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="linux/index.html">Linux Testset</a><input class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><div class="visually-hidden">Toggle navigation of Linux Testset</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="linux/system_service_status.html">system_service_status</a></li>
+<li class="toctree-l3"><a class="reference internal" href="linux/process_running.html">process_running</a></li>
+<li class="toctree-l3"><a class="reference internal" href="linux/user_exists.html">user_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="linux/log_entry_exists.html">log_entry_exists</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="windows/index.html">Windows Testset</a><input class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><div class="visually-hidden">Toggle navigation of Windows Testset</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="windows/registry_key_exists.html">registry_key_exists</a></li>
+<li class="toctree-l3"><a class="reference internal" href="windows/registry_value_matches.html">registry_value_matches</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Technical Documentation:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Architecture</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><div class="visually-hidden">Toggle navigation of Advanced</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul class="simple">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced</a><input class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><div class="visually-hidden">Toggle navigation of Advanced</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul class="simple">
 </ul>
 </li>
 </ul>
@@ -312,9 +338,29 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><span class="xref std std-doc">testsets/standard</span></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="standard/index.html"><span class="doc">Standard Testset</span></a></p></td>
 <td><p>11</p></td>
 <td><p>File system operations, content validation, permissions, and metadata testing</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="json/index.html"><span class="doc">JSON Testset</span></a></p></td>
+<td><p>3</p></td>
+<td><p>JSON data validation, key existence checking, value comparison, and array element verification</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="csv/index.html"><span class="doc">CSV Testset</span></a></p></td>
+<td><p>1</p></td>
+<td><p>CSV data validation and row pattern matching with regex and timestamp support</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="sqlite/index.html"><span class="doc">SQLite Testset</span></a></p></td>
+<td><p>1</p></td>
+<td><p>SQLite database query execution and result validation</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="linux/index.html"><span class="doc">Linux Testset</span></a></p></td>
+<td><p>4</p></td>
+<td><p>Linux system validation including services, processes, users, and logs</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="windows/index.html"><span class="doc">Windows Testset</span></a></p></td>
+<td><p>2</p></td>
+<td><p>Windows system validation including registry key and value operations</p></td>
 </tr>
 </tbody>
 </table>
@@ -406,6 +452,61 @@
 <td><p>Tests if file content contains specified string or byte pattern</p></td>
 <td><p>dst (string), content (string), content_type (string, optional)</p></td>
 </tr>
+<tr class="row-odd"><td><p>json.contains_key</p></td>
+<td><p><span class="status-tested">●</span></p></td>
+<td><p>Tests if JSON file contains specified key path (supports dot notation like “user.profile.name”)</p></td>
+<td><p>dst (string), key_path (string)</p></td>
+</tr>
+<tr class="row-even"><td><p>json.value_matches</p></td>
+<td><p><span class="status-tested">●</span></p></td>
+<td><p>Tests if JSON value at key path matches expected value using placeholders (supports wildcards [*] and * with any/all modes)</p></td>
+<td><p>dst (string), key_path (string), expected_value (string/int/float/bool), regex_match (boolean, optional), wildcard_mode (string, optional)</p></td>
+</tr>
+<tr class="row-odd"><td><p>json.array_contains</p></td>
+<td><p><span class="status-tested">●</span></p></td>
+<td><p>Tests if JSON array at specified path contains expected element</p></td>
+<td><p>dst (string), array_path (string), expected_element (string/int/float/bool/dict/list)</p></td>
+</tr>
+<tr class="row-even"><td><p>csv.contains_line</p></td>
+<td><p><span class="status-tested">●</span></p></td>
+<td><p>Tests if row in a CSV file exists that matches the given entry layout</p></td>
+<td><p>dst (string), entry (list)</p></td>
+</tr>
+<tr class="row-odd"><td><p>sqlite.query_result</p></td>
+<td><p><span class="status-dev">●</span></p></td>
+<td><p>Executes SQL query against SQLite database and validates result</p></td>
+<td><p>dst (string), query (string), expected_rows* (integer), expected_result* (list)</p></td>
+</tr>
+<tr class="row-even"><td><p>linux.system_service_status</p></td>
+<td><p><span class="status-dev">●</span></p></td>
+<td><p>Tests if a systemd service has expected status (Linux only)</p></td>
+<td><p>service_name (string), expected_status (string)</p></td>
+</tr>
+<tr class="row-odd"><td><p>linux.process_running</p></td>
+<td><p><span class="status-dev">●</span></p></td>
+<td><p>Tests if a process is running with expected number of instances (Linux only)</p></td>
+<td><p>process_name (string), min_instances* (integer)</p></td>
+</tr>
+<tr class="row-even"><td><p>linux.user_exists</p></td>
+<td><p><span class="status-dev">●</span></p></td>
+<td><p>Tests if a user account exists on the Linux system</p></td>
+<td><p>username (string)</p></td>
+</tr>
+<tr class="row-odd"><td><p>linux.log_entry_exists</p></td>
+<td><p><span class="status-dev">●</span></p></td>
+<td><p>Tests if a log file contains entries matching a specified pattern</p></td>
+<td><p>log_file (string), pattern (string), max_lines* (integer)</p></td>
+</tr>
+<tr class="row-even"><td><p>windows.registry_key_exists</p></td>
+<td><p><span class="status-dev">●</span></p></td>
+<td><p>Tests if Windows registry key exists (Windows only)</p></td>
+<td><p>key_path (string)</p></td>
+</tr>
+<tr class="row-odd"><td><p>windows.registry_value_matches</p></td>
+<td><p><span class="status-dev">●</span></p></td>
+<td><p>Tests if Windows registry value matches expected value with type validation (Windows only)</p></td>
+<td><p>key_path (string), value_name (string), expected_value (string/integer/bytes), value_type* (string)</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -419,6 +520,31 @@
 <li class="toctree-l1"><a class="reference internal" href="standard/index.html">Standard Testset</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="standard/index.html#overview">Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="standard/index.html#test-functions">Test Functions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="json/index.html">JSON Testset</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="json/index.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="json/index.html#test-functions">Test Functions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="csv/index.html">CSV Testset</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="csv/index.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="csv/index.html#test-functions">Test Functions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="sqlite/index.html">SQLite Testset</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="sqlite/index.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sqlite/index.html#test-functions">Test Functions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="linux/index.html">Linux Testset</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="linux/index.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="linux/index.html#test-functions">Test Functions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="windows/index.html">Windows Testset</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="windows/index.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="windows/index.html#test-functions">Test Functions</a></li>
 </ul>
 </li>
 </ul>

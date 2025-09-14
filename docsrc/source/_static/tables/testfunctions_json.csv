@@ -1,0 +1,4 @@
+Function Name,S,Description,Parameters
+:doc:`contains_key <../json/contains_key>`,:status-tested:`●`,Tests if JSON file contains specified key path (supports dot notation like "user.profile.name"),dst (str); key_path (str)
+:doc:`value_matches <../json/value_matches>`,:status-tested:`●`,Tests if JSON value at key path matches expected value using placeholders (supports wildcards [*] and * with any/all modes),"dst (str), key_path (str), expected_value (str/int/float/bool), regex_match* (bool), wildcard_mode* (str)"
+:doc:`array_contains <../json/array_contains>`,:status-tested:`●`,Tests if JSON array at specified path contains expected element,"dst (str), array_path (str), expected_element (str/int/float/bool/dict/list)"

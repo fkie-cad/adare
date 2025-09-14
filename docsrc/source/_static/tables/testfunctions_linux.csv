@@ -1,0 +1,5 @@
+Function Name,S,Description,Parameters
+:doc:`system_service_status <../linux/system_service_status>`,:status-dev:`●`,Tests if a systemd service has expected status (Linux only),"service_name (str), expected_status (str)"
+:doc:`process_running <../linux/process_running>`,:status-dev:`●`,Tests if a process is running with expected number of instances (Linux only),"process_name (str), min_instances* (int)"
+:doc:`user_exists <../linux/user_exists>`,:status-dev:`●`,Tests if a user account exists on the Linux system,username (str)
+:doc:`log_entry_exists <../linux/log_entry_exists>`,:status-dev:`●`,Tests if a log file contains entries matching a specified pattern,"log_file (str), pattern (str), max_lines* (int)"

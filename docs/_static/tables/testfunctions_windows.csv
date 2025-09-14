@@ -1,0 +1,3 @@
+Function Name,S,Description,Parameters
+:doc:`registry_key_exists <../windows/registry_key_exists>`,:status-dev:`●`,Tests if Windows registry key exists (Windows only),key_path (str)
+:doc:`registry_value_matches <../windows/registry_value_matches>`,:status-dev:`●`,Tests if Windows registry value matches expected value with type validation (Windows only),"key_path (str), value_name (str), expected_value (str/int/bytes), value_type* (str)"

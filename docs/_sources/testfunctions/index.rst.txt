@@ -31,9 +31,24 @@ ADARE organizes test functions into logical testsets based on their purpose and 
    * - Testset
      - Functions
      - Description
-   * - :doc:`testsets/standard`
+   * - :doc:`standard/index`
      - 11
      - File system operations, content validation, permissions, and metadata testing
+   * - :doc:`json/index`
+     - 3
+     - JSON data validation, key existence checking, value comparison, and array element verification
+   * - :doc:`csv/index`
+     - 1
+     - CSV data validation and row pattern matching with regex and timestamp support
+   * - :doc:`sqlite/index`
+     - 1
+     - SQLite database query execution and result validation
+   * - :doc:`linux/index`
+     - 4
+     - Linux system validation including services, processes, users, and logs
+   * - :doc:`windows/index`
+     - 2
+     - Windows system validation including registry key and value operations
 
 
 Usage in Playbooks
@@ -76,4 +91,9 @@ Overvies of all Test Functions
    :caption: Test Functions
 
    standard/index
+   json/index
+   csv/index
+   sqlite/index
+   linux/index
+   windows/index
 

@@ -1,0 +1,2 @@
+Function Name,S,Description,Parameters
+:doc:`query_result <../sqlite/query_result>`,:status-dev:`●`,Executes SQL query against SQLite database and validates result,"dst (str), query (str), expected_rows* (int), expected_result* (list)"
