@@ -1,0 +1,12 @@
+Function Name,S,Description,Parameters
+:doc:`file_exists <../standard/file_exists>`,:status-tested:`●`,Tests if a file exists at the specified path,dst (str)
+:doc:`file_does_not_exist <../standard/file_does_not_exist>`,:status-tested:`●`,Tests if a file does NOT exist at the specified path,dst (str)
+:doc:`dir_exists <../standard/dir_exists>`,:status-tested:`●`,Tests if a directory exists at the specified path,dst (str)
+:doc:`dir_does_not_exist <../standard/dir_does_not_exist>`,:status-tested:`●`,Tests if a directory does NOT exist at the specified path,dst (str)
+:doc:`dir_content <../standard/dir_content>`,:status-tested:`●`,Tests if a directory contains the expected files/folders,"dst (str), files (list)"
+:doc:`file_content_matches_regex <../standard/file_content_matches_regex>`,:status-tested:`●`,Tests if file content matches a regular expression,"dst (str), regex (str)"
+:doc:`file_content_equals <../standard/file_content_equals>`,:status-tested:`●`,Tests if file content exactly equals the given content,"dst (str), content (str)"
+:doc:`file_hash_matches <../standard/file_hash_matches>`,:status-tested:`●`,Tests if file hash matches expected value,"dst (str), expected_hash (str), hash_type* (str)"
+:doc:`file_timestamps <../standard/file_timestamps>`,:status-tested:`●`,Tests file timestamps with various comparison types,"dst (str), timestamp_type* (str), comparison_type* (str), expected_time* (str/num)"
+:doc:`file_permissions <../standard/file_permissions>`,:status-tested:`●`,Tests file permissions owner and group,"dst (str), expected_permissions (str), check_owner* (str), check_group* (str)"
+:doc:`file_content_contains <../standard/file_content_contains>`,:status-tested:`●`,Tests if file content contains specified string or byte pattern,"dst (str), content (str), content_type* (str)"

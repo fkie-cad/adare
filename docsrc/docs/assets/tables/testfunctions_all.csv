@@ -1,0 +1,12 @@
+Function Name,Testset,Status,Description,Parameters,Link
+file_exists,Standard,Tested,Tests if a file exists at the specified path,"dst (string, required)",testsets/standard.html#file-exists
+file_does_not_exist,Standard,Tested,Tests if a file does NOT exist at the specified path,"dst (string, required)",testsets/standard.html#file-does-not-exist
+dir_exists,Standard,Tested,Tests if a directory exists at the specified path,"dst (string, required)",testsets/standard.html#dir-exists
+dir_does_not_exist,Standard,Tested,Tests if a directory does NOT exist at the specified path,"dst (string, required)",testsets/standard.html#dir-does-not-exist
+dir_content,Standard,Tested,Tests if a directory contains the expected files/folders,"dst (string, required), files (list, required)",testsets/standard.html#dir-content
+file_content_matches_regex,Standard,Tested,Tests if file content matches a regular expression,"dst (string, required), regex (string, required)",testsets/standard.html#file-content-matches-regex
+file_content_equals,Standard,Tested,Tests if file content exactly equals the given content,"dst (string, required), content (string, required)",testsets/standard.html#file-content-equals
+file_hash_matches,Standard,Tested,Tests if file hash matches expected value,"dst (string, required), expected_hash (string, required), hash_type (string, optional)",testsets/standard.html#file-hash-matches
+file_timestamps,Standard,Tested,Tests file timestamps with various comparison types,"dst (string, required), timestamp_type (string, optional), comparison_type (string, optional), expected_time (string/number, optional)",testsets/standard.html#file-timestamps
+file_permissions,Standard,Tested,Tests file permissions owner and group,"dst (string, required), expected_permissions (string, required), check_owner (string, optional), check_group (string, optional)",testsets/standard.html#file-permissions
+file_content_contains,Standard,Tested,Tests if file content contains specified string or byte pattern,"dst (string, required), content (string, required), content_type (string, optional)",testsets/standard.html#file-content-contains

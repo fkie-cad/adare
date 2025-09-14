@@ -87,14 +87,17 @@ Ready to start?
 Documentation Structure
 -----------------------
 
-**🚀 Quick Start**
-  :doc:`quickstart/index` - Get up and running with ADARE in minutes
+**🚀 Tutorial**
+  :doc:`tutorial/index` - Get up and running with ADARE in minutes
 
 **👤 User Guide**  
   :doc:`user-guide/index` - Complete guide for daily ADARE usage
 
 **💻 CLI Reference**
   :doc:`cli-reference/index` - Complete command-line interface documentation
+
+**🧪 Test Functions**
+  :doc:`testfunctions/index` - Complete reference for all available test functions with examples
 
 **🏗️ Architecture**
   :doc:`architecture/index` - Understanding how ADARE works internally
@@ -105,11 +108,16 @@ Documentation Structure
 
 .. toctree::
    :hidden:
-   :maxdepth: 2
-   :caption: Getting Started:
 
-   installation/index
-   quickstart/index
+   Home <self>
+
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: Basics
+
+   install/index
+   tutorial/index
 
 .. toctree::
    :hidden:
@@ -118,6 +126,13 @@ Documentation Structure
 
    user-guide/index
    cli-reference/index
+
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: Test Functions:
+
+   testfunctions/index
 
 .. toctree::
    :hidden:

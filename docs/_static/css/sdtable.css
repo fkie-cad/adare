@@ -1,0 +1,81 @@
+/* Simple-DataTables v9 x Furo — LIGHT MODE */
+html[data-theme="light"] .datatable-wrapper .datatable-search input,
+html[data-theme="light"] .datatable-wrapper .datatable-selector select {
+  background: var(--color-background-primary) !important;
+  color: var(--color-foreground-primary) !important;
+  border: 1px solid var(--color-background-secondary) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="light"] .datatable-wrapper .datatable-top,
+html[data-theme="light"] .datatable-wrapper .datatable-bottom {
+  color: var(--color-foreground-primary) !important;
+}
+
+/* Pagination (v9 uses .datatable-pagination) */
+html[data-theme="light"] .datatable-wrapper .datatable-pagination a {
+  background: transparent !important;
+  color: var(--color-foreground-primary) !important;
+  border: 1px solid transparent !important;
+}
+html[data-theme="light"] .datatable-wrapper .datatable-pagination .active a,
+html[data-theme="light"] .datatable-wrapper .datatable-pagination a:focus {
+  background: var(--color-background-secondary) !important;
+  color: var(--color-foreground-primary) !important;
+  border-color: var(--color-background-tertiary, #e5e7eb) !important;
+}
+
+/* Table chrome */
+html[data-theme="light"] .datatable-wrapper .datatable-table {
+  background: var(--color-background-primary) !important;
+  color: var(--color-foreground-primary) !important;
+}
+html[data-theme="light"] .datatable-wrapper .datatable-table thead th {
+  background: var(--color-background-secondary) !important;
+  color: var(--color-foreground-primary) !important;
+  border-bottom: 1px solid var(--color-background-tertiary, #e5e7eb) !important;
+}
+html[data-theme="light"] .datatable-wrapper .datatable-table tbody tr:hover {
+  background: var(--color-background-secondary) !important;
+}
+
+/* --- Optional: DARK MODE to match Furo switcher --- */
+html[data-theme="dark"] .datatable-wrapper .datatable-search input,
+html[data-theme="dark"] .datatable-wrapper .datatable-selector select {
+  background: var(--color-background-primary) !important;
+  color: var(--color-foreground-primary) !important;
+  border: 1px solid var(--color-background-secondary) !important;
+}
+html[data-theme="dark"] .datatable-wrapper .datatable-pagination a {
+  background: transparent !important;
+  color: var(--color-foreground-primary) !important;
+  border: 1px solid transparent !important;
+}
+html[data-theme="dark"] .datatable-wrapper .datatable-pagination .active a,
+html[data-theme="dark"] .datatable-wrapper .datatable-pagination a:focus {
+  background: var(--color-background-secondary) !important;
+  color: var(--color-foreground-primary) !important;
+  border-color: var(--color-background-tertiary, #374151) !important;
+}
+html[data-theme="dark"] .datatable-wrapper .datatable-table {
+  background: var(--color-background-primary) !important;
+  color: var(--color-foreground-primary) !important;
+}
+html[data-theme="dark"] .datatable-wrapper .datatable-table thead th {
+  background: var(--color-background-secondary) !important;
+  color: var(--color-foreground-primary) !important;
+  border-bottom: 1px solid var(--color-background-tertiary, #374151) !important;
+}
+html[data-theme="dark"] .datatable-wrapper .datatable-table tbody tr:hover {
+  background: var(--color-background-secondary) !important;
+}
+
+/* Back-compat with older class names (harmless if unused) */
+html[data-theme="light"] .dataTable-wrapper .dataTable-input,
+html[data-theme="light"] .dataTable-wrapper .dataTable-selector,
+html[data-theme="dark"]  .dataTable-wrapper .dataTable-input,
+html[data-theme="dark"]  .dataTable-wrapper .dataTable-selector { 
+  background: var(--color-background-primary) !important;
+  color: var(--color-foreground-primary) !important;
+  border: 1px solid var(--color-background-secondary) !important;
+}

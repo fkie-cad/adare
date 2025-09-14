@@ -1,0 +1,206 @@
+Standard Testset
+================
+
+.. role:: status-tested
+   :class: status-tested
+
+:Status: :status-tested:`● Tested`
+:Functions: 11
+:Category: File System Operations
+
+The **Standard** testset provides fundamental file system testing capabilities for ADARE experiments. This testset focuses on file and directory operations, content validation, permissions, and metadata verification.
+
+Overview
+--------
+
+The Standard testset is the core foundation for ADARE testing, providing essential functions for:
+
+- **File and Directory Existence Testing**: Verify creation, deletion, and presence of filesystem objects
+- **Content Validation**: Test file contents using exact matching, pattern matching, and substring searching
+- **Metadata Verification**: Validate file timestamps, permissions, ownership, and integrity
+- **Directory Structure Testing**: Verify directory contents and structure
+
+This testset is particularly useful for:
+
+- Forensic artifact detection and validation
+- System behavior verification
+- Security compliance testing
+- File integrity monitoring
+- Log analysis and monitoring
+
+Test Functions
+--------------
+
+
+.. csv-table::
+   :file: ../../_static/tables/testfunctions_standard.csv
+   :widths: 20, 10, 40, 30
+   :header-rows: 1
+   :class: sdtable
+   :name: standard-functions-table
+
+
+
+Function Categories
+-------------------
+
+File and Directory Existence
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These functions test whether files and directories exist or don't exist at specified paths:
+
+- :doc:`../standard/file_exists` - Verify file presence
+- :doc:`../standard/file_does_not_exist` - Verify file absence
+- :doc:`../standard/dir_exists` - Verify directory presence
+- :doc:`../standard/dir_does_not_exist` - Verify directory absence
+
+**Common Use Cases:**
+- Verify file creation after user actions
+- Confirm file deletion/cleanup
+- Validate installation/uninstallation processes
+- Monitor temporary file management
+
+Content Validation
+~~~~~~~~~~~~~~~~~~
+
+These functions validate the contents of files using different matching strategies:
+
+- :doc:`../standard/file_content_equals` - Exact content matching
+- :doc:`../standard/file_content_contains` - Substring/pattern searching
+- :doc:`../standard/file_content_matches_regex` - Regular expression matching
+
+**Common Use Cases:**
+- Verify generated configuration files
+- Validate log entries and error messages
+- Check data export formats
+- Confirm template processing results
+
+Directory Operations
+~~~~~~~~~~~~~~~~~~~~
+
+Functions for testing directory structures and contents:
+
+- :doc:`../standard/dir_content` - Verify expected directory contents
+
+**Common Use Cases:**
+- Validate project structure creation
+- Verify backup/extraction operations
+- Check installation directory layouts
+- Monitor directory changes
+
+File Metadata and Security
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Functions for testing file properties, security, and integrity:
+
+- :doc:`../standard/file_hash_matches` - File integrity verification
+- :doc:`../standard/file_timestamps` - Timestamp validation
+- :doc:`../standard/file_permissions` - Permission and ownership testing
+
+**Common Use Cases:**
+- Verify file integrity after operations
+- Monitor file access patterns
+- Validate security permissions
+- Detect unauthorized modifications
+
+Usage Examples
+--------------
+
+Basic File Operations
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+   # Test file creation and content
+   tests:
+     - name: config_created
+       function: file_exists
+       parameter:
+         dst: "/etc/myapp/config.yml"
+       description: "Verify config file was created"
+
+     - name: config_content_valid
+       function: file_content_contains
+       parameter:
+         dst: "/etc/myapp/config.yml"
+         content: "database_url: postgresql://"
+       description: "Verify config contains database URL"
+
+Security Validation
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+   # Test file security properties
+   tests:
+     - name: ssh_key_secure
+       function: file_permissions
+       parameter:
+         dst: "/home/user/.ssh/id_rsa"
+         expected_permissions: "600"
+         check_owner: "user"
+       description: "Verify SSH private key has secure permissions"
+
+     - name: key_integrity
+       function: file_hash_matches
+       parameter:
+         dst: "/home/user/.ssh/id_rsa.pub"
+         expected_hash: "a1b2c3d4e5f6789012345678901234567890abcdef"
+         hash_type: "sha256"
+       description: "Verify public key integrity"
+
+Directory Structure Validation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+   # Test project structure
+   tests:
+     - name: project_structure
+       function: dir_content
+       parameter:
+         dst: "/home/user/projects/myapp"
+         files:
+           - "src"
+           - "tests"
+           - "docs"
+           - "package.json"
+           - "README.md"
+       description: "Verify complete project structure"
+
+Implementation Details
+----------------------
+
+**Path Resolution**
+All functions in the Standard testset support glob pattern path resolution for dynamic file/directory matching.
+
+**Error Handling**
+Functions distinguish between test failures (expected behavior not met) and execution errors (technical issues preventing test execution).
+
+**Performance**
+The testset is optimized for efficient file system operations with appropriate chunked reading for large files.
+
+**Platform Support**
+Functions are designed to work across different operating systems with appropriate platform-specific handling for features like file permissions and timestamps.
+
+Best Practices
+--------------
+
+**Test Ordering**
+Structure tests to validate the complete workflow, testing file creation before content validation.
+
+**Path Specifications**
+Use absolute paths for reliability and glob patterns judiciously for maintainability.
+
+**Security Considerations**
+Always test both positive cases (expected behavior) and negative cases (security violations).
+
+**Performance Optimization**
+For large files, use hash-based integrity checking rather than full content comparison.
+
+Related Resources
+-----------------
+
+- :doc:`../examples/index` - Comprehensive usage examples
+- :doc:`../../user-guide/playbooks` - Complete playbook guide
+- :doc:`../standard/index` - Individual function documentation

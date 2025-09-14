@@ -75,41 +75,45 @@ def testfunction_load(project_path: Path, name: str):
 
 
 def testfunction_list(testfunction_set: str = None):
-    testfunction_by_file = testfunction_database.list_testfunctions()
-    
-    # Combine all testfunctions into a single list
-    all_testfunctions = []
-    for file, data in testfunction_by_file.items():
-        for tf in data:
-            # Add file information to each testfunction
-            tf_with_file = tf.copy()
-            tf_with_file['file'] = Path(file).stem
-            all_testfunctions.append(tf_with_file)
-    
+    from adare.frontend.terminal.testfunction_list import TestfunctionListPanel
+    from adare.frontend.terminal.console import DefaultConsole
+    from adare.database.api.frontend import DataRetrievalApi
+    from rich.layout import Layout
+
+    # Use the same data source as the working testfunction show command
+    with DataRetrievalApi() as api:
+        testfunctions_df = api.get_testfunction_list()
+
     # Filter by testfunction set if specified
     if testfunction_set:
-        filtered_testfunctions = []
-        for tf in all_testfunctions:
-            # Check if the testfunction belongs to the specified set
-            file_path = tf['file']
-            # Extract the base filename without extension
-            file_base = Path(file_path).stem
-            
-            # Check if the testfunction set matches the file base name or is contained in the path
-            if (testfunction_set == file_base or 
-                testfunction_set in file_path or 
-                file_path.startswith(testfunction_set)):
-                filtered_testfunctions.append(tf)
-        all_testfunctions = filtered_testfunctions
-    
-    if all_testfunctions:
-        df = pd.DataFrame(all_testfunctions)
-        # Reorder columns to show file first
-        if 'file' in df.columns:
-            cols = ['file'] + [col for col in df.columns if col != 'file']
-            df = df[cols]
-        title = f"All testfunctions" + (f" (set: {testfunction_set})" if testfunction_set else "")
-        print_df(df, title=title)
+        # Filter based on file name (extracted from dotnotation or file_name column)
+        if 'file_name' in testfunctions_df.columns:
+            file_column = 'file_name'
+        elif 'dotnotation' in testfunctions_df.columns:
+            # Extract file name from dotnotation
+            testfunctions_df = testfunctions_df.copy()
+            testfunctions_df['file_name'] = testfunctions_df['dotnotation'].apply(
+                lambda x: x.split('.', 1)[0] if '.' in str(x) else str(x)
+            )
+            file_column = 'file_name'
+        else:
+            file_column = None
+
+        if file_column:
+            # Filter by testfunction set
+            mask = (
+                testfunctions_df[file_column].str.contains(testfunction_set, na=False) |
+                testfunctions_df[file_column].str.startswith(testfunction_set, na=False) |
+                (testfunctions_df[file_column] == testfunction_set)
+            )
+            testfunctions_df = testfunctions_df[mask]
+
+    if not testfunctions_df.empty:
+        console = DefaultConsole()
+        layout = Layout(name="root")
+        panel = TestfunctionListPanel(testfunctions_df, testfunction_file=None)  # None means show all files
+        layout.update(panel)
+        console.print(layout)
     else:
         filter_msg = f" for set '{testfunction_set}'" if testfunction_set else ""
         print(f"No testfunctions found{filter_msg}")

@@ -1,6 +1,6 @@
-*************************
+*****************************
 Complete Playbook Reference
-*************************
+*****************************
 
 This comprehensive reference covers all possibilities for writing ADARE playbooks. Playbooks use YAML syntax to define GUI automation steps for experiments.
 

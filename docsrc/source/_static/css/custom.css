@@ -5,4 +5,73 @@
     font-weight: bold;
     color: #2a4640;
 }
+
+/* Test function status indicators */
+.status-tested {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.status-dev {
+    color: #ffc107;
+    font-weight: bold;
+}
+
+.status-planned {
+    color: #6c757d;
+    font-weight: bold;
+}
+
+/* Table styling for test functions */
+.sortable-table {
+    margin: 1em 0;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.sortable-table th {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    padding: 8px 12px;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.sortable-table th:hover {
+    background-color: #e9ecef;
+}
+
+.sortable-table td {
+    border: 1px solid #dee2e6;
+    padding: 6px 12px;
+    vertical-align: top;
+}
+
+.sortable-table tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+.sortable-table tr:hover {
+    background-color: #e9ecef;
+}
+
+/* Search box styling */
+.table-search {
+    margin-bottom: 1em;
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    width: 100%;
+    max-width: 400px;
+    font-size: 14px;
+}
+
+.table-search:focus {
+    outline: none;
+    border-color: #2a4640;
+    box-shadow: 0 0 0 2px rgba(42, 70, 64, 0.25);
+}
   

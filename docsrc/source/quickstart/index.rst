@@ -1,5 +1,5 @@
 ***********
-Quick Start
+Tutorial
 ***********
 
 Welcome to ADARE! This guide will get you up and running with your first forensic experiment in just a few steps.

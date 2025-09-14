@@ -21,7 +21,11 @@ pytest-cov = "^4.0.0"
 
 [tool.poetry.group.dev.dependencies]
 sphinx = "<8.0"
-sphinx-rtd-theme = "^3.0.2"
+furo = "^2025.7.1"
+
+[tool.poetry.group.docs.dependencies]
+sphinx = "<8.0"
+furo = "^2025.7.1"
 
 [tool.poetry.scripts]
 adare = "adare.run:main"
@@ -29,7 +33,7 @@ adareexp = "adare.example:main"
 mcp_gui = "adare.mcp_gui:main"
 
 [tool.poetry.extras]
-docs = ["Sphinx", "sphinx-rtd-theme"]
+docs = ["sphinx", "furo"]
 
 
 [tool.pytest.ini_options]

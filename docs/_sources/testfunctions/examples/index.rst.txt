@@ -1,0 +1,425 @@
+Test Function Examples
+=======================
+
+This section provides practical examples showing how to use ADARE test functions in real-world scenarios. Each example includes the complete playbook context and explains the testing strategy.
+
+File Management Examples
+------------------------
+
+File Creation and Deletion Testing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Test a file manager's create and delete operations:
+
+.. code-block:: yaml
+
+   name: "File Manager Operations"
+   description: "Test file creation and deletion in file manager"
+
+   actions:
+     - click:
+         target:
+           image: "file_manager_icon.png"
+     - right_click:
+         target:
+           text: "empty_area"
+     - click:
+         target:
+           text: "New File"
+     - keyboard:
+         text: "test_document.txt"
+     - keyboard:
+         combination: ["enter"]
+     - keyboard:
+         text: "This is a test document."
+     - keyboard:
+         combination: ["ctrl", "s"]
+     - right_click:
+         target:
+           text: "test_document.txt"
+     - click:
+         target:
+           text: "Delete"
+
+   tests:
+     - name: file_created
+       function: file_exists
+       parameter:
+         dst: "/home/user/Desktop/test_document.txt"
+       description: "Verify file was created"
+
+     - name: file_has_content
+       function: file_content_contains
+       parameter:
+         dst: "/home/user/Desktop/test_document.txt"
+         content: "This is a test document."
+       description: "Verify file contains expected text"
+
+     - name: file_deleted_from_filesystem
+       function: file_does_not_exist
+       parameter:
+         dst: "/home/user/Desktop/test_document.txt"
+       description: "Verify file was deleted from filesystem"
+
+     - name: file_moved_to_trash
+       function: file_exists
+       parameter:
+         dst: "/home/user/.local/share/Trash/files/test_document.txt"
+       description: "Verify file was moved to trash"
+
+Project Setup Validation
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Test a development tool that creates project structures:
+
+.. code-block:: yaml
+
+   name: "Project Generator Test"
+   description: "Test project structure generation"
+
+   actions:
+     - click:
+         target:
+           text: "New Project"
+     - keyboard:
+         text: "my-web-app"
+     - click:
+         target:
+           text: "Web Application"
+     - click:
+         target:
+           text: "Create"
+     - wait:
+         seconds: 5
+
+   tests:
+     - name: project_directory_created
+       function: dir_exists
+       parameter:
+         dst: "/home/user/projects/my-web-app"
+       description: "Verify project directory was created"
+
+     - name: project_structure_complete
+       function: dir_content
+       parameter:
+         dst: "/home/user/projects/my-web-app"
+         files:
+           - "src"
+           - "public"
+           - "package.json"
+           - "README.md"
+           - ".gitignore"
+       description: "Verify all expected project files and directories were created"
+
+     - name: package_json_valid
+       function: file_content_matches_regex
+       parameter:
+         dst: "/home/user/projects/my-web-app/package.json"
+         regex: '"name"\\s*:\\s*"my-web-app"'
+       description: "Verify package.json contains correct project name"
+
+Log Analysis Examples
+---------------------
+
+Application Error Monitoring
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Test that applications properly log errors:
+
+.. code-block:: yaml
+
+   name: "Error Logging Test"
+   description: "Test application error logging behavior"
+
+   actions:
+     - click:
+         target:
+           text: "Login"
+     - keyboard:
+         text: "invalid_username"
+     - keyboard:
+         combination: ["tab"]
+     - keyboard:
+         text: "wrong_password"
+     - click:
+         target:
+           text: "Submit"
+
+   tests:
+     - name: error_logged
+       function: file_content_contains
+       parameter:
+         dst: "/var/log/myapp/application.log"
+         content: "Authentication failed"
+       description: "Verify authentication failure was logged"
+
+     - name: username_logged
+       function: file_content_matches_regex
+       parameter:
+         dst: "/var/log/myapp/application.log"
+         regex: "Authentication failed.*user:\\s*invalid_username"
+       description: "Verify failed username was logged"
+
+     - name: no_password_in_logs
+       function: file_content_contains
+       parameter:
+         dst: "/var/log/myapp/application.log"
+         content: "wrong_password"
+       description: "Verify password was NOT logged (security check)"
+       expected_result: "failed"  # We expect this test to fail (password should not be logged)
+
+System Configuration Examples
+-----------------------------
+
+Settings Persistence Testing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Test that application settings are properly saved:
+
+.. code-block:: yaml
+
+   name: "Settings Persistence Test"
+   description: "Test application settings are saved correctly"
+
+   actions:
+     - click:
+         target:
+           text: "Settings"
+     - click:
+         target:
+           text: "Preferences"
+     - click:
+         target:
+           text: "Dark Theme"
+     - keyboard:
+         combination: ["ctrl", "s"]
+     - click:
+         target:
+           text: "OK"
+
+   tests:
+     - name: config_file_created
+       function: file_exists
+       parameter:
+         dst: "/home/user/.config/myapp/settings.conf"
+       description: "Verify configuration file was created"
+
+     - name: theme_setting_saved
+       function: file_content_contains
+       parameter:
+         dst: "/home/user/.config/myapp/settings.conf"
+         content: "theme=dark"
+       description: "Verify dark theme setting was saved"
+
+     - name: config_file_permissions
+       function: file_permissions
+       parameter:
+         dst: "/home/user/.config/myapp/settings.conf"
+         expected_permissions: "644"
+         check_owner: "user"
+       description: "Verify config file has correct permissions"
+
+File Integrity Examples
+-----------------------
+
+Download Verification
+~~~~~~~~~~~~~~~~~~~~~
+
+Test file download with integrity checking:
+
+.. code-block:: yaml
+
+   name: "File Download Test"
+   description: "Test file download with integrity verification"
+
+   actions:
+     - click:
+         target:
+           text: "Download File"
+     - wait:
+         condition: "file_exists"
+         target: "/home/user/Downloads/document.pdf"
+         timeout: 30
+
+   tests:
+     - name: file_downloaded
+       function: file_exists
+       parameter:
+         dst: "/home/user/Downloads/document.pdf"
+       description: "Verify file was downloaded"
+
+     - name: download_integrity
+       function: file_hash_matches
+       parameter:
+         dst: "/home/user/Downloads/document.pdf"
+         expected_hash: "a1b2c3d4e5f6789012345678901234567890abcdef1234567890123456789012"
+         hash_type: "sha256"
+       description: "Verify downloaded file integrity"
+
+     - name: download_recent
+       function: file_timestamps
+       parameter:
+         dst: "/home/user/Downloads/document.pdf"
+         timestamp_type: "created"
+         comparison_type: "within_last"
+         within_duration: "5m"
+       description: "Verify file was created recently"
+
+Security Testing Examples
+-------------------------
+
+Permission Validation
+~~~~~~~~~~~~~~~~~~~~~
+
+Test that sensitive files have proper permissions:
+
+.. code-block:: yaml
+
+   name: "Security Permissions Test"
+   description: "Test file permissions for security compliance"
+
+   actions:
+     - click:
+         target:
+           text: "Generate SSH Key"
+     - keyboard:
+         text: "/home/user/.ssh/id_rsa"
+     - click:
+         target:
+           text: "Generate"
+
+   tests:
+     - name: private_key_created
+       function: file_exists
+       parameter:
+         dst: "/home/user/.ssh/id_rsa"
+       description: "Verify private key was created"
+
+     - name: private_key_secure_permissions
+       function: file_permissions
+       parameter:
+         dst: "/home/user/.ssh/id_rsa"
+         expected_permissions: "600"
+         check_owner: "user"
+       description: "Verify private key has secure permissions (owner read/write only)"
+
+     - name: public_key_created
+       function: file_exists
+       parameter:
+         dst: "/home/user/.ssh/id_rsa.pub"
+       description: "Verify public key was created"
+
+     - name: public_key_readable
+       function: file_permissions
+       parameter:
+         dst: "/home/user/.ssh/id_rsa.pub"
+         expected_permissions: "644"
+         check_owner: "user"
+       description: "Verify public key has readable permissions"
+
+Advanced Testing Patterns
+-------------------------
+
+Multi-Stage Process Testing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Test complex workflows with multiple validation points:
+
+.. code-block:: yaml
+
+   name: "Multi-Stage Backup Process"
+   description: "Test complete backup workflow"
+
+   actions:
+     - click:
+         target:
+           text: "Backup Manager"
+     - click:
+         target:
+           text: "Create Backup"
+     - click:
+         target:
+           text: "Full System Backup"
+     - keyboard:
+         text: "system_backup_2024"
+     - click:
+         target:
+           text: "Start Backup"
+     - wait:
+         condition: "file_content_contains"
+         target: "/var/log/backup.log"
+         content: "Backup completed successfully"
+         timeout: 300
+
+   tests:
+     # Stage 1: Backup initiation
+     - name: backup_log_created
+       function: file_exists
+       parameter:
+         dst: "/var/log/backup.log"
+       description: "Verify backup log file was created"
+
+     - name: backup_started_logged
+       function: file_content_contains
+       parameter:
+         dst: "/var/log/backup.log"
+         content: "Backup process started"
+       description: "Verify backup start was logged"
+
+     # Stage 2: Backup progress
+     - name: backup_directory_created
+       function: dir_exists
+       parameter:
+         dst: "/backups/system_backup_2024"
+       description: "Verify backup directory was created"
+
+     # Stage 3: Backup completion
+     - name: backup_completed_logged
+       function: file_content_contains
+       parameter:
+         dst: "/var/log/backup.log"
+         content: "Backup completed successfully"
+       description: "Verify backup completion was logged"
+
+     - name: backup_archive_created
+       function: file_exists
+       parameter:
+         dst: "/backups/system_backup_2024.tar.gz"
+       description: "Verify backup archive was created"
+
+     - name: backup_archive_not_empty
+       function: file_hash_matches
+       parameter:
+         dst: "/backups/system_backup_2024.tar.gz"
+         expected_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+         hash_type: "sha256"
+       description: "Verify backup archive is not empty"
+       expected_result: "failed"  # We expect this to fail (non-empty file won't have all-zeros hash)
+
+Best Practices
+--------------
+
+**Test Order Dependencies**
+  Some tests depend on previous actions. Structure your tests to validate the complete workflow.
+
+**Meaningful Test Names**
+  Use descriptive test names that clearly indicate what is being validated.
+
+**Appropriate Wait Conditions**
+  Use appropriate wait conditions for long-running processes before testing results.
+
+**Security Considerations**
+  Test both positive cases (expected behavior) and negative cases (security violations).
+
+**Error Handling**
+  Include tests that verify proper error handling and logging.
+
+**Cleanup Validation**
+  Test that temporary files and directories are properly cleaned up.
+
+See Also
+--------
+
+- :doc:`../standard/index` - Complete test function reference
+- :doc:`../../user-guide/playbooks` - Playbook writing guide
+- :doc:`../../user-guide/playbook-actions` - Available actions for test setup
