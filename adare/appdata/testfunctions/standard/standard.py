@@ -628,3 +628,66 @@ class FilePermissions(BasicTest):
 
         except Exception as e:
             return TestResult.execution_error(e, "Unexpected error in file permissions test")
+
+
+@attrs.define
+class FileContentContainsParameter(Parameter):
+    dst: str
+    content: Union[str, bytes]
+    content_type: str = 'string'  # 'string' or 'bytes'
+
+
+@attrs.define
+class FileContentContains(BasicTest):
+    testname: ClassVar[str] = 'file_content_contains'
+    testdescription: ClassVar[str] = 'tests if file content contains specified string or byte pattern'
+
+    name: str
+    parameter: FileContentContainsParameter
+    description: Optional[str] = ''
+    variable_metadata: Optional[dict] = None
+
+    def test(self):
+        try:
+            dst, status = self.resolve_globfilepath(self.parameter.dst)
+            if not dst:
+                return TestResult.error([f'file {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
+
+            log.debug(f'dst file {dst} will be used for test {self.name}')
+
+            try:
+                if self.parameter.content_type == 'bytes':
+                    # Read file in binary mode
+                    with open(dst, 'rb') as f:
+                        file_data = f.read()
+
+                    # Convert content to bytes if it's a string
+                    if isinstance(self.parameter.content, str):
+                        search_content = self.parameter.content.encode('utf-8')
+                    else:
+                        search_content = self.parameter.content
+
+                    if search_content in file_data:
+                        return TestResult.success([f'byte pattern found in file'])
+                    else:
+                        return TestResult.failed([f'byte pattern not found in file'])
+
+                else:  # default: string content
+                    # Read file as text
+                    with open(dst, 'r', encoding='utf-8', errors='ignore') as f:
+                        file_content = f.read()
+
+                    search_string = str(self.parameter.content)
+
+                    if search_string in file_content:
+                        return TestResult.success([f'string content found in file'])
+                    else:
+                        return TestResult.failed([f'string content not found in file'])
+
+            except FileNotFoundError:
+                return TestResult.failed([f'file {dst} does not exist'])
+            except (PermissionError, OSError) as e:
+                return TestResult.execution_error(e, f"Cannot read file {dst}")
+
+        except Exception as e:
+            return TestResult.execution_error(e, "Unexpected error in file content contains test")

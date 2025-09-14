@@ -26,31 +26,29 @@ class AutomaticVariables:
     """
     
     @classmethod
-    def get_automatic_variables(cls, vm_os: Optional[str] = None, vm_user: Optional[str] = None) -> VariableRegistry:
+    def get_automatic_variables(cls, vm_os: str, vm_user: str) -> VariableRegistry:
         """
         Get automatic variables appropriate for the target system.
         
         Args:
-            vm_os: Target VM OS ('windows', 'linux') - if None, detects current system
-            vm_user: Target VM username - if None, uses current user or default
-            
+            vm_os: Target VM OS ('windows', 'linux')
+            vm_user: Target VM username
+
         Returns:
             VariableRegistry containing automatic variables
         """
         registry = VariableRegistry()
-        
-        # Determine target OS
-        target_os = vm_os if vm_os else cls._detect_os()
-        
-        # Determine target user
-        target_user = vm_user if vm_user else cls._get_default_user(target_os)
+
+        # Use provided VM parameters directly (no fallback logic)
+        target_os = vm_os
+        target_user = vm_user
         
         # Add automatic variables
         cls._add_user_variables(registry, target_os, target_user)
         cls._add_system_variables(registry, target_os)
-        
-        log.debug(f"Created automatic variables for OS='{target_os}', user='{target_user}': {list(registry.variables.keys())}")
-        
+
+        log.info(f"CLAUDE: Created automatic variables for OS='{target_os}', user='{target_user}': {list(registry.variables.keys())}")
+
         return registry
     
     @classmethod
@@ -190,15 +188,19 @@ class AutomaticVariables:
             return automatic_vars
         
         merged = VariableRegistry()
-        
+
         # First add all automatic variables
         for name, var in automatic_vars.variables.items():
             merged.add(name, var)
-        
+
+        log.info(f"CLAUDE: Added {len(automatic_vars.variables)} automatic variables: {list(automatic_vars.variables.keys())}")
+
         # Then add/override with user variables
         for name, var in user_vars.variables.items():
             if name in merged.variables:
-                log.debug(f"User variable '{name}' overrides automatic variable")
+                log.info(f"CLAUDE: User variable '{name}' overrides automatic variable")
             merged.add(name, var)
-        
+
+        log.info(f"CLAUDE: Final merged registry has {len(merged.variables)} variables: {list(merged.variables.keys())}")
+
         return merged

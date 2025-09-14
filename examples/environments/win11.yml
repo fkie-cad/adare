@@ -1,8 +1,0 @@
-name: win11
-vm: "/media/miq/FKIE/AdareVMs/Adare-Win11-Old.ova"
-os:
-  os: "Windows 11"
-  platform: "windows"
-  distribution: "Home"
-  version: "24H2"
-  language: "English"

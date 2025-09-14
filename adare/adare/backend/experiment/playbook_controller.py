@@ -59,11 +59,12 @@ class PlaybookController:
     specialized modules for different aspects of playbook execution.
     """
     
-    def __init__(self, websocket_client: AdareVMClient, experiment_dir: Path, project_dir: Path, 
-                 mcp_gui_url: str = "http://localhost:13109/mcp", debug_screenshots: bool = False, 
-                 screenshots_dir: Path = None, playbook: Optional[Playbook] = None, 
+    def __init__(self, websocket_client: AdareVMClient, experiment_dir: Path, project_dir: Path,
+                 mcp_gui_url: str = "http://localhost:13109/mcp", debug_screenshots: bool = False,
+                 screenshots_dir: Path = None, playbook: Optional[Playbook] = None,
                  experiment_id: Optional[str] = None, experiment_run_id: Optional[str] = None,
-                 vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Optional[Path] = None):
+                 vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Optional[Path] = None,
+                 vm_os: Optional[str] = None, vm_user: Optional[str] = None):
         """
         Initialize the playbook controller.
         
@@ -88,6 +89,8 @@ class PlaybookController:
         self.playbook = playbook
         self.vm = vm  # VirtualBox VM instance for file operations
         self.experiment_run_directory = experiment_run_directory  # Run directory for artifacts
+        self.vm_os = vm_os  # VM OS for automatic variables
+        self.vm_user = vm_user  # VM user for automatic variables
         
         # Database integration
         self.experiment_id = experiment_id
@@ -111,9 +114,23 @@ class PlaybookController:
     
     def _initialize_modules(self):
         """Initialize specialized modules for clean separation of concerns."""
+        # Get variable registry from playbook and add automatic variables
+        variable_registry = getattr(self.playbook, 'variables', None) if self.playbook else None
+
+        # Add automatic variables if we have VM information
+        if self.vm_os and self.vm_user and variable_registry:
+            from adarelib.common.automatic_variables import AutomaticVariables
+            automatic_vars = AutomaticVariables.get_automatic_variables(self.vm_os, self.vm_user)
+            # Merge automatic variables with existing user variables
+            variable_registry = AutomaticVariables.merge_with_user_variables(automatic_vars, variable_registry)
+        elif self.vm_os and self.vm_user:
+            # No user variables, create registry with just automatic variables
+            from adarelib.common.automatic_variables import AutomaticVariables
+            variable_registry = AutomaticVariables.get_automatic_variables(self.vm_os, self.vm_user)
+
         # Variable resolver for template processing
         self.variable_resolver = VariableResolver(
-            variable_registry=getattr(self.playbook, 'variables', None) if self.playbook else None,
+            variable_registry=variable_registry,
             jinja_env=self._create_jinja_environment()
         )
         
@@ -253,8 +270,14 @@ class PlaybookController:
         self.execution_context['playbook'] = playbook
         if hasattr(playbook, 'variables') and playbook.variables:
             log.info("Loading experiment variables...")
+            # CLAUDE: Debug what variables are in the registry
+            log.info(f"CLAUDE: Variables in registry: {list(playbook.variables.variables.keys())}")
+            for name, var in playbook.variables.variables.items():
+                log.info(f"CLAUDE: Variable '{name}' = '{var.value}' (type: {var.type})")
+
             # Convert VariableRegistry to execution context format (for actions - full resolution)
             var_dict = playbook.variables.to_execution_context(for_tests=False)
+            log.info(f"CLAUDE: Variables in execution context: {list(var_dict.keys())}")
             self.execution_context.update(var_dict)
             log.debug(f"Loaded {len(playbook.variables.variables)} variables into execution context")
         

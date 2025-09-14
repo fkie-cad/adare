@@ -598,7 +598,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                 vm_user = None
                 if vm_os:
                     vm_user, _ = get_vm_credentials(vm_os)
-                context.playbook = parse_playbook(playbook_path, vm_os=vm_os, vm_user=vm_user)
+                context.playbook = parse_playbook(playbook_path)
                 log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
                 return
             
@@ -607,6 +607,12 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
             with PlaybookApi() as playbook_api:
                 try:
                     log.info(f"Loading pre-validated playbook from database for experiment {experiment_id}")
+                    # CLAUDE: Pass VM parameters to database loader for automatic variables
+                    vm_os = context.guest_platform if context.guest_platform else None
+                    vm_user = None
+                    if vm_os:
+                        from adare.config import get_vm_credentials
+                        vm_user, _ = get_vm_credentials(vm_os)
                     context.playbook = playbook_api.load_playbook_from_database(experiment_id)
                     log.info(f"Playbook loaded from database - {len(context.playbook.actions)} actions found")
                 except ValueError as e:
@@ -623,7 +629,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                     vm_user = None
                     if vm_os:
                         vm_user, _ = get_vm_credentials(vm_os)
-                    context.playbook = parse_playbook(playbook_path, vm_os=vm_os, vm_user=vm_user)
+                    context.playbook = parse_playbook(playbook_path)
                     log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
                     
         except Exception as e:
@@ -863,6 +869,13 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         except Exception as e:
             log.warning(f"Failed to get experiment ID for execution tracking: {e}")
         
+        # Get VM credentials for automatic variables
+        from adare.config import get_vm_credentials
+        vm_os = context.guest_platform if context.guest_platform else None
+        vm_user = None
+        if vm_os:
+            vm_user, _ = get_vm_credentials(vm_os)
+
         # Create playbook controller
         controller = PlaybookController(
             websocket_client=context.client,
@@ -874,7 +887,9 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             experiment_id=experiment_id,
             experiment_run_id=context.experiment_run_ulid,
             vm=context.vm,  # Pass VM for pull operations
-            experiment_run_directory=context.experiment_run_directory.path  # Pass run directory for artifacts
+            experiment_run_directory=context.experiment_run_directory.path,  # Pass run directory for artifacts
+            vm_os=vm_os,  # Pass VM OS for automatic variables
+            vm_user=vm_user  # Pass VM user for automatic variables
         )
         
         # Execute complete experiment (playbook + tests)

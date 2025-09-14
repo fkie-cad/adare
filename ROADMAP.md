@@ -12,7 +12,6 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] test if we can still run adare if we delete cloned repo
 - [ ] add xml testfunctions in separate xml module
 - [ ] support yaml with same logic/function as for json!
-- [ ] add 
 
 ## Planned Features
 - [ ] test and enable ydotool to make it work on wayland linux distros as well
