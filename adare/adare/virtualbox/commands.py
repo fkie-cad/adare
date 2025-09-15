@@ -310,47 +310,50 @@ class CommandExecutionMixin:
         stdout = '\n'.join(captured_output)
         return return_value, stdout, ""
 
-    def _detect_xauthority(self) -> str:
+    def _detect_xauthority(self) -> Optional[str]:
         """Detect XAUTHORITY file location in Linux guest VM."""
-        # One-liner to find XAUTHORITY across different display managers
-        detect_cmd = 'for p in "$XAUTHORITY" "/run/user/$(id -u)/gdm/Xauthority" "/run/user/$(id -u)/X11-display" "$HOME/.Xauthority" /tmp/serverauth.* /run/sddm/xauth_*; do [ -f "$p" ] && echo "$p" && break; done'
+        detect_cmd = r'''
+            shopt -s nullglob
+            for p in "$XAUTHORITY" \
+                    "/run/user/$(id -u)/gdm/Xauthority" \
+                    "/run/user/$(id -u)/X11-display" \
+                    "$HOME/.Xauthority" \
+                    /tmp/serverauth.* \
+                    /run/sddm/xauth_* \
+                    /run/user/$(id -u)/xauth_*; do
+                [ -f "$p" ] && [ -r "$p" ] && { echo "$p"; exit 0; }
+            done
+            exit 1
+        '''.strip()
 
-        try:
-            # Run detection command in guest
-            args = [
-                "guestcontrol", self.vm_name, "run",
-                "--exe", "/bin/bash",
-                "--putenv", "DISPLAY=:0",
-                "--", "-c", detect_cmd
-            ]
+        args = [
+            "guestcontrol", self.vm_name, "run",
+            "--exe", "/bin/bash",
+            "--wait-stdout", "--wait-stderr",
+            "--timeout", "10000",
+            "--", "-c", detect_cmd
+        ]
 
-            # Add authentication
-            if hasattr(self, "_guest_session_id") and self._guest_session_id:
-                args.insert(2, "--session-id")
-                args.insert(3, self._guest_session_id)
-            else:
-                args.insert(2, "--username")
-                args.insert(3, self.username)
-                args.insert(4, "--password")
-                args.insert(5, self.password)
+        if hasattr(self, "_guest_session_id") and self._guest_session_id:
+            args.insert(2, "--session-id")
+            args.insert(3, self._guest_session_id)
+        else:
+            args.insert(2, "--username")
+            args.insert(3, self.username)
+            args.insert(4, "--password")
+            args.insert(5, self.password)
 
-            from .utils import run_subprocess
-            cmd = [self.vboxmanage_exe] + args
-            result = run_subprocess(cmd, check=False)
-            return_code, stdout, stderr = result.returncode, result.stdout, result.stderr
+        from .utils import run_subprocess
+        result = run_subprocess([self.vboxmanage_exe] + args, check=False)
 
-            if return_code == 0 and stdout.strip():
-                xauthority_path = stdout.strip().splitlines()[0]
-                log.info(f"Detected XAUTHORITY at: {xauthority_path}")
-                return xauthority_path
-            else:
-                log.error(f"Failed to detect XAUTHORITY, using fallback. Error: {stderr.strip()}")
+        if result.returncode == 0 and result.stdout.strip():
+            path = result.stdout.strip().splitlines()[0]
+            log.info(f"Detected XAUTHORITY at: {path}")
+            return path
 
-        except Exception as e:
-            log.warning(f"Could not detect XAUTHORITY: {e}")
+        log.error(f"Failed to detect XAUTHORITY, using fallback. Error: {result.stderr.strip()}")
+        return None   # better than returning a hardcoded, possibly wrong path
 
-        # Fallback to GDM default
-        return "/run/user/1000/gdm/Xauthority"
 
     def _build_guest_command_args(self, command: str, background: bool = False, cwd: Optional[str] = None, win_noprofile: bool = True, use_cmd: bool = False) -> List[str]:
         """Build VBoxManage guestcontrol command arguments for running guest commands."""

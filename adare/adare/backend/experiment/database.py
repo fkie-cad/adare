@@ -169,12 +169,14 @@ def get_experiment_hashes(project_path: Path, environment_name: str, experiment_
         }
 
 
-def get_experiment_run_count(experiment_ulid: str) -> int:
+def get_experiment_run_count(experiment_ulid: str, exclude_fake: bool = False) -> int:
     with ExperimentApi() as api:
         experiment = api.get_experiment_by_ulid(experiment_ulid)
         if experiment is None:
             log.error('experiment not found')
             raise ValueError('experiment not found')
+        if exclude_fake:
+            return len([run for run in experiment.runs if not run.fake])
         return len(experiment.runs)
 
 
