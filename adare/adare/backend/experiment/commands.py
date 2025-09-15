@@ -1761,6 +1761,218 @@ async def _cleanup_test_vm(context, keep_vm: bool = False):
     log.info("CLAUDE: Cleanup completed")
 
 
+def experiment_add_environments(project_path: Path, experiment_pattern: str, environment_names: list[str], force: bool = False):
+    """Add environments to experiments matching the pattern."""
+    from adare.console import print_success_message
+    import glob
+
+    # Find matching experiments using glob
+    project_directory = ProjectDirectory(project_path)
+    experiments_dir = project_directory.experiments
+
+    # Use glob to find matching experiment directories
+    pattern_path = experiments_dir / experiment_pattern
+    matching_paths = glob.glob(str(pattern_path))
+
+    if not matching_paths:
+        from adare.exceptions import LoggedErrorException
+        raise LoggedErrorException(
+            log,
+            f'No experiments found matching pattern: {experiment_pattern}',
+            possible_solutions=[
+                f'Check if pattern "{experiment_pattern}" is correct',
+                'List experiments with: adare experiment list',
+                'Use exact experiment name if no pattern matching needed'
+            ]
+        )
+
+    # Extract experiment names from paths
+    experiment_names = [Path(p).name for p in matching_paths]
+
+    # Validate all environments exist in project before proceeding
+    from adare.database.api.environment import EnvironmentDbApi
+    with EnvironmentDbApi() as env_db:
+        project_environments = {env.name for env in env_db.get_environments(project_path)}
+
+    missing_envs = [env for env in environment_names if env not in project_environments]
+    if missing_envs:
+        from adare.exceptions import LoggedErrorException
+        raise LoggedErrorException(
+            log,
+            f'Environment(s) not found in project: {", ".join(missing_envs)}',
+            possible_solutions=[
+                'Create missing environments with: adare environment create <name>',
+                'Load existing environments with: adare environment load <file>',
+                'List available environments with: adare environment list'
+            ]
+        )
+
+    print(f"Found {len(experiment_names)} experiment(s) matching pattern '{experiment_pattern}':")
+    for exp_name in experiment_names:
+        print(f"  - {exp_name}")
+    print(f"Adding environment(s): {', '.join(environment_names)}")
+    print()
+
+    # Process each experiment
+    updated_experiments = []
+    failed_experiments = []
+
+    for exp_name in experiment_names:
+        try:
+            exp_dir = ExperimentDirectory(project_path, exp_name)
+            if not exp_dir.exists():
+                log.warning(f"Experiment directory not found: {exp_name}, skipping")
+                failed_experiments.append(exp_name)
+                continue
+
+            # Load current metadata
+            metadata = exp_dir.load_metadata()
+            original_envs = set(metadata.environments)
+
+            # Add new environments (avoid duplicates)
+            new_envs = set(environment_names)
+            updated_envs = original_envs | new_envs
+
+            # Check if anything actually changed
+            if updated_envs == original_envs:
+                log.info(f"Experiment '{exp_name}' already has all specified environments, skipping")
+                continue
+
+            # Update metadata
+            metadata.environments = sorted(list(updated_envs))
+
+            # Save updated metadata
+            exp_dir.save_metadata(metadata)
+            log.info(f"Updated metadata for experiment: {exp_name}")
+
+            # Reload experiment to update database
+            experiment_load(project_path, exp_name, force=True, silent=True)
+            log.info(f"Reloaded experiment: {exp_name}")
+
+            updated_experiments.append(exp_name)
+
+        except Exception as e:
+            log.error(f"Failed to update experiment '{exp_name}': {e}")
+            failed_experiments.append(exp_name)
+
+    # Print summary
+    if updated_experiments:
+        print_success_message(
+            title=f"Successfully added environments to {len(updated_experiments)} experiment(s)",
+            location=f"Experiments: {', '.join(updated_experiments)}",
+            next_steps=[
+                f"Added environments: {', '.join(environment_names)}",
+                "Experiments have been reloaded automatically",
+                "You can now run experiments on the new environments"
+            ]
+        )
+
+    if failed_experiments:
+        log.warning(f"Failed to update {len(failed_experiments)} experiment(s): {', '.join(failed_experiments)}")
+
+
+def experiment_remove_environments(project_path: Path, experiment_pattern: str, environment_names: list[str], force: bool = False):
+    """Remove environments from experiments matching the pattern."""
+    from adare.console import print_success_message
+    import glob
+
+    # Find matching experiments using glob
+    project_directory = ProjectDirectory(project_path)
+    experiments_dir = project_directory.experiments
+
+    # Use glob to find matching experiment directories
+    pattern_path = experiments_dir / experiment_pattern
+    matching_paths = glob.glob(str(pattern_path))
+
+    if not matching_paths:
+        from adare.exceptions import LoggedErrorException
+        raise LoggedErrorException(
+            log,
+            f'No experiments found matching pattern: {experiment_pattern}',
+            possible_solutions=[
+                f'Check if pattern "{experiment_pattern}" is correct',
+                'List experiments with: adare experiment list',
+                'Use exact experiment name if no pattern matching needed'
+            ]
+        )
+
+    # Extract experiment names from paths
+    experiment_names = [Path(p).name for p in matching_paths]
+
+    print(f"Found {len(experiment_names)} experiment(s) matching pattern '{experiment_pattern}':")
+    for exp_name in experiment_names:
+        print(f"  - {exp_name}")
+    print(f"Removing environment(s): {', '.join(environment_names)}")
+    print()
+
+    # Process each experiment
+    updated_experiments = []
+    failed_experiments = []
+
+    for exp_name in experiment_names:
+        try:
+            exp_dir = ExperimentDirectory(project_path, exp_name)
+            if not exp_dir.exists():
+                log.warning(f"Experiment directory not found: {exp_name}, skipping")
+                failed_experiments.append(exp_name)
+                continue
+
+            # Load current metadata
+            metadata = exp_dir.load_metadata()
+            original_envs = set(metadata.environments)
+
+            # Remove specified environments
+            envs_to_remove = set(environment_names)
+            updated_envs = original_envs - envs_to_remove
+
+            # Check if anything actually changed
+            if updated_envs == original_envs:
+                log.info(f"Experiment '{exp_name}' doesn't have any of the specified environments, skipping")
+                continue
+
+            # Validate that we're not removing all environments
+            if not updated_envs:
+                if not force:
+                    log.warning(f"Cannot remove all environments from experiment '{exp_name}' without --force flag")
+                    failed_experiments.append(exp_name)
+                    continue
+                else:
+                    log.warning(f"Removing ALL environments from experiment '{exp_name}' due to --force flag")
+
+            # Update metadata
+            metadata.environments = sorted(list(updated_envs))
+
+            # Save updated metadata
+            exp_dir.save_metadata(metadata)
+            log.info(f"Updated metadata for experiment: {exp_name}")
+
+            # Reload experiment to update database (if it still has environments)
+            if updated_envs:
+                experiment_load(project_path, exp_name, force=True, silent=True)
+                log.info(f"Reloaded experiment: {exp_name}")
+            else:
+                log.warning(f"Experiment '{exp_name}' now has no environments and may become inaccessible")
+
+            updated_experiments.append(exp_name)
+
+        except Exception as e:
+            log.error(f"Failed to update experiment '{exp_name}': {e}")
+            failed_experiments.append(exp_name)
+
+    # Print summary
+    if updated_experiments:
+        print_success_message(
+            title=f"Successfully removed environments from {len(updated_experiments)} experiment(s)",
+            location=f"Experiments: {', '.join(updated_experiments)}",
+            next_steps=[
+                f"Removed environments: {', '.join(environment_names)}",
+                "Experiments have been reloaded automatically",
+                "Check remaining environments with: adare experiment info <name>"
+            ]
+        )
+
+    if failed_experiments:
+        log.warning(f"Failed to update {len(failed_experiments)} experiment(s): {', '.join(failed_experiments)}")
 
 
 

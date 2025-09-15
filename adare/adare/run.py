@@ -48,7 +48,7 @@ from adare.cli.environment import (
     exec_environment_load, exec_environment_create, exec_environment_delete, exec_environment_example
 )
 from adare.cli.experiment import (
-    exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example, exec_experiment_clean
+    exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example, exec_experiment_clean, exec_experiment_add_env, exec_experiment_remove_env
 )
 from adare.cli.interactive import (
     exec_experiment_dev
@@ -387,6 +387,56 @@ def clean(experiment, project):
         project=project
     )
     exec_with_error_printing(exec_experiment_clean, args)
+
+
+@experiment.command(name='add-env')
+@click.argument('experiment_pattern')
+@click.argument('environments', nargs=-1, required=True)
+@click.option('--force', '-f', is_flag=True, help='Force operation even if it would remove all environments')
+@click.option('--project', '-p', help='Name of the project')
+def add_env(experiment_pattern, environments, force, project):
+    """Add environments to experiments matching the pattern.
+
+    EXPERIMENT_PATTERN can be an exact name or glob pattern (e.g., test_*, *_linux).
+    ENVIRONMENTS are the environment names to add.
+
+    Examples:
+    - adare experiment add-env "test_*" ubuntu24
+    - adare experiment add-env "*_linux" ubuntu22 ubuntu24
+    - adare experiment add-env specific_experiment ubuntu24
+    """
+    args = SimpleNamespace(
+        experiment_pattern=experiment_pattern,
+        environments=list(environments),
+        force=force,
+        project=project
+    )
+    exec_with_error_printing(exec_experiment_add_env, args)
+
+
+@experiment.command(name='rm-env')
+@click.argument('experiment_pattern')
+@click.argument('environments', nargs=-1, required=True)
+@click.option('--force', '-f', is_flag=True, help='Force operation even if it would remove all environments')
+@click.option('--project', '-p', help='Name of the project')
+def remove_env(experiment_pattern, environments, force, project):
+    """Remove environments from experiments matching the pattern.
+
+    EXPERIMENT_PATTERN can be an exact name or glob pattern (e.g., test_*, *_linux).
+    ENVIRONMENTS are the environment names to remove.
+
+    Examples:
+    - adare experiment remove-env "win_*" ubuntu22
+    - adare experiment remove-env "*_test" old_env
+    - adare experiment remove-env specific_experiment ubuntu22
+    """
+    args = SimpleNamespace(
+        experiment_pattern=experiment_pattern,
+        environments=list(environments),
+        force=force,
+        project=project
+    )
+    exec_with_error_printing(exec_experiment_remove_env, args)
 
 
 # ------------------------------
