@@ -278,7 +278,7 @@ def load(experiment, environment, force, project):
 
 @experiment.command()
 @click.argument('experiment')
-@click.option('-e', '--environment', required=True, help='Name of the environment')
+@click.option('-e', '--environment', help='Name of the environment (if not specified, runs on all environments in project)')
 @click.option('--test', '-t', is_flag=True, help='Run the experiment in test mode - delete results afterwards and do not block changes')
 @click.option('--debug-screenshots', is_flag=True, help='Save screenshots to experiment run directory for debugging')
 @click.option('--preserve-snapshot', '-s', is_flag=True, help='Create experiment snapshot for preservation (default: only reset to base snapshot)')
@@ -288,7 +288,7 @@ def load(experiment, environment, force, project):
 @click.option('--project', '-p', help='Name of the project')
 @click.pass_context
 def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, project):
-    """Run an experiment in a given environment."""
+    """Run an experiment in a given environment or all environments if none specified."""
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,

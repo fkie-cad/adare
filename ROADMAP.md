@@ -4,8 +4,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 
 
 ## Current Development Tasks
-- [ ] check/build testfunctions
-  - [ ] doe we have file_contains test method to test if file contains a certain string?
+- [x] check/build testfunctions -> test all tests and check if it all works
 - [ ] make adare experiment run ... without env run all experiments in that env after another. Lets at the end add some summary telling what succeded which failed.
 - [ ] update docs to acceptable amount!
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
@@ -24,6 +23,8 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] build conditionlogic , wait until we find, retry logic for playbook
 - [x] autocomplete for commands / abbreviations like env/exp
 - [ ] not only expect_to_fail, but also a expect_to_fail_on: ExceptionType (-> so catch specific Exception either custom written or existing as FileNotFoundError)
+- [ ] how to add an environment to an experiment after it exists?! 
+- [ ] multiple runs for all environments when we call adare experiment run ... without environment specified -< print summary at the end!
  
 ## Quality of Life Improvements
 - [ ] update documentation

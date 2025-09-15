@@ -35,8 +35,8 @@ class PlaybookApi(DatabaseApi):
             if experiment.environments:
                 # Use first environment's OS info
                 env = experiment.environments[0]
-                if env.os_info:
-                    vm_os = env.os_info.platform  # 'windows' or 'linux'
+                if env.vm and env.vm.osinfo:
+                    vm_os = env.vm.osinfo.platform  # 'windows' or 'linux'
                     # Get VM user from config - import here to avoid circular imports
                     from adare.config import get_vm_credentials
                     if vm_os:

@@ -130,14 +130,14 @@ class AutomaticVariables:
     @classmethod
     def _add_system_variables(cls, registry: VariableRegistry, target_os: str):
         """Add system-related automatic variables."""
-        
+
         # adare_os - operating system name
         registry.add('adare_os', Variable(
             value=target_os,
             type=VariableType.STRING,
             description="Target operating system (windows/linux)"
         ))
-        
+
         # OS-specific system paths
         if target_os == 'windows':
             registry.add('adare_temp_dir', Variable(
@@ -161,7 +161,44 @@ class AutomaticVariables:
                 type=VariableType.PATH,
                 description="Root directory on Linux"
             ))
-    
+
+        # Add shared mount directory variables
+        cls._add_shared_mount_variables(registry, target_os)
+
+    @classmethod
+    def _add_shared_mount_variables(cls, registry: VariableRegistry, target_os: str):
+        """Add shared mount directory variables based on VM OS."""
+        # Get the base shared mount point based on target OS
+        if target_os == 'windows':
+            shared_root = "C:/adare"
+        else:  # linux
+            shared_root = "/adare"
+
+        # Add shared mount directory variables
+        registry.add('adare_shared', Variable(
+            value=f"{shared_root}/shared",
+            type=VariableType.PATH,
+            description="Base shared directory mount point in VM"
+        ))
+
+        registry.add('adare_shared_tools', Variable(
+            value=f"{shared_root}/shared/tools",
+            type=VariableType.PATH,
+            description="Shared tools directory mount point in VM"
+        ))
+
+        registry.add('adare_shared_data', Variable(
+            value=f"{shared_root}/shared/data",
+            type=VariableType.PATH,
+            description="Shared data directory mount point in VM"
+        ))
+
+        registry.add('adare_run_dir', Variable(
+            value=f"{shared_root}/run",
+            type=VariableType.PATH,
+            description="Run directory mount point in VM"
+        ))
+
     @classmethod
     def _get_user_home_path(cls, target_os: str, username: str) -> str:
         """Get the user home directory path for the target OS."""
