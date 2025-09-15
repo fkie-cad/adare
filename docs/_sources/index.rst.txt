@@ -3,10 +3,10 @@
 .. role:: boldprimary
    :class: boldprimary
 
-ADARE Documentation
+Welcome to ADARE!
 ===================
 
-**Automated Desktop Analysis framework for Reproducible Experiments**
+**The Automated Desktop Analysis framework for Reproducible Experiments**
 
 .. image:: logo.png
    :width: 150px
@@ -14,6 +14,14 @@ ADARE Documentation
    :alt: ADARE Logo
 
 ADARE is a powerful framework designed for **forensic artifact analysis** and **digital forensics research**. It automates desktop interactions within virtual machines to detect and analyze changes in forensic artifacts across different software and operating system versions.
+
+.. raw:: html
+
+   <!-- Placeholder for demo video/gif -->
+   <div style="text-align: center; margin: 30px 0; padding: 20px; border: 2px dashed #ccc; background-color: #f9f9f9;">
+     <p style="margin: 0; color: #666; font-size: 16px;">📹 <strong>Demo Video Coming Soon!</strong></p>
+     <p style="margin: 5px 0 0 0; color: #888; font-size: 14px;">A short video demonstration showing ADARE in action</p>
+   </div>
 
 What makes ADARE unique?
 ------------------------
@@ -56,17 +64,11 @@ Here's what a simple ADARE experiment looks like:
 .. code-block:: yaml
 
    # Delete a file and verify trash bin artifacts
-   actions:
-     - click:
-         target:
-           image: "file_explorer.png"
-     - click:
-         target:
-           text: "testfile.txt"
-     - keyboard:
-         combination: ["delete"]
-   
    tests:
+     - name: file_exists_before_deletion
+       function: file_exists
+       parameter:
+         dst: "/home/user/testfile.txt"
      - name: file_deleted
        function: file_does_not_exist
        parameter:
@@ -76,34 +78,38 @@ Here's what a simple ADARE experiment looks like:
        parameter:
          dst: "/home/user/.local/share/Trash/files/testfile.txt"
 
+   actions:
+     - click:
+         target:
+           image: "file_explorer.png"
+     - click:
+         target:
+           text: "testfile.txt"
+     - test: file_exists_before_deletion
+     - keyboard:
+         combination: ["delete"]
+     - test: file_deleted
+     - test: trash_artifact_created
+
 Getting Started
 ---------------
 
-Ready to start? 
+Ready to start?
 
-1. **Install ADARE** → :doc:`installation/index`
-2. **Quick Tutorial** → :doc:`quickstart/index`
+1. **Install ADARE** → :doc:`basics/installation`
+2. **Quick Tutorial** → :doc:`basics/tutorial`
 
 Documentation Structure
 -----------------------
 
-**🚀 Tutorial**
-  :doc:`tutorial/index` - Get up and running with ADARE in minutes
+**📚 Basics**
+  :doc:`basics/installation` - Complete guide for daily ADARE usage - from installation to creating experiments
 
-**👤 User Guide**  
-  :doc:`user-guide/index` - Complete guide for daily ADARE usage
-
-**💻 CLI Reference**
-  :doc:`cli-reference/index` - Complete command-line interface documentation
-
-**🧪 Test Functions**
-  :doc:`testfunctions/index` - Complete reference for all available test functions with examples
+**⚡ Advanced**
+  :doc:`advanced/cli` - CLI reference and advanced topics
 
 **🏗️ Architecture**
   :doc:`architecture/index` - Understanding how ADARE works internally
-
-**⚡ Advanced Topics**
-  :doc:`advanced/index` - Custom test functions, VM management, and performance tuning
 
 
 .. toctree::
@@ -116,28 +122,24 @@ Documentation Structure
    :maxdepth: 2
    :caption: Basics
 
-   install/index
-   tutorial/index
+   basics/installation
+   basics/tutorial
+   basics/projects
+   basics/environments
+   basics/experiments
+   basics/actions
+   basics/testfunctions/index
 
 .. toctree::
    :hidden:
    :maxdepth: 2
-   :caption: User Documentation:
+   :caption: Advanced
 
-   user-guide/index
-   cli-reference/index
-
-.. toctree::
-   :hidden:
-   :maxdepth: 2
-   :caption: Test Functions:
-
-   testfunctions/index
+   advanced/cli
 
 .. toctree::
    :hidden:
    :maxdepth: 2
-   :caption: Technical Documentation:
+   :caption: Architecture
 
    architecture/index
-   advanced/index

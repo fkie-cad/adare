@@ -6,6 +6,10 @@
     color: #2a4640;
 }
 
+.underline {
+  text-decoration: underline;
+}
+
 /* Test function status indicators */
 .status-tested {
     color: #28a745;

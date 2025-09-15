@@ -65,7 +65,10 @@ html_favicon = "favicon.ico"
 def setup(app):
     app.add_css_file('css/custom.css')
 
-
+rst_prolog = """
+.. role:: ul
+   :class: underline
+"""
 
 # simple_datatable_selector = "table.sdtable"
 # simple_datatable_options = {

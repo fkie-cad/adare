@@ -7,6 +7,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [x] check/build testfunctions -> test all tests and check if it all works
 - [ ] make adare experiment run ... without env run all experiments in that env after another. Lets at the end add some summary telling what succeded which failed.
 - [ ] update docs to acceptable amount!
+- [ ] make cli einheitlicher rm/remove instead of delete ... 
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
 - [ ] test if we can still run adare if we delete cloned repo
 - [x] add xml testfunctions in separate xml module
@@ -30,7 +31,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 ## Quality of Life Improvements
 - [ ] update documentation
   - [ ] add sections about timezones -> since vm syncs with local time do not interfer -> when tool uses utc all good when tool uses localtime use | localtime filter!
-  - [ ] add some info about the testfunctions in the different set and what variables are allowed in the different fields
+  - [x] add some info about the testfunctions in the different set and what variables are allowed in the different fields
   - [ ] keypress with special keys
   - [ ] expect_to_fail for tests
   - [ ] option to not stop on test failure
