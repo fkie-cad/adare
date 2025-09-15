@@ -98,6 +98,40 @@ def exec_show_environments(arguments):
     print_environment_list()
 
 
+def exec_remove_run(arguments):
+    """Remove a single experiment run by its ULID."""
+    from adare.database.api.experiment import ExperimentApi
+    from adare.database.models.experiment import ExperimentRun
+    from adare.console import print_success_message, print_warning_message
+
+    if not arguments.ulid:
+        raise ArgumentsError(log, message='no run ULID provided',
+                           possible_solutions=['use `adare run list` to find the ULID of the run to remove'])
+
+    try:
+        with ExperimentApi() as api:
+            # Get the run first to check if it exists
+            run = api._session.query(ExperimentRun).filter(ExperimentRun.id == arguments.ulid).first()
+            if not run:
+                raise ArgumentsError(log, message=f'run with ULID {arguments.ulid} not found')
+
+            # Check if it's a fake run
+            if run.fake:
+                print_warning_message(f"Removing fake run {arguments.ulid}")
+            else:
+                print_warning_message(f"Removing real run {arguments.ulid}")
+
+            # Delete the run
+            api.delete_experiment_run(run)
+            api._session.commit()
+
+            print_success_message(f"Successfully removed run {arguments.ulid}")
+
+    except Exception as e:
+        log.error(f"Failed to remove run {arguments.ulid}: {str(e)}")
+        raise
+
+
 def exec_show_environment(arguments):
     from adare.frontend.terminal.environment import print_environment
     print_environment(arguments.dotnotation)

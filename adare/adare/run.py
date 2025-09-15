@@ -57,7 +57,8 @@ from adare.cli.manage import exec_manage_reset_db, exec_manage_reset_vm
 from adare.cli.show import (
     exec_show_environment, exec_show_environments,
     exec_show_experiment, exec_show_runs, exec_show_run,
-    exec_show_testfunctions, exec_show_testfunction, exec_show_experiments
+    exec_show_testfunctions, exec_show_testfunction, exec_show_experiments,
+    exec_remove_run
 )
 from adare.cli.web import (
     exec_web_login, exec_web_logout, exec_web_status,
@@ -546,7 +547,7 @@ def clear_environment(environment_ulid, force):
 # ------------------------------
 # Run management commands
 # ------------------------------
-@cli.group()
+@cli.group(cls=AliasedGroup)
 def run():
     """Experiment run management commands."""
     pass
@@ -565,6 +566,16 @@ def info(ulid):
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_show_run, args)
 
+@run.command()
+@click.argument('ulid', required=True)
+def remove(ulid):
+    """Remove a single experiment run by its ULID."""
+    args = SimpleNamespace(ulid=ulid)
+    exec_with_error_printing(exec_remove_run, args)
+
+# Add aliases for run commands
+run.add_alias('l', 'list')
+run.add_alias('rm', 'remove')
 
 # ------------------------------
 # Web interface commands
