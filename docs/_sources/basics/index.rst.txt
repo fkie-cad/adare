@@ -1,0 +1,55 @@
+******
+Basics
+******
+
+This section covers everything you need for daily ADARE usage. Whether you're a forensic researcher, system administrator, or automation developer, you'll find practical information to get started and master ADARE workflows.
+
+Learning Path
+=============
+
+Follow this logical progression to master ADARE:
+
+1. **Installation** → Set up ADARE on your system
+2. **Tutorial** → Get hands-on experience with your first experiment
+3. **Projects** → Learn how to organize your work
+4. **Environments** → Configure virtual machines for testing
+5. **Experiments** → Create and structure your research
+6. **Actions** → Master playbook automation and GUI interactions
+7. **Test Functions** → Validate forensic artifacts and system states
+
+Quick Reference
+===============
+
+**🔧 Installation & Setup**
+  :doc:`installation` - System requirements, installation, and initial configuration
+
+**🚀 Tutorial**
+  :doc:`tutorial` - Hands-on walkthrough creating your first experiment
+
+**📁 Projects**
+  :doc:`projects` - Project creation, structure, and management
+
+**💻 Environments**
+  :doc:`environments` - Virtual machine setup and configuration
+
+**🧪 Experiments**
+  :doc:`experiments` - Experiment creation, metadata, and directory structure
+
+**🤖 Actions**
+  :doc:`actions` - Complete playbook guide - settings, actions, variables, and templating
+
+**🔍 Test Functions**
+  :doc:`testfunctions/index` - Forensic validation functions for artifacts and system states
+
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+
+   installation
+   tutorial
+   projects
+   environments
+   experiments
+   actions
+   testfunctions/index

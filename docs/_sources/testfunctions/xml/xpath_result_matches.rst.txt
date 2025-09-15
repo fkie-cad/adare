@@ -1,5 +1,5 @@
 xpath_result_matches
-===================
+====================
 
 Tests if XPath expression result matches expected value, with support for text, number, and boolean result types.
 

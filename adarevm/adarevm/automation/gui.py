@@ -7,6 +7,8 @@ from io import BytesIO
 import platform
 import base64
 import logging
+import subprocess
+from PIL import Image
 from typing import Dict, List, Any, Optional
 
 log = logging.getLogger(__name__)
@@ -15,19 +17,39 @@ log = logging.getLogger(__name__)
 def take_screenshot(x: int = None, y: int = None, width: int = None, height: int = None) -> Dict[str, Any]:
     """
     Take a screenshot and return the image data and offset in JSON-safe format.
+    Uses maim for screenshot capture instead of pyautogui for better reliability.
     """
-    # Take screenshot (full or region)
-    if x is not None and y is not None and width is not None and height is not None:
-        log.info(f"Taking screenshot with x={x}, y={y}, width={width}, height={height}")
-        screenshot = pyautogui.screenshot(region=(x, y, width, height))
-    else:
-        log.info("Taking screenshot")
-        screenshot = pyautogui.screenshot()
+    try:
+        # Build maim command
+        maim_cmd = ["maim", "-f", "png"]
 
-    # Convert to bytes
-    buffer = BytesIO()
-    screenshot.save(buffer, format="PNG")
-    img_bytes = buffer.getvalue()
+        # Add region parameters if specified
+        if x is not None and y is not None and width is not None and height is not None:
+            log.info(f"Taking screenshot with x={x}, y={y}, width={width}, height={height}")
+            maim_cmd.extend(["-g", f"{width}x{height}+{x}+{y}"])
+        else:
+            log.info("Taking screenshot")
+
+        # Capture screenshot using maim
+        png_bytes = subprocess.check_output(maim_cmd, stderr=subprocess.PIPE)
+
+        # Load image and convert to RGBA
+        img = Image.open(BytesIO(png_bytes)).convert("RGBA")
+
+        # Convert back to bytes
+        buffer = BytesIO()
+        img.save(buffer, format="PNG")
+        img_bytes = buffer.getvalue()
+
+    except subprocess.CalledProcessError as e:
+        log.error(f"maim command failed: {e.stderr.decode() if e.stderr else str(e)}")
+        raise RuntimeError(f"Screenshot capture failed: {e.stderr.decode() if e.stderr else str(e)}")
+    except FileNotFoundError:
+        log.error("maim command not found - please install maim")
+        raise RuntimeError("maim command not found - please install maim package")
+    except Exception as e:
+        log.error(f"Screenshot processing failed: {str(e)}")
+        raise RuntimeError(f"Screenshot processing failed: {str(e)}")
 
     # Convert to base64
     img_base64 = base64.b64encode(img_bytes).decode("utf-8")

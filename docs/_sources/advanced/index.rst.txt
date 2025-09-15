@@ -1,8 +1,10 @@
-************************
+********
 Advanced
-************************
+********
+
+Advanced topics for experienced ADARE users.
 
 .. toctree::
-   :hidden:
    :maxdepth: 2
-   :caption: Contents:
+
+   cli
