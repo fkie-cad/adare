@@ -310,6 +310,48 @@ class CommandExecutionMixin:
         stdout = '\n'.join(captured_output)
         return return_value, stdout, ""
 
+    def _detect_xauthority(self) -> str:
+        """Detect XAUTHORITY file location in Linux guest VM."""
+        # One-liner to find XAUTHORITY across different display managers
+        detect_cmd = 'for p in "$XAUTHORITY" "/run/user/$(id -u)/gdm/Xauthority" "/run/user/$(id -u)/X11-display" "$HOME/.Xauthority" /tmp/serverauth.* /run/sddm/xauth_*; do [ -f "$p" ] && echo "$p" && break; done'
+
+        try:
+            # Run detection command in guest
+            args = [
+                "guestcontrol", self.vm_name, "run",
+                "--exe", "/bin/bash",
+                "--putenv", "DISPLAY=:0",
+                "--", "-c", detect_cmd
+            ]
+
+            # Add authentication
+            if hasattr(self, "_guest_session_id") and self._guest_session_id:
+                args.insert(2, "--session-id")
+                args.insert(3, self._guest_session_id)
+            else:
+                args.insert(2, "--username")
+                args.insert(3, self.username)
+                args.insert(4, "--password")
+                args.insert(5, self.password)
+
+            from .utils import run_subprocess
+            cmd = [self.vboxmanage_exe] + args
+            result = run_subprocess(cmd, check=False)
+            return_code, stdout, stderr = result.returncode, result.stdout, result.stderr
+
+            if return_code == 0 and stdout.strip():
+                xauthority_path = stdout.strip().splitlines()[0]
+                log.info(f"Detected XAUTHORITY at: {xauthority_path}")
+                return xauthority_path
+            else:
+                log.error(f"Failed to detect XAUTHORITY, using fallback. Error: {stderr.strip()}")
+
+        except Exception as e:
+            log.warning(f"Could not detect XAUTHORITY: {e}")
+
+        # Fallback to GDM default
+        return "/run/user/1000/gdm/Xauthority"
+
     def _build_guest_command_args(self, command: str, background: bool = False, cwd: Optional[str] = None, win_noprofile: bool = True, use_cmd: bool = False) -> List[str]:
         """Build VBoxManage guestcontrol command arguments for running guest commands."""
         cmd_to_run = command
@@ -373,11 +415,13 @@ class CommandExecutionMixin:
             # Add PowerShell arguments as separate list items
             args.extend(command_args)
         else:
+            # Detect XAUTHORITY for Linux guests
+            xauthority_path = self._detect_xauthority()
             args = [
                 "guestcontrol", self.vm_name, "run",
                 "--exe", command_exe,
                 "--putenv", "DISPLAY=:0",
-                "--putenv", "XAUTHORITY=/run/user/1000/gdm/Xauthority",
+                "--putenv", f"XAUTHORITY={xauthority_path}",
                 "--", "-c", linux_command
             ]
 

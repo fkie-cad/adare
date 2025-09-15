@@ -171,28 +171,42 @@ actions:
        EOF
      shell: true
 
+ # Execute all XML tests
+ - test: config_root_element_exists
+ - test: database_configuration_exists
+ - test: database_host_is_localhost
+ - test: version_matches_pattern
+ - test: authentication_feature_is_enabled
+ - test: active_users_exist
+ - test: correct_number_of_users
+ - test: deep_nested_data_accessible
+ - test: timestamp_within_tolerance
+ - test: dynamic_timestamp_with_tolerance
+ - test: config_xml_is_well_formed
+ - test: malformed_xml_fails_validation
+
 # Test section - XML-specific forensic tests
 tests:
- - name: "Config root element exists"
+ - name: config_root_element_exists
    function: xml.element_exists
    parameter:
      dst: "{{config_xml}}"
      xpath: "./configuration"
 
- - name: "Database configuration exists"
+ - name: database_configuration_exists
    function: xml.element_exists
    parameter:
      dst: "{{config_xml}}"
      xpath: ".//database"
 
- - name: "Database host is localhost"
+ - name: database_host_is_localhost
    function: xml.element_text_matches
    parameter:
      dst: "{{config_xml}}"
      xpath: ".//host"
      expected_text: "localhost"
 
- - name: "Version matches pattern"
+ - name: version_matches_pattern
    function: xml.element_text_matches
    parameter:
      dst: "{{config_xml}}"
@@ -200,7 +214,7 @@ tests:
      expected_text: "{{version_regex}}"
      regex_match: true
 
- - name: "Authentication feature is enabled"
+ - name: authentication_feature_is_enabled
    function: xml.attribute_matches
    parameter:
      dst: "{{config_xml}}"
@@ -208,46 +222,46 @@ tests:
      attribute: "enabled"
      expected_value: "true"
 
- - name: "Active users exist"
+ - name: active_users_exist
    function: xml.element_exists
    parameter:
      dst: "{{users_xml}}"
      xpath: ".//user[active='true']"
 
- - name: "Correct number of users"
+ - name: correct_number_of_users
    function: xml.element_count
    parameter:
      dst: "{{users_xml}}"
      xpath: ".//user"
      expected_count: 3
 
- - name: "Deep nested data accessible"
+ - name: deep_nested_data_accessible
    function: xml.element_text_matches
    parameter:
      dst: "{{nested_xml}}"
      xpath: ".//level4/data"
      expected_text: "Deep nested value"
 
- - name: "Timestamp within tolerance"
+ - name: timestamp_within_tolerance
    function: xml.element_text_matches
    parameter:
      dst: "{{config_xml}}"
      xpath: ".//timestamp"
      expected_text: "{{fixed_timestamp}}"
 
- - name: "Dynamic timestamp with tolerance"
+ - name: dynamic_timestamp_with_tolerance
    function: xml.element_text_matches
    parameter:
      dst: "{{test_dir}}/timestamped.xml"
      xpath: ".//timestamp"
      expected_text: "{{ now | tolerance(30) | format('%Y-%m-%dT%H:%M:%S') }}"
 
- - name: "Config XML is well-formed"
+ - name: config_xml_is_well_formed
    function: standard.file_exists
    parameter:
      dst: "{{config_xml}}"
 
- - name: "Malformed XML fails validation"
+ - name: malformed_xml_fails_validation
    function: standard.file_exists
    expect_to_fail: false
    parameter:

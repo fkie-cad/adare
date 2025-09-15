@@ -25,6 +25,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] not only expect_to_fail, but also a expect_to_fail_on: ExceptionType (-> so catch specific Exception either custom written or existing as FileNotFoundError)
 - [ ] how to add an environment to an experiment after it exists?! 
 - [ ] multiple runs for all environments when we call adare experiment run ... without environment specified -< print summary at the end!
+- [ ] some kind of dev mode (simple first idea execute till interactive action -> we stop there an only continue on keypress)
  
 ## Quality of Life Improvements
 - [ ] update documentation
@@ -39,6 +40,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
   - [ ] in installation add: eval "$(_ADARE_COMPLETE=zsh_source adare)" and tutorial how to enable autocomplete
 - [ ] improve code quality in general
   - [ ] we at many places catch generic Exception - lets not do it but catch more specific exceptions
+  - [ ] improve detect_xession to use exsiting commands command -> to avoid recusrsion sey via parameter if command is done in user x11 session
 - [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
   - [ ] thereby replace claude logging details with different levels and be less noicy and clearer to see what went wrong? 
 - [x] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;)

@@ -183,21 +183,38 @@ actions:
        echo   ^</appSettings^> >> "{{malformed_xml}}"
      shell: true
 
+ # Execute all XML tests
+ - test: config_root_element_exists
+ - test: app_settings_section_exists
+ - test: database_connection_configured
+ - test: version_matches_windows_pattern
+ - test: ssl_is_enabled
+ - test: active_users_exist
+ - test: correct_number_of_windows_users
+ - test: deep_registry_data_accessible
+ - test: platform_is_windows_11
+ - test: dotnet_framework_version_configured
+ - test: fixed_timestamp_matches
+ - test: dynamic_timestamp_with_tolerance
+ - test: config_xml_is_well_formed
+ - test: app_config_is_well_formed
+ - test: malformed_xml_fails_validation
+
 # Test section - Windows XML-specific forensic tests
 tests:
- - name: "Config root element exists"
+ - name: config_root_element_exists
    function: xml.element_exists
    parameter:
      dst: "{{config_xml}}"
      xpath: "./configuration"
 
- - name: "App settings section exists"
+ - name: app_settings_section_exists
    function: xml.element_exists
    parameter:
      dst: "{{config_xml}}"
      xpath: ".//appSettings"
 
- - name: "Database connection configured"
+ - name: database_connection_configured
    function: xml.attribute_matches
    parameter:
      dst: "{{config_xml}}"
@@ -205,7 +222,7 @@ tests:
      attribute: "value"
      expected_value: "Server=localhost;Database=TestDB"
 
- - name: "Version matches Windows pattern"
+ - name: version_matches_windows_pattern
    function: xml.element_text_matches
    parameter:
      dst: "{{config_xml}}"
@@ -213,7 +230,7 @@ tests:
      expected_text: "{{version_regex}}"
      regex_match: true
 
- - name: "SSL is enabled"
+ - name: ssl_is_enabled
    function: xml.attribute_matches
    parameter:
      dst: "{{config_xml}}"
@@ -221,34 +238,34 @@ tests:
      attribute: "value"
      expected_value: "true"
 
- - name: "Active users exist"
+ - name: active_users_exist
    function: xml.element_exists
    parameter:
      dst: "{{users_xml}}"
      xpath: ".//user[active='true']"
 
- - name: "Correct number of Windows users"
+ - name: correct_number_of_windows_users
    function: xml.element_count
    parameter:
      dst: "{{users_xml}}"
      xpath: ".//user"
      expected_count: 3
 
- - name: "Deep registry data accessible"
+ - name: deep_registry_data_accessible
    function: xml.element_text_matches
    parameter:
      dst: "{{nested_xml}}"
      xpath: ".//hklm/software/data"
      expected_text: "Registry nested value"
 
- - name: "Platform is Windows 11"
+ - name: platform_is_windows_11
    function: xml.element_text_matches
    parameter:
      dst: "{{nested_xml}}"
      xpath: ".//platform"
      expected_text: "Windows 11"
 
- - name: ".NET Framework version configured"
+ - name: dotnet_framework_version_configured
    function: xml.attribute_matches
    parameter:
      dst: "{{app_config_xml}}"
@@ -256,31 +273,31 @@ tests:
      attribute: "sku"
      expected_value: ".NETFramework,Version=v4.8"
 
- - name: "Fixed timestamp matches"
+ - name: fixed_timestamp_matches
    function: xml.element_text_matches
    parameter:
      dst: "{{config_xml}}"
      xpath: ".//timestamp"
      expected_text: "{{fixed_timestamp}}"
 
- - name: "Dynamic timestamp with tolerance"
+ - name: dynamic_timestamp_with_tolerance
    function: xml.element_text_matches
    parameter:
      dst: "{{test_dir}}\\timestamped.xml"
      xpath: ".//timestamp"
      expected_text: "{{ now | tolerance(30) | format('%Y-%m-%dT%H:%M:%S') }}"
 
- - name: "Config XML is well-formed"
+ - name: config_xml_is_well_formed
    function: standard.file_exists
    parameter:
      dst: "{{config_xml}}"
 
- - name: "App.config is well-formed"
+ - name: app_config_is_well_formed
    function: standard.file_exists
    parameter:
      dst: "{{app_config_xml}}"
 
- - name: "Malformed XML fails validation"
+ - name: malformed_xml_fails_validation
    function: standard.file_exists
    expect_to_fail: false
    parameter:
