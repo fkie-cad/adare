@@ -8,30 +8,15 @@ settings:
 
 # Variables for Linux SQLite testing
 variables:
-  username:
-    type: string
-    value: "adare"
-    description: "System username"
-  
-  test_dir:
-    type: path
-    value: "/home/{{username}}/test_sqlite"
-    description: "Base directory for SQLite testing"
-  
-  test_db:
-    type: path
-    value: "{{test_dir}}/test.db"
-    description: "Test SQLite database"
-
   shared_db:
     type: path
-    value: "{{experiment_dir}}/shared/data/test.db"
+    value: "{{adare_shared_data}}/test.db"
     description: "Pre-created SQLite database with comprehensive test data"
-  
+
   empty_db:
     type: path
-    value: "{{test_dir}}/empty.db"
-    description: "Empty SQLite database"
+    value: "{{adare_temp_dir}}/empty.db"
+    description: "Empty SQLite database for empty DB tests"
 
 # Test definitions for SQLite functions
 tests:
@@ -40,66 +25,66 @@ tests:
     description: 'Test sqlite_query_result with COUNT query'
     function: sqlite.query_result
     parameter:
-      dst: '{{test_db}}'
+      dst: '{{shared_db}}'
       query: 'SELECT COUNT(*) as count FROM users'
       expected_rows: 1
-  
+
   - name: test_sqlite_query_specific_result
     description: 'Test sqlite_query_result with specific expected result'
     function: sqlite.query_result
     parameter:
-      dst: '{{test_db}}'
+      dst: '{{shared_db}}'
       query: 'SELECT COUNT(*) as count FROM users WHERE role = "Admin"'
       expected_result: [{"count": 2}]
-  
+
   - name: test_sqlite_query_all_users
     description: 'Test sqlite_query_result returning all users'
     function: sqlite.query_result
     parameter:
-      dst: '{{test_db}}'
+      dst: '{{shared_db}}'
       query: 'SELECT name, role FROM users ORDER BY id'
       expected_rows: 8
-  
+
   - name: test_sqlite_query_single_user
     description: 'Test sqlite_query_result with single user lookup'
     function: sqlite.query_result
     parameter:
-      dst: '{{test_db}}'
+      dst: '{{shared_db}}'
       query: 'SELECT * FROM users WHERE name = "John Doe"'
       expected_rows: 1
-  
+
   - name: test_sqlite_query_no_results
     description: 'Test sqlite_query_result with query returning no results'
     function: sqlite.query_result
     parameter:
-      dst: '{{test_db}}'
+      dst: '{{shared_db}}'
       query: 'SELECT * FROM users WHERE name = "Nonexistent User"'
       expected_rows: 0
-  
+
   - name: test_sqlite_query_wrong_count
     description: 'Test sqlite_query_result with wrong expected count'
     function: sqlite.query_result
     expect_to_fail: true
     parameter:
-      dst: '{{test_db}}'
+      dst: '{{shared_db}}'
       query: 'SELECT * FROM users'
       expected_rows: 10
-  
+
   # Query with joins
   - name: test_sqlite_query_join
     description: 'Test sqlite_query_result with JOIN query'
     function: sqlite.query_result
     parameter:
-      dst: '{{test_db}}'
+      dst: '{{shared_db}}'
       query: 'SELECT u.name, p.project_name FROM users u JOIN projects p ON u.id = p.user_id'
       expected_rows: 5
-  
+
   # Complex queries
   - name: test_sqlite_query_aggregation
     description: 'Test sqlite_query_result with aggregation'
     function: sqlite.query_result
     parameter:
-      dst: '{{test_db}}'
+      dst: '{{shared_db}}'
       query: 'SELECT role, COUNT(*) as count FROM users GROUP BY role'
       expected_rows: 3
   
@@ -117,16 +102,16 @@ tests:
     function: sqlite.query_result
     expect_to_fail: true
     parameter:
-      dst: '{{test_db}}'
+      dst: '{{shared_db}}'
       query: 'SELECT * FROM nonexistent_table'
       expected_rows: 0
-  
+
   - name: test_sqlite_query_file_not_found
     description: 'Test sqlite_query_result with non-existent database file'
     function: sqlite.query_result
     expect_to_fail: true
     parameter:
-      dst: '{{test_dir}}/nonexistent.db'
+      dst: '{{adare_temp_dir}}/nonexistent.db'
       query: 'SELECT 1'
       expected_rows: 1
 
@@ -164,27 +149,13 @@ tests:
       expected_rows: 4
 
 actions:
-  # Setup test environment
-  - command:
-      name: "Create Test Directory"
-      description: "Create base directory for SQLite testing"
-      command: "mkdir -p {{test_dir}}"
-      shell: true
-  
-  # Copy pre-created database from shared data
-  - command:
-      name: "Copy Test Database"
-      description: "Copy pre-created SQLite database with comprehensive test data"
-      command: "cp {{shared_db}} {{test_db}}"
-      shell: true
-  
-  # Create empty database
+  # Create empty database for empty DB tests
   - command:
       name: "Create Empty Database"
-      description: "Create empty SQLite database"
+      description: "Create empty SQLite database for testing empty database scenarios"
       command: "sqlite3 {{empty_db}} 'SELECT 1;'"
       shell: true
-  
+
   # Run all SQLite tests
   - test: test_sqlite_query_count
   - test: test_sqlite_query_specific_result
@@ -198,15 +169,15 @@ actions:
   - test: test_sqlite_query_invalid_table
   - test: test_sqlite_query_file_not_found
 
-  # Run tests using pre-created database
+  # Run tests using shared database with richer data
   - test: test_shared_db_department_count
   - test: test_shared_db_salary_range
   - test: test_shared_db_audit_logs
   - test: test_shared_db_complex_join
-  
+
   # Cleanup
   - command:
-      name: "Cleanup Test Directory"
-      description: "Remove test directory and files"
-      command: "rm -rf {{test_dir}}"
+      name: "Cleanup Empty Database"
+      description: "Remove temporary empty database file"
+      command: "rm -f {{empty_db}}"
       shell: true

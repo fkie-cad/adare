@@ -260,7 +260,7 @@ class ElementTextMatches(BasicTest):
 class AttributeMatchesParameter(Parameter):
     dst: str
     xpath: str
-    attribute_name: str
+    attribute: str
     expected_value: str
     regex_match: Optional[bool] = False
     case_sensitive: Optional[bool] = True
@@ -344,7 +344,7 @@ class AttributeMatches(BasicTest):
             log.debug(f'dst file {dst} will be used for test {self.name}')
 
             xpath = self.parameter.xpath
-            attribute_name = self.parameter.attribute_name
+            attribute_name = self.parameter.attribute
             expected_value = self.parameter.expected_value
             namespaces = self.parameter.namespaces
 
