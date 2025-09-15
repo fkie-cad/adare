@@ -62,7 +62,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             project_directory, arguments.experiment, trigger_error=False
         )
         if experiment_ulid:
-            run_count = experiment_database.get_experiment_run_count(experiment_ulid)
+            run_count = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
             if run_count > 0:
                 raise LoggedErrorException(log,
                     f'Cannot run test mode on experiment "{arguments.experiment}" with existing runs ({run_count} runs found).\n'
@@ -209,7 +209,7 @@ def exec_experiment_run(arguments):
                     project_directory, arguments.experiment, trigger_error=False
                 )
                 if experiment_ulid:
-                    run_count = experiment_database.get_experiment_run_count(experiment_ulid)
+                    run_count = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
                     if run_count > 0:
                         raise LoggedErrorException(log,
                             f'Cannot run test mode on experiment "{arguments.experiment}" with existing runs ({run_count} runs found).\n'
