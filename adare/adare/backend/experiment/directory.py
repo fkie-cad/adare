@@ -157,6 +157,37 @@ class ExperimentDirectory(Directory):
     def load_metadata(self) -> ExperimentMetadata:
         return parse_metadata_file(self.metadatafile)
 
+    def save_metadata(self, metadata: ExperimentMetadata):
+        """Save metadata to the metadata.yml file."""
+        import yaml
+
+        # Convert ExperimentMetadata to dictionary
+        metadata_dict = {
+            'environments': metadata.environments,
+            'description': metadata.description,
+        }
+
+        # Add optional fields if they exist
+        if metadata.tags:
+            metadata_dict['tags'] = metadata.tags
+        if metadata.smb:
+            metadata_dict['smb'] = metadata.smb
+        if metadata.nfs:
+            metadata_dict['nfs'] = metadata.nfs
+        if metadata.usb:
+            metadata_dict['usb'] = metadata.usb
+        if metadata.disk:
+            metadata_dict['disk'] = metadata.disk
+
+        try:
+            with open(self.metadatafile, 'w') as f:
+                yaml.dump(metadata_dict, f, default_flow_style=False, sort_keys=False)
+        except OSError as e:
+            raise ExperimentFileCreationError(
+                log,
+                message=f'Failed to save metadata file for experiment {self.experiment}: {e.strerror}'
+            ) from e
+
     def load_testset(self) -> TestsetFile:
         # Load tests from playbook instead of separate testset file
         from adare.types.playbook import parse_playbook
