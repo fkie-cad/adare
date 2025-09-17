@@ -166,6 +166,12 @@ class PullAction:
     # Note: Always pulls recursively - no need for recursive parameter
 
 @attrs.define
+class PauseAction:
+    message: Optional[str] = None  # Optional message to display during pause
+    name: Optional[str] = None     # Optional name for the pause action
+    description: str = ''
+
+@attrs.define
 class BlockAction:
     actions: List[ActionType]  # Remove quotes
     description: str = ''
@@ -174,8 +180,8 @@ class BlockAction:
 # Now define ActionType after all classes
 ActionType = Union[
     ClickAction, DragAction,
-    KeyboardAction, IdleAction, ScrollAction, GotoAction, ActionTestAction, 
-    CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, PullAction
+    KeyboardAction, IdleAction, ScrollAction, GotoAction, ActionTestAction,
+    CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, PullAction, PauseAction
 ]
 
 @attrs.define
@@ -272,6 +278,8 @@ def _structure_action(obj, converter):
         return converter.structure(obj['save_timestamp'], SaveTimestampAction)
     if 'pull' in obj:
         return converter.structure(obj['pull'], PullAction)
+    if 'pause' in obj:
+        return converter.structure(obj['pause'], PauseAction)
     raise ValueError(f"Unknown action: {obj}")
 
 def _structure_condition(obj, converter):
@@ -351,10 +359,10 @@ def _register_strict_hooks(converter):
         return strict_structure_hook
     
     # Register hooks for all main attrs classes
-    for cls in [Target, Settings, ClickAction, 
+    for cls in [Target, Settings, ClickAction,
                 DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,
                 ActionTestAction, CommandAction, ScreenshotAction, BlockAction,
-                SaveTimestampAction, PullAction, ExistsCondition, NotExistsCondition,
+                SaveTimestampAction, PullAction, PauseAction, ExistsCondition, NotExistsCondition,
                 SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
                 TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
                 BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook]:

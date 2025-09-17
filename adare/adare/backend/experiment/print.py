@@ -54,19 +54,35 @@ class ExperimentFlowConsole:
 
     def _start_live_in_thread(self):
         tick_count = 0
-        with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second, 
+        with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second,
                   auto_refresh=False, transient=False) as live:
             while not self.stop_event.is_set():
-                with self._lock:
-                    message_identifiers = list(self.messages.keys())
-                    # Ensure experiment timer appears first if it exists
-                    if 'EXPERIMENT_TIMER' in message_identifiers:
-                        message_identifiers.remove('EXPERIMENT_TIMER')
-                        message_identifiers.insert(0, 'EXPERIMENT_TIMER')
-                messages_as_str = '\n'.join([self._generate_message(identifier, spinner_position=tick_count) for identifier in message_identifiers])
-                live.update(messages_as_str)
-                live.refresh()  # Force manual refresh since auto_refresh=False
-                tick_count += 1
+                try:
+                    with self._lock:
+                        message_identifiers = list(self.messages.keys())
+                        # Ensure experiment timer appears first if it exists
+                        if 'EXPERIMENT_TIMER' in message_identifiers:
+                            message_identifiers.remove('EXPERIMENT_TIMER')
+                            message_identifiers.insert(0, 'EXPERIMENT_TIMER')
+
+                    # Generate messages and filter out empty ones to avoid blank lines
+                    generated_messages = [self._generate_message(identifier, spinner_position=tick_count) for identifier in message_identifiers]
+                    non_empty_messages = [msg for msg in generated_messages if msg.strip()]
+                    messages_as_str = '\n'.join(non_empty_messages)
+                    live.update(messages_as_str)
+                    live.refresh()  # Force manual refresh since auto_refresh=False
+                    tick_count += 1
+
+                except Exception as e:
+                    # Don't let message generation errors break the refresh cycle
+                    log.error(f"Error in flow console refresh cycle: {e}")
+                    # Continue with a fallback display
+                    try:
+                        live.update("Flow console error - please check logs")
+                        live.refresh()
+                    except:
+                        pass  # If even this fails, just continue the loop
+
                 time.sleep(0.1)
         log.debug('rich live thread stopped')
 
@@ -126,9 +142,18 @@ class ExperimentFlowConsole:
                 return ""
             message_object = self.messages[identifier]
             message = message_object['message']
-            
-            icon = StatusEnum.get_icon(message_object['status'], color=True)
-            message = f'{icon} {message}'
+
+            # Special handling for experiment timer
+            if message_object.get('is_experiment_timer'):
+                # For experiment timer, only show duration if available
+                # If message is empty and no duration to show yet, return empty string to hide this line
+                if not message and not message_object.get('duration') and not message_object.get('start_time'):
+                    return ""
+                # Skip icon addition for experiment timer - duration will be the only content
+                pass
+            else:
+                icon = StatusEnum.get_icon(message_object['status'], color=True)
+                message = f'{icon} {message}'
 
             if message_object['spinner']:
                 spinner = SPINNERS[message_object['spinner']]['frames']
@@ -169,22 +194,75 @@ class ExperimentFlowConsole:
             
             if duration_text:
                 terminal_width = self.console.size.width
-                # Use Rich's measure method to get actual display width including markup
+                # Calculate the total line length to prevent wrapping
                 from rich.text import Text
-                
-                message_obj = Text.from_markup(message)
-                duration_obj = Text.from_markup(duration_text)
-                
-                message_width = self.console.measure(message_obj).maximum
-                duration_width = self.console.measure(duration_obj).maximum
-                
-                available_width = terminal_width - duration_width
-                if message_width < available_width:
-                    padding = available_width - message_width
-                    message = f"{message}{' ' * padding}{duration_text}"
+
+                # Build the complete line first
+                complete_line = f"{message} {duration_text}"
+                complete_obj = Text.from_markup(complete_line)
+                complete_width = self.console.measure(complete_obj).maximum
+
+                if complete_width > terminal_width:
+                    # Line is too long, need to truncate the message part
+                    duration_obj = Text.from_markup(duration_text)
+                    duration_width = self.console.measure(duration_obj).maximum
+
+                    # Calculate how much space we have for the message
+                    available_for_message = terminal_width - duration_width - 4  # -4 for " " + "..."
+
+                    if available_for_message > 10:  # Ensure we have reasonable space
+                        # Handle multiline messages (like heredoc commands) specially
+                        message_obj = Text.from_markup(message)
+                        if len(message_obj) > available_for_message:
+                            # Check if the ORIGINAL message (not Rich object) is multiline
+                            is_multiline = '\n' in message
+
+                            if is_multiline:
+                                # For truly multiline content, show only the first line
+                                first_line = message.split('\n')[0].strip()
+                                # Remove any Rich markup from first line for safer truncation
+                                import re
+                                # Strip Rich markup like [bold], [/bold], etc.
+                                clean_first_line = re.sub(r'\[/?[^\]]*\]', '', first_line)
+
+                                # If first line is still too long, truncate it
+                                if len(clean_first_line) > available_for_message:
+                                    clean_first_line = clean_first_line[:available_for_message-3].strip()
+
+                                message = f"{clean_first_line}..."
+                            else:
+                                # Single line that's just too long - truncate safely
+                                # Strip Rich markup for safer truncation
+                                import re
+                                clean_message = re.sub(r'\[/?[^\]]*\]', '', message)
+                                if len(clean_message) > available_for_message:
+                                    clean_message = clean_message[:available_for_message-3].strip()
+                                message = f"{clean_message}..."
+
+                        # Right-align the duration
+                        current_width = self.console.measure(Text.from_markup(message)).maximum
+                        padding = terminal_width - current_width - duration_width
+                        if padding > 1:
+                            message = f"{message}{' ' * (padding - 1)} {duration_text}"
+                        else:
+                            message = f"{message} {duration_text}"
+                    else:
+                        # Very narrow terminal, just truncate severely
+                        message = f"{message[:terminal_width-10]}... {duration_text}"
                 else:
-                    # If message is too long, just append normally
-                    message = f"{message} {duration_text}"
+                    # Line fits properly, add right-aligned duration with padding
+                    duration_obj = Text.from_markup(duration_text)
+                    duration_width = self.console.measure(duration_obj).maximum
+
+                    message_obj = Text.from_markup(message)
+                    message_width = self.console.measure(message_obj).maximum
+
+                    # Calculate padding to right-align duration
+                    padding = terminal_width - message_width - duration_width
+                    if padding > 1:
+                        message = f"{message}{' ' * (padding - 1)} {duration_text}"
+                    else:
+                        message = f"{message} {duration_text}"
 
             return message
 
@@ -478,25 +556,157 @@ class ExperimentFlowConsole:
                 timer_msg['status'] = StatusEnum.SUCCESS if success else StatusEnum.FAILED
                 timer_msg['start_time'] = None  # Stop live updates
 
+    def log_interactive_pause(self, identifier: str, message: str, level: int = 0) -> str:
+        """
+        Display an interactive pause message and wait for user input.
+        Shows the pause message in flow console only, without disrupting the display.
+        Returns the user input.
+        """
+        import platform
+        import threading
+        import queue
+        import sys
+        import os
+        import time
+
+        # Show pause message in flow console
+        if platform.system() == 'Windows':
+            pause_message = f"{message} - Press 'c' to continue"
+        else:
+            pause_message = f"{message} - Press 'c' and then Enter to continue"
+
+
+        # Log as warning to make it stand out in the flow console
+        # Use level 2 to match main playbook actions (same as other actions)
+        display_level = 2  # Main playbook action level
+        with self._lock:
+            self.messages[identifier] = {
+                'message': pause_message,
+                'spinner': None,
+                'spinner_style': None,
+                'level': display_level,
+                'status': StatusEnum.PAUSE,  # Use pause status to show pause icon
+                'result_status': None,
+                'duration': None,
+            }
+
+        # Use a separate thread for input handling to avoid interfering with Rich Live
+        input_queue = queue.Queue()
+        input_thread_stop = threading.Event()
+
+        def input_worker():
+            """Worker thread to handle input without blocking Rich Live."""
+            try:
+                if os.name == 'nt':  # Windows
+                    import msvcrt
+                    while not input_thread_stop.is_set():
+                        if msvcrt.kbhit():
+                            char = msvcrt.getch().decode('utf-8', errors='ignore').lower()
+                            input_queue.put(char)
+                            break
+                        time.sleep(0.05)  # Faster polling in separate thread
+                else:  # Unix/Linux
+                    # Use standard input() which is more reliable than select/readline
+                    try:
+                        # This will block in the separate thread, not affecting Rich Live
+                        user_input = input().strip().lower()
+                        if user_input:
+                            input_queue.put(user_input[0])  # Put first character
+                        else:
+                            input_queue.put('c')  # Empty input treated as continue
+                    except (EOFError, KeyboardInterrupt):
+                        input_queue.put('interrupted')
+            except Exception as e:
+                log.error(f"Input worker thread error: {e}")
+                input_queue.put('error')
+
+        # Start input worker thread
+        input_thread = threading.Thread(target=input_worker, daemon=True)
+        input_thread.start()
+
+        user_input = None
+        try:
+            # Main thread polls the queue without blocking
+            while True:
+                try:
+                    # Check for input from worker thread (non-blocking)
+                    char = input_queue.get(timeout=0.1)
+
+                    if char == 'c':
+                        user_input = 'c'
+                        break
+                    elif char in ['interrupted', '\x03', '\x04']:
+                        user_input = 'interrupted'
+                        break
+                    elif char == 'error':
+                        user_input = 'error'
+                        break
+                    else:
+                        # Invalid input, continue waiting
+                        continue
+
+                except queue.Empty:
+                    # No input yet, continue polling
+                    # This maintains Rich Live responsiveness
+                    continue
+                except (EOFError, KeyboardInterrupt):
+                    user_input = 'interrupted'
+                    break
+
+        finally:
+            # Clean up input thread
+            input_thread_stop.set()
+            # Give thread a moment to finish
+            input_thread.join(timeout=0.5)
+
+        # Update the pause message to show completion in flow console
+        if user_input == 'c':
+            self.log_finished(identifier, f"{message} - Continued", display_level)
+            return 'c'
+        elif user_input == 'interrupted':
+            with self._lock:
+                self.messages[identifier] = {
+                    'message': f"{message} - Interrupted",
+                    'spinner': None,
+                    'spinner_style': None,
+                    'level': display_level,
+                    'status': StatusEnum.INTERRUPTED,
+                    'result_status': None,
+                    'duration': None,
+                }
+            return 'interrupted'
+        else:
+            with self._lock:
+                self.messages[identifier] = {
+                    'message': f"{message} - Invalid input, continuing anyway",
+                    'spinner': None,
+                    'spinner_style': None,
+                    'level': display_level,
+                    'status': StatusEnum.FAILED,
+                    'result_status': None,
+                    'duration': None,
+                }
+            return user_input or 'timeout'
+
     def print_debug_flow_messages(self):
         """Print all flow messages for debugging purposes."""
         with self._lock:
             if not self.messages:
                 print("\n=== EXPERIMENT FLOW DEBUG: No messages to display ===")
                 return
-            
+
             print("\n" + "="*60)
             print("EXPERIMENT FLOW DEBUG MESSAGES")
             print("="*60)
-            
+
             for identifier, message_object in self.messages.items():
                 status_icon = StatusEnum.get_icon(message_object['status'], color=False)
                 print(f"[{identifier}] {status_icon} {message_object['message']}")
-                
+
                 if message_object['result_status']:
                     result_icon = StatusEnum.get_icon(message_object['result_status'], color=False)
                     print(f"    └─ Result: {result_icon}")
-            
+
             print("="*60)
             print(f"Total messages: {len(self.messages)}")
             print("="*60 + "\n")

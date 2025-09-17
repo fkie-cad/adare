@@ -187,7 +187,7 @@ def experiment_example(project_path: Path, experiment: str):
 
 
 def __experiment_update(experiment_ulid, experiment_name, experiment_directory, force):
-    if not experiment_database.check_for_experiment_change(experiment_ulid, experiment_directory.sha256):
+    if not force and not experiment_database.check_for_experiment_change(experiment_ulid, experiment_directory.sha256):
         raise ExperimentNotChanged(log, f'experiment [i]{experiment_ulid}[/i] has not changed')
     log.info(f'experiment {experiment_ulid} has changed')
     num_runs = experiment_database.get_experiment_run_count(experiment_ulid)
@@ -876,6 +876,9 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         if vm_os:
             vm_user, _ = get_vm_credentials(vm_os)
 
+        # Get flow console for interactive actions like pause
+        flow_console = flowconsolemanager.get_handler(context.experiment_run_ulid)
+
         # Create playbook controller
         controller = PlaybookController(
             websocket_client=context.client,
@@ -889,7 +892,9 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             vm=context.vm,  # Pass VM for pull operations
             experiment_run_directory=context.experiment_run_directory.path,  # Pass run directory for artifacts
             vm_os=vm_os,  # Pass VM OS for automatic variables
-            vm_user=vm_user  # Pass VM user for automatic variables
+            vm_user=vm_user,  # Pass VM user for automatic variables
+            flow_console=flow_console,  # Pass flow console for interactive actions
+            test_mode=context.test_mode  # Pass test mode flag
         )
         
         # Execute complete experiment (playbook + tests)
@@ -1240,8 +1245,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             else:
                 # Fake runs are now kept until manually cleaned with 'adare experiment clean <name>'
                 log.info(f"Fake experiment run {experiment_run_context.experiment_run_ulid} completed and preserved for analysis")
-            await asyncio.sleep(1)
-            
+            # Give the flow console time to display the summary before stopping
+            await asyncio.sleep(3)
+
             # Print debug flow messages before stopping console
             # flow_console.print_debug_flow_messages()
             flow_console.stop()

@@ -15,6 +15,7 @@ class StatusEnum(IntEnum):
     FINISHED = 9
     TEST_MISSING = 12
     TEST_FAILED = 13
+    PAUSE = 14
 
     @staticmethod
     def from_string(status_string: str):
@@ -65,6 +66,8 @@ class StatusEnum(IntEnum):
             icon = ':black_medium_square:'
         elif value == StatusEnum.TEST_FAILED:
             icon = ':no_entry_sign:'
+        elif value == StatusEnum.PAUSE:
+            icon = ':pause_button:'
         from rich.text import Text
         return f'[{colorname}]{Text.from_markup(icon)}[/{colorname}]' if colorname else Text.from_markup(icon)
 
@@ -90,6 +93,8 @@ class StatusEnum(IntEnum):
             return 'blue'
         elif value == StatusEnum.TEST_FAILED:
             return 'red'
+        elif value == StatusEnum.PAUSE:
+            return 'yellow'
         return ''
 
 

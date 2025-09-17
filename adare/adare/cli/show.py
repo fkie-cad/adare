@@ -102,7 +102,7 @@ def exec_remove_run(arguments):
     """Remove a single experiment run by its ULID."""
     from adare.database.api.experiment import ExperimentApi
     from adare.database.models.experiment import ExperimentRun
-    from adare.console import print_success_message, print_warning_message
+    from adare.console import print_success_message, console_print
 
     if not arguments.ulid:
         raise ArgumentsError(log, message='no run ULID provided',
@@ -117,15 +117,19 @@ def exec_remove_run(arguments):
 
             # Check if it's a fake run
             if run.fake:
-                print_warning_message(f"Removing fake run {arguments.ulid}")
+                console_print(f"⚠️  Removing fake run {arguments.ulid}")
             else:
-                print_warning_message(f"Removing real run {arguments.ulid}")
+                console_print(f"⚠️  Removing real run {arguments.ulid}")
 
             # Delete the run
             api.delete_experiment_run(run)
             api._session.commit()
 
-            print_success_message(f"Successfully removed run {arguments.ulid}")
+            print_success_message(
+                title=f"Successfully removed run {arguments.ulid}",
+                location="Database",
+                next_steps=["Run 'adare run list' to see remaining runs"]
+            )
 
     except Exception as e:
         log.error(f"Failed to remove run {arguments.ulid}: {str(e)}")

@@ -61,7 +61,15 @@ class EventManager:
         """Create appropriate start event for the given action type."""
         action_type = type(action).__name__
         description = getattr(action, 'description', '')
-        
+
+        # Generate better description for CommandActions (always override for clean display)
+        if isinstance(action, CommandAction):
+            description = self._generate_command_description(action)
+
+        # Always strip newlines from descriptions to prevent multiline display issues
+        if description:
+            description = ' '.join(description.split())
+
         # Common event data
         event_data = {
             'action_id': action_id,
@@ -126,7 +134,15 @@ class EventManager:
         """Create appropriate complete event for the given action type and result."""
         action_type = type(action).__name__
         description = getattr(action, 'description', '')
-        
+
+        # Generate better description for CommandActions (always override for clean display)
+        if isinstance(action, CommandAction):
+            description = self._generate_command_description(action)
+
+        # Always strip newlines from descriptions to prevent multiline display issues
+        if description:
+            description = ' '.join(description.split())
+
         # Common event data
         event_data = {
             'action_id': action_id,
@@ -238,6 +254,53 @@ class EventManager:
                         info['strategy_params'] = strategy_params
         
         return info if info else None
+
+    def _generate_command_description(self, action: CommandAction) -> str:
+        """Generate a clean, single-line description for command actions."""
+        command = action.command.strip()
+
+        # Handle multiline commands (like heredoc)
+        if '\n' in command:
+            # For heredoc commands, extract the main command (first line)
+            first_line = command.split('\n')[0].strip()
+
+            # Check if it's a heredoc command
+            if '<<' in first_line:
+                # Extract the base command before heredoc
+                base_cmd = first_line.split('<<')[0].strip()
+                # Try to get the filename if it's a file creation command
+                if 'cat >' in base_cmd or 'tee' in base_cmd:
+                    # Extract filename for better readability
+                    import re
+                    file_match = re.search(r'[>]\s*([^\s]+)', base_cmd)
+                    if file_match:
+                        filename = file_match.group(1)
+                        # Keep filename shorter to prevent flow console truncation
+                        import os
+                        basename = os.path.basename(filename)
+                        return f"command: create file {basename}"
+
+                # Truncate base command aggressively to prevent flow console truncation
+                if len(base_cmd) > 40:
+                    base_cmd = base_cmd[:37] + "..."
+                result = f"command: execute '{base_cmd}'"
+                import logging
+                log = logging.getLogger(__name__)
+                log.error(f"CLAUDE: DEBUG - Returning command description: {repr(result)}")
+                return result
+            else:
+                # Multi-line command without heredoc - be very aggressive with truncation
+                if len(first_line) > 40:
+                    first_line = first_line[:37] + "..."
+                result = f"command: execute '{first_line}'"
+                print(f"CLAUDE: DEBUG - Returning first_line description: {repr(result)}")
+                return result
+        else:
+            # Single line command - be more aggressive with truncation
+            if len(command) > 40:
+                return f"command: execute '{command[:37]}...'"
+            else:
+                return f"command: execute '{command}'"
     
     def _get_condition_info(self, conditions) -> Optional[Dict[str, Any]]:
         """Extract condition information for event logging."""

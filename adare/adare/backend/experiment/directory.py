@@ -217,7 +217,22 @@ class ExperimentDirectory(Directory):
     @property
     def sha256_playbook(self) -> str:
         return hash_file_sha256(self.playbookfile)
-    
+
+    @property
+    def sha256_playbook_full(self) -> str:
+        """Full playbook hash including all actions for development/loading purposes."""
+        return hash_file_sha256(self.playbookfile)
+
+    @property
+    def sha256_for_loading(self) -> str:
+        """Hash used for loading decisions - includes pause/pull for development workflow."""
+        return self.sha256_playbook_full  # Use full hash for loading decisions
+
+    @property
+    def sha256_for_integrity(self) -> str:
+        """Hash for experiment integrity/reproducibility - excludes infrastructure actions."""
+        return self.sha256_playbook_semantic
+
     @property
     def sha256_playbook_semantic(self) -> str:
         """
@@ -259,5 +274,5 @@ class ExperimentDirectory(Directory):
     def sha256(self) -> str:
         # Since testset is now part of playbook, only use playbook hash
         # to avoid double-counting the same content
-        # Use semantic hash to exclude infrastructure actions like 'pull'
-        return self.sha256_playbook_semantic
+        # Use full hash for experiment loading/development workflow
+        return self.sha256_playbook_full
