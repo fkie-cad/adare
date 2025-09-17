@@ -82,10 +82,26 @@ class StageEventCoordinator:
         except queue.Full:
             log.error(f"Stage event queue full, dropping event: {stage.name}")
 
+    def wait_for_queue_drain(self, timeout: float = 0.1) -> bool:
+        """
+        Wait for the event queue to drain (become empty).
+
+        Args:
+            timeout: Maximum time to wait in seconds
+
+        Returns:
+            True if queue is empty, False if timeout reached
+        """
+        import time
+        start_time = time.time()
+        while not self._event_queue.empty() and (time.time() - start_time) < timeout:
+            time.sleep(0.001)  # 1ms check interval
+        return self._event_queue.empty()
+
     def emit_action_event(self, ulid: str, action_event, action_id: str):
         """
         Thread-safe action event emission.
-        
+
         Args:
             ulid: Experiment run ULID
             action_event: ActionEvent instance
@@ -94,7 +110,7 @@ class StageEventCoordinator:
         if not self._started:
             log.warning("StageEventCoordinator not started, dropping action event")
             return
-            
+
         event_data = {
             'type': 'action',
             'ulid': ulid,

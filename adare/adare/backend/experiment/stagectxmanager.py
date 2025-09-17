@@ -89,15 +89,14 @@ class StageCtxManager(contextlib.AbstractContextManager):
         try:
             from adare.backend.events.coordinator import get_stage_coordinator
             coordinator = get_stage_coordinator()
-            if coordinator and hasattr(coordinator, '_event_queue'):
-                # Wait for queue to be empty with a reasonable timeout
-                import time
-                timeout = 0.1  # 100ms max wait
-                start_time = time.time()
-                while not coordinator._event_queue.empty() and (time.time() - start_time) < timeout:
-                    time.sleep(0.001)  # 1ms check interval
-        except Exception:
+            if coordinator:
+                # Use the proper public method to wait for queue drain
+                drained = coordinator.wait_for_queue_drain(timeout=0.1)
+                if not drained:
+                    log.debug(f"Event queue did not drain within timeout for parent stage: {self.stage.name}")
+        except Exception as e:
             # If we can't check the queue, just continue
+            log.debug(f"Could not wait for event queue drain: {e}")
             pass
 
         # Reset parent context if this was a parent stage

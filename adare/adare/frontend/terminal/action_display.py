@@ -51,8 +51,13 @@ def get_action_display_info(action_type: ActionType, action_data: dict, is_compl
     elif action_type == ActionType.COMMAND:
         command = action_data.get('command_executed') or action_data.get('command') or action_data.get('cmd')
         if command:
-            # Truncate long commands
-            if len(command) > 50:
+            # Smart truncation for heredoc commands
+            heredoc_pos = command.find('<<')
+            if heredoc_pos != -1:
+                # Found heredoc syntax, truncate after the << operator
+                command = command[:heredoc_pos + 2] + " ..."
+            elif len(command) > 50:
+                # Regular truncation for long commands
                 command = command[:47] + "..."
             return f"execute '{command}'"
         return "execute command"
