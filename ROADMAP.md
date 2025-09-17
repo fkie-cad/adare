@@ -6,7 +6,7 @@ This document tracks ongoing development tasks, planned features, quality of lif
 ## Current Development Tasks
 - [x] check/build testfunctions -> test all tests and check if it all works
 - [ ] make adare experiment run ... without env run all experiments in that env after another. Lets at the end add some summary telling what succeded which failed.
-- [ ] update docs to acceptable amount!
+- [x] update docs to acceptable amount!
 - [ ] make cli einheitlicher rm/remove instead of delete ... 
 - [ ] built remote platform to store VMs and test/improve download to not be done manually
 - [ ] test if we can still run adare if we delete cloned repo
@@ -27,15 +27,13 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] how to add an environment to an experiment after it exists?! 
 - [ ] multiple runs for all environments when we call adare experiment run ... without environment specified -< print summary at the end!
 - [ ] some kind of dev mode (simple first idea execute till interactive action -> we stop there an only continue on keypress)
+- [ ] for all things where we need ulid lets find by unique combo already!
  
 ## Quality of Life Improvements
 - [ ] update documentation
   - [ ] add sections about timezones -> since vm syncs with local time do not interfer -> when tool uses utc all good when tool uses localtime use | localtime filter!
-  - [x] add some info about the testfunctions in the different set and what variables are allowed in the different fields
-  - [ ] keypress with special keys
-  - [ ] expect_to_fail for tests
-  - [ ] option to not stop on test failure
-  - [ ] add automatic variables to docs
+  - [ ] add some tutorial how to develop an experiment or some tipps:
+    - [ ] pause; idles; ...
   - [ ] add info about default cores and ram for vm and how to set this 
   - [ ] svg are not supported for icons at the moment!
   - [ ] in installation add: eval "$(_ADARE_COMPLETE=zsh_source adare)" and tutorial how to enable autocomplete
@@ -53,4 +51,5 @@ This document tracks ongoing development tasks, planned features, quality of lif
 ## Known Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 - [ ] interrupt on verify does not work!
-- [ ] adding/removing a pull does not trigger reload of experiment?! -> this means run do not work -> try to load on every run?!
+- [ ] adding/removing a pull does not trigger reload of experiment?! -> this means run do not work -> try to load on every run
+- [ ] visual bug on flow console for last stages where Stopping computer vision server spinner occurs for very vers short and text and spinnger dissapera and then it apperas when its done with green dot?! why does it disappear in the middle?! does not make much sense?

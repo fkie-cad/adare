@@ -14,9 +14,9 @@ from pathlib import Path
 
 from adare.types.playbook import (
     ActionType, ClickAction, DragAction,
-    KeyboardAction, IdleAction, ScrollAction, GotoAction, 
+    KeyboardAction, IdleAction, ScrollAction, GotoAction,
     CommandAction, ScreenshotAction, BlockAction, ActionTestAction,
-    SaveTimestampAction, PullAction
+    SaveTimestampAction, PullAction, PauseAction
 )
 from adare.backend.experiment.websocket_client import AdareVMClient
 from adare.backend.experiment.target_resolver import MCPTargetResolver, MCPConditionChecker
@@ -46,11 +46,12 @@ class ActionExecutor:
     PlaybookController, providing clean separation of concerns.
     """
     
-    def __init__(self, websocket_client: AdareVMClient, target_resolver: MCPTargetResolver, 
+    def __init__(self, websocket_client: AdareVMClient, target_resolver: MCPTargetResolver,
                  condition_checker: MCPConditionChecker, experiment_run_id: Optional[str] = None,
                  playbook = None, execution_context: Dict[str, Any] = None,
                  debug_screenshots: bool = False, screenshots_dir: Optional[Path] = None,
-                 vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Optional[Path] = None):
+                 vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Optional[Path] = None,
+                 flow_console = None):
         """
         Initialize the action executor.
         
@@ -63,6 +64,7 @@ class ActionExecutor:
             execution_context: Execution context for variable resolution
             debug_screenshots: Whether to save screenshots for debugging
             screenshots_dir: Directory to save debug screenshots
+            flow_console: Flow console for interactive display and input
         """
         self.client = websocket_client
         self.target_resolver = target_resolver
@@ -75,6 +77,7 @@ class ActionExecutor:
         self.screenshot_counter = 0
         self.vm = vm  # VirtualBox VM instance for file operations
         self.experiment_run_directory = experiment_run_directory  # Run directory for artifacts
+        self.flow_console = flow_console  # Flow console for interactive display
         
         # Initialize action handlers mapping - now handled by _get_click_handler
         self._action_handlers = {}
@@ -138,6 +141,8 @@ class ActionExecutor:
                 return await self._execute_save_timestamp(resolved_action, parent_event_id, event_emitter)
             elif isinstance(resolved_action, PullAction):
                 return await self._execute_pull(resolved_action, parent_event_id, event_emitter)
+            elif isinstance(resolved_action, PauseAction):
+                return await self._execute_pause(resolved_action, parent_event_id, event_emitter)
             else:
                 return ActionResult(
                     success=False,
@@ -683,6 +688,88 @@ class ActionExecutor:
             return ActionResult(
                 success=False,
                 message=f"Pull operation failed: {str(e)}"
+            )
+
+    async def _execute_pause(self, action: PauseAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
+        """Execute pause action - wait for user input to continue."""
+        try:
+            pause_message = action.message or action.name or "Execution paused"
+
+            # If we have a flow console, use the integrated interactive pause
+            if self.flow_console and not self.flow_console.disable:
+                pause_id = f"pause_{int(time.time()*1000)}"
+
+                # Run the pause in a thread pool to avoid blocking the asyncio loop
+                # This prevents timeout issues with long pauses
+                import asyncio
+                import functools
+
+                loop = asyncio.get_event_loop()
+                user_input = await loop.run_in_executor(
+                    None,
+                    functools.partial(self.flow_console.log_interactive_pause, pause_id, pause_message)
+                )
+
+                if user_input == 'c':
+                    log.info("PAUSE: User continued execution")
+                    return ActionResult(
+                        success=True,
+                        message="Execution resumed by user",
+                        data={"user_input": user_input}
+                    )
+                elif user_input == 'interrupted':
+                    log.info("PAUSE: User interrupted with Ctrl+C")
+                    return ActionResult(
+                        success=False,
+                        message="Pause action interrupted by user",
+                        data={"user_input": "interrupted"}
+                    )
+                else:
+                    log.warning(f"PAUSE: Unexpected input '{user_input}'")
+                    return ActionResult(
+                        success=False,
+                        message=f"Pause action failed with input: {user_input}",
+                        data={"user_input": user_input}
+                    )
+            else:
+                # Fallback to simple input if no flow console available
+                pause_symbol = "⏸️"
+                display_message = f"{pause_symbol} {pause_message} - Press 'c' + Enter to continue"
+                log.info(f"PAUSE: {display_message}")
+
+                # Keep asking for input until we get 'c'
+                while True:
+                    try:
+                        user_input = input(f"\n{display_message}: ").strip().lower()
+                        if user_input == 'c':
+                            log.info("PAUSE: User continued execution")
+                            return ActionResult(
+                                success=True,
+                                message="Execution resumed by user",
+                                data={"user_input": user_input}
+                            )
+                        else:
+                            print("Please press 'c' + Enter to continue execution")
+                    except (EOFError, KeyboardInterrupt):
+                        # Handle Ctrl+C or EOF gracefully
+                        log.info("PAUSE: User interrupted with Ctrl+C")
+                        return ActionResult(
+                            success=False,
+                            message="Pause action interrupted by user",
+                            data={"user_input": "interrupted"}
+                        )
+                    except Exception as e:
+                        log.error(f"Error during pause input: {e}")
+                        return ActionResult(
+                            success=False,
+                            message=f"Pause action failed: {str(e)}"
+                        )
+
+        except Exception as e:
+            log.error(f"Error in pause action: {e}")
+            return ActionResult(
+                success=False,
+                message=f"Pause action failed: {str(e)}"
             )
     
     # Utility methods

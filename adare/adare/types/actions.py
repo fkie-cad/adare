@@ -352,7 +352,7 @@ class PullActionStartEvent(ActionStartEvent):
     """Event for pull action start."""
     source: Optional[str] = None
     destination: Optional[str] = None
-    
+
     def get_event_type(self) -> EventType:
         return EventType.PULL_START
 
@@ -364,9 +364,31 @@ class PullActionCompleteEvent(ActionCompleteEvent):
     destination: Optional[str] = None
     files_copied: Optional[int] = None
     total_size: Optional[int] = None
-    
+
     def get_event_type(self) -> EventType:
         return EventType.PULL_COMPLETE
+
+
+# -------------------------------
+# Pause Action Events
+# -------------------------------
+
+@attrs.define
+class PauseActionStartEvent(ActionStartEvent):
+    """Event for pause action start."""
+    message: Optional[str] = None
+
+    def get_event_type(self) -> EventType:
+        return EventType.PAUSE_START
+
+
+@attrs.define
+class PauseActionCompleteEvent(ActionCompleteEvent):
+    """Event for pause action completion."""
+    user_input: Optional[str] = None
+
+    def get_event_type(self) -> EventType:
+        return EventType.PAUSE_COMPLETE
 
 
 # -------------------------------

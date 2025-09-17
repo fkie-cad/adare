@@ -280,7 +280,7 @@ class InteractiveDevelopmentServer:
                 
                 # Command type selector
                 command_type = ui.select(
-                    ["click", "keyboard", "idle", "screenshot", "command", "test"],
+                    ["click", "keyboard", "idle", "screenshot", "command", "test", "pause"],
                     label="Command Type",
                     value="click"
                 ).classes("w-48")
@@ -302,6 +302,8 @@ class InteractiveDevelopmentServer:
                         param_form.create_command_form()
                     elif command_type.value == "test":
                         param_form.create_test_form()
+                    elif command_type.value == "pause":
+                        param_form.create_pause_form()
                 
                 command_type.on('update:model-value', lambda: update_params())
                 

@@ -192,12 +192,28 @@ class CommandParameterForm:
         self.clear()
         with self.container:
             ui.label("Test Action Parameters").classes("text-subtitle1 q-mb-sm")
-            
+
             test_name_input = ui.input("Test name").classes("w-full")
             desc_input = ui.input("Description (optional)").classes("w-full")
-            
+
             self.current_inputs = {
                 "name": test_name_input,
+                "description": desc_input
+            }
+
+    def create_pause_form(self):
+        """Create form for pause action parameters."""
+        self.clear()
+        with self.container:
+            ui.label("Pause Action Parameters").classes("text-subtitle1 q-mb-sm")
+
+            name_input = ui.input("Action name (optional)").classes("w-full")
+            message_input = ui.input("Pause message (optional)").classes("w-full")
+            desc_input = ui.input("Description (optional)").classes("w-full")
+
+            self.current_inputs = {
+                "name": name_input,
+                "message": message_input,
                 "description": desc_input
             }
     
@@ -275,7 +291,18 @@ class CommandParameterForm:
                     "description": self.current_inputs["description"].value or ""
                 }
             }
-        
+
+        elif command_type == "pause":
+            pause_data = {
+                "description": self.current_inputs["description"].value or ""
+            }
+            if self.current_inputs["name"].value:
+                pause_data["name"] = self.current_inputs["name"].value
+            if self.current_inputs["message"].value:
+                pause_data["message"] = self.current_inputs["message"].value
+
+            return {"pause": pause_data}
+
         return {}
 
 

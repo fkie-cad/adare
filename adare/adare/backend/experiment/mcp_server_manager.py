@@ -91,11 +91,11 @@ class MCPServerManager:
         """
         if not self.process:
             return
-        
+
         try:
             if self.process.poll() is None:
                 log.info("Stopping MCP GUI server...")
-                
+
                 # Try graceful shutdown first
                 self.process.terminate()
                 

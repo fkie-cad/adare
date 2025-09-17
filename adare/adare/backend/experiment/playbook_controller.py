@@ -14,7 +14,7 @@ import time
 
 # Playbook and test imports
 from adare.types.playbook import (
-    parse_playbook, Playbook, ActionType, ActionTestAction
+    parse_playbook, Playbook, ActionType, ActionTestAction, PullAction, PauseAction, SaveTimestampAction
 )
 
 # WebSocket client import
@@ -64,7 +64,8 @@ class PlaybookController:
                  screenshots_dir: Path = None, playbook: Optional[Playbook] = None,
                  experiment_id: Optional[str] = None, experiment_run_id: Optional[str] = None,
                  vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Optional[Path] = None,
-                 vm_os: Optional[str] = None, vm_user: Optional[str] = None):
+                 vm_os: Optional[str] = None, vm_user: Optional[str] = None, flow_console = None,
+                 test_mode: bool = False):
         """
         Initialize the playbook controller.
         
@@ -78,6 +79,8 @@ class PlaybookController:
             playbook: Pre-parsed playbook (optional, will parse if not provided)
             experiment_id: Experiment ID for database linking
             experiment_run_id: Experiment run ID for execution tracking
+            flow_console: Flow console for interactive display and input
+            test_mode: Whether running in test mode (affects test action execution)
         """
         self.client = websocket_client
         self.experiment_dir = experiment_dir
@@ -91,6 +94,8 @@ class PlaybookController:
         self.experiment_run_directory = experiment_run_directory  # Run directory for artifacts
         self.vm_os = vm_os  # VM OS for automatic variables
         self.vm_user = vm_user  # VM user for automatic variables
+        self.flow_console = flow_console  # Flow console for interactive actions
+        self.test_mode = test_mode  # Test mode flag
         
         # Database integration
         self.experiment_id = experiment_id
@@ -151,7 +156,8 @@ class PlaybookController:
             debug_screenshots=self.debug_screenshots,
             screenshots_dir=self.screenshots_dir,
             vm=self.vm,
-            experiment_run_directory=self.experiment_run_directory
+            experiment_run_directory=self.experiment_run_directory,
+            flow_console=self.flow_console
         )
         
         # Test loader for test loading and resolution
@@ -245,13 +251,16 @@ class PlaybookController:
         successful_tests = sum(1 for r in test_results if r.success)
         failed_tests = total_tests - successful_tests
         
+        # Count only actions that should be included in execution statistics (exclude utility actions)
+        countable_results = [r for r in self.action_results if r.data and r.data.get('is_countable', True)]
+
         return PlaybookExecutionResult(
             success=True,
-            total_actions=len(self.action_results),
-            successful_actions=sum(1 for r in self.action_results if r.success),
-            failed_actions=sum(1 for r in self.action_results if not r.success),
+            total_actions=len(countable_results),
+            successful_actions=sum(1 for r in countable_results if r.success),
+            failed_actions=sum(1 for r in countable_results if not r.success),
             execution_time=execution_time,
-            action_results=self.action_results,
+            action_results=self.action_results,  # Keep all results for debugging/logging
             total_tests=total_tests,
             successful_tests=successful_tests,
             failed_tests=failed_tests
@@ -288,7 +297,25 @@ class PlaybookController:
         for i, action in enumerate(playbook.actions):
             action_name = type(action).__name__
             log.info(f"Executing action {i+1}/{total_actions}: {action_name}")
-            
+
+            # Skip pause actions when not in test mode
+            if isinstance(action, PauseAction) and not self.test_mode:
+                log.info(f"Skipping pause action {action_name} - not running in test mode")
+                # Create a successful result to indicate the action was skipped
+                skipped_result = ActionResult(
+                    success=True,
+                    message=f"Pause action skipped (not in test mode)",
+                    execution_time=0.0,
+                    data={
+                        'is_countable': self._is_countable_action(action),
+                        'is_test_action': False,
+                        'is_utility_action': self._is_utility_action(action),
+                        'skipped': True
+                    }
+                )
+                self.action_results.append(skipped_result)
+                continue
+
             # Create database execution record if tracking enabled
             execution_id = None
             if self.experiment_run_id and i in self.playbook_items_map:
@@ -320,6 +347,14 @@ class PlaybookController:
             execution_time = time.time() - start_time
             
             result.execution_time = execution_time
+
+            # Add metadata to track if this action should be counted in statistics
+            if not result.data:
+                result.data = {}
+            result.data['is_countable'] = self._is_countable_action(action)
+            result.data['is_test_action'] = self._is_test_action(action)
+            result.data['is_utility_action'] = self._is_utility_action(action)
+
             self.action_results.append(result)
             self.action_timings[f"action_{i+1}_{action_name}"] = execution_time
             
@@ -417,6 +452,14 @@ class PlaybookController:
     def _is_test_action(self, action: ActionType) -> bool:
         """Check if an action is a test action."""
         return isinstance(action, ActionTestAction)
+
+    def _is_utility_action(self, action: ActionType) -> bool:
+        """Check if an action is a utility action that shouldn't count toward execution statistics."""
+        return isinstance(action, (PullAction, PauseAction, SaveTimestampAction))
+
+    def _is_countable_action(self, action: ActionType) -> bool:
+        """Check if an action should be counted in execution statistics."""
+        return not self._is_utility_action(action)
     
     def _is_test_action_result(self, action_result: ActionResult) -> bool:
         """Check if an action result corresponds to a test execution."""
