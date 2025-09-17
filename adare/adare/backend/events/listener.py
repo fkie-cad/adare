@@ -29,6 +29,9 @@ _spinner_timers = {}  # stage_id -> timer
 _spinner_lock = threading.Lock()
 _MIN_SPINNER_DISPLAY_TIME = 0.1  # Minimum 100ms spinner display
 
+# Simplified spinner management
+_stage_tracking_lock = threading.Lock()
+
 # Import shared action display logic
 from adare.frontend.terminal.action_display import get_action_display_info, determine_action_status, format_action_message
 
@@ -53,14 +56,15 @@ def _schedule_delayed_completion(stage_id: str, console, completion_callback, de
             with _spinner_lock:
                 _spinner_timers.pop(stage_id, None)
 
-    # Cancel any existing timer for this stage
+    # Cancel any existing timer for this stage and wait for completion to avoid races
     with _spinner_lock:
         existing_timer = _spinner_timers.get(stage_id)
         if existing_timer and existing_timer.is_alive():
-            # Don't cancel if already running, let it complete
+            # Let existing timer complete to prevent race conditions
+            log.debug(f"[EventListener CLI] Timer already running for {stage_id}, skipping duplicate")
             return
 
-        timer = threading.Thread(target=delayed_complete, daemon=True)
+        timer = threading.Thread(target=delayed_complete, daemon=True, name=f"delayed_complete")
         _spinner_timers[stage_id] = timer
         timer.start()
 
@@ -267,7 +271,7 @@ def event_listener_cli(ulid):
 
 
 def _handle_stage_event(event, console, ulid):
-    """Handle stage events (existing logic)."""
+    """Handle stage events (restored to simple logic)."""
     stage = event.get("data", {})
     stage_id = event.get("stage_id")
     if not stage:
@@ -285,7 +289,7 @@ def _handle_stage_event(event, console, ulid):
     # Check stage status first
     finished = stage.start_time and stage.end_time
     in_progress = stage.start_time and not stage.end_time
-    
+
     # Calculate display level using cached hierarchy lookup
     level = _get_stage_level(stage.name)
     
@@ -299,18 +303,6 @@ def _handle_stage_event(event, console, ulid):
         stage_duration = None
         if stage.start_time and stage.end_time:
             stage_duration = (stage.end_time - stage.start_time).total_seconds()
-
-        # Calculate how long the spinner has been visible
-        spinner_visible_time = 0
-        if console.exists(stage_id):
-            try:
-                # Try to get when the spinner was created (this is approximate)
-                spinner_visible_time = (event_end_time - event_start_time)
-            except:
-                spinner_visible_time = 0
-
-        # Determine if we need to delay completion for better UX
-        min_display_time_needed = max(0, _MIN_SPINNER_DISPLAY_TIME - spinner_visible_time)
 
         def complete_stage():
             if console.exists(stage_id):
@@ -341,12 +333,22 @@ def _handle_stage_event(event, console, ulid):
                 elif stage.status == StatusEnum.FINISHED:
                     console.log_finished(identifier=stage_id, message=message, level=level, duration=stage_duration)
 
-        # Apply debouncing for very short stages to prevent flashing
-        if min_display_time_needed > 0.01 and console.exists(stage_id):  # Only for existing spinners
+        # Calculate how long the spinner has been visible
+        spinner_visible_time = 0
+        if console.exists(stage_id):
+            try:
+                current_time = time.time()
+                spinner_visible_time = current_time - event_start_time
+            except Exception:
+                spinner_visible_time = 0
+
+        min_display_time_needed = max(0, _MIN_SPINNER_DISPLAY_TIME - spinner_visible_time)
+
+        # Apply debouncing for very short stages
+        if min_display_time_needed > 0.01 and console.exists(stage_id):
             log.debug(f"[EventListener CLI] Delaying completion of {stage.name} by {min_display_time_needed*1000:.1f}ms for better UX")
             _schedule_delayed_completion(stage_id, console, complete_stage, min_display_time_needed * 1000)
         else:
-            # Complete immediately if spinner has been visible long enough
             complete_stage()
     elif in_progress:
         # Only add the stage if it doesn't already exist

@@ -191,7 +191,7 @@ tests:
    function: xml.element_exists
    parameter:
      dst: "{{config_xml}}"
-     xpath: "./configuration"
+     xpath: "/configuration"
 
  - name: database_configuration_exists
    function: xml.element_exists

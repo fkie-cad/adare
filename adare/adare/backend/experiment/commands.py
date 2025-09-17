@@ -848,6 +848,23 @@ async def step_start_mcp_server(context: ExperimentRunCtx):
 
 async def step_execute_experiment(context: ExperimentRunCtx):
     """Execute the experiment using the playbook controller."""
+
+    # First, install testfunction dependencies in a separate stage
+    from adare.types.stages import TestfunctionDependenciesStage
+    from adare.backend.experiment.test_loader import TestLoader
+
+    stage_deps = TestfunctionDependenciesStage()
+    with StageCtxManager(stage_deps, context.experiment_run_ulid, event=context.user_interrupt_event):
+        # Create test loader with all required parameters
+        test_loader = TestLoader(
+            experiment_dir=context.experiment_directory.path,
+            project_dir=context.project_directory.path,
+            playbook=context.playbook,
+            variable_resolver=None
+        )
+        await test_loader._install_dependencies_only(context.client)
+
+    # Then run the actual experiment
     with StageCtxManager(ExperimentRunStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage:
         from adare.backend.experiment.playbook_controller import PlaybookController
         

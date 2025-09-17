@@ -227,7 +227,7 @@ class PlaybookController:
         log.info(f"Starting experiment execution in {experiment_dir}")
         self.start_time = time.time()
         
-        # 1. Load testfunctions and testset FIRST (required for playbook test actions)
+        # 1. Load testfunctions and testset (dependencies should already be installed)
         await self.test_loader.load_tests(self.client)
         
         # 2. Execute playbook actions (can now use loaded tests)

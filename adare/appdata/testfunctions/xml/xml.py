@@ -1,7 +1,7 @@
 # external imports
 import attrs
 from pathlib import Path
-import xml.etree.ElementTree as ET
+from lxml import etree as ET
 import re
 from typing import ClassVar, Optional, Union, Dict, Any, List
 
@@ -37,17 +37,18 @@ class ElementExists(BasicTest):
         try:
             tree = ET.parse(filepath)
             return tree.getroot()
-        except ET.ParseError as e:
+        except ET.XMLSyntaxError as e:
             raise ValueError(f"Invalid XML format: {e}")
 
     def _find_elements(self, root, xpath, namespaces=None):
         """Find elements using XPath with namespace support"""
         try:
+            # Use lxml's xpath() method for full XPath support
             if namespaces:
-                return root.findall(xpath, namespaces)
+                return root.xpath(xpath, namespaces=namespaces)
             else:
-                return root.findall(xpath)
-        except (AttributeError, SyntaxError) as e:
+                return root.xpath(xpath)
+        except (AttributeError, SyntaxError, ET.XPathEvalError) as e:
             raise ValueError(f"Invalid XPath expression '{xpath}': {e}")
 
     def test(self):
@@ -107,17 +108,18 @@ class ElementTextMatches(BasicTest):
         try:
             tree = ET.parse(filepath)
             return tree.getroot()
-        except ET.ParseError as e:
+        except ET.XMLSyntaxError as e:
             raise ValueError(f"Invalid XML format: {e}")
 
     def _find_elements(self, root, xpath, namespaces=None):
         """Find elements using XPath with namespace support"""
         try:
+            # Use lxml's xpath() method for full XPath support
             if namespaces:
-                return root.findall(xpath, namespaces)
+                return root.xpath(xpath, namespaces=namespaces)
             else:
-                return root.findall(xpath)
-        except (AttributeError, SyntaxError) as e:
+                return root.xpath(xpath)
+        except (AttributeError, SyntaxError, ET.XPathEvalError) as e:
             raise ValueError(f"Invalid XPath expression '{xpath}': {e}")
 
     def _compare_values(self, actual_text, expected_text):
@@ -282,17 +284,18 @@ class AttributeMatches(BasicTest):
         try:
             tree = ET.parse(filepath)
             return tree.getroot()
-        except ET.ParseError as e:
+        except ET.XMLSyntaxError as e:
             raise ValueError(f"Invalid XML format: {e}")
 
     def _find_elements(self, root, xpath, namespaces=None):
         """Find elements using XPath with namespace support"""
         try:
+            # Use lxml's xpath() method for full XPath support
             if namespaces:
-                return root.findall(xpath, namespaces)
+                return root.xpath(xpath, namespaces=namespaces)
             else:
-                return root.findall(xpath)
-        except (AttributeError, SyntaxError) as e:
+                return root.xpath(xpath)
+        except (AttributeError, SyntaxError, ET.XPathEvalError) as e:
             raise ValueError(f"Invalid XPath expression '{xpath}': {e}")
 
     def _compare_values(self, actual_value, expected_value):
@@ -403,17 +406,18 @@ class ElementCount(BasicTest):
         try:
             tree = ET.parse(filepath)
             return tree.getroot()
-        except ET.ParseError as e:
+        except ET.XMLSyntaxError as e:
             raise ValueError(f"Invalid XML format: {e}")
 
     def _find_elements(self, root, xpath, namespaces=None):
         """Find elements using XPath with namespace support"""
         try:
+            # Use lxml's xpath() method for full XPath support
             if namespaces:
-                return root.findall(xpath, namespaces)
+                return root.xpath(xpath, namespaces=namespaces)
             else:
-                return root.findall(xpath)
-        except (AttributeError, SyntaxError) as e:
+                return root.xpath(xpath)
+        except (AttributeError, SyntaxError, ET.XPathEvalError) as e:
             raise ValueError(f"Invalid XPath expression '{xpath}': {e}")
 
     def _compare_count(self, actual_count, expected_count, comparison_type):
@@ -491,34 +495,33 @@ class XPathResultMatches(BasicTest):
         try:
             tree = ET.parse(filepath)
             return tree.getroot()
-        except ET.ParseError as e:
+        except ET.XMLSyntaxError as e:
             raise ValueError(f"Invalid XML format: {e}")
 
     def _evaluate_xpath(self, root, xpath, result_type, namespaces=None):
         """Evaluate XPath and convert result based on type"""
         try:
-            # Note: ElementTree has limited XPath support compared to lxml
-            # This implementation covers basic functionality
+            # Use lxml's xpath() method for full XPath support
             if result_type == 'text':
-                elements = root.findall(xpath, namespaces or {})
+                elements = root.xpath(xpath, namespaces=namespaces or {})
                 if elements:
                     return elements[0].text or ""
                 else:
                     return ""
             elif result_type == 'number':
-                elements = root.findall(xpath, namespaces or {})
+                elements = root.xpath(xpath, namespaces=namespaces or {})
                 if elements:
                     text = elements[0].text or "0"
                     return float(text)
                 else:
                     return 0.0
             elif result_type == 'boolean':
-                elements = root.findall(xpath, namespaces or {})
+                elements = root.xpath(xpath, namespaces=namespaces or {})
                 return len(elements) > 0
             else:
                 raise ValueError(f"Unsupported result type: {result_type}")
 
-        except (AttributeError, SyntaxError, ValueError) as e:
+        except (AttributeError, SyntaxError, ValueError, ET.XPathEvalError) as e:
             raise ValueError(f"XPath evaluation error '{xpath}': {e}")
 
     def test(self):
@@ -605,7 +608,7 @@ class NamespaceMatches(BasicTest):
                     namespaces[''] = root.attrib[attr_name]
 
             return root, namespaces
-        except ET.ParseError as e:
+        except ET.XMLSyntaxError as e:
             raise ValueError(f"Invalid XML format: {e}")
 
     def test(self):

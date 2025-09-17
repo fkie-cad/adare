@@ -65,6 +65,7 @@ class AdareVMServer:
             "run_test": self._run_test,
             "execute_shell": self._execute_shell,
             "get_status": self._get_status,
+            "set_screenshot_method": self._set_screenshot_method,
         }
     
     async def start_server(self):
@@ -363,7 +364,7 @@ class AdareVMServer:
 
     async def _install_dependencies(self, websocket, dependencies: List[str]):
         """Install Python dependencies using Poetry."""
-        await self.send_event(websocket, EventType.LOG, {"message": f"Installing {len(dependencies)} dependencies with Poetry..."})
+        await self.send_event(websocket, EventType.LOG, {"message": f"Starting dependency installation: {len(dependencies)} packages"})
 
         try:
             if not dependencies:
@@ -372,13 +373,19 @@ class AdareVMServer:
 
             log.info(f"Installing dependencies with Poetry: {dependencies}")
 
-            # Find the project directory containing pyproject.toml
+            # Step 1: Find project directory
+            await self.send_event(websocket, EventType.LOG, {"message": "Step 1/4: Locating pyproject.toml..."})
             project_dir = self._find_project_directory()
+            await self.send_event(websocket, EventType.LOG, {"message": f"Found project directory: {project_dir}"})
 
-            # Install all dependencies in one command for efficiency
-            cmd = ["poetry", "add"] + [f'"{dep}"' for dep in dependencies]
+            # Step 2: Prepare Poetry command
+            await self.send_event(websocket, EventType.LOG, {"message": "Step 2/4: Preparing Poetry command..."})
+            cmd = ["poetry", "add"] + dependencies
             log.info(f"Running command: {' '.join(cmd)} in directory: {project_dir}")
-            await self.send_event(websocket, EventType.LOG, {"message": f"Running: {' '.join(cmd)} in {project_dir}"})
+            await self.send_event(websocket, EventType.LOG, {"message": f"Command: {' '.join(cmd)}"})
+
+            # Step 3: Execute installation
+            await self.send_event(websocket, EventType.LOG, {"message": "Step 3/4: Installing dependencies (this may take several minutes)..."})
 
             # Use asyncio subprocess to avoid blocking the event loop
             process = await asyncio.create_subprocess_exec(
@@ -398,11 +405,13 @@ class AdareVMServer:
             stderr = stderr.decode('utf-8') if stderr else ""
             
             if process.returncode != 0:
+                await self.send_event(websocket, EventType.LOG, {"message": "Step 4/4: Installation failed"})
                 error_msg = f"Poetry add failed: {stderr}"
                 log.error(error_msg)
                 await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
                 return {"status": "error", "message": error_msg}
             else:
+                await self.send_event(websocket, EventType.LOG, {"message": "Step 4/4: Installation completed successfully"})
                 success_msg = f"Successfully installed all {len(dependencies)} dependencies with Poetry"
                 log.info(success_msg)
                 log.debug(f"Poetry output: {stdout}")
@@ -689,4 +698,27 @@ class AdareVMServer:
             "variables": self.current_variables,
             "connected_clients": len(self.clients)
         }
+
+    async def _set_screenshot_method(self, websocket, use_maim: bool):
+        """Set the screenshot method to use (maim or pyautogui)."""
+        log.info(f"Setting screenshot method to: {'maim' if use_maim else 'pyautogui'}")
+        try:
+            from adarevm.automation.gui import set_screenshot_method
+            set_screenshot_method(use_maim)
+
+            await self.send_event(websocket, EventType.LOG, {
+                "message": f"Screenshot method set to: {'maim' if use_maim else 'pyautogui'}"
+            })
+
+            return {
+                "status": "success",
+                "message": f"Screenshot method set to: {'maim' if use_maim else 'pyautogui'}",
+                "use_maim": use_maim
+            }
+        except Exception as e:
+            log.error(f"Failed to set screenshot method: {e}")
+            await self.send_event(websocket, EventType.ERROR, {
+                "message": f"Failed to set screenshot method: {e}"
+            })
+            return {"status": "error", "message": str(e)}
 
