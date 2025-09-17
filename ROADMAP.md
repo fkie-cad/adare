@@ -28,6 +28,8 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] multiple runs for all environments when we call adare experiment run ... without environment specified -< print summary at the end!
 - [ ] some kind of dev mode (simple first idea execute till interactive action -> we stop there an only continue on keypress)
 - [ ] for all things where we need ulid lets find by unique combo already!
+- [ ] add metadata to testfunction sets to let a user add description
+- [ ] make own stage for dependency installation of testfunctions this can take a while!
  
 ## Quality of Life Improvements
 - [ ] update documentation

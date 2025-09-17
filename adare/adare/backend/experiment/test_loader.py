@@ -38,16 +38,15 @@ class TestLoader:
         self.playbook = playbook
         self.variable_resolver = variable_resolver
     
-    async def load_tests(self, websocket_client):
+    async def _install_dependencies_only(self, websocket_client):
         """
-        Load testfunctions and testset for use during playbook execution.
-        
+        Install only testfunction dependencies without uploading files.
+
         Args:
-            websocket_client: WebSocket client for uploading testfunctions
+            websocket_client: WebSocket client for installing dependencies
         """
-        log.info("Loading testfunctions and testset...")
-        
-        # First, install dependencies for testfunctions
+        log.info("Installing testfunction dependencies...")
+
         dependencies = self._collect_testfunction_dependencies()
         if dependencies:
             log.info(f"Installing {len(dependencies)} testfunction dependencies in VM...")
@@ -63,6 +62,19 @@ class TestLoader:
                 # Continue anyway - some tests might still work
         else:
             log.debug("No testfunction dependencies to install")
+
+    async def load_tests(self, websocket_client):
+        """
+        Load testfunctions and testset for use during playbook execution.
+        Note: Dependencies should already be installed by this point.
+
+        Args:
+            websocket_client: WebSocket client for uploading testfunctions
+        """
+        log.info("Loading testfunctions and testset...")
+
+        # Dependencies should already be installed, just note that here
+        log.debug("Skipping dependency installation (should already be done)")
         
         # Upload only testfunctions that are actually used in the playbook
         testfunctions_path = self.project_dir / "testfunctions"

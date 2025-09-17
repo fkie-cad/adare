@@ -206,7 +206,7 @@ tests:
    function: xml.element_exists
    parameter:
      dst: "{{config_xml}}"
-     xpath: "./configuration"
+     xpath: "/configuration"
 
  - name: app_settings_section_exists
    function: xml.element_exists

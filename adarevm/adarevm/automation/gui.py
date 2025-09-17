@@ -13,33 +13,67 @@ from typing import Dict, List, Any, Optional
 
 log = logging.getLogger(__name__)
 
+# Global configuration for screenshot method
+_use_maim_screenshot = False
+
+
+def set_screenshot_method(use_maim: bool):
+    """Set the screenshot method to use."""
+    global _use_maim_screenshot
+    _use_maim_screenshot = use_maim
+    log.info(f"Screenshot method set to: {'maim' if use_maim else 'pyautogui'}")
+
+
+def _take_screenshot_maim(x: int = None, y: int = None, width: int = None, height: int = None) -> bytes:
+    """Take screenshot using maim command."""
+    # Build maim command
+    maim_cmd = ["maim", "-f", "png"]
+
+    # Add region parameters if specified
+    if x is not None and y is not None and width is not None and height is not None:
+        log.info(f"Taking screenshot with maim: x={x}, y={y}, width={width}, height={height}")
+        maim_cmd.extend(["-g", f"{width}x{height}+{x}+{y}"])
+    else:
+        log.info("Taking screenshot with maim")
+
+    # Capture screenshot using maim
+    png_bytes = subprocess.check_output(maim_cmd, stderr=subprocess.PIPE)
+
+    # Load image and convert to RGBA
+    img = Image.open(BytesIO(png_bytes)).convert("RGBA")
+
+    # Convert back to bytes
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _take_screenshot_pyautogui(x: int = None, y: int = None, width: int = None, height: int = None) -> bytes:
+    """Take screenshot using pyautogui."""
+    if x is not None and y is not None and width is not None and height is not None:
+        log.info(f"Taking screenshot with pyautogui: x={x}, y={y}, width={width}, height={height}")
+        img = pyautogui.screenshot(region=(x, y, width, height))
+    else:
+        log.info("Taking screenshot with pyautogui")
+        img = pyautogui.screenshot()
+
+    # Convert to RGBA and then to bytes
+    img = img.convert("RGBA")
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    return buffer.getvalue()
+
 
 def take_screenshot(x: int = None, y: int = None, width: int = None, height: int = None) -> Dict[str, Any]:
     """
     Take a screenshot and return the image data and offset in JSON-safe format.
-    Uses maim for screenshot capture instead of pyautogui for better reliability.
+    Uses either maim or pyautogui based on configuration (defaults to pyautogui).
     """
     try:
-        # Build maim command
-        maim_cmd = ["maim", "-f", "png"]
-
-        # Add region parameters if specified
-        if x is not None and y is not None and width is not None and height is not None:
-            log.info(f"Taking screenshot with x={x}, y={y}, width={width}, height={height}")
-            maim_cmd.extend(["-g", f"{width}x{height}+{x}+{y}"])
+        if _use_maim_screenshot:
+            img_bytes = _take_screenshot_maim(x, y, width, height)
         else:
-            log.info("Taking screenshot")
-
-        # Capture screenshot using maim
-        png_bytes = subprocess.check_output(maim_cmd, stderr=subprocess.PIPE)
-
-        # Load image and convert to RGBA
-        img = Image.open(BytesIO(png_bytes)).convert("RGBA")
-
-        # Convert back to bytes
-        buffer = BytesIO()
-        img.save(buffer, format="PNG")
-        img_bytes = buffer.getvalue()
+            img_bytes = _take_screenshot_pyautogui(x, y, width, height)
 
     except subprocess.CalledProcessError as e:
         log.error(f"maim command failed: {e.stderr.decode() if e.stderr else str(e)}")

@@ -343,7 +343,7 @@ class AdareVMClient:
 
         return await self.call_tool(ToolRegistry.UPLOAD_TESTFUNCTIONS, {
             "testfunctions_data": zip_data
-        })
+        }, timeout=300.0)  # Increased timeout for dependency installation (5 minutes)
     
     async def install_testfunction_dependencies(self, dependencies: List[str]) -> Dict[str, Any]:
         """
@@ -357,7 +357,7 @@ class AdareVMClient:
         """
         return await self.call_tool(ToolRegistry.INSTALL_DEPENDENCIES, {
             "dependencies": dependencies
-        })
+        }, timeout=300.0)  # 5 minutes for dependency installation
     
     async def set_variables(self, variables: Dict[str, Any]) -> Dict[str, Any]:
         """Set variables for test execution."""

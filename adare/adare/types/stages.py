@@ -196,6 +196,14 @@ class InstallationsStage(Stage):
 
 @register_stage
 @attrs.define
+class TestfunctionDependenciesStage(Stage):
+    name: ClassVar[str] = 'testfunction_dependencies'
+    msg: ClassVar[str] = 'Installing testfunction dependencies'
+    description: ClassVar[str] = 'Installing Python packages required by testfunctions via Poetry'
+    parent: ClassVar[str] = 'experiment_execution'
+
+@register_stage
+@attrs.define
 class ExperimentRunStage(Stage):
     name: ClassVar[str] = 'experiment_run'
     msg: ClassVar[str] = 'Running the playbook'

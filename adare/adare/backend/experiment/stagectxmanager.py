@@ -36,12 +36,12 @@ class StageCtxManager(contextlib.AbstractContextManager):
                 raise ValueError(f"Child stage '{self.stage.name}' requires parent '{self.stage.parent}' but no parent stage is active")
             if current_parent != self.stage.parent:
                 raise ValueError(f"Child stage '{self.stage.name}' expects parent '{self.stage.parent}' but active parent is '{current_parent}'")
-        
+
         # Set this stage as active parent if it's a parent stage (has no parent itself)
         is_parent_stage = not (hasattr(self.stage, 'parent') and self.stage.parent)
         if is_parent_stage:
             self._parent_token = _active_parent_stage.set(self.stage.name)
-        
+
         self.stage.start()
         if not self.stage_id:
             self.stage_id = str(ULID())
@@ -58,7 +58,7 @@ class StageCtxManager(contextlib.AbstractContextManager):
         # 1. If user interrupted (event set), mark as interrupted (takes priority over exceptions)
         # 2. If an exception occurred, mark as failed/error
         # 3. Otherwise, let the stage complete with its current status
-        
+
         if self.event and self.event.is_set() and self.stage.status != StatusEnum.SUCCESS:
             # User interrupted and stage hasn't already completed successfully
             # This takes priority over exceptions since interrupts can cause CancelledError
@@ -74,11 +74,32 @@ class StageCtxManager(contextlib.AbstractContextManager):
                 # This is an unexpected error (programming errors, etc.)
                 self.stage.status = StatusEnum.ERROR
                 log.debug(f"Stage '{self.stage.name}' errored due to unexpected exception: {exc_value}")
-            
+
         self.stage.end()
         if self.experimentrun_ulid:
+            # For parent stages, wait for the event processing queue to drain
+            is_parent_stage = not (hasattr(self.stage, 'parent') and self.stage.parent)
+            if is_parent_stage:
+                self._wait_for_event_queue_drain()
+
             emit_stage(self.experimentrun_ulid, stage=self.stage, stage_id=self.stage_id)
-        
+
+    def _wait_for_event_queue_drain(self):
+        """Wait for the event processing queue to drain before completing parent stage."""
+        try:
+            from adare.backend.events.coordinator import get_stage_coordinator
+            coordinator = get_stage_coordinator()
+            if coordinator and hasattr(coordinator, '_event_queue'):
+                # Wait for queue to be empty with a reasonable timeout
+                import time
+                timeout = 0.1  # 100ms max wait
+                start_time = time.time()
+                while not coordinator._event_queue.empty() and (time.time() - start_time) < timeout:
+                    time.sleep(0.001)  # 1ms check interval
+        except Exception:
+            # If we can't check the queue, just continue
+            pass
+
         # Reset parent context if this was a parent stage
         if hasattr(self, '_parent_token'):
             _active_parent_stage.reset(self._parent_token)
