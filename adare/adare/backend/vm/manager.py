@@ -7,10 +7,12 @@ Pure business logic with no database dependencies for easy testing.
 
 from pathlib import Path
 import logging
+import threading
+from typing import Optional
 
 from adare.backend.vm.exceptions import VMValidationError, VMCopyError
 from adare.backend.vm.storage import get_vm_storage_directory, generate_vm_filename
-from adare.helperfunctions.file.hash import file_sha256_with_progress
+from adare.helperfunctions.file.hash import file_sha256_with_progress, file_sha256_with_progress_async
 from adare.helperfunctions.file.validation import validate_tarfile_with_progress
 from adare.helperfunctions.integrity import IntegrityManager
 
@@ -98,21 +100,42 @@ class VMFileManager:
             'file_size': file_size
         }
     
-    def calculate_file_hash(self, file_path: Path, silent: bool = False) -> str:
+    def calculate_file_hash(self, file_path: Path, silent: bool = False, interrupt_event: Optional[threading.Event] = None) -> str:
         """
         Calculate SHA256 hash of file with progress indication.
-        
+
         Args:
             file_path: Path to file
             silent: If True, suppress progress bar
-            
+            interrupt_event: Optional event to check for user interruption
+
         Returns:
             SHA256 hash string
         """
         return file_sha256_with_progress(
             file_path=file_path,
             description=f"Calculating hash for {file_path.name}",
-            silent=silent
+            silent=silent,
+            interrupt_event=interrupt_event
+        )
+
+    async def calculate_file_hash_async(self, file_path: Path, silent: bool = False, interrupt_event: Optional[threading.Event] = None) -> str:
+        """
+        Calculate SHA256 hash of file with progress indication (async version).
+
+        Args:
+            file_path: Path to file
+            silent: If True, suppress progress bar
+            interrupt_event: Optional event to check for user interruption
+
+        Returns:
+            SHA256 hash string
+        """
+        return await file_sha256_with_progress_async(
+            file_path=file_path,
+            description=f"Calculating hash for {file_path.name}",
+            silent=silent,
+            interrupt_event=interrupt_event
         )
     
     def copy_vm_file(self, source_path: Path, name: str, scope: str, 

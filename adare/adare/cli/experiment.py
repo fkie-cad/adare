@@ -33,25 +33,68 @@ def exec_experiment_example(arguments):
         raise NoProjectFoundError(log, message='no project directory found')
 
 
+def _handle_environment_interruption(environments, current_index, results):
+    """
+    Handle interruption logic and prompt user whether to continue with remaining environments.
+
+    Returns:
+        bool: True if user wants to continue, False if user wants to stop
+    """
+    remaining_envs = environments[current_index:]
+    if not remaining_envs:
+        return False  # No remaining environments
+
+    print(f"\n{len(remaining_envs)} environment(s) remaining: {', '.join([env.name for env in remaining_envs])}")
+    while True:
+        choice = input("Continue with remaining environments? [y/n] (y=yes, n=no): ").lower().strip()
+        if choice in ['y', 'yes']:
+            print("Continuing with next environment...\n")
+            return True
+        elif choice in ['n', 'no']:
+            print("Terminating all remaining environments...\n")
+            # Mark remaining environments as skipped
+            for remaining_env in remaining_envs:
+                results.append({
+                    'environment': remaining_env.name,
+                    'status': 'SKIPPED',
+                    'duration': 0,
+                    'error': 'Skipped due to user termination'
+                })
+            return False
+        else:
+            print("Please enter 'y' (yes) or 'n' (no)")
+
+
 async def exec_experiment_run_all_environments(project_directory, arguments, disable_printing):
-    """Run experiment across all environments in the project and provide a summary."""
+    """Run experiment across all environments supported by the experiment and provide a summary."""
     from adare.backend.experiment.commands import experiment_run, experiment_load
-    from adare.database.api.environment import EnvironmentDbApi
+    from adare.database.api.experiment import ExperimentApi
     from adare.exceptions import LoggedErrorException
     from datetime import datetime, timezone
 
-    # Get all environments for the project
-    with EnvironmentDbApi() as db:
-        environments = db.get_environments(project_directory)
+    # Get environments supported by the experiment (from experiment's metadata.yml)
+    with ExperimentApi() as api:
+        experiment = api.get_experiment_by_project_and_name(project_directory, arguments.experiment)
+        if not experiment:
+            raise LoggedErrorException(log,
+                f'Experiment "{arguments.experiment}" not found in project "{project_directory.name}". '
+                'Please load the experiment first.',
+                possible_solutions=[
+                    f'Load the experiment with: adare experiment load {arguments.experiment}',
+                    'Check if you are in the correct project directory',
+                    'List available experiments with: adare experiment list'
+                ]
+            )
+        environments = experiment.environments
 
     if not environments:
         raise LoggedErrorException(log,
-            f'No environments found in project "{project_directory.name}". '
-            'Please create at least one environment before running experiments.',
+            f'No environments configured for experiment "{arguments.experiment}". '
+            'The experiment metadata.yml has no environments specified.',
             possible_solutions=[
-                'Create an environment with: adare environment create <name>',
-                'Load an existing environment with: adare environment load <file>',
-                'Check if you are in the correct project directory'
+                f'Add environments to experiment with: adare experiment add-env {arguments.experiment} <env_name>',
+                f'Edit the experiment metadata.yml file to specify environments',
+                'Check if the experiment was loaded correctly'
             ]
         )
 
@@ -78,6 +121,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
     else:
         experiment_load(project_directory, arguments.experiment, force=False, silent=True)
 
+    print(f"Experiment '{arguments.experiment}' (ulid: {experiment.ulid}) was loaded successfully")
     print(f"Running experiment '{arguments.experiment}' on {len(environments)} environment(s)...")
     print(f"Environments: {', '.join([env.name for env in environments])}")
     print()
@@ -94,7 +138,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
         env_start_time = datetime.now(timezone.utc)
 
         try:
-            await experiment_run(
+            was_interrupted = await experiment_run(
                 project_directory,
                 arguments.experiment,
                 env_name,
@@ -109,14 +153,45 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
 
             env_end_time = datetime.now(timezone.utc)
             duration = (env_end_time - env_start_time).total_seconds()
+
+            if was_interrupted:
+                results.append({
+                    'environment': env_name,
+                    'status': 'INTERRUPTED',
+                    'duration': duration,
+                    'error': 'User interrupted'
+                })
+                print(f"⏸️  Environment '{env_name}' interrupted by user ({duration:.1f}s)")
+
+                # Handle interruption and check if user wants to continue
+                if not _handle_environment_interruption(environments, i, results):
+                    break  # Exit the main environment loop
+
+            else:
+                results.append({
+                    'environment': env_name,
+                    'status': 'SUCCESS',
+                    'duration': duration,
+                    'error': None
+                })
+                print(f"✅ Environment '{env_name}' completed successfully ({duration:.1f}s)")
+
+        except KeyboardInterrupt:
+            env_end_time = datetime.now(timezone.utc)
+            duration = (env_end_time - env_start_time).total_seconds()
+
             results.append({
                 'environment': env_name,
-                'status': 'SUCCESS',
+                'status': 'INTERRUPTED',
                 'duration': duration,
-                'error': None
+                'error': 'User interrupted (Ctrl-C)'
             })
 
-            print(f"✅ Environment '{env_name}' completed successfully ({duration:.1f}s)")
+            print(f"⏸️  Environment '{env_name}' interrupted by user ({duration:.1f}s)")
+
+            # Handle interruption and check if user wants to continue
+            if not _handle_environment_interruption(environments, i, results):
+                break  # Exit the main environment loop
 
         except Exception as e:
             env_end_time = datetime.now(timezone.utc)
@@ -140,36 +215,50 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
 
     successful_runs = [r for r in results if r['status'] == 'SUCCESS']
     failed_runs = [r for r in results if r['status'] == 'FAILED']
+    interrupted_runs = [r for r in results if r['status'] == 'INTERRUPTED']
+    skipped_runs = [r for r in results if r['status'] == 'SKIPPED']
 
-    print("=" * 60)
-    print(f"EXPERIMENT SUMMARY: {arguments.experiment}")
-    print("=" * 60)
-    print(f"Total environments: {len(environments)}")
-    print(f"Successful runs: {len(successful_runs)}")
-    print(f"Failed runs: {len(failed_runs)}")
-    print(f"Total duration: {total_duration:.1f}s")
+    # Clear separation from previous output
+    print()
+    print("=" * 80)
     print()
 
+    # Main title and overview
+    has_issues = failed_runs or interrupted_runs or skipped_runs
+
+    print(f"📊 Tested {len(environments)} environment(s): {', '.join([env.name for env in environments])}")
+    print(f"⏱️  Total duration: {total_duration:.1f}s")
+    print()
+
+    # Results breakdown with clear indentation
+    print("📋 Results:")
+
     if successful_runs:
-        print("✅ SUCCESSFUL ENVIRONMENTS:")
+        print(f"   ✅ Successful: {len(successful_runs)}")
         for result in successful_runs:
-            print(f"  - {result['environment']} ({result['duration']:.1f}s)")
-        print()
+            print(f"      • {result['environment']} ({result['duration']:.1f}s)")
 
     if failed_runs:
-        print("❌ FAILED ENVIRONMENTS:")
+        print(f"   ❌ Failed: {len(failed_runs)}")
         for result in failed_runs:
-            print(f"  - {result['environment']} ({result['duration']:.1f}s): {result['error']}")
-        print()
+            print(f"      • {result['environment']} ({result['duration']:.1f}s) - {result['error']}")
+
+    if interrupted_runs:
+        print(f"   ⏸️  Interrupted: {len(interrupted_runs)}")
+        for result in interrupted_runs:
+            print(f"      • {result['environment']} ({result['duration']:.1f}s) - {result['error']}")
+
+    if skipped_runs:
+        print(f"   ⏭️  Skipped: {len(skipped_runs)}")
+        for result in skipped_runs:
+            print(f"      • {result['environment']} - {result['error']}")
+
+    print()
 
     # Exit with appropriate code
-    if failed_runs:
-        if len(successful_runs) == 0:
-            raise LoggedErrorException(log,
-                f"All {len(environments)} environment runs failed. See details above.")
-        else:
-            print(f"⚠️  {len(failed_runs)} out of {len(environments)} environments failed.")
-            print(f"✅ {len(successful_runs)} environments completed successfully.")
+    if failed_runs and len(successful_runs) == 0 and len(interrupted_runs) == 0:
+        raise LoggedErrorException(log,
+            f"All {len(environments)} environment runs failed. See details above.")
 
 
 def exec_experiment_run(arguments):

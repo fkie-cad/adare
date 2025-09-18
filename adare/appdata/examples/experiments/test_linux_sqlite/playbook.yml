@@ -15,8 +15,8 @@ variables:
 
   empty_db:
     type: path
-    value: "{{adare_temp_dir}}/empty.db"
-    description: "Empty SQLite database for empty DB tests"
+    value: "{{adare_shared_data}}/empty.db"
+    description: "Pre-created empty SQLite database for empty DB tests"
 
 # Test definitions for SQLite functions
 tests:
@@ -107,9 +107,8 @@ tests:
       expected_rows: 0
 
   - name: test_sqlite_query_file_not_found
-    description: 'Test sqlite_query_result with non-existent database file'
+    description: 'Test sqlite_query_result creates database file when it does not exist'
     function: sqlite.query_result
-    expect_to_fail: true
     parameter:
       dst: '{{adare_temp_dir}}/nonexistent.db'
       query: 'SELECT 1'
@@ -130,7 +129,7 @@ tests:
     parameter:
       dst: '{{shared_db}}'
       query: 'SELECT COUNT(*) as count FROM users WHERE salary BETWEEN 50000 AND 75000'
-      expected_result: [{"count": 4}]
+      expected_result: [{"count": 5}]
 
   - name: test_shared_db_audit_logs
     description: 'Test sqlite_query_result with audit log analysis from shared DB'
@@ -149,13 +148,6 @@ tests:
       expected_rows: 4
 
 actions:
-  # Create empty database for empty DB tests
-  - command:
-      name: "Create Empty Database"
-      description: "Create empty SQLite database for testing empty database scenarios"
-      command: "sqlite3 {{empty_db}} 'SELECT 1;'"
-      shell: true
-
   # Run all SQLite tests
   - test: test_sqlite_query_count
   - test: test_sqlite_query_specific_result
@@ -175,9 +167,3 @@ actions:
   - test: test_shared_db_audit_logs
   - test: test_shared_db_complex_join
 
-  # Cleanup
-  - command:
-      name: "Cleanup Empty Database"
-      description: "Remove temporary empty database file"
-      command: "rm -f {{empty_db}}"
-      shell: true

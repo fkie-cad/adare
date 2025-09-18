@@ -6,17 +6,22 @@ settings:
     quality: 95
   continue_on_test_failure: true
 
-# Variables for Windows SQLite testing
+# Variables for cross-platform SQLite testing
 variables:
   shared_db:
     type: path
-    value: "{{adare_shared_data}}\\test.db"
+    value: "{{adare_shared_data}}/test.db"
     description: "Pre-created SQLite database with comprehensive test data"
 
   empty_db:
     type: path
-    value: "{{adare_shared_data}}\\empty.db"
+    value: "{{adare_shared_data}}/empty.db"
     description: "Pre-created empty SQLite database for empty DB tests"
+
+  temp_db:
+    type: path
+    value: "{{adare_temp_dir}}/nonexistent.db"
+    description: "Temporary database file path"
 
 # Test definitions for SQLite functions
 tests:
@@ -110,7 +115,7 @@ tests:
     description: 'Test sqlite_query_result creates database file when it does not exist'
     function: sqlite.query_result
     parameter:
-      dst: '{{adare_temp_dir}}\\nonexistent.db'
+      dst: '{{temp_db}}'
       query: 'SELECT 1'
       expected_rows: 1
 

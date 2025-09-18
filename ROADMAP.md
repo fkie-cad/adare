@@ -12,6 +12,15 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [ ] test if we can still run adare if we delete cloned repo
 - [x] add xml testfunctions in separate xml module
 - [ ] support yaml with same logic/function as for json!
+- [ ] test and fix all test expriments
+  - [x] test_sqlite
+  - [ ] test_json
+  - [ ] test_csv
+  - [ ] test_xml
+  - [ ] test_linux_system
+  - [ ] test_windows_registry
+  - [ ] test_linux_standard
+  - [ ] test_windows_standard
 
 ## Planned Features
 - [ ] test and enable ydotool to make it work on wayland linux distros as well
@@ -52,6 +61,5 @@ This document tracks ongoing development tasks, planned features, quality of lif
 
 ## Known Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
-- [ ] interrupt on verify does not work!
-- [ ] adding/removing a pull does not trigger reload of experiment?! -> this means run do not work -> try to load on every run
+- [x] interrupt on verify does not work!
 - [ ] visual bug on flow console for last stages where Stopping computer vision server spinner occurs for very vers short and text and spinnger dissapera and then it apperas when its done with green dot?! why does it disappear in the middle?! does not make much sense? -> most likely weird timing issues?!

@@ -93,9 +93,19 @@ class BasicTest:
         """
         find a file that matches the given glob expression and return it. If no file is found or more than one file is
         found, return an error message.
-        :param globfilepath: glob expression to find a file
+        For simple paths without glob patterns, returns the path directly to allow testing of non-existent files.
+        :param globfilepath: glob expression to find a file, or simple file path
         :return: (filepath, error message)
         """
+        # Check if path contains glob patterns
+        has_glob_patterns = any(char in globfilepath for char in ['*', '?', '[', ']'])
+
+        if not has_glob_patterns:
+            # For simple paths without glob patterns, return the path directly
+            # This allows testing file-not-found scenarios where files intentionally don't exist
+            return globfilepath, ""
+
+        # Use glob resolution for paths with glob patterns (original behavior)
         found_files = list(glob.glob(globfilepath))
         if not found_files:
             return "", "no files match the given path (glob) expression"
