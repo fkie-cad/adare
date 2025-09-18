@@ -42,7 +42,8 @@ class VMLifecycleManager:
             experiment_id=context.experiment_run_ulid,
             environment_ulid=context.environment_ulid,
             experiment_run_ulid=context.experiment_run_ulid,
-            preserve_experiment_snapshot=context.config.preserve_snapshot
+            preserve_experiment_snapshot=context.config.preserve_snapshot,
+            interrupt_event=context.user_interrupt_event
         )
         
         # Get the prepared VM from database to use its actual VirtualBox name

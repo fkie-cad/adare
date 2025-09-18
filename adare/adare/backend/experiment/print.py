@@ -55,7 +55,7 @@ class ExperimentFlowConsole:
     def _start_live_in_thread(self):
         tick_count = 0
         with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second,
-                  auto_refresh=False, transient=False) as live:
+                  auto_refresh=False, transient=True) as live:
             while not self.stop_event.is_set():
                 try:
                     with self._lock:

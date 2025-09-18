@@ -7,6 +7,7 @@ High-level VM operations for CLI and other interfaces.
 from pathlib import Path
 from typing import List, Optional
 import logging
+import threading
 
 from adare.backend.vm import database as vm_database
 from adare.backend.vm.manager import VMFileManager
@@ -20,14 +21,15 @@ from adare.backend.experiment.stagectxmanager import StageCtxManager
 log = logging.getLogger(__name__)
 
 
-def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None) -> None:
+async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, interrupt_event: Optional[threading.Event] = None) -> None:
     """
     Verify VM file integrity before import/use.
     This ensures the VM file hasn't been tampered with since loading.
-    
+
     Args:
         vm_id: Database ID of the VM to verify
         experiment_run_ulid: Optional experiment run ID for stage tracking
+        interrupt_event: Optional event to check for user interruption
     """
     # Get VM record from database
     vm_record = vm_database.get_vm_by_id(vm_id)
@@ -52,10 +54,14 @@ def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None) -> None:
     # Calculate current hash and compare with stored hash
     vm_manager = VMFileManager()
     
-    def verify_in_stage():
+    async def verify_in_stage():
         log.info(f"Verifying integrity of VM: {vm_record.name}")
-        current_hash = vm_manager.calculate_file_hash(vm_file_path, silent=True)
-        
+        try:
+            current_hash = await vm_manager.calculate_file_hash_async(vm_file_path, silent=True, interrupt_event=interrupt_event)
+        except InterruptedError:
+            log.info(f"VM integrity verification interrupted by user for {vm_record.name}")
+            return  # Return gracefully, let the stage manager handle the interruption status
+
         if current_hash != vm_record.hash:
             from adare.backend.experiment.exceptions import ExperimentIntegrityError
             raise ExperimentIntegrityError(
@@ -67,15 +73,15 @@ def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None) -> None:
                     "Verify VM file hasn't been corrupted"
                 ]
             )
-        
+
         log.info(f"VM integrity verification passed: {vm_record.name}")
     
     # Run with stage context if experiment run provided
     if experiment_run_ulid:
-        with StageCtxManager(VMIntegrityVerificationStage(), experiment_run_ulid):
-            verify_in_stage()
+        with StageCtxManager(VMIntegrityVerificationStage(), experiment_run_ulid, interrupt_event):
+            await verify_in_stage()
     else:
-        verify_in_stage()
+        await verify_in_stage()
 
 
 def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_metadata) -> str:
@@ -398,7 +404,7 @@ def get_vm_by_uuid_from_db(vbox_uuid: str):
 # PHASE 4: OPTIMIZED EXPERIMENT WORKFLOW
 # ==========================================
 
-async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environment_ulid: str = None, experiment_run_ulid: Optional[str] = None, preserve_experiment_snapshot: bool = False) -> str:
+async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environment_ulid: str = None, experiment_run_ulid: Optional[str] = None, preserve_experiment_snapshot: bool = False, interrupt_event: Optional[threading.Event] = None) -> str:
     """
     🚀 FAST VM preparation for experiment - only VirtualBox import and snapshots!
     
@@ -443,8 +449,13 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         log.info(f"First time VM setup - importing to VirtualBox...")
         
         # Verify VM integrity before proceeding with import (only when importing)
-        verify_vm_integrity(vm_id, experiment_run_ulid)
-        
+        await verify_vm_integrity(vm_id, experiment_run_ulid, interrupt_event)
+
+        # Check if verification was interrupted - if so, don't proceed with import
+        if interrupt_event and interrupt_event.is_set():
+            log.info("VM integrity verification was interrupted - skipping import")
+            return None
+
         # Use dedicated VM import stage
         if experiment_run_ulid:
             with StageCtxManager(VMImportStage(), experiment_run_ulid):

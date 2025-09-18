@@ -298,9 +298,3 @@ actions:
   - test: test_file_content_contains_bytes_positive
   - test: test_file_content_contains_bytes_negative
   
-  # Cleanup
-  - command:
-      name: "Cleanup Test Directory"
-      description: "Remove test directory and files"
-      command: "rm -rf {{test_dir}}"
-      shell: true

@@ -1277,6 +1277,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             except Exception as cleanup_error:
                 log.error(f"Error stopping stage coordinator during error cleanup: {cleanup_error}")
 
+    # Return whether the experiment was interrupted
+    return user_interrupt_event.is_set()
+
 
 
 
