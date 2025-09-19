@@ -116,7 +116,7 @@ tests:
     parameter:
       dst: "{{config_xml}}"
       xpath: ".//timestamp"
-      expected_text: "{{fixed_timestamp}}"
+      expected_text: "{{fixed_timestamp | format('%Y-%m-%dT%H:%M:%S')}}"
 
   - name: dynamic_timestamp_with_tolerance
     description: 'Test xml.element_text_matches with fixed timestamp and tolerance'
