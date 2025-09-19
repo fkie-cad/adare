@@ -217,6 +217,7 @@ class Variable:
     
     def __post_init__(self):
         """Validate and coerce value on creation."""
+        log.info(f"CLAUDE: Variable.__post_init__ called - value='{self.value}', type={self.type}, metadata={self.metadata}")
         self.value = self._validate_and_coerce(self.value, self.type)
         # Create structured metadata if available
         if self.metadata and not self.structured_metadata:
@@ -231,11 +232,25 @@ class Variable:
     @classmethod
     def from_dict(cls, data: dict) -> 'Variable':
         """Create Variable from explicit dict definition."""
+        log.info(f"CLAUDE: Variable.from_dict called with data: {data}")
+
+        # Collect metadata from both explicit metadata dict and top-level properties
+        metadata = data.get("metadata", {}).copy()
+
+        # For timestamp variables, collect timezone, format, and other properties into metadata
+        if data.get("type") == "timestamp":
+            for key in ["timezone", "format", "tolerance", "localtime"]:
+                if key in data:
+                    metadata[key] = data[key]
+                    log.info(f"CLAUDE: Collected {key}='{data[key]}' into metadata")
+
+        log.info(f"CLAUDE: Final metadata for Variable.from_dict: {metadata}")
+
         return cls(
             value=data["value"],
-            type=VariableType(data["type"]), 
+            type=VariableType(data["type"]),
             description=data.get("description", ""),
-            metadata=data.get("metadata", {}),
+            metadata=metadata,
             structured_metadata=data.get("structured_metadata")
         )
     
@@ -274,6 +289,8 @@ class Variable:
     @classmethod
     def auto_infer(cls, value: Any, description: str = "", metadata: Dict[str, Any] = None) -> 'Variable':
         """Create Variable with automatic type inference."""
+        log.info(f"CLAUDE: Variable.auto_infer called with value='{value}', metadata={metadata}")
+
         if isinstance(value, bool):
             var_type = VariableType.BOOLEAN
         elif isinstance(value, int):
@@ -296,7 +313,8 @@ class Variable:
                 var_type = VariableType.STRING
         else:
             var_type = VariableType.STRING
-        
+
+        log.info(f"CLAUDE: auto_infer determined type: {var_type}")
         return cls(value, var_type, description, metadata or {})
     
     @classmethod
@@ -321,6 +339,7 @@ class Variable:
     
     def _validate_and_coerce(self, value: Any, var_type: VariableType) -> Any:
         """Validate and coerce value to match the specified type."""
+        log.info(f"CLAUDE: _validate_and_coerce called with value='{value}', type={var_type}")
         try:
             if var_type == VariableType.STRING:
                 return str(value)
@@ -367,8 +386,13 @@ class Variable:
                     parsed_dt = dateutil.parser.parse(timestamp_str)
 
                     # Apply timezone metadata if available and datetime is naive
+                    log.info(f"CLAUDE: Timezone conversion check - parsed_dt.tzinfo: {parsed_dt.tzinfo}, hasattr(self, 'metadata'): {hasattr(self, 'metadata')}")
+                    if hasattr(self, 'metadata'):
+                        log.info(f"CLAUDE: self.metadata: {self.metadata}")
+
                     if parsed_dt.tzinfo is None and hasattr(self, 'metadata') and self.metadata:
                         timezone_str = self.metadata.get('timezone')
+                        log.info(f"CLAUDE: Found timezone in metadata: '{timezone_str}'")
                         if timezone_str:
                             try:
                                 # Parse timezone offset (e.g., "+04:00", "-05:00")
@@ -377,22 +401,24 @@ class Variable:
                                     tz = dateutil.tz.gettz(timezone_str)
                                     if tz:
                                         parsed_dt = parsed_dt.replace(tzinfo=tz)
+                                        log.info(f"CLAUDE: Applied offset timezone '{timezone_str}' to timestamp: {parsed_dt}")
                                 else:
                                     # Named timezone (e.g., "UTC", "US/Eastern")
                                     tz = dateutil.tz.gettz(timezone_str)
                                     if tz:
                                         parsed_dt = parsed_dt.replace(tzinfo=tz)
-                                log.debug(f"Applied timezone '{timezone_str}' to timestamp: {parsed_dt}")
+                                        log.info(f"CLAUDE: Applied named timezone '{timezone_str}' to timestamp: {parsed_dt}")
                             except Exception as e:
                                 log.warning(f"Failed to apply timezone '{timezone_str}': {e}")
 
                     # Convert timezone-aware datetime to UTC Unix timestamp for consistent storage
                     if parsed_dt.tzinfo is not None:
                         unix_timestamp = parsed_dt.timestamp()
-                        log.debug(f"Converted timezone-aware timestamp to Unix timestamp: {unix_timestamp}")
+                        log.info(f"CLAUDE: Converted timezone-aware timestamp to Unix timestamp: {unix_timestamp}")
                         return unix_timestamp
                     else:
                         # Keep naive datetime as-is for backward compatibility
+                        log.info(f"CLAUDE: Keeping naive datetime (no timezone): {parsed_dt}")
                         return parsed_dt
 
                 except (dateutil.parser.ParserError, ValueError) as e:
@@ -737,6 +763,11 @@ class VariableRegistry:
             'tolerance': tolerance
         }
 
+        # If we have a Unix timestamp, it means it was converted from timezone-aware variable to UTC
+        if isinstance(var.value, (int, float)):
+            metadata['timezone'] = 'utc'
+            log.debug(f"Added UTC timezone metadata for Unix timestamp variable '{var.name}'")
+
         if not local_only:
             # Store globally (original behavior)
             if not hasattr(self, '_placeholder_metadata'):
@@ -755,6 +786,8 @@ class VariableRegistry:
 
         # Handle TIMESTAMP variables
         if var.type == VariableType.TIMESTAMP:
+            log.info(f"CLAUDE: Processing timestamp variable '{var.name}' - value='{var.value}', metadata={var.metadata}")
+
             # Handle both Unix timestamps (float) and datetime objects
             if isinstance(var.value, (int, float)):
                 # Unix timestamp - convert to UTC datetime for processing
@@ -764,10 +797,63 @@ class VariableRegistry:
                 result = var.value
                 log.debug(f"Using datetime object: {result}")
             else:
-                # Fallback: try to parse as string
+                # String timestamp - parse and apply timezone if available
                 try:
                     result = dateutil.parser.parse(str(var.value))
                     log.debug(f"Parsed timestamp string: {result}")
+
+                    # Apply timezone conversion if timezone metadata is available
+                    timezone_str = None
+                    if var.structured_metadata and isinstance(var.structured_metadata, TimestampMetadata):
+                        timezone_str = var.structured_metadata.timezone
+                    elif var.metadata and 'timezone' in var.metadata:
+                        timezone_str = var.metadata['timezone']
+
+                    if timezone_str and result.tzinfo is None:
+                        log.info(f"CLAUDE: Applying timezone '{timezone_str}' to naive timestamp")
+                        try:
+                            # Apply timezone to naive datetime
+                            if timezone_str.startswith(('+', '-')):
+                                # Parse timezone offset (e.g., "+04:00", "-05:00")
+                                import re
+                                log.info(f"CLAUDE: Parsing timezone offset '{timezone_str}'")
+                                offset_match = re.match(r'([+-])(\d{2}):?(\d{2})', timezone_str)
+                                if offset_match:
+                                    sign, hours, minutes = offset_match.groups()
+                                    log.info(f"CLAUDE: Regex matched - sign={sign}, hours={hours}, minutes={minutes}")
+                                    offset_hours = int(hours) + int(minutes) / 60
+                                    if sign == '-':
+                                        offset_hours = -offset_hours
+                                    log.info(f"CLAUDE: Calculated offset_hours: {offset_hours}")
+
+                                    # Create timezone object from offset
+                                    tz = datetime.timezone(datetime.timedelta(hours=offset_hours))
+                                    result = result.replace(tzinfo=tz)
+                                    log.info(f"CLAUDE: Applied timezone offset '{timezone_str}': {result}")
+                                    log.info(f"CLAUDE: result.tzinfo after applying timezone: {result.tzinfo}")
+                                else:
+                                    log.warning(f"CLAUDE: Failed to parse timezone offset '{timezone_str}' - regex didn't match")
+                            else:
+                                # Named timezone (e.g., "UTC", "US/Eastern")
+                                tz = dateutil.tz.gettz(timezone_str)
+                                if tz:
+                                    result = result.replace(tzinfo=tz)
+                                    log.info(f"CLAUDE: Applied named timezone '{timezone_str}': {result}")
+
+                            # Convert to UTC Unix timestamp for consistent storage
+                            log.info(f"CLAUDE: Checking if result has timezone: {result.tzinfo is not None}")
+                            if result.tzinfo is not None:
+                                unix_timestamp = result.timestamp()
+                                log.info(f"CLAUDE: SUCCESS! Converted timezone-aware timestamp to UTC Unix timestamp: {unix_timestamp}")
+                                return unix_timestamp
+                            else:
+                                log.warning(f"CLAUDE: No timezone info available after conversion attempt")
+
+                        except Exception as e:
+                            log.warning(f"CLAUDE: Exception during timezone conversion: {e}")
+                            import traceback
+                            log.warning(f"CLAUDE: Traceback: {traceback.format_exc()}")
+
                 except Exception as e:
                     log.warning(f"Failed to parse timestamp value '{var.value}': {e}")
                     return str(var.value)
@@ -916,20 +1002,27 @@ class VariableRegistry:
     @classmethod
     def from_dict(cls, var_dict: Dict[str, Any]) -> 'VariableRegistry':
         """Create registry from mixed variable definitions."""
+        log.info(f"CLAUDE: VariableRegistry.from_dict called with: {var_dict}")
         registry = cls()
-        
+
         for name, value in var_dict.items():
+            log.info(f"CLAUDE: Processing variable '{name}' with value: {value} (type: {type(value)})")
             if isinstance(value, Variable):
+                log.info(f"CLAUDE: '{name}' is already a Variable object")
                 registry.add(name, value)
             elif isinstance(value, dict) and "type" in value:
                 # Explicit type definition
+                log.info(f"CLAUDE: '{name}' is dict with type, calling Variable.from_dict")
                 registry.add(name, Variable.from_dict(value))
             elif hasattr(value, 'yaml_tag'):  # YAML custom tag
+                log.info(f"CLAUDE: '{name}' has yaml_tag, calling Variable.from_yaml_tag")
                 registry.add(name, Variable.from_yaml_tag(value))
             else:
                 # Auto-infer type
+                log.info(f"CLAUDE: '{name}' auto-inferring type")
                 registry.add(name, Variable.auto_infer(value))
-        
+
+        log.info(f"CLAUDE: VariableRegistry.from_dict created registry with {len(registry.variables)} variables")
         return registry
 
 

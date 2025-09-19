@@ -308,9 +308,9 @@ class BasicTest:
                 treat_as_local = False
                 log.debug(f"CLAUDE: Using UTC (timezone=utc)")
             else:
-                # Default to local time if nothing specified
-                treat_as_local = True
-                log.debug(f"CLAUDE: Using local time (default)")
+                # Default to UTC if nothing specified (for consistency with UTC Unix timestamps)
+                treat_as_local = False
+                log.debug(f"CLAUDE: Using UTC (default)")
 
             if treat_as_local:
                 # Naive actuals are LOCAL wall time → label as local (no shift).
