@@ -171,6 +171,8 @@ class EventManager:
             event = TestActionCompleteEvent(
                 test_name=getattr(action, 'name', ''),
                 test_output=result.data.get('result', {}).get('details') if result.data else None,
+                result_category=result.data.get('result_category') if result.data else None,
+                expect_to_fail=result.data.get('expect_to_fail', False) if result.data else False,
                 **event_data
             )
         elif isinstance(action, ScreenshotAction):

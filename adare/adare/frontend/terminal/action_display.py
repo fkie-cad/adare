@@ -158,17 +158,21 @@ def determine_action_status(action_type: ActionType, action_data: dict):
     if success:
         # Check if it's a test action for special handling
         if action_type == ActionType.TEST:
-            # Extract test result category for enhanced status determination
+            # Extract test result category and expect_to_fail flag for enhanced status determination
             result_category = action_data.get('result_category', 'unknown')
+            expect_to_fail = action_data.get('expect_to_fail', False)
+
             if result_category == 'success':
                 status = StatusEnum.FINISHED
-                result_status = StatusEnum.SUCCESS
+                # For expect_to_fail tests, success means the test unexpectedly passed (bad)
+                result_status = StatusEnum.TEST_FAILED if expect_to_fail else StatusEnum.SUCCESS
             elif result_category == 'test_failure':
                 status = StatusEnum.FINISHED  # Test ran successfully but failed condition
-                result_status = StatusEnum.TEST_FAILED
+                # For expect_to_fail tests, failure means the test failed as expected (good)
+                result_status = StatusEnum.SUCCESS if expect_to_fail else StatusEnum.TEST_FAILED
             elif result_category == 'execution_error':
                 status = StatusEnum.FAILED  # Test had execution issues - show as failed stage
-                result_status = None  # No result status for execution errors
+                result_status = None  # No result status for execution errors (never invert execution errors)
             else:
                 status = StatusEnum.FINISHED
                 result_status = StatusEnum.SUCCESS
@@ -178,14 +182,17 @@ def determine_action_status(action_type: ActionType, action_data: dict):
     else:
         # Failed action
         if action_type == ActionType.TEST:
-            # For test actions, check the specific error type
+            # For test actions, check the specific error type and expect_to_fail flag
             result_category = action_data.get('result_category', 'execution_error')
+            expect_to_fail = action_data.get('expect_to_fail', False)
+
             if result_category == 'execution_error':
                 status = StatusEnum.FAILED  # Test execution failed - show as failed stage
-                result_status = None  # No result status for execution errors
+                result_status = None  # No result status for execution errors (never invert execution errors)
             else:
                 status = StatusEnum.FINISHED  # Test assertion failed - show as completed with failed result
-                result_status = StatusEnum.TEST_FAILED
+                # For expect_to_fail tests, failure means the test failed as expected (good)
+                result_status = StatusEnum.SUCCESS if expect_to_fail else StatusEnum.TEST_FAILED
         else:
             status = StatusEnum.FAILED
             result_status = None

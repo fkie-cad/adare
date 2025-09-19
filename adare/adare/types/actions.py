@@ -191,6 +191,8 @@ class TestActionCompleteEvent(ActionCompleteEvent):
     """Event for test action completion."""
     test_name: str = ""
     test_output: Optional[str] = None
+    result_category: Optional[str] = None
+    expect_to_fail: bool = False
     
     def get_event_type(self) -> EventType:
         return EventType.TEST_COMPLETE

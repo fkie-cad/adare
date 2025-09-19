@@ -83,7 +83,7 @@ class TestResultProcessor:
         return ActionResult(
             success=overall_success,
             message=detailed_message,
-            data={**ws_result, 'result_category': result_category}
+            data={**ws_result, 'result_category': result_category, 'expect_to_fail': expect_to_fail}
         )
     
     @classmethod
