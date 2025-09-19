@@ -358,10 +358,43 @@ class Variable:
             
             elif var_type == VariableType.TIMESTAMP:
                 if isinstance(value, datetime.datetime):
+                    # Already a datetime - convert to Unix timestamp if has timezone info
+                    if value.tzinfo is not None:
+                        return value.timestamp()
                     return value
                 timestamp_str = str(value)
                 try:
-                    return dateutil.parser.parse(timestamp_str)
+                    parsed_dt = dateutil.parser.parse(timestamp_str)
+
+                    # Apply timezone metadata if available and datetime is naive
+                    if parsed_dt.tzinfo is None and hasattr(self, 'metadata') and self.metadata:
+                        timezone_str = self.metadata.get('timezone')
+                        if timezone_str:
+                            try:
+                                # Parse timezone offset (e.g., "+04:00", "-05:00")
+                                if timezone_str.startswith(('+', '-')):
+                                    # Create timezone from offset string
+                                    tz = dateutil.tz.gettz(timezone_str)
+                                    if tz:
+                                        parsed_dt = parsed_dt.replace(tzinfo=tz)
+                                else:
+                                    # Named timezone (e.g., "UTC", "US/Eastern")
+                                    tz = dateutil.tz.gettz(timezone_str)
+                                    if tz:
+                                        parsed_dt = parsed_dt.replace(tzinfo=tz)
+                                log.debug(f"Applied timezone '{timezone_str}' to timestamp: {parsed_dt}")
+                            except Exception as e:
+                                log.warning(f"Failed to apply timezone '{timezone_str}': {e}")
+
+                    # Convert timezone-aware datetime to UTC Unix timestamp for consistent storage
+                    if parsed_dt.tzinfo is not None:
+                        unix_timestamp = parsed_dt.timestamp()
+                        log.debug(f"Converted timezone-aware timestamp to Unix timestamp: {unix_timestamp}")
+                        return unix_timestamp
+                    else:
+                        # Keep naive datetime as-is for backward compatibility
+                        return parsed_dt
+
                 except (dateutil.parser.ParserError, ValueError) as e:
                     raise ValidationError(f"Invalid timestamp '{timestamp_str}': {e}")
             
@@ -399,16 +432,19 @@ class Variable:
     
     def get_string_value(self) -> str:
         """Get string representation for variable substitution."""
-        if self.type == VariableType.TIMESTAMP and isinstance(self.value, datetime.datetime):
-            return self.value.isoformat()
+        if self.type == VariableType.TIMESTAMP:
+            if isinstance(self.value, datetime.datetime):
+                return self.value.isoformat()
+            elif isinstance(self.value, (int, float)):
+                # Unix timestamp - return as string
+                return str(self.value)
         elif self.type == VariableType.BOOLEAN:
             return str(self.value).lower()
         elif self.type in (VariableType.LIST, VariableType.DICT):
             # For complex types, might want JSON serialization
             import json
             return json.dumps(self.value)
-        else:
-            return str(self.value)
+        return str(self.value)
     
     def get_escaped_string_value(self, for_regex: bool = False) -> str:
         """Get escaped string value for safe substitution."""
@@ -678,6 +714,9 @@ class VariableRegistry:
         # Get base timestamp value
         if isinstance(var.value, datetime.datetime):
             base_value = var.value.isoformat()
+        elif isinstance(var.value, (int, float)):
+            # Unix timestamp - keep as numeric string for VM processing
+            base_value = str(var.value)
         else:
             base_value = str(var.value)
 
@@ -715,8 +754,23 @@ class VariableRegistry:
         # Note: Regex variables are handled by placeholder system in to_execution_context()
 
         # Handle TIMESTAMP variables
-        if var.type == VariableType.TIMESTAMP and isinstance(var.value, datetime.datetime):
-            result = var.value
+        if var.type == VariableType.TIMESTAMP:
+            # Handle both Unix timestamps (float) and datetime objects
+            if isinstance(var.value, (int, float)):
+                # Unix timestamp - convert to UTC datetime for processing
+                result = datetime.datetime.utcfromtimestamp(var.value).replace(tzinfo=datetime.timezone.utc)
+                log.debug(f"Converted Unix timestamp {var.value} to UTC datetime: {result}")
+            elif isinstance(var.value, datetime.datetime):
+                result = var.value
+                log.debug(f"Using datetime object: {result}")
+            else:
+                # Fallback: try to parse as string
+                try:
+                    result = dateutil.parser.parse(str(var.value))
+                    log.debug(f"Parsed timestamp string: {result}")
+                except Exception as e:
+                    log.warning(f"Failed to parse timestamp value '{var.value}': {e}")
+                    return str(var.value)
 
             # Note: Timestamp variables with tolerance are handled by placeholder system in to_execution_context()
 
@@ -724,45 +778,20 @@ class VariableRegistry:
             if var.structured_metadata and isinstance(var.structured_metadata, TimestampMetadata):
                 metadata = var.structured_metadata
 
-                # TODO: check here if its done twice both on server and client?!
-
-                # Apply localtime conversion first (convert local time to UTC)
-                # if metadata.localtime:
-                #     try:
-                #         import time
-                #         # Get the current local timezone offset in seconds
-                #         local_offset = time.timezone
-                #         if time.daylight and time.localtime().tm_isdst:
-                #             local_offset = time.altzone
-
-                #         # Subtract the offset to convert local time to UTC
-                #         result = result - datetime.timedelta(seconds=local_offset)
-                #         log.info(f"Applied localtime conversion: adjusted timestamp by {-local_offset} seconds ({-local_offset/3600:.1f} hours) to convert to UTC")
-                #     except Exception as e:
-                #         log.warning(f"Failed to apply localtime conversion: {e}")
-
-
-                # Apply timezone conversion
-                if metadata.timezone:
-                    try:
-                        import pytz
-                        target_tz = pytz.timezone(metadata.timezone)
-                        if result.tzinfo is None:
-                            result = pytz.UTC.localize(result).astimezone(target_tz)
-                        else:
-                            result = result.astimezone(target_tz)
-                        log.debug(f"Applied timezone '{metadata.timezone}' to timestamp")
-                    except Exception as e:
-                        log.warning(f"Failed to apply timezone '{metadata.timezone}': {e}")
-
-                # Apply format
+                # Skip timezone conversion for Unix timestamps since they're already UTC
+                # Only apply format if specified
                 if metadata.format_str:
                     try:
                         return result.strftime(metadata.format_str)
                     except Exception as e:
                         log.warning(f"Failed to apply format '{metadata.format_str}': {e}")
 
-            # Return as ISO string if no format specified
+            # For Unix timestamp variables (already UTC), return the timestamp directly
+            # This matches the save_timestamp behavior
+            if isinstance(var.value, (int, float)):
+                return var.value
+
+            # For datetime objects, return as ISO string if no format specified
             return result.isoformat()
         else:
             # For non-timestamp variables, get string value and apply template resolution

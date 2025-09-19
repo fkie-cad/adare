@@ -138,7 +138,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
         env_start_time = datetime.now(timezone.utc)
 
         try:
-            was_interrupted = await experiment_run(
+            was_interrupted, was_successful = await experiment_run(
                 project_directory,
                 arguments.experiment,
                 env_name,
@@ -167,7 +167,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                 if not _handle_environment_interruption(environments, i, results):
                     break  # Exit the main environment loop
 
-            else:
+            elif was_successful:
                 results.append({
                     'environment': env_name,
                     'status': 'SUCCESS',
@@ -175,6 +175,14 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                     'error': None
                 })
                 print(f"✅ Environment '{env_name}' completed successfully ({duration:.1f}s)")
+            else:
+                results.append({
+                    'environment': env_name,
+                    'status': 'FAILED',
+                    'duration': duration,
+                    'error': 'Experiment tests failed'
+                })
+                print(f"❌ Environment '{env_name}' failed - tests did not pass ({duration:.1f}s)")
 
         except KeyboardInterrupt:
             env_end_time = datetime.now(timezone.utc)
@@ -218,47 +226,31 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
     interrupted_runs = [r for r in results if r['status'] == 'INTERRUPTED']
     skipped_runs = [r for r in results if r['status'] == 'SKIPPED']
 
-    # Clear separation from previous output
-    print()
-    print("=" * 80)
-    print()
+    # Create and use flow console for beautiful summary
+    from adare.backend.experiment.print import ExperimentFlowConsole
+    import time
 
-    # Main title and overview
-    has_issues = failed_runs or interrupted_runs or skipped_runs
+    # Create a flow console just for summary display
+    summary_console = ExperimentFlowConsole(disable=False)
+    summary_console.start()
 
-    print(f"📊 Tested {len(environments)} environment(s): {', '.join([env.name for env in environments])}")
-    print(f"⏱️  Total duration: {total_duration:.1f}s")
-    print()
+    # Give it a moment to initialize
+    time.sleep(0.2)
 
-    # Results breakdown with clear indentation
-    print("📋 Results:")
+    # Log the beautiful multi-experiment summary
+    summary_console.log_multi_experiment_summary(
+        experiment_name=arguments.experiment,
+        environments=environments,
+        results=results,
+        total_duration=total_duration
+    )
 
-    if successful_runs:
-        print(f"   ✅ Successful: {len(successful_runs)}")
-        for result in successful_runs:
-            print(f"      • {result['environment']} ({result['duration']:.1f}s)")
+    # Let it display for a moment, then stop
+    time.sleep(3)
+    summary_console.stop()
 
-    if failed_runs:
-        print(f"   ❌ Failed: {len(failed_runs)}")
-        for result in failed_runs:
-            print(f"      • {result['environment']} ({result['duration']:.1f}s) - {result['error']}")
-
-    if interrupted_runs:
-        print(f"   ⏸️  Interrupted: {len(interrupted_runs)}")
-        for result in interrupted_runs:
-            print(f"      • {result['environment']} ({result['duration']:.1f}s) - {result['error']}")
-
-    if skipped_runs:
-        print(f"   ⏭️  Skipped: {len(skipped_runs)}")
-        for result in skipped_runs:
-            print(f"      • {result['environment']} - {result['error']}")
-
-    print()
-
-    # Exit with appropriate code
-    if failed_runs and len(successful_runs) == 0 and len(interrupted_runs) == 0:
-        raise LoggedErrorException(log,
-            f"All {len(environments)} environment runs failed. See details above.")
+    # Summary complete - no need to raise exception for failures
+    # The summary already shows the failure status clearly
 
 
 def exec_experiment_run(arguments):

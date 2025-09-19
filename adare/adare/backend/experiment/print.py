@@ -55,7 +55,7 @@ class ExperimentFlowConsole:
     def _start_live_in_thread(self):
         tick_count = 0
         with Live(self.layout, console=self.console, refresh_per_second=self.ticks_per_second,
-                  auto_refresh=False, transient=True) as live:
+                  auto_refresh=False, transient=False) as live:
             while not self.stop_event.is_set():
                 try:
                     with self._lock:
@@ -290,6 +290,109 @@ class ExperimentFlowConsole:
                 'result_status': None,
                 'duration': None,
             }
+
+    def log_multi_experiment_summary(self, experiment_name: str, environments: list, results: list, total_duration: float):
+        """Log a comprehensive summary for multi-environment experiment runs."""
+        with self._lock:
+            # Categorize results
+            successful_runs = [r for r in results if r['status'] == 'SUCCESS']
+            failed_runs = [r for r in results if r['status'] == 'FAILED']
+            interrupted_runs = [r for r in results if r['status'] == 'INTERRUPTED']
+            skipped_runs = [r for r in results if r['status'] == 'SKIPPED']
+
+            # Determine overall status and color
+            has_failures = len(failed_runs) > 0
+            has_issues = len(interrupted_runs) > 0 or len(skipped_runs) > 0
+
+            if has_failures:
+                status_color = "red"
+                status_icon = "❌"
+                status_text = "COMPLETED WITH FAILURES"
+            elif has_issues:
+                status_color = "yellow"
+                status_icon = "⚠️"
+                status_text = "COMPLETED WITH ISSUES"
+            else:
+                status_color = "green"
+                status_icon = "✅"
+                status_text = "COMPLETED SUCCESSFULLY"
+
+            # Build summary parts
+            summary_parts = []
+            line_width = max(60, self.console.size.width - 10)
+            separator = "[dim]" + "─" * line_width + "[/dim]"
+
+            # Header
+            summary_parts.extend([
+                "",
+                separator,
+                f"[bold {status_color}]EXPERIMENT SUMMARY: {experiment_name}[/bold {status_color}] {status_icon}"
+            ])
+
+            # Overview
+            env_names = [env.name for env in environments]
+            summary_parts.extend([
+                f"  📊 Tested {len(environments)} environment(s): [dim]{', '.join(env_names)}[/dim]",
+                f"  ⏱️  Total duration: [bold cyan]{self._format_duration_text(total_duration)}[/bold cyan]"
+            ])
+
+            # Results breakdown
+            summary_parts.append("  📋 Results:")
+
+            if successful_runs:
+                summary_parts.append(f"     [bold green]✅ Successful: {len(successful_runs)}[/bold green]")
+                for result in successful_runs:
+                    duration_str = f"({result['duration']:.1f}s)"
+                    summary_parts.append(f"        • [dim]{result['environment']}[/dim] [green]{duration_str}[/green]")
+
+            if failed_runs:
+                summary_parts.append(f"     [bold red]❌ Failed: {len(failed_runs)}[/bold red]")
+                for result in failed_runs:
+                    duration_str = f"({result['duration']:.1f}s)"
+                    error_str = f" - {result['error']}" if result.get('error') else ""
+                    summary_parts.append(f"        • [dim]{result['environment']}[/dim] [red]{duration_str}[/red][dim]{error_str}[/dim]")
+
+            if interrupted_runs:
+                summary_parts.append(f"     [bold yellow]⏸️  Interrupted: {len(interrupted_runs)}[/bold yellow]")
+                for result in interrupted_runs:
+                    duration_str = f"({result['duration']:.1f}s)"
+                    error_str = f" - {result['error']}" if result.get('error') else ""
+                    summary_parts.append(f"        • [dim]{result['environment']}[/dim] [yellow]{duration_str}[/yellow][dim]{error_str}[/dim]")
+
+            if skipped_runs:
+                summary_parts.append(f"     [bold yellow]⏭️  Skipped: {len(skipped_runs)}[/bold yellow]")
+                for result in skipped_runs:
+                    error_str = f" - {result['error']}" if result.get('error') else ""
+                    summary_parts.append(f"        • [dim]{result['environment']}[/dim][dim]{error_str}[/dim]")
+
+            # Footer
+            summary_parts.extend(["", separator])
+
+            complete_message = "\n".join(summary_parts)
+
+            # Replace any existing messages with the summary for final display
+            self.messages.clear()
+            self.messages['MULTI_EXPERIMENT_SUMMARY'] = {
+                'message': complete_message,
+                'spinner': None,
+                'spinner_style': None,
+                'level': 0,
+                'status': None,
+                'result_status': None,
+                'duration': None,
+            }
+
+    def _format_duration_text(self, duration: float) -> str:
+        """Format duration for multi-experiment summary."""
+        if not duration:
+            return "0s"
+
+        if duration >= 60:
+            minutes = int(duration // 60)
+            remaining_seconds = duration % 60
+            return f"{minutes}m {remaining_seconds:.1f}s"
+        else:
+            return f"{duration:.1f}s"
 
     def log_experiment_summary(self, ulid: str, success: bool, total_actions: int = 0, successful_actions: int = 0, failed_actions: int = 0, total_tests: int = 0, successful_tests: int = 0, failed_tests: int = 0, duration: float = None, level: int = 0, was_interrupted: bool = False):
         """Log a comprehensive, visually appealing experiment summary."""

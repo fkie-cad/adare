@@ -1,0 +1,195 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+  continue_on_test_failure: true
+
+# Variables for cross-platform XML testing
+variables:
+  fixed_timestamp:
+    type: timestamp
+    value: "2025-01-15 18:30:05"
+    timezone: "+04:00"
+    format: "%Y-%m-%dT%H:%M:%S"
+    description: "Fixed timestamp for consistent testing (XML contains 14:30:00 UTC = 18:30:00 +04:00)"
+
+  config_xml:
+    type: path
+    value: "{{adare_shared_data}}/config.xml"
+    description: "Configuration XML file"
+
+  users_xml:
+    type: path
+    value: "{{adare_shared_data}}/users.xml"
+    description: "Users XML file"
+
+  nested_xml:
+    type: path
+    value: "{{adare_shared_data}}/nested.xml"
+    description: "Deeply nested XML file"
+
+  timestamped_xml:
+    type: path
+    value: "{{adare_shared_data}}/timestamped.xml"
+    description: "XML with current timestamp"
+
+  malformed_xml:
+    type: path
+    value: "{{adare_shared_data}}/malformed.xml"
+    description: "Malformed XML file for error handling tests"
+
+  version_regex:
+    type: regex
+    value: '^\d+\.\d+\.\d+$'
+    description: "Regex pattern for version matching"
+
+# Test definitions for XML functions
+tests:
+  - name: config_root_element_exists
+    description: 'Test xml.element_exists with root element'
+    function: xml.element_exists
+    parameter:
+      dst: "{{config_xml}}"
+      xpath: "/configuration"
+
+  - name: database_configuration_exists
+    description: 'Test xml.element_exists with nested element'
+    function: xml.element_exists
+    parameter:
+      dst: "{{config_xml}}"
+      xpath: ".//database"
+
+  - name: database_host_is_localhost
+    description: 'Test xml.element_text_matches with specific text'
+    function: xml.element_text_matches
+    parameter:
+      dst: "{{config_xml}}"
+      xpath: ".//host"
+      expected_text: "localhost"
+
+  - name: version_matches_pattern
+    description: 'Test xml.element_text_matches with regex pattern'
+    function: xml.element_text_matches
+    parameter:
+      dst: "{{config_xml}}"
+      xpath: ".//version"
+      expected_text: "{{version_regex}}"
+      regex_match: true
+
+  - name: authentication_feature_is_enabled
+    description: 'Test xml.attribute_matches with attribute check'
+    function: xml.attribute_matches
+    parameter:
+      dst: "{{config_xml}}"
+      xpath: ".//feature[@name='authentication']"
+      attribute: "enabled"
+      expected_value: "true"
+
+  - name: active_users_exist
+    description: 'Test xml.element_exists with conditional xpath'
+    function: xml.element_exists
+    parameter:
+      dst: "{{users_xml}}"
+      xpath: ".//user[active='true']"
+
+  - name: correct_number_of_users
+    description: 'Test xml.element_count with expected count'
+    function: xml.element_count
+    parameter:
+      dst: "{{users_xml}}"
+      xpath: ".//user"
+      expected_count: 3
+
+  - name: deep_nested_data_accessible
+    description: 'Test xml.element_text_matches with deep nesting'
+    function: xml.element_text_matches
+    parameter:
+      dst: "{{nested_xml}}"
+      xpath: ".//level4/data"
+      expected_text: "Deep nested value"
+
+  - name: timestamp_within_tolerance
+    description: 'Test xml.element_text_matches with fixed timestamp'
+    function: xml.element_text_matches
+    parameter:
+      dst: "{{config_xml}}"
+      xpath: ".//timestamp"
+      expected_text: "{{fixed_timestamp}}"
+
+  - name: dynamic_timestamp_with_tolerance
+    description: 'Test xml.element_text_matches with fixed timestamp and tolerance'
+    function: xml.element_text_matches
+    parameter:
+      dst: "{{timestamped_xml}}"
+      xpath: ".//timestamp"
+      expected_text: "{{ fixed_timestamp | tolerance(30) | format('%Y-%m-%dT%H:%M:%S') }}"
+
+  - name: config_xml_is_well_formed
+    description: 'Test that well-formed XML file exists'
+    function: standard.file_exists
+    parameter:
+      dst: "{{config_xml}}"
+
+  - name: malformed_xml_exists_but_invalid
+    description: 'Test that malformed XML file exists (but is malformed)'
+    function: standard.file_exists
+    parameter:
+      dst: "{{malformed_xml}}"
+
+  # Element not found tests
+  - name: nonexistent_element_not_found
+    description: 'Test xml.element_exists with non-existent element'
+    function: xml.element_exists
+    expect_to_fail: true
+    parameter:
+      dst: "{{config_xml}}"
+      xpath: ".//nonexistent"
+
+  - name: wrong_text_match_fails
+    description: 'Test xml.element_text_matches with wrong expected text'
+    function: xml.element_text_matches
+    expect_to_fail: true
+    parameter:
+      dst: "{{config_xml}}"
+      xpath: ".//host"
+      expected_text: "wronghost"
+
+  - name: wrong_attribute_value_fails
+    description: 'Test xml.attribute_matches with wrong expected value'
+    function: xml.attribute_matches
+    expect_to_fail: true
+    parameter:
+      dst: "{{config_xml}}"
+      xpath: ".//feature[@name='authentication']"
+      attribute: "enabled"
+      expected_value: "false"
+
+  - name: wrong_element_count_fails
+    description: 'Test xml.element_count with wrong expected count'
+    function: xml.element_count
+    expect_to_fail: true
+    parameter:
+      dst: "{{users_xml}}"
+      xpath: ".//user"
+      expected_count: 5
+
+actions:
+  # Run all XML tests
+  - test: config_root_element_exists
+  - test: database_configuration_exists
+  - test: database_host_is_localhost
+  - test: version_matches_pattern
+  - test: authentication_feature_is_enabled
+  - test: active_users_exist
+  - test: correct_number_of_users
+  - test: deep_nested_data_accessible
+  - test: timestamp_within_tolerance
+  - test: dynamic_timestamp_with_tolerance
+  - test: config_xml_is_well_formed
+  - test: malformed_xml_exists_but_invalid
+  - test: nonexistent_element_not_found
+  - test: wrong_text_match_fails
+  - test: wrong_attribute_value_fails
+  - test: wrong_element_count_fails
