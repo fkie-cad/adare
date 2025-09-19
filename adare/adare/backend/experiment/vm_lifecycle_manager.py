@@ -45,7 +45,12 @@ class VMLifecycleManager:
             preserve_experiment_snapshot=context.config.preserve_snapshot,
             interrupt_event=context.user_interrupt_event
         )
-        
+
+        # Check if VM preparation was interrupted - return early if so
+        if vm_id is None:
+            log.info("VM preparation was interrupted - returning early")
+            return
+
         # Get the prepared VM from database to use its actual VirtualBox name
         vm_record = vm_database.get_vm_by_id(vm_id)
         if not vm_record:

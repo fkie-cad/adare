@@ -1,0 +1,14 @@
+{
+  "level1": {
+    "level2": {
+      "level3": {
+        "value": "deeply_nested_value",
+        "array": [1, 2, 3],
+        "object": {
+          "nested_key": "nested_value"
+        }
+      }
+    }
+  },
+  "simple_key": "simple_value"
+}

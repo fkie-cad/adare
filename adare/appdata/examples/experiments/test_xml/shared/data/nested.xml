@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <level1>
+    <level2>
+      <level3>
+        <level4>
+          <data>Deep nested value</data>
+          <count>42</count>
+        </level4>
+      </level3>
+    </level2>
+  </level1>
+  <metadata>
+    <created>2025-01-15T14:30:00</created>
+    <author>Test System</author>
+  </metadata>
+</root>

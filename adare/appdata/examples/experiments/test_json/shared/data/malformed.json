@@ -1,0 +1,6 @@
+{
+  "valid_key": "valid_value",
+  "missing_comma": "value"
+  "invalid_syntax": true,
+  "unclosed_string": "this string is not closed
+}

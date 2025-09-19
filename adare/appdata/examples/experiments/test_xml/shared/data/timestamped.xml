@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<log>
+  <entry>
+    <timestamp>2025-01-15T14:30:00</timestamp>
+    <level>INFO</level>
+    <message>Test log entry</message>
+  </entry>
+</log>

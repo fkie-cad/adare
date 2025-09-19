@@ -1212,54 +1212,54 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             log.info("Stage event coordinator stopped")
             
             # Log enhanced experiment summary before stopping console
-            if not test:
-                # Get execution results and calculate overall statistics
-                execution_result = getattr(experiment_run_context, 'execution_result', None)
-                
-                if execution_result:
-                    # Calculate total duration from context timestamps
-                    total_duration = None
-                    if hasattr(experiment_run_context, 'timestamp_start'):
-                        from datetime import datetime, timezone
-                        total_duration = (datetime.now(timezone.utc) - experiment_run_context.timestamp_start).total_seconds()
-                    
-                    # Log comprehensive experiment summary
-                    flow_console.log_experiment_summary(
-                        ulid=experiment_run_context.experiment_run_ulid,
-                        success=execution_result.success,
-                        total_actions=execution_result.total_actions,
-                        successful_actions=execution_result.successful_actions,
-                        failed_actions=execution_result.failed_actions,
-                        total_tests=execution_result.total_tests,
-                        successful_tests=execution_result.successful_tests,
-                        failed_tests=execution_result.failed_tests,
-                        duration=total_duration
-                    )
-                else:
-                    # Enhanced fallback - show what we can determine from the context
-                    # Calculate total duration from context timestamps
-                    total_duration = None
-                    if hasattr(experiment_run_context, 'timestamp_start'):
-                        from datetime import datetime, timezone
-                        total_duration = (datetime.now(timezone.utc) - experiment_run_context.timestamp_start).total_seconds()
-                    
-                    # Check if this was an interruption vs failure
-                    was_interrupted = user_interrupt_event.is_set()
-                    
-                    # Show a summary even without execution result
-                    flow_console.log_experiment_summary(
-                        ulid=experiment_run_context.experiment_run_ulid,
-                        success=False,  # If we're here, something failed or was interrupted
-                        total_actions=0,
-                        successful_actions=0,
-                        failed_actions=0,
-                        total_tests=0,
-                        successful_tests=0,
-                        failed_tests=0,
-                        duration=total_duration,
-                        was_interrupted=was_interrupted
-                    )
+            # Get execution results and calculate overall statistics
+            execution_result = getattr(experiment_run_context, 'execution_result', None)
+
+            if execution_result:
+                # Calculate total duration from context timestamps
+                total_duration = None
+                if hasattr(experiment_run_context, 'timestamp_start'):
+                    from datetime import datetime, timezone
+                    total_duration = (datetime.now(timezone.utc) - experiment_run_context.timestamp_start).total_seconds()
+
+                # Log comprehensive experiment summary
+                flow_console.log_experiment_summary(
+                    ulid=experiment_run_context.experiment_run_ulid,
+                    success=execution_result.success,
+                    total_actions=execution_result.total_actions,
+                    successful_actions=execution_result.successful_actions,
+                    failed_actions=execution_result.failed_actions,
+                    total_tests=execution_result.total_tests,
+                    successful_tests=execution_result.successful_tests,
+                    failed_tests=execution_result.failed_tests,
+                    duration=total_duration
+                )
             else:
+                # Enhanced fallback - show what we can determine from the context
+                # Calculate total duration from context timestamps
+                total_duration = None
+                if hasattr(experiment_run_context, 'timestamp_start'):
+                    from datetime import datetime, timezone
+                    total_duration = (datetime.now(timezone.utc) - experiment_run_context.timestamp_start).total_seconds()
+
+                # Check if this was an interruption vs failure
+                was_interrupted = user_interrupt_event.is_set()
+
+                # Show a summary even without execution result
+                flow_console.log_experiment_summary(
+                    ulid=experiment_run_context.experiment_run_ulid,
+                    success=False,  # If we're here, something failed or was interrupted
+                    total_actions=0,
+                    successful_actions=0,
+                    failed_actions=0,
+                    total_tests=0,
+                    successful_tests=0,
+                    failed_tests=0,
+                    duration=total_duration,
+                    was_interrupted=was_interrupted
+                )
+
+            if test:
                 # Fake runs are now kept until manually cleaned with 'adare experiment clean <name>'
                 log.info(f"Fake experiment run {experiment_run_context.experiment_run_ulid} completed and preserved for analysis")
             # Give the flow console time to display the summary before stopping
@@ -1277,8 +1277,22 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             except Exception as cleanup_error:
                 log.error(f"Error stopping stage coordinator during error cleanup: {cleanup_error}")
 
-    # Return whether the experiment was interrupted
-    return user_interrupt_event.is_set()
+    # Query the database to get the actual experiment success status
+    experiment_success = False
+    try:
+        from adare.database.api.experiment import ExperimentApi
+        from adare.database.models.experiment import ExperimentRun
+        with ExperimentApi() as api:
+            experiment_run = api._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_context.experiment_run_ulid).first()
+            if experiment_run:
+                # Use the result_status property to determine actual success
+                experiment_success = experiment_run.result_status == StatusEnum.SUCCESS
+    except Exception as e:
+        log.error(f"Error checking experiment run status: {e}")
+        experiment_success = False
+
+    # Return both interruption status and actual success status
+    return user_interrupt_event.is_set(), experiment_success
 
 
 

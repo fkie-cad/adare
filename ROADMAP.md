@@ -62,4 +62,4 @@ This document tracks ongoing development tasks, planned features, quality of lif
 ## Known Bugs
 - [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
 - [x] interrupt on verify does not work!
-- [ ] visual bug on flow console for last stages where Stopping computer vision server spinner occurs for very vers short and text and spinnger dissapera and then it apperas when its done with green dot?! why does it disappear in the middle?! does not make much sense? -> most likely weird timing issues?!
+- [ ] sometimes we see 3 red dots at bottom of flow console -> why?- [ ] visual bug on flow console for last stages where Stopping computer vision server spinner occurs for very vers short and text and spinnger dissapera and then it apperas when its done with green dot?! why does it disappear in the middle?! does not make much sense? -> most likely weird timing issues?!

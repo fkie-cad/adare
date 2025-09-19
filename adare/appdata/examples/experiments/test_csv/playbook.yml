@@ -6,46 +6,50 @@ settings:
     quality: 95
   continue_on_test_failure: true
 
-# Variables for Linux CSV testing
+# Variables for cross-platform CSV testing
 variables:
-  username:
-    type: string
-    value: "adare"
-    description: "System username"
+  fixed_timestamp:
+    type: timestamp
+    value: "2025-01-15 18:30:00"
+    timezone: "+04:00"
+    format: "%Y-%m-%dT%H:%M:%SZ"
+    description: "Fixed timestamp for consistent testing (CSV contains 14:30:00Z UTC = 18:30:00 +04:00)"
 
-  test_dir:
-    type: path
-    value: "/home/{{username}}/test_csv"
-    description: "Base directory for CSV testing"
+  fixed_timestamp_warning:
+    type: timestamp
+    value: "2025-01-15 18:28:00"
+    timezone: "+04:00"
+    format: "%Y-%m-%dT%H:%M:%SZ"
+    description: "Fixed timestamp for warning events (CSV contains 14:28:00Z UTC = 18:28:00 +04:00)"
 
   users_csv:
     type: path
-    value: "{{test_dir}}/users.csv"
+    value: "{{adare_shared_data}}/users.csv"
     description: "Users CSV file"
 
   logs_csv:
     type: path
-    value: "{{test_dir}}/access_logs.csv"
+    value: "{{adare_shared_data}}/access_logs.csv"
     description: "Access logs CSV file"
 
   events_csv:
     type: path
-    value: "{{test_dir}}/events.csv"
+    value: "{{adare_shared_data}}/events.csv"
     description: "System events CSV file with timestamps"
 
   transactions_csv:
     type: path
-    value: "{{test_dir}}/transactions.csv"
+    value: "{{adare_shared_data}}/transactions.csv"
     description: "Transaction records with amounts and regex patterns"
 
   empty_csv:
     type: path
-    value: "{{test_dir}}/empty.csv"
+    value: "{{adare_shared_data}}/empty.csv"
     description: "Empty CSV file"
 
   malformed_csv:
     type: path
-    value: "{{test_dir}}/malformed.csv"
+    value: "{{adare_shared_data}}/malformed.csv"
     description: "Malformed CSV file"
 
   # Regex patterns for complex matching
@@ -68,9 +72,6 @@ variables:
     type: regex
     value: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     description: "UUID regex pattern"
-
-  # Note: Timestamp tolerance variables are used directly with filters like {{ now | tolerance(30) }}
-  # No need to define them as variables - they're handled by save_timestamp action
 
 # Test definitions for CSV functions
 tests:
@@ -143,25 +144,25 @@ tests:
 
   # Timestamp with tolerance testing
   - name: test_csv_contains_line_current_timestamp
-    description: 'Test csv_contains_line with current timestamp and tolerance'
+    description: 'Test csv_contains_line with fixed timestamp and tolerance'
     function: csv.contains_line
     parameter:
       dst: '{{events_csv}}'
-      entry: ['EVENT001', 'user_login', '{{ now | tolerance(30) | format("%Y-%m-%dT%H:%M:%S%z") }}', 'success']
+      entry: ['EVENT001', 'user_login', '{{ fixed_timestamp | tolerance(30) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'success']
 
   - name: test_csv_contains_line_recent_timestamp
-    description: 'Test csv_contains_line with recent timestamp and tolerance'
+    description: 'Test csv_contains_line with warning timestamp and tolerance'
     function: csv.contains_line
     parameter:
       dst: '{{events_csv}}'
-      entry: ['EVENT002', 'file_access', '{{ now | tolerance(300) | format("%Y-%m-%dT%H:%M:%S%z") }}', 'warning']
+      entry: ['EVENT002', 'file_access', '{{ fixed_timestamp_warning | tolerance(300) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'warning']
 
   - name: test_csv_contains_line_mixed_regex_timestamp
     description: 'Test csv_contains_line with both regex and timestamp'
     function: csv.contains_line
     parameter:
       dst: '{{events_csv}}'
-      entry: ['{{uuid_regex}}', 'system_update', '{{ now | tolerance(30) | format("%Y-%m-%dT%H:%M:%S%z") }}', 'info']
+      entry: ['{{uuid_regex}}', 'system_update', '{{ fixed_timestamp | tolerance(30) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'info']
 
   # Complex pattern combinations
   - name: test_csv_contains_line_all_regex_patterns
@@ -178,7 +179,7 @@ tests:
     parameter:
       dst: '{{users_csv}}'
       entry: ['1', 'John Doe', 'invalid-email-format', 'Admin']
-  
+
   # Tolerance edge cases
   - name: test_csv_contains_line_timestamp_exact
     description: 'Test csv_contains_line with exact timestamp (no tolerance)'
@@ -193,7 +194,7 @@ tests:
     expect_to_fail: true
     parameter:
       dst: '{{events_csv}}'
-      entry: ['EVENT999', 'nonexistent_event', '{{ now | tolerance(1) | format("%Y-%m-%dT%H:%M:%S%z") }}', 'error']
+      entry: ['EVENT999', 'nonexistent_event', '{{ fixed_timestamp | tolerance(1) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'error']
 
   # Complex regex patterns
   - name: test_csv_contains_line_decimal_regex
@@ -225,7 +226,7 @@ tests:
     function: csv.contains_line
     expect_to_fail: true
     parameter:
-      dst: '{{test_dir}}/nonexistent.csv'
+      dst: '{{adare_shared_data}}/nonexistent.csv'
       entry: ['test', 'data']
 
   - name: test_csv_contains_line_wrong_column_count
@@ -271,100 +272,6 @@ tests:
       entry: ['corrupted', 'data']
 
 actions:
-  # Setup test environment
-  - command:
-      name: "Create Test Directory"
-      description: "Create base directory for CSV testing"
-      command: "mkdir -p {{test_dir}}"
-      shell: true
-
-  # Save current timestamp for later comparison
-  - save_timestamp:
-      name: "Save Current Timestamp"
-      description: "Save current timestamp in 'now' variable for timestamp tolerance tests"
-      variable: "now"
-
-  # Create users CSV file
-  - command:
-      name: "Create Users CSV"
-      description: "Create users CSV file with sample data"
-      command: |
-        cat > {{users_csv}} << 'EOF'
-        id,name,email,role
-        1,John Doe,john@example.com,Admin
-        2,Jane Smith,jane@example.com,User
-        3,Bob Johnson,bob@example.com,Manager
-        4,Alice Brown,alice@example.com,User
-        5,Charlie Wilson,charlie@example.com,Admin
-        EOF
-      shell: true
-
-  # Create access logs CSV file
-  - command:
-      name: "Create Access Logs CSV"
-      description: "Create access logs CSV file with sample data"
-      command: |
-        cat > {{logs_csv}} << 'EOF'
-        date,time,ip,method,url,status
-        2024-01-15,10:30:45,192.168.1.100,GET,/api/users,200
-        2024-01-15,10:31:12,192.168.1.101,POST,/api/login,401
-        2024-01-15,10:32:30,192.168.1.102,GET,/api/dashboard,200
-        2024-01-15,10:33:15,192.168.1.103,DELETE,/api/users/123,403
-        2024-01-15,10:34:22,192.168.1.104,PUT,/api/users/456,200
-        2024-01-15,10:35:00,192.168.1.105,GET,/api/search?q=test&sort=date,200
-        EOF
-      shell: true
-
-  # Create system events CSV file with timestamps
-  - command:
-      name: "Create System Events CSV"
-      description: "Create system events CSV file with current timestamps"
-      command: |
-        cat > {{events_csv}} << EOF
-        event_id,event_type,timestamp,severity
-        EVENT001,user_login,$(date -Iseconds),success
-        EVENT002,file_access,$(date -d '2 minutes ago' -Iseconds),warning
-        EVENT003,exact_time,2024-03-15T14:30:00Z,debug
-        EVENT004,old_event,2020-01-01T00:00:00Z,error
-        123e4567-e89b-12d3-a456-426614174000,system_update,$(date -Iseconds),info
-        EOF
-      shell: true
-
-  # Create transactions CSV file with complex patterns
-  - command:
-      name: "Create Transactions CSV"
-      description: "Create transactions CSV file with versions, UUIDs, and amounts"
-      command: |
-        cat > {{transactions_csv}} << 'EOF'
-        transaction_id,version,status,amount
-        TXN001,1.2.3,processing,250.50
-        TXN002,2.1.0,completed,123e4567-e89b-12d3-a456-426614174000
-        TXN003,3.0.1,completed,999.99
-        f47ac10b-58cc-4372-a567-0e02b2c3d479,4.5.6,failed,0.01
-        EOF
-      shell: true
-
-  # Create empty CSV file
-  - command:
-      name: "Create Empty CSV"
-      description: "Create empty CSV file"
-      command: "touch {{empty_csv}}"
-      shell: true
-
-  # Create malformed CSV file
-  - command:
-      name: "Create Malformed CSV"
-      description: "Create malformed CSV file with inconsistent structure"
-      command: |
-        cat > {{malformed_csv}} << 'EOF'
-        id,name,email
-        1,John,john@example.com,extra_column
-        2,Jane
-        3,Bob,bob@example.com,role,another_extra
-        "unclosed quote,field
-        EOF
-      shell: true
-  
   # Run all CSV tests - Basic tests first
   - test: test_csv_contains_line_exact_match
   - test: test_csv_contains_line_second_row
@@ -403,47 +310,3 @@ actions:
   - test: test_csv_contains_line_partial_match
   - test: test_csv_contains_line_special_chars
   - test: test_csv_contains_line_malformed
-  
-  # Pull created files for analysis
-  - pull:
-      name: "Pull Users CSV"
-      description: "Retrieve the users CSV file"
-      src: "{{users_csv}}"
-      dst: "users.csv"
-
-  - pull:
-      name: "Pull Access Logs CSV"
-      description: "Retrieve the access logs CSV file"
-      src: "{{logs_csv}}"
-      dst: "access_logs.csv"
-
-  - pull:
-      name: "Pull Events CSV"
-      description: "Retrieve the system events CSV file"
-      src: "{{events_csv}}"
-      dst: "events.csv"
-
-  - pull:
-      name: "Pull Transactions CSV"
-      description: "Retrieve the transactions CSV file"
-      src: "{{transactions_csv}}"
-      dst: "transactions.csv"
-
-  - pull:
-      name: "Pull Malformed CSV"
-      description: "Retrieve the malformed CSV file"
-      src: "{{malformed_csv}}"
-      dst: "malformed.csv"
-
-  - pull:
-      name: "Pull Empty CSV"
-      description: "Retrieve the empty CSV file"
-      src: "{{empty_csv}}"
-      dst: "empty.csv"
-
-  # Cleanup
-  - command:
-      name: "Cleanup Test Directory"
-      description: "Remove test directory and files"
-      command: "rm -rf {{test_dir}}"
-      shell: true

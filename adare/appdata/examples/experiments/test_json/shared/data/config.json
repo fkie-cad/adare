@@ -1,0 +1,22 @@
+{
+  "app_name": "TestApplication",
+  "version": "1.2.3",
+  "debug_mode": true,
+  "production_mode": false,
+  "api_key": null,
+  "created_at": "2025-01-15 14:30:00",
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "test_db",
+    "ssl": true
+  },
+  "features": [
+    "logging",
+    "authentication",
+    "authorization",
+    "caching"
+  ],
+  "timeout": 30,
+  "retry_count": 3
+}

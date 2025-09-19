@@ -1,0 +1,23 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com",
+      "active": true
+    },
+    {
+      "id": 2,
+      "name": "Jane Smith",
+      "email": "jane@example.com",
+      "active": false
+    }
+  ],
+  "user_ids": [123, 456, 789],
+  "permissions": [
+    {"action": "read", "resource": "users"},
+    {"action": "write", "resource": "posts"},
+    {"action": "delete", "resource": "comments"}
+  ],
+  "total_count": 2
+}
