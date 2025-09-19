@@ -13,9 +13,9 @@ This document tracks ongoing development tasks, planned features, quality of lif
 - [x] add xml testfunctions in separate xml module
 - [ ] support yaml with same logic/function as for json!
 - [ ] test and fix all test expriments
-  - [x] test_sqlite
-  - [ ] test_json
-  - [ ] test_csv
+  - [ ] test_sqlite
+  - [x] test_json
+  - [x] test_csv
   - [ ] test_xml
   - [ ] test_linux_system
   - [ ] test_windows_registry
