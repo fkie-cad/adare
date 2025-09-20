@@ -62,7 +62,6 @@ Install the following software:
 - **Python 3.9 or newer**
 - **Poetry** (`Installation Guide <https://python-poetry.org/docs/#installing-with-the-official-installer>`_)
 - **VirtualBox Guest Additions**
-- 
   
 
 Linux Setup
@@ -87,7 +86,9 @@ Base Configuration (all environments)
   - VirtualBox Guest Additions
   - ``python3-tk``
   - ``python3-dev``
-  - any C-compiler if not already installed (preferably ``gcc`` or ``clang``)
+  - to be ready for future updates also install:
+    - for x11: maim (for screenshots)
+    - for wayland: grim (for screenshots) + ydotool (for mouse/keyboard control)
 
 
 Desktop Environment–Specific Setup

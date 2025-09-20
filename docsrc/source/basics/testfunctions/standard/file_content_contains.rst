@@ -31,6 +31,9 @@ Parameters
    * - ``content_type``
      - string
      - **Optional.** Either "string" (default) or "bytes". Determines how content is interpreted.
+   * - ``encoding``
+     - string
+     - **Optional.** Text encoding to use when reading the file for string content (default: "utf-8"). Ignored for byte content. Common values: "utf-8", "utf-16", "latin-1", "ascii".
 
 Usage Example
 -------------
@@ -81,6 +84,21 @@ Log Monitoring
          content: "Data processing completed successfully"
        description: "Verify processing completion was logged"
 
+Windows UTF-16 Log Analysis
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+   tests:
+     - name: check_windows_event_log
+       function: file_content_contains
+       parameter:
+         dst: "C:\\Windows\\Logs\\application.log"
+         content: "Service started successfully"
+         content_type: "string"
+         encoding: "utf-16"
+       description: "Search for service start message in UTF-16 encoded log"
+
 Common Use Cases
 ----------------
 
@@ -109,9 +127,10 @@ Content Type Details
 --------------------
 
 **String Content (default)**
-  - File is read as UTF-8 text with error handling
+  - File is read as text using the specified encoding (default: UTF-8) with error handling
   - Search is performed on the decoded string content
   - Suitable for text files, logs, configuration files
+  - Use the encoding parameter to handle different character encodings
 
 **Byte Content**
   - File is read in binary mode
@@ -153,7 +172,7 @@ Return Values
   - The file cannot be found or read
   - Permission denied reading the file
   - Path resolution fails due to glob pattern ambiguity
-  - Unicode decoding errors occur (for string content)
+  - Unicode decoding errors occur (for string content - try specifying correct encoding parameter)
 
 Example Results
 ---------------

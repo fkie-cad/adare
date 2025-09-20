@@ -28,6 +28,9 @@ Parameters
    * - ``regex``
      - string
      - **Required.** The regular expression pattern to match against the file content.
+   * - ``encoding``
+     - string
+     - **Optional.** Text encoding to use when reading the file (default: "utf-8"). Common values: "utf-8", "utf-16", "latin-1", "ascii".
 
 Usage Example
 -------------
@@ -70,6 +73,20 @@ Multi-line Pattern Matching
          dst: "/tmp/generated_query.sql"
          regex: "SELECT\\s+\\*\\s+FROM\\s+users\\s+WHERE\\s+active\\s*=\\s*1"
        description: "Verify correct SQL query was generated"
+
+Windows UTF-16 File Pattern Matching
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+   tests:
+     - name: verify_windows_config
+       function: file_content_matches_regex
+       parameter:
+         dst: "C:\\Program Files\\MyApp\\config.txt"
+         regex: "version\\s*=\\s*[0-9]+\\.[0-9]+\\.[0-9]+"
+         encoding: "utf-16"
+       description: "Verify version number pattern in UTF-16 encoded config file"
 
 Common Use Cases
 ----------------
@@ -135,6 +152,7 @@ Return Values
   - The regular expression pattern is invalid
   - Permission denied reading the file
   - Path resolution fails due to glob pattern ambiguity
+  - Unicode decoding errors occur (try specifying correct encoding parameter)
 
 Example Results
 ---------------

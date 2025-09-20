@@ -165,6 +165,7 @@ class DirContent(BasicTest):
 class FileContentMatchesRegexParameter(Parameter):
     dst: str
     regex: str
+    encoding: Optional[str] = 'utf-8'
 
 
 @attrs.define
@@ -186,11 +187,11 @@ class FileContentMatchesRegex(BasicTest):
             log.debug(f'dst file {dst} will be used for test {self.name}')
 
             try:
-                with open(dst, 'r') as f:
+                with open(dst, 'r', encoding=self.parameter.encoding) as f:
                     data = f.read()
             except FileNotFoundError:
                 return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
-            except (PermissionError, OSError) as e:
+            except (PermissionError, OSError, UnicodeDecodeError) as e:
                 return TestResult.execution_error(e, f"Cannot read file {dst}")
 
             # Test regex compilation first
@@ -212,6 +213,7 @@ class FileContentMatchesRegex(BasicTest):
 class FileContentEqualsParameter(Parameter):
     dst: str
     content: str
+    encoding: Optional[str] = 'utf-8'
 
 @attrs.define
 class FileContentEquals(BasicTest):
@@ -231,7 +233,7 @@ class FileContentEquals(BasicTest):
 
             log.debug(f'dst file {dst} will be used for test {self.name}')
             try:
-                with open(dst, 'r') as f:
+                with open(dst, 'r', encoding=self.parameter.encoding) as f:
                     data = f.read()
             except FileNotFoundError:
                 return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
@@ -635,6 +637,7 @@ class FileContentContainsParameter(Parameter):
     dst: str
     content: str  # Always string input, parsed to bytes if content_type is 'bytes'
     content_type: str = 'string'  # 'string' or 'bytes'
+    encoding: Optional[str] = 'utf-8'
 
 
 @attrs.define
@@ -681,7 +684,7 @@ class FileContentContains(BasicTest):
 
                 else:  # default: string content
                     # Read file as text
-                    with open(dst, 'r', encoding='utf-8', errors='ignore') as f:
+                    with open(dst, 'r', encoding=self.parameter.encoding, errors='ignore') as f:
                         file_content = f.read()
 
                     search_string = self.parameter.content
