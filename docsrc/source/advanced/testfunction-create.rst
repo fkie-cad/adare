@@ -1,5 +1,5 @@
 ********************************************************
-Create your own testfunction collection (in development)
+Create your own testfunction set (in development)
 ********************************************************
 
 This guide explains how to create custom test functions for ADARE to extend its testing capabilities beyond the built-in test function collections.

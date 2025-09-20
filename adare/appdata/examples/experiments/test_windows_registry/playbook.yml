@@ -38,6 +38,7 @@ tests:
     function: windows.registry_key_exists
     parameter:
       key_path: 'HKEY_CURRENT_USER\\Software\\NonExistentApp'
+    expect_to_fail: true
 
   # Registry value tests
   - name: test_registry_value_string
@@ -56,7 +57,7 @@ tests:
       key_path: '{{test_key_path}}'
       value_name: 'DwordValue'
       expected_value: 42
-      value_type: 'REG_DWORD'
+      value_type: 'REG_DWORD_LITTLE_ENDIAN'
 
 actions:
   # Create test registry entries

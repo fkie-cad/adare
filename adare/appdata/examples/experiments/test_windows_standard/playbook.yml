@@ -31,7 +31,7 @@ variables:
   binary_content:
     type: string
     value: "Binary data: \x89PNG\r\n\x1a\n"
-    description: "Binary content with escape sequences"
+    description: "Binary content with escape sequences (matches the byte array in the command)"
 
   expected_hash:
     type: string
@@ -231,19 +231,19 @@ actions:
   - command:
       name: "Create Test File"
       description: "Create test file with content"
-      command: 'echo {{test_content}} > "{{test_file}}"'
+      command: 'Set-Content -Path "{{test_file}}" -Value "{{test_content}}" -Encoding UTF8'
       shell: true
 
   - command:
       name: "Create Empty File"
       description: "Create empty file for hash testing"
-      command: 'type nul > "{{test_dir}}\\empty_file.txt"'
+      command: 'New-Item -Path "{{test_dir}}\\empty_file.txt" -ItemType File -Force'
       shell: true
 
   - command:
       name: "Create Binary File"
       description: "Create binary file for content contains testing"
-      command: 'powershell -Command "[System.IO.File]::WriteAllBytes(\"{{test_dir}}\\binary_file.bin\", [System.Text.Encoding]::UTF8.GetBytes(\"{{binary_content}}\"))"'
+      command: '[System.IO.File]::WriteAllBytes("{{test_dir}}\\binary_file.bin", [byte[]](0x42,0x69,0x6E,0x61,0x72,0x79,0x20,0x64,0x61,0x74,0x61,0x3A,0x20,0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A))'
       shell: true
 
   - idle:
@@ -273,10 +273,3 @@ actions:
   - test: test_file_content_contains_string_negative
   - test: test_file_content_contains_bytes_positive
   - test: test_file_content_contains_bytes_negative
-
-  # Cleanup
-  - command:
-      name: "Cleanup Test Directory"
-      description: "Remove test directory and files"
-      command: 'rmdir /s /q "{{test_dir}}"'
-      shell: true

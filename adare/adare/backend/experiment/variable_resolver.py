@@ -10,7 +10,10 @@ from typing import Dict, Any, List, Optional, Tuple
 import logging
 import re
 import copy
+import datetime
 import jinja2
+import dateutil.parser
+import pytz
 from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
@@ -565,21 +568,7 @@ class JinjaTemplateResolver:
         return data
 
     def _apply_format_filter(self, template_expr: str, filter_analysis: FilterAnalysis, template_context: Dict[str, Any]) -> str:
-        """
-        Apply timestamp formatting for format-only cases (no tolerance).
-
-        Args:
-            template_expr: Original template expression like "{{fixed_timestamp | format('%Y-%m-%dT%H:%M:%S')}}"
-            filter_analysis: Analysis result containing format string and variable name
-            template_context: Context containing variable values
-
-        Returns:
-            Formatted timestamp string
-        """
-        import datetime
-        import dateutil.parser
-        import pytz
-
+        """Apply timestamp formatting for format-only cases (no tolerance)."""
         try:
             variable_name = filter_analysis.variable_name
             format_string = filter_analysis.format_string
@@ -588,69 +577,77 @@ class JinjaTemplateResolver:
                 log.warning(f"Missing variable name or format string for template: {template_expr}")
                 return template_expr
 
-            # Get the timestamp value from context
             if variable_name not in template_context:
                 log.warning(f"Variable '{variable_name}' not found in template context for formatting")
                 return template_expr
 
             timestamp_value = template_context[variable_name]
-            log.debug(f"CLAUDE: Formatting timestamp '{variable_name}' with value '{timestamp_value}' using format '{format_string}'")
+            log.debug(f"Formatting timestamp '{variable_name}' with value '{timestamp_value}' using format '{format_string}'")
 
-            # Convert to datetime object
-            if isinstance(timestamp_value, (int, float)):
-                # Unix timestamp
-                dt = datetime.datetime.fromtimestamp(timestamp_value, tz=pytz.UTC)
-                log.debug(f"CLAUDE: Converted Unix timestamp {timestamp_value} to UTC datetime: {dt}")
-            elif isinstance(timestamp_value, str):
-                # Try to parse string timestamp
-                try:
-                    # First try as Unix timestamp string
-                    unix_ts = float(timestamp_value)
-                    dt = datetime.datetime.fromtimestamp(unix_ts, tz=pytz.UTC)
-                    log.debug(f"CLAUDE: Converted Unix timestamp string '{timestamp_value}' to UTC datetime: {dt}")
-                except ValueError:
-                    # Parse as date string
-                    dt = dateutil.parser.parse(timestamp_value)
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=pytz.UTC)
-                    log.debug(f"CLAUDE: Parsed timestamp string '{timestamp_value}' to datetime: {dt}")
-            else:
-                log.warning(f"Unsupported timestamp type: {type(timestamp_value)}")
-                return template_expr
-
-            # Check for timezone metadata and apply timezone conversion if needed
-            # Look up the variable in the registry to get timezone metadata
-            if hasattr(self, 'metadata_manager') and self.metadata_manager.variable_registry:
-                try:
-                    source_var = self.metadata_manager.variable_registry.get(variable_name)
-                    if source_var and hasattr(source_var, 'structured_metadata') and source_var.structured_metadata:
-                        if source_var.structured_metadata.timezone:
-                            # Parse timezone offset like "+04:00"
-                            tz_str = source_var.structured_metadata.timezone
-                            if tz_str.startswith(('+', '-')):
-                                # Parse offset format like "+04:00"
-                                sign = 1 if tz_str[0] == '+' else -1
-                                hours, minutes = map(int, tz_str[1:].split(':'))
-                                offset = sign * (hours * 60 + minutes)
-                                target_tz = datetime.timezone(datetime.timedelta(minutes=offset))
-                                dt = dt.astimezone(target_tz)
-                                log.debug(f"CLAUDE: Converted to timezone {tz_str}: {dt}")
-                            else:
-                                # Try as named timezone
-                                target_tz = pytz.timezone(tz_str)
-                                dt = dt.astimezone(target_tz)
-                                log.debug(f"CLAUDE: Converted to timezone {tz_str}: {dt}")
-                except Exception as e:
-                    log.debug(f"CLAUDE: Could not apply timezone conversion: {e}")
+            # Convert to datetime and apply timezone if needed
+            dt = self._parse_timestamp_value(timestamp_value)
+            dt = self._apply_timezone_conversion(dt, variable_name)
 
             # Apply format string
             formatted = dt.strftime(format_string)
-            log.info(f"CLAUDE: Successfully formatted timestamp '{variable_name}' -> '{formatted}'")
+            log.info(f"Successfully formatted timestamp '{variable_name}' -> '{formatted}'")
             return formatted
 
         except Exception as e:
             log.warning(f"Failed to apply format filter to '{template_expr}': {e}")
             return template_expr
+
+    def _parse_timestamp_value(self, timestamp_value: Any) -> datetime.datetime:
+        """Parse various timestamp formats into datetime object."""
+        if isinstance(timestamp_value, (int, float)):
+            return datetime.datetime.fromtimestamp(timestamp_value, tz=pytz.UTC)
+
+        if isinstance(timestamp_value, str):
+            try:
+                # Try as Unix timestamp string first
+                unix_ts = float(timestamp_value)
+                return datetime.datetime.fromtimestamp(unix_ts, tz=pytz.UTC)
+            except ValueError:
+                # Parse as date string
+                dt = dateutil.parser.parse(timestamp_value)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=pytz.UTC)
+                return dt
+
+        raise ValueError(f"Unsupported timestamp type: {type(timestamp_value)}")
+
+    def _apply_timezone_conversion(self, dt: datetime.datetime, variable_name: str) -> datetime.datetime:
+        """Apply timezone conversion based on variable metadata."""
+        if not (hasattr(self, 'metadata_manager') and self.metadata_manager.variable_registry):
+            return dt
+
+        try:
+            source_var = self.metadata_manager.variable_registry.get(variable_name)
+            if not (source_var and hasattr(source_var, 'structured_metadata') and source_var.structured_metadata):
+                return dt
+
+            tz_str = source_var.structured_metadata.timezone
+            if not tz_str:
+                return dt
+
+            target_tz = self._parse_timezone(tz_str)
+            return dt.astimezone(target_tz)
+
+        except Exception as e:
+            log.debug(f"Could not apply timezone conversion: {e}")
+            return dt
+
+    def _parse_timezone(self, tz_str: str) -> datetime.timezone:
+        """Parse timezone string into timezone object."""
+        if tz_str.startswith(('+', '-')):
+            # Parse offset format like "+04:00"
+            sign = 1 if tz_str[0] == '+' else -1
+            hours, minutes = map(int, tz_str[1:].split(':'))
+            offset = sign * (hours * 60 + minutes)
+            return datetime.timezone(datetime.timedelta(minutes=offset))
+        else:
+            # Named timezone
+            return pytz.timezone(tz_str)
 
 
 class ToleranceDetector:

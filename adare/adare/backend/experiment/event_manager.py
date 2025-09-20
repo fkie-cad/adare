@@ -261,48 +261,35 @@ class EventManager:
         """Generate a clean, single-line description for command actions."""
         command = action.command.strip()
 
-        # Handle multiline commands (like heredoc)
-        if '\n' in command:
-            # For heredoc commands, extract the main command (first line)
-            first_line = command.split('\n')[0].strip()
+        # Always force single-line display by replacing any actual newlines with spaces
+        command = ' '.join(command.split())
 
-            # Check if it's a heredoc command
-            if '<<' in first_line:
-                # Extract the base command before heredoc
-                base_cmd = first_line.split('<<')[0].strip()
-                # Try to get the filename if it's a file creation command
-                if 'cat >' in base_cmd or 'tee' in base_cmd:
-                    # Extract filename for better readability
-                    import re
-                    file_match = re.search(r'[>]\s*([^\s]+)', base_cmd)
-                    if file_match:
-                        filename = file_match.group(1)
-                        # Keep filename shorter to prevent flow console truncation
-                        import os
-                        basename = os.path.basename(filename)
-                        return f"command: create file {basename}"
+        # Special handling for heredoc commands (<<)
+        if '<<' in command:
+            # Extract the base command before heredoc
+            base_cmd = command.split('<<')[0].strip()
+            # Try to get the filename if it's a file creation command
+            if 'cat >' in base_cmd or 'tee' in base_cmd:
+                # Extract filename for better readability
+                import re
+                file_match = re.search(r'[>]\s*([^\s]+)', base_cmd)
+                if file_match:
+                    filename = file_match.group(1)
+                    # Keep filename shorter to prevent flow console truncation
+                    import os
+                    basename = os.path.basename(filename)
+                    return f"command: create file {basename}"
 
-                # Truncate base command aggressively to prevent flow console truncation
-                if len(base_cmd) > 40:
-                    base_cmd = base_cmd[:37] + "..."
-                result = f"command: execute '{base_cmd}'"
-                import logging
-                log = logging.getLogger(__name__)
-                log.error(f"CLAUDE: DEBUG - Returning command description: {repr(result)}")
-                return result
-            else:
-                # Multi-line command without heredoc - be very aggressive with truncation
-                if len(first_line) > 40:
-                    first_line = first_line[:37] + "..."
-                result = f"command: execute '{first_line}'"
-                print(f"CLAUDE: DEBUG - Returning first_line description: {repr(result)}")
-                return result
+            # Truncate heredoc command
+            if len(base_cmd) > 40:
+                base_cmd = base_cmd[:37] + "..."
+            return f"command: execute '{base_cmd}'"
+
+        # Regular command truncation - always single line
+        if len(command) > 40:
+            return f"command: execute '{command[:37]}...'"
         else:
-            # Single line command - be more aggressive with truncation
-            if len(command) > 40:
-                return f"command: execute '{command[:37]}...'"
-            else:
-                return f"command: execute '{command}'"
+            return f"command: execute '{command}'"
     
     def _get_condition_info(self, conditions) -> Optional[Dict[str, Any]]:
         """Extract condition information for event logging."""
