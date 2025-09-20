@@ -511,14 +511,20 @@ class JinjaTemplateResolver:
                 replacement = f'{{{{ {placeholder_name} }}}}'
                 log.info(f"Created tolerance placeholder '{placeholder_name}' for template '{template_expr}' in mixed content")
             else:
-                # No tolerance - resolve directly
-                try:
-                    template = self.jinja_env.from_string(template_expr)
-                    replacement = template.render(template_context)
-                    log.debug(f"Resolved template '{template_expr}' to '{replacement}' in mixed content")
-                except (jinja2.TemplateError, jinja2.UndefinedError, KeyError, TypeError, ValueError) as e:
-                    log.warning(f"Failed to resolve template '{template_expr}': {e}")
-                    replacement = template_expr  # Keep original if resolution fails
+                # No tolerance - check if format filter needs special handling
+                if filter_analysis.has_format:
+                    # Format-only case: Apply timestamp formatting client-side
+                    replacement = self._apply_format_filter(template_expr, filter_analysis, template_context)
+                    log.debug(f"Applied format filter to '{template_expr}' -> '{replacement}' in mixed content")
+                else:
+                    # Regular template - resolve directly
+                    try:
+                        template = self.jinja_env.from_string(template_expr)
+                        replacement = template.render(template_context)
+                        log.debug(f"Resolved template '{template_expr}' to '{replacement}' in mixed content")
+                    except (jinja2.TemplateError, jinja2.UndefinedError, KeyError, TypeError, ValueError) as e:
+                        log.warning(f"Failed to resolve template '{template_expr}': {e}")
+                        replacement = template_expr  # Keep original if resolution fails
 
             # Replace this template in the result
             result = result[:start_pos] + replacement + result[end_pos:]
@@ -557,6 +563,94 @@ class JinjaTemplateResolver:
                     for item in data]
 
         return data
+
+    def _apply_format_filter(self, template_expr: str, filter_analysis: FilterAnalysis, template_context: Dict[str, Any]) -> str:
+        """
+        Apply timestamp formatting for format-only cases (no tolerance).
+
+        Args:
+            template_expr: Original template expression like "{{fixed_timestamp | format('%Y-%m-%dT%H:%M:%S')}}"
+            filter_analysis: Analysis result containing format string and variable name
+            template_context: Context containing variable values
+
+        Returns:
+            Formatted timestamp string
+        """
+        import datetime
+        import dateutil.parser
+        import pytz
+
+        try:
+            variable_name = filter_analysis.variable_name
+            format_string = filter_analysis.format_string
+
+            if not variable_name or not format_string:
+                log.warning(f"Missing variable name or format string for template: {template_expr}")
+                return template_expr
+
+            # Get the timestamp value from context
+            if variable_name not in template_context:
+                log.warning(f"Variable '{variable_name}' not found in template context for formatting")
+                return template_expr
+
+            timestamp_value = template_context[variable_name]
+            log.debug(f"CLAUDE: Formatting timestamp '{variable_name}' with value '{timestamp_value}' using format '{format_string}'")
+
+            # Convert to datetime object
+            if isinstance(timestamp_value, (int, float)):
+                # Unix timestamp
+                dt = datetime.datetime.fromtimestamp(timestamp_value, tz=pytz.UTC)
+                log.debug(f"CLAUDE: Converted Unix timestamp {timestamp_value} to UTC datetime: {dt}")
+            elif isinstance(timestamp_value, str):
+                # Try to parse string timestamp
+                try:
+                    # First try as Unix timestamp string
+                    unix_ts = float(timestamp_value)
+                    dt = datetime.datetime.fromtimestamp(unix_ts, tz=pytz.UTC)
+                    log.debug(f"CLAUDE: Converted Unix timestamp string '{timestamp_value}' to UTC datetime: {dt}")
+                except ValueError:
+                    # Parse as date string
+                    dt = dateutil.parser.parse(timestamp_value)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=pytz.UTC)
+                    log.debug(f"CLAUDE: Parsed timestamp string '{timestamp_value}' to datetime: {dt}")
+            else:
+                log.warning(f"Unsupported timestamp type: {type(timestamp_value)}")
+                return template_expr
+
+            # Check for timezone metadata and apply timezone conversion if needed
+            # Look up the variable in the registry to get timezone metadata
+            if hasattr(self, 'metadata_manager') and self.metadata_manager.variable_registry:
+                try:
+                    source_var = self.metadata_manager.variable_registry.get(variable_name)
+                    if source_var and hasattr(source_var, 'structured_metadata') and source_var.structured_metadata:
+                        if source_var.structured_metadata.timezone:
+                            # Parse timezone offset like "+04:00"
+                            tz_str = source_var.structured_metadata.timezone
+                            if tz_str.startswith(('+', '-')):
+                                # Parse offset format like "+04:00"
+                                sign = 1 if tz_str[0] == '+' else -1
+                                hours, minutes = map(int, tz_str[1:].split(':'))
+                                offset = sign * (hours * 60 + minutes)
+                                target_tz = datetime.timezone(datetime.timedelta(minutes=offset))
+                                dt = dt.astimezone(target_tz)
+                                log.debug(f"CLAUDE: Converted to timezone {tz_str}: {dt}")
+                            else:
+                                # Try as named timezone
+                                target_tz = pytz.timezone(tz_str)
+                                dt = dt.astimezone(target_tz)
+                                log.debug(f"CLAUDE: Converted to timezone {tz_str}: {dt}")
+                except Exception as e:
+                    log.debug(f"CLAUDE: Could not apply timezone conversion: {e}")
+
+            # Apply format string
+            formatted = dt.strftime(format_string)
+            log.info(f"CLAUDE: Successfully formatted timestamp '{variable_name}' -> '{formatted}'")
+            return formatted
+
+        except Exception as e:
+            log.warning(f"Failed to apply format filter to '{template_expr}': {e}")
+            return template_expr
 
 
 class ToleranceDetector:
