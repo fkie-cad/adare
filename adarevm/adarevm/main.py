@@ -1,6 +1,18 @@
 import asyncio
 import logging
+import sys
+from pathlib import Path
+
 log = logging.getLogger(__name__)
+
+
+def __setup_python_paths():
+    """Setup Python paths for adarelib when in VM runtime structure."""
+    # Check if adarelib is in VM runtime structure
+    adarelib_path = Path("/adare/app/adarelib")
+    if adarelib_path.exists() and str(adarelib_path) not in sys.path:
+        sys.path.insert(0, str(adarelib_path))
+        log.info(f"Added adarelib path to Python path: {adarelib_path}")
 
 
 
@@ -18,6 +30,7 @@ def __setup_logging(logfile: str = None):
     )
 
 async def main():
+    __setup_python_paths()
     from adarevm.core.server import AdareVMServer
     server_instance = AdareVMServer()
     log.info("Starting AdareVM server...")

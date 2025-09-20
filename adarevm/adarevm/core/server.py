@@ -345,7 +345,8 @@ class AdareVMServer:
 
         # Common deployment paths to check
         possible_paths = [
-            "/adare/app",  # Common deployment path
+            "/adare/app/adarevm",  # VM runtime deployment path (adarevm in runtime directory)
+            "/adare/app",  # Legacy deployment path (whole adare directory)
             "/adare",      # Alternative deployment path
             Path(__file__).parent.parent.parent,  # Development path (../../../)
             Path.cwd(),    # Current working directory
@@ -362,8 +363,14 @@ class AdareVMServer:
         log.warning("Could not find pyproject.toml, falling back to current directory")
         return str(Path.cwd())
 
-    async def _install_dependencies(self, websocket, dependencies: List[str]):
-        """Install Python dependencies using Poetry."""
+    async def _install_dependencies(self, websocket, dependencies: List[str], prefer_binary: bool = False):
+        """Install Python dependencies using Poetry.
+
+        Args:
+            websocket: WebSocket connection
+            dependencies: List of dependencies to install
+            prefer_binary: If True, configure Poetry to only use binary packages (avoid compilation)
+        """
         await self.send_event(websocket, EventType.LOG, {"message": f"Starting dependency installation: {len(dependencies)} packages"})
 
         try:
@@ -378,14 +385,38 @@ class AdareVMServer:
             project_dir = self._find_project_directory()
             await self.send_event(websocket, EventType.LOG, {"message": f"Found project directory: {project_dir}"})
 
-            # Step 2: Prepare Poetry command
-            await self.send_event(websocket, EventType.LOG, {"message": "Step 2/4: Preparing Poetry command..."})
+            step_count = "4" if not prefer_binary else "5"
+            current_step = 2
+
+            # Step 2: Configure Poetry for binary-only installation (if requested)
+            if prefer_binary:
+                await self.send_event(websocket, EventType.LOG, {"message": f"Step {current_step}/{step_count}: Configuring Poetry for binary-only installation..."})
+                config_cmd = ["poetry", "config", "--local", "installer.only-binary", ":all:"]
+                log.info(f"Running config command: {' '.join(config_cmd)} in directory: {project_dir}")
+
+                config_process = await asyncio.create_subprocess_exec(
+                    *config_cmd,
+                    cwd=project_dir,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                config_stdout, config_stderr = await config_process.communicate()
+
+                if config_process.returncode != 0:
+                    log.warning(f"Poetry config failed (continuing anyway): {config_stderr.decode('utf-8') if config_stderr else 'unknown error'}")
+                else:
+                    log.info("Poetry configured for binary-only installation")
+                current_step += 1
+
+            # Step 2/3: Prepare Poetry add command
+            await self.send_event(websocket, EventType.LOG, {"message": f"Step {current_step}/{step_count}: Preparing Poetry command..."})
             cmd = ["poetry", "add"] + dependencies
             log.info(f"Running command: {' '.join(cmd)} in directory: {project_dir}")
             await self.send_event(websocket, EventType.LOG, {"message": f"Command: {' '.join(cmd)}"})
+            current_step += 1
 
-            # Step 3: Execute installation
-            await self.send_event(websocket, EventType.LOG, {"message": "Step 3/4: Installing dependencies (this may take several minutes)..."})
+            # Step 3/4: Execute installation
+            await self.send_event(websocket, EventType.LOG, {"message": f"Step {current_step}/{step_count}: Installing dependencies (this may take several minutes)..."})
 
             # Use asyncio subprocess to avoid blocking the event loop
             process = await asyncio.create_subprocess_exec(
@@ -395,9 +426,9 @@ class AdareVMServer:
                 stderr=asyncio.subprocess.PIPE
             )
 
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=600.0  # 10 minute timeout for all dependencies
+            # Wait for process with periodic heartbeat to keep WebSocket alive
+            stdout, stderr = await self._wait_for_process_with_heartbeat(
+                websocket, process, timeout=600.0
             )
 
             # Decode bytes to string
@@ -405,13 +436,21 @@ class AdareVMServer:
             stderr = stderr.decode('utf-8') if stderr else ""
             
             if process.returncode != 0:
-                await self.send_event(websocket, EventType.LOG, {"message": "Step 4/4: Installation failed"})
-                error_msg = f"Poetry add failed: {stderr}"
+                await self.send_event(websocket, EventType.LOG, {"message": f"Step {step_count}/{step_count}: Installation failed"})
+                error_msg = f"Poetry add failed with exit code {process.returncode}"
+                if stderr.strip():
+                    error_msg += f": {stderr}"
+                else:
+                    error_msg += " (no error output)"
+                if stdout.strip():
+                    error_msg += f"\nStdout: {stdout}"
+
                 log.error(error_msg)
+                log.error(f"CLAUDE: Poetry command details - Exit code: {process.returncode}, Stderr: '{stderr}', Stdout: '{stdout}'")
                 await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
                 return {"status": "error", "message": error_msg}
             else:
-                await self.send_event(websocket, EventType.LOG, {"message": "Step 4/4: Installation completed successfully"})
+                await self.send_event(websocket, EventType.LOG, {"message": f"Step {step_count}/{step_count}: Installation completed successfully"})
                 success_msg = f"Successfully installed all {len(dependencies)} dependencies with Poetry"
                 log.info(success_msg)
                 log.debug(f"Poetry output: {stdout}")
@@ -434,7 +473,85 @@ class AdareVMServer:
             log.error(error_msg)
             await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
             return {"status": "error", "message": error_msg}
-    
+
+    async def _wait_for_process_with_heartbeat(self, websocket, process, timeout=600.0, heartbeat_interval=30.0):
+        """Wait for subprocess with periodic WebSocket heartbeat to prevent disconnection.
+
+        Args:
+            websocket: WebSocket connection for heartbeat messages
+            process: asyncio subprocess to monitor
+            timeout: Maximum time to wait for process completion
+            heartbeat_interval: Seconds between heartbeat messages
+
+        Returns:
+            Tuple of (stdout, stderr) from process
+
+        Raises:
+            asyncio.TimeoutError: If process exceeds timeout
+            OSError: If process execution fails
+        """
+        start_time = time.time()
+        heartbeat_task = None
+        websocket_alive = True
+
+        async def send_heartbeat():
+            """Send periodic heartbeat messages to keep WebSocket alive."""
+            nonlocal websocket_alive
+            heartbeat_count = 0
+
+            while True:
+                try:
+                    await asyncio.sleep(heartbeat_interval)
+                    if not websocket_alive:
+                        break
+
+                    heartbeat_count += 1
+                    elapsed = time.time() - start_time
+                    await self.send_event(websocket, EventType.LOG, {
+                        "message": f"Installation in progress... ({elapsed:.0f}s elapsed)"
+                    })
+                    log.debug(f"Sent heartbeat {heartbeat_count} after {elapsed:.1f}s")
+
+                except websockets.exceptions.ConnectionClosed:
+                    log.warning("WebSocket disconnected during heartbeat, continuing process in background")
+                    websocket_alive = False
+                    break
+                except Exception as e:
+                    log.warning(f"Heartbeat failed: {e}, continuing process")
+                    websocket_alive = False
+                    break
+
+        try:
+            # Start heartbeat task
+            heartbeat_task = asyncio.create_task(send_heartbeat())
+
+            # Wait for process with timeout
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=timeout
+            )
+
+            return stdout, stderr
+
+        except websockets.exceptions.ConnectionClosed:
+            log.warning("WebSocket disconnected during process wait, continuing in background")
+            websocket_alive = False
+            # Continue waiting for process even if WebSocket is gone
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=timeout
+            )
+            return stdout, stderr
+
+        finally:
+            # Clean up heartbeat task
+            if heartbeat_task and not heartbeat_task.done():
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+
     async def _set_variables(self, websocket, variables: str):
         """Set variables for test execution."""
         log.info(f"Setting variables: {variables[:100]}...")

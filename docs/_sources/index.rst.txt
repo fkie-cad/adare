@@ -136,6 +136,8 @@ Documentation Structure
    :caption: Advanced
 
    advanced/cli
+   advanced/testfunction-create
+   advanced/vm-create
 
 .. toctree::
    :hidden:

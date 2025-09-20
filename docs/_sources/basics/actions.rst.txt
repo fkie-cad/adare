@@ -496,34 +496,13 @@ Timing Control Actions
          duration: '{{load_time}}'
          description: "Wait for configurable load time"
 
-**Wait Conditions**
+**Interactive Pauses**
 
 .. code-block:: yaml
 
-   actions:
-     # Wait for file to exist
-     - wait_for:
-         condition: "file_exists"
-         parameter:
-           path: "/evidence/processing_complete.flag"
-         timeout: 60
-         description: "Wait for processing to complete"
+  - pause:
+      name: "Configuration Check"
 
-     # Wait for GUI element
-     - wait_for:
-         condition: "element_visible"
-         parameter:
-           text: "Process Complete"
-         timeout: 30
-         description: "Wait for completion dialog"
-
-     # Wait for process to stop
-     - wait_for:
-         condition: "process_not_running"
-         parameter:
-           process_name: "analyzer.exe"
-         timeout: 120
-         description: "Wait for analyzer to finish"
 
 Evidence Collection Actions
 ===========================
@@ -561,12 +540,6 @@ Evidence Collection Actions
          variable: "deletion_start"
          description: "Record when file deletion began"
 
-     # Timestamp with custom format
-     - save_timestamp:
-         variable: "evidence_time"
-         format: "%Y-%m-%d %H:%M:%S.%f"
-         timezone: "UTC"
-         description: "Precise forensic timestamp"
 
 Block Actions
 =============

@@ -15,6 +15,8 @@ from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager
 import adare.backend.experiment.database as experiment_database
 import adare.backend.environment.database as environment_database
 import adare.backend.vm.database as vm_database
+import shutil
+import os
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +26,78 @@ class VMLifecycleManager:
     
     def __init__(self):
         self.vbox_manager = VirtualBoxManager()
-    
+
+    async def _ensure_vm_runtime_ready(self, context: ExperimentRunCtx):
+        """Ensure project VM runtime directory is ready with up-to-date adarevm and adarelib."""
+        # Use project-level vm_runtime directory instead of creating per-experiment copies
+        vm_runtime_dir = context.project_directory.vm_runtime
+        adarevm_target = vm_runtime_dir / 'adarevm'
+        adarelib_target = vm_runtime_dir / 'adarelib'
+
+        # Use global sources
+        adarevm_source = context.adarevm
+        adarelib_source = context.adarelib
+
+        # Check if we need to copy/update files
+        needs_update = False
+
+        if not vm_runtime_dir.exists():
+            log.info("CLAUDE: Creating project VM runtime directory for first time")
+            needs_update = True
+        elif not adarevm_target.exists() or not adarelib_target.exists():
+            log.info("CLAUDE: Project VM runtime directory incomplete, updating")
+            needs_update = True
+        else:
+            # Check if source files are newer than target
+            adarevm_source_time = self._get_latest_mtime(adarevm_source)
+            adarelib_source_time = self._get_latest_mtime(adarelib_source)
+            adarevm_target_time = self._get_latest_mtime(adarevm_target)
+            adarelib_target_time = self._get_latest_mtime(adarelib_target)
+
+            if (adarevm_source_time > adarevm_target_time or
+                adarelib_source_time > adarelib_target_time):
+                log.info("CLAUDE: Source files newer than cached runtime, updating")
+                needs_update = True
+
+        if needs_update:
+            # Create/recreate VM runtime directory
+            if vm_runtime_dir.exists():
+                shutil.rmtree(vm_runtime_dir)
+            vm_runtime_dir.mkdir(parents=True)
+
+            # Copy adarevm
+            log.info(f"CLAUDE: Copying adarevm from {adarevm_source} to {adarevm_target}")
+            shutil.copytree(adarevm_source, adarevm_target, dirs_exist_ok=True)
+
+            # Copy adarelib
+            log.info(f"CLAUDE: Copying adarelib from {adarelib_source} to {adarelib_target}")
+            shutil.copytree(adarelib_source, adarelib_target, dirs_exist_ok=True)
+
+            log.info("CLAUDE: ✅ Project VM runtime directory ready")
+        else:
+            log.info("CLAUDE: ✅ Project VM runtime directory up-to-date")
+
+    def _get_latest_mtime(self, directory: Path) -> float:
+        """Get the latest modification time in a directory tree."""
+        if not directory.exists():
+            return 0.0
+
+        latest = 0.0
+        for root, dirs, files in os.walk(directory):
+            # Skip __pycache__ directories
+            dirs[:] = [d for d in dirs if d != '__pycache__']
+
+            for file in files:
+                if file.endswith('.pyc'):
+                    continue
+                file_path = Path(root) / file
+                try:
+                    mtime = file_path.stat().st_mtime
+                    latest = max(latest, mtime)
+                except (OSError, PermissionError):
+                    continue
+        return latest
+
     async def create_and_prepare_vm(self, context: ExperimentRunCtx):
         """Create and prepare VM for experiment with snapshots and shared folders."""
         # Get VM ID from environment (file operations already done during environment load)
@@ -59,11 +132,14 @@ class VMLifecycleManager:
         # Use the actual VM name from database (not experiment-specific name)
         context.vm_name = vm_record.name
         
+        # Setup VM runtime directory with smart copying
+        await self._ensure_vm_runtime_ready(context)
+
         # Setup shared directories configuration
         shared_root = Path(SHARE_POINT_VM[context.guest_platform])
         context.config.shared_directories = {
             'run': {'host': context.experiment_run_directory.path, 'vm': shared_root / 'run'},
-            'adare': {'host': context.adarevm.parent, 'vm': shared_root / 'app'},
+            'adare': {'host': context.project_directory.vm_runtime, 'vm': shared_root / 'app'},
             'experiment': {'host': context.experiment_directory.path, 'vm': shared_root / 'experiment'},
             'testfunctions': {'host': context.project_directory.testfunctions, 'vm': shared_root / 'testfunctions'},
             'shared': {'host': context.experiment_directory.shared, 'vm': shared_root / 'shared'},

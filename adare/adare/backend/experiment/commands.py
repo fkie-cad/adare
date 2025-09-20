@@ -1478,6 +1478,7 @@ def _create_ova_test_context(ova_file_path: Path, guest_platform: str):
     context.experiment_run_ulid = str(ulid.ULID())
     context.guest_platform = guest_platform
     context.adarevm = ADAREVM_DIR
+    context.adarelib = ADARELIB_DIR
     context.vm = None
     context.client = None
     

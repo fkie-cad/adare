@@ -499,8 +499,9 @@ Timing Control Actions
 **Interactive Pauses**
 
 .. code-block:: yaml
-     - pause:
-         name: "Configuration Check"
+
+  - pause:
+      name: "Configuration Check"
 
 
 Evidence Collection Actions

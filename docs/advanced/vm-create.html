@@ -3,11 +3,11 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="prev" title="VM Creation Guide" href="../advanced/vm-create.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Architecture" href="../architecture/index.html" /><link rel="prev" title="Create your own testfunction collection (in development)" href="testfunction-create.html" />
         <link rel="prefetch" href="../_static/logo.png" as="image" />
 
     <link rel="shortcut icon" href="../_static/favicon.ico"/><!-- Generated with Sphinx 7.4.7 and Furo 2025.07.19 -->
-        <title>Architecture - ADARE documentation</title>
+        <title>VM Creation Guide - ADARE documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=25af2a20" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
@@ -181,7 +181,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
         <div class="visually-hidden">Toggle table of contents sidebar</div>
         <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
       </label>
@@ -267,14 +267,14 @@
 </li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/cli.html">CLI Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction collection (in development)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/vm-create.html">VM Creation Guide</a></li>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="testfunction-create.html">Create your own testfunction collection (in development)</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">VM Creation Guide</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
-<ul class="current">
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Architecture</a></li>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/index.html">Architecture</a></li>
 </ul>
 
 </div>
@@ -295,7 +295,7 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="../_sources/architecture/index.rst.txt" title="View this page">
+  <a class="muted-link" href="../_sources/advanced/vm-create.rst.txt" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
@@ -309,29 +309,131 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
             <div class="visually-hidden">Toggle table of contents sidebar</div>
             <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="architecture">
-<h1>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">¶</a></h1>
-<p>Understanding how ADARE works internally.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Architecture documentation is coming soon. This section will cover ADARE’s internal design, components, and how they work together.</p>
-</div>
-<p>Topics planned:</p>
+          <section id="vm-creation-guide">
+<h1>VM Creation Guide<a class="headerlink" href="#vm-creation-guide" title="Link to this heading">¶</a></h1>
+<p>This guide shows you how to set up a virtual machine that’s compatible with ADARE. You’ll need to create a custom VM if:</p>
 <ul class="simple">
-<li><p>System Architecture Overview</p></li>
-<li><p>Component Interaction Diagrams</p></li>
-<li><p>VM Lifecycle Management</p></li>
-<li><p>WebSocket Communication Protocol</p></li>
-<li><p>Computer Vision Server</p></li>
-<li><p>Database Schema</p></li>
-<li><p>Plugin Architecture</p></li>
+<li><p>None of the provided VMs have the OS/distribution you need</p></li>
+<li><p>You need specific software pre-installed</p></li>
+<li><p>You want a customized forensic analysis environment</p></li>
 </ul>
+<p>Once configured, export the VM as an <code class="docutils literal notranslate"><span class="pre">.ova</span></code> or <code class="docutils literal notranslate"><span class="pre">.ovf</span></code> file in <strong>OVF 1.0 format</strong>.</p>
+<section id="windows-setup">
+<h2>Windows Setup<a class="headerlink" href="#windows-setup" title="Link to this heading">¶</a></h2>
+<section id="user-account-configuration">
+<h3>User Account Configuration<a class="headerlink" href="#user-account-configuration" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Create a user account with:</p>
+<ul>
+<li><p><strong>Username:</strong> <code class="docutils literal notranslate"><span class="pre">adare</span></code></p></li>
+<li><p><strong>Password:</strong> <code class="docutils literal notranslate"><span class="pre">adare</span></code></p></li>
+</ul>
+</li>
+<li><p>Enable <strong>autologin</strong> so the VM boots directly into the <code class="docutils literal notranslate"><span class="pre">adare</span></code> user’s desktop.</p></li>
+</ul>
+</section>
+<section id="additional-configuration">
+<h3>Additional Configuration<a class="headerlink" href="#additional-configuration" title="Link to this heading">¶</a></h3>
+<ol class="arabic simple">
+<li><p><strong>Disable User Account Control (UAC):</strong></p>
+<ul class="simple">
+<li><p>Go to Control Panel → <code class="docutils literal notranslate"><span class="pre">User</span> <span class="pre">Accounts</span></code> → <code class="docutils literal notranslate"><span class="pre">User</span> <span class="pre">Accounts</span></code> → <code class="docutils literal notranslate"><span class="pre">Change</span> <span class="pre">User</span> <span class="pre">Account</span> <span class="pre">Control</span> <span class="pre">settings</span></code></p></li>
+<li><p>Set the slider to the bottom (<code class="docutils literal notranslate"><span class="pre">Never</span> <span class="pre">notify</span></code>)</p></li>
+</ul>
+</li>
+<li><p><strong>Enable Developer Mode:</strong></p>
+<ul class="simple">
+<li><p>In Windows Settings, search for <code class="docutils literal notranslate"><span class="pre">For</span> <span class="pre">Developers</span></code></p></li>
+<li><p>Toggle the switch to enable Developer Mode</p></li>
+<li><p>This is required to set up shared directories properly</p></li>
+</ul>
+</li>
+<li><p><strong>Configure Windows Defender Firewall:</strong></p>
+<ol class="loweralpha simple">
+<li><p>Press <code class="docutils literal notranslate"><span class="pre">Win</span> <span class="pre">+</span> <span class="pre">R</span></code>, type <code class="docutils literal notranslate"><span class="pre">wf.msc</span></code>, and press Enter</p></li>
+<li><p>In the left panel, right-click <strong>Windows Defender Firewall with Advanced Security on Local Computer</strong> → <strong>Properties</strong></p></li>
+<li><p>For each profile tab (<strong>Domain Profile</strong>, <strong>Private Profile</strong>, and <strong>Public Profile</strong>), configure:</p>
+<ul class="simple">
+<li><p><strong>Inbound connections:</strong> Allow</p></li>
+<li><p><strong>Outbound connections:</strong> Allow (default)</p></li>
+</ul>
+</li>
+<li><p>Click <strong>OK</strong></p></li>
+</ol>
+</li>
+<li><p><strong>Apply Changes:</strong></p>
+<ul class="simple">
+<li><p>Perform a clean shutdown to apply all security changes</p></li>
+</ul>
+</li>
+</ol>
+</section>
+<section id="required-software-installation">
+<h3>Required Software Installation<a class="headerlink" href="#required-software-installation" title="Link to this heading">¶</a></h3>
+<p>Install the following software:</p>
+<ul class="simple">
+<li><p><strong>Python 3.9 or newer</strong></p></li>
+<li><p><strong>Poetry</strong> (<a class="reference external" href="https://python-poetry.org/docs/#installing-with-the-official-installer">Installation Guide</a>)</p></li>
+<li><p><strong>VirtualBox Guest Additions</strong></p></li>
+<li></li>
+</ul>
+</section>
+</section>
+<section id="linux-setup">
+<h2>Linux Setup<a class="headerlink" href="#linux-setup" title="Link to this heading">¶</a></h2>
+<section id="base-configuration-all-environments">
+<h3>Base Configuration (all environments)<a class="headerlink" href="#base-configuration-all-environments" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Create a user account with:</p>
+<ul>
+<li><p><strong>Username:</strong> <code class="docutils literal notranslate"><span class="pre">adare</span></code></p></li>
+<li><p><strong>Password:</strong> <code class="docutils literal notranslate"><span class="pre">adare</span></code></p></li>
+</ul>
+</li>
+<li><p>Enable <strong>autologin</strong> so the VM boots directly into the <code class="docutils literal notranslate"><span class="pre">adare</span></code> user’s desktop.</p>
+<ul>
+<li><p><strong>Important:</strong> autologin must start an <strong>X11 session</strong> (not Wayland).</p></li>
+</ul>
+</li>
+<li><p>Install:</p>
+<ul>
+<li><p>Python 3.10 or newer</p></li>
+<li><p><a class="reference external" href="https://python-poetry.org/docs/#installing-with-the-official-installer">Poetry</a> and make sure it’s in the PATH for the <code class="docutils literal notranslate"><span class="pre">adare</span></code> user. So open a new terminal and run <code class="docutils literal notranslate"><span class="pre">poetry</span> <span class="pre">--version</span></code> to confirm.</p></li>
+<li><p>VirtualBox Guest Additions</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">python3-tk</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">python3-dev</span></code></p></li>
+<li><p>any C-compiler if not already installed (preferably <code class="docutils literal notranslate"><span class="pre">gcc</span></code> or <code class="docutils literal notranslate"><span class="pre">clang</span></code>)</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="desktop-environmentspecific-setup">
+<h3>Desktop Environment–Specific Setup<a class="headerlink" href="#desktop-environmentspecific-setup" title="Link to this heading">¶</a></h3>
+<section id="gnome">
+<h4>GNOME<a class="headerlink" href="#gnome" title="Link to this heading">¶</a></h4>
+<ul class="simple">
+<li><p>Install:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">gnome-screenshot</span></code></p></li>
+</ul>
+</li>
+<li><p>Configure Seahorse (keyring) to unlock automatically on login by setting an empty password.</p></li>
+</ul>
+</section>
+<section id="other-desktop-environments">
+<h4>Other Desktop Environments<a class="headerlink" href="#other-desktop-environments" title="Link to this heading">¶</a></h4>
+<ul class="simple">
+<li><p>Not tested so far. Confirm PyAutoGUI can make screenshots and control the mouse and keyboard.</p></li>
+</ul>
+</section>
+</section>
+</section>
 </section>
 
         </article>
@@ -339,15 +441,23 @@
       <footer>
         
         <div class="related-pages">
-          
-          <a class="prev-page" href="../advanced/vm-create.html">
+          <a class="next-page" href="../architecture/index.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Architecture</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="testfunction-create.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">VM Creation Guide</div>
+                <div class="title">Create your own testfunction collection (in development)</div>
                 
               </div>
             </a>
@@ -369,8 +479,41 @@
         
       </footer>
     </div>
-    <aside class="toc-drawer no-toc">
+    <aside class="toc-drawer">
       
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">VM Creation Guide</a><ul>
+<li><a class="reference internal" href="#windows-setup">Windows Setup</a><ul>
+<li><a class="reference internal" href="#user-account-configuration">User Account Configuration</a></li>
+<li><a class="reference internal" href="#additional-configuration">Additional Configuration</a></li>
+<li><a class="reference internal" href="#required-software-installation">Required Software Installation</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#linux-setup">Linux Setup</a><ul>
+<li><a class="reference internal" href="#base-configuration-all-environments">Base Configuration (all environments)</a></li>
+<li><a class="reference internal" href="#desktop-environmentspecific-setup">Desktop Environment–Specific Setup</a><ul>
+<li><a class="reference internal" href="#gnome">GNOME</a></li>
+<li><a class="reference internal" href="#other-desktop-environments">Other Desktop Environments</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
       
       
     </aside>

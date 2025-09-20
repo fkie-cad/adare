@@ -36,6 +36,14 @@ def project_create(path: Path, name: str, description: str = ''):
         log.info(f'project directory {path} removed, since testfunctions could not be copied')
         raise e
 
+    try:
+        project_directory.copy_vm_runtime_files()
+    except ProjectDirectoryCopyError as e:
+        project_directory.remove()
+        project_database.remove_project(path)
+        log.info(f'project directory {path} removed, since vm runtime files could not be copied')
+        raise e
+
     # Auto-load all copied testfunctions
     try:
         _auto_load_testfunctions(project_directory)
