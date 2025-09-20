@@ -278,10 +278,13 @@ def info(dotnotation):
 # ------------------------------
 # Experiment commands
 # ------------------------------
-@cli.group(name='experiment')
+@cli.group(name='experiment', cls=AliasedGroup)
 def experiment():
     """Experiment-related commands."""
     pass
+
+# Add aliases for experiment commands
+experiment.add_alias('rm-env', 'remove-env')
 
 @experiment.command()
 @click.argument('experiment')
@@ -443,7 +446,7 @@ def add_env(experiment_pattern, environments, force, project):
     exec_with_error_printing(exec_experiment_add_env, args)
 
 
-@experiment.command(name='rm-env')
+@experiment.command(name='remove-env')
 @click.argument('experiment_pattern')
 @click.argument('environments', nargs=-1, required=True)
 @click.option('--force', '-f', is_flag=True, help='Force operation even if it would remove all environments')

@@ -1,66 +1,75 @@
-# ADARE Development Roadmap
+# ADARE Development Roadmap  
 
-This document tracks ongoing development tasks, planned features, quality of life improvements, known bugs for ADARE.
+This document tracks ongoing development tasks, planned features, quality-of-life improvements, known bugs, and areas requiring additional testing for **ADARE**.  
 
+---
 
-## Current Development Tasks
-- [x] check/build testfunctions -> test all tests and check if it all works
-- [ ] make adare experiment run ... without env run all experiments in that env after another. Lets at the end add some summary telling what succeded which failed.
-- [x] update docs to acceptable amount!
-- [ ] make cli einheitlicher rm/remove instead of delete ... 
-- [ ] built remote platform to store VMs and test/improve download to not be done manually
-- [ ] test if we can still run adare if we delete cloned repo
-- [x] add xml testfunctions in separate xml module
-- [ ] support yaml with same logic/function as for json!
-- [ ] test and fix all test expriments
-  - [ ] test_sqlite
-  - [x] test_json
-  - [x] test_csv
-  - [ ] test_xml
-  - [ ] test_linux_system
-  - [ ] test_windows_registry
-  - [ ] test_linux_standard
-  - [ ] test_windows_standard
+## ✅ Current Development Tasks  
+- [ ] Test and fix all experiment tests:  
+  - [x] `test_sqlite`  
+  - [x] `test_json`  
+  - [x] `test_csv`  
+  - [x] `test_xml`  
+  - [x] `test_linux_system`  
+  - [x] `test_windows_registry`  
+  - [x] `test_linux_standard`  
+  - [ ] `test_windows_standard`  
 
-## Planned Features
-- [ ] test and enable ydotool to make it work on wayland linux distros as well
-- [ ] implement interactive experiment development
-    - [ ] use nicegui to interactively test and create playbook and tests -> e.g. crop images extract icons ... 
-- [ ] built a way to better validate playbooks (e.g. two variables with saame name through variables or save_timestamp ..., check that used variables are defined before, check if filters are correct)
-- [ ] make all output available as csv/json/yaml
-- [ ] enhance `adare vm test` with automatic platform detection and desktop environmadaent detection for platform-specific tests -> complexer than thought since we need database indendent experiment run with own stages and own flow console
-- [ ] use proper directory for installation; maybe convert instllation from ps1,sh to python script to use platformdirs to get installation location; also use for database then later!
-- [ ] build conditionlogic , wait until we find, retry logic for playbook
-- [x] autocomplete for commands / abbreviations like env/exp
-- [ ] not only expect_to_fail, but also a expect_to_fail_on: ExceptionType (-> so catch specific Exception either custom written or existing as FileNotFoundError)
-- [ ] how to add an environment to an experiment after it exists?! 
-- [ ] multiple runs for all environments when we call adare experiment run ... without environment specified -< print summary at the end!
-- [ ] some kind of dev mode (simple first idea execute till interactive action -> we stop there an only continue on keypress)
-- [ ] for all things where we need ulid lets find by unique combo already!
-- [ ] add metadata to testfunction sets to let a user add description
-- [ ] make own stage for dependency installation of testfunctions this can take a while!
- 
-## Quality of Life Improvements
-- [ ] update documentation
-  - [ ] add sections about timezones -> since vm syncs with local time do not interfer -> when tool uses utc all good when tool uses localtime use | localtime filter!
-  - [ ] add some tutorial how to develop an experiment or some tipps:
-    - [ ] pause; idles; ...
-  - [ ] add info about default cores and ram for vm and how to set this 
-  - [ ] svg are not supported for icons at the moment!
-  - [ ] in installation add: eval "$(_ADARE_COMPLETE=zsh_source adare)" and tutorial how to enable autocomplete
-- [ ] improve code quality in general
-  - [ ] we at many places catch generic Exception - lets not do it but catch more specific exceptions
-  - [ ] improve detect_xession to use exsiting commands command -> to avoid recusrsion sey via parameter if command is done in user x11 session
-- [ ] improve logging at the moment too much is going on reduce and make log level clearer define what to store at which level
-  - [ ] thereby replace claude logging details with different levels and be less noicy and clearer to see what went wrong? 
-- [x] split windows and unix test methods and separate testfunction modules with their own requirements (clenaer+test more functionality ;)
-- [ ] rethink testfunction result -> at the moment lists -> how is it saved in databse plain json? (then dicts would be better?)
-- [x] add some automatic variables -> e.g. adare_user_home als automatische Variable, die im Playbook verwendet werden kann und zum entsprechenden Home-Verzeichnis auflöst 
-- [x] improve adare-cv-server code quality; maybe tweak functionality
-- [x] reconsider if fake runs are deleted from database or kept until we wipe them manually -> no do not delete them only if we all adare experiment clean "name" -> delete all fake runs
+---
 
-## Known Bugs
-- [ ] on ctrl-c we see temporary two lines of the top line / relict from old implementation (-> remove); on interrupt top level total time stays there
-- [x] interrupt on verify does not work!
-- [ ] sometimes we see 3 red dots at bottom of flow console -> why?- [ ] visual bug on flow console for last stages where Stopping computer vision server spinner occurs for very vers short and text and spinnger dissapera and then it apperas when its done with green dot?! why does it disappear in the middle?! does not make much sense? -> most likely weird timing issues?!
-- [ ] runnin experiment with non existent enviromemnt gives some weird run display? why not finish with exception? 
+## 🚀 Planned Features  
+- [ ] Add support for Wayland-based Linux systems  
+  - [ ] Validate `ydotool`  
+- [ ] Replace `pyautogui.screenshot` with `maim` for improved stability under Wayland  
+- [ ] Implement interactive experiment development tools  
+  - [ ] Idea: Use **NiceGUI** for web-based interactive playbook and test creation (e.g., cropping images, extracting icons)  
+- [ ] Add playbook variable validation:  
+  - [ ] Prevent duplicate variable names  
+  - [ ] Ensure all variables are defined before use  
+  - [ ] Validate filter correctness  
+- [ ] Provide all output in JSON format for automation (toggle via flag or save to file)  
+- [ ] Enhance `adare vm test` with automatic platform and desktop environment detection  
+- [ ] Use standardized installation directory (via `platformdirs`) and migrate installer scripts to Python  
+- [ ] Implement condition/wait/retry logic in playbooks  
+- [ ] Extend `expect_to_fail` with `expect_to_fail_on: ExceptionType` (specific exception handling)  
+- [ ] Improve ULID handling → allow lookup by unique partial combinations  
+- [ ] Allow metadata descriptions in test function sets  
+- [ ] Add new test function sets:  
+  - [ ] YAML  
+
+---
+
+## 🛠 Quality of Life Improvements  
+- [ ] Expand documentation:  
+  - [ ] Timezone handling (VM syncs with local time vs. UTC)  
+  - [ ] Advanced experiment runs (multi-env execution, glob experiment names)  
+  - [ ] Experiment development guide (pause, idle, tips)  
+  - [ ] Default VM resources (cores, RAM) and how to configure them  
+  - [ ] Current limitation: SVG icons not supported  
+  - [ ] Installation guide → add `eval "$(_ADARE_COMPLETE=zsh_source adare)"` and autocomplete tutorial  
+- [ ] Simplify and clarify logging:  
+  - [ ] Define logging levels more clearly  
+  - [ ] Replace excessive debug logging with structured log levels  
+  - [ ] Make errors more readable and actionable  
+
+---
+
+## 🧹 Code Quality  
+- [ ] Rethink test function results: currently lists → should be dictionaries for better JSON/database handling  
+- [ ] Replace generic `Exception` catches with specific ones  
+- [ ] Refactor `detect_xession` to use existing system commands with proper parameterization  
+
+---
+
+## 🐞 Known Bugs  
+- [ ] Visual bug: On `Ctrl-C`, duplicate top-line output appears (legacy artifact)  
+- [ ] Visual bug: Flow console occasionally shows three red dots at the bottom → cause unknown  
+- [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
+
+---
+
+## 🔍 Areas Needing More Testing  
+- [ ] Verify behavior when adding a new environment to an existing experiment  
+- [ ] Verify if ADARE runs without the cloned repository  
+- [ ] Test if VM download via URL in environment works
+- [ ] Running experiment with a non-existent environment caused weird display instead of throwing an exception (fixed/test pending)  

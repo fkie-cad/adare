@@ -121,7 +121,6 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
     else:
         experiment_load(project_directory, arguments.experiment, force=False, silent=True)
 
-    print(f"Experiment '{arguments.experiment}' (ulid: {experiment.ulid}) was loaded successfully")
     print(f"Running experiment '{arguments.experiment}' on {len(environments)} environment(s)...")
     print(f"Environments: {', '.join([env.name for env in environments])}")
     print()
