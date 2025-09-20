@@ -28,6 +28,9 @@ Parameters
    * - ``content``
      - string
      - **Required.** The expected content that the file should contain exactly.
+   * - ``encoding``
+     - string
+     - **Optional.** Text encoding to use when reading the file (default: "utf-8"). Common values: "utf-8", "utf-16", "latin-1", "ascii".
 
 Usage Example
 -------------
@@ -78,6 +81,20 @@ Small File Validation
          content: "COMPLETED"
        description: "Verify process completed successfully"
 
+Windows UTF-16 File Testing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+   tests:
+     - name: verify_windows_file
+       function: file_content_equals
+       parameter:
+         dst: "C:\\Users\\user\\output.txt"
+         content: "Windows file content"
+         encoding: "utf-16"
+       description: "Verify file created by PowerShell echo command"
+
 Common Use Cases
 ----------------
 
@@ -114,6 +131,9 @@ Comparison Behavior
 **Diff Generation**
   On failure, the function provides detailed diff output showing differences between expected and actual content
 
+**Encoding Support**
+  The function supports various text encodings. Use the encoding parameter to handle files created with different character encodings (UTF-8, UTF-16, etc.)
+
 Return Values
 -------------
 
@@ -133,7 +153,7 @@ Return Values
   - The file cannot be found or read
   - Permission denied reading the file
   - Path resolution fails due to glob pattern ambiguity
-  - Unicode decoding errors occur
+  - Unicode decoding errors occur (try specifying correct encoding parameter)
 
 Example Results
 ---------------

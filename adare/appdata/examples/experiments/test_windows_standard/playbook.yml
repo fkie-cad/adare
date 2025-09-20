@@ -30,7 +30,7 @@ variables:
 
   binary_content:
     type: string
-    value: "Binary data: \x89PNG\r\n\x1a\n"
+    value: "Binary data: \\x89PNG\\r\\n\\x1a\\n"
     description: "Binary content with escape sequences (matches the byte array in the command)"
 
   expected_hash:
@@ -231,7 +231,7 @@ actions:
   - command:
       name: "Create Test File"
       description: "Create test file with content"
-      command: 'Set-Content -Path "{{test_file}}" -Value "{{test_content}}" -Encoding UTF8'
+      command: '[System.IO.File]::WriteAllText("{{test_file}}", "{{test_content}}", [System.Text.UTF8Encoding]::new($false))'
       shell: true
 
   - command:

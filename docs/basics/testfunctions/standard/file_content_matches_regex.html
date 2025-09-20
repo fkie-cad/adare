@@ -269,7 +269,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../advanced/cli.html">CLI Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../advanced/testfunction-create.html">Create your own testfunction collection (in development)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../advanced/vm-create.html">VM Creation Guide</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
@@ -354,6 +354,10 @@
 <td><p>string</p></td>
 <td><p><strong>Required.</strong> The regular expression pattern to match against the file content.</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">encoding</span></code></p></td>
+<td><p>string</p></td>
+<td><p><strong>Optional.</strong> Text encoding to use when reading the file (default: “utf-8”). Common values: “utf-8”, “utf-16”, “latin-1”, “ascii”.</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -393,6 +397,19 @@
 <span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/tmp/generated_query.sql&quot;</span>
 <span class="w">      </span><span class="nt">regex</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;SELECT\\s+\\*\\s+FROM\\s+users\\s+WHERE\\s+active\\s*=\\s*1&quot;</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">correct</span><span class="nv"> </span><span class="s">SQL</span><span class="nv"> </span><span class="s">query</span><span class="nv"> </span><span class="s">was</span><span class="nv"> </span><span class="s">generated&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="windows-utf-16-file-pattern-matching">
+<h3>Windows UTF-16 File Pattern Matching<a class="headerlink" href="#windows-utf-16-file-pattern-matching" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">verify_windows_config</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_matches_regex</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;C:\\Program</span><span class="nv"> </span><span class="s">Files\\MyApp\\config.txt&quot;</span>
+<span class="w">      </span><span class="nt">regex</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;version\\s*=\\s*[0-9]+\\.[0-9]+\\.[0-9]+&quot;</span>
+<span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;utf-16&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">version</span><span class="nv"> </span><span class="s">number</span><span class="nv"> </span><span class="s">pattern</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">UTF-16</span><span class="nv"> </span><span class="s">encoded</span><span class="nv"> </span><span class="s">config</span><span class="nv"> </span><span class="s">file&quot;</span>
 </pre></div>
 </div>
 </section>
@@ -451,6 +468,7 @@
 <li><p>The regular expression pattern is invalid</p></li>
 <li><p>Permission denied reading the file</p></li>
 <li><p>Path resolution fails due to glob pattern ambiguity</p></li>
+<li><p>Unicode decoding errors occur (try specifying correct encoding parameter)</p></li>
 </ul>
 </dd>
 </dl>
@@ -541,6 +559,7 @@
 <li><a class="reference internal" href="#log-file-validation">Log File Validation</a></li>
 <li><a class="reference internal" href="#configuration-validation">Configuration Validation</a></li>
 <li><a class="reference internal" href="#multi-line-pattern-matching">Multi-line Pattern Matching</a></li>
+<li><a class="reference internal" href="#windows-utf-16-file-pattern-matching">Windows UTF-16 File Pattern Matching</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#common-use-cases">Common Use Cases</a></li>

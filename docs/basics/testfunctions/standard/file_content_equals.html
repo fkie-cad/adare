@@ -269,7 +269,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../advanced/cli.html">CLI Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../advanced/testfunction-create.html">Create your own testfunction collection (in development)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../advanced/vm-create.html">VM Creation Guide</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
@@ -354,6 +354,10 @@
 <td><p>string</p></td>
 <td><p><strong>Required.</strong> The expected content that the file should contain exactly.</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">encoding</span></code></p></td>
+<td><p>string</p></td>
+<td><p><strong>Optional.</strong> Text encoding to use when reading the file (default: “utf-8”). Common values: “utf-8”, “utf-16”, “latin-1”, “ascii”.</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -403,6 +407,19 @@
 </pre></div>
 </div>
 </section>
+<section id="windows-utf-16-file-testing">
+<h3>Windows UTF-16 File Testing<a class="headerlink" href="#windows-utf-16-file-testing" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">verify_windows_file</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_equals</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;C:\\Users\\user\\output.txt&quot;</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">content&quot;</span>
+<span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;utf-16&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">created</span><span class="nv"> </span><span class="s">by</span><span class="nv"> </span><span class="s">PowerShell</span><span class="nv"> </span><span class="s">echo</span><span class="nv"> </span><span class="s">command&quot;</span>
+</pre></div>
+</div>
+</section>
 </section>
 <section id="common-use-cases">
 <h2>Common Use Cases<a class="headerlink" href="#common-use-cases" title="Link to this heading">¶</a></h2>
@@ -432,6 +449,8 @@
 </dd>
 <dt><strong>Diff Generation</strong></dt><dd><p>On failure, the function provides detailed diff output showing differences between expected and actual content</p>
 </dd>
+<dt><strong>Encoding Support</strong></dt><dd><p>The function supports various text encodings. Use the encoding parameter to handle files created with different character encodings (UTF-8, UTF-16, etc.)</p>
+</dd>
 </dl>
 </section>
 <section id="return-values">
@@ -451,7 +470,7 @@
 <li><p>The file cannot be found or read</p></li>
 <li><p>Permission denied reading the file</p></li>
 <li><p>Path resolution fails due to glob pattern ambiguity</p></li>
-<li><p>Unicode decoding errors occur</p></li>
+<li><p>Unicode decoding errors occur (try specifying correct encoding parameter)</p></li>
 </ul>
 </dd>
 </dl>
@@ -544,6 +563,7 @@
 <li><a class="reference internal" href="#configuration-file-validation">Configuration File Validation</a></li>
 <li><a class="reference internal" href="#generated-script-validation">Generated Script Validation</a></li>
 <li><a class="reference internal" href="#small-file-validation">Small File Validation</a></li>
+<li><a class="reference internal" href="#windows-utf-16-file-testing">Windows UTF-16 File Testing</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#common-use-cases">Common Use Cases</a></li>

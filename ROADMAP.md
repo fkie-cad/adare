@@ -5,15 +5,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ---
 
 ## ✅ Current Development Tasks  
-- [ ] Test and fix all experiment tests:  
-  - [x] `test_sqlite`  
-  - [x] `test_json`  
-  - [x] `test_csv`  
-  - [x] `test_xml`  
-  - [x] `test_linux_system`  
-  - [x] `test_windows_registry`  
-  - [x] `test_linux_standard`  
-  - [ ] `test_windows_standard`  
+
 
 ---
 
@@ -32,7 +24,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Use standardized installation directory (via `platformdirs`) and migrate installer scripts to Python  
 - [ ] Implement condition/wait/retry logic in playbooks  
 - [ ] Extend `expect_to_fail` with `expect_to_fail_on: ExceptionType` (specific exception handling)  
-- [ ] Improve ULID handling → allow lookup by unique partial combinations  
+- [ ] Improve ULID handling in CLI → allow lookup by unique partial combinations  
 - [ ] Allow metadata descriptions in test function sets  
 - [ ] Add new test function sets:  
   - [ ] YAML  
@@ -65,6 +57,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: On `Ctrl-C`, duplicate top-line output appears (legacy artifact)  
 - [ ] Visual bug: Flow console occasionally shows three red dots at the bottom → cause unknown  
 - [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
+- [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
 
 ---
 
