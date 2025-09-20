@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 
 # internal imports
-from adare.config.configdirectory import ADARE_DIR, APPDATA_DIR
+from adare.config.configdirectory import ADARE_DIR, APPDATA_DIR, ADAREVM_DIR, ADARELIB_DIR
 from adare.helperfunctions.web.download import download
 from adare.backend.project.exceptions import ProjectDirectoryCreationError, ProjectDirectoryRemovalError, ProjectDirectoryCopyError
 from adare.backend.directory import Directory
@@ -45,7 +45,11 @@ class ProjectDirectory(Directory):
     @property
     def vm(self) -> Path:
         return self.path / 'vm'
-    
+
+    @property
+    def vm_runtime(self) -> Path:
+        return self.path / 'vm_runtime'
+
     @property
     def run(self) -> Path:
         return self.path / 'run'
@@ -87,7 +91,7 @@ class ProjectDirectory(Directory):
         # check if all paths exist
         return all(
             [self.path.exists(), self.environments.exists(), self.experiments.exists(), self.testfunctions.exists(),
-             self.shared.exists(), self.vm.exists(), self.run.exists()])
+             self.shared.exists(), self.vm.exists(), self.vm_runtime.exists(), self.run.exists()])
 
     def _create_project_directories(self):
         self.path.mkdir()
@@ -98,6 +102,7 @@ class ProjectDirectory(Directory):
         self.shared_tools.mkdir()
         self.shared_data.mkdir()
         self.vm.mkdir()
+        self.vm_runtime.mkdir()
         self.run.mkdir()
 
 
@@ -140,3 +145,38 @@ class ProjectDirectory(Directory):
     def copy_standard_testfunction(self):
         # Keep for backward compatibility - redirect to copy_all_testfunctions
         self.copy_all_testfunctions()
+
+    def copy_vm_runtime_files(self):
+        """Copy adarevm and adarelib to project vm_runtime directory for caching."""
+        try:
+            from adare.helperfunctions.file.copy import copytree_with_progress
+
+            # Copy adarevm
+            if ADAREVM_DIR.exists():
+                copytree_with_progress(
+                    src=ADAREVM_DIR,
+                    dst=self.vm_runtime / 'adarevm',
+                    preserve_metadata=True,
+                    dirs_exist_ok=True,
+                )
+                log.info('copied adarevm to project vm_runtime')
+            else:
+                log.warning(f'adarevm directory not found at {ADAREVM_DIR}')
+
+            # Copy adarelib
+            if ADARELIB_DIR.exists():
+                copytree_with_progress(
+                    src=ADARELIB_DIR,
+                    dst=self.vm_runtime / 'adarelib',
+                    preserve_metadata=True,
+                    dirs_exist_ok=True,
+                )
+                log.info('copied adarelib to project vm_runtime')
+            else:
+                log.warning(f'adarelib directory not found at {ADARELIB_DIR}')
+
+        except OSError as e:
+            raise ProjectDirectoryCopyError(
+                log,
+                message=f'VM runtime files could not be copied to project directory ({self.vm_runtime}): {e.strerror}',
+            ) from e

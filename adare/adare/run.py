@@ -53,7 +53,7 @@ from adare.cli.experiment import (
 from adare.cli.interactive import (
     exec_experiment_dev
 )
-from adare.cli.manage import exec_manage_reset_db, exec_manage_reset_vm
+from adare.cli.manage import exec_manage_reset_db, exec_manage_reset_vm, exec_manage_vm_runtime_refresh, exec_manage_vm_runtime_clean, exec_manage_vm_runtime_status, exec_manage_vm_runtime_init
 from adare.cli.show import (
     exec_show_environment, exec_show_environments,
     exec_show_experiment, exec_show_runs, exec_show_run,
@@ -149,6 +149,35 @@ def reset_vm(force):
     """Reset all VMs in the system (use with caution)."""
     args = SimpleNamespace(force=force)
     exec_with_error_printing(exec_manage_reset_vm, args)
+
+@manage.group(name='vm-runtime')
+def vm_runtime():
+    """VM runtime cache management commands."""
+    pass
+
+@vm_runtime.command(name='refresh')
+def vm_runtime_refresh():
+    """Force refresh VM runtime files in all experiment directories."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_manage_vm_runtime_refresh, args)
+
+@vm_runtime.command(name='clean')
+def vm_runtime_clean():
+    """Remove all cached VM runtime files."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_manage_vm_runtime_clean, args)
+
+@vm_runtime.command(name='status')
+def vm_runtime_status():
+    """Show status of VM runtime caches."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_manage_vm_runtime_status, args)
+
+@vm_runtime.command(name='init')
+def vm_runtime_init():
+    """Initialize VM runtime files in project directories that are missing them."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_manage_vm_runtime_init, args)
 
 
 # ------------------------------
