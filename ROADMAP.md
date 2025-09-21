@@ -5,7 +5,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ---
 
 ## ✅ Current Development Tasks  
-- [ ] Provide all output in JSON/YML format for automation (toggle via flag to use this as stdout (logging errors+warnings in json; or save to file)  
+- [x] Provide all output in JSON/YML format for automation (toggle via flag to use this as stdout (logging errors+warnings in json; or save to file)  -> need to be tested more first way is implemented
 
 ---
 
@@ -62,6 +62,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
 - [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
 - [ ] Visual bug: when no tag is set for experiment or env only # is single in a line (in this case remove it)
+- [ ] ctrl-c in multi execute setup does not show prompt that ask wheter to skip all coming or to continue with next experiment
 
 ---
 

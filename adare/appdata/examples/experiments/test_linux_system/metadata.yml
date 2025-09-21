@@ -1,2 +1,11 @@
 environments:
  - ubuntu24043
+
+description: "Linux system analysis and artifact collection test"
+tags:
+  - linux
+  - system
+  - artifacts
+  - test
+  - example
+  - noguiinteraction

@@ -1,2 +1,11 @@
 environments:
  - win11
+
+description: "File deletion analysis in Windows"
+tags:
+  - windows
+  - file-deletion
+  - filesystem
+  - test
+  - example
+  - guiinteraction

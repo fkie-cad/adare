@@ -41,5 +41,18 @@ def exec_load_testfunction(arguments):
 
 
 def exec_list_testfunctions(arguments):
-    from adare.backend.testfunction.commands import testfunction_list
-    testfunction_list(testfunction_set=getattr(arguments, 'set', None))
+    """List testfunctions in the configured output format."""
+    from adare.run import get_formatter_from_context
+    from adare.frontend.terminal.testfunction_list import print_testfunction_list
+
+    # Get formatter from CLI context
+    formatter, output_file, dual_output = get_formatter_from_context()
+
+    # Call enhanced frontend function with output format support
+    testfunction_set = getattr(arguments, 'set', None)
+    print_testfunction_list(
+        testfunction_file=testfunction_set,
+        formatter=formatter,
+        output_file=output_file,
+        dual_output=dual_output
+    )

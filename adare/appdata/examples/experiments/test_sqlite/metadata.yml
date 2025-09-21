@@ -1,3 +1,11 @@
 environments:
  - ubuntu24043
  - win11
+
+description: "SQLite database analysis test"
+tags:
+  - sqlite
+  - database
+  - test
+  - example
+  - noguiinteraction

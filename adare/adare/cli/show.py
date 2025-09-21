@@ -8,13 +8,15 @@ log = logging.getLogger(__name__)
 
 
 def exec_show_runs(arguments):
+    """Show runs in the configured output format."""
     from adare.frontend.terminal.run_list import print_run_list
+    from adare.run import get_formatter_from_context
 
     # Parse dot notation filter if provided
     project = None
     environment = None
     experiment = None
-    
+
     if hasattr(arguments, 'filter') and arguments.filter:
         parts = arguments.filter.split('.')
         if len(parts) == 1:
@@ -50,8 +52,19 @@ def exec_show_runs(arguments):
             project = project_path.name
         else:
             raise NoProjectFoundError(log, message='no project directory found and no filter provided')
-    
-    print_run_list(project, environment, experiment)
+
+    # Get formatter from CLI context
+    formatter, output_file, dual_output = get_formatter_from_context()
+
+    # Call enhanced frontend function with output format support
+    print_run_list(
+        project=project,
+        environment=environment,
+        experiment=experiment,
+        formatter=formatter,
+        output_file=output_file,
+        dual_output=dual_output
+    )
 
 
 def exec_show_run(arguments):
@@ -69,8 +82,20 @@ def exec_show_run(arguments):
 
 
 def exec_show_testfunctions(arguments):
+    """Show testfunctions in the configured output format."""
     from adare.frontend.terminal.testfunction_list import print_testfunction_list
-    print_testfunction_list(testfunction_file=arguments.file_name)
+    from adare.run import get_formatter_from_context
+
+    # Get formatter from CLI context
+    formatter, output_file, dual_output = get_formatter_from_context()
+
+    # Call enhanced frontend function with output format support
+    print_testfunction_list(
+        testfunction_file=arguments.file_name,
+        formatter=formatter,
+        output_file=output_file,
+        dual_output=dual_output
+    )
 
 
 def exec_show_testfunction(arguments):
@@ -84,18 +109,51 @@ def exec_show_experiment(arguments):
 
 
 def exec_show_experiments(arguments):
+    """Show experiments in the configured output format."""
     from adare.frontend.terminal.experiment_list import print_experiment_list
-    print_experiment_list()
+    from adare.run import get_formatter_from_context
+
+    # Get formatter from CLI context
+    formatter, output_file, dual_output = get_formatter_from_context()
+
+    # Call enhanced frontend function with output format support
+    print_experiment_list(
+        formatter=formatter,
+        output_file=output_file,
+        dual_output=dual_output
+    )
 
 
 def exec_show_projects(arguments):
+    """Show projects in the configured output format."""
     from adare.frontend.terminal.project_list import print_project_list
-    print_project_list()
+    from adare.run import get_formatter_from_context
+
+    # Get formatter from CLI context
+    formatter, output_file, dual_output = get_formatter_from_context()
+
+    # Call enhanced frontend function with output format support
+    print_project_list(
+        formatter=formatter,
+        output_file=output_file,
+        dual_output=dual_output
+    )
 
 
 def exec_show_environments(arguments):
+    """Show environments in the configured output format."""
     from adare.frontend.terminal.environment_list import print_environment_list
-    print_environment_list()
+    from adare.run import get_formatter_from_context
+
+    # Get formatter from CLI context
+    formatter, output_file, dual_output = get_formatter_from_context()
+
+    # Call enhanced frontend function with output format support
+    print_environment_list(
+        formatter=formatter,
+        output_file=output_file,
+        dual_output=dual_output
+    )
 
 
 def exec_remove_run(arguments):

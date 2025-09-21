@@ -1,3 +1,10 @@
 environments:
  - ubuntu24043
  - win11
+
+description: "JSON file parsing and analysis test"
+tags:
+  - json
+  - test
+  - example
+  - noguiinteraction
