@@ -11,7 +11,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 
 ## 🚀 Planned Features  
 - [ ] Add support for Wayland-based Linux systems  
-  - [ ] Validate if `ydotool` is suitable and reliable
+  - [ ] Validate if `ydotool` is suitable and reliable -> if yes make sure to coply to AGPLv3 
 - [ ] Replace `pyautogui.screenshot` as default screenshot in linux vms with `maim` for improved stability (`grim` for wayland)
 - [ ] Implement interactive experiment development tools  
   - [ ] Idea: Use **NiceGUI** for web-based interactive playbook and test creation (e.g., cropping images, extracting icons)  
@@ -28,6 +28,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Allow metadata descriptions in test function sets  
 - [ ] Add new test function sets:  
   - [ ] YAML  
+- [ ] integrated log viewer with `adare run log adare ULID` or `adare run log adarevm` that we can view logs but also filter them!
 
 ---
 
@@ -50,7 +51,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ## 🧹 Code Quality  
 - [ ] Rethink test function results: currently lists → should be dictionaries for better JSON/database handling  
 - [ ] Replace generic `Exception` catches with specific ones  
-- [ ] Refactor `detect_xession` to use existing system commands with proper parameterization  
+- [ ] Refactor `detect_xsession` to use existing system commands with proper parameterization  
 
 ---
 
