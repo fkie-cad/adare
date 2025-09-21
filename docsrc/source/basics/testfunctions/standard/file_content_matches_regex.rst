@@ -30,7 +30,10 @@ Parameters
      - **Required.** The regular expression pattern to match against the file content.
    * - ``encoding``
      - string
-     - **Optional.** Text encoding to use when reading the file (default: "utf-8"). Common values: "utf-8", "utf-16", "latin-1", "ascii".
+     - **Optional.** Text encoding to use when reading the file (default: "utf-8"). Common values: "utf-8", "utf-16", "latin-1", "ascii". Use "BOM" to auto-detect encoding from file's Byte Order Mark.
+   * - ``strip_bom``
+     - boolean
+     - **Optional.** Remove Byte Order Mark (BOM) from file content before regex matching (default: false). Useful for Windows files that include BOM.
 
 Usage Example
 -------------
@@ -87,6 +90,32 @@ Windows UTF-16 File Pattern Matching
          regex: "version\\s*=\\s*[0-9]+\\.[0-9]+\\.[0-9]+"
          encoding: "utf-16"
        description: "Verify version number pattern in UTF-16 encoded config file"
+
+BOM Handling Examples
+~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+   tests:
+     # Match pattern in file with BOM, strip BOM first
+     - name: match_pattern_with_bom
+       function: file_content_matches_regex
+       parameter:
+         dst: "/path/to/windows_file.log"
+         regex: "^ERROR.*failed$"
+         encoding: "utf-8"
+         strip_bom: true
+       description: "Match error pattern, ignoring BOM at start"
+
+     # Auto-detect encoding and match pattern
+     - name: match_pattern_auto_encoding
+       function: file_content_matches_regex
+       parameter:
+         dst: "/path/to/unknown_file.txt"
+         regex: "\\bSUCCESS\\b.*\\d{4}-\\d{2}-\\d{2}"
+         encoding: "BOM"
+         strip_bom: true
+       description: "Auto-detect encoding and match success pattern"
 
 Common Use Cases
 ----------------

@@ -38,6 +38,21 @@ variables:
     value: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     description: "SHA256 hash of empty file"
 
+  bom_test_file_utf8:
+    type: path
+    value: "{{test_dir}}\\bom_test_utf8.txt"
+    description: "UTF-8 file with BOM for testing"
+
+  bom_test_file_utf16:
+    type: path
+    value: "{{test_dir}}\\bom_test_utf16.txt"
+    description: "UTF-16 file with BOM for testing"
+
+  bom_test_content:
+    type: string
+    value: "BOM test content"
+    description: "Content for BOM testing files"
+
 # Test definitions for filesystem functions
 tests:
   # File existence tests
@@ -214,6 +229,44 @@ tests:
       content: '\xff\xfe\xfd'
       content_type: 'bytes'
 
+  # BOM handling tests
+  - name: test_file_content_equals_with_bom_strip
+    description: 'Test file_content_equals with BOM stripping'
+    function: file_content_equals
+    parameter:
+      dst: '{{bom_test_file_utf8}}'
+      content: '{{bom_test_content}}'
+      encoding: 'utf-8'
+      strip_bom: true
+
+  - name: test_file_content_equals_bom_autodetect
+    description: 'Test file_content_equals with BOM auto-detection'
+    function: file_content_equals
+    parameter:
+      dst: '{{bom_test_file_utf16}}'
+      content: '{{bom_test_content}}'
+      encoding: 'BOM'
+      strip_bom: true
+
+  - name: test_file_content_matches_regex_with_bom_strip
+    description: 'Test file_content_matches_regex with BOM stripping'
+    function: file_content_matches_regex
+    parameter:
+      dst: '{{bom_test_file_utf8}}'
+      regex: '^BOM.*content$'
+      encoding: 'utf-8'
+      strip_bom: true
+
+  - name: test_file_content_contains_with_bom_strip
+    description: 'Test file_content_contains with BOM stripping'
+    function: file_content_contains
+    parameter:
+      dst: '{{bom_test_file_utf8}}'
+      content: 'BOM test'
+      content_type: 'string'
+      encoding: 'utf-8'
+      strip_bom: true
+
 actions:
   # Setup test environment
   - command:
@@ -246,6 +299,18 @@ actions:
       command: '[System.IO.File]::WriteAllBytes("{{test_dir}}\\binary_file.bin", [byte[]](0x42,0x69,0x6E,0x61,0x72,0x79,0x20,0x64,0x61,0x74,0x61,0x3A,0x20,0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A))'
       shell: true
 
+  - command:
+      name: "Create UTF-8 BOM Test File"
+      description: "Create UTF-8 file with BOM for testing BOM handling"
+      command: '[System.IO.File]::WriteAllText("{{bom_test_file_utf8}}", "{{bom_test_content}}", [System.Text.UTF8Encoding]::new($true))'
+      shell: true
+
+  - command:
+      name: "Create UTF-16 BOM Test File"
+      description: "Create UTF-16 file with BOM for testing BOM auto-detection"
+      command: '[System.IO.File]::WriteAllText("{{bom_test_file_utf16}}", "{{bom_test_content}}", [System.Text.UnicodeEncoding]::new())'
+      shell: true
+
   - idle:
       duration: 2.0
       description: "Wait to ensure timestamp differences"
@@ -273,3 +338,9 @@ actions:
   - test: test_file_content_contains_string_negative
   - test: test_file_content_contains_bytes_positive
   - test: test_file_content_contains_bytes_negative
+
+  # BOM handling tests
+  - test: test_file_content_equals_with_bom_strip
+  - test: test_file_content_equals_bom_autodetect
+  - test: test_file_content_matches_regex_with_bom_strip
+  - test: test_file_content_contains_with_bom_strip
