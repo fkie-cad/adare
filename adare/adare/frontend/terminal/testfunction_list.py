@@ -36,13 +36,19 @@ class TestfunctionListPanel:
         table.add_column("#parameters", justify="left", style="cyan", no_wrap=True)
 
         for _, row in self.testfunctions.iterrows():
-            # For name, remove file prefix if showing file column separately
+            # For name, use smart display name when available, otherwise fall back to existing logic
             if self.testfunction_file:
                 display_name = row['name']
             else:
-                display_name = row['dotnotation']
-                if '.' in display_name:
-                    display_name = display_name.split('.', 1)[1]  # Keep everything after the first dot
+                # Use the new smart display_name field if available, otherwise fall back to dotnotation logic
+                if 'display_name' in row:
+                    display_name = row['display_name']
+                    if '.' in display_name:
+                        display_name = display_name.split('.', 1)[1]  # Keep everything after the first dot
+                else:
+                    display_name = row['dotnotation']
+                    if '.' in display_name:
+                        display_name = display_name.split('.', 1)[1]  # Keep everything after the first dot
 
             row_data = []
 

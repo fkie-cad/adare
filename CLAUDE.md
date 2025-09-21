@@ -17,4 +17,4 @@ Framework for detecting forensic artifact changes across OS/software versions us
 - Keep files <1000 lines  
 - Update docs when adding features  
 - Review flow & fix errors after changes  
-- never catch generic exception but more specific ones
+- never catch generic exception (with except Exception) - use more specific Excpetion that are expected instead

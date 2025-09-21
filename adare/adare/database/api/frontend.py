@@ -52,7 +52,7 @@ class DataRetrievalApi(DatabaseApi):
         """
         if not event.parent_event_id:
             return 0  # Root level
-        
+
         # Find parent event and recursively compute depth
         parent = self._session.query(Event).filter_by(id=event.parent_event_id).first()
         if parent:
@@ -60,6 +60,53 @@ class DataRetrievalApi(DatabaseApi):
         else:
             # If parent not found, assume next level
             return 1
+
+    def _get_smart_display_name(self, obj, obj_type: str, current_project_name: str = None):
+        """
+        Get context-aware display name for objects (environments, experiments, testfunctions).
+
+        Args:
+            obj: The database object
+            obj_type: Type of object ('environment', 'experiment', 'testfunction')
+            current_project_name: Current project context (detected if None)
+
+        Returns:
+            str: Display name - either just the name part or full dotnotation
+        """
+        if current_project_name is None:
+            from adare.backend.basics import determine_projectdirectory
+            if project_path := determine_projectdirectory(None, silent=True):
+                current_project_name = project_path.name
+
+        # Get the full dotnotation (create it for experiments if needed)
+        if obj_type == 'experiment':
+            # For experiments, create dotnotation based on first environment
+            full_dotnotation = f'{obj.environments[0].project.name}.{obj.name}' if obj.environments else obj.name
+        else:
+            full_dotnotation = obj.dotnotation
+
+        if obj_type == 'environment':
+            # For environments, check if we're in the same project
+            if current_project_name and hasattr(obj, 'project') and obj.project.name == current_project_name:
+                return obj.name  # Return just the environment name
+            else:
+                return full_dotnotation  # Return full project.name format
+
+        elif obj_type == 'experiment':
+            # For experiments, check project via first environment (experiments can span multiple projects)
+            if current_project_name and obj.environments and obj.environments[0].project.name == current_project_name:
+                return obj.name  # Return just the experiment name
+            else:
+                return full_dotnotation  # Return full project.name format
+
+        elif obj_type == 'testfunction':
+            # For testfunctions, dotnotation is file.function_name
+            # We could add more sophisticated logic here if needed
+            return full_dotnotation
+
+        else:
+            # Fallback to full dotnotation for unknown types
+            return full_dotnotation
 
     def __enrich_project_data(self, data: pd.DataFrame) -> pd.DataFrame:
         data['object'] = [self._session.query(Project).filter_by(id=id).one() for id in data['id']]
@@ -102,6 +149,8 @@ class DataRetrievalApi(DatabaseApi):
     def __enrich_environment_data(self, data: pd.DataFrame) -> pd.DataFrame:
         data['object'] = [self._session.query(Environment).filter_by(id=id).one() for id in data['id']]
         data['dotnotation'] = [obj.dotnotation for obj in data['object']]
+        # Add smart display name based on current project context
+        data['display_name'] = [self._get_smart_display_name(obj, 'environment') for obj in data['object']]
         # Get VM information
         data['vm'] = [self._session.query(Vm).filter_by(id=obj.vm_id).one() if obj.vm_id else None for obj in data['object']]
         data['vm_name'] = [obj.name for obj in data['vm']]
@@ -150,24 +199,14 @@ class DataRetrievalApi(DatabaseApi):
     
     def get_environment_by_dotnotation(self, dotnotation: str, current_project_name: str = None) -> pd.DataFrame:
         """Get environment by its dotnotation."""
-        dotparts = dotnotation.split('.')
-        
-        if len(dotparts) == 1:
-            # Only environment name provided, use current project
-            if not current_project_name:
-                from adare.backend.basics import determine_projectdirectory
-                from adare.exceptions import NoProjectFoundError
-                if project_path := determine_projectdirectory(None):
-                    current_project_name = project_path.name
-                else:
-                    raise NoProjectFoundError(log, message='No project directory found. Either provide full dotnotation (project.environment) or run from a project directory')
-            project_name, environment_name = current_project_name, dotparts[0]
-        elif len(dotparts) == 2:
-            # Full dotnotation provided
-            project_name, environment_name = dotparts
-        else:
-            raise ArgumentsError(log, f'Invalid dotnotation "{dotnotation}". Expected format: environment_name or project_name.environment_name')
-            
+        from adare.database.api.dotnotation_parser import DotNotationParser
+
+        parser = DotNotationParser()
+        parsed = parser.parse_environment_dotnotation(dotnotation)
+
+        project_name = parsed['project_name']
+        environment_name = parsed['environment_name']
+
         self.__check_environment_exists_by_projenv(project_name, environment_name)
         environment_df = pd.read_sql(self._session.query(Environment).filter(
             Environment.name == environment_name).filter(
@@ -178,6 +217,10 @@ class DataRetrievalApi(DatabaseApi):
 
     def __enrich_experiment_data(self, data: pd.DataFrame) -> pd.DataFrame:
         data['object'] = [self._session.query(Experiment).filter_by(id=id).one() for id in data['id']]
+        # Create dotnotation based on first environment's project (experiments can span multiple projects/envs)
+        data['dotnotation'] = [f'{obj.environments[0].project.name}.{obj.name}' if obj.environments else obj.name for obj in data['object']]
+        # Add smart display name based on current project context
+        data['display_name'] = [self._get_smart_display_name(obj, 'experiment') for obj in data['object']]
         data['environments'] = [', '.join([env.name for env in obj.environments]) for obj in data['object']]
         data['environments_names'] = [', '.join([env.name for env in obj.environments]) for obj in data['object']]
         data['tags'] = [', '.join([tag.name for tag in obj.tags]) for obj in data['object']]
@@ -221,25 +264,35 @@ class DataRetrievalApi(DatabaseApi):
 
     def get_experiment_by_dotnotation(self, dotnotation: str, current_project_name: str = None) -> pd.DataFrame:
         """Get experiment by its dotnotation."""
-        dotparts = dotnotation.split('.')
-        
-        if len(dotparts) == 2:
-            # Only environment.experiment provided, use current project
-            if not current_project_name:
-                from adare.backend.basics import determine_projectdirectory
-                from adare.exceptions import NoProjectFoundError
-                if project_path := determine_projectdirectory(None):
-                    current_project_name = project_path.name
-                else:
-                    raise NoProjectFoundError(log, message='No project directory found. Either provide full dotnotation (project.environment.experiment) or run from a project directory')
-            project_name, environment_name, experiment_name = current_project_name, dotparts[0], dotparts[1]
-        elif len(dotparts) == 3:
-            # Full dotnotation provided
-            project_name, environment_name, experiment_name = dotparts
+        from adare.database.api.dotnotation_parser import DotNotationParser
+
+        parser = DotNotationParser()
+        parsed = parser.parse_experiment_dotnotation(dotnotation)
+
+        project_name = parsed['project_name']
+        experiment_name = parsed['experiment_name']
+        environment_name = parsed['environment_name']
+
+        if environment_name:
+            # Full 3-part notation: project.environment.experiment
+            return self.get_experiment(project_name, environment_name, experiment_name)
         else:
-            raise ArgumentsError(log, f'Invalid dotnotation "{dotnotation}". Expected format: environment_name.experiment_name or project_name.environment_name.experiment_name')
-            
-        return self.get_experiment(project_name, environment_name, experiment_name)
+            # 2-part notation: project.experiment
+            # Find the experiment by name in the specified project
+            # Since experiments can span multiple environments, we'll find the first one
+            from adare.database.models.experiment import Experiment, Environment, Project
+            experiment_query = self._session.query(Experiment).filter(
+                Experiment.name == experiment_name).filter(
+                Experiment.environments.any(Environment.project.has(Project.name == project_name)))
+
+            if not experiment_query.count():
+                from adare.exceptions import ExperimentNotFoundError
+                raise ExperimentNotFoundError(log, f'Experiment "{experiment_name}" not found in project "{project_name}"')
+
+            experiment_df = pd.read_sql(experiment_query.statement, self._session.bind)
+            experiment_df = experiment_df.map(str)
+            experiment_df = self.__enrich_experiment_data(experiment_df)
+            return experiment_df
 
     def get_experiment_by_name_in_current_project(self, experiment_name: str) -> pd.DataFrame:
         """Get experiment by name within the current project (names are unique per project)."""
@@ -579,6 +632,8 @@ class DataRetrievalApi(DatabaseApi):
         data['object'] = [self._session.query(TestFunction).filter_by(id=id).one() for id in data['id']]
         data['testfunction_file'] = [self._session.query(TestFunctionFile).filter_by(id=file_id).one() for file_id in data['file_id']]
         data['dotnotation'] = [obj.dotnotation for obj in data['object']]
+        # Add smart display name based on current project context
+        data['display_name'] = [self._get_smart_display_name(obj, 'testfunction') for obj in data['object']]
         data['num_parameters'] = [obj.num_parameters for obj in data['object']]
         data['file_path'] = [obj.path for obj in data['testfunction_file']]
         data['file_name'] = [obj.name for obj in data['testfunction_file']]
@@ -606,12 +661,35 @@ class DataRetrievalApi(DatabaseApi):
         return testfunction_data, parameter_data
 
     def testfunction_dotnotation_to_id(self, dotnotation: str) -> int:
-        file_name, function_name = dotnotation.split('.')
+        from adare.database.api.dotnotation_parser import DotNotationParser
+
+        parser = DotNotationParser()
+        parsed = parser.parse_testfunction_dotnotation(dotnotation)
+
+        file_name = parsed['file_name']
+        function_name = parsed['function_name']
+        project_name = parsed['project_name']
+
         file_name_with_extension = file_name + '.py'
+
         try:
-            testfunction_file = self._session.query(TestFunctionFile).filter_by(name=file_name_with_extension).one()
+            if project_name:
+                # 3-part notation: project.file.function
+                # Filter by project to ensure we get the right testfunction
+                from adare.database.models.experiment import Project
+                testfunction_file = self._session.query(TestFunctionFile).filter(
+                    TestFunctionFile.name == file_name_with_extension).filter(
+                    TestFunctionFile.projects.any(Project.name == project_name)).one()
+            else:
+                # 2-part notation: file.function (current project context)
+                # Get from current project or first match if no project specified
+                testfunction_file = self._session.query(TestFunctionFile).filter_by(name=file_name_with_extension).one()
+
             testfunction = self._session.query(TestFunction).filter_by(file_id=testfunction_file.id, name=function_name).one()
         except sqlalchemy.orm.exc.NoResultFound:
-            raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found')
+            if project_name:
+                raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found in project "{project_name}"')
+            else:
+                raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found')
         return testfunction.id
 

@@ -36,7 +36,7 @@ class ExperimentTablePanel:
                 web_status = 'in request'
 
             table.add_row(
-                row['name'],
+                row['display_name'],
                 row['ulid'],
                 row['environments_names'],
                 row['description'],

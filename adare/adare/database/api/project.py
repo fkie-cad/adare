@@ -53,10 +53,11 @@ class ProjectDbApi(DatabaseApi):
             return None
         return project
 
-    def get_project_by_path(self, path: Path) -> Project | None:
+    def get_project_by_path(self, path: Path, silent: bool = False) -> Project | None:
         project = self._session.query(Project).filter(Project.path == path.as_posix()).first()
         if not project:
-            log.error(f"Project with path '{path}' not found in database")
+            if not silent:
+                log.error(f"Project with path '{path}' not found in database")
             return None
         return project
 
