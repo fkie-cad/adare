@@ -269,6 +269,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../advanced/cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../advanced/output-formats.html">Output Formats (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../advanced/vm-create.html">VM Creation Guide</a></li>
 </ul>
@@ -356,7 +357,11 @@
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">encoding</span></code></p></td>
 <td><p>string</p></td>
-<td><p><strong>Optional.</strong> Text encoding to use when reading the file (default: “utf-8”). Common values: “utf-8”, “utf-16”, “latin-1”, “ascii”.</p></td>
+<td><p><strong>Optional.</strong> Text encoding to use when reading the file (default: “utf-8”). Common values: “utf-8”, “utf-16”, “latin-1”, “ascii”. Use “BOM” to auto-detect encoding from file’s Byte Order Mark.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strip_bom</span></code></p></td>
+<td><p>boolean</p></td>
+<td><p><strong>Optional.</strong> Remove Byte Order Mark (BOM) from file content before regex matching (default: false). Useful for Windows files that include BOM.</p></td>
 </tr>
 </tbody>
 </table>
@@ -410,6 +415,31 @@
 <span class="w">      </span><span class="nt">regex</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;version\\s*=\\s*[0-9]+\\.[0-9]+\\.[0-9]+&quot;</span>
 <span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;utf-16&quot;</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">version</span><span class="nv"> </span><span class="s">number</span><span class="nv"> </span><span class="s">pattern</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">UTF-16</span><span class="nv"> </span><span class="s">encoded</span><span class="nv"> </span><span class="s">config</span><span class="nv"> </span><span class="s">file&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="bom-handling-examples">
+<h3>BOM Handling Examples<a class="headerlink" href="#bom-handling-examples" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Match pattern in file with BOM, strip BOM first</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">match_pattern_with_bom</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_matches_regex</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/windows_file.log&quot;</span>
+<span class="w">      </span><span class="nt">regex</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^ERROR.*failed$&quot;</span>
+<span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;utf-8&quot;</span>
+<span class="w">      </span><span class="nt">strip_bom</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Match</span><span class="nv"> </span><span class="s">error</span><span class="nv"> </span><span class="s">pattern,</span><span class="nv"> </span><span class="s">ignoring</span><span class="nv"> </span><span class="s">BOM</span><span class="nv"> </span><span class="s">at</span><span class="nv"> </span><span class="s">start&quot;</span>
+
+<span class="w">  </span><span class="c1"># Auto-detect encoding and match pattern</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">match_pattern_auto_encoding</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_matches_regex</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/unknown_file.txt&quot;</span>
+<span class="w">      </span><span class="nt">regex</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;\\bSUCCESS\\b.*\\d{4}-\\d{2}-\\d{2}&quot;</span>
+<span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;BOM&quot;</span>
+<span class="w">      </span><span class="nt">strip_bom</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Auto-detect</span><span class="nv"> </span><span class="s">encoding</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">match</span><span class="nv"> </span><span class="s">success</span><span class="nv"> </span><span class="s">pattern&quot;</span>
 </pre></div>
 </div>
 </section>
@@ -560,6 +590,7 @@
 <li><a class="reference internal" href="#configuration-validation">Configuration Validation</a></li>
 <li><a class="reference internal" href="#multi-line-pattern-matching">Multi-line Pattern Matching</a></li>
 <li><a class="reference internal" href="#windows-utf-16-file-pattern-matching">Windows UTF-16 File Pattern Matching</a></li>
+<li><a class="reference internal" href="#bom-handling-examples">BOM Handling Examples</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#common-use-cases">Common Use Cases</a></li>
