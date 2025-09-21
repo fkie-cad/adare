@@ -5,14 +5,14 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ---
 
 ## ✅ Current Development Tasks  
-- [ ] adare enviroment list (remove the project name if we are in a project!)
-- [ ] 
+- [ ] Provide all output in JSON/YML format for automation (toggle via flag to use this as stdout (logging errors+warnings in json; or save to file)  
 
 ---
 
 ## 🚀 Planned Features  
 - [ ] Add support for Wayland-based Linux systems  
   - [ ] Validate if `ydotool` is suitable and reliable -> if yes make sure to coply to AGPLv3 
+    - [ ] it is suitable but we need to develop some python bindings; build as indepedent package to be usable later similar to pyautogui! -> or wait until pyautogui supports wayland via ydotool (existing pr since 20.09.2025)
 - [ ] Replace `pyautogui.screenshot` as default screenshot in linux vms with `maim` for improved stability (`grim` for wayland)
 - [ ] Implement interactive experiment development tools  
   - [ ] Idea: Use **NiceGUI** for web-based interactive playbook and test creation (e.g., cropping images, extracting icons)  
@@ -20,7 +20,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] Prevent duplicate variable names  
   - [ ] Ensure all variables are defined before use  
   - [ ] Validate filter correctness  
-- [ ] Provide all output in JSON format for automation (toggle via flag or save to file)  
 - [ ] Enhance `adare vm test` with automatic platform and desktop environment detection  
 - [ ] Use standardized installation directory (via `platformdirs`) and migrate installer scripts to Python  
 - [ ] Implement condition/wait/retry logic in playbooks  
@@ -36,7 +35,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ## 🛠 Quality of Life Improvements  
 - [ ] Expand documentation:  
   - [ ] Timezone handling (VM syncs with local time vs. UTC)  
-  - [x] Advanced experiment runs (multi-env execution, glob experiment names) → **Implemented: Batch Execution with Glob Patterns**  
   - [ ] Experiment development guide (pause, idle, tips)  
   - [ ] Default VM resources (cores, RAM) and how to configure them  
   - [ ] Current limitation: SVG icons not supported  
@@ -63,6 +61,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: Flow console occasionally shows three red dots at the bottom → cause unknown  
 - [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
 - [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
+- [ ] Visual bug: when no tag is set for experiment or env only # is single in a line (in this case remove it)
 
 ---
 
@@ -70,4 +69,5 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Verify behavior when adding a new environment to an existing experiment  
 - [ ] Verify if ADARE runs without the cloned repository  
 - [ ] Test if VM download via URL in environment works 
-- [ ] Test if list/info commands work outside of an project and then prefix all with the project name (also check if project name is unique?!)
+- [x] Test if list/info commands work outside of an project and then prefix all with the project name (also check if project name is unique?!)
+- [ ] Test if environment with zenodo url works!

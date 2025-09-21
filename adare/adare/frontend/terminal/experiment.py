@@ -96,7 +96,9 @@ class ExperimentPanel:
         layout["data"]["info"].update(info)
         layout["tags"].update(TagsText(self.experiment['tags'].values[0]))
         layout["data"]["tests"].update(tests)
-        title = f'[b gold3]{self.experiment["name"].values[0]}[/b gold3]'
+        # Use dotnotation if available, otherwise fall back to name
+        display_title = self.experiment.get("dotnotation", self.experiment["name"]).values[0]
+        title = f'[b gold3]{display_title}[/b gold3]'
         return Panel(layout, title=title, border_style="blue", title_align="left")
 
 
@@ -111,8 +113,12 @@ def print_experiment(name: str = None, dotnotation: str = None, ulid: str = None
             raise ArgumentsError(log, 'Only one of name, --dotnotation, or --ulid should be provided')
         
         if name:
-            # Find experiment by name in current project (names are unique per project)
-            experiment = db.get_experiment_by_name_in_current_project(name)
+            # Check if name contains dots - if so, treat as dotnotation
+            if '.' in name:
+                experiment = db.get_experiment_by_dotnotation(name)
+            else:
+                # Find experiment by name in current project (names are unique per project)
+                experiment = db.get_experiment_by_name_in_current_project(name)
         elif dotnotation:
             experiment = db.get_experiment_by_dotnotation(dotnotation)
         elif ulid:

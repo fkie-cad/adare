@@ -34,7 +34,7 @@ class EnvironmentTablePanel:
                 web_status = 'in request'
 
             table.add_row(
-                row['dotnotation'],
+                row['display_name'],
                 row['id'],
                 row['vm_name'] if 'vm_name' in row and row['vm_name'] else 'No VM',
                 row['osinfo'] if 'osinfo' in row and row['osinfo'] else 'Unknown',
