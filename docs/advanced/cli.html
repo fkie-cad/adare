@@ -3,7 +3,7 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Create your own testfunction set (in development)" href="testfunction-create.html" /><link rel="prev" title="registry_value_matches" href="../basics/testfunctions/windows/registry_value_matches.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Output Formats (in development)" href="output-formats.html" /><link rel="prev" title="registry_value_matches" href="../basics/testfunctions/windows/registry_value_matches.html" />
         <link rel="prefetch" href="../_static/logo.png" as="image" />
 
     <link rel="shortcut icon" href="../_static/favicon.ico"/><!-- Generated with Sphinx 7.4.7 and Furo 2025.07.19 -->
@@ -269,6 +269,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul class="current">
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="testfunction-create.html">Create your own testfunction set (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="vm-create.html">VM Creation Guide</a></li>
 </ul>
@@ -457,6 +458,46 @@
 </ul>
 </dd>
 </dl>
+</dd>
+</dl>
+<p><strong>Batch Execution with Glob Patterns</strong></p>
+<p>ADARE supports advanced batch execution allowing you to run multiple experiments across multiple environments using glob patterns:</p>
+<ul>
+<li><p><strong>Run experiment on all environments</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="n">test_sqlite</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>Run multiple experiments on specific environment</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="s2">&quot;test_*&quot;</span> <span class="o">-</span><span class="n">e</span> <span class="n">ubuntu24043</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>Run multiple experiments on multiple environments</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="s2">&quot;test_*&quot;</span> <span class="o">-</span><span class="n">e</span> <span class="s2">&quot;ubuntu*&quot;</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>Complex patterns</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">adare</span> <span class="n">experiment</span> <span class="n">run</span> <span class="s2">&quot;file_*&quot;</span> <span class="o">-</span><span class="n">e</span> <span class="s2">&quot;*win*&quot;</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<dl class="simple">
+<dt><strong>Glob Pattern Support:</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">*</span></code> - Matches any number of characters</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">?</span></code> - Matches single character</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[abc]</span></code> - Matches any character in brackets</p></li>
+<li><p>Combinations run alphabetically (environments first, then experiments)</p></li>
+</ul>
+</dd>
+<dt><strong>Batch Features:</strong></dt><dd><ul class="simple">
+<li><p>Live flow console showing experiment progress</p></li>
+<li><p>Rich summary table with success/failure status</p></li>
+<li><p>Automatic error handling and continuation</p></li>
+<li><p>Duration tracking for each combination</p></li>
+</ul>
 </dd>
 </dl>
 <p><strong>Test Mode Development (–test)</strong></p>
@@ -803,12 +844,12 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="testfunction-create.html">
+          <a class="next-page" href="output-formats.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Create your own testfunction set (in development)</div>
+                <div class="title">Output Formats (in development)</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>

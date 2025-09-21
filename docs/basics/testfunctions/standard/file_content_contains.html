@@ -269,6 +269,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../advanced/cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../advanced/output-formats.html">Output Formats (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../advanced/vm-create.html">VM Creation Guide</a></li>
 </ul>
@@ -360,7 +361,11 @@
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">encoding</span></code></p></td>
 <td><p>string</p></td>
-<td><p><strong>Optional.</strong> Text encoding to use when reading the file for string content (default: “utf-8”). Ignored for byte content. Common values: “utf-8”, “utf-16”, “latin-1”, “ascii”.</p></td>
+<td><p><strong>Optional.</strong> Text encoding to use when reading the file for string content (default: “utf-8”). Ignored for byte content. Common values: “utf-8”, “utf-16”, “latin-1”, “ascii”. Use “BOM” to auto-detect encoding from file’s Byte Order Mark.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strip_bom</span></code></p></td>
+<td><p>boolean</p></td>
+<td><p><strong>Optional.</strong> Remove Byte Order Mark (BOM) from file content before searching (default: false). Only applies to string content type. Useful for Windows files that include BOM.</p></td>
 </tr>
 </tbody>
 </table>
@@ -425,6 +430,33 @@
 </pre></div>
 </div>
 </section>
+<section id="bom-handling-examples">
+<h3>BOM Handling Examples<a class="headerlink" href="#bom-handling-examples" title="Link to this heading">¶</a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Search in file with BOM, automatically strip BOM</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">search_in_bom_file</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_contains</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/windows_file.txt&quot;</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Error</span><span class="nv"> </span><span class="s">occurred&quot;</span>
+<span class="w">      </span><span class="nt">content_type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;string&quot;</span>
+<span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;utf-8&quot;</span>
+<span class="w">      </span><span class="nt">strip_bom</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Search</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">error</span><span class="nv"> </span><span class="s">message,</span><span class="nv"> </span><span class="s">ignoring</span><span class="nv"> </span><span class="s">BOM&quot;</span>
+
+<span class="w">  </span><span class="c1"># Auto-detect encoding and search</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">search_unknown_encoding</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_content_contains</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/unknown_file.txt&quot;</span>
+<span class="w">      </span><span class="nt">content</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;SUCCESS&quot;</span>
+<span class="w">      </span><span class="nt">content_type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;string&quot;</span>
+<span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;BOM&quot;</span>
+<span class="w">      </span><span class="nt">strip_bom</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Auto-detect</span><span class="nv"> </span><span class="s">encoding</span><span class="nv"> </span><span class="s">from</span><span class="nv"> </span><span class="s">BOM</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">search&quot;</span>
+</pre></div>
+</div>
+</section>
 </section>
 <section id="common-use-cases">
 <h2>Common Use Cases<a class="headerlink" href="#common-use-cases" title="Link to this heading">¶</a></h2>
@@ -453,6 +485,7 @@
 <li><p>Search is performed on the decoded string content</p></li>
 <li><p>Suitable for text files, logs, configuration files</p></li>
 <li><p>Use the encoding parameter to handle different character encodings</p></li>
+<li><p>BOM can be automatically detected and optionally stripped before searching</p></li>
 </ul>
 </dd>
 <dt><strong>Byte Content</strong></dt><dd><ul class="simple">
@@ -587,6 +620,7 @@
 <li><a class="reference internal" href="#binary-content-search">Binary Content Search</a></li>
 <li><a class="reference internal" href="#log-monitoring">Log Monitoring</a></li>
 <li><a class="reference internal" href="#windows-utf-16-log-analysis">Windows UTF-16 Log Analysis</a></li>
+<li><a class="reference internal" href="#bom-handling-examples">BOM Handling Examples</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#common-use-cases">Common Use Cases</a></li>

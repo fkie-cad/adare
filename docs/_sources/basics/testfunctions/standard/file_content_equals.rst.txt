@@ -30,7 +30,10 @@ Parameters
      - **Required.** The expected content that the file should contain exactly.
    * - ``encoding``
      - string
-     - **Optional.** Text encoding to use when reading the file (default: "utf-8"). Common values: "utf-8", "utf-16", "latin-1", "ascii".
+     - **Optional.** Text encoding to use when reading the file (default: "utf-8"). Common values: "utf-8", "utf-16", "latin-1", "ascii". Use "BOM" to auto-detect encoding from file's Byte Order Mark.
+   * - ``strip_bom``
+     - boolean
+     - **Optional.** Remove Byte Order Mark (BOM) from file content before comparison (default: false). Useful for Windows files that include BOM.
 
 Usage Example
 -------------
@@ -95,6 +98,32 @@ Windows UTF-16 File Testing
          encoding: "utf-16"
        description: "Verify file created by PowerShell echo command"
 
+BOM Handling Examples
+~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+   tests:
+     # Strip BOM from Windows UTF-8 files
+     - name: test_utf8_with_bom
+       function: file_content_equals
+       parameter:
+         dst: "/path/to/file_with_bom.txt"
+         content: "File content without BOM"
+         encoding: "utf-8"
+         strip_bom: true
+       description: "Test UTF-8 file with BOM, automatically strip BOM"
+
+     # Auto-detect encoding from BOM
+     - name: test_auto_detect_encoding
+       function: file_content_equals
+       parameter:
+         dst: "/path/to/unknown_encoding.txt"
+         content: "Content in unknown encoding"
+         encoding: "BOM"
+         strip_bom: true
+       description: "Auto-detect encoding from BOM and strip it"
+
 Common Use Cases
 ----------------
 
@@ -133,6 +162,9 @@ Comparison Behavior
 
 **Encoding Support**
   The function supports various text encodings. Use the encoding parameter to handle files created with different character encodings (UTF-8, UTF-16, etc.)
+
+**BOM Handling**
+  The function can automatically detect encoding from Byte Order Mark (BOM) when encoding is set to "BOM". Use strip_bom to remove BOM before content comparison, which is useful for Windows files that include BOM by default
 
 Return Values
 -------------

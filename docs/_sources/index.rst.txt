@@ -136,6 +136,7 @@ Documentation Structure
    :caption: Advanced
 
    advanced/cli
+   advanced/output-formats
    advanced/testfunction-create
    advanced/vm-create
 
