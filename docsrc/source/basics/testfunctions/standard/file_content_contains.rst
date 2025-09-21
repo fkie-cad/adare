@@ -33,7 +33,10 @@ Parameters
      - **Optional.** Either "string" (default) or "bytes". Determines how content is interpreted.
    * - ``encoding``
      - string
-     - **Optional.** Text encoding to use when reading the file for string content (default: "utf-8"). Ignored for byte content. Common values: "utf-8", "utf-16", "latin-1", "ascii".
+     - **Optional.** Text encoding to use when reading the file for string content (default: "utf-8"). Ignored for byte content. Common values: "utf-8", "utf-16", "latin-1", "ascii". Use "BOM" to auto-detect encoding from file's Byte Order Mark.
+   * - ``strip_bom``
+     - boolean
+     - **Optional.** Remove Byte Order Mark (BOM) from file content before searching (default: false). Only applies to string content type. Useful for Windows files that include BOM.
 
 Usage Example
 -------------
@@ -99,6 +102,34 @@ Windows UTF-16 Log Analysis
          encoding: "utf-16"
        description: "Search for service start message in UTF-16 encoded log"
 
+BOM Handling Examples
+~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+   tests:
+     # Search in file with BOM, automatically strip BOM
+     - name: search_in_bom_file
+       function: file_content_contains
+       parameter:
+         dst: "/path/to/windows_file.txt"
+         content: "Error occurred"
+         content_type: "string"
+         encoding: "utf-8"
+         strip_bom: true
+       description: "Search for error message, ignoring BOM"
+
+     # Auto-detect encoding and search
+     - name: search_unknown_encoding
+       function: file_content_contains
+       parameter:
+         dst: "/path/to/unknown_file.txt"
+         content: "SUCCESS"
+         content_type: "string"
+         encoding: "BOM"
+         strip_bom: true
+       description: "Auto-detect encoding from BOM and search"
+
 Common Use Cases
 ----------------
 
@@ -131,6 +162,7 @@ Content Type Details
   - Search is performed on the decoded string content
   - Suitable for text files, logs, configuration files
   - Use the encoding parameter to handle different character encodings
+  - BOM can be automatically detected and optionally stripped before searching
 
 **Byte Content**
   - File is read in binary mode

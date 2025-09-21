@@ -166,6 +166,7 @@ class FileContentMatchesRegexParameter(Parameter):
     dst: str
     regex: str
     encoding: Optional[str] = 'utf-8'
+    strip_bom: Optional[bool] = False
 
 
 @attrs.define
@@ -178,6 +179,34 @@ class FileContentMatchesRegex(BasicTest):
     description: Optional[str] = ''
     variable_metadata: Optional[dict] = None
 
+    def _detect_encoding_from_bom(self, file_path):
+        """Detect encoding from BOM, return (encoding, bom_length)"""
+        with open(file_path, 'rb') as f:
+            raw_data = f.read(4)
+
+        if raw_data.startswith(b'\xef\xbb\xbf'):
+            return 'utf-8', 3
+        elif raw_data.startswith(b'\xff\xfe\x00\x00'):
+            return 'utf-32-le', 4
+        elif raw_data.startswith(b'\x00\x00\xfe\xff'):
+            return 'utf-32-be', 4
+        elif raw_data.startswith(b'\xff\xfe'):
+            return 'utf-16-le', 2
+        elif raw_data.startswith(b'\xfe\xff'):
+            return 'utf-16-be', 2
+        else:
+            return None, 0
+
+    def _strip_bom_from_text(self, text, encoding):
+        """Strip BOM from text content"""
+        if encoding.lower() == 'utf-8' and text.startswith('\ufeff'):
+            return text[1:]
+        elif encoding.lower().startswith('utf-16') and text.startswith('\ufeff'):
+            return text[1:]
+        elif encoding.lower().startswith('utf-32') and text.startswith('\ufeff'):
+            return text[1:]
+        return text
+
     def test(self):
         try:
             dst, status = self.resolve_globfilepath(self.parameter.dst)
@@ -186,9 +215,23 @@ class FileContentMatchesRegex(BasicTest):
 
             log.debug(f'dst file {dst} will be used for test {self.name}')
 
+            # Handle BOM detection and encoding
+            encoding = self.parameter.encoding
+            if encoding and encoding.upper() == 'BOM':
+                detected_encoding, bom_length = self._detect_encoding_from_bom(dst)
+                if detected_encoding:
+                    encoding = detected_encoding
+                else:
+                    return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
+
             try:
-                with open(dst, 'r', encoding=self.parameter.encoding) as f:
+                with open(dst, 'r', encoding=encoding) as f:
                     data = f.read()
+
+                # Strip BOM if requested
+                if self.parameter.strip_bom:
+                    data = self._strip_bom_from_text(data, encoding)
+
             except FileNotFoundError:
                 return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
             except (PermissionError, OSError, UnicodeDecodeError) as e:
@@ -214,6 +257,7 @@ class FileContentEqualsParameter(Parameter):
     dst: str
     content: str
     encoding: Optional[str] = 'utf-8'
+    strip_bom: Optional[bool] = False
 
 @attrs.define
 class FileContentEquals(BasicTest):
@@ -225,6 +269,34 @@ class FileContentEquals(BasicTest):
     description: Optional[str] = ''
     variable_metadata: Optional[dict] = None
 
+    def _detect_encoding_from_bom(self, file_path):
+        """Detect encoding from BOM, return (encoding, bom_length)"""
+        with open(file_path, 'rb') as f:
+            raw_data = f.read(4)
+
+        if raw_data.startswith(b'\xef\xbb\xbf'):
+            return 'utf-8', 3
+        elif raw_data.startswith(b'\xff\xfe\x00\x00'):
+            return 'utf-32-le', 4
+        elif raw_data.startswith(b'\x00\x00\xfe\xff'):
+            return 'utf-32-be', 4
+        elif raw_data.startswith(b'\xff\xfe'):
+            return 'utf-16-le', 2
+        elif raw_data.startswith(b'\xfe\xff'):
+            return 'utf-16-be', 2
+        else:
+            return None, 0
+
+    def _strip_bom_from_text(self, text, encoding):
+        """Strip BOM from text content"""
+        if encoding.lower() == 'utf-8' and text.startswith('\ufeff'):
+            return text[1:]
+        elif encoding.lower().startswith('utf-16') and text.startswith('\ufeff'):
+            return text[1:]
+        elif encoding.lower().startswith('utf-32') and text.startswith('\ufeff'):
+            return text[1:]
+        return text
+
     def test(self):
         try:
             dst, status = self.resolve_globfilepath(self.parameter.dst)
@@ -232,9 +304,24 @@ class FileContentEquals(BasicTest):
                 return TestResult.error([f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status})'])
 
             log.debug(f'dst file {dst} will be used for test {self.name}')
+
+            # Handle BOM detection and encoding
+            encoding = self.parameter.encoding
+            if encoding and encoding.upper() == 'BOM':
+                detected_encoding, bom_length = self._detect_encoding_from_bom(dst)
+                if detected_encoding:
+                    encoding = detected_encoding
+                else:
+                    return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
+
             try:
-                with open(dst, 'r', encoding=self.parameter.encoding) as f:
+                with open(dst, 'r', encoding=encoding) as f:
                     data = f.read()
+
+                # Strip BOM if requested
+                if self.parameter.strip_bom:
+                    data = self._strip_bom_from_text(data, encoding)
+
             except FileNotFoundError:
                 return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
             except (PermissionError, OSError, UnicodeDecodeError) as e:
@@ -638,6 +725,7 @@ class FileContentContainsParameter(Parameter):
     content: str  # Always string input, parsed to bytes if content_type is 'bytes'
     content_type: str = 'string'  # 'string' or 'bytes'
     encoding: Optional[str] = 'utf-8'
+    strip_bom: Optional[bool] = False
 
 
 @attrs.define
@@ -649,6 +737,34 @@ class FileContentContains(BasicTest):
     parameter: FileContentContainsParameter
     description: Optional[str] = ''
     variable_metadata: Optional[dict] = None
+
+    def _detect_encoding_from_bom(self, file_path):
+        """Detect encoding from BOM, return (encoding, bom_length)"""
+        with open(file_path, 'rb') as f:
+            raw_data = f.read(4)
+
+        if raw_data.startswith(b'\xef\xbb\xbf'):
+            return 'utf-8', 3
+        elif raw_data.startswith(b'\xff\xfe\x00\x00'):
+            return 'utf-32-le', 4
+        elif raw_data.startswith(b'\x00\x00\xfe\xff'):
+            return 'utf-32-be', 4
+        elif raw_data.startswith(b'\xff\xfe'):
+            return 'utf-16-le', 2
+        elif raw_data.startswith(b'\xfe\xff'):
+            return 'utf-16-be', 2
+        else:
+            return None, 0
+
+    def _strip_bom_from_text(self, text, encoding):
+        """Strip BOM from text content"""
+        if encoding.lower() == 'utf-8' and text.startswith('\ufeff'):
+            return text[1:]
+        elif encoding.lower().startswith('utf-16') and text.startswith('\ufeff'):
+            return text[1:]
+        elif encoding.lower().startswith('utf-32') and text.startswith('\ufeff'):
+            return text[1:]
+        return text
 
     def _parse_escape_sequences(self, text):
         """Parse Python-style escape sequences in string to actual bytes"""
@@ -683,9 +799,22 @@ class FileContentContains(BasicTest):
                         return TestResult.failed([f'byte pattern not found in file'])
 
                 else:  # default: string content
+                    # Handle BOM detection and encoding for string content
+                    encoding = self.parameter.encoding
+                    if encoding and encoding.upper() == 'BOM':
+                        detected_encoding, bom_length = self._detect_encoding_from_bom(dst)
+                        if detected_encoding:
+                            encoding = detected_encoding
+                        else:
+                            return TestResult.execution_error(None, f"No BOM found in file {dst} to detect encoding")
+
                     # Read file as text
-                    with open(dst, 'r', encoding=self.parameter.encoding, errors='ignore') as f:
+                    with open(dst, 'r', encoding=encoding, errors='ignore') as f:
                         file_content = f.read()
+
+                    # Strip BOM if requested
+                    if self.parameter.strip_bom:
+                        file_content = self._strip_bom_from_text(file_content, encoding)
 
                     search_string = self.parameter.content
 

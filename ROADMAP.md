@@ -11,8 +11,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 
 ## 🚀 Planned Features  
 - [ ] Add support for Wayland-based Linux systems  
-  - [ ] Validate `ydotool`  
-- [ ] Replace `pyautogui.screenshot` with `maim` for improved stability under Wayland  
+  - [ ] Validate if `ydotool` is suitable and reliable
+- [ ] Replace `pyautogui.screenshot` as default screenshot in linux vms with `maim` for improved stability (`grim` for wayland)
 - [ ] Implement interactive experiment development tools  
   - [ ] Idea: Use **NiceGUI** for web-based interactive playbook and test creation (e.g., cropping images, extracting icons)  
 - [ ] Add playbook variable validation:  
@@ -42,7 +42,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Simplify and clarify logging:  
   - [ ] Define logging levels more clearly  
   - [ ] Replace excessive debug logging with structured log levels  
-  - [ ] Make errors more readable and actionable  
+  - [ ] Make errors more readable and actionable
+  - [ ] Remove Claude: log messages
 
 ---
 
