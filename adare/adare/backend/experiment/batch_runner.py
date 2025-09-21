@@ -41,6 +41,19 @@ class ExperimentResult:
         if self.duration.total_seconds() < 0:
             raise ValueError("Duration cannot be negative")
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON/YAML serialization."""
+        return {
+            'environment': self.environment,
+            'experiment': self.experiment,
+            'status': self.status.name if hasattr(self.status, 'name') else str(self.status),
+            'duration_seconds': self.duration.total_seconds(),
+            'error_message': self.error_message,
+            'run_ulid': self.run_ulid,
+            'start_time': self.start_time.isoformat() if self.start_time else None,
+            'end_time': self.end_time.isoformat() if self.end_time else None,
+        }
+
 
 @dataclass(frozen=True)
 class BatchRunSummary:
@@ -144,6 +157,20 @@ class BatchRunSummary:
         console.print(f"Summary: {self.successful_runs}/{self.total_combinations} successful ({self.success_rate:.0f}%), "
                      f"Total time: {self.total_duration.total_seconds():.1f}s", style="bold")
         console.print()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON/YAML serialization."""
+        return {
+            'summary': {
+                'total_combinations': self.total_combinations,
+                'successful_runs': self.successful_runs,
+                'failed_runs': self.failed_runs,
+                'interrupted_runs': self.interrupted_runs,
+                'success_rate': self.success_rate,
+                'total_duration_seconds': self.total_duration.total_seconds(),
+            },
+            'results': [result.to_dict() for result in self.results]
+        }
 
 
 class ExperimentEnvironmentMatcher:

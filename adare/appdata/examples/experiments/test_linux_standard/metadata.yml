@@ -1,2 +1,10 @@
 environments:
  - ubuntu24043
+
+description: "Standard Linux system forensic analysis test"
+tags:
+  - linux
+  - system
+  - test
+  - example
+  - noguiinteraction

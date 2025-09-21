@@ -7,6 +7,7 @@ from rich.table import Table
 # internal imports
 from adare.database.api.frontend import DataRetrievalApi
 from adare.frontend.terminal.console import DefaultConsole
+from adare.types.output_models import EnvironmentInfo
 
 import logging
 log = logging.getLogger(__name__)
@@ -43,10 +44,47 @@ class EnvironmentTablePanel:
         return Panel(table, title="[b gold3]environments[/b gold3]", border_style="blue", title_align="left")
 
 
-def print_environment_list():
+def print_environment_list(formatter=None, output_file=None, dual_output=False):
+    """Print environment list in the configured output format."""
+
+    # Get data from database
     with DataRetrievalApi() as db:
-        console = DefaultConsole()
         environments = db.get_environments()
+
+    # Get formatter if not provided
+    if formatter is None:
+        from adare.run import get_formatter_from_context
+        formatter, output_file, dual_output = get_formatter_from_context()
+
+    if dual_output or formatter.format_type.value != 'rich':
+        # Convert to structured data
+        environment_list = []
+        for _, row in environments.iterrows():
+            published = True if row.get('published') == 'True' else False
+            in_request = True if row.get('in_request') == 'True' else False
+            web_status = 'NOT published'
+            if published:
+                web_status = 'published'
+            if in_request:
+                web_status = 'in request'
+
+            environment_info = EnvironmentInfo(
+                name=row.get('display_name', ''),
+                ulid=row.get('id', ''),
+                project=row.get('project', ''),
+                description=row.get('description', ''),
+                os_info=row.get('osinfo', 'Unknown'),
+                vm_box=row.get('vm_name', 'No VM')
+            )
+            env_dict = environment_info.to_dict()
+            env_dict['web_status'] = web_status
+            environment_list.append(env_dict)
+
+        # Output structured data
+        formatter.print_or_save({'environments': environment_list}, output_file, dual_output)
+    else:
+        # Use existing Rich formatting
+        console = DefaultConsole()
         layout = Layout(name="root")
         panel = EnvironmentTablePanel(environments)
         layout.update(panel)

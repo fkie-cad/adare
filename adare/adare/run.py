@@ -79,6 +79,26 @@ from adare.cli.ws import (
 )
 from adare.setup_logging import setup_logging
 from adare.exceptions import LoggedException, LoggedErrorException
+from adare.helperfunctions.output_formatter import get_formatter
+
+
+def get_formatter_from_context():
+    """Get output formatter from current Click context."""
+    import click
+    try:
+        ctx = click.get_current_context()
+        output_format = ctx.obj.output_format
+        output_file = ctx.obj.output_file
+
+        # Determine if dual output is desired:
+        # When output-file is specified, user wants Rich console + structured file
+        # (regardless of the format specified)
+        dual_output = (output_file is not None)
+
+        return get_formatter(output_format), output_file, dual_output
+    except (RuntimeError, AttributeError):
+        # Fallback if no context or missing attributes
+        return get_formatter('rich'), None, False
 
 
 def exec_with_error_printing(func, args):
@@ -109,9 +129,15 @@ START_TIME = time.time()
 @click.option('--verbose', is_flag=True, help='Verbose output (loglevel=INFO)')
 @click.option('--very-verbose', is_flag=True, help='Very verbose output (loglevel=DEBUG)')
 @click.option('--log-level', help='Log level for logfile')
+@click.option('--output-format', '--format', 'output_format',
+              type=click.Choice(['rich', 'json', 'yaml'], case_sensitive=False),
+              default='rich', show_default=True,
+              help='Output format for commands that support structured data')
+@click.option('--output-file', type=click.Path(),
+              help='Save output to file instead of printing to console')
 @click.version_option()  # Uses the package version if configured
 @click.pass_context
-def cli(ctx, logfile, verbose, very_verbose, log_level):
+def cli(ctx, logfile, verbose, very_verbose, log_level, output_format, output_file):
     """
     ADARE - the Automated Desktop Analysis framework for Reproducible Experiments.
     """
@@ -120,6 +146,8 @@ def cli(ctx, logfile, verbose, very_verbose, log_level):
     ctx.obj.verbose = verbose
     ctx.obj.very_verbose = very_verbose
     ctx.obj.log_level = log_level
+    ctx.obj.output_format = output_format
+    ctx.obj.output_file = output_file
     setup_logging(ctx.obj, sys.argv)
 
 

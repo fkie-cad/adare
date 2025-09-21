@@ -1,3 +1,10 @@
 environments:
  - ubuntu24043
  - win11
+
+description: "XML file parsing and analysis test"
+tags:
+  - xml
+  - test
+  - example
+  - noguiinteraction

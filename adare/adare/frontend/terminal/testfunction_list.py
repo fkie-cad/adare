@@ -7,6 +7,7 @@ from rich.table import Table
 # internal imports
 from adare.database.api.frontend import DataRetrievalApi
 from adare.frontend.terminal.console import DefaultConsole
+from adare.types.output_models import TestFunctionInfo
 
 import logging
 log = logging.getLogger(__name__)
@@ -74,10 +75,63 @@ class TestfunctionListPanel:
         return Panel(table, border_style="blue", title_align='left', style='', title=title)
 
 
-def print_testfunction_list(testfunction_file: str = None):
+def print_testfunction_list(testfunction_file: str = None, formatter=None, output_file=None, dual_output=False):
+    """Print testfunction list in the configured output format."""
 
+    # Get data from database
     with DataRetrievalApi() as api:
         testfunctions = api.get_testfunction_list()
+
+    # Apply filtering if testfunction_file is specified
+    if testfunction_file:
+        # Filter based on file name (extracted from dotnotation or file_name column)
+        if 'file_name' in testfunctions.columns:
+            file_column = 'file_name'
+        elif 'dotnotation' in testfunctions.columns:
+            # Extract file name from dotnotation
+            testfunctions = testfunctions.copy()
+            testfunctions['file_name'] = testfunctions['dotnotation'].apply(
+                lambda x: x.split('.', 1)[0] if '.' in str(x) else str(x)
+            )
+            file_column = 'file_name'
+        else:
+            # No suitable column found, use original data
+            file_column = None
+
+        if file_column:
+            testfunctions = testfunctions[testfunctions[file_column] == testfunction_file]
+
+    # Get formatter if not provided
+    if formatter is None:
+        from adare.run import get_formatter_from_context
+        formatter, output_file, dual_output = get_formatter_from_context()
+
+    if dual_output or formatter.format_type.value != 'rich':
+        # Convert to structured data
+        testfunction_list = []
+        for _, row in testfunctions.iterrows():
+            # Extract file name for structured output
+            if 'file_name' in row:
+                file_name = row['file_name'].replace('.py', '') if row['file_name'].endswith('.py') else row['file_name']
+            elif 'dotnotation' in row and '.' in str(row['dotnotation']):
+                file_name = str(row['dotnotation']).split('.', 1)[0]
+            else:
+                file_name = 'unknown'
+
+            testfunction_info = TestFunctionInfo(
+                name=row.get('name', row.get('testfunction', '')),
+                dotnotation=row.get('dotnotation', ''),
+                description=row.get('description', ''),
+                file_path=file_name
+            )
+            tf_dict = testfunction_info.to_dict()
+            tf_dict['parameter_count'] = row.get('num_parameters', row.get('#parameters', 0))
+            testfunction_list.append(tf_dict)
+
+        # Output structured data
+        formatter.print_or_save({'testfunctions': testfunction_list}, output_file, dual_output)
+    else:
+        # Use existing Rich formatting
         console = DefaultConsole()
         layout = Layout(name="root")
         panel = TestfunctionListPanel(testfunctions, testfunction_file)

@@ -1,2 +1,10 @@
 environments:
  - win11
+
+description: "Windows registry analysis and forensic test"
+tags:
+  - windows
+  - registry
+  - test
+  - example
+  - noguiinteraction

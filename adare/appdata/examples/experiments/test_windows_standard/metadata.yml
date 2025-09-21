@@ -1,2 +1,9 @@
 environments:
  - win11
+
+description: "Standard Windows forensic analysis test"
+tags:
+  - windows
+  - test
+  - example
+  - noguiinteraction

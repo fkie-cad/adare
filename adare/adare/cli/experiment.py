@@ -291,8 +291,16 @@ def exec_experiment_run(arguments):
                     vm_cpus=arguments.vm_cpus
                 ))
 
-                # Print summary
-                summary.print_summary()
+                # Print summary using configured output format
+                from adare.run import get_formatter_from_context
+                formatter, output_file, dual_output = get_formatter_from_context()
+
+                if dual_output or formatter.format_type.value != 'rich':
+                    # Use new formatter system (handles both dual and structured output)
+                    formatter.print_or_save(summary.to_dict(), output_file, dual_output)
+                else:
+                    # Use existing Rich formatting for pure Rich output
+                    summary.print_summary()
 
                 # Exit with appropriate code
                 if summary.failed_runs > 0:
@@ -360,7 +368,49 @@ def exec_experiment_run(arguments):
                             'List available environments for this experiment or create a compatible one'
                         ])
 
-            asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot, runlog=arguments.runlog, vm_memory=arguments.vm_memory, vm_cpus=arguments.vm_cpus))
+            was_interrupted, was_successful = asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot, runlog=arguments.runlog, vm_memory=arguments.vm_memory, vm_cpus=arguments.vm_cpus))
+
+            # Handle output formatting for single runs
+            from adare.run import get_formatter_from_context
+            from adare.backend.experiment.batch_runner import ExperimentResult, BatchRunSummary
+            from datetime import datetime, timedelta
+            from adarelib.constants import StatusEnum
+
+            formatter, output_file, dual_output = get_formatter_from_context()
+
+            if dual_output or formatter.format_type.value != 'rich':
+                # Create a summary for single run (similar to batch run format)
+                if was_interrupted:
+                    status = StatusEnum.INTERRUPTED
+                    error_msg = "User interrupted"
+                elif was_successful:
+                    status = StatusEnum.SUCCESS
+                    error_msg = None
+                else:
+                    status = StatusEnum.FAILED
+                    error_msg = "Experiment tests failed"
+
+                # Create a single result entry
+                single_result = ExperimentResult(
+                    environment=arguments.environment,
+                    experiment=arguments.experiment,
+                    status=status,
+                    duration=timedelta(seconds=0),  # We don't have duration from single run
+                    error_message=error_msg,
+                    run_ulid=None,  # Would need to get this from the experiment run
+                    start_time=None,
+                    end_time=None
+                )
+
+                # Create summary with single result
+                summary = BatchRunSummary(
+                    results=[single_result],
+                    total_combinations=1,
+                    total_duration=timedelta(seconds=0)
+                )
+
+                # Output using formatter
+                formatter.print_or_save(summary.to_dict(), output_file, dual_output)
         except LoggedException as e:
             e.print()
             if isinstance(e, LoggedErrorException):
