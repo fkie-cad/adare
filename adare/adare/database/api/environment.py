@@ -178,7 +178,7 @@ class EnvironmentDbApi(ExperimentApi):
         else:
             raise ValueError(f'environment {environment_ulid} not found in database')
 
-    def get_environment(self, name: str, project_name: str) -> Environment:
+    def get_environment(self, name: str, project_name: str) -> Environment | None:
         if (
             env := self._session.query(Environment)
             .filter_by(name=name)
@@ -187,8 +187,8 @@ class EnvironmentDbApi(ExperimentApi):
             .first()
         ):
             return env
-        log.error(f'environment {name} not found in database')
-        raise None
+        log.error(f'environment {name} does not exist in the database')
+        return None
 
     def get_environment_vm(self, environment_ulid: str) -> str:
         if (

@@ -264,12 +264,42 @@ def exec_experiment_run(arguments):
     if project_directory := determine_projectdirectory(arguments.project):
         import asyncio
 
-        # If no environment specified, run on all environments
-        if not arguments.environment:
+        # Check if we need batch execution (multiple environments OR glob patterns)
+        from adare.backend.experiment.batch_runner import has_glob_patterns, run_batch_experiments
+
+        # If no environment specified, run on ALL environments (use "*" pattern)
+        environment_pattern = arguments.environment if arguments.environment else "*"
+
+        # Use batch runner if: no environment specified OR glob patterns detected
+        if not arguments.environment or has_glob_patterns(arguments.experiment, environment_pattern):
+            # Load experiment if needed (similar to old exec_experiment_run_all_environments logic)
+            from adare.backend.experiment.commands import experiment_load
+            if not arguments.environment:  # Only auto-load for "all environments" case
+                experiment_load(project_directory, arguments.experiment, force=False, silent=True)
+
             try:
-                asyncio.run(exec_experiment_run_all_environments(
-                    project_directory, arguments, disable_printing
+                summary = asyncio.run(run_batch_experiments(
+                    project_path=project_directory,
+                    experiment_pattern=arguments.experiment,
+                    environment_pattern=environment_pattern,
+                    show_flow_console=True,  # Always show flow console for better user experience
+                    test=arguments.test,
+                    debug_screenshots=arguments.debug_screenshots,
+                    preserve_snapshot=arguments.preserve_snapshot,
+                    runlog=arguments.runlog,
+                    vm_memory=arguments.vm_memory,
+                    vm_cpus=arguments.vm_cpus
                 ))
+
+                # Print summary
+                summary.print_summary()
+
+                # Exit with appropriate code
+                if summary.failed_runs > 0:
+                    sys.exit(-1)
+                else:
+                    sys.exit(0)
+
             except LoggedException as e:
                 e.print()
                 if isinstance(e, LoggedErrorException):
@@ -277,7 +307,8 @@ def exec_experiment_run(arguments):
                 else:
                     sys.exit(0)
             except KeyboardInterrupt:
-                log.info("Keyboard interrupt received, shutting down gracefully...")
+                log.info("Batch execution interrupted by user")
+                sys.exit(0)
             return
 
         # Single environment run (existing logic)
@@ -306,6 +337,28 @@ def exec_experiment_run(arguments):
             else:
                 # Normal mode - no force loading
                 experiment_load(project_directory, arguments.experiment, force=False, silent=True)
+
+            # Validate environment and experiment compatibility before starting execution
+            from adare.database.api.experiment import ExperimentApi
+            from adare.exceptions import EnvironmentNotFoundError, ExperimentNotFoundError
+            with ExperimentApi() as api:
+                environment = api.get_environment(arguments.environment, project_directory.name)
+                if environment is None:
+                    raise EnvironmentNotFoundError(log, f'environment {arguments.environment} does not exist in project {project_directory.name}',
+                        possible_solutions=[
+                            f'Check if environment name "{arguments.environment}" is spelled correctly',
+                            'List available environments with: adare environment list',
+                            'If not found via list, create or load: adare environment create <name> OR adare environment load <path>'
+                        ])
+                experiment = api.get_experiment(arguments.experiment, environment)
+                if experiment is None:
+                    raise ExperimentNotFoundError(log, f'experiment {arguments.experiment} is not available for environment {arguments.environment}',
+                        possible_solutions=[
+                            f'Check if experiment name "{arguments.experiment}" is spelled correctly',
+                            'List available experiments with: adare experiment list',
+                            f'Check if experiment "{arguments.experiment}" supports environment "{arguments.environment}"',
+                            'List available environments for this experiment or create a compatible one'
+                        ])
 
             asyncio.run(experiment_run(project_directory, arguments.experiment, arguments.environment, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot, runlog=arguments.runlog, vm_memory=arguments.vm_memory, vm_cpus=arguments.vm_cpus))
         except LoggedException as e:

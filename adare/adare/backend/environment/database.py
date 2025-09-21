@@ -527,6 +527,11 @@ def get_environment_path_by_project_and_name(project_path: Path, environment_nam
             raise EnvironmentDoesNotExistInDatabase(
                 log,
                 f'environment {environment_name} does not exist in the database',
+                possible_solutions=[
+                    f'Check if environment name "{environment_name}" is spelled correctly',
+                    'List available environments with: adare environment list',
+                    'If not found via list, create or load: adare environment create <name> OR adare environment load <path>'
+                ]
             )
 
 def update_environment_vm_id(environment_ulid: str, vm_id: str):
