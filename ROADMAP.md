@@ -5,7 +5,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ---
 
 ## ✅ Current Development Tasks  
-
+- [ ] adare enviroment list (remove the project name if we are in a project!)
+- [ ] 
 
 ---
 
@@ -35,7 +36,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ## 🛠 Quality of Life Improvements  
 - [ ] Expand documentation:  
   - [ ] Timezone handling (VM syncs with local time vs. UTC)  
-  - [ ] Advanced experiment runs (multi-env execution, glob experiment names)  
+  - [x] Advanced experiment runs (multi-env execution, glob experiment names) → **Implemented: Batch Execution with Glob Patterns**  
   - [ ] Experiment development guide (pause, idle, tips)  
   - [ ] Default VM resources (cores, RAM) and how to configure them  
   - [ ] Current limitation: SVG icons not supported  
@@ -45,6 +46,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] Replace excessive debug logging with structured log levels  
   - [ ] Make errors more readable and actionable
   - [ ] Remove Claude: log messages
+- [ ] Improve the possible solutions on Exceptions to be correct and provide only working options!
 
 ---
 
@@ -52,6 +54,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Rethink test function results: currently lists → should be dictionaries for better JSON/database handling  
 - [ ] Replace generic `Exception` catches with specific ones  
 - [ ] Refactor `detect_xsession` to use existing system commands with proper parameterization  
+- [ ] Consider lazy loading of modules at least for certain libraries -> improve speed
 
 ---
 
@@ -66,5 +69,5 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ## 🔍 Areas Needing More Testing  
 - [ ] Verify behavior when adding a new environment to an existing experiment  
 - [ ] Verify if ADARE runs without the cloned repository  
-- [ ] Test if VM download via URL in environment works
-- [ ] Running experiment with a non-existent environment caused weird display instead of throwing an exception (fixed/test pending)  
+- [ ] Test if VM download via URL in environment works 
+- [ ] Test if list/info commands work outside of an project and then prefix all with the project name (also check if project name is unique?!)

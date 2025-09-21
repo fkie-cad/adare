@@ -108,6 +108,38 @@ Experiments contain the actual test automation logic using YAML-based playbooks.
     * ``--preserve-snapshot`` - Create experiment snapshot for preservation (default: only reset to base)
     * ``--project TEXT`` - Name of the project
 
+**Batch Execution with Glob Patterns**
+
+ADARE supports advanced batch execution allowing you to run multiple experiments across multiple environments using glob patterns:
+
+* **Run experiment on all environments**::
+
+    adare experiment run test_sqlite
+
+* **Run multiple experiments on specific environment**::
+
+    adare experiment run "test_*" -e ubuntu24043
+
+* **Run multiple experiments on multiple environments**::
+
+    adare experiment run "test_*" -e "ubuntu*"
+
+* **Complex patterns**::
+
+    adare experiment run "file_*" -e "*win*"
+
+**Glob Pattern Support:**
+  * ``*`` - Matches any number of characters
+  * ``?`` - Matches single character
+  * ``[abc]`` - Matches any character in brackets
+  * Combinations run alphabetically (environments first, then experiments)
+
+**Batch Features:**
+  * Live flow console showing experiment progress
+  * Rich summary table with success/failure status
+  * Automatic error handling and continuation
+  * Duration tracking for each combination
+
 **Test Mode Development (--test)**
 
 The ``--test`` flag enables iterative experiment development:

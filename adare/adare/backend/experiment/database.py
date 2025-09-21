@@ -9,6 +9,7 @@ from adare.database.api.environment import EnvironmentDbApi
 from adare.database.api.stage import StageDbApi
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 from adare.backend.experiment.exceptions import NoEnvironmentError, MultipleEnvironmentsError
+from adare.exceptions import EnvironmentNotFoundError
 from adare.types.stages import Stage
 from adarelib.constants import StatusEnum
 

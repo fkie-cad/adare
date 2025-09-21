@@ -1014,12 +1014,12 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             environment_file = environment_database.get_environment_path_by_project_and_name(
                 project_path, environment_name
             )
-        
+
         if environment_file:
             from adare.types.environment import parse_environment_file
             environment_metadata = parse_environment_file(environment_file)
             guest_platform = environment_metadata.os.platform
-            
+
             # Set platform-specific defaults if not overridden by CLI
             if vm_memory is None:
                 if 'windows' in guest_platform.lower():
@@ -1036,7 +1036,8 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             if vm_memory is not None:
                 config.vm_memory = vm_memory
                 log.info(f"Using custom VM memory: {vm_memory}MB")
-    except Exception as e:
+    except (FileNotFoundError, OSError) as e:
+        # Only catch file system related errors, not environment validation errors
         log.warning(f"Could not determine guest platform for memory defaults: {e}")
         # Fallback: apply CLI override or keep default
         if vm_memory is not None:
