@@ -57,31 +57,12 @@ def print_environment_list(formatter=None, output_file=None, dual_output=False):
         formatter, output_file, dual_output = get_formatter_from_context()
 
     if dual_output or formatter.format_type.value != 'rich':
-        # Convert to structured data
-        environment_list = []
-        for _, row in environments.iterrows():
-            published = True if row.get('published') == 'True' else False
-            in_request = True if row.get('in_request') == 'True' else False
-            web_status = 'NOT published'
-            if published:
-                web_status = 'published'
-            if in_request:
-                web_status = 'in request'
-
-            environment_info = EnvironmentInfo(
-                name=row.get('display_name', ''),
-                ulid=row.get('id', ''),
-                project=row.get('project', ''),
-                description=row.get('description', ''),
-                os_info=row.get('osinfo', 'Unknown'),
-                vm_box=row.get('vm_name', 'No VM')
-            )
-            env_dict = environment_info.to_dict()
-            env_dict['web_status'] = web_status
-            environment_list.append(env_dict)
-
-        # Output structured data
-        formatter.print_or_save({'environments': environment_list}, output_file, dual_output)
+        # Use StructuredDataApi for JSON/YAML output
+        from adare.database.api.structured_data import StructuredDataApi
+        with StructuredDataApi() as api:
+            environments_structured = api.get_environments_structured()
+            environment_list = [env.to_dict() for env in environments_structured]
+            formatter.print_or_save({'environments': environment_list}, output_file, dual_output)
     else:
         # Use existing Rich formatting
         console = DefaultConsole()

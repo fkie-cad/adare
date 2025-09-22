@@ -46,18 +46,12 @@ def print_project_list(formatter=None, output_file=None, dual_output=False):
         formatter, output_file, dual_output = get_formatter_from_context()
 
     if dual_output or formatter.format_type.value != 'rich':
-        # Convert to structured data
-        project_list = []
-        for _, row in projects.iterrows():
-            project_info = ProjectInfo(
-                name=row['name'],
-                description=row.get('description', ''),
-                environment_count=len(row.get('environments_names', '').split(',')) if row.get('environments_names') else 0
-            )
-            project_list.append(project_info.to_dict())
-
-        # Output structured data
-        formatter.print_or_save({'projects': project_list}, output_file, dual_output)
+        # Use StructuredDataApi for JSON/YAML output
+        from adare.database.api.structured_data import StructuredDataApi
+        with StructuredDataApi() as api:
+            projects_structured = api.get_projects_structured()
+            project_list = [proj.to_dict() for proj in projects_structured]
+            formatter.print_or_save({'projects': project_list}, output_file, dual_output)
     else:
         # Use existing Rich formatting
         console = DefaultConsole()

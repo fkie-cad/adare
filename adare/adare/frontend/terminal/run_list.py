@@ -58,28 +58,16 @@ def print_run_list(project: str, environment: str = None, experiment: str = None
         formatter, output_file, dual_output = get_formatter_from_context()
 
     if dual_output or formatter.format_type.value != 'rich':
-        # Convert to structured data
-        run_list = []
-        for _, row in runs.iterrows():
-            run_info = RunInfo(
-                ulid=row.get('id', ''),
-                experiment_name=row.get('experiment_dotnotation', ''),
-                experiment_ulid=row.get('experiment_id', ''),
-                environment_name=row.get('environment_name', ''),
-                environment_ulid=row.get('environment_id', ''),
+        # Use StructuredDataApi for JSON/YAML output
+        from adare.database.api.structured_data import StructuredDataApi
+        with StructuredDataApi() as api:
+            runs_structured = api.get_runs_structured(
                 project_name=project,
-                start_time=row.get('start_time'),
-                end_time=row.get('end_time'),
-                duration_seconds=row.get('duration').total_seconds() if row.get('duration') else 0.0,
-                status=row.get('status', ''),
-                published=row.get('published', False),
-                fake=row.get('fake', False),
-                overall_result=row.get('result_status', '')
+                environment_name=environment,
+                experiment_name=experiment
             )
-            run_list.append(run_info.to_dict())
-
-        # Output structured data
-        formatter.print_or_save({'runs': run_list}, output_file, dual_output)
+            run_list = [run.to_dict() for run in runs_structured]
+            formatter.print_or_save({'runs': run_list}, output_file, dual_output)
     else:
         # Use existing Rich formatting
         console = DefaultConsole()
