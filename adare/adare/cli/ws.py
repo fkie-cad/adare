@@ -85,7 +85,7 @@ async def exec_ws_action(args: SimpleNamespace):
             await client.disconnect()
             
     except Exception as e:
-        log.error(f"WebSocket action execution failed: {e}")
+        log.error(f"WebSocket action execution failed: {e}", exc_info=True)
         raise WSActionError(str(e))
 
 async def execute_single_action(client: AdareVMClient, action: Dict[str, Any], 
@@ -211,7 +211,7 @@ async def execute_single_action(client: AdareVMClient, action: Dict[str, Any],
             'error': str(e)
         }
     except Exception as e:
-        log.error(f"[Action {action_num}] Error: {e}")
+        log.error(f"[Action {action_num}] Error: {e}", exc_info=True)
         return {
             'action_num': action_num,
             'action_type': action_type,

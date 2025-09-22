@@ -432,7 +432,7 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
                 log.warning(f"Could not capture UUID for VM '{vbox_vm_name}' after import")
         
     except Exception as e:
-        log.error(f"Failed to import VM '{vbox_vm_name}' to VirtualBox: {e}")
+        log.error(f"Failed to import VM '{vbox_vm_name}' to VirtualBox: {e}", exc_info=True)
         raise
     
     return vm
@@ -471,6 +471,7 @@ def delete_vm(vm_id: str) -> bool:
         with VmApi() as api:
             return api.delete_vm(vm_id)
     except Exception as e:
+        log.error(f"Failed to delete VM {vm_id}: {e}", exc_info=True)
         raise VMError(log, f"Failed to delete VM {vm_id}: {e}")
 
 
@@ -544,7 +545,7 @@ def get_vms_by_environment(environment_ulid: str) -> list:
         return vms
         
     except Exception as e:
-        log.error(f"Failed to get VMs for environment {environment_ulid}: {e}")
+        log.error(f"Failed to get VMs for environment {environment_ulid}: {e}", exc_info=True)
         return []
 
 

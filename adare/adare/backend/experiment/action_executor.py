@@ -150,7 +150,7 @@ class ActionExecutor:
                 )
                 
         except Exception as e:
-            log.error(f"Error executing action: {e}")
+            log.error(f"Error executing action: {e}", exc_info=True)
             return ActionResult(
                 success=False,
                 message=f"Exception: {str(e)}"
@@ -208,6 +208,7 @@ class ActionExecutor:
             )
             
         except Exception as e:
+            log.error(f"Error executing click action: {e}", exc_info=True)
             return ActionResult(
                 success=False,
                 message=str(e),
@@ -288,7 +289,7 @@ class ActionExecutor:
                 
         except Exception as e:
             execution_time = time.time() - start_time if 'start_time' in locals() else 0
-            log.error(f"Error resolving target: {e}")
+            log.error(f"Error resolving target: {e}", exc_info=True)
             
             # Emit find failure event  
             if self.experiment_run_id and event_emitter:
@@ -369,10 +370,11 @@ class ActionExecutor:
                 coordinates=src_coords,
                 data={'source': action.src, 'destination': action.dst, 'source_coordinates': src_coords, 'dest_coordinates': dst_coords}
             )
-            
+
         except Exception as e:
+            log.error(f"Error executing drag action: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
-    
+
     async def _execute_keyboard(self, action: KeyboardAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
         """Execute keyboard action."""
         try:
@@ -397,8 +399,9 @@ class ActionExecutor:
                 message=result.get('message', '')
             )
         except Exception as e:
+            log.error(f"Error executing keyboard action: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
-    
+
     async def _execute_idle(self, action: IdleAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
         """Execute idle action."""
         try:

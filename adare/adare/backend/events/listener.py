@@ -51,7 +51,7 @@ def _schedule_delayed_completion(stage_id: str, console, completion_callback, de
         try:
             completion_callback()
         except Exception as e:
-            log.error(f"Error in delayed completion for {stage_id}: {e}")
+            log.error(f"Error in delayed completion for {stage_id}: {e}", exc_info=True)
         finally:
             with _spinner_lock:
                 _spinner_timers.pop(stage_id, None)
@@ -267,7 +267,7 @@ def event_listener_cli(ulid):
 
         except Exception as e:
             # Log or handle malformed events
-            log.error(f"[EventListener CLI] Error processing event: {e}")
+            log.error(f"[EventListener CLI] Error processing event: {e}", exc_info=True)
 
 
 def _handle_stage_event(event, console, ulid):

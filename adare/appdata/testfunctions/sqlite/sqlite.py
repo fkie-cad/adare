@@ -84,4 +84,5 @@ class QueryResult(BasicTest):
                 return TestResult.failed([f'database file {dst} does not exist'])
 
         except Exception as e:
+            log.error(f"Unexpected error in SQLite query test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in SQLite query test")

@@ -444,8 +444,11 @@ class JinjaTemplateResolver:
                 resolved = template.render(template_context)
             log.debug(f"Resolved template '{template_string}' to '{resolved}'")
             return resolved
+        except (jinja2.TemplateError, jinja2.UndefinedError, TypeError, ValueError) as e:
+            log.warning(f"Template resolution error for '{template_string}': {e}")
+            return template_string
         except Exception as e:
-            log.warning(f"Failed to resolve template '{template_string}': {e}")
+            log.warning(f"Unexpected error resolving template '{template_string}': {e}", exc_info=True)
             return template_string
 
     def resolve_template(self, template_string: str, template_context: Dict[str, Any]) -> str:

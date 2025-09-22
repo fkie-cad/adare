@@ -249,6 +249,7 @@ class FileContentMatchesRegex(BasicTest):
                 return TestResult.failed(['file content does not match regex expression'])
 
         except Exception as e:
+            log.error(f"Unexpected error in file content regex test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in file content regex test")
 
 
@@ -339,6 +340,7 @@ class FileContentEquals(BasicTest):
                 try:
                     success, message = self._handle_placeholders_comparison(data.strip(), expected_content)
                 except Exception as e:
+                    log.error(f"Error in placeholder comparison logic: {e}", exc_info=True)
                     return TestResult.execution_error(e, "Error in placeholder comparison logic")
 
             if success:
@@ -362,9 +364,11 @@ class FileContentEquals(BasicTest):
                         f'Diff:\n{diff_output}'
                     ])
                 except Exception as e:
+                    log.error(f"Error generating diff output: {e}", exc_info=True)
                     return TestResult.execution_error(e, "Error generating diff output")
 
         except Exception as e:
+            log.error(f"Unexpected error in file content equals test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in file content equals test")
 
 
@@ -432,6 +436,7 @@ class FileHashMatches(BasicTest):
                 return TestResult.execution_error(e, "Hash calculation error")
 
         except Exception as e:
+            log.error(f"Unexpected error in file hash test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in file hash test")
 
 
@@ -598,6 +603,7 @@ class FileTimestamps(BasicTest):
                 return TestResult.execution_error(e, "Timestamp parsing/comparison error")
 
         except Exception as e:
+            log.error(f"Unexpected error in file timestamps test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in file timestamps test")
 
 
@@ -716,6 +722,7 @@ class FilePermissions(BasicTest):
                 return TestResult.execution_error(e, "Permission parsing error")
 
         except Exception as e:
+            log.error(f"Unexpected error in file permissions test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in file permissions test")
 
 
@@ -829,4 +836,5 @@ class FileContentContains(BasicTest):
                 return TestResult.execution_error(e, f"Cannot read file {dst}")
 
         except Exception as e:
+            log.error(f"Unexpected error in file content contains test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in file content contains test")

@@ -58,7 +58,7 @@ def handle_db_errors(func):
             log.error(f"Database error in {func.__name__}: {e}")
             raise DatabaseError(f"Database operation failed: {e}")
         except Exception as e:
-            log.error(f"Unexpected error in {func.__name__}: {e}")
+            log.error(f"Unexpected error in {func.__name__}: {e}", exc_info=True)
             raise
     return wrapper
 
@@ -96,8 +96,11 @@ class EnhancedDatabaseApi:
                 autocommit=False,
                 expire_on_commit=False
             )
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to setup database: {e}")
+            raise DatabaseConnectionError(log, f"Cannot connect to database: {e}")
+        except Exception as e:
+            log.error(f"Unexpected error setting up database: {e}", exc_info=True)
             raise DatabaseConnectionError(log, f"Cannot connect to database: {e}")
     
     @property
