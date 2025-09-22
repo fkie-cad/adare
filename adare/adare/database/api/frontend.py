@@ -3,6 +3,7 @@ import attrs
 import sqlalchemy
 import pandas as pd
 from pathlib import Path
+from sqlalchemy.orm import joinedload
 
 # internal imports
 from adare.database.models.experiment import Vm, Project, Environment, Experiment, ExperimentRun, OsInfo, StageInRun, Stage, Event, Status, TestFunction, TestFunctionFile, TestParameter, AbstractTest
@@ -340,6 +341,25 @@ class DataRetrievalApi(DatabaseApi):
         return pd.read_sql(self._session.query(ExperimentRun).filter_by(experiment_id=experiment_ulid).statement, self._session.bind).map(str)
 
     def __enrich_run_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        # Use bulk loading to avoid N+1 queries
+        run_ids = data['id'].tolist()
+        experiment_ids = data['experiment_id'].tolist()
+        environment_ids = data['environment_id'].tolist()
+
+        # Bulk load all required objects with eager loading
+        runs_dict = {run.id: run for run in self._session.query(ExperimentRun).options(
+            joinedload(ExperimentRun.sync_metadata)
+        ).filter(ExperimentRun.id.in_(run_ids)).all()}
+
+        experiments_dict = {exp.id: exp for exp in self._session.query(Experiment).filter(
+            Experiment.id.in_(experiment_ids)).all()}
+
+        environments_dict = {env.id: env for env in self._session.query(Environment).options(
+            joinedload(Environment.vm).joinedload(Vm.osinfo),
+            joinedload(Environment.project)
+        ).filter(Environment.id.in_(environment_ids)).all()}
+
+        # Build result arrays using bulk-loaded data
         experiment_names = []
         environment_names = []
         project_names = []
@@ -347,18 +367,15 @@ class DataRetrievalApi(DatabaseApi):
         object_environments = []
 
         for index, row in data.iterrows():
-            experiment_name = self._session.query(Experiment).filter_by(id=row['experiment_id']).one().name
-            environment_name = self._session.query(Environment).filter_by(id=row['environment_id']).one().name
-            project_name = self._session.query(Project).filter(
-                Project.environments.any(Environment.id == row['environment_id'])).one().name
-            object_run = self._session.query(ExperimentRun).filter_by(id=row['id']).one()
-            object_environment = self._session.query(Environment).filter_by(id=row['environment_id']).one()
+            experiment = experiments_dict.get(row['experiment_id'])
+            environment = environments_dict.get(row['environment_id'])
+            run = runs_dict.get(row['id'])
 
-            experiment_names.append(experiment_name)
-            environment_names.append(environment_name)
-            project_names.append(project_name)
-            object_runs.append(object_run)
-            object_environments.append(object_environment)
+            experiment_names.append(experiment.name if experiment else '')
+            environment_names.append(environment.name if environment else '')
+            project_names.append(environment.project.name if environment and environment.project else '')
+            object_runs.append(run)
+            object_environments.append(environment)
 
         data['experiment_name'] = experiment_names
         data['environment_name'] = environment_names
