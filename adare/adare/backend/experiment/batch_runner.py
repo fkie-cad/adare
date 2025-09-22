@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Set
+from typing import Dict, List, Optional, Any, Set, Tuple
 
 # internal imports
 from adare.database.api.experiment import ExperimentApi
@@ -404,6 +404,48 @@ class BatchExperimentRunner:
         self.matcher: Optional[ExperimentEnvironmentMatcher] = None
         self.interrupt_requested: bool = False
 
+    def _handle_interruption(self, remaining_combinations: List[Tuple[str, str]], current_env: str, current_exp: str) -> bool:
+        """Handle interruption and prompt user whether to continue with remaining combinations.
+
+        Args:
+            remaining_combinations: List of (env_name, exp_name) tuples remaining
+            current_env: Name of current environment being processed
+            current_exp: Name of current experiment being processed
+
+        Returns:
+            bool: True if user wants to continue, False if user wants to stop
+        """
+        if not remaining_combinations:
+            return False
+
+        console.print(f"\n[yellow]Interrupted while running {current_exp} on {current_env}[/yellow]")
+        console.print(f"{len(remaining_combinations)} combination(s) remaining:")
+
+        # Group remaining combinations by environment for better display
+        env_groups = {}
+        for env_name, exp_name in remaining_combinations:
+            if env_name not in env_groups:
+                env_groups[env_name] = []
+            env_groups[env_name].append(exp_name)
+
+        for env_name, exp_names in env_groups.items():
+            console.print(f"  [cyan]{env_name}[/cyan]: {', '.join(exp_names)}")
+
+        while True:
+            try:
+                choice = input("\nContinue with remaining combinations? [y/n] (y=yes, n=no): ").lower().strip()
+                if choice in ['y', 'yes']:
+                    console.print("[green]Continuing with next combination...[/green]\n")
+                    return True
+                elif choice in ['n', 'no']:
+                    console.print("[yellow]Terminating all remaining combinations...[/yellow]\n")
+                    return False
+                else:
+                    console.print("[red]Please enter 'y' (yes) or 'n' (no)[/red]")
+            except (EOFError, KeyboardInterrupt):
+                console.print("\n[yellow]Terminating all remaining combinations...[/yellow]\n")
+                return False
+
     async def run_batch(
         self,
         project_path: Path,
@@ -464,43 +506,83 @@ class BatchExperimentRunner:
         results = []
         combination_count = 0
 
+        # Build a flat list of all combinations for tracking what's remaining
+        all_combinations = []
+        for env_name in sorted(combinations.keys()):
+            for exp_name in combinations[env_name]:
+                all_combinations.append((env_name, exp_name))
+
         try:
-            for env_name in sorted(combinations.keys()):
+            for i, (env_name, exp_name) in enumerate(all_combinations):
                 if self.interrupt_requested:
                     break
 
-                experiments = combinations[env_name]
-                console.print(f"\n[bold cyan]Environment: {env_name}[/bold cyan]")
+                combination_count += 1
 
-                for exp_name in experiments:
-                    if self.interrupt_requested:
+                # Print environment header when switching to a new environment
+                if i == 0 or all_combinations[i-1][0] != env_name:
+                    console.print(f"\n[bold cyan]Environment: {env_name}[/bold cyan]")
+
+                console.print(f"  [{combination_count}/{total_combinations}] Running {exp_name}...")
+
+                result = await self._execute_combination(
+                    project_path, exp_name, env_name, show_flow_console, **experiment_kwargs
+                )
+                results.append(result)
+                self._print_immediate_result(result)
+
+                # Handle interruption if experiment was interrupted
+                if result.status == StatusEnum.INTERRUPTED:
+                    # Get remaining combinations
+                    remaining = all_combinations[i+1:]
+
+                    # Ask user if they want to continue
+                    if remaining and self._handle_interruption(remaining, env_name, exp_name):
+                        continue  # Continue with next combination
+                    else:
+                        # Mark all remaining combinations as skipped
+                        from datetime import datetime, timezone, timedelta
+                        for rem_env, rem_exp in remaining:
+                            skipped_result = ExperimentResult(
+                                environment=rem_env,
+                                experiment=rem_exp,
+                                status=StatusEnum.INTERRUPTED,
+                                duration=timedelta(seconds=0),
+                                error_message="Skipped due to user termination",
+                                start_time=datetime.now(timezone.utc),
+                                end_time=datetime.now(timezone.utc)
+                            )
+                            results.append(skipped_result)
                         break
-
-                    combination_count += 1
-                    console.print(f"  [{combination_count}/{total_combinations}] Running {exp_name}...")
-
-                    result = await self._execute_combination(
-                        project_path, exp_name, env_name, show_flow_console, **experiment_kwargs
-                    )
-                    results.append(result)
-
-                    self._print_immediate_result(result)
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Batch execution interrupted by user[/yellow]")
             self.interrupt_requested = True
+            # This shouldn't happen since individual experiments handle interrupts,
+            # but if it does, we should handle any remaining combinations
+            if combination_count < total_combinations:
+                console.print(f"[yellow]Note: {total_combinations - combination_count} combinations were not attempted[/yellow]")
 
         return results
 
     def _print_immediate_result(self, result: ExperimentResult) -> None:
         """Print the immediate result of a single experiment execution."""
-        status_icon = "✓" if result.status == StatusEnum.SUCCESS else "✗"
-        status_color = "green" if result.status == StatusEnum.SUCCESS else "red"
+        if result.status == StatusEnum.SUCCESS:
+            status_icon = "✓"
+            status_color = "green"
+        elif result.status == StatusEnum.INTERRUPTED:
+            status_icon = "⚠"
+            status_color = "yellow"
+        else:  # FAILED or ERROR
+            status_icon = "✗"
+            status_color = "red"
+
         console.print(f"    [{status_color}]{status_icon}[/{status_color}] "
                      f"{result.duration.total_seconds():.1f}s")
 
         if result.error_message:
-            console.print(f"    [red]Error: {result.error_message}[/red]")
+            error_color = "yellow" if result.status == StatusEnum.INTERRUPTED else "red"
+            console.print(f"    [{error_color}]{result.error_message}[/{error_color}]")
 
     def _print_execution_plan(self, combinations: Dict[str, List[str]]):
         """Print the execution plan before starting."""
@@ -530,7 +612,7 @@ class BatchExperimentRunner:
             from adare.backend.experiment.commands import experiment_run
 
             # Execute the experiment
-            await experiment_run(
+            was_interrupted, was_successful = await experiment_run(
                 project_path=project_path,
                 experiment_name=experiment_name,
                 environment_name=environment_name,
@@ -541,11 +623,23 @@ class BatchExperimentRunner:
             end_time = datetime.now(timezone.utc)
             duration = end_time - start_time
 
+            # Determine status based on experiment results
+            if was_interrupted:
+                status = StatusEnum.INTERRUPTED
+                error_msg = "User interrupted"
+            elif was_successful:
+                status = StatusEnum.SUCCESS
+                error_msg = None
+            else:
+                status = StatusEnum.FAILED
+                error_msg = "Experiment tests failed"
+
             return ExperimentResult(
                 environment=environment_name,
                 experiment=experiment_name,
-                status=StatusEnum.SUCCESS,
+                status=status,
                 duration=duration,
+                error_message=error_msg,
                 start_time=start_time,
                 end_time=end_time
             )
