@@ -62,8 +62,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: Flow console occasionally shows three red dots at the bottom → cause unknown  
 - [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
 - [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
-- [ ] Visual bug: when no tag is set for experiment or env only # is single in a line (in this case remove it)
-- [ ] ctrl-c in multi execute setup does not show prompt that ask wheter to skip all coming or to continue with next experiment
+- [x] Visual bug: when no tag is set for experiment or env only # is single in a line (in this case remove it)
+- [x] ctrl-c in multi execute setup does not show prompt that ask wheter to skip all coming or to continue with next experiment
 
 ---
 

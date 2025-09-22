@@ -133,13 +133,14 @@ class TwoTitleRule(Rule):
 
 class TagsText:
     def __init__(self, tags: str):
-        self.tags = tags.split(', ')
+        self.tags = tags.split(', ') if tags and tags.strip() else []
 
     def __rich__(self) -> Table:
         text = ''
         for tag in self.tags:
-            text += f'[b deep_pink4]#{tag}[/b deep_pink4] '
-        text = text[:-1]
+            if tag.strip():  # Only add non-empty tags
+                text += f'[b deep_pink4]#{tag}[/b deep_pink4] '
+        text = text[:-1] if text else ''  # Remove trailing space only if text exists
         grid = Table.grid(expand=True)
         grid.add_column(justify="left")
         grid.add_row(
