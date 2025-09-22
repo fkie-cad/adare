@@ -39,18 +39,44 @@ class EnvironmentInfo:
     vm_box: str = ""
     created_at: Optional[datetime] = None
     experiment_count: int = 0
+    dotnotation: str = ""
+    display_name: str = ""
+    vm_id: str = ""
+    osinfo_os: str = ""
+    osinfo_distribution: str = ""
+    osinfo_version: str = ""
+    osinfo_language: str = ""
+    published: bool = False
+    in_request: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
-            'name': self.name,
             'ulid': self.ulid,
+            'name': self.name,
+            'display_name': self.display_name,
+            'dotnotation': self.dotnotation,
             'project': self.project,
             'description': self.description,
-            'os_info': self.os_info,
-            'vm_box': self.vm_box,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'experiment_count': self.experiment_count,
+            'vm': {
+                'id': self.vm_id,
+                'name': self.vm_box,
+                'os_info': self.os_info,
+            },
+            'os_details': {
+                'os': self.osinfo_os,
+                'distribution': self.osinfo_distribution,
+                'version': self.osinfo_version,
+                'language': self.osinfo_language,
+            },
+            'sync_status': {
+                'published': self.published,
+                'in_request': self.in_request,
+            },
+            'metadata': {
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'experiment_count': self.experiment_count,
+            }
         }
 
 
@@ -66,19 +92,33 @@ class ExperimentInfo:
     created_at: Optional[datetime] = None
     run_count: int = 0
     last_run: Optional[datetime] = None
+    dotnotation: str = ""
+    display_name: str = ""
+    environments: List[str] = attrs.Factory(list)
+    published: bool = False
+    in_request: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
-            'name': self.name,
             'ulid': self.ulid,
-            'project': self.project,
-            'environment': self.environment,
+            'name': self.name,
+            'display_name': self.display_name,
+            'dotnotation': self.dotnotation,
             'description': self.description,
             'tags': self.tags,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'run_count': self.run_count,
-            'last_run': self.last_run.isoformat() if self.last_run else None,
+            'project': self.project,
+            'environments': self.environments,
+            'primary_environment': self.environment,
+            'sync_status': {
+                'published': self.published,
+                'in_request': self.in_request,
+            },
+            'metadata': {
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'run_count': self.run_count,
+                'last_run': self.last_run.isoformat() if self.last_run else None,
+            }
         }
 
 
@@ -90,15 +130,33 @@ class TestFunctionInfo:
     description: str = ""
     parameters: List[Dict[str, Any]] = attrs.Factory(list)
     file_path: str = ""
+    id: Optional[str] = None
+    file_id: Optional[str] = None
+    display_name: str = ""
+    parameter_count: int = 0
+    file_name: str = ""
+    file_sha256: str = ""
+    file_description: str = ""
+    full_file_path: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
+            'id': self.id,
             'name': self.name,
             'dotnotation': self.dotnotation,
+            'display_name': self.display_name,
             'description': self.description,
+            'parameter_count': self.parameter_count,
             'parameters': self.parameters,
-            'file_path': self.file_path,
+            'file': {
+                'id': self.file_id,
+                'name': self.file_name,
+                'path': self.file_path,
+                'full_path': self.full_file_path,
+                'sha256': self.file_sha256,
+                'description': self.file_description,
+            }
         }
 
 
