@@ -101,6 +101,7 @@ class TextDetector:
         try:
             result = await OCRProcessor.process_screenshot(screenshot_bytes)
         except Exception as e:
+            log.error(f"OCR processing failed: {e}", exc_info=True)
             return {
                 "error": f"OCR processing failed: {str(e)}",
                 "all_text": []
@@ -137,6 +138,7 @@ class TextDetector:
         try:
             result = await OCRProcessor.process_screenshot(screenshot_bytes)
         except Exception as e:
+            log.error(f"OCR processing failed: {e}", exc_info=True)
             return {
                 "error": f"OCR processing failed: {str(e)}",
                 "locations": []

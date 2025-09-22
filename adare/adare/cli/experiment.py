@@ -204,6 +204,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             env_end_time = datetime.now(timezone.utc)
             duration = (env_end_time - env_start_time).total_seconds()
             error_msg = str(e)
+            log.error(f"Environment '{env_name}' failed with unexpected error: {e}", exc_info=True)
 
             results.append({
                 'environment': env_name,

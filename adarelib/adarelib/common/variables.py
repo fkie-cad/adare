@@ -409,7 +409,7 @@ class Variable:
                                         parsed_dt = parsed_dt.replace(tzinfo=tz)
                                         log.info(f"CLAUDE: Applied named timezone '{timezone_str}' to timestamp: {parsed_dt}")
                             except Exception as e:
-                                log.warning(f"Failed to apply timezone '{timezone_str}': {e}")
+                                log.warning(f"Failed to apply timezone '{timezone_str}': {e}", exc_info=True)
 
                     # Convert timezone-aware datetime to UTC Unix timestamp for consistent storage
                     if parsed_dt.tzinfo is not None:

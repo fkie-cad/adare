@@ -79,6 +79,7 @@ class ElementExists(BasicTest):
                 return TestResult.execution_error(e, f"Cannot read XML file {dst}")
 
         except Exception as e:
+            log.error(f"Unexpected error in XML element exists test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in XML element exists test")
 
 
@@ -255,6 +256,7 @@ class ElementTextMatches(BasicTest):
                 return TestResult.execution_error(e, f"Cannot read XML file {dst}")
 
         except Exception as e:
+            log.error(f"Unexpected error in XML element text matches test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in XML element text matches test")
 
 

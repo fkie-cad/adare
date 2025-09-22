@@ -85,8 +85,8 @@ class ContainsLine(BasicTest):
                     search_path = Path(self.parameter.dst).parent if '/' in self.parameter.dst or '\\' in self.parameter.dst else Path('.')
                     available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
                     files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-                except Exception:
-                    files_info = "Could not list directory contents"
+                except (OSError, PermissionError, FileNotFoundError) as e:
+                    files_info = f"Could not list directory contents: {e}"
 
                 return TestResult.failed([f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'])
 
@@ -154,4 +154,5 @@ class ContainsLine(BasicTest):
                 return TestResult.failed([f"CSV parsing error in file {dst}: {e}"])
 
         except Exception as e:
+            log.error(f"Unexpected error in CSV line matching test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in CSV line matching test")

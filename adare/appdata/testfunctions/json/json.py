@@ -71,6 +71,7 @@ class ContainsKey(BasicTest):
                 return TestResult.execution_error(e, f"Cannot read JSON file {dst}")
 
         except Exception as e:
+            log.error(f"Unexpected error in JSON contains key test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in JSON contains key test")
 
 
@@ -285,6 +286,7 @@ class ValueMatches(BasicTest):
                 return TestResult.execution_error(e, f"Cannot read JSON file {dst}")
 
         except Exception as e:
+            log.error(f"Unexpected error in JSON value matches test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in JSON value matches test")
 
 
@@ -371,4 +373,5 @@ class ArrayContains(BasicTest):
                 return TestResult.execution_error(e, f"Cannot read JSON file {dst}")
 
         except Exception as e:
+            log.error(f"Unexpected error in JSON array contains test: {e}", exc_info=True)
             return TestResult.execution_error(e, "Unexpected error in JSON array contains test")

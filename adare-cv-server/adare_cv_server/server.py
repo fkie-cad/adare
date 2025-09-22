@@ -5,10 +5,12 @@ import base64
 import click
 import logging
 from typing import Dict, Any
+import cv2
 
 from .constants import DEFAULT_PORT, DEFAULT_HOST, MCP_PATH, DEFAULT_MAX_RESULTS
 from .feature_matching import SIFTMatcher, ORBMatcher, TemplateMatcher
 from .ocr_processing import TextDetector
+from .exceptions import FeatureMatchingError, ImageDecodingError, OCRProcessingError
 
 log = logging.getLogger(__name__)
 
@@ -55,8 +57,10 @@ async def find_icon(
                     }
                 else:
                     log.info("ORB found no matches, trying other methods...")
-            except Exception as orb_error:
+            except (FeatureMatchingError, cv2.error, ValueError) as orb_error:
                 log.warning(f"ORB failed: {orb_error}, trying other methods...")
+            except Exception as orb_error:
+                log.warning(f"Unexpected ORB error: {orb_error}, trying other methods...", exc_info=True)
 
         # Try SIFT if ORB didn't find anything and SIFT is enabled
         if use_sift:
@@ -75,8 +79,10 @@ async def find_icon(
                     }
                 else:
                     log.info("SIFT found no matches, falling back to template matching")
-            except Exception as sift_error:
+            except (FeatureMatchingError, cv2.error, ValueError) as sift_error:
                 log.warning(f"SIFT failed: {sift_error}, falling back to template matching")
+            except Exception as sift_error:
+                log.warning(f"Unexpected SIFT error: {sift_error}, falling back to template matching", exc_info=True)
 
         # Fall back to template matching
         log.info("Using template matching...")
@@ -90,8 +96,14 @@ async def find_icon(
             "method_used": result.method
         }
 
+    except (ImageDecodingError, base64.binascii.Error, ValueError) as e:
+        log.error(f"Icon search input error: {e}")
+        return {
+            "error": f"Invalid input data: {str(e)}",
+            "matches": []
+        }
     except Exception as e:
-        log.error(f"Icon search failed: {e}")
+        log.error(f"Icon search failed: {e}", exc_info=True)
         return {
             "error": f"Icon search failed: {str(e)}",
             "locations": [],
@@ -111,8 +123,14 @@ async def get_all_text(
     try:
         screenshot_bytes = base64.b64decode(screenshot_base64)
         return await TextDetector.get_all_text(screenshot_bytes, offset_x, offset_y, format)
+    except (OCRProcessingError, ImageDecodingError, base64.binascii.Error, ValueError) as e:
+        log.error(f"Text detection input error: {e}")
+        return {
+            "error": f"Invalid input data: {str(e)}",
+            "matches": []
+        }
     except Exception as e:
-        log.error(f"Get all text failed: {e}")
+        log.error(f"Get all text failed: {e}", exc_info=True)
         return {
             "error": f"Get all text failed: {str(e)}",
             "all_text": []
@@ -131,8 +149,14 @@ async def find_text(
     try:
         screenshot_bytes = base64.b64decode(screenshot_base64)
         return await TextDetector.find_text(text, screenshot_bytes, offset_x, offset_y, format)
+    except (OCRProcessingError, ImageDecodingError, base64.binascii.Error, ValueError) as e:
+        log.error(f"Text search input error: {e}")
+        return {
+            "error": f"Invalid input data: {str(e)}",
+            "matches": []
+        }
     except Exception as e:
-        log.error(f"Text search failed: {e}")
+        log.error(f"Text search failed: {e}", exc_info=True)
         return {
             "error": f"Text search failed: {str(e)}",
             "locations": []
@@ -169,7 +193,7 @@ def main(port: int, host: str, debug: bool) -> None:
             path=MCP_PATH
         )
     except Exception as e:
-        log.error(f"CV server failed to start: {e}")
+        log.error(f"CV server failed to start: {e}", exc_info=True)
         raise
 
 

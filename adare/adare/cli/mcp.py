@@ -73,8 +73,12 @@ class MCPServerManager:
         except FileNotFoundError:
             print("❌ adare-cv-server command not found. Make sure adare-cv-server package is installed.")
             return False
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             print(f"❌ Failed to start server: {e}")
+            return False
+        except Exception as e:
+            print(f"❌ Unexpected error starting server: {e}")
+            log.error(f"Unexpected error starting MCP server: {e}", exc_info=True)
             return False
     
     async def _is_server_running(self):
@@ -147,8 +151,15 @@ async def exec_mcp_test_icon(args):
         print(f"📁 Using icon: {icon_path}")
         print(f"📁 Using screenshot: {screenshot_path}")
         
-    except Exception as e:
+    except FileNotFoundError as e:
+        print(f"❌ File not found: {e}")
+        return
+    except (PermissionError, OSError) as e:
         print(f"❌ Error reading files: {e}")
+        return
+    except Exception as e:
+        print(f"❌ Unexpected error reading files: {e}")
+        log.error(f"Unexpected error reading files: {e}", exc_info=True)
         return
     
     # Start MCP server for this command
@@ -337,8 +348,11 @@ async def exec_mcp_test_icon(args):
                     
         except ConnectionError:
             print(f"❌ Could not connect to MCP server")
+        except (TimeoutError, OSError) as e:
+            print(f"❌ Connection error testing MCP server: {e}")
         except Exception as e:
-            print(f"❌ Error testing MCP server: {e}")
+            print(f"❌ Unexpected error testing MCP server: {e}")
+            log.error(f"Unexpected error testing MCP server: {e}", exc_info=True)
 
 
 async def exec_mcp_get_all_text(args):
@@ -363,8 +377,15 @@ async def exec_mcp_get_all_text(args):
             
         print(f"📁 Using screenshot: {screenshot_path}")
         
-    except Exception as e:
+    except FileNotFoundError as e:
+        print(f"❌ File not found: {e}")
+        return
+    except (PermissionError, OSError) as e:
         print(f"❌ Error reading file: {e}")
+        return
+    except Exception as e:
+        print(f"❌ Unexpected error reading file: {e}")
+        log.error(f"Unexpected error reading file: {e}", exc_info=True)
         return
     
     # Start MCP server for this command
@@ -421,8 +442,11 @@ async def exec_mcp_get_all_text(args):
                     
         except ConnectionError:
             print(f"❌ Could not connect to MCP server")
+        except (TimeoutError, OSError) as e:
+            print(f"❌ Connection error testing MCP server: {e}")
         except Exception as e:
-            print(f"❌ Error testing MCP server: {e}")
+            print(f"❌ Unexpected error testing MCP server: {e}")
+            log.error(f"Unexpected error testing MCP server: {e}", exc_info=True)
 
 
 async def exec_mcp_test_text(args):
@@ -447,8 +471,15 @@ async def exec_mcp_test_text(args):
             
         print(f"📁 Using screenshot: {screenshot_path}")
         
-    except Exception as e:
+    except FileNotFoundError as e:
+        print(f"❌ File not found: {e}")
+        return
+    except (PermissionError, OSError) as e:
         print(f"❌ Error reading file: {e}")
+        return
+    except Exception as e:
+        print(f"❌ Unexpected error reading file: {e}")
+        log.error(f"Unexpected error reading file: {e}", exc_info=True)
         return
     
     # Start MCP server for this command
@@ -507,8 +538,11 @@ async def exec_mcp_test_text(args):
                     
         except ConnectionError:
             print(f"❌ Could not connect to MCP server")
+        except (TimeoutError, OSError) as e:
+            print(f"❌ Connection error testing MCP server: {e}")
         except Exception as e:
-            print(f"❌ Error testing MCP server: {e}")
+            print(f"❌ Unexpected error testing MCP server: {e}")
+            log.error(f"Unexpected error testing MCP server: {e}", exc_info=True)
 
 
 async def exec_mcp_start_server(args):

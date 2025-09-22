@@ -57,8 +57,11 @@ class TestLoader:
                     # Continue anyway - some tests might still work
                 else:
                     log.info("Successfully installed all testfunction dependencies")
-            except Exception as e:
+            except (OSError, subprocess.SubprocessError, ConnectionError) as e:
                 log.error(f"Failed to install testfunction dependencies: {e}")
+                # Continue anyway - some tests might still work
+            except Exception as e:
+                log.error(f"Unexpected error installing testfunction dependencies: {e}", exc_info=True)
                 # Continue anyway - some tests might still work
         else:
             log.debug("No testfunction dependencies to install")
@@ -149,8 +152,12 @@ class TestLoader:
 
             return dependencies_list
 
-        except Exception as e:
+        except (ImportError, ModuleNotFoundError, SyntaxError, FileNotFoundError) as e:
             log.error(f"Failed to collect testfunction dependencies: {e}")
+            # Fallback to collecting all dependencies if there's an error
+            return self._collect_all_testfunction_dependencies()
+        except Exception as e:
+            log.error(f"Unexpected error collecting testfunction dependencies: {e}", exc_info=True)
             # Fallback to collecting all dependencies if there's an error
             return self._collect_all_testfunction_dependencies()
 
@@ -234,8 +241,11 @@ class TestLoader:
                     return resolved_test
             
             return None
-        except Exception as e:
+        except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError) as e:
             log.error(f"Failed to resolve test '{test_name}' locally: {e}")
+            return None
+        except Exception as e:
+            log.error(f"Unexpected error resolving test '{test_name}' locally: {e}", exc_info=True)
             return None
 
     async def resolve_test_with_runtime_context(self, test_name: str, runtime_execution_context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -289,8 +299,11 @@ class TestLoader:
                         return test
 
             return None
-        except Exception as e:
+        except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError) as e:
             log.error(f"Failed to resolve test '{test_name}' with runtime context: {e}")
+            return None
+        except Exception as e:
+            log.error(f"Unexpected error resolving test '{test_name}' with runtime context: {e}", exc_info=True)
             return None
 
     def _resolve_test_content(self, test_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -478,8 +491,11 @@ class TestLoader:
             log.debug(f"Test template result: '{result}'")
 
             return result
-        except Exception as e:
+        except (ValueError, TypeError, KeyError) as e:
             log.warning(f"Failed to replace variables in test text '{text}': {e}")
+            return text
+        except Exception as e:
+            log.warning(f"Unexpected error replacing variables in test text '{text}': {e}", exc_info=True)
             return text
     
     def _is_test_action_result(self, action_result) -> bool:

@@ -251,9 +251,7 @@ def __validate_testset_compatibility(project_path: Path, experiment_directory: E
         log.warning(f"Could not import testset validation modules: {e}")
         log.warning("Skipping testset validation - validation will occur at runtime")
     except Exception as e:
-        # print stack trace for debugging
-        import traceback
-        traceback.print_exc()
+        log.error(f"Testset validation error: {e}", exc_info=True)
         raise ExperimentIntegrityError(
             log,
             f"Testset validation failed: {str(e)}",
@@ -1276,7 +1274,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 from adare.backend.events.coordinator import stop_stage_coordinator
                 stop_stage_coordinator()
             except Exception as cleanup_error:
-                log.error(f"Error stopping stage coordinator during error cleanup: {cleanup_error}")
+                log.error(f"Error stopping stage coordinator during error cleanup: {cleanup_error}", exc_info=True)
 
     # Query the database to get the actual experiment success status
     experiment_success = False

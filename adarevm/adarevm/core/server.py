@@ -115,7 +115,7 @@ class AdareVMServer:
         except websockets.exceptions.ConnectionClosed:
             log.info(f"Client disconnected: {client_address}")
         except Exception as e:
-            log.error(f"Error handling client {client_address}: {e}")
+            log.error(f"Unexpected error handling client {client_address}: {e}", exc_info=True)
         finally:
             self.clients.discard(websocket)
     
@@ -139,7 +139,7 @@ class AdareVMServer:
             log.error(f"Missing required field in message: {e}")
             await self.send_error(websocket, f"Missing field: {e}")
         except Exception as e:
-            log.error(f"Unexpected error handling message: {e}")
+            log.error(f"Unexpected error handling message: {e}", exc_info=True)
             await self.send_error(websocket, str(e))
     
     async def handle_tool_call(self, websocket, message: Dict[str, Any]):
@@ -175,7 +175,7 @@ class AdareVMServer:
             )
             await websocket.send(error_msg.to_json())
         except Exception as e:
-            log.error(f"Tool execution failed: {tool_name}: {e}")
+            log.error(f"Tool execution failed: {tool_name}: {e}", exc_info=True)
             error_msg = ToolResultMessage(
                 id=call_id,
                 success=False,
@@ -286,7 +286,7 @@ class AdareVMServer:
             await self.send_event(websocket, EventType.ERROR, {"message": f"Screenshot failed: {e}"})
             return {"status": "error", "message": f"Screenshot failed: {e}"}
         except Exception as e:
-            log.error(f"Unexpected screenshot error: {e}")
+            log.error(f"Unexpected screenshot error: {e}", exc_info=True)
             await self.send_event(websocket, EventType.ERROR, {"message": f"Window screenshot failed: {e}"})
             return {"status": "error", "message": str(e)}
     
@@ -334,7 +334,7 @@ class AdareVMServer:
             await self.send_event(websocket, EventType.ERROR, {"message": f"Archive extraction failed: {e}"})
             return {"status": "error", "message": f"Archive extraction failed: {e}"}
         except Exception as e:
-            log.error(f"Unexpected upload error: {e}")
+            log.error(f"Unexpected upload error: {e}", exc_info=True)
             await self.send_event(websocket, EventType.ERROR, {"message": f"Upload failed: {e}"})
             return {"status": "error", "message": str(e)}
     
@@ -517,7 +517,7 @@ class AdareVMServer:
                     websocket_alive = False
                     break
                 except Exception as e:
-                    log.warning(f"Heartbeat failed: {e}, continuing process")
+                    log.warning(f"Heartbeat failed: {e}, continuing process", exc_info=True)
                     websocket_alive = False
                     break
 
@@ -573,7 +573,7 @@ class AdareVMServer:
             await self.send_event(websocket, EventType.ERROR, {"message": f"Invalid JSON format: {e}"})
             return {"status": "error", "message": f"Invalid JSON format: {e}"}
         except Exception as e:
-            log.error(f"Unexpected variable setting error: {e}")
+            log.error(f"Unexpected variable setting error: {e}", exc_info=True)
             await self.send_event(websocket, EventType.ERROR, {"message": f"Variable setting failed: {e}"})
             return {"status": "error", "message": str(e)}
     
@@ -612,7 +612,7 @@ class AdareVMServer:
             try:
                 supported_tests = import_basictest_subclasses(self.testfunctions_dir)
             except Exception as e:
-                log.error(f"Error importing test functions: {e}")
+                log.error(f"Error importing test functions: {e}", exc_info=True)
                 return TestResult.execution_error(e, "Failed to import testfunctions")
             
             function_name = resolved_test_data.get('function')
@@ -655,7 +655,7 @@ class AdareVMServer:
                     variable_metadata=variable_metadata
                 )
             except Exception as e:
-                log.error(f"Error creating test instance: {e}")
+                log.error(f"Error creating test instance: {e}", exc_info=True)
                 return TestResult.execution_error(e, f"Failed to create test instance for {function_name}")
             
             # Execute the test - this returns a TestResult object
@@ -702,7 +702,7 @@ class AdareVMServer:
             })
             return {"status": "error", "message": f"Test execution failed: {e}"}
         except Exception as e:
-            log.error(f"Unexpected test error: {test_name}: {e}")
+            log.error(f"Unexpected test error: {test_name}: {e}", exc_info=True)
             await self.send_event(websocket, EventType.TEST_FAILED, {
                 "test_name": test_name, "error": str(e)
             })
@@ -833,7 +833,7 @@ class AdareVMServer:
                 "use_maim": use_maim
             }
         except Exception as e:
-            log.error(f"Failed to set screenshot method: {e}")
+            log.error(f"Failed to set screenshot method: {e}", exc_info=True)
             await self.send_event(websocket, EventType.ERROR, {
                 "message": f"Failed to set screenshot method: {e}"
             })

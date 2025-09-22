@@ -219,8 +219,11 @@ class ORBMatcher:
 
             return [], []
 
-        except Exception as e:
+        except (ValueError, AttributeError, IndexError) as e:
             log.error(f"CLAUDE: ORB clustering failed: {e}")
+            return [], []
+        except Exception as e:
+            log.error(f"CLAUDE: Unexpected ORB clustering error: {e}", exc_info=True)
             return [], []
 
     @staticmethod

@@ -88,7 +88,7 @@ class AdareVMClient:
             except asyncio.TimeoutError:
                 log.error(f"Connection timeout after {timeout} seconds")
                 return False
-            except Exception as e:
+            except (websockets.exceptions.WebSocketException, ConnectionError, OSError) as e:
                 log.error(f"Failed to connect to adarevm server: {e}")
                 return False
     
@@ -117,7 +117,7 @@ class AdareVMClient:
                 log.info("Disconnected from adarevm server")
                 
             except Exception as e:
-                log.error(f"Error during disconnect: {e}")
+                log.error(f"Unexpected error during disconnect: {e}", exc_info=True)
     
     async def _handle_messages(self):
         """Handle incoming messages from the server."""
@@ -127,8 +127,8 @@ class AdareVMClient:
         except websockets.exceptions.ConnectionClosed:
             log.info("WebSocket connection closed")
             self.connected = False
-        except Exception as e:
-            log.error(f"Error handling messages: {e}")
+        except (websockets.exceptions.WebSocketException, ConnectionError, OSError) as e:
+            log.error(f"WebSocket error handling messages: {e}")
             self.connected = False
     
     async def _process_message(self, message_str: str):
@@ -143,8 +143,8 @@ class AdareVMClient:
             else:
                 log.debug(f"Received unknown message type: {message.type}")
                 
-        except Exception as e:
-            log.error(f"Error processing message: {e}")
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            log.error(f"Message parsing error: {e}")
     
     async def _handle_tool_result(self, message: ToolResultMessage):
         """Handle a tool result message."""
@@ -172,7 +172,7 @@ class AdareVMClient:
                 else:
                     handler(event_type, message.data)
             except Exception as e:
-                log.error(f"Error in event handler: {e}")
+                log.error(f"Error in event handler: {e}", exc_info=True)
     
     def add_event_handler(self, event_type: str, handler: Callable):
         """
@@ -407,7 +407,7 @@ class AdareVMClient:
             ping_msg = {"type": MessageType.PING, "timestamp": time.time()}
             await self.websocket.send(json.dumps(ping_msg))
             return True
-        except Exception:
+        except (websockets.exceptions.WebSocketException, ConnectionError, OSError, json.JSONEncodeError):
             return False
     
     async def wait_for_connection(self, timeout: float = 30.0) -> bool:
