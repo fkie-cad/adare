@@ -50,7 +50,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 
 ## 🧹 Code Quality  
 - [ ] Rethink test function results: currently lists → should be dictionaries for better JSON/database handling  
-- [ ] Replace generic `Exception` catches with specific ones  
+- [x] Replace generic `Exception` catches with specific ones  
+- [ ] We have custom exceptions? are these clever named and used? should we have more? (general question: Exception vs Return False/None)
 - [ ] Refactor `detect_xsession` to use existing system commands with proper parameterization  
 - [ ] Consider lazy loading of modules at least for certain libraries -> improve speed
 

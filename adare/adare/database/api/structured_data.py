@@ -2,6 +2,7 @@
 from typing import List, Optional
 import pandas as pd
 from pathlib import Path
+from sqlalchemy.orm import joinedload, selectinload
 
 # internal imports
 from adare.database.models.experiment import (
@@ -11,6 +12,14 @@ from adare.database.api.database import DatabaseApi
 import adare.config.database as config_database
 from adare.types.output_models import (
     ProjectInfo, EnvironmentInfo, ExperimentInfo, TestFunctionInfo, RunInfo
+)
+from adare.database.utils.display_helpers import (
+    get_smart_display_name, safe_get_sync_status, safe_get_os_info,
+    safe_get_vm_info, safe_get_tags, get_current_project_name
+)
+from adare.database.utils.error_handling import (
+    safe_query_first, safe_query_all, safe_count, validate_ulid,
+    ObjectNotFoundError, DataRetrievalError
 )
 
 # configure logging
@@ -31,14 +40,14 @@ class StructuredDataApi(DatabaseApi):
 
     def get_projects_structured(self) -> List[ProjectInfo]:
         """Get all projects as structured ProjectInfo objects."""
-        projects = self._session.query(Project).all()
+        projects = safe_query_all(self._session.query(Project))
         result = []
 
         for project in projects:
             # Count environments for this project
-            env_count = self._session.query(Environment).filter(
+            env_count = safe_count(self._session.query(Environment).filter(
                 Environment.project_id == project.id
-            ).count()
+            ))
 
             project_info = ProjectInfo(
                 name=project.name,
@@ -52,33 +61,20 @@ class StructuredDataApi(DatabaseApi):
 
     def get_environments_structured(self) -> List[EnvironmentInfo]:
         """Get all environments as structured EnvironmentInfo objects."""
-        environments = self._session.query(Environment).all()
+        # Use eager loading to prevent N+1 queries
+        environments = safe_query_all(self._session.query(Environment).options(
+            joinedload(Environment.vm).joinedload(Vm.osinfo),
+            joinedload(Environment.project),
+            selectinload(Environment.sync_metadata)
+        ))
         result = []
 
         for env in environments:
-            # Get VM information
-            vm = self._session.query(Vm).filter_by(id=env.vm_id).first() if env.vm_id else None
-            vm_name = vm.name if vm else "No VM"
-            vm_id = vm.id if vm else ""
-
-            # Get OS information
-            osinfo = None
-            if vm and hasattr(vm, 'osinfo_id'):
-                osinfo = self._session.query(OsInfo).filter_by(id=vm.osinfo_id).first()
-
-            # Get sync status
-            published = bool(env.sync_metadata.is_synced) if hasattr(env, 'sync_metadata') and env.sync_metadata else False
-            in_request = bool(env.sync_metadata.needs_sync) if hasattr(env, 'sync_metadata') and env.sync_metadata else False
-
-            # Get smart display name
-            from adare.backend.basics import determine_projectdirectory
-            current_project_name = None
-            if project_path := determine_projectdirectory(None, silent=True):
-                current_project_name = project_path.name
-
-            display_name = env.name
-            if current_project_name and env.project.name != current_project_name:
-                display_name = env.dotnotation
+            # Use utility functions for cleaner, reusable code
+            vm_name, vm_id = safe_get_vm_info(env)
+            os_info_str, osinfo_os, osinfo_distribution, osinfo_version, osinfo_language = safe_get_os_info(env.vm)
+            published, in_request = safe_get_sync_status(env)
+            display_name = get_smart_display_name(env, 'environment')
 
             env_info = EnvironmentInfo(
                 name=env.name,
@@ -87,13 +83,13 @@ class StructuredDataApi(DatabaseApi):
                 dotnotation=env.dotnotation,
                 project=env.project.name,
                 description=env.description or "",
-                os_info=str(osinfo) if osinfo else "Unknown",
+                os_info=os_info_str,
                 vm_box=vm_name,
                 vm_id=vm_id,
-                osinfo_os=osinfo.os if osinfo else "",
-                osinfo_distribution=osinfo.distribution if osinfo else "",
-                osinfo_version=osinfo.version if osinfo else "",
-                osinfo_language=osinfo.language if osinfo else "",
+                osinfo_os=osinfo_os,
+                osinfo_distribution=osinfo_distribution,
+                osinfo_version=osinfo_version,
+                osinfo_language=osinfo_language,
                 created_at=env.created_at,
                 published=published,
                 in_request=in_request
@@ -104,37 +100,25 @@ class StructuredDataApi(DatabaseApi):
 
     def get_experiments_structured(self) -> List[ExperimentInfo]:
         """Get all experiments as structured ExperimentInfo objects."""
-        experiments = self._session.query(Experiment).all()
+        # Use eager loading to prevent N+1 queries
+        experiments = safe_query_all(self._session.query(Experiment).options(
+            selectinload(Experiment.environments).joinedload(Environment.project),
+            selectinload(Experiment.tags),
+            selectinload(Experiment.sync_metadata)
+        ))
         result = []
 
         for exp in experiments:
-            # Get first environment for project context
+            # Use utility functions for cleaner, reusable code
             first_env = exp.environments[0] if exp.environments else None
             project_name = first_env.project.name if first_env else ""
-
-            # Create dotnotation
             dotnotation = f"{project_name}.{exp.name}" if project_name else exp.name
 
-            # Get smart display name
-            from adare.backend.basics import determine_projectdirectory
-            current_project_name = None
-            if project_path := determine_projectdirectory(None, silent=True):
-                current_project_name = project_path.name
-
-            display_name = exp.name
-            if current_project_name and project_name != current_project_name:
-                display_name = dotnotation
-
-            # Get environment names
+            display_name = get_smart_display_name(exp, 'experiment')
             env_names = [env.name for env in exp.environments]
             primary_env = env_names[0] if env_names else ""
-
-            # Get tags
-            tags = [tag.name for tag in exp.tags] if hasattr(exp, 'tags') else []
-
-            # Get sync status
-            published = bool(exp.sync_metadata.is_synced) if hasattr(exp, 'sync_metadata') and exp.sync_metadata else False
-            in_request = bool(exp.sync_metadata.needs_sync) if hasattr(exp, 'sync_metadata') and exp.sync_metadata else False
+            tags = safe_get_tags(exp)
+            published, in_request = safe_get_sync_status(exp)
 
             exp_info = ExperimentInfo(
                 name=exp.name,
@@ -156,76 +140,95 @@ class StructuredDataApi(DatabaseApi):
 
     def get_testfunctions_structured(self, include_parameters: bool = True, testfunction_file: str = None) -> List[TestFunctionInfo]:
         """Get all testfunctions as structured TestFunctionInfo objects."""
-        query = self._session.query(TestFunction)
+        # Validate testfunction_file parameter if provided
+        if testfunction_file and not isinstance(testfunction_file, str):
+            raise DataRetrievalError("testfunction_file must be a string")
+
+        # Build query with eager loading to prevent N+1 queries
+        query_options = [joinedload(TestFunction.file)]
+        if include_parameters:
+            query_options.append(selectinload(TestFunction.parameters))
+
+        query = self._session.query(TestFunction).options(*query_options)
 
         # Apply file filtering if specified
         if testfunction_file:
-            file_obj = self._session.query(TestFunctionFile).filter_by(name=testfunction_file).first()
+            file_obj = safe_query_first(
+                self._session.query(TestFunctionFile).filter_by(name=testfunction_file)
+            )
             if file_obj:
                 query = query.filter(TestFunction.file_id == file_obj.id)
             else:
                 # No matching file found, return empty list
+                log.info(f"No testfunction file found with name: {testfunction_file}")
                 return []
 
-        testfunctions = query.all()
+        testfunctions = safe_query_all(query)
         result = []
 
         for tf in testfunctions:
-            # Get file information
-            tf_file = self._session.query(TestFunctionFile).filter_by(id=tf.file_id).first()
-            file_name = tf_file.name if tf_file else "unknown"
-            file_name_clean = file_name.replace('.py', '') if file_name.endswith('.py') else file_name
+            try:
+                # Validate required fields
+                if not tf.id or not tf.name:
+                    log.warning(f"Skipping testfunction with missing required fields: id={tf.id}, name={tf.name}")
+                    continue
 
-            # Get smart display name
-            from adare.backend.basics import determine_projectdirectory
-            current_project_name = None
-            if project_path := determine_projectdirectory(None, silent=True):
-                current_project_name = project_path.name
+                # File information is now eagerly loaded
+                tf_file = tf.file
+                file_name = tf_file.name if tf_file else "unknown"
+                file_name_clean = file_name.replace('.py', '') if file_name.endswith('.py') else file_name
 
-            display_name = tf.name
-            if current_project_name and '.' in tf.dotnotation:
-                # Check if testfunction is from current project context
-                tf_project = tf.dotnotation.split('.', 1)[0]
-                if tf_project == current_project_name:
-                    display_name = tf.dotnotation.split('.', 1)[1] if '.' in tf.dotnotation else tf.name
-                else:
-                    display_name = tf.dotnotation
+                # Use utility function for smart display name
+                display_name = get_smart_display_name(tf, 'testfunction')
 
-            # Get parameters if requested
-            parameters = []
-            if include_parameters and tf.parameters:
-                for param in tf.parameters:
-                    parameters.append({
-                        'id': param.id,
-                        'name': param.name,
-                        'description': param.description or '',
-                        'data_type': param.dtype or '',
-                        'optional': param.optional or False,
-                        'required': not (param.optional or False)
-                    })
+                # Parameters are now eagerly loaded
+                parameters = []
+                if include_parameters and tf.parameters:
+                    for param in tf.parameters:
+                        # Validate parameter data
+                        if param.id and param.name:
+                            parameters.append({
+                                'id': param.id,
+                                'name': param.name,
+                                'description': param.description or '',
+                                'data_type': param.dtype or '',
+                                'optional': param.optional or False,
+                                'required': not (param.optional or False)
+                            })
 
-            tf_info = TestFunctionInfo(
-                id=tf.id,
-                name=tf.name,
-                dotnotation=tf.dotnotation,
-                display_name=display_name,
-                description=tf.description or "",
-                parameter_count=len(tf.parameters) if tf.parameters else 0,
-                parameters=parameters,
-                file_id=tf.file_id,
-                file_name=file_name,
-                file_path=file_name_clean,
-                full_file_path=tf_file.path if tf_file else "",
-                file_sha256=tf_file.sha256hash if tf_file else "",
-                file_description=tf_file.description if tf_file else ""
-            )
-            result.append(tf_info)
+                tf_info = TestFunctionInfo(
+                    id=tf.id,
+                    name=tf.name,
+                    dotnotation=tf.dotnotation or f"unknown.{tf.name}",
+                    display_name=display_name,
+                    description=tf.description or "",
+                    parameter_count=len(tf.parameters) if tf.parameters else 0,
+                    parameters=parameters,
+                    file_id=tf.file_id or "",
+                    file_name=file_name,
+                    file_path=file_name_clean,
+                    full_file_path=tf_file.path if tf_file else "",
+                    file_sha256=tf_file.sha256hash if tf_file else "",
+                    file_description=tf_file.description if tf_file else ""
+                )
+                result.append(tf_info)
+            except Exception as e:
+                log.error(f"Error processing testfunction {tf.id}: {e}")
+                continue
 
         return result
 
     def get_runs_structured(self, project_name: str = None, environment_name: str = None, experiment_name: str = None) -> List[RunInfo]:
         """Get runs as structured RunInfo objects with optional filtering."""
-        query = self._session.query(ExperimentRun)
+        # Validate input parameters
+        for param_name, param_value in [('project_name', project_name), ('environment_name', environment_name), ('experiment_name', experiment_name)]:
+            if param_value is not None and not isinstance(param_value, str):
+                raise DataRetrievalError(f"{param_name} must be a string")
+
+        # Use eager loading to prevent N+1 queries
+        query = self._session.query(ExperimentRun).options(
+            joinedload(ExperimentRun.experiment).selectinload(Experiment.environments).joinedload(Environment.project)
+        )
 
         # Apply filters
         if experiment_name and environment_name and project_name:
@@ -239,11 +242,11 @@ class StructuredDataApi(DatabaseApi):
                 Project.name == project_name
             )
 
-        runs = query.all()
+        runs = safe_query_all(query)
         result = []
 
         for run in runs:
-            # Get experiment and environment info
+            # Experiment and environment info are now eagerly loaded
             experiment = run.experiment
             env = experiment.environments[0] if experiment.environments else None
 
