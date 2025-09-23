@@ -1017,7 +1017,14 @@ class ExperimentRun(SerializerMixin, Base):
 
     @hybrid_property
     def experiment_dotnotation(self) -> str:
-        return f'{self.environment.project.name}.{self.environment.name}.{self.experiment.name}'
+        # Handle cases where environment or experiment might be None
+        if not self.environment or not self.experiment:
+            return 'unknown.unknown.unknown'
+
+        # Handle case where environment.project might be None
+        project_name = self.environment.project.name if self.environment.project else 'unknown'
+
+        return f'{project_name}.{self.environment.name}.{self.experiment.name}'
 
     @hybrid_property
     def duration(self):
@@ -1034,17 +1041,21 @@ class ExperimentRun(SerializerMixin, Base):
 
     @hybrid_property
     def result_status(self):
+        # Handle case where experiment is None
+        if not self.experiment:
+            return StatusEnum.ERROR
+
         # First check for test execution failures and result failures
         # This takes priority over missing tests since failed tests cause early termination
         for t in self.tests:
             # Check if test execution failed (success=False in Event base class)
             if hasattr(t, 'success') and t.success is False:
                 return StatusEnum.FAILED
-            
+
             # Check if test result indicates failure
             if t.result and int(t.result.status_id) != StatusEnum.SUCCESS:
                 return StatusEnum.FAILED
-        
+
         # Only check for missing tests if no tests failed
         # (missing tests are expected when earlier tests failed and stopped execution)
         for test in self.experiment.abstract_tests:
@@ -1055,7 +1066,7 @@ class ExperimentRun(SerializerMixin, Base):
                     break
             if not found:
                 return StatusEnum.TEST_MISSING
-        
+
         return StatusEnum.SUCCESS
 
     @hybrid_property

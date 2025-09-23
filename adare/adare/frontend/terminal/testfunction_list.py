@@ -16,10 +16,12 @@ log = logging.getLogger(__name__)
 class TestfunctionListPanel:
     testfunctions: pd.DataFrame
     testfunction_file: str
+    show_project_column: bool
 
-    def __init__(self, testfunctions: pd.DataFrame, testfunction_file: str):
+    def __init__(self, testfunctions: pd.DataFrame, testfunction_file: str, show_project_column: bool = False):
         self.testfunctions = testfunctions
         self.testfunction_file = testfunction_file
+        self.show_project_column = show_project_column
 
     def __rich__(self) -> Panel:
         if not self.testfunction_file:
@@ -27,6 +29,10 @@ class TestfunctionListPanel:
         else:
             title = f'[b gold3]testfunctions[/b gold3] from [b gold3]{self.testfunction_file}[/b gold3]'
         table = Table(expand=True)
+
+        # Add project column if showing project info and not filtering by specific file
+        if self.show_project_column and not self.testfunction_file:
+            table.add_column("project", justify="left", style="cyan", no_wrap=True)
 
         # Add file column if not filtering by specific file
         if not self.testfunction_file:
@@ -52,6 +58,11 @@ class TestfunctionListPanel:
                         display_name = display_name.split('.', 1)[1]  # Keep everything after the first dot
 
             row_data = []
+
+            # Add project column data if showing project info and not filtering by specific file
+            if self.show_project_column and not self.testfunction_file:
+                project_name = row.get('project', '') if 'project' in row else ''
+                row_data.append(project_name)
 
             # Add file column data if not filtering by specific file
             if not self.testfunction_file:
@@ -82,6 +93,15 @@ def print_testfunction_list(testfunction_file: str = None, formatter=None, outpu
     if formatter is None:
         from adare.run import get_formatter_from_context
         formatter, output_file, dual_output = get_formatter_from_context()
+
+    # Determine if we should show project column by checking if we're outside a project context
+    show_project_column = False
+    try:
+        from adare.backend.basics import determine_projectdirectory
+        project_directory = determine_projectdirectory(None, silent=True)
+        show_project_column = project_directory is None
+    except:
+        show_project_column = True  # Default to showing project column if we can't determine
 
     if dual_output or formatter.format_type.value != 'rich':
         # Use StructuredDataApi for JSON/YAML output
@@ -119,6 +139,6 @@ def print_testfunction_list(testfunction_file: str = None, formatter=None, outpu
 
             console = DefaultConsole()
             layout = Layout(name="root")
-            panel = TestfunctionListPanel(testfunctions, testfunction_file)
+            panel = TestfunctionListPanel(testfunctions, testfunction_file, show_project_column)
             layout.update(panel)
             console.print(layout)

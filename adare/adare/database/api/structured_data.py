@@ -145,7 +145,9 @@ class StructuredDataApi(DatabaseApi):
             raise DataRetrievalError("testfunction_file must be a string")
 
         # Build query with eager loading to prevent N+1 queries
-        query_options = [joinedload(TestFunction.file)]
+        query_options = [
+            joinedload(TestFunction.file).selectinload(TestFunctionFile.projects)
+        ]
         if include_parameters:
             query_options.append(selectinload(TestFunction.parameters))
 
@@ -178,6 +180,12 @@ class StructuredDataApi(DatabaseApi):
                 file_name = tf_file.name if tf_file else "unknown"
                 file_name_clean = file_name.replace('.py', '') if file_name.endswith('.py') else file_name
 
+                # Get project information - take the first project if multiple exist
+                project_names = []
+                if tf_file and tf_file.projects:
+                    project_names = [project.name for project in tf_file.projects]
+                project_name = project_names[0] if project_names else ""
+
                 # Use utility function for smart display name
                 display_name = get_smart_display_name(tf, 'testfunction')
 
@@ -209,7 +217,8 @@ class StructuredDataApi(DatabaseApi):
                     file_path=file_name_clean,
                     full_file_path=tf_file.path if tf_file else "",
                     file_sha256=tf_file.sha256hash if tf_file else "",
-                    file_description=tf_file.description if tf_file else ""
+                    file_description=tf_file.description if tf_file else "",
+                    project=project_name
                 )
                 result.append(tf_info)
             except Exception as e:

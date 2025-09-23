@@ -347,9 +347,7 @@ class DataRetrievalApi(DatabaseApi):
         environment_ids = data['environment_id'].tolist()
 
         # Bulk load all required objects with eager loading
-        runs_dict = {run.id: run for run in self._session.query(ExperimentRun).options(
-            joinedload(ExperimentRun.sync_metadata)
-        ).filter(ExperimentRun.id.in_(run_ids)).all()}
+        runs_dict = {run.id: run for run in self._session.query(ExperimentRun).filter(ExperimentRun.id.in_(run_ids)).all()}
 
         experiments_dict = {exp.id: exp for exp in self._session.query(Experiment).filter(
             Experiment.id.in_(experiment_ids)).all()}
@@ -383,21 +381,21 @@ class DataRetrievalApi(DatabaseApi):
         data['object_run'] = object_runs
         data['object_environment'] = object_environments
 
-        # access hybrid properties
-        data['duration'] = data['object_run'].apply(lambda obj: obj.duration)
-        data['result_status'] = data['object_run'].apply(lambda obj: int(obj.result_status))
-        data['status'] = data['object_run'].apply(lambda obj: obj.status)
-        data['experiment_dotnotation'] = data['object_run'].apply(lambda obj: obj.experiment_dotnotation)
-        data['vm'] = data['object_environment'].apply(lambda obj: obj.vm)
-        data['vm_name'] = data['object_environment'].apply(lambda obj: obj.vm.name if obj.vm else '')
-        data['osinfo'] = data['object_environment'].apply(lambda obj: str(obj.vm.osinfo) if obj.vm and hasattr(obj.vm, 'osinfo') and obj.vm.osinfo else '')
+        # access hybrid properties with null checks
+        data['duration'] = data['object_run'].apply(lambda obj: obj.duration if obj else None)
+        data['result_status'] = data['object_run'].apply(lambda obj: int(obj.result_status) if obj else 0)
+        data['status'] = data['object_run'].apply(lambda obj: obj.status if obj else '')
+        data['experiment_dotnotation'] = data['object_run'].apply(lambda obj: obj.experiment_dotnotation if obj else 'unknown.unknown.unknown')
+        data['vm'] = data['object_environment'].apply(lambda obj: obj.vm if obj else None)
+        data['vm_name'] = data['object_environment'].apply(lambda obj: obj.vm.name if obj and obj.vm else '')
+        data['osinfo'] = data['object_environment'].apply(lambda obj: str(obj.vm.osinfo) if obj and obj.vm and hasattr(obj.vm, 'osinfo') and obj.vm.osinfo else '')
         # Add missing timestamp fields
-        data['timestamp_start'] = data['object_run'].apply(lambda obj: getattr(obj, 'timestamp_start', ''))
-        data['timestamp_end'] = data['object_run'].apply(lambda obj: getattr(obj, 'timestamp_end', ''))
+        data['timestamp_start'] = data['object_run'].apply(lambda obj: getattr(obj, 'timestamp_start', '') if obj else '')
+        data['timestamp_end'] = data['object_run'].apply(lambda obj: getattr(obj, 'timestamp_end', '') if obj else '')
         # Add published field through sync_metadata if available
-        data['published'] = data['object_run'].apply(lambda obj: obj.sync_metadata.is_synced if hasattr(obj, 'sync_metadata') and obj.sync_metadata else False)
+        data['published'] = data['object_run'].apply(lambda obj: obj.sync_metadata.is_synced if obj and hasattr(obj, 'sync_metadata') and obj.sync_metadata else False)
         # Add fake field
-        data['fake'] = data['object_run'].apply(lambda obj: getattr(obj, 'fake', False))
+        data['fake'] = data['object_run'].apply(lambda obj: getattr(obj, 'fake', False) if obj else False)
         # remove object_run column
         data = data.drop(columns=['object_run', 'object_environment'])
         return data
@@ -656,6 +654,14 @@ class DataRetrievalApi(DatabaseApi):
         data['file_name'] = [obj.name for obj in data['testfunction_file']]
         data['file_sha256'] = [obj.sha256hash for obj in data['testfunction_file']]
         data['file_description'] = [obj.description for obj in data['testfunction_file']]
+        # Add project information - get the first project name for each testfunction file
+        project_names = []
+        for tf_file in data['testfunction_file']:
+            if tf_file.projects:
+                project_names.append(tf_file.projects[0].name)
+            else:
+                project_names.append('')
+        data['project'] = project_names
         # remove object and testfunction_file columns
         data = data.drop(columns=['object', 'testfunction_file'])
         return data

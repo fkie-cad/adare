@@ -49,10 +49,12 @@ def exec_show_runs(arguments):
         project = arguments.project
     else:
         # No filter provided, use current project if available
-        if project_path := determine_projectdirectory(None):
+        # Use silent=True to avoid warning message when outside project directory
+        if project_path := determine_projectdirectory(None, silent=True):
             project = project_path.name
         else:
-            raise NoProjectFoundError(log, message='no project directory found and no filter provided')
+            # When outside of project, show all runs from all projects (like experiments/environments do)
+            project = None
 
     # Get formatter from CLI context
     formatter, output_file, dual_output = get_formatter_from_context()
