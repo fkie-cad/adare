@@ -15,3 +15,4 @@ save_variable|Saves the given value under the given name in the variables file.
 save_time|"Saves the current timestamp under the given name in the variables file.
 
 "
+wait_until|Waits until a specified condition becomes true or times out. Supports text/image targets and boolean logic (all/any/negate).
