@@ -403,24 +403,19 @@ class ActionExecutor:
             return ActionResult(success=False, message=str(e))
 
     async def _execute_idle(self, action: IdleAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
-        """Execute idle action."""
+        """Execute idle action locally without involving the VM."""
         try:
-            log.info(f"Starting idle action for {action.duration} seconds")
-            result = await self.client.idle(action.duration)
-            log.info(f"Idle action completed, result: {result}")
-            
-            # Handle different possible response formats
-            if isinstance(result, dict):
-                success = result.get('status') == 'success' or result.get('success', False)
-                message = result.get('message', '') or result.get('error', '')
-            else:
-                # If result is not a dict, assume success if no exception was thrown
-                success = True
-                message = f"Idle completed ({action.duration}s)"
-            
+            log.info(f"Starting idle action for {action.duration} seconds (local)")
+
+            # Execute idle locally using asyncio.sleep instead of WebSocket call
+            import asyncio
+            await asyncio.sleep(action.duration)
+
+            log.info(f"Idle action completed locally ({action.duration}s)")
+
             return ActionResult(
-                success=success,
-                message=message
+                success=True,
+                message=f"Idle completed ({action.duration}s)"
             )
         except Exception as e:
             log.error(f"Idle action failed: {e}")
