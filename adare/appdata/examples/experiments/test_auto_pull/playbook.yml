@@ -1,0 +1,45 @@
+# Minimal test for auto_pull_on_test_failure feature
+# Note: auto_pull_on_test_failure is enabled by default (true)
+
+variables:
+  test_file_path:
+    type: path
+    value: "/tmp/test_log.txt"
+    description: "Path to test log file"
+
+  expected_content:
+    type: path
+    value: "{{adare_shared_data}}/expected.txt"
+    description: "Expected content file"
+
+tests:
+  - name: test_file_exists
+    description: 'Test that the created file exists (should pass)'
+    function: file.exists
+    parameter:
+      dst: '{{test_file_path}}'
+
+  - name: test_content_match
+    description: 'Test file content matches expected (should fail and trigger auto-pull)'
+    function: file.contains_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{test_file_path}}'
+      entry: 'This line does not exist in the file'
+
+actions:
+  # Create a test file with some content
+  - command:
+      command: 'echo "Auto-pull test log entry" > {{test_file_path}}'
+      description: "Create test log file"
+
+  # Define pull action - this file will be auto-pulled when test fails
+  - pull:
+      src: '{{test_file_path}}'
+      description: "Test log file for analysis"
+
+  # Run the tests
+  - test: test_file_exists
+
+  # This test will fail and trigger auto-pull of test_file_path
+  - test: test_content_match
