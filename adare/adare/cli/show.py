@@ -1,6 +1,7 @@
 # internal imports
 from adare.backend.basics import determine_projectdirectory
 from adare.exceptions import NoProjectFoundError, ArgumentsError
+from adare.helperfunctions.path_resolution import resolve_experiment_path, resolve_environment_path
 
 # configure logging
 import logging
@@ -105,7 +106,17 @@ def exec_show_testfunction(arguments):
 
 def exec_show_experiment(arguments):
     from adare.frontend.terminal.experiment import print_experiment
-    print_experiment(name=arguments.name, ulid=arguments.ulid, dotnotation=arguments.dotnotation)
+
+    # Resolve experiment name if it's a path
+    experiment_name = arguments.name
+    if experiment_name and (project_directory := determine_projectdirectory(None)):
+        try:
+            experiment_name = resolve_experiment_path(arguments.name, project_directory)
+        except Exception:
+            # If path resolution fails, use the original name (might be a simple name or dotnotation)
+            experiment_name = arguments.name
+
+    print_experiment(name=experiment_name, ulid=arguments.ulid, dotnotation=arguments.dotnotation)
 
 
 def exec_show_experiments(arguments):

@@ -10,6 +10,13 @@ This guide shows you how to set up a virtual machine that's compatible with ADAR
 
 Once configured, export the VM as an ``.ova`` or ``.ovf`` file in **OVF 1.0 format**.
 
+
+General
+=======
+
+- Disable all that can create pop up's as far as possible (like update notifications etc., automatic updates, error reporting, etc.)
+- Disable screen lock and sleep mode if possible
+
 Windows Setup
 =============
 

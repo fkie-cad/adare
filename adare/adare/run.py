@@ -233,7 +233,13 @@ def environment():
 @click.option('--project', '-p', help='Name of the project')
 @click.option('--force', '-f', is_flag=True, help='Force update of the environment')
 def load(environment, project, force):
-    """Load an environment."""
+    """Load an environment.
+
+    ENVIRONMENT can be:
+    - Simple name: ubuntu24
+    - Relative path: environments/ubuntu24.yml
+    - Relative path: ./environments/ubuntu24.yaml
+    """
     args = SimpleNamespace(environment=environment, project=project, force=force)
     exec_with_error_printing(exec_environment_load, args)
 
@@ -242,7 +248,12 @@ def load(environment, project, force):
 @click.option('--project', '-p', help='Name of the project')
 @click.option('--with-vm', type=click.Path(exists=True), help='VM file path (OVA) to load automatically during environment creation')
 def create(name, project, with_vm):
-    """Create an environment."""
+    """Create an environment.
+
+    NAME can be:
+    - Simple name: ubuntu24
+    - Relative path: environments/ubuntu24
+    """
     args = SimpleNamespace(name=name, project=project, with_vm=with_vm)
     exec_with_error_printing(exec_environment_create, args)
 
@@ -300,7 +311,12 @@ experiment.add_alias('rm-env', 'remove-env')
 @click.argument('experiment')
 @click.option('--project', '-p', help='Name of the project')
 def create(experiment, project):
-    """Create a new experiment skeleton."""
+    """Create a new experiment skeleton.
+
+    EXPERIMENT can be:
+    - Simple name: test_csv
+    - Relative path: experiments/test_csv
+    """
     args = SimpleNamespace(experiment=experiment, project=project)
     exec_with_error_printing(exec_experiment_create, args)
 
@@ -310,7 +326,13 @@ def create(experiment, project):
 @click.option('--force', '-f', is_flag=True, help='Force update of the experiment')
 @click.option('--project', '-p', help='Name of the project')
 def load(experiment, environment, force, project):
-    """Load an experiment."""
+    """Load an experiment.
+
+    EXPERIMENT can be:
+    - Simple name: test_csv
+    - Relative path: experiments/test_csv
+    - Relative path: ./experiments/test_csv
+    """
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
@@ -331,7 +353,18 @@ def load(experiment, environment, force, project):
 @click.option('--project', '-p', help='Name of the project')
 @click.pass_context
 def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, project):
-    """Run an experiment in a given environment or all environments if none specified."""
+    """Run an experiment in a given environment or all environments if none specified.
+
+    EXPERIMENT can be:
+    - Simple name: test_csv
+    - Relative path: experiments/test_csv
+    - Relative path: ./experiments/test_csv
+
+    ENVIRONMENT can be:
+    - Simple name: ubuntu24
+    - Relative path: environments/ubuntu24.yml
+    - Relative path: ./environments/ubuntu24.yaml
+    """
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
@@ -493,7 +526,12 @@ def testfunction():
 @click.argument('name')
 @click.option('--project', '-p', help='Name of the project')
 def create(name, project):
-    """Create a new testfunction."""
+    """Create a new testfunction.
+
+    NAME can be:
+    - Simple name: my_test
+    - Relative path: testfunctions/my_test
+    """
     args = SimpleNamespace(name=name, project=project)
     exec_with_error_printing(exec_create_testfunction, args)
 
@@ -501,7 +539,12 @@ def create(name, project):
 @click.argument('name')
 @click.option('--project', '-p', help='Name of the project')
 def remove(name, project):
-    """Remove a testfunction."""
+    """Remove a testfunction.
+
+    NAME can be:
+    - Simple name: my_test
+    - Relative path: testfunctions/my_test
+    """
     args = SimpleNamespace(name=name, project=project)
     exec_with_error_printing(exec_remove_testfunction, args)
 
@@ -509,7 +552,13 @@ def remove(name, project):
 @click.argument('name')
 @click.option('--project', '-p', help='Name of the project')
 def load(name, project):
-    """Load a testfunction."""
+    """Load a testfunction.
+
+    NAME can be:
+    - Simple name: my_test
+    - Relative path: testfunctions/my_test
+    - Relative path: ./testfunctions/my_test
+    """
     args = SimpleNamespace(name=name, project=project)
     exec_with_error_printing(exec_load_testfunction, args)
 
