@@ -10,6 +10,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ---
 
 ## 🚀 Planned Features
+- [ ] add a wait_until action that wait until a specific icon/text occurs? (also with timeout parameter/chedcking itnerval) -> how to design it in a way we not make more screenshots than be able to check it as checking takes some time?!
+- [ ] add settings (default true) that in case of an failed test pulls all files mentioned in the playbook
 - [ ] Add support for Wayland-based Linux systems  
   - [ ] Validate if `ydotool` is suitable and reliable -> if yes make sure to coply to AGPLv3 
     - [ ] it is suitable but we need to develop some python bindings; build as indepedent package to be usable later similar to pyautogui! -> or wait until pyautogui supports wayland via ydotool (existing pr since 20.09.2025)
@@ -23,6 +25,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Enhance `adare vm test` with automatic platform and desktop environment detection  
 - [ ] Use standardized installation directory (via `platformdirs`) and migrate installer scripts to Python  
 - [ ] Implement condition/wait/retry logic in playbooks  
+- [ ] Implement watchers that if gui find failed searches for specific things (e.g. remove popup) and then tries again
 - [ ] Extend `expect_to_fail` with `expect_to_fail_on: ExceptionType` (specific exception handling)  
 - [ ] Improve ULID handling in CLI → allow lookup by unique partial combinations  
 - [ ] Allow metadata descriptions in test function sets  
