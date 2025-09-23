@@ -139,9 +139,8 @@ class BatchRunSummary:
 
     def print_summary(self) -> None:
         """Print a formatted summary table using Rich console."""
-        # For single experiment, just show a brief summary
+        # For single experiment, no additional summary needed - experiment already printed completion info
         if len(self.results) == 1:
-            self._print_single_result(self.results[0])
             return
 
         # For multiple experiments, show full table

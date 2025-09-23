@@ -55,7 +55,7 @@ Additional Configuration
       - **Inbound connections:** Allow
       - **Outbound connections:** Allow (default)
    
-   d. Click **OK**
+   d. Click **Apply** and then **OK**
 
 4. **Apply Changes:**
 

@@ -178,11 +178,63 @@ class BlockAction:
     description: str = ''
     when: Optional[List[Union['ExistsCondition', 'NotExistsCondition']]] = None
 
+@attrs.define
+class WaitCondition:
+    """Recursive boolean condition for wait_until actions."""
+    # Leaf conditions (mutually exclusive with operators)
+    exists: Optional[Target] = None
+    not_exists: Optional[Target] = None
+
+    # Boolean operators (mutually exclusive with leaf conditions)
+    all: Optional[List['WaitCondition']] = None  # AND logic
+    any: Optional[List['WaitCondition']] = None  # OR logic
+    negate: Optional['WaitCondition'] = None     # NOT logic
+
+    def __attrs_post_init__(self):
+        """Validation: exactly one field must be set."""
+        fields_set = sum([
+            self.exists is not None,
+            self.not_exists is not None,
+            self.all is not None,
+            self.any is not None,
+            self.negate is not None
+        ])
+        if fields_set != 1:
+            raise ValueError("WaitCondition must have exactly one field set")
+
+    def validate_depth(self, current_depth=0, max_depth=10):
+        """Prevent infinite recursion by checking nesting depth."""
+        if current_depth > max_depth:
+            raise ValueError(f"WaitCondition nesting exceeds maximum depth of {max_depth}")
+
+        # Recursively validate nested conditions
+        if self.all:
+            for condition in self.all:
+                condition.validate_depth(current_depth + 1, max_depth)
+        elif self.any:
+            for condition in self.any:
+                condition.validate_depth(current_depth + 1, max_depth)
+        elif self.negate:
+            self.negate.validate_depth(current_depth + 1, max_depth)
+
+@attrs.define
+class WaitUntilAction:
+    condition: WaitCondition
+    timeout: float = 60.0
+    check_interval: float = 0.0  # 0 = no delay between checks, let processing time be the natural interval
+    initial_delay: float = 5.0   # Default 5s delay to let UI stabilize
+    description: str = ''
+
+    def __attrs_post_init__(self):
+        """Validate condition tree depth."""
+        self.condition.validate_depth()
+
 # Now define ActionType after all classes
 ActionType = Union[
     ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, ActionTestAction,
-    CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, PullAction, PauseAction
+    CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, PullAction, PauseAction,
+    WaitUntilAction
 ]
 
 @attrs.define
@@ -242,7 +294,17 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
         Optional[VariableRegistry],
         lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
     )
-    
+
+    # Register structure hook for WaitCondition
+    converter.register_structure_hook(
+        WaitCondition,
+        lambda obj, _: _structure_wait_condition(obj, converter)
+    )
+    converter.register_structure_hook(
+        Optional[WaitCondition],
+        lambda obj, _: _structure_wait_condition(obj, converter) if obj is not None else None
+    )
+
     # Register strict structure hooks for all main classes to validate fields
     _register_strict_hooks(converter)
     
@@ -280,6 +342,8 @@ def _structure_action(obj, converter):
         return converter.structure(obj['pull'], PullAction)
     if 'pause' in obj:
         return converter.structure(obj['pause'], PauseAction)
+    if 'wait_until' in obj:
+        return converter.structure(obj['wait_until'], WaitUntilAction)
     raise ValueError(f"Unknown action: {obj}")
 
 def _structure_condition(obj, converter):
@@ -309,6 +373,25 @@ def _structure_strategy(obj, converter):
     if 'SmallestStrategy' in obj:
         return converter.structure(obj['SmallestStrategy'], SmallestStrategy)
     raise ValueError(f"Unknown strategy: {obj}")
+
+def _structure_wait_condition(obj, converter):
+    """Structure WaitCondition objects with recursive support."""
+    if 'exists' in obj:
+        target = converter.structure(obj['exists'], Target)
+        return WaitCondition(exists=target)
+    if 'not_exists' in obj:
+        target = converter.structure(obj['not_exists'], Target)
+        return WaitCondition(not_exists=target)
+    if 'all' in obj:
+        conditions = [_structure_wait_condition(condition, converter) for condition in obj['all']]
+        return WaitCondition(all=conditions)
+    if 'any' in obj:
+        conditions = [_structure_wait_condition(condition, converter) for condition in obj['any']]
+        return WaitCondition(any=conditions)
+    if 'not' in obj:
+        condition = _structure_wait_condition(obj['not'], converter)
+        return WaitCondition(negate=condition)
+    raise ValueError(f"Unknown wait condition: {obj}")
 
 def _register_strict_hooks(converter):
     """Register strict structure hooks that validate all fields."""
@@ -355,6 +438,14 @@ def _register_strict_hooks(converter):
                 Optional[VariableRegistry],
                 lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
             )
+            fresh_converter.register_structure_hook(
+                WaitCondition,
+                lambda obj, _: _structure_wait_condition(obj, fresh_converter)
+            )
+            fresh_converter.register_structure_hook(
+                Optional[WaitCondition],
+                lambda obj, _: _structure_wait_condition(obj, fresh_converter) if obj is not None else None
+            )
             return fresh_converter.structure(obj, cls)
         return strict_structure_hook
     
@@ -362,7 +453,7 @@ def _register_strict_hooks(converter):
     for cls in [Target, Settings, ClickAction,
                 DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,
                 ActionTestAction, CommandAction, ScreenshotAction, BlockAction,
-                SaveTimestampAction, PullAction, PauseAction, ExistsCondition, NotExistsCondition,
+                SaveTimestampAction, PullAction, PauseAction, WaitUntilAction, WaitCondition, ExistsCondition, NotExistsCondition,
                 SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
                 TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
                 BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook]:

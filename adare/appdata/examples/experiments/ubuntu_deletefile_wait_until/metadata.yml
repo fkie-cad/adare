@@ -1,0 +1,12 @@
+environments:
+ - ubuntu24043
+
+description: "File deletion analysis in Ubuntu Linux"
+tags:
+  - linux
+  - ubuntu
+  - file-deletion
+  - filesystem
+  - test
+  - example
+  - guiinteraction

@@ -1,0 +1,64 @@
+settings:
+  idle: 0.5
+  timeout: 60
+
+actions:
+  # Simple existence check
+  - wait_until:
+      condition:
+        exists:
+          text: "Documents"
+      timeout: 10
+      description: "Wait for Documents text to appear"
+
+  # Multiple AND conditions
+  - wait_until:
+      condition:
+        all:
+          - exists:
+              text: "Documents"
+          - exists:
+              image: "file_manager.png"
+          - not_exists:
+              text: "Loading"
+      timeout: 15
+      description: "Wait for Documents folder and file manager to be ready"
+
+  # OR conditions
+  - wait_until:
+      condition:
+        any:
+          - exists:
+              text: "Success"
+          - exists:
+              text: "Complete"
+          - exists:
+              text: "Done"
+      timeout: 20
+      description: "Wait for any success message"
+
+  # Complex nested logic
+  - wait_until:
+      condition:
+        all:
+          - exists:
+              image: "dialog.png"
+          - any:
+              - exists:
+                  text: "OK"
+              - exists:
+                  text: "Yes"
+          - not:
+              exists:
+                text: "Error"
+      timeout: 30
+      description: "Wait for confirmation dialog with OK/Yes but no errors"
+
+  # Simple NOT condition
+  - wait_until:
+      condition:
+        not:
+          exists:
+            text: "Loading"
+      timeout: 5
+      description: "Wait until loading disappears"

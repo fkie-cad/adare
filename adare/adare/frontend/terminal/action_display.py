@@ -136,11 +136,52 @@ def get_action_display_info(action_type: ActionType, action_data: dict, is_compl
     
     elif action_type == ActionType.PULL:
         src = action_data.get('src') or action_data.get('source')
-        
+
         if src:
             return f"pull {src}"
         return "pull files"
-    
+
+    elif action_type == ActionType.WAIT_UNTIL:
+        target_info = action_data.get('target_info')
+        timeout = action_data.get('timeout')
+        found = action_data.get('found')
+        initial_delay = action_data.get('initial_delay')
+        check_interval = action_data.get('check_interval')
+
+        # Build the target description
+        target_desc = "target"
+        if target_info:
+            if target_info.get('image'):
+                target_desc = f"image '{target_info['image']}'"
+            elif target_info.get('text'):
+                target_desc = f"text '{target_info['text']}'"
+            elif target_info.get('position'):
+                target_desc = f"position {target_info['position']}"
+
+        # For complete events, include result
+        if is_complete:
+            if found:
+                return f"wait until {target_desc} appears - found text"
+            elif timeout:
+                return f"wait until {target_desc} appears (timeout after {timeout}s)"
+            else:
+                return f"wait until {target_desc} appears - failed"
+        else:
+            # For start events, show configuration
+            config_parts = []
+            if timeout:
+                config_parts.append(f"timeout: {timeout}s")
+            if initial_delay and initial_delay > 0:
+                config_parts.append(f"delay: {initial_delay}s")
+            if check_interval and check_interval > 0:
+                config_parts.append(f"interval: {check_interval}s")
+
+            if config_parts:
+                config_str = f" ({', '.join(config_parts)})"
+                return f"wait until {target_desc} appears{config_str}"
+            else:
+                return f"wait until {target_desc} appears"
+
     else:
         # Throw exception for unhandled action types to catch missing cases
         raise ValueError(f"Unhandled action type in get_action_display_info: {action_type} (value: {action_type.value})")

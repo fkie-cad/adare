@@ -44,6 +44,8 @@ class EventType(Enum):
     PAUSE_COMPLETE = "pause_complete"
     BLOCK_START = "block_start"
     BLOCK_COMPLETE = "block_complete"
+    WAIT_UNTIL_START = "wait_until_start"
+    WAIT_UNTIL_COMPLETE = "wait_until_complete"
 
 
 class ActionType(Enum):
@@ -64,6 +66,7 @@ class ActionType(Enum):
     PULL = "pull"
     PAUSE = "pause"
     BLOCK = "block"
+    WAIT_UNTIL = "wait_until"
     
     # Internal step action types (not used in playbook YAML)
     FIND = "find"
@@ -103,6 +106,8 @@ class EventTypeResolver:
             "PauseActionCompleteEvent": EventType.PAUSE_COMPLETE,
             "BlockActionStartEvent": EventType.BLOCK_START,
             "BlockActionCompleteEvent": EventType.BLOCK_COMPLETE,
+            "WaitUntilActionStartEvent": EventType.WAIT_UNTIL_START,
+            "WaitUntilActionCompleteEvent": EventType.WAIT_UNTIL_COMPLETE,
         }
     
     def resolve_event_type(self, event_data: Dict[str, Any]) -> EventType:
@@ -167,6 +172,8 @@ class EventTypeResolver:
             return EventType.PAUSE_COMPLETE if is_complete else EventType.PAUSE_START
         elif action_type_raw == "block":
             return EventType.BLOCK_COMPLETE if is_complete else EventType.BLOCK_START
+        elif action_type_raw == "waituntil":
+            return EventType.WAIT_UNTIL_COMPLETE if is_complete else EventType.WAIT_UNTIL_START
         elif action_type_raw == "find":
             return EventType.ACTION_COMPLETE if is_complete else EventType.ACTION_START
         elif action_type_raw == "execute":
@@ -206,6 +213,8 @@ class EventTypeResolver:
             return ActionType.PAUSE
         elif event_name.startswith("block_"):
             return ActionType.BLOCK
+        elif event_name.startswith("wait_until_"):
+            return ActionType.WAIT_UNTIL
         else:
             # For generic action events, check the original action data
             if action_data:

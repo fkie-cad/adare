@@ -190,7 +190,7 @@ def __experiment_update(experiment_ulid, experiment_name, experiment_directory, 
     if not force and not experiment_database.check_for_experiment_change(experiment_ulid, experiment_directory.sha256):
         raise ExperimentNotChanged(log, f'experiment [i]{experiment_ulid}[/i] has not changed')
     log.info(f'experiment {experiment_ulid} has changed')
-    num_runs = experiment_database.get_experiment_run_count(experiment_ulid)
+    num_runs = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
     if not force and num_runs > 0:
         raise LoggedException(log,
                               f'experiment [i]{experiment_ulid}[/i] has changed, use --force to overwrite and delete all related experiment runs')
