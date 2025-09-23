@@ -74,6 +74,7 @@ class Settings:
     timeout: Optional[float] = None
     screenshot: Optional[dict] = None
     continue_on_test_failure: bool = False
+    auto_pull_on_test_failure: bool = True
 
 @attrs.define
 class Target:

@@ -85,6 +85,7 @@ Configure experiment-wide behavior:
 
      # Test failure handling
      continue_on_test_failure: true # Continue experiment even if tests fail
+     auto_pull_on_test_failure: true # Automatically pull files on test failure for analysis
 
      # Retry behavior
      retry:
@@ -252,6 +253,33 @@ Basic Test Structure
 
 Test Failure Handling
 ======================
+
+**Auto-Pull on Test Failure**
+
+When ``auto_pull_on_test_failure`` is enabled (default: ``true``), ADARE automatically pulls all files mentioned in pull actions when any test fails. This provides valuable forensic data for failure analysis:
+
+.. code-block:: yaml
+
+   settings:
+     auto_pull_on_test_failure: true  # Pull files for failure analysis (default)
+     continue_on_test_failure: true   # Continue after test failures
+
+   actions:
+     - command:
+         command: "echo 'log entry' > /var/log/app.log"
+     - pull:
+         src: "/var/log/app.log"
+         description: "Application logs"
+     - test: validate_log_content
+
+If ``validate_log_content`` fails, ADARE will automatically pull ``/var/log/app.log`` to the artifacts directory for analysis, even if the explicit pull action hasn't been reached yet.
+
+Key behaviors:
+
+* Auto-pull only triggers once per experiment execution
+* Files are pulled with variable resolution applied
+* Failed auto-pulls are logged but don't cause experiment failure
+* Auto-pulled files are stored in the standard artifacts directory
 
 **Expect Test to Fail**
 

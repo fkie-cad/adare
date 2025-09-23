@@ -67,6 +67,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
 - [x] Visual bug: when no tag is set for experiment or env only # is single in a line (in this case remove it)
 - [x] ctrl-c in multi execute setup does not show prompt that ask wheter to skip all coming or to continue with next experiment
+- [ ] commands can be lists and this gives some weird results! recognize on parsing
 
 ---
 
