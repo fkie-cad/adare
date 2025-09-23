@@ -1,6 +1,7 @@
 # internal imports
 from adare.backend.basics import determine_projectdirectory
 from adare.exceptions import NoProjectFoundError
+from adare.helperfunctions.path_resolution import resolve_testfunction_path
 
 # configure logging
 import logging
@@ -10,9 +11,10 @@ log = logging.getLogger(__name__)
 def exec_create_testfunction(arguments):
     from adare.backend.testfunction.commands import testfunction_create
     if project_directory := determine_projectdirectory(arguments.project):
+        testfunction_name = resolve_testfunction_path(arguments.name, project_directory)
         testfunction_create(
             project_directory,
-            arguments.name
+            testfunction_name
         )
     else:
         raise NoProjectFoundError(log, message='no project directory found')
@@ -21,9 +23,10 @@ def exec_create_testfunction(arguments):
 def exec_remove_testfunction(arguments):
     from adare.backend.testfunction.commands import testfunction_remove
     if project_directory := determine_projectdirectory(arguments.project):
+        testfunction_name = resolve_testfunction_path(arguments.name, project_directory)
         testfunction_remove(
             project_directory,
-            arguments.name
+            testfunction_name
         )
     else:
         raise NoProjectFoundError(log, message='no project directory found')
@@ -32,9 +35,10 @@ def exec_remove_testfunction(arguments):
 def exec_load_testfunction(arguments):
     from adare.backend.testfunction.commands import testfunction_load
     if project_directory := determine_projectdirectory(arguments.project):
+        testfunction_name = resolve_testfunction_path(arguments.name, project_directory)
         testfunction_load(
             project_directory,
-            arguments.name
+            testfunction_name
         )
     else:
         raise NoProjectFoundError(log, message='no project directory found')
