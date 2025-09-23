@@ -32,6 +32,9 @@ from adare.backend.experiment.test_loader import TestLoader
 # Action event imports for flow console display
 from adare.backend.events.emitters import emit_action
 
+# Import playbook analysis utility
+from adare.helperfunctions.playbook_analysis import collect_pull_action_files
+
 log = logging.getLogger(__name__)
 
 
@@ -112,10 +115,14 @@ class PlaybookController:
         
         # Initialize specialized modules
         self._initialize_modules()
-        
+
         # Performance tracking
         self.start_time: Optional[float] = None
         self.action_timings: Dict[str, float] = {}
+
+        # Auto-pull on test failure tracking
+        self._auto_pull_files: List[str] = []
+        self._auto_pull_executed: bool = False
     
     def _initialize_modules(self):
         """Initialize specialized modules for clean separation of concerns."""
@@ -290,6 +297,14 @@ class PlaybookController:
             self.execution_context.update(var_dict)
             log.debug(f"Loaded {len(playbook.variables.variables)} variables into execution context")
         
+        # Collect files to auto-pull on test failure if setting is enabled
+        if hasattr(playbook, 'settings') and playbook.settings and playbook.settings.auto_pull_on_test_failure:
+            self._auto_pull_files = collect_pull_action_files(playbook)
+            if self._auto_pull_files:
+                log.info(f"Auto-pull on test failure enabled - collected {len(self._auto_pull_files)} files: {self._auto_pull_files}")
+            else:
+                log.debug("Auto-pull on test failure enabled but no pull actions found in playbook")
+
         # Execute actions sequentially
         total_actions = len(playbook.actions)
         log.info(f"Executing {total_actions} playbook actions...")
@@ -377,11 +392,19 @@ class PlaybookController:
                 # Check if we should continue on test failure
                 should_continue = False
                 if self._is_test_action(resolved_action):
-                    # This is a test action - check continue_on_test_failure setting
-                    if hasattr(playbook, 'settings') and playbook.settings and playbook.settings.continue_on_test_failure:
-                        log.info(f"Test action failed but continuing due to continue_on_test_failure setting")
-                        should_continue = True
-                
+                    # This is a test action - check settings
+                    if hasattr(playbook, 'settings') and playbook.settings:
+                        # Auto-pull files on test failure if enabled
+                        if playbook.settings.auto_pull_on_test_failure and self._auto_pull_files and not self._auto_pull_executed:
+                            log.info(f"Test failed - triggering auto-pull of {len(self._auto_pull_files)} files")
+                            await self._execute_auto_pull()
+                            self._auto_pull_executed = True  # Only auto-pull once per execution
+
+                        # Check continue_on_test_failure setting
+                        if playbook.settings.continue_on_test_failure:
+                            log.info(f"Test action failed but continuing due to continue_on_test_failure setting")
+                            should_continue = True
+
                 if not should_continue:
                     # Stop execution after failed action
                     break
@@ -468,3 +491,34 @@ class PlaybookController:
             result_data = action_result.data.get('result', {})
             return 'status' in result_data and 'details' in result_data
         return False
+
+    async def _execute_auto_pull(self):
+        """Execute auto-pull of files mentioned in playbook after test failure."""
+        log.info("Executing auto-pull for test failure analysis")
+
+        for file_path in self._auto_pull_files:
+            try:
+                # Resolve variables in file path
+                resolved_path = self.variable_resolver.replace_variables(file_path, self.execution_context)
+
+                # Create a programmatic pull action
+                auto_pull_action = PullAction(
+                    src=resolved_path,
+                    description=f"Auto-pull on test failure: {resolved_path}"
+                )
+
+                log.info(f"Auto-pulling file: {resolved_path}")
+
+                # Execute the pull using the action executor
+                result = await self.action_executor.execute_programmatic_pull(
+                    src_path=resolved_path,
+                    description=f"Auto-pull on test failure: {resolved_path}"
+                )
+
+                if result.success:
+                    log.info(f"Successfully auto-pulled: {resolved_path}")
+                else:
+                    log.warning(f"Failed to auto-pull {resolved_path}: {result.message}")
+
+            except Exception as e:
+                log.error(f"Error during auto-pull of {file_path}: {e}", exc_info=True)

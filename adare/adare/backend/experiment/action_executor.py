@@ -688,6 +688,30 @@ class ActionExecutor:
                 message=f"Pull operation failed: {str(e)}"
             )
 
+    async def execute_programmatic_pull(self, src_path: str, description: str = "Programmatic pull") -> ActionResult:
+        """
+        Execute a pull operation programmatically without a formal PullAction.
+
+        This method is used for auto-pulls triggered by test failures or other
+        programmatic scenarios where we need to pull files without explicit
+        playbook pull actions.
+
+        Args:
+            src_path: Source path on VM to pull from
+            description: Description for logging
+
+        Returns:
+            ActionResult with pull operation details
+        """
+        # Create a temporary PullAction for the pull operation
+        pull_action = PullAction(
+            src=src_path,
+            description=description
+        )
+
+        # Execute using the existing _execute_pull logic
+        return await self._execute_pull(pull_action, parent_event_id=None, event_emitter=None)
+
     async def _execute_pause(self, action: PauseAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
         """Execute pause action - wait for user input to continue."""
         try:
