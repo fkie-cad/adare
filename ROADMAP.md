@@ -11,7 +11,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 
 ## 🚀 Planned Features
 - [ ] add a wait_until action that wait until a specific icon/text occurs? (also with timeout parameter/chedcking itnerval) -> how to design it in a way we not make more screenshots than be able to check it as checking takes some time?!
-- [ ] add settings (default true) that in case of an failed test pulls all files mentioned in the playbook
+- [x] add settings (default true) that in case of an failed test pulls all files mentioned in the playbook
 - [ ] Add support for Wayland-based Linux systems  
   - [ ] Validate if `ydotool` is suitable and reliable -> if yes make sure to coply to AGPLv3 
     - [ ] it is suitable but we need to develop some python bindings; build as indepedent package to be usable later similar to pyautogui! -> or wait until pyautogui supports wayland via ydotool (existing pr since 20.09.2025)
@@ -41,7 +41,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] Experiment development guide (pause, idle, tips)  
   - [ ] Default VM resources (cores, RAM) and how to configure them  
   - [ ] Current limitation: SVG icons not supported  
-  - [ ] Installation guide → add `eval "$(_ADARE_COMPLETE=zsh_source adare)"` and autocomplete tutorial  
+  - [ ] Installation guide → add `eval "$(_ADARE_COMPLETE=zsh_source adare)"` and autocomplete tutorial 
+  - [ ] add info that we can only run one experiment inside a specific vm/env if not in a separate project 
 - [ ] Simplify and clarify logging:  
   - [ ] Define logging levels more clearly  
   - [ ] Replace excessive debug logging with structured log levels  
@@ -68,6 +69,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [x] Visual bug: when no tag is set for experiment or env only # is single in a line (in this case remove it)
 - [x] ctrl-c in multi execute setup does not show prompt that ask wheter to skip all coming or to continue with next experiment
 - [ ] commands can be lists and this gives some weird results! recognize on parsing
+- [ ] multiple project shared directory and vm?! should not happen
 
 ---
 
@@ -78,3 +80,4 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [x] Test if list/info commands work outside of an project and then prefix all with the project name (also check if project name is unique?!)
 - [ ] Test if environment with zenodo url works!
 - [ ] Test Multiproject setup (same environemnt/name in different Projects)
+- [ ] Test if auto_pull_on_test_failure works!

@@ -16,8 +16,9 @@ log = logging.getLogger(__name__)
 
 class RunListPanel:
 
-    def __init__(self, runs: pd.DataFrame):
+    def __init__(self, runs: pd.DataFrame, project: str = None):
         self.runs = runs
+        self.project = project
 
     def __rich__(self) -> Panel:
         title = '[b gold3]runs[/b gold3]'
@@ -32,10 +33,16 @@ class RunListPanel:
         for _, row in self.runs.iterrows():
             # Determine if run is fake or real
             run_type = "[red]fake[/red]" if row.get('fake', False) else "[green]real[/green]"
-            
+
+            # Show context-aware experiment name
+            experiment_display = row['experiment_dotnotation']
+            if self.project and experiment_display.startswith(f"{self.project}."):
+                # Remove project prefix when we're in project context
+                experiment_display = experiment_display[len(self.project) + 1:]
+
             table.add_row(
                 row['id'],
-                row['experiment_dotnotation'],
+                experiment_display,
                 run_type,
                 StatusEnum.get_icon(row['status'], color=True),
                 StatusEnum.get_icon(row['result_status'], color=True),
@@ -72,7 +79,7 @@ def print_run_list(project: str, environment: str = None, experiment: str = None
         # Use existing Rich formatting
         console = DefaultConsole()
         layout = Layout(name="root")
-        panel = RunListPanel(runs)
+        panel = RunListPanel(runs, project=project)
         layout.update(panel)
         console.print(layout)
 
