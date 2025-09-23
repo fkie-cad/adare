@@ -9,7 +9,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 
 ---
 
-## 🚀 Planned Features  
+## 🚀 Planned Features
 - [ ] Add support for Wayland-based Linux systems  
   - [ ] Validate if `ydotool` is suitable and reliable -> if yes make sure to coply to AGPLv3 
     - [ ] it is suitable but we need to develop some python bindings; build as indepedent package to be usable later similar to pyautogui! -> or wait until pyautogui supports wayland via ydotool (existing pr since 20.09.2025)
@@ -73,3 +73,4 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Test if VM download via URL in environment works 
 - [x] Test if list/info commands work outside of an project and then prefix all with the project name (also check if project name is unique?!)
 - [ ] Test if environment with zenodo url works!
+- [ ] Test Multiproject setup (same environemnt/name in different Projects)

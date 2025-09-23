@@ -37,15 +37,19 @@ import base64
 
 class AdareVMServer:
     """WebSocket server for adarevm GUI automation and test execution."""
-    
+
     def __init__(self, host="0.0.0.0", port=18765):
         self.host = host
         self.port = port
         self.clients: Set[websockets.WebSocketServerProtocol] = set()
-        
+
         # Test management state
         self.testfunctions_dir: Optional[Path] = None
         self.current_variables: Dict[str, Any] = {}
+
+        # Task management for non-blocking tool execution
+        self.running_tasks: Dict[str, asyncio.Task] = {}
+        self.client_tasks: Dict[websockets.WebSocketServerProtocol, Set[str]] = {}
         
         # Tool registry
         self.tools = {
@@ -95,9 +99,10 @@ class AdareVMServer:
     async def handle_client(self, websocket):
         """Handle a new client connection."""
         self.clients.add(websocket)
+        self.client_tasks[websocket] = set()
         client_address = websocket.remote_address
         log.info(f"Client connected: {client_address}")
-        
+
         try:
             # Send welcome message
             await self.send_event(websocket, EventType.LOG, {
@@ -117,7 +122,9 @@ class AdareVMServer:
         except Exception as e:
             log.error(f"Unexpected error handling client {client_address}: {e}", exc_info=True)
         finally:
+            await self._cleanup_client_tasks(websocket)
             self.clients.discard(websocket)
+            self.client_tasks.pop(websocket, None)
     
     async def handle_message(self, websocket, message_str: str):
         """Handle incoming message from client."""
@@ -127,8 +134,6 @@ class AdareVMServer:
             
             if msg_type == MessageType.TOOL_CALL:
                 await self.handle_tool_call(websocket, message)
-            elif msg_type == MessageType.PING:
-                await self.send_pong(websocket)
             else:
                 log.warning(f"Unknown message type: {msg_type}")
                 
@@ -143,29 +148,41 @@ class AdareVMServer:
             await self.send_error(websocket, str(e))
     
     async def handle_tool_call(self, websocket, message: Dict[str, Any]):
-        """Handle a tool call from the client."""
+        """
+        Handle a tool call from the client.
+
+        Tool execution runs in background tasks to avoid blocking the message loop,
+        allowing the server to continue processing ping/pong and other messages
+        during long-running operations like dependency installation.
+        """
         call_id = message.get('id')
         tool_name = message.get('tool')
         params = message.get('params', {})
-        
+
         log.info(f"Tool call: {tool_name} with params: {params}")
-        
+
         try:
             if tool_name not in self.tools:
                 raise ValueError(f"Unknown tool: {tool_name}")
-            
-            # Execute the tool
+
+            # Execute the tool in background task to avoid blocking message loop
             tool_func = self.tools[tool_name]
-            result = await tool_func(websocket, **params)
-            
-            # Send result back
-            result_msg = ToolResultMessage(
-                id=call_id,
-                success=True,
-                result=result
-            )
-            await websocket.send(result_msg.to_json())
-            
+            task_id = f"{call_id}_{tool_name}"
+
+            # Create background task for tool execution
+            task = asyncio.create_task(tool_func(websocket, **params))
+            self.running_tasks[task_id] = task
+
+            # Track task for this client
+            if websocket not in self.client_tasks:
+                self.client_tasks[websocket] = set()
+            self.client_tasks[websocket].add(task_id)
+
+            # Create completion handler that will send result when task finishes
+            asyncio.create_task(self._handle_task_completion(task_id, websocket, call_id))
+
+            log.debug(f"[{call_id[:8]}] Started background task for {tool_name}")
+
         except ValueError as e:
             log.error(f"Invalid tool or parameters: {tool_name}: {e}")
             error_msg = ToolResultMessage(
@@ -192,10 +209,70 @@ class AdareVMServer:
         """Send an error event to the client."""
         await self.send_event(websocket, EventType.ERROR, {"error": error})
     
-    async def send_pong(self, websocket):
-        """Send a pong response."""
-        pong_msg = {"type": MessageType.PONG, "timestamp": time.time()}
-        await websocket.send(json.dumps(pong_msg))
+
+    async def _cleanup_client_tasks(self, websocket):
+        """Cancel all running tasks for a disconnected client."""
+        if websocket not in self.client_tasks:
+            return
+
+        task_ids = list(self.client_tasks[websocket])
+        if task_ids:
+            log.info(f"Cancelling {len(task_ids)} running tasks for disconnected client")
+
+        for task_id in task_ids:
+            if task_id in self.running_tasks:
+                task = self.running_tasks[task_id]
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception as e:
+                        log.warning(f"Error cancelling task {task_id}: {e}")
+                del self.running_tasks[task_id]
+
+    async def _handle_task_completion(self, task_id: str, websocket, call_id: str):
+        """Handle completion of a background tool execution task."""
+        try:
+            task = self.running_tasks.get(task_id)
+            if not task:
+                log.warning(f"Task {task_id} not found in running tasks")
+                return
+
+            try:
+                result = await task
+                # Send successful result back to client
+                result_msg = ToolResultMessage(
+                    id=call_id,
+                    success=True,
+                    result=result
+                )
+                if websocket in self.clients:  # Check if client still connected
+                    await websocket.send(result_msg.to_json())
+                    log.debug(f"[{call_id[:8]}] Background task completed successfully")
+
+            except asyncio.CancelledError:
+                log.debug(f"[{call_id[:8]}] Background task was cancelled")
+                # Don't send error for cancelled tasks, client likely disconnected
+
+            except Exception as e:
+                log.error(f"[{call_id[:8]}] Background task failed: {e}", exc_info=True)
+                # Send error result back to client
+                error_msg = ToolResultMessage(
+                    id=call_id,
+                    success=False,
+                    error=f"Tool execution error: {e}"
+                )
+                if websocket in self.clients:  # Check if client still connected
+                    await websocket.send(error_msg.to_json())
+
+        finally:
+            # Clean up task tracking
+            if task_id in self.running_tasks:
+                del self.running_tasks[task_id]
+            if websocket in self.client_tasks and task_id in self.client_tasks[websocket]:
+                self.client_tasks[websocket].discard(task_id)
     
     async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
         """Broadcast an event to all connected clients."""

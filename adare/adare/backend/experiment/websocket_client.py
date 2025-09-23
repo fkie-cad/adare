@@ -73,7 +73,12 @@ class AdareVMClient:
                 log.info(f"Connecting to adarevm server at {self.server_url}")
                 
                 self.websocket = await asyncio.wait_for(
-                    websockets.connect(self.server_url, max_size=None),
+                    websockets.connect(
+                        self.server_url,
+                        max_size=None,
+                        ping_interval=None,    # Disable automatic WebSocket pings
+                        ping_timeout=None      # Disable ping timeouts
+                    ),
                     timeout=timeout
                 )
                 
@@ -399,16 +404,8 @@ class AdareVMClient:
     # Convenience Methods
     
     async def ping(self) -> bool:
-        """Ping the server to check connectivity."""
-        try:
-            if not self.connected:
-                return False
-            
-            ping_msg = {"type": MessageType.PING, "timestamp": time.time()}
-            await self.websocket.send(json.dumps(ping_msg))
-            return True
-        except (websockets.exceptions.WebSocketException, ConnectionError, OSError, json.JSONEncodeError):
-            return False
+        """Check connectivity by testing if websocket is still connected."""
+        return self.connected and self.websocket is not None
     
     async def wait_for_connection(self, timeout: float = 30.0) -> bool:
         """Wait for connection to be established."""

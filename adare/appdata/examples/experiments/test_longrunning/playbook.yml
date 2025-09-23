@@ -1,0 +1,20 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+  continue_on_test_failure: true
+
+actions:
+  # do an command that sleeps for 5 minutes
+  - command:
+      name: "sleep 1"
+      description: "Sleep with shell=True"
+      command: "sleep 120"
+      shell: true
+  - command:
+      name: "sleep 2"
+      description: "Sleep with shell=False"
+      command: "sleep 120"
+      shell: false

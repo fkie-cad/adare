@@ -207,7 +207,6 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
 
     # Convert variables to VariableRegistry if present (automatic variables added during resolution)
     if 'variables' in data and data['variables']:
-        from adarelib.common.variables import VariableRegistry
         data['variables'] = VariableRegistry.from_dict(data['variables'])
     # Note: automatic variables will be merged during variable resolution, not during parsing
     
