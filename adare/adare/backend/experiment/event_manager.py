@@ -11,9 +11,9 @@ import time
 
 from adare.types.playbook import (
     ActionType, ClickAction, DragAction,
-    KeyboardAction, IdleAction, ScrollAction, GotoAction, 
+    KeyboardAction, IdleAction, ScrollAction, GotoAction,
     CommandAction, ScreenshotAction, BlockAction, ActionTestAction,
-    SaveTimestampAction, PullAction
+    SaveTimestampAction, PullAction, WaitUntilAction
 )
 
 # Action event imports for flow console display
@@ -31,6 +31,7 @@ from adare.types.actions import (
     BlockActionStartEvent, BlockActionCompleteEvent,
     SaveTimestampActionStartEvent, SaveTimestampActionCompleteEvent,
     PullActionStartEvent, PullActionCompleteEvent,
+    WaitUntilActionStartEvent, WaitUntilActionCompleteEvent,
     FindActionStartEvent, FindActionCompleteEvent,
     ExecuteActionStartEvent, ExecuteActionCompleteEvent
 )
@@ -119,6 +120,20 @@ class EventManager:
             return PullActionStartEvent(
                 source=getattr(action, 'src', None),
                 destination=getattr(action, 'dst', None),
+                **event_data
+            )
+        elif isinstance(action, WaitUntilAction):
+            # Extract target from condition (exists or not_exists)
+            target = None
+            if action.condition.exists:
+                target = action.condition.exists
+            elif action.condition.not_exists:
+                target = action.condition.not_exists
+            return WaitUntilActionStartEvent(
+                target_info=self._get_target_info(target),
+                timeout=getattr(action, 'timeout', None),
+                check_interval=getattr(action, 'check_interval', None),
+                initial_delay=getattr(action, 'initial_delay', None),
                 **event_data
             )
         elif isinstance(action, FindAction):
@@ -212,6 +227,19 @@ class EventManager:
                 destination=getattr(action, 'dst', None),
                 files_copied=result.data.get('files_copied') if result.data else None,
                 total_size=result.data.get('total_size') if result.data else None,
+                **event_data
+            )
+        elif isinstance(action, WaitUntilAction):
+            # Extract target from condition (exists or not_exists)
+            target = None
+            if action.condition.exists:
+                target = action.condition.exists
+            elif action.condition.not_exists:
+                target = action.condition.not_exists
+            event = WaitUntilActionCompleteEvent(
+                target_info=self._get_target_info(target),
+                coordinates=result.coordinates,
+                found=result.success,
                 **event_data
             )
         elif isinstance(action, FindAction):

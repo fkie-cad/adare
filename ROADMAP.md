@@ -10,7 +10,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ---
 
 ## 🚀 Planned Features
-- [ ] add a wait_until action that wait until a specific icon/text occurs? (also with timeout parameter/chedcking itnerval) -> how to design it in a way we not make more screenshots than be able to check it as checking takes some time?!
+- [x] add a wait_until action that wait until a specific icon/text occurs? (also with timeout parameter/chedcking itnerval) -> how to design it in a way we not make more screenshots than be able to check it as checking takes some time?! -> test
 - [x] add settings (default true) that in case of an failed test pulls all files mentioned in the playbook
 - [ ] Add support for Wayland-based Linux systems  
   - [ ] Validate if `ydotool` is suitable and reliable -> if yes make sure to coply to AGPLv3 
@@ -69,7 +69,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [x] Visual bug: when no tag is set for experiment or env only # is single in a line (in this case remove it)
 - [x] ctrl-c in multi execute setup does not show prompt that ask wheter to skip all coming or to continue with next experiment
 - [ ] commands can be lists and this gives some weird results! recognize on parsing
-- [ ] multiple project shared directory and vm?! should not happen
+- [ ] multiple project shared directory and vm?! should not happen -> clear separation for multiple projects not happening also not in testfunction sets -> maybe database per project?! 
+- [ ] .ova may result in input issues - maybe extract import ovf file simply then?! 
 
 ---
 

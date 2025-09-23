@@ -394,6 +394,33 @@ class PauseActionCompleteEvent(ActionCompleteEvent):
 
 
 # -------------------------------
+# Wait Until Action Events
+# -------------------------------
+
+@attrs.define
+class WaitUntilActionStartEvent(ActionStartEvent):
+    """Event for wait until action start."""
+    target_info: Optional[Dict[str, Any]] = None
+    timeout: Optional[float] = None
+    check_interval: Optional[float] = None
+    initial_delay: Optional[float] = None
+
+    def get_event_type(self) -> EventType:
+        return EventType.WAIT_UNTIL_START
+
+
+@attrs.define
+class WaitUntilActionCompleteEvent(ActionCompleteEvent):
+    """Event for wait until action completion."""
+    target_info: Optional[Dict[str, Any]] = None
+    coordinates: Optional[Tuple[int, int]] = None
+    found: bool = False
+
+    def get_event_type(self) -> EventType:
+        return EventType.WAIT_UNTIL_COMPLETE
+
+
+# -------------------------------
 # Substage Action Events
 # -------------------------------
 

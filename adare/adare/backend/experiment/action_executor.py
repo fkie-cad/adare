@@ -8,6 +8,7 @@ separation of action handling logic from the main controller orchestration.
 import logging
 import time
 import base64
+import asyncio
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +17,7 @@ from adare.types.playbook import (
     ActionType, ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction,
     CommandAction, ScreenshotAction, BlockAction, ActionTestAction,
-    SaveTimestampAction, PullAction, PauseAction
+    SaveTimestampAction, PullAction, PauseAction, WaitUntilAction, WaitCondition
 )
 from adare.backend.experiment.websocket_client import AdareVMClient
 from adare.backend.experiment.target_resolver import MCPTargetResolver, MCPConditionChecker
@@ -143,6 +144,8 @@ class ActionExecutor:
                 return await self._execute_pull(resolved_action, parent_event_id, event_emitter)
             elif isinstance(resolved_action, PauseAction):
                 return await self._execute_pause(resolved_action, parent_event_id, event_emitter)
+            elif isinstance(resolved_action, WaitUntilAction):
+                return await self._execute_wait_until(resolved_action, parent_event_id, event_emitter)
             else:
                 return ActionResult(
                     success=False,
@@ -888,3 +891,138 @@ class ActionExecutor:
                         info['strategy_params'] = strategy_params
         
         return info if info else None
+
+    async def _execute_wait_until(self, action: WaitUntilAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
+        """Execute wait until action - wait for condition to be satisfied with timeout and check interval."""
+        try:
+            log.info(f"Starting wait until action with timeout={action.timeout}s, check_interval={action.check_interval}s, initial_delay={action.initial_delay}s")
+
+            check_count = 0
+
+            # Apply initial delay if specified to let UI stabilize (doesn't count towards timeout)
+            if action.initial_delay > 0:
+                log.info(f"Applying initial delay of {action.initial_delay}s to let UI stabilize")
+                await asyncio.sleep(action.initial_delay)
+
+            # Start timeout counting AFTER initial delay
+            start_time = time.time()
+
+            # Always do at least one check, then continue until timeout
+            while True:
+                check_count += 1
+                log.debug(f"Wait until check #{check_count} (elapsed: {time.time() - start_time:.1f}s)")
+
+                # Take screenshot for condition evaluation
+                screenshot_base64 = await self._get_current_screenshot()
+                if not screenshot_base64:
+                    log.debug(f"Failed to get screenshot on check #{check_count}")
+                    continue
+
+                # Evaluate the condition tree
+                try:
+                    condition_result = await self._evaluate_wait_condition(action.condition, screenshot_base64)
+                    if condition_result:
+                        elapsed_time = time.time() - start_time
+                        log.info(f"Wait until condition satisfied after {elapsed_time:.1f}s")
+                        return ActionResult(
+                            success=True,
+                            message=f"Condition satisfied after {elapsed_time:.1f}s ({check_count} checks)",
+                            execution_time=elapsed_time
+                        )
+                except Exception as e:
+                    log.debug(f"Condition evaluation failed on check #{check_count}: {e}")
+
+                # Check timeout AFTER each evaluation attempt
+                elapsed_time = time.time() - start_time
+                if elapsed_time >= action.timeout:
+                    log.info(f"Wait until timeout reached after {elapsed_time:.1f}s ({check_count} checks)")
+                    return ActionResult(
+                        success=False,
+                        message=f"Timeout waiting for condition after {elapsed_time:.1f}s ({check_count} checks)",
+                        execution_time=elapsed_time
+                    )
+
+                # Sleep for check_interval before next attempt (only if check_interval > 0)
+                if action.check_interval > 0:
+                    remaining_time = action.timeout - elapsed_time
+                    if remaining_time > action.check_interval:
+                        await asyncio.sleep(action.check_interval)
+                    elif remaining_time > 0:
+                        # Sleep for the remaining time if it's less than check_interval
+                        await asyncio.sleep(remaining_time)
+                        # After this sleep we'll definitely timeout on next iteration
+                # If check_interval is 0, don't sleep - let the natural processing time be the interval
+
+        except Exception as e:
+            log.error(f"Wait until action failed: {e}", exc_info=True)
+            return ActionResult(success=False, message=str(e))
+
+    async def _evaluate_wait_condition(self, condition, screenshot_base64: str) -> bool:
+        """
+        Recursively evaluate a WaitCondition tree.
+
+        Args:
+            condition: WaitCondition object to evaluate
+            screenshot_base64: Screenshot data for target resolution
+
+        Returns:
+            bool: True if condition is satisfied, False otherwise
+        """
+        try:
+            # Leaf conditions: exists/not_exists
+            if condition.exists is not None:
+                # Apply smart defaults if no strategy specified
+                target = condition.exists
+                if target.strategy is None:
+                    from adare.types.playbook import BestConfidenceStrategy, TopLeftStrategy
+                    if target.image:
+                        target.strategy = BestConfidenceStrategy()
+                        log.debug("Applied default BestConfidence strategy for image target")
+                    elif target.text:
+                        target.strategy = TopLeftStrategy()
+                        log.debug("Applied default TopLeft strategy for text target")
+
+                target_match = await self.target_resolver.resolve_target(target, screenshot_base64)
+                return target_match is not None
+
+            elif condition.not_exists is not None:
+                # Apply smart defaults if no strategy specified
+                target = condition.not_exists
+                if target.strategy is None:
+                    from adare.types.playbook import BestConfidenceStrategy, TopLeftStrategy
+                    if target.image:
+                        target.strategy = BestConfidenceStrategy()
+                        log.debug("Applied default BestConfidence strategy for image target")
+                    elif target.text:
+                        target.strategy = TopLeftStrategy()
+                        log.debug("Applied default TopLeft strategy for text target")
+
+                target_match = await self.target_resolver.resolve_target(target, screenshot_base64)
+                return target_match is None
+
+            # Boolean operators: all/any/not
+            elif condition.all is not None:
+                # AND logic: all conditions must be true
+                for sub_condition in condition.all:
+                    if not await self._evaluate_wait_condition(sub_condition, screenshot_base64):
+                        return False
+                return True
+
+            elif condition.any is not None:
+                # OR logic: at least one condition must be true
+                for sub_condition in condition.any:
+                    if await self._evaluate_wait_condition(sub_condition, screenshot_base64):
+                        return True
+                return False
+
+            elif condition.negate is not None:
+                # NOT logic: invert the result
+                return not await self._evaluate_wait_condition(condition.negate, screenshot_base64)
+
+            else:
+                log.error("WaitCondition has no valid field set")
+                return False
+
+        except Exception as e:
+            log.error(f"Error evaluating wait condition: {e}")
+            return False
