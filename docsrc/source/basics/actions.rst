@@ -531,6 +531,83 @@ Timing Control Actions
   - pause:
       name: "Configuration Check"
 
+**Wait Until Conditions**
+
+.. code-block:: yaml
+
+   actions:
+     # Wait for specific element to appear
+     - wait_until:
+         condition:
+           exists:
+             text: "Documents"
+         timeout: 30.0
+         description: "Wait for Documents text to appear"
+
+     # Wait for element with image
+     - wait_until:
+         condition:
+           exists:
+             image: "save_button.png"
+             confidence: 0.8
+         timeout: 60.0
+         check_interval: 1.0
+         initial_delay: 2.0
+         description: "Wait for Save button to become visible"
+
+     # Wait for element to disappear
+     - wait_until:
+         condition:
+           not_exists:
+             text: "Loading..."
+         timeout: 45.0
+         description: "Wait for loading text to disappear"
+
+     # Complex conditions with boolean logic
+     - wait_until:
+         condition:
+           all:  # AND logic - all conditions must be true
+             - exists:
+                 text: "Ready"
+             - not_exists:
+                 text: "Loading"
+         timeout: 30.0
+         description: "Wait for application to be ready"
+
+     - wait_until:
+         condition:
+           any:  # OR logic - any condition can be true
+             - exists:
+                 text: "Save"
+             - exists:
+                 text: "Export"
+         timeout: 20.0
+         description: "Wait for either Save or Export button"
+
+     # Negated conditions
+     - wait_until:
+         condition:
+           negate:  # NOT logic - condition must be false
+             exists:
+               text: "Error"
+         timeout: 15.0
+         description: "Wait until no error is displayed"
+
+**Wait Until Parameters:**
+
+- ``condition``: The condition to wait for (required)
+
+  - ``exists``: Wait for element to appear
+  - ``not_exists``: Wait for element to disappear
+  - ``all``: All sub-conditions must be true (AND logic)
+  - ``any``: Any sub-condition can be true (OR logic)
+  - ``negate``: Condition must be false (NOT logic)
+
+- ``timeout``: Maximum time to wait in seconds (default: 60.0)
+- ``check_interval``: Delay between condition checks in seconds (default: 0.0 - no delay)
+- ``initial_delay``: Initial delay before first check in seconds (default: 5.0)
+- ``description``: Human-readable description of what we're waiting for
+
 
 Evidence Collection Actions
 ===========================

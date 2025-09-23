@@ -391,6 +391,7 @@
 
 <span class="w">  </span><span class="c1"># Test failure handling</span>
 <span class="w">  </span><span class="nt">continue_on_test_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w"> </span><span class="c1"># Continue experiment even if tests fail</span>
+<span class="w">  </span><span class="nt">auto_pull_on_test_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w"> </span><span class="c1"># Automatically pull files on test failure for analysis</span>
 
 <span class="w">  </span><span class="c1"># Retry behavior</span>
 <span class="w">  </span><span class="nt">retry</span><span class="p">:</span>
@@ -549,6 +550,29 @@
 </section>
 <section id="test-failure-handling">
 <h3>Test Failure Handling<a class="headerlink" href="#test-failure-handling" title="Link to this heading">¶</a></h3>
+<p><strong>Auto-Pull on Test Failure</strong></p>
+<p>When <code class="docutils literal notranslate"><span class="pre">auto_pull_on_test_failure</span></code> is enabled (default: <code class="docutils literal notranslate"><span class="pre">true</span></code>), ADARE automatically pulls all files mentioned in pull actions when any test fails. This provides valuable forensic data for failure analysis:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">settings</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">auto_pull_on_test_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># Pull files for failure analysis (default)</span>
+<span class="w">  </span><span class="nt">continue_on_test_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">   </span><span class="c1"># Continue after test failures</span>
+
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;log</span><span class="nv"> </span><span class="s">entry&#39;</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">/var/log/app.log&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pull</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">src</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/var/log/app.log&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Application</span><span class="nv"> </span><span class="s">logs&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">validate_log_content</span>
+</pre></div>
+</div>
+<p>If <code class="docutils literal notranslate"><span class="pre">validate_log_content</span></code> fails, ADARE will automatically pull <code class="docutils literal notranslate"><span class="pre">/var/log/app.log</span></code> to the artifacts directory for analysis, even if the explicit pull action hasn’t been reached yet.</p>
+<p>Key behaviors:</p>
+<ul class="simple">
+<li><p>Auto-pull only triggers once per experiment execution</p></li>
+<li><p>Files are pulled with variable resolution applied</p></li>
+<li><p>Failed auto-pulls are logged but don’t cause experiment failure</p></li>
+<li><p>Auto-pulled files are stored in the standard artifacts directory</p></li>
+</ul>
 <p><strong>Expect Test to Fail</strong></p>
 <p>Use <code class="docutils literal notranslate"><span class="pre">expect_to_fail</span></code> when testing negative conditions:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
@@ -779,6 +803,82 @@
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Configuration</span><span class="nv"> </span><span class="s">Check&quot;</span>
 </pre></div>
 </div>
+<p><strong>Wait Until Conditions</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Wait for specific element to appear</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_until</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Documents&quot;</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">Documents</span><span class="nv"> </span><span class="s">text</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">appear&quot;</span>
+
+<span class="w">  </span><span class="c1"># Wait for element with image</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_until</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;save_button.png&quot;</span>
+<span class="w">          </span><span class="nt">confidence</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.8</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60.0</span>
+<span class="w">      </span><span class="nt">check_interval</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">      </span><span class="nt">initial_delay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">Save</span><span class="nv"> </span><span class="s">button</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">become</span><span class="nv"> </span><span class="s">visible&quot;</span>
+
+<span class="w">  </span><span class="c1"># Wait for element to disappear</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_until</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">not_exists</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Loading...&quot;</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">45.0</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">loading</span><span class="nv"> </span><span class="s">text</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">disappear&quot;</span>
+
+<span class="w">  </span><span class="c1"># Complex conditions with boolean logic</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_until</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">all</span><span class="p">:</span><span class="w">  </span><span class="c1"># AND logic - all conditions must be true</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Ready&quot;</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">not_exists</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Loading&quot;</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">application</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">be</span><span class="nv"> </span><span class="s">ready&quot;</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_until</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">any</span><span class="p">:</span><span class="w">  </span><span class="c1"># OR logic - any condition can be true</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Save&quot;</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Export&quot;</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20.0</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">either</span><span class="nv"> </span><span class="s">Save</span><span class="nv"> </span><span class="s">or</span><span class="nv"> </span><span class="s">Export</span><span class="nv"> </span><span class="s">button&quot;</span>
+
+<span class="w">  </span><span class="c1"># Negated conditions</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_until</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">negate</span><span class="p">:</span><span class="w">  </span><span class="c1"># NOT logic - condition must be false</span>
+<span class="w">          </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Error&quot;</span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15.0</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">until</span><span class="nv"> </span><span class="s">no</span><span class="nv"> </span><span class="s">error</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">displayed&quot;</span>
+</pre></div>
+</div>
+<p><strong>Wait Until Parameters:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">condition</span></code>: The condition to wait for (required)</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">exists</span></code>: Wait for element to appear</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">not_exists</span></code>: Wait for element to disappear</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">all</span></code>: All sub-conditions must be true (AND logic)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">any</span></code>: Any sub-condition can be true (OR logic)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">negate</span></code>: Condition must be false (NOT logic)</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">timeout</span></code>: Maximum time to wait in seconds (default: 60.0)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">check_interval</span></code>: Delay between condition checks in seconds (default: 0.0 - no delay)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">initial_delay</span></code>: Initial delay before first check in seconds (default: 5.0)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">description</span></code>: Human-readable description of what we’re waiting for</p></li>
+</ul>
 </section>
 <section id="evidence-collection-actions">
 <h3>Evidence Collection Actions<a class="headerlink" href="#evidence-collection-actions" title="Link to this heading">¶</a></h3>
