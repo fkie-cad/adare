@@ -94,8 +94,8 @@ Base Configuration (all environments)
 Desktop Environment–Specific Setup
 ----------------------------------
 
-GNOME
-~~~~~
+GNOME/KDE
+~~~~~~~~~
 
 - Install:
 
