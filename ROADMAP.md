@@ -70,7 +70,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [x] ctrl-c in multi execute setup does not show prompt that ask wheter to skip all coming or to continue with next experiment
 - [ ] commands can be lists and this gives some weird results! recognize on parsing
 - [ ] multiple project shared directory and vm?! should not happen -> clear separation for multiple projects not happening also not in testfunction sets -> maybe database per project?! 
-- [ ] .ova may result in input issues - maybe extract import ovf file simply then?! 
+- [x] for environments only care about the filename!
 
 ---
 
