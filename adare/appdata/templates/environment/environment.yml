@@ -1,4 +1,4 @@
-name: {{ environment }}
+# name: {{ environment }}  # Optional: filename is used as environment name
 vm: {% if vm_name %}"{{ vm_name }}"{% else %}"path/to/your/vm"{% endif %}
 os:
   os: "Windows 10"

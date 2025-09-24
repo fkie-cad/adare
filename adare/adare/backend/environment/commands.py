@@ -145,17 +145,10 @@ def environment_load(project: Path, environment: str, force: bool = False):
     
     environment_metadata: EnvironmentMetadata = parse_environment_file(environment_file)
 
-    # todo: maybe add validation for environment configuration semantic 
+    # Override environment name with filename (ignore name in file)
+    environment_metadata.name = environment
 
-    # check if file name equals environment name
-    if environment != environment_metadata.name:
-        raise EnvironmentLoadFailed(
-            log,
-            f'environment name in file {environment_metadata.name} does not match the file name {environment}',
-            possible_solutions=[
-                'rename the file or change the environment name in the file and try again',
-            ]
-        )
+    # todo: maybe add validation for environment configuration semantic
 
     # Handle VM file copying and hashing during environment load (heavy file operations)
     vm_id = None
