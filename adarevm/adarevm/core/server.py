@@ -69,6 +69,7 @@ class AdareVMServer:
             "run_test": self._run_test,
             "execute_shell": self._execute_shell,
             "get_status": self._get_status,
+            "collect_system_info": self._collect_system_info,
             "set_screenshot_method": self._set_screenshot_method,
         }
     
@@ -892,6 +893,79 @@ class AdareVMServer:
             "variables": self.current_variables,
             "connected_clients": len(self.clients)
         }
+
+    async def _collect_system_info(self, websocket):
+        """Collect comprehensive system information from the guest VM."""
+        import platform
+        import time
+        from datetime import datetime, timezone
+
+        collection_start = time.time()
+        log.info("Starting system information collection...")
+
+        try:
+            system_info = {
+                'collection_timestamp': datetime.now(timezone.utc).isoformat(),
+                'os_info': {},
+                'installed_packages': [],
+                'package_manager': 'unknown'
+            }
+
+            # Detect platform
+            guest_platform = platform.system().lower()
+            system_info['guest_platform'] = guest_platform
+
+            if guest_platform == 'windows':
+                # Use Windows platform functions
+                from adarevm.platforms.windows import get_os_info, get_installed_programs, get_windows_features
+
+                system_info['os_info'] = get_os_info()
+                system_info['installed_programs'] = get_installed_programs()
+                system_info['windows_features'] = get_windows_features()
+
+            else:
+                # Use Linux platform functions
+                from adarevm.platforms.linux import get_os_info, detect_package_manager, get_installed_packages
+
+                system_info['os_info'] = get_os_info()
+
+                # Detect package manager and get packages
+                package_manager = detect_package_manager()
+                if package_manager:
+                    system_info['package_manager'] = package_manager
+                    system_info['installed_packages'] = get_installed_packages(package_manager)
+                    log.info(f"Found {len(system_info['installed_packages'])} packages using {package_manager}")
+
+            collection_time = time.time() - collection_start
+            log.info(f"System information collection completed in {collection_time:.2f} seconds")
+
+            # Send success event
+            await self.send_event(websocket, EventType.LOG, {
+                "message": f"System information collected successfully in {collection_time:.2f}s",
+                "packages_found": len(system_info.get('installed_packages', [])),
+                "os_detected": system_info['os_info'].get('name', 'Unknown')
+            })
+
+            return {
+                "status": "success",
+                "system_info": system_info,
+                "collection_time": collection_time
+            }
+
+        except Exception as e:
+            collection_time = time.time() - collection_start
+            log.error(f"System information collection failed after {collection_time:.2f}s: {e}", exc_info=True)
+
+            await self.send_event(websocket, EventType.ERROR, {
+                "message": f"System information collection failed: {str(e)}",
+                "collection_time": collection_time
+            })
+
+            return {
+                "status": "error",
+                "message": str(e),
+                "collection_time": collection_time
+            }
 
     async def _set_screenshot_method(self, websocket, use_maim: bool):
         """Set the screenshot method to use (maim or pyautogui)."""

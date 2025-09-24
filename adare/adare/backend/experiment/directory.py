@@ -39,6 +39,7 @@ class ExperimentRunDirectory(Directory):
         self.mcp_gui_log_file = self.log_directory / 'mcp_gui.log'
         self.experiment_debug_log_file = self.log_directory / 'experiment_debug.log'
         self.screenshots_directory = self.path / 'screenshots'
+        self.system_info_file = self.path / 'system-info.yml'
 
 
     def create(self):

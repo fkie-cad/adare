@@ -400,6 +400,21 @@ class AdareVMClient:
     async def get_status(self) -> Dict[str, Any]:
         """Get current server status."""
         return await self.call_tool(ToolRegistry.GET_STATUS)
+
+    async def collect_system_info(self, timeout: float = 120.0) -> Dict[str, Any]:
+        """
+        Collect comprehensive system information from the guest VM.
+
+        Returns structured data including OS info, installed packages, etc.
+        Uses a longer timeout as this operation can take time on systems with many packages.
+
+        Args:
+            timeout: Timeout in seconds (default 120s for systems with many packages)
+
+        Returns:
+            Dict containing system information or error details
+        """
+        return await self.call_tool(ToolRegistry.COLLECT_SYSTEM_INFO, timeout=timeout)
     
     # Convenience Methods
     
