@@ -905,7 +905,6 @@ class AdareVMServer:
 
         try:
             system_info = {
-                'collection_timestamp': datetime.now(timezone.utc).isoformat(),
                 'os_info': {},
                 'installed_packages': [],
                 'package_manager': 'unknown'
@@ -917,11 +916,12 @@ class AdareVMServer:
 
             if guest_platform == 'windows':
                 # Use Windows platform functions
-                from adarevm.platforms.windows import get_os_info, get_installed_programs, get_windows_features
+                from adarevm.platforms.windows import get_os_info, get_installed_programs, get_windows_features, get_installed_updates
 
                 system_info['os_info'] = get_os_info()
                 system_info['installed_programs'] = get_installed_programs()
                 system_info['windows_features'] = get_windows_features()
+                system_info['installed_updates'] = get_installed_updates()
 
             else:
                 # Use Linux platform functions

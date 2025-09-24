@@ -14,8 +14,8 @@ def get_os_info():
         if result.returncode == 0:
             info.update(_parse_systeminfo(result.stdout))
 
-        # Try PowerShell for more detailed info
-        ps_cmd = 'powershell -Command "Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, WindowsBuildLabEx | ConvertTo-Json"'
+        # Try PowerShell for more detailed info including display version
+        ps_cmd = 'powershell -Command "Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, WindowsBuildLabEx, WindowsDisplayVersion | ConvertTo-Json"'
         result = subprocess.run(ps_cmd, capture_output=True, text=True, shell=True, timeout=20)
         if result.returncode == 0:
             try:
@@ -27,8 +27,27 @@ def get_os_info():
                     info['version'] = computer_info['WindowsVersion']
                 if computer_info.get('WindowsBuildLabEx'):
                     info['build'] = computer_info['WindowsBuildLabEx']
+                if computer_info.get('WindowsDisplayVersion'):
+                    info['display_version'] = computer_info['WindowsDisplayVersion']
             except (json.JSONDecodeError, Exception):
                 pass  # Fallback to systeminfo data
+
+        # Try to get display version from registry if not found
+        if 'display_version' not in info:
+            try:
+                reg_cmd = r'reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v DisplayVersion'
+                result = subprocess.run(reg_cmd, capture_output=True, text=True, shell=True, timeout=10)
+                if result.returncode == 0:
+                    for line in result.stdout.split('\n'):
+                        if 'DisplayVersion' in line and 'REG_SZ' in line:
+                            parts = line.split('REG_SZ')
+                            if len(parts) > 1:
+                                display_version = parts[1].strip()
+                                if display_version:
+                                    info['display_version'] = display_version
+                                    break
+            except Exception:
+                pass
 
     except Exception as e:
         # Basic fallback
