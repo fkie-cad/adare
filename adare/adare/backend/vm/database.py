@@ -397,11 +397,20 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
         manager = VirtualBoxManager()
         username, password = get_vm_credentials(guest_os)
         vbox_vm = VirtualBoxVM(vbox_vm_name, guest_os, manager, username, password)
-        import_result = await vbox_vm.create_from_ovf_or_ova(vm_file, silent=True)
-        
-        # Check if import was successful 
+
+        # Import VM and capture detailed error output
+        try:
+            import_result, vbox_output = await vbox_vm.create_from_ovf_or_ova(vm_file, silent=True)
+        except Exception as e:
+            # If the import method itself raised an exception, extract the error details
+            error_msg = str(e)
+            raise VMImportError(log, f"VirtualBox import failed: {error_msg}")
+
+        # Check if import was successful
         if import_result != 0:
-            raise VMImportError(log, f"VirtualBox import failed with return code {import_result}. Check VirtualBox installation and VM file validity.")
+            # Include actual VirtualBox error output in the error message
+            vbox_error = vbox_output.strip() if vbox_output and vbox_output.strip() else "No error details available"
+            raise VMImportError(log, f"VirtualBox import failed with return code {import_result}. VirtualBox error: {vbox_error}")
         
         # Disable time synchronization to prevent VM from syncing with host time
         # await vbox_vm.disable_time_sync(silent=True)  # Commented out - makes clock weird

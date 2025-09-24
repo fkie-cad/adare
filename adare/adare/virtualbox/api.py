@@ -596,16 +596,16 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin):
                 if file_path.suffix.lower() not in ('.ovf', '.ova'):
                     log.error("File must be .ovf or .ova")
                     raise VMImportException(f"File '{file_path}' must be .ovf or .ova")
-                
+
                 args = [
                     "import", str(file_path),
                     "--vsys", "0",
                     "--vmname", self.vm_name
                 ]
-                
+
                 try:
                     log.info(f"Importing VM '{self.vm_name}' from '{file_path}'")
-                    return_value, _, _ = await self._execute_streaming_command_async(
+                    return_value, stdout, stderr = await self._execute_streaming_command_async(
                         args,
                         log_file=log_file,
                         stop_event=stop_event,
@@ -613,17 +613,19 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin):
                         ctx_manager=ctx_manager,
                         operation_name="VM import"
                     )
-                    
+
                     if return_value == 0:
                         log.info(f"VM '{self.vm_name}' imported successfully from '{file_path}'")
                     else:
-                        log.error(f"Failed to import VM '{self.vm_name}' from '{file_path}': return code {return_value}")
-                    
-                    return return_value
+                        # Log the actual VirtualBox error output
+                        error_output = stdout.strip() if stdout.strip() else "No error output"
+                        log.error(f"Failed to import VM '{self.vm_name}' from '{file_path}': return code {return_value}. VirtualBox output: {error_output}")
+
+                    return return_value, stdout
                 except Exception as e:
                     log.error(f"Error importing VM '{self.vm_name}' from '{file_path}': {e}")
                     raise VMImportException(f"Failed to import VM '{self.vm_name}' from '{file_path}': {e}")
-        
+
         return await self.manager.run_async(_import_async)
 
     def ovf_is_identical(self, ovf_path: str) -> bool:
