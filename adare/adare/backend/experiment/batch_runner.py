@@ -94,15 +94,6 @@ class BatchRunSummary:
             return 0.0
         return (self.successful_runs / self.total_combinations) * 100
 
-    def _print_single_result(self, result: ExperimentResult) -> None:
-        """Print a brief summary for a single experiment result."""
-        if result.status == StatusEnum.SUCCESS:
-            console.print(f"[green]✓[/green] {result.experiment} completed successfully in {result.duration.total_seconds():.1f}s")
-        else:
-            console.print(f"[red]✗[/red] {result.experiment} failed in {result.duration.total_seconds():.1f}s")
-            if result.error_message:
-                console.print(f"  [red]Error: {result.error_message}[/red]")
-
     def _create_results_table(self) -> Any:
         """Create a Rich table with the batch execution results."""
         from rich.table import Table
@@ -528,7 +519,7 @@ class BatchExperimentRunner:
                     project_path, exp_name, env_name, show_flow_console, **experiment_kwargs
                 )
                 results.append(result)
-                self._print_immediate_result(result)
+                self._print_immediate_result(result, total_combinations)
 
                 # Handle interruption if experiment was interrupted
                 if result.status == StatusEnum.INTERRUPTED:
@@ -564,8 +555,12 @@ class BatchExperimentRunner:
 
         return results
 
-    def _print_immediate_result(self, result: ExperimentResult) -> None:
+    def _print_immediate_result(self, result: ExperimentResult, total_combinations: int) -> None:
         """Print the immediate result of a single experiment execution."""
+        # For single experiment, no immediate result printing needed
+        if total_combinations == 1:
+            return
+
         if result.status == StatusEnum.SUCCESS:
             status_icon = "✓"
             status_color = "green"

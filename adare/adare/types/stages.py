@@ -211,6 +211,14 @@ class ExperimentRunStage(Stage):
 
 @register_stage
 @attrs.define
+class SystemInfoCollectionStage(Stage):
+    name: ClassVar[str] = 'system_info_collection'
+    msg: ClassVar[str] = 'Collecting system information'
+    description: ClassVar[str] = 'Collecting OS info and installed software/packages from guest VM'
+    parent: ClassVar[str] = 'experiment_execution'
+
+@register_stage
+@attrs.define
 class ExperimentTestStage(Stage):
     name: ClassVar[str] = 'experiment_test'
     msg: ClassVar[str] = 'Running test'

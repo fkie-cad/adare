@@ -32,6 +32,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Add new test function sets:  
   - [ ] YAML  
 - [ ] integrated log viewer with `adare run log adare ULID` or `adare run log adarevm` that we can view logs but also filter them!
+- [ ] more advanced wait_until logic -> use image diffs to identify changed areas?! Only search in changed ares?! -> analyze if this works or is too complex?!
 
 ---
 

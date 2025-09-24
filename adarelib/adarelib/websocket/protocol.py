@@ -203,7 +203,8 @@ class ToolRegistry:
     LIST_TESTS = "list_tests"
     EXECUTE_SHELL = "execute_shell"
     GET_STATUS = "get_status"
-    
+    COLLECT_SYSTEM_INFO = "collect_system_info"
+
     # Window Management
     SCREENSHOT_WINDOW = "screenshot_window"
     
@@ -211,5 +212,5 @@ class ToolRegistry:
         SCREENSHOT, CLICK, RIGHT_CLICK, DOUBLE_CLICK, DRAG,
         KEYBOARD, SCROLL, GOTO, IDLE, UPLOAD_TESTFUNCTIONS,
         UPLOAD_TESTSET, SET_VARIABLES, RUN_TEST, RUN_ALL_TESTS,
-        LIST_TESTS, EXECUTE_SHELL, GET_STATUS, SCREENSHOT_WINDOW
+        LIST_TESTS, EXECUTE_SHELL, GET_STATUS, COLLECT_SYSTEM_INFO, SCREENSHOT_WINDOW
     ]

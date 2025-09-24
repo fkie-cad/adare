@@ -242,3 +242,174 @@ def get_visible_windows():
               f"Non-visible areas: {window.non_visible_areas}")
     return filtered_windows
 
+
+def get_os_info():
+    """Get Linux OS information."""
+    import subprocess
+
+    info = {}
+
+    try:
+        # Get OS release info
+        with open('/etc/os-release', 'r') as f:
+            for line in f:
+                line = line.strip()
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    value = value.strip('"')
+                    if key == 'NAME':
+                        info['name'] = value
+                    elif key == 'VERSION':
+                        info['version'] = value
+                    elif key == 'VERSION_ID':
+                        info['version_id'] = value
+    except FileNotFoundError:
+        pass
+
+    try:
+        # Get kernel info
+        result = subprocess.run(['uname', '-r'], capture_output=True, text=True)
+        if result.returncode == 0:
+            info['kernel'] = result.stdout.strip()
+    except FileNotFoundError:
+        pass
+
+    try:
+        # Get architecture
+        result = subprocess.run(['uname', '-m'], capture_output=True, text=True)
+        if result.returncode == 0:
+            info['architecture'] = result.stdout.strip()
+    except FileNotFoundError:
+        pass
+
+    return info
+
+
+def detect_package_manager():
+    """Detect which package manager is available, preferring dpkg for Debian and rpm for RedHat."""
+    import subprocess
+    import os
+
+    # Check for Debian-based systems first
+    if os.path.exists('/etc/debian_version'):
+        try:
+            subprocess.run(['which', 'dpkg'], capture_output=True, check=True)
+            return 'dpkg'
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
+    # Check for RedHat-based systems
+    if os.path.exists('/etc/redhat-release'):
+        try:
+            subprocess.run(['which', 'rpm'], capture_output=True, check=True)
+            return 'rpm'
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
+    # Fallback to other package managers
+    other_managers = ['pacman', 'zypper']
+
+    for manager in other_managers:
+        try:
+            subprocess.run(['which', manager], capture_output=True, check=True)
+            return manager
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
+
+    return None
+
+
+def get_installed_packages(manager=None):
+    """Get list of installed packages using detected package manager."""
+    import subprocess
+
+    if manager is None:
+        manager = detect_package_manager()
+
+    if manager is None:
+        return []
+
+    packages = []
+
+    try:
+        if manager == 'dpkg':
+            result = subprocess.run(['dpkg', '-l'], capture_output=True, text=True)
+            if result.returncode == 0:
+                packages = _parse_dpkg_output(result.stdout)
+
+        elif manager == 'rpm':
+            result = subprocess.run(['rpm', '-qa'], capture_output=True, text=True)
+            if result.returncode == 0:
+                packages = _parse_rpm_output(result.stdout)
+
+        elif manager == 'pacman':
+            result = subprocess.run(['pacman', '-Q'], capture_output=True, text=True)
+            if result.returncode == 0:
+                packages = _parse_pacman_output(result.stdout)
+
+        elif manager == 'zypper':
+            result = subprocess.run(['zypper', 'search', '--installed-only'],
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                packages = _parse_zypper_output(result.stdout)
+
+    except subprocess.CalledProcessError as e:
+        log.warning(f"Failed to get packages with {manager}: return code {e.returncode}")
+    except FileNotFoundError as e:
+        log.warning(f"Package manager {manager} not found: {e}")
+    except Exception as e:
+        log.warning(f"Unexpected error getting packages with {manager}: {e}")
+
+    return packages
+
+
+def _parse_dpkg_output(output):
+    """Parse dpkg -l output."""
+    packages = []
+    for line in output.split('\n'):
+        line = line.strip()
+        if line.startswith('ii'):
+            parts = line.split()
+            if len(parts) >= 3:
+                packages.append({'name': parts[1], 'version': parts[2]})
+    return packages
+
+
+def _parse_rpm_output(output):
+    """Parse rpm -qa output."""
+    packages = []
+    for line in output.split('\n'):
+        line = line.strip()
+        if '-' in line:
+            parts = line.rsplit('-', 2)
+            if len(parts) >= 2:
+                name = parts[0]
+                version = '-'.join(parts[1:])
+                packages.append({'name': name, 'version': version})
+    return packages
+
+
+def _parse_pacman_output(output):
+    """Parse pacman -Q output."""
+    packages = []
+    for line in output.split('\n'):
+        line = line.strip()
+        parts = line.split()
+        if len(parts) >= 2:
+            packages.append({'name': parts[0], 'version': parts[1]})
+    return packages
+
+
+def _parse_zypper_output(output):
+    """Parse zypper search output."""
+    packages = []
+    for line in output.split('\n'):
+        line = line.strip()
+        parts = line.split()
+        if parts and not parts[0].startswith('#'):
+            package_info = {'name': parts[0]}
+            if len(parts) > 1:
+                package_info['version'] = parts[1]
+            packages.append(package_info)
+    return packages
+

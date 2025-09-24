@@ -18,13 +18,13 @@ from adare.backend.experiment.step_runner import ExperimentStepRunner
 from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
 from adare.types.stages import (
     # Top-level parent stages
-    ExperimentPreparationStage, VirtualMachineSetupStage, SoftwareInstallationStage, 
+    ExperimentPreparationStage, VirtualMachineSetupStage, SoftwareInstallationStage,
     ExperimentExecutionStage, CleanupShutdownStage,
     # Sub-stages
     SetupExperimentEnvironmentStage, ValidateIntegrityStage, PrepareRunEnvironmentStage, StartComputerVisionServerStage,
     ExperimentIntegrityCheckStage, ProjectIntegrityCheckStage,
     InstallAdareVMStage, ConnectToVMStage, InstallationsStage,
-    ExperimentRunStage,
+    ExperimentRunStage, SystemInfoCollectionStage,
     FinalizeStage, ShutdownComputerVisionServerStage, ShutdownWebSocketStage,
     # VM Test stages
     VMTestSetupStage, VMCompatibilityTestStage, VMTestCleanupStage,
@@ -926,6 +926,44 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             log.error(f"Action results: {result.successful_actions}/{result.total_actions} succeeded")
 
 
+async def step_collect_system_info(context: ExperimentRunCtx):
+    """Collect system information from the guest VM and save to YAML file."""
+    with StageCtxManager(SystemInfoCollectionStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        from adare.backend.experiment.system_info_collector import collect_system_info
+
+        # Check if system info collection is enabled in playbook settings
+        collect_enabled = getattr(context.playbook.settings, 'collect_system_info', True)
+        if not collect_enabled:
+            log.info("System info collection disabled in playbook settings")
+            return
+
+        # Ensure we have required components
+        if not context.client:
+            log.warning("WebSocket client not available - skipping system info collection")
+            return
+
+        if not context.guest_platform:
+            log.warning("Guest platform not detected - skipping system info collection")
+            return
+
+        if not hasattr(context, 'experiment_run_directory') or not context.experiment_run_directory:
+            log.warning("Experiment run directory not available - skipping system info collection")
+            return
+
+        # Collect system information
+        output_file = context.experiment_run_directory.system_info_file
+        success = await collect_system_info(
+            websocket_client=context.client,
+            guest_platform=context.guest_platform,
+            output_file=output_file
+        )
+
+        if success:
+            log.info(f"System information collected and saved to {output_file}")
+        else:
+            log.warning("System information collection failed (experiment continues)")
+
+
 def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
     event = None if post_interrupt else context.user_interrupt_event
     with StageCtxManager(FinalizeStage(), context.experiment_run_ulid, event=event):
@@ -1135,6 +1173,9 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             with StageCtxManager(ExperimentExecutionStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 await step_runner.run_async_step(step_execute_experiment, experiment_run_context)
+
+                # Collect system information after experiment execution (if enabled in playbook settings)
+                await step_runner.run_async_step(step_collect_system_info, experiment_run_context)
 
         # Success: Mark experiment as finished if no exceptions occurred
         if not stop_event.is_set():
