@@ -1899,11 +1899,8 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
     if updated_experiments:
         print_success_message(
             title=f"Successfully added environments to {len(updated_experiments)} experiment(s)",
-            location=f"Experiments: {', '.join(updated_experiments)}",
             next_steps=[
-                f"Added environments: {', '.join(environment_names)}",
-                "Experiments have been reloaded automatically",
-                "You can now run experiments on the new environments"
+                f"Run experiment in new environments with: adare experiment run <name> -e <environment>",
             ]
         )
 
