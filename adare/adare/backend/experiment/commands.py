@@ -1086,7 +1086,8 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         log.info(f"Using custom VM CPUs: {vm_cpus}")
     
     experiment_run_context = ExperimentRunCtx(config)
-    experiment_run_context.debug_screenshots = debug_screenshots
+    # Enable debug screenshots by default for forensic logging (can be overridden by explicit flag)
+    experiment_run_context.debug_screenshots = debug_screenshots or True  # Default to True for forensic logging
     experiment_run_context.test_mode = test  # Store test mode flag for later use
     if test:
         step_initialize(experiment_run_context, fake=True)
@@ -1330,6 +1331,33 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     except Exception as e:
         log.error(f"Error checking experiment run status: {e}")
         experiment_success = False
+
+    # Generate forensic report after experiment completion
+    try:
+        # Check if forensic logging is enabled (default: True)
+        forensic_enabled = True
+        if (hasattr(experiment_run_context, 'playbook') and
+            experiment_run_context.playbook and
+            hasattr(experiment_run_context.playbook, 'settings') and
+            experiment_run_context.playbook.settings):
+            forensic_enabled = experiment_run_context.playbook.settings.forensic_logging
+
+        if forensic_enabled and hasattr(experiment_run_context, 'experiment_run_directory'):
+            from adare.backend.experiment.forensic_reporter import generate_forensic_report_for_run
+            forensic_log_path = experiment_run_context.experiment_run_directory.forensic_log_file
+
+            log.info(f"Generating forensic report for run {experiment_run_context.experiment_run_ulid}")
+            forensic_success = generate_forensic_report_for_run(
+                experiment_run_context.experiment_run_ulid,
+                forensic_log_path
+            )
+
+            if forensic_success:
+                log.info(f"Forensic report generated: {forensic_log_path}")
+            else:
+                log.warning(f"Failed to generate forensic report for run {experiment_run_context.experiment_run_ulid}")
+    except Exception as e:
+        log.error(f"Error generating forensic report: {e}", exc_info=True)
 
     # Return both interruption status and actual success status
     return user_interrupt_event.is_set(), experiment_success
