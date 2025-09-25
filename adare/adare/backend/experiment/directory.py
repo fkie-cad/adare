@@ -38,14 +38,17 @@ class ExperimentRunDirectory(Directory):
         self.adarevm_log_file = self.log_directory / 'adarevm.log'
         self.mcp_gui_log_file = self.log_directory / 'mcp_gui.log'
         self.experiment_debug_log_file = self.log_directory / 'experiment_debug.log'
-        self.screenshots_directory = self.path / 'screenshots'
         self.system_info_file = self.path / 'system-info.yml'
+        self.reporting_directory = self.path / 'reporting'
+        self.screenshots_directory = self.reporting_directory / 'screenshots'
+        self.forensic_log_file = self.reporting_directory / 'forensic_log.yml'
 
 
     def create(self):
         self.path.parent.mkdir(parents=False, exist_ok=True)
         self.path.mkdir(parents=False)
         self.log_directory.mkdir(parents=False)
+        self.reporting_directory.mkdir(parents=False, exist_ok=True)
         self.screenshots_directory.mkdir(parents=False, exist_ok=True)
 
 

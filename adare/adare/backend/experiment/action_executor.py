@@ -258,32 +258,39 @@ class ActionExecutor:
         try:
             # Get screenshot for target resolution
             start_time = time.time()
-            screenshot_base64 = await self._get_current_screenshot()
+            screenshot_base64, screenshot_path = await self._get_current_screenshot_with_path()
             if not screenshot_base64:
                 log.error("Failed to get screenshot for target resolution")
-                
+
                 # Emit find failure event
                 if self.experiment_run_id and event_emitter:
                     execution_time = time.time() - start_time
                     find_result = ActionResult(success=False, message="Failed to get screenshot", execution_time=execution_time)
                     complete_event = event_emitter.create_action_complete_event(find_step, -1, find_action_id, find_result, parent_action_id)
                     emit_action(self.experiment_run_id, complete_event, find_action_id)
-                
+
                 return None
-            
+
             # Resolve using MCP target resolver
             match = await self.target_resolver.resolve_target(target, screenshot_base64)
             execution_time = time.time() - start_time
-            
+
             # Emit find complete event
             if self.experiment_run_id and event_emitter:
                 success = match is not None
                 coords = match.coordinates if match else None
+
+                # Include screenshot path in result data
+                data = {}
+                if screenshot_path:
+                    data['screenshot_path'] = screenshot_path
+
                 find_result = ActionResult(
                     success=success,
                     message="Target found" if success else "Target not found",
                     execution_time=execution_time,
-                    coordinates=coords
+                    coordinates=coords,
+                    data=data if data else None
                 )
                 complete_event = event_emitter.create_action_complete_event(find_step, -1, find_action_id, find_result, parent_action_id)
                 emit_action(self.experiment_run_id, complete_event, find_action_id)
@@ -518,15 +525,21 @@ class ActionExecutor:
     async def _execute_block(self, action: BlockAction, parent_event_id: str = None, event_emitter = None, variable_resolver = None) -> ActionResult:
         """Execute conditional block action with MCP-based condition checking."""
         # Check conditions if present
+        screenshot_path = None  # Track screenshot path for result data
         if hasattr(action, 'when') and action.when:
             try:
                 # Get screenshot for condition checking
-                screenshot_base64 = await self._get_current_screenshot()
+                screenshot_base64, screenshot_path = await self._get_current_screenshot_with_path()
                 conditions_met = await self.condition_checker.check_conditions(action.when, screenshot_base64)
                 if not conditions_met:
+                    # Include screenshot path in skipped result
+                    data = {}
+                    if screenshot_path:
+                        data['screenshot_path'] = screenshot_path
                     return ActionResult(
                         success=True,
-                        message="Block conditions not met, skipping"
+                        message="Block conditions not met, skipping",
+                        data=data if data else None
                     )
             except Exception as e:
                 log.error(f"Error checking block conditions: {e}")
@@ -579,10 +592,15 @@ class ActionExecutor:
                     message=f"Block action failed: {result.message}"
                 )
         
+        # Include screenshot path in final result data
+        data = {'actions_executed': len(results)}
+        if screenshot_path:
+            data['screenshot_path'] = screenshot_path
+
         return ActionResult(
             success=True,
             message=f"Block executed successfully ({len(results)} actions)",
-            data={'actions_executed': len(results)}
+            data=data
         )
     
     async def _execute_save_timestamp(self, action: SaveTimestampAction, parent_event_id: str = None, event_emitter = None) -> ActionResult:
@@ -799,43 +817,62 @@ class ActionExecutor:
     
     # Utility methods
     
-    async def _save_debug_screenshot(self, screenshot_base64: str):
+    async def _save_debug_screenshot(self, screenshot_base64: str) -> Optional[str]:
         """
         Save screenshot to disk for debugging purposes.
-        
+
         Args:
             screenshot_base64: Base64 encoded screenshot data
+
+        Returns:
+            Relative path to saved screenshot file, or None if not saved
         """
         if not self.debug_screenshots or not self.screenshots_dir:
-            return
-            
+            return None
+
         try:
             # Create screenshots directory if it doesn't exist
             self.screenshots_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Generate filename with counter
-            filename = f"screenshot_{self.screenshot_counter}.png"
+
+            # Generate filename with counter (consistent with forensic reporter expectations)
+            filename = f"action_{self.screenshot_counter:03d}.png"
             filepath = self.screenshots_dir / filename
-            
+
             # Increment counter for next screenshot
             self.screenshot_counter += 1
-            
+
             # Decode and save the image
             image_data = base64.b64decode(screenshot_base64)
             with open(filepath, 'wb') as f:
                 f.write(image_data)
-                
+
             log.debug(f"Debug screenshot saved: {filepath}")
-            
+
+            # Return relative path (relative to run directory)
+            relative_path = f"reporting/screenshots/{filename}"
+            return relative_path
+
         except Exception as e:
             log.error(f"Failed to save debug screenshot: {e}")
+            return None
     
     async def _get_current_screenshot(self) -> Optional[str]:
         """
         Get current screenshot from WebSocket client.
-        
+
         Returns:
             Base64 encoded screenshot data, None if failed
+        """
+        screenshot_data, _ = await self._get_current_screenshot_with_path()
+        return screenshot_data
+
+    async def _get_current_screenshot_with_path(self) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Get current screenshot from WebSocket client and save to disk.
+
+        Returns:
+            Tuple of (base64_screenshot_data, relative_screenshot_path)
+            Either can be None if failed
         """
         try:
             # Take new screenshot via WebSocket
@@ -846,19 +883,19 @@ class ActionExecutor:
                     screenshot_base64 = result['image']['data']
                 else:
                     screenshot_base64 = result['image']
-                
+
                 # Save screenshot to disk if debug mode is enabled
-                await self._save_debug_screenshot(screenshot_base64)
-                
+                screenshot_path = await self._save_debug_screenshot(screenshot_base64)
+
                 log.debug("Screenshot captured")
-                return screenshot_base64
+                return screenshot_base64, screenshot_path
             else:
                 log.error("Screenshot result missing image data")
-                return None
+                return None, None
                 
         except Exception as e:
             log.error(f"Failed to capture screenshot: {e}")
-            return None
+            return None, None
     
     def _serialize_target(self, target) -> Optional[Dict[str, Any]]:
         """Serialize Target object for JSON storage."""
@@ -898,6 +935,7 @@ class ActionExecutor:
             log.info(f"Starting wait until action with timeout={action.timeout}s, check_interval={action.check_interval}s, initial_delay={action.initial_delay}s")
 
             check_count = 0
+            last_screenshot_path = None  # Track last screenshot for timeout result
 
             # Apply initial delay if specified to let UI stabilize (doesn't count towards timeout)
             if action.initial_delay > 0:
@@ -913,7 +951,9 @@ class ActionExecutor:
                 log.debug(f"Wait until check #{check_count} (elapsed: {time.time() - start_time:.1f}s)")
 
                 # Take screenshot for condition evaluation
-                screenshot_base64 = await self._get_current_screenshot()
+                screenshot_base64, screenshot_path = await self._get_current_screenshot_with_path()
+                if screenshot_path:
+                    last_screenshot_path = screenshot_path  # Keep track for timeout case
                 if not screenshot_base64:
                     log.debug(f"Failed to get screenshot on check #{check_count}")
                     continue
@@ -924,10 +964,17 @@ class ActionExecutor:
                     if condition_result:
                         elapsed_time = time.time() - start_time
                         log.info(f"Wait until condition satisfied after {elapsed_time:.1f}s")
+
+                        # Include screenshot path in success result
+                        data = {}
+                        if screenshot_path:
+                            data['screenshot_path'] = screenshot_path
+
                         return ActionResult(
                             success=True,
                             message=f"Condition satisfied after {elapsed_time:.1f}s ({check_count} checks)",
-                            execution_time=elapsed_time
+                            execution_time=elapsed_time,
+                            data=data if data else None
                         )
                 except Exception as e:
                     log.debug(f"Condition evaluation failed on check #{check_count}: {e}")
@@ -936,10 +983,17 @@ class ActionExecutor:
                 elapsed_time = time.time() - start_time
                 if elapsed_time >= action.timeout:
                     log.info(f"Wait until timeout reached after {elapsed_time:.1f}s ({check_count} checks)")
+
+                    # Include last screenshot in timeout result
+                    data = {}
+                    if last_screenshot_path:
+                        data['screenshot_path'] = last_screenshot_path
+
                     return ActionResult(
                         success=False,
                         message=f"Timeout waiting for condition after {elapsed_time:.1f}s ({check_count} checks)",
-                        execution_time=elapsed_time
+                        execution_time=elapsed_time,
+                        data=data if data else None
                     )
 
                 # Sleep for check_interval before next attempt (only if check_interval > 0)
