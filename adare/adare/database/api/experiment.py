@@ -349,8 +349,10 @@ class ExperimentApi(ProjectDbApi):
         if project_path:
             project = self.get_project_by_path(project_path)
             environments = self._session.query(Environment).filter_by(project=project).all()
-            experiments = [experiment for environment in environments for experiment in environment.experiments]
-            return experiments
+            experiments_set = set()
+            for environment in environments:
+                experiments_set.update(environment.experiments)
+            return list(experiments_set)
         return self._session.query(Experiment).all()
 
     def remove_fake_experiment_runs_by_experiment_name(self, project_path: Path, experiment_name: str) -> int:
