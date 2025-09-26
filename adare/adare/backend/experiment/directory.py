@@ -26,7 +26,6 @@ log = logging.getLogger(__name__)
 
 
 class ExperimentRunDirectory(Directory):
-    path: Path
     log_directory: Path
     vagrant_log_file: Path
     adarevm_log_file: Path

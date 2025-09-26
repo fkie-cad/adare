@@ -78,6 +78,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] multiple project shared directory and vm?! should not happen -> clear separation for multiple projects not happening also not in testfunction sets -> maybe database per project?! 
 - [x] for environments only care about the filename!
 - [ ] even if vm does not exist the env is added to envs with "no vm"
+- [x] glob result in multi-execution! why? adare exp run "deletefile_nautilus_by_c*" -e ubuntu-2404 -> 3 executions?!
 
 ---
 
