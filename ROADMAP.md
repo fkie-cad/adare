@@ -10,6 +10,11 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ---
 
 ## 🚀 Planned Features
+- [ ] make test mode default and --reproducible or other flag for those that are fixed and be used later
+- [ ] add clone to clone already existing experiment  
+- [ ] add datasets that are downloaded to an project and retrieved from an URL (e.g. hosted by us in minio instance)
+- [ ] add no_idle action to disable the default idle (e.g. when wanting to save a timestamp) -> or better only idle between gui actions
+- [ ] experiment run by glob (does not work as load does not work by glob)
 - [x] add a wait_until action that wait until a specific icon/text occurs? (also with timeout parameter/chedcking itnerval) -> how to design it in a way we not make more screenshots than be able to check it as checking takes some time?! -> test
 - [x] add settings (default true) that in case of an failed test pulls all files mentioned in the playbook
 - [ ] Add support for Wayland-based Linux systems  
@@ -72,6 +77,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] commands can be lists and this gives some weird results! recognize on parsing
 - [ ] multiple project shared directory and vm?! should not happen -> clear separation for multiple projects not happening also not in testfunction sets -> maybe database per project?! 
 - [x] for environments only care about the filename!
+- [ ] even if vm does not exist the env is added to envs with "no vm"
 
 ---
 
@@ -83,3 +89,4 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Test if environment with zenodo url works!
 - [ ] Test Multiproject setup (same environemnt/name in different Projects)
 - [ ] Test if auto_pull_on_test_failure works!
+- [ ] Test how settings idle work

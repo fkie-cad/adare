@@ -154,7 +154,7 @@ class DataRetrievalApi(DatabaseApi):
         data['display_name'] = [self._get_smart_display_name(obj, 'environment') for obj in data['object']]
         # Get VM information
         data['vm'] = [self._session.query(Vm).filter_by(id=obj.vm_id).one() if obj.vm_id else None for obj in data['object']]
-        data['vm_name'] = [obj.name for obj in data['vm']]
+        data['vm_name'] = [obj.name if obj else '' for obj in data['vm']]
         data['vm_id'] = [obj.id if obj else '' for obj in data['vm']]
         # Get osinfo from the VM attached to the environment - fix osinfo access
         data['osinfo_object'] = [self._session.query(OsInfo).filter_by(id=vm.osinfo_id).one() if vm and hasattr(vm, 'osinfo_id') else None for vm in data['vm']]
