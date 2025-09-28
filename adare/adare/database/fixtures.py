@@ -1,6 +1,6 @@
 import sqlalchemy
 from adare.types.stages import Stage as StageType
-from adare.database.models.experiment import Stage, Status
+from adare.database.models.project_models import Stage, Status
 from adarelib.constants import StatusEnum
 
 # configure logging

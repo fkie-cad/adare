@@ -5,9 +5,9 @@ import ast
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.models.experiment import TestFunction, TestFunctionFile, TestParameter, \
-    Base as ExperimentBase, AbstractTest, TestEvent
-from adare.database.api.experiment import ExperimentApi
+from adare.config.configdirectory import STATE_DIR
+from adare.database.models.global_models import TestFunction, TestFunctionFile, TestParameter, Project
+from adare.database.api.base import GlobalDatabaseApi
 from adare.database.exceptions import DatabaseTestfunctionCreationError, DatabaseTestfunctionRemovalError, \
     DatabaseTestfunctionUpdateError, DatabaseTestValidationError
 from adare.helperfunctions.pyfileanalyze import PyModuleAnalyzer
@@ -20,18 +20,33 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class TestfunctionDbApi(ExperimentApi):
+class TestfunctionDbApi(GlobalDatabaseApi):
 
-    def __init__(self, db_path: Path = config_database.get_database_location()):
-        super().__init__(db_path)
-        ExperimentBase.metadata.create_all(self.engine)
+    def __init__(self):
+        super().__init__()
+        self._start_session()
+
+    def get_project(self, name: str) -> Project | None:
+        """Get project by name from global database."""
+        project = self._session.query(Project).filter(Project.name == name).first()
+        if not project:
+            log.error(f"Project '{name}' not found in database")
+            return None
+        return project
 
     def create_testfunction(self, testfunction_file, t_func_class, db_parameter_objects, sha256_testfunction: str):
         test_name = t_func_class.get_attribute('testname').get_value()
         test_description = t_func_class.get_attribute('testdescription').get_value()
+
         testfunction_obj, created = self.get_or_create(
-            TestFunction, defaults={'file': testfunction_file}, name=test_name, sha256hash=sha256_testfunction,
-            description=test_description,
+            TestFunction,
+            defaults={
+                'file_id': testfunction_file.id,
+                'description': test_description,
+                'type': t_func_class.name,
+                'sha256hash': sha256_testfunction
+            },
+            name=test_name
         )
         if not created:
             raise DatabaseTestfunctionCreationError(
@@ -39,8 +54,6 @@ class TestfunctionDbApi(ExperimentApi):
                 message=f'Testfunction {test_name} already exists in database',
             )
 
-        testfunction_obj.type = t_func_class.name
-        testfunction_obj.description = test_description
         testfunction_obj.parameters.extend(db_parameter_objects.values())
         return testfunction_obj
 
@@ -140,27 +153,25 @@ class TestfunctionDbApi(ExperimentApi):
             )
 
     def create_testfunction_file_obj(self, project_path: Path, path: Path, requirements: Path):
-        if self.testfunction_file_obj_exists(path):
-            raise DatabaseTestfunctionCreationError(
-                log,
-                message=f'Testfunction file {path} already exists in database',
-            )
-        project = self.get_project(project_path.name)
-        if not project:
-            raise DatabaseTestfunctionCreationError(
-                log,
-                message=f'Project {project_path.name} does not exist in database',
-            )
+        # Check if testfunction file already exists by name (testfunctions are global)
+        existing_file = self._session.query(TestFunctionFile).filter(
+            TestFunctionFile.name == path.stem).first()
+        if existing_file:
+            log.debug(f'Testfunction file {path.name} already exists in global database - using existing')
+            return existing_file
+        # Testfunctions are now global resources - no project relationship needed
         module_analyzer = PyModuleAnalyzer(path)
         sha256hash = combine_hashes([hash_file_sha256(path),hash_file_sha256(requirements)])
+
+        # Use the actual paths provided (which should be the global paths from TestfunctionManager)
         testfunction_file = TestFunctionFile(
-            name=path.name,
+            name=path.stem,
             path=path.as_posix(),
             requirements_path=requirements.as_posix(),
             sha256hash=sha256hash,
         )
-        testfunction_file.projects.append(project)
         self._session.add(testfunction_file)
+        self._session.flush()  # Flush to get ID for the testfunction_file
 
         for t_func_class in module_analyzer.get_classes(parent='BasicTest'):
             if t_func_class.has_attribute('parameter'):
@@ -176,7 +187,7 @@ class TestfunctionDbApi(ExperimentApi):
 
     def testfunction_file_obj_exists(self, path: Path) -> bool:
         return self._session.query(TestFunctionFile).filter(
-            TestFunctionFile.path == path.as_posix()).first() is not None
+            TestFunctionFile.name == path.stem).first() is not None
 
     def __get_testfunction_hash(self, test_class):
         testfunction_bytes = ast.unparse(test_class.get_method('test'))

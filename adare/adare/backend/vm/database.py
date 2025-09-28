@@ -10,7 +10,7 @@ from typing import Optional
 import logging
 
 from adare.database.api.vm import VmApi
-from adare.database.models.experiment import Vm
+from adare.database.models.global_models import Vm
 from adare.backend.vm.exceptions import VMNotFoundError
 
 log = logging.getLogger(__name__)
@@ -18,16 +18,15 @@ log = logging.getLogger(__name__)
 
 
 
-def get_vm_by_hash(file_hash: str, project_id: str = None, fields: list[str] = None) -> Optional[Vm] | dict | None:
+def get_vm_by_hash(file_hash: str, fields: list[str] = None) -> Optional[Vm] | dict | None:
     """
-    Get VM by file hash.
-    
+    Get VM by file hash from global database.
+
     Args:
         file_hash: SHA256 hash of VM file
-        project_id: Project ID for scoped lookup (not used yet - VMs are global)
         fields: Optional list of fields to extract. If None, returns full object.
                 Available fields: 'id', 'name', 'file', 'hash', 'description', 'osinfo'
-        
+
     Returns:
         VM: Full object if fields=None
         dict: VM data if fields specified
@@ -63,15 +62,14 @@ def get_vm_by_hash(file_hash: str, project_id: str = None, fields: list[str] = N
         return result
 
 
-def get_vm_by_name(name: str, project_id: str = None, fields: list[str] = None) -> Optional[Vm] | dict | None:
+def get_vm_by_name(name: str, fields: list[str] = None) -> Optional[Vm] | dict | None:
     """
-    Get VM by name.
-    
+    Get VM by name from global database.
+
     Args:
         name: VM name
-        project_id: Project ID for scoped lookup (not used yet - VMs are global)
         fields: Optional list of fields to extract. If None, returns full object.
-        
+
     Returns:
         VM: Full object if fields=None
         dict: VM data if fields specified
@@ -323,14 +321,14 @@ def get_vm_by_id(vm_id: str, fields: list[str] = None) -> Optional[Vm] | dict | 
         return result
 
 
-def get_vm_data(vm_id: str = None, name: str = None, file_hash: str = None, project_id: str = None) -> dict | None:
+def get_vm_data(vm_id: str = None, name: str = None, file_hash: str = None) -> dict | None:
     """Get full VM data - convenience function for common case."""
     if vm_id:
         return get_vm_by_id(vm_id, fields=['id', 'name', 'file', 'hash', 'description', 'osinfo'])
     elif name:
-        return get_vm_by_name(name, project_id, fields=['id', 'name', 'file', 'hash', 'description', 'osinfo'])
+        return get_vm_by_name(name, fields=['id', 'name', 'file', 'hash', 'description', 'osinfo'])
     elif file_hash:
-        return get_vm_by_hash(file_hash, project_id, fields=['id', 'name', 'file', 'hash', 'description', 'osinfo'])
+        return get_vm_by_hash(file_hash, fields=['id', 'name', 'file', 'hash', 'description', 'osinfo'])
     else:
         log.error("Must provide vm_id, name, or file_hash")
         return None
@@ -359,19 +357,14 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
     try:
         existing_uuid = VirtualBoxVM.get_vm_uuid_by_name(vbox_vm_name)
         if existing_uuid:
-            log.warning(f"⚠️  WARNING: VM with name '{vbox_vm_name}' already exists in VirtualBox!")
-            log.warning(f"⚠️  Instead of reusing, creating a NEW VM with unique name for clean state.")
-            log.warning(f"⚠️  You may have a RELICT VM '{vbox_vm_name}' in VirtualBox that needs manual cleanup!")
-            log.warning(f"⚠️  Consider running: VBoxManage unregistervm '{vbox_vm_name}' --delete")
-            
             # Generate unique VM name for VirtualBox to avoid conflicts
             import time
             import random
             timestamp = int(time.time())
             unique_suffix = f"_{timestamp}_{random.randint(1000, 9999)}"
             vbox_vm_name = f"{original_vm_name}{unique_suffix}"
-            
-            log.warning(f"⚠️  Creating NEW VM in VirtualBox with unique name: '{vbox_vm_name}'")
+
+            log.info(f"VM '{original_vm_name}' already exists in VirtualBox, creating new VM with unique name: '{vbox_vm_name}'")
                 
     except Exception as e:
         log.debug(f"VM '{vbox_vm_name}' not found in VirtualBox, proceeding with import: {e}")
@@ -447,15 +440,15 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
     return vm
 
 
-def get_vm_summary(vm_id: str = None, name: str = None, file_hash: str = None, project_id: str = None) -> dict | None:
+def get_vm_summary(vm_id: str = None, name: str = None, file_hash: str = None) -> dict | None:
     """Get basic VM info - lighter version."""
     if vm_id:
         log.warning("get_vm_summary by ID not implemented - use name or hash")
         return None
     elif name:
-        return get_vm_by_name(name, project_id, fields=['id', 'name', 'description'])
+        return get_vm_by_name(name, fields=['id', 'name', 'description'])
     elif file_hash:
-        return get_vm_by_hash(file_hash, project_id, fields=['id', 'name', 'description'])
+        return get_vm_by_hash(file_hash, fields=['id', 'name', 'description'])
     else:
         log.error("Must provide vm_id, name, or file_hash")
         return None

@@ -218,7 +218,7 @@ class ExperimentEnvironmentMatcher:
             raise ValueError("Experiment pattern cannot be empty")
 
         try:
-            with ExperimentApi() as api:
+            with ExperimentApi(self.project_path) as api:
                 all_experiments = api.get_experiments(self.project_path)
                 experiment_names = [exp.name for exp in all_experiments if exp.name]
 
@@ -282,12 +282,12 @@ class ExperimentEnvironmentMatcher:
             raise ValueError("Environment name cannot be empty")
 
         try:
-            with ExperimentApi() as api:
+            with ExperimentApi(self.project_path) as api:
                 environment = api.get_environment(environment_name, self.project_path.name)
                 if environment is None:
                     return False
 
-                experiment = api.get_experiment(experiment_name, environment)
+                experiment = api.get_experiment(experiment_name, environment.id)
                 return experiment is not None
 
         except Exception as e:

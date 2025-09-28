@@ -79,7 +79,7 @@ async def send_experiment_request(request_ulid: str):
 
         #
         experiment_data = {
-            'ulid': experiment.ulid,
+            'ulid': experiment.id,
             'name': experiment.name,
             'description': experiment.description,
             'tags': [

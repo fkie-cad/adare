@@ -688,7 +688,7 @@ class AdareVMServer:
             from adarelib.constants import StatusEnum
             
             try:
-                supported_tests = import_basictest_subclasses(self.testfunctions_dir)
+                supported_tests = import_basictest_subclasses(directory=self.testfunctions_dir)
             except Exception as e:
                 log.error(f"Error importing test functions: {e}", exc_info=True)
                 return TestResult.execution_error(e, "Failed to import testfunctions")

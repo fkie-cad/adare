@@ -1085,3 +1085,81 @@ class ExperimentRun(SerializerMixin, Base):
     def __repr__(self):
         return f"<ExperimentRun(id='{self.id}',experiment={self.experiment_id})>"
 
+
+class Playbook(SerializerMixin, Base):
+    """Main playbook container linked to experiment."""
+    __tablename__ = 'playbook'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+    experiment_id = Column(CHAR(26), ForeignKey('experiment.id', ondelete='CASCADE'), nullable=False)
+
+    name = Column(String(255), nullable=False)
+    description = Column(String)
+    settings = Column(String)  # idle times, timeouts, etc. (changed from JSON to String for Base compatibility)
+    original_yaml_content = Column(String)  # Full original YAML content for perfect recovery
+    version = Column(Integer, default=1)
+
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    experiment = relationship("Experiment", back_populates="playbook")
+    items = relationship("PlaybookItem", back_populates="playbook", cascade="all, delete-orphan")
+
+
+class PlaybookItem(SerializerMixin, Base):
+    """Unified model for actions and blocks with hierarchical support."""
+    __tablename__ = 'playbook_item'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+    playbook_id = Column(CHAR(26), ForeignKey('playbook.id', ondelete='CASCADE'), nullable=False)
+    parent_id = Column(CHAR(26), ForeignKey('playbook_item.id', ondelete='CASCADE'), nullable=True)
+
+    item_type = Column(String(50), nullable=False)  # 'action', 'group_block', 'if_block', etc.
+    sequence_order = Column(Integer, nullable=False)
+
+    # For actions only
+    action_type = Column(String(50))  # 'click', 'keyboard', 'scroll', etc.
+    target = Column(String)  # action targeting information (changed from JSON to String for Base compatibility)
+
+    # For all items (actions and blocks)
+    parameters = Column(String, nullable=False)  # type-specific configuration (changed from JSON to String for Base compatibility)
+    conditions = Column(String)  # execution conditions (changed from JSON to String for Base compatibility)
+
+    name = Column(String(255))
+    description = Column(String)
+    is_enabled = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, nullable=False, default=func.now())
+
+    # Relationships
+    playbook = relationship("Playbook", back_populates="items")
+    parent = relationship("PlaybookItem", remote_side=[id], back_populates="children")
+    children = relationship("PlaybookItem", back_populates="parent", cascade="all, delete-orphan")
+    executions = relationship("ActionExecution", back_populates="playbook_item", cascade="all, delete-orphan")
+
+
+class ActionExecution(SerializerMixin, Base):
+    """Execution tracking per action step."""
+    __tablename__ = 'action_execution'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+    playbook_item_id = Column(CHAR(26), ForeignKey('playbook_item.id'), nullable=False)
+    experiment_run_id = Column(CHAR(26), nullable=True)
+
+    status = Column(String(20), nullable=False)  # 'pending', 'running', 'success', 'failed', 'skipped'
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime)
+
+    result_data = Column(String)  # screenshots, coordinates, error details, timing (changed from JSON to String for Base compatibility)
+    error_message = Column(String)
+    attempt_number = Column(Integer, default=1)
+
+    created_at = Column(DateTime, nullable=False, default=func.now())
+
+    # Relationships
+    playbook_item = relationship("PlaybookItem", back_populates="executions")
+

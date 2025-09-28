@@ -80,8 +80,10 @@ class TestLoader:
         log.debug("Skipping dependency installation (should already be done)")
         
         # Upload only testfunctions that are actually used in the playbook
-        testfunctions_path = self.project_dir / "testfunctions"
-        if testfunctions_path.exists():
+        from adare.config.configdirectory import STATE_DIR
+        global_testfunctions_path = STATE_DIR / 'testfunctions'
+
+        if global_testfunctions_path.exists():
             # Extract which testfunctions are used in the playbook
             used_function_names = self._extract_used_testfunction_names()
 
@@ -92,7 +94,7 @@ class TestLoader:
                 if required_files:
                     log.info(f"Uploading {len(required_files)} testfunction files for functions: {sorted(used_function_names)}")
                     try:
-                        await websocket_client.upload_testfunctions(testfunctions_path, required_files)
+                        await websocket_client.upload_testfunctions(global_testfunctions_path, required_files)
                     except (OSError, IOError) as e:
                         log.error(f"Failed to upload testfunctions due to file system error: {e}")
                     except (ValueError, TypeError) as e:
@@ -102,7 +104,8 @@ class TestLoader:
             else:
                 log.info("No testfunctions used in playbook - skipping testfunction upload")
         else:
-            log.warning("No testfunctions directory found")
+            log.warning(f"Global testfunctions directory not found: {global_testfunctions_path}")
+            log.info("Load testfunctions using 'adare testfunction load-global <path>' to enable testfunction uploads")
         
         # Individual tests are sent via WebSocket when executed
         # No need to upload entire testset file to VM
@@ -415,7 +418,7 @@ class TestLoader:
         """Map testfunction names to their file paths."""
         try:
             from adare.database.api.testfunction import TestfunctionDbApi
-            from adare.database.models.experiment import TestFunctionFile
+            from adare.database.models.global_models import TestFunctionFile
 
             testfunction_files = set()
             with TestfunctionDbApi() as api:

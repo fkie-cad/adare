@@ -84,31 +84,32 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
         await verify_in_stage()
 
 
-def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_metadata) -> str:
+def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_metadata) -> dict:
     """
     Load VM file during environment load - only hash calculation and file copying.
     No VirtualBox import happens here!
-    
+
     Args:
         project_path: Path to the project
         vm_path: Path to VM file
         environment_metadata: Environment configuration
-        
+
     Returns:
-        VM ID from database
+        Dict with 'vm_id' and 'was_existing' keys
     """
     vm_manager = VMFileManager()
-    
-    # Calculate hash (heavy operation done during environment load)
-    log.info(f"Calculating VM file hash during environment load...")
+
+    # Calculate hash FIRST (heavy operation done during environment load)
+    log.info(f"📊 Calculating VM file hash during environment load...")
     file_hash = vm_manager.calculate_file_hash(vm_path, silent=False)
-    log.info(f"VM file hash: {file_hash}")
-    
-    # Check if VM already exists by hash
+    log.info(f"🔑 VM file hash: {file_hash}")
+
+    # Check if VM already exists by hash BEFORE copying
     existing_vm = vm_database.get_vm_by_hash(file_hash)
     if existing_vm:
-        log.info(f"VM with hash {file_hash} already exists: {existing_vm.name}")
-        
+        log.info(f"✅ VM with hash {file_hash} already exists: {existing_vm.name}")
+        log.info(f"✅ Skipping file copy operation - using existing VM")
+
         # Check if existing VM has proper snapshot configuration
         if not existing_vm.use_snapshots or not existing_vm.base_snapshot_name:
             log.warning(f"⚠️  Existing VM '{existing_vm.name}' has no snapshot configuration!")
@@ -116,13 +117,15 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
             log.warning(f"⚠️  Creating a NEW VM entry to ensure clean state.")
             log.warning(f"⚠️  You may have a RELICT VM '{existing_vm.name}' in VirtualBox that needs manual cleanup!")
             log.warning(f"⚠️  Consider running: VBoxManage unregistervm '{existing_vm.name}' --delete")
-            
+
             # Don't reuse - fall through to create new VM
         else:
             # VM has snapshot configuration - safe to reuse
-            return existing_vm.id
-    
-    # Create VM record without VirtualBox import (file operations only)
+            log.info(f"✅ VM ready for reuse with existing snapshot configuration")
+            return {'vm_id': existing_vm.id, 'was_existing': True}
+
+    # VM doesn't exist or existing VM can't be reused - create new one with file operations
+    log.info(f"Creating new VM entry with file operations...")
     vm = vm_database.create_vm(
         project_path=project_path,
         name=vm_path.stem,
@@ -137,9 +140,9 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
         os_architecture=environment_metadata.os.architecture,
         silent=False
     )
-    
+
     log.info(f"VM file loaded into database: {vm.name} (ID: {vm.id})")
-    return vm.id
+    return {'vm_id': vm.id, 'was_existing': False}
 
 
 def load_vm(vm_file: Path, name: str = None, description: str = '', 
@@ -490,17 +493,32 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         log.warning(f"VM not ready (status: {vm_status.name}) - attempting repair...")
         # Additional repair logic could go here
     
-    # VM exists in VirtualBox - use FAST snapshot workflow! 
+    # VM exists in VirtualBox - use FAST snapshot workflow!
     log.info(f"VM already in VirtualBox! Using FAST snapshot workflow...")
-    
+
     # 🚀 FAST RESTORE from base snapshot (this is where the magic happens!)
-    log.info(f"Restoring from base snapshot - SUPER FAST!")
+    log.info(f"CLAUDE: Restoring from base snapshot with interrupt support...")
     if experiment_run_ulid:
         with StageCtxManager(VMSnapshotRestoreStage(), experiment_run_ulid):
-            restore_success = restore_vm_to_base_snapshot(vm, silent=False)
+            restore_success = restore_vm_to_base_snapshot(
+                vm,
+                silent=False,
+                interrupt_event=interrupt_event,
+                timeout=180  # Increased timeout for snapshot operations
+            )
     else:
-        restore_success = restore_vm_to_base_snapshot(vm, silent=False)
-    
+        restore_success = restore_vm_to_base_snapshot(
+            vm,
+            silent=False,
+            interrupt_event=interrupt_event,
+            timeout=180
+        )
+
+    # Check if operation was interrupted
+    if interrupt_event and interrupt_event.is_set():
+        log.info(f"CLAUDE: VM preparation interrupted during snapshot restore for '{vm.name}'")
+        return None
+
     if not restore_success:
         raise VMError(log, f"Failed to restore VM '{vm.name}' to base snapshot")
     

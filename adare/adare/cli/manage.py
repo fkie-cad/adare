@@ -1,5 +1,6 @@
 # internal imports
-from adare.config.database import get_database_location
+from adare.config.database import get_database_location, get_global_database_location
+from adare.database.init import initialize_database_system, validate_database_integrity, repair_database_system, clean_install_database_system
 from pathlib import Path
 import shutil
 import os
@@ -11,12 +12,125 @@ log = logging.getLogger(__name__)
 
 def exec_manage_reset_db(arguments):
     """Reset the database."""
-    # get database location
-    database_location = get_database_location()
+    # get database location (legacy - now resets global database)
+    database_location = get_global_database_location()
     # remove database
     if database_location.exists():
-        log.info(f'removing database {database_location}')
+        log.info(f'removing global database {database_location}')
         database_location.unlink()
+        print(f"Global database reset: {database_location}")
+    else:
+        print("No global database found to reset")
+
+
+def exec_manage_init_db(arguments):
+    """Initialize the database system."""
+    print("Initializing database system...")
+
+    try:
+        results = initialize_database_system()
+
+        if results['global_db_initialized']:
+            print(f"✅ Global database initialized: {results['global_db_location']}")
+        else:
+            print("❌ Failed to initialize global database")
+            for error in results['errors']:
+                print(f"  Error: {error}")
+            return
+
+        print("✅ Database system initialization completed successfully")
+
+    except Exception as e:
+        print(f"❌ Database initialization failed: {e}")
+        log.error(f"Database initialization error: {e}")
+
+
+def exec_manage_db_status(arguments):
+    """Check database system status."""
+    print("Checking database system status...")
+
+    try:
+        status = validate_database_integrity()
+
+        print(f"Global database exists: {'✅' if status['global_db_exists'] else '❌'}")
+        print(f"Global database accessible: {'✅' if status['global_db_accessible'] else '❌'}")
+        print(f"System valid: {'✅' if status['valid'] else '❌'}")
+
+        if status['errors']:
+            print("\nErrors found:")
+            for error in status['errors']:
+                print(f"  ❌ {error}")
+
+        if status['valid']:
+            print("\n✅ Database system is healthy")
+        else:
+            print("\n❌ Database system has issues")
+
+    except Exception as e:
+        print(f"❌ Status check failed: {e}")
+        log.error(f"Database status check error: {e}")
+
+
+def exec_manage_repair_db(arguments):
+    """Repair the database system."""
+    print("Starting database system repair...")
+
+    try:
+        results = repair_database_system()
+
+        if results['actions_taken']:
+            print("Actions taken:")
+            for action in results['actions_taken']:
+                print(f"  ✅ {action}")
+
+        if results['errors']:
+            print("Errors encountered:")
+            for error in results['errors']:
+                print(f"  ❌ {error}")
+
+        if results['repaired']:
+            print("✅ Database system repair completed successfully")
+        else:
+            print("❌ Database system repair failed")
+
+    except Exception as e:
+        print(f"❌ Database repair failed: {e}")
+        log.error(f"Database repair error: {e}")
+
+
+def exec_manage_clean_install_db(arguments):
+    """Perform clean database installation."""
+    print("⚠️  WARNING: This will delete all existing database data!")
+
+    if not arguments.force:
+        response = input("Are you sure you want to proceed? (yes/no): ").strip().lower()
+        if response != 'yes':
+            print("Operation cancelled")
+            return
+
+    print("Starting clean database installation...")
+
+    try:
+        results = clean_install_database_system()
+
+        if results['actions_taken']:
+            print("Actions taken:")
+            for action in results['actions_taken']:
+                print(f"  ✅ {action}")
+
+        if results['errors']:
+            print("Errors encountered:")
+            for error in results['errors']:
+                print(f"  ❌ {error}")
+
+        if results['installed']:
+            print("✅ Clean database installation completed successfully")
+        else:
+            print("❌ Clean database installation failed")
+
+    except Exception as e:
+        print(f"❌ Clean installation failed: {e}")
+        log.error(f"Clean installation error: {e}")
 
 
 def exec_manage_reset_vm(arguments):

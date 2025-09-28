@@ -5,8 +5,8 @@ from pathlib import Path
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.models.experiment import OsInfo, Project, Environment, Base as ExperimentBase
-from adare.database.api.database import DatabaseApi
+from adare.database.models.global_models import Project, Environment, OsInfo
+from adare.database.api.base import GlobalDatabaseApi
 from adare.database.exceptions import DatabaseProjectCreationError
 
 # configure logging
@@ -14,11 +14,11 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class ProjectDbApi(DatabaseApi):
+class ProjectDbApi(GlobalDatabaseApi):
 
-    def __init__(self, db_path: Path = config_database.get_database_location()):
-        super().__init__(db_path)
-        ExperimentBase.metadata.create_all(self.engine)
+    def __init__(self):
+        super().__init__()
+        self._start_session()
 
     def add_project(self, name: str, path: Path, description: str = None) -> Project:
         project = self._session.query(Project).filter(Project.name == name).first()
@@ -43,7 +43,7 @@ class ProjectDbApi(DatabaseApi):
 
     def get_projects(self) -> list[Project]:
         projects = self._session.query(Project).all()
-        self._expunge_all()
+        self.expunge_all()
         return projects
 
     def get_project(self, name: str) -> Project | None:

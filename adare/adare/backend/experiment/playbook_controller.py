@@ -202,7 +202,7 @@ class PlaybookController:
         try:
             from adare.database.api.playbook import PlaybookApi
             
-            with PlaybookApi() as playbook_api:
+            with PlaybookApi(self.project_dir) as playbook_api:
                 # Get playbook from database
                 playbook = playbook_api.get_playbook_by_experiment_id(self.experiment_id)
                 if not playbook:
@@ -439,7 +439,7 @@ class PlaybookController:
         try:
             from adare.database.api.playbook import PlaybookApi
             
-            with PlaybookApi() as playbook_api:
+            with PlaybookApi(self.project_dir) as playbook_api:
                 execution = playbook_api.create_action_execution(
                     playbook_item_id=self.playbook_items_map[action_index],
                     experiment_run_id=self.experiment_run_id,
@@ -457,7 +457,7 @@ class PlaybookController:
         try:
             from adare.database.api.playbook import PlaybookApi
             
-            with PlaybookApi() as playbook_api:
+            with PlaybookApi(self.project_dir) as playbook_api:
                 playbook_api.update_action_execution_complete(
                     execution_id=execution_id,
                     success=result.success,

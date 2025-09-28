@@ -5,9 +5,9 @@ from pathlib import Path
 
 # internal imports
 import adare.config.database as config_database
-from adare.database.models.experiment import Environment, OsInfo, Project, PostSetupInstallation
+from adare.database.models.global_models import Environment, OsInfo, Project, PostSetupInstallation, Tag
 from adare.types.environment import EnvironmentMetadata, OsInfo as OsInfoAttrs, PostsetupInstallations as PostsetupInstallationsAttrs
-from adare.database.api.experiment import ExperimentApi
+from adare.database.api.base import GlobalDatabaseApi
 from adare.database.exceptions import DatabaseProjectNotFoundError
 
 # configure logging
@@ -16,10 +16,11 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class EnvironmentDbApi(ExperimentApi):
+class EnvironmentDbApi(GlobalDatabaseApi):
 
-    def __init__(self, db_path: Path = config_database.get_database_location()):
-        super().__init__(db_path)
+    def __init__(self):
+        super().__init__()
+        self._start_session()
 
     def get_or_create_os_info(self, os_info_attrs: OsInfoAttrs) -> tuple[OsInfo, bool]:
         os_info_dict = attrs.asdict(os_info_attrs)
@@ -35,6 +36,23 @@ class EnvironmentDbApi(ExperimentApi):
         return self._session.query(Environment).filter(Environment.file == path.as_posix()).order_by(
             sqlalchemy.desc(Environment.created_at)).all()
 
+    def get_or_create_tags(self, tag_names: list[str]) -> list:
+        """
+        Get or create multiple tags.
+
+        Args:
+            tag_names: List of tag names
+
+        Returns:
+            List of Tag instances
+        """
+        tags = []
+        for name in tag_names:
+            if name and name.strip():
+                tag, _ = self.get_or_create(Tag, name=name.strip().lower())
+                tags.append(tag)
+        return tags
+
     def get_environment_by_ulid(self, ulid: str) -> Environment:
         return self._session.query(Environment).filter(Environment.id == ulid).first()
     
@@ -48,31 +66,24 @@ class EnvironmentDbApi(ExperimentApi):
             installation_objects.append(installation_obj)
         return installation_objects
 
-    def get_or_create_environment(self, project_path: Path, name: str, description: str, 
+    def get_or_create_environment(self, project_path: Path, name: str, description: str,
                                   vm_id: str, tags: list[str],
                                   installations: list[dict], environment_file: Path,
                                   sha256hash: str) -> tuple[Environment, bool]:
-        environment = self._session.query(Environment).join(Project).filter(Environment.sha256hash == sha256hash,
-                                                                            Project.path == project_path.as_posix()).first()
+        # For global environments, check by hash only (no project dependency)
+        environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
         if environment:
             log.info(f'Environment with hash {sha256hash} already exists in database')
             return environment, False
         log.info(f"Environment with hash '{sha256hash}' not found in database -> creating new entry")
-        # OS info is now stored in the VM, not separately
-        project = self._session.query(Project).filter(Project.path == project_path.as_posix()).first()
-        if not project:
-            raise DatabaseProjectNotFoundError(
-                log,
-                f"Project with path '{project_path}' not found in database -> cannot create environment"
-            )
+
         tag_objects = self.get_or_create_tags(tags)
         environment = Environment(
             name=name,
-            project=project,
             description=description,
             vm_id=vm_id,
             sha256hash=sha256hash,
-            file=environment_file.as_posix(),
+            file=environment_file.resolve().as_posix(),  # Store absolute path
             tags=tag_objects
         )
         installation_objects = []
@@ -98,7 +109,7 @@ class EnvironmentDbApi(ExperimentApi):
         environment.name = name
         environment.description = description
         environment.vm_id = vm_id
-        environment.file = environment_file.as_posix()
+        environment.file = environment_file.resolve().as_posix()  # Store absolute path
         self._session.commit()
         log.info(f"Environment with hash '{sha256hash}' updated in database")
         return environment
@@ -109,11 +120,8 @@ class EnvironmentDbApi(ExperimentApi):
 
     def get_environments(self, project_path: Path = None) -> list[Environment]:
         # retrieve all environments and expunge them from the session
-        if project_path:
-            projects = self._session.query(Project).filter(Project.path == project_path.as_posix()).all()
-            environments = [env for project in projects for env in project.environments]
-        else:
-            environments = self._session.query(Environment).all()
+        # Since environments are now global, we return all environments regardless of project_path
+        environments = self._session.query(Environment).all()
         return environments
 
 
@@ -174,18 +182,14 @@ class EnvironmentDbApi(ExperimentApi):
             .filter_by(ulid=environment_ulid)
             .first()
         ):
-            return env.osinfo.platform
+            return env.vm.osinfo.platform
         else:
             raise ValueError(f'environment {environment_ulid} not found in database')
 
     def get_environment(self, name: str, project_name: str) -> Environment | None:
-        if (
-            env := self._session.query(Environment)
-            .filter_by(name=name)
-            .join(Project)
-            .filter(Project.name == project_name)
-            .first()
-        ):
+        # Since environments are now global, we just search by name (project_name is ignored)
+        env = self._session.query(Environment).filter_by(name=name).first()
+        if env:
             return env
         log.error(f'environment {name} does not exist in the database')
         return None
@@ -201,17 +205,8 @@ class EnvironmentDbApi(ExperimentApi):
             raise ValueError(f'environment {environment_ulid} not found in database')
 
     def get_environment_by_project_and_name(self, project_path: Path, environment_name: str) -> Environment:
-        if (
-            project := self._session.query(Project)
-            .filter(Project.path == project_path.as_posix())
-            .first()
-        ):
-            return self._session.query(Environment).filter_by(name=environment_name, project=project).first()
-        else:
-            raise DatabaseProjectNotFoundError(
-                log,
-                f"Project with path '{project_path}' not found in database -> cannot get environment"
-            )
+        # Since environments are now global, we just search by name
+        return self._session.query(Environment).filter_by(name=environment_name).first()
 
     def sync_environment(self, ulid: str, remote_ulid: str, remote_url: str, is_published: bool):
         environment = self.get_environment_by_ulid(ulid)

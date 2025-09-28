@@ -26,5 +26,3 @@ class EnvironmentAlreadyExists(LoggedErrorException):
     pass
 
 
-class ExampleEnvironmentDoesNotExist(LoggedErrorException):
-    pass

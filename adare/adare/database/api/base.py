@@ -22,8 +22,8 @@ import ulid
 
 import adare.config.database as config_database
 from adare.database.exceptions import (
-    DatabaseError, 
-    EntityNotFoundError, 
+    DatabaseError,
+    EntityNotFoundError,
     ValidationError,
     DatabaseConnectionError
 )
@@ -41,7 +41,7 @@ def validate_input(func):
         try:
             return func(self, *args, **kwargs)
         except (ValueError, TypeError) as e:
-            raise ValidationError(f"Invalid input for {func.__name__}: {e}")
+            raise ValidationError(log, f"Invalid input for {func.__name__}: {e}")
     return wrapper
 
 
@@ -53,10 +53,10 @@ def handle_db_errors(func):
             return func(self, *args, **kwargs)
         except IntegrityError as e:
             log.error(f"Database integrity error in {func.__name__}: {e}")
-            raise DatabaseError(f"Data integrity violation: {e.orig}")
+            raise DatabaseError(log, f"Data integrity violation: {e.orig}")
         except SQLAlchemyError as e:
             log.error(f"Database error in {func.__name__}: {e}")
-            raise DatabaseError(f"Database operation failed: {e}")
+            raise DatabaseError(log, f"Database operation failed: {e}")
         except Exception as e:
             log.error(f"Unexpected error in {func.__name__}: {e}", exc_info=True)
             raise
@@ -139,13 +139,13 @@ class EnhancedDatabaseApi:
             self._session = self._session_factory()
         except Exception as e:
             log.error(f"Failed to start session: {e}")
-            raise DatabaseConnectionError(f"Cannot start database session: {e}")
+            raise DatabaseConnectionError(log, f"Cannot start database session: {e}")
     
     @contextmanager
     def transaction(self):
         """Context manager for explicit transaction control."""
         if not self._session:
-            raise DatabaseError("No active session for transaction")
+            raise DatabaseError(log, "No active session for transaction")
         
         try:
             yield self._session
@@ -173,13 +173,13 @@ class EnhancedDatabaseApi:
             DatabaseError: If database operation fails
         """
         if not self._session:
-            raise DatabaseError("No active session")
+            raise DatabaseError(log, "No active session")
         
         # Validate ULID format
         try:
-            ulid.parse(ulid_str)
+            ulid.ULID.from_str(ulid_str)
         except ValueError:
-            raise ValidationError(f"Invalid ULID format: {ulid_str}")
+            raise ValidationError(log, f"Invalid ULID format: {ulid_str}")
         
         return self._session.query(model).filter(model.id == ulid_str).first()
     
@@ -203,7 +203,7 @@ class EnhancedDatabaseApi:
         """
         entity = self.get_by_ulid(model, ulid_str)
         if not entity:
-            raise EntityNotFoundError(f"{model.__name__} with ULID {ulid_str} not found")
+            raise EntityNotFoundError(log, f"{model.__name__} with ULID {ulid_str} not found")
         return entity
     
     @validate_input
@@ -224,7 +224,7 @@ class EnhancedDatabaseApi:
             DatabaseError: If database operation fails
         """
         if not self._session:
-            raise DatabaseError("No active session")
+            raise DatabaseError(log, "No active session")
         
         # Generate ULID if not provided and model has id field
         if hasattr(model, 'id') and 'id' not in kwargs:
@@ -257,7 +257,7 @@ class EnhancedDatabaseApi:
             DatabaseError: If database operation fails
         """
         if not self._session:
-            raise DatabaseError("No active session")
+            raise DatabaseError(log, "No active session")
         
         for key, value in kwargs.items():
             if hasattr(entity, key):
@@ -281,7 +281,7 @@ class EnhancedDatabaseApi:
             DatabaseError: If database operation fails
         """
         if not self._session:
-            raise DatabaseError("No active session")
+            raise DatabaseError(log, "No active session")
         
         self._session.delete(entity)
         self._session.flush()
@@ -304,7 +304,7 @@ class EnhancedDatabaseApi:
             DatabaseError: If database operation fails
         """
         if not self._session:
-            raise DatabaseError("No active session")
+            raise DatabaseError(log, "No active session")
         
         # Try to get existing
         entity = self._session.query(model).filter_by(**kwargs).first()
@@ -342,7 +342,7 @@ class EnhancedDatabaseApi:
             DatabaseError: If database operation fails
         """
         if not self._session:
-            raise DatabaseError("No active session")
+            raise DatabaseError(log, "No active session")
         
         query = self._session.query(model)
         
@@ -382,7 +382,7 @@ class EnhancedDatabaseApi:
             DatabaseError: If database operation fails
         """
         if not self._session:
-            raise DatabaseError("No active session")
+            raise DatabaseError(log, "No active session")
         
         query = self._session.query(model)
         if filters:
@@ -435,7 +435,7 @@ class EnhancedDatabaseApi:
     def extract_id(self, entity):
         """
         Safely extract the ID from an entity while session is active.
-        
+
         This is a helper to avoid DetachedInstanceError when you only need the ID.
         """
         if hasattr(entity, 'id'):
@@ -444,3 +444,63 @@ class EnhancedDatabaseApi:
             return entity.ulid
         else:
             return str(entity)
+
+
+class GlobalDatabaseApi(EnhancedDatabaseApi):
+    """
+    Database API for global resources (VMs, environments, test functions, project metadata).
+
+    This API connects to the global database and manages globally shared resources.
+    """
+
+    def __init__(self):
+        """Initialize with global database location."""
+        super().__init__(config_database.get_global_database_location())
+        self._ensure_global_database()
+
+    def _ensure_global_database(self):
+        """Ensure global database schema exists."""
+        try:
+            from adare.database.models.global_models import GlobalBase
+            GlobalBase.metadata.create_all(self.engine)
+            log.debug("Global database schema ensured")
+        except Exception as e:
+            log.error(f"Failed to create global database schema: {e}")
+            raise DatabaseError(log, f"Cannot initialize global database: {e}")
+
+
+class ProjectDatabaseApi(EnhancedDatabaseApi):
+    """
+    Database API for project-specific resources (experiments, runs).
+
+    This API connects to a project-specific database and manages project data.
+    """
+
+    def __init__(self, project_path: Path):
+        """
+        Initialize with project-specific database location.
+
+        Args:
+            project_path: Path to the project directory
+        """
+        if not isinstance(project_path, Path):
+            project_path = Path(project_path)
+
+        self.project_path = project_path
+        db_path = config_database.get_project_database_location(project_path)
+        super().__init__(db_path)
+        self._ensure_project_database()
+
+    def _ensure_project_database(self):
+        """Ensure project database schema exists."""
+        try:
+            from adare.database.models.project_models import ProjectBase
+            ProjectBase.metadata.create_all(self.engine)
+            log.debug(f"Project database schema ensured for {self.project_path}")
+        except Exception as e:
+            log.error(f"Failed to create project database schema: {e}")
+            raise DatabaseError(log, f"Cannot initialize project database: {e}")
+
+
+# Legacy alias for backward compatibility
+DatabaseApi = EnhancedDatabaseApi

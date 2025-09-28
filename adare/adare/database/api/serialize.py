@@ -5,7 +5,8 @@ import pandas as pd
 from pathlib import Path
 
 # internal imports
-from adare.database.models.experiment import Project, Result, Environment, Experiment, ExperimentRun, OsInfo, StageInRun, Stage, Event, Status, TestFunction, TestFunctionFile, TestParameter, AbstractTest
+from adare.database.models.global_models import Project, Environment, OsInfo, TestFunction, TestFunctionFile, TestParameter
+from adare.database.models.project_models import Result, Experiment, ExperimentRun,  StageInRun, Stage, Event, Status, AbstractTest
 from adare.database.api.database import DatabaseApi
 import adare.config.database as config_database
 from adare.config import TIMESTAMP_FORMAT, StatusEnum
@@ -70,11 +71,11 @@ class SerializeApi(DatabaseApi):
 
     def serialize_run(self, run: ExperimentRun) -> (dict, dict):
         run_dict = {
-            'ulid': run.ulid,
+            'ulid': run.id,
             'status': run.status,
             'result_status': run.result_status,
-            'timestamp_start': run.timestamp_start.strftime(TIMESTAMP_FORMAT),
-            'timestamp_end': run.timestamp_end.strftime(TIMESTAMP_FORMAT),
+            'timestamp_start': run.start_time.strftime(TIMESTAMP_FORMAT),
+            'timestamp_end': run.end_time.strftime(TIMESTAMP_FORMAT),
             'events': [self.serialize_event(event) for event in run.events],
             'experiment_ulid': run.experiment.remote_ulid,
             'environment_ulid': run.environment.remote_ulid,
@@ -87,5 +88,5 @@ class SerializeApi(DatabaseApi):
         return run_dict, files_dict
 
     def serialize_run_by_ulid(self, run_ulid: str) -> dict:
-        run = self._session.query(ExperimentRun).filter(ExperimentRun.ulid == run_ulid).first()
+        run = self._session.query(ExperimentRun).filter(ExperimentRun.id == run_ulid).first()
         return self.serialize_run(run)

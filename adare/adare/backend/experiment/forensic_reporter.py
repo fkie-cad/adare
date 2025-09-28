@@ -14,7 +14,7 @@ from typing import Dict, List, Any, Optional
 import json
 
 from sqlalchemy.orm import Session
-from adare.database.models.experiment import ExperimentRun, ActionEvent, TestEvent, Event
+from adare.database.models.project_models import ExperimentRun, ActionEvent, TestEvent, Event
 from adare.database.api.experiment import ExperimentApi
 from adarelib.constants import StatusEnum
 
@@ -26,20 +26,21 @@ class ForensicReporter:
     Generates forensic audit logs from experiment run database records.
     """
 
-    def generate_forensic_report(self, experiment_run_id: str, output_path: Path) -> bool:
+    def generate_forensic_report(self, experiment_run_id: str, output_path: Path, project_path: Path) -> bool:
         """
         Generate forensic log for an experiment run and save to file.
 
         Args:
             experiment_run_id: ULID of the experiment run
             output_path: Path to save the forensic log YAML file
+            project_path: Path to the project directory for database context
 
         Returns:
             True if report generated successfully, False otherwise
         """
         try:
             # Use ExperimentApi for database access
-            with ExperimentApi() as api:
+            with ExperimentApi(project_path) as api:
                 # Query experiment run with relationships
                 experiment_run = api._session.query(ExperimentRun).filter(
                     ExperimentRun.id == experiment_run_id
@@ -80,8 +81,8 @@ class ForensicReporter:
             'experiment_run_id': experiment_run.id,
             'experiment_name': experiment_run.experiment.name if experiment_run.experiment else 'unknown',
             'environment_name': experiment_run.environment.name if experiment_run.environment else 'unknown',
-            'start_time': experiment_run.timestamp_start.isoformat() + 'Z' if experiment_run.timestamp_start else None,
-            'end_time': experiment_run.timestamp_end.isoformat() + 'Z' if experiment_run.timestamp_end else None
+            'start_time': experiment_run.start_time.isoformat() + 'Z' if experiment_run.start_time else None,
+            'end_time': experiment_run.end_time.isoformat() + 'Z' if experiment_run.end_time else None
         }
 
         # Process events into forensic actions
@@ -282,16 +283,17 @@ class ForensicReporter:
             return 'UNKNOWN'
 
 
-def generate_forensic_report_for_run(experiment_run_id: str, forensic_log_path: Path) -> bool:
+def generate_forensic_report_for_run(experiment_run_id: str, forensic_log_path: Path, project_path: Path) -> bool:
     """
     Convenience function to generate forensic report for an experiment run.
 
     Args:
         experiment_run_id: ULID of the experiment run
         forensic_log_path: Path to save the forensic log file
+        project_path: Path to the project directory for database context
 
     Returns:
         True if report generated successfully, False otherwise
     """
     reporter = ForensicReporter()
-    return reporter.generate_forensic_report(experiment_run_id, forensic_log_path)
+    return reporter.generate_forensic_report(experiment_run_id, forensic_log_path, project_path)

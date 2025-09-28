@@ -98,6 +98,7 @@ class VMLifecycleManager:
                     continue
         return latest
 
+
     async def create_and_prepare_vm(self, context: ExperimentRunCtx):
         """Create and prepare VM for experiment with snapshots and shared folders."""
         # Get VM ID from environment (file operations already done during environment load)
@@ -141,7 +142,6 @@ class VMLifecycleManager:
             'run': {'host': context.experiment_run_directory.path, 'vm': shared_root / 'run'},
             'adare': {'host': context.project_directory.vm_runtime, 'vm': shared_root / 'app'},
             'experiment': {'host': context.experiment_directory.path, 'vm': shared_root / 'experiment'},
-            'testfunctions': {'host': context.project_directory.testfunctions, 'vm': shared_root / 'testfunctions'},
             'shared': {'host': context.experiment_directory.shared, 'vm': shared_root / 'shared'},
         }
         

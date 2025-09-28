@@ -1,27 +1,25 @@
 """API for playbook database operations."""
 
 import logging
+import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
-from adare.database.models.playbook import Playbook, PlaybookItem, ActionExecution
+from adare.database.models.project_models import Playbook, PlaybookItem, ActionExecution, Experiment
 from adare.types.playbook import parse_playbook, Playbook as PlaybookType, ActionType
-from adare.database.models.experiment import Experiment
-from adare.database.api.database import DatabaseApi
+from adare.database.api.base import ProjectDatabaseApi
 from datetime import datetime, timezone
-import adare.config.database as config_database
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 
-class PlaybookApi(DatabaseApi):
+class PlaybookApi(ProjectDatabaseApi):
     """API for playbook database operations."""
-    
-    def __init__(self, db_path: Path = None):
-        if db_path is None:
-            db_path = config_database.get_database_location()
-        super().__init__(db_path)
+
+    def __init__(self, project_path: Path):
+        super().__init__(project_path)
     
     def populate_playbook_from_file(self, experiment: Experiment, playbook_file_path: Path) -> Playbook:
         """Parse YAML playbook file and populate database models."""
@@ -33,14 +31,21 @@ class PlaybookApi(DatabaseApi):
             vm_os = None
             vm_user = None
             if experiment.environments:
-                # Use first environment's OS info
-                env = experiment.environments[0]
-                if env.vm and env.vm.osinfo:
-                    vm_os = env.vm.osinfo.platform  # 'windows' or 'linux'
-                    # Get VM user from config - import here to avoid circular imports
-                    from adare.config import get_vm_credentials
-                    if vm_os:
-                        vm_user, _ = get_vm_credentials(vm_os)
+                # Use first environment's OS info - query from global database
+                env_id = experiment.environments[0].id
+                from adare.database.api.base import GlobalDatabaseApi
+                from adare.database.models.global_models import Environment, Vm
+                from sqlalchemy.orm import joinedload
+                with GlobalDatabaseApi() as global_api:
+                    env = global_api._session.query(Environment).options(
+                        joinedload(Environment.vm).joinedload(Vm.osinfo)
+                    ).filter(Environment.id == env_id).first()
+                    if env and env.vm and env.vm.osinfo:
+                        vm_os = env.vm.osinfo.platform  # 'windows' or 'linux'
+                        # Get VM user from config - import here to avoid circular imports
+                        from adare.config import get_vm_credentials
+                        if vm_os:
+                            vm_user, _ = get_vm_credentials(vm_os)
 
             # Parse YAML file using existing parser (automatic variables added during execution)
             config = parse_playbook(playbook_file_path)

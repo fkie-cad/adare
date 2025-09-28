@@ -12,21 +12,69 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def import_basictest_subclasses(directory: Path) -> dict:
+def import_basictest_subclasses(source=None, directory=None) -> dict:
+    """
+    Import BasicTest subclasses from either database records or directory scanning.
+
+    Args:
+        source: Optional list of (name, path) tuples from database
+        directory: Optional directory path for filesystem scanning (fallback)
+
+    Returns:
+        dict: Nested dictionary {file_name: {testname: test_class}}
+    """
     testdict = {}
 
-    for testfunction_dir in directory.iterdir():
-        file = testfunction_dir / f'{testfunction_dir.name}.py'
-        if not (testfunction_dir / f'{testfunction_dir.name}.py').exists():
-            continue
-        module = import_module_from_pyfile(file)
-        testdict[file.stem] = {}
+    if source:
+        # Database-driven approach: use provided (name, path) tuples
+        for name, file_path in source:
+            file_path = Path(file_path)
+            if not file_path.exists():
+                log.warning(f"Testfunction file not found: {file_path}")
+                continue
 
-        for attribute_name in dir(module):
-            attribute = getattr(module, attribute_name)
-            if isclass(attribute) and issubclass(attribute, BasicTest):
-                globals()[attribute_name] = attribute
-                testdict[file.stem][getattr(attribute, 'testname')] = attribute
+            try:
+                module = import_module_from_pyfile(file_path)
+                testdict[name] = {}
+
+                for attribute_name in dir(module):
+                    attribute = getattr(module, attribute_name)
+                    if isclass(attribute) and issubclass(attribute, BasicTest):
+                        globals()[attribute_name] = attribute
+                        testdict[name][getattr(attribute, 'testname')] = attribute
+            except Exception as e:
+                log.error(f"Error loading testfunction module {file_path}: {e}")
+                continue
+
+    elif directory:
+        # Filesystem scanning approach (existing logic)
+        directory = Path(directory)
+        if not directory.exists():
+            log.warning(f"Testfunctions directory not found: {directory}")
+            return testdict
+
+        for testfunction_dir in directory.iterdir():
+            if not testfunction_dir.is_dir():
+                continue
+
+            file = testfunction_dir / f'{testfunction_dir.name}.py'
+            if not file.exists():
+                continue
+
+            try:
+                module = import_module_from_pyfile(file)
+                testdict[file.stem] = {}
+
+                for attribute_name in dir(module):
+                    attribute = getattr(module, attribute_name)
+                    if isclass(attribute) and issubclass(attribute, BasicTest):
+                        globals()[attribute_name] = attribute
+                        testdict[file.stem][getattr(attribute, 'testname')] = attribute
+            except Exception as e:
+                log.error(f"Error loading testfunction module {file}: {e}")
+                continue
+    else:
+        raise ValueError("Either 'source' or 'directory' parameter must be provided")
 
     return testdict
 

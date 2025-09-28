@@ -27,13 +27,13 @@ log = logging.getLogger(__name__)
 
 class ExperimentRunDirectory(Directory):
     log_directory: Path
-    vagrant_log_file: Path
+    adare_log_file: Path
     adarevm_log_file: Path
 
     def __init__(self, project_directory: ProjectDirectory, experiment: str):
         super().__init__(project_directory.run / experiment / datetime.now(timezone.utc).strftime('%Y-%m-%d_%H-%M-%S'))
         self.log_directory = self.path / 'logs'
-        self.vagrant_log_file = self.log_directory / 'vagrant.log'
+        self.adare_log_file = self.log_directory / 'adare.log'
         self.adarevm_log_file = self.log_directory / 'adarevm.log'
         self.mcp_gui_log_file = self.log_directory / 'mcp_gui.log'
         self.experiment_debug_log_file = self.log_directory / 'experiment_debug.log'
@@ -41,6 +41,7 @@ class ExperimentRunDirectory(Directory):
         self.reporting_directory = self.path / 'reporting'
         self.screenshots_directory = self.reporting_directory / 'screenshots'
         self.forensic_log_file = self.reporting_directory / 'forensic_log.yml'
+        self.tmp_directory = self.path / '.tmp'
 
 
     def create(self):
@@ -49,11 +50,17 @@ class ExperimentRunDirectory(Directory):
         self.log_directory.mkdir(parents=False)
         self.reporting_directory.mkdir(parents=False, exist_ok=True)
         self.screenshots_directory.mkdir(parents=False, exist_ok=True)
+        self.tmp_directory.mkdir(parents=False, exist_ok=True)
 
 
     def clean(self):
-        # todo: implement clean method (think what needs to be cleaned)
-        pass
+        """Clean up temporary files and directories after experiment run."""
+        try:
+            if self.tmp_directory.exists():
+                shutil.rmtree(self.tmp_directory)
+                log.debug(f"Cleaned up temporary directory: {self.tmp_directory}")
+        except Exception as e:
+            log.warning(f"Failed to clean up temporary directory {self.tmp_directory}: {e}")
 
 
 class ExperimentDirectory(Directory):

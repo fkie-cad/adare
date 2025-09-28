@@ -11,7 +11,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def __get_default_appdata_directory(create_if_missing: bool = False, program_name: str = 'adare') -> Path or None:
+def __get_default_appdata_directory(create_if_missing: bool = False, program_name: str = 'adare') -> Path | None:
     """
     get the default config directory for the tool
 
@@ -32,6 +32,12 @@ def __get_default_appdata_directory(create_if_missing: bool = False, program_nam
         return None
     if create_if_missing:
         appdata_path.mkdir(parents=False, exist_ok=True)
+        # Create state directory structure
+        state_dir = appdata_path / 'state'
+        state_dir.mkdir(exist_ok=True, parents=True)
+        (state_dir / 'vms').mkdir(exist_ok=True, parents=True)
+        (state_dir / 'environments').mkdir(exist_ok=True, parents=True)
+        (state_dir / 'testfunctions').mkdir(exist_ok=True, parents=True)
     if not appdata_path.is_dir():
         print(f'the appdata directory ({appdata_path}) of the tool is missing')
         return None
@@ -53,6 +59,9 @@ TEMPLATES_DIR: Path = APPDATA_DIR/'templates'
 NETWORKDRIVE_TEMPLATES_DIR: Path = APPDATA_DIR/'networkdrive'/'templates'
 VAGRANTFILE_TEMPLATE: Path = APPDATA_DIR/'VagrantfileTemplate'/'VagrantfileMultiMachine'
 
-# VM storage directories
-VMS_DIR: Path = APPDATA_DIR/'vms'  # Global VM storage
+# Global storage directories
+STATE_DIR: Path = APPDATA_DIR/'state'  # Global state directory
+VMS_DIR: Path = STATE_DIR/'vms'  # Global VM storage
+ENVIRONMENTS_DIR: Path = STATE_DIR/'environments'  # Global environment storage
+
 

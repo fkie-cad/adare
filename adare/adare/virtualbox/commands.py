@@ -55,8 +55,38 @@ class CommandExecutionMixin:
                             proc.wait()
                         break
 
-                    byte = proc.stdout.read(1)
-                    now = time.time()
+                    # Cross-platform non-blocking read approach
+                    if os.name != 'windows':
+                        # Use select on Unix-like systems
+                        import select
+                        ready, _, _ = select.select([proc.stdout], [], [], 0.1)  # 100ms timeout
+
+                        if ready:
+                            byte = proc.stdout.read(1)
+                            now = time.time()
+                        else:
+                            byte = None
+                            now = time.time()
+                    else:
+                        # Windows doesn't support select on pipes, use polling approach
+                        if proc.poll() is None:  # Process still running
+                            try:
+                                # Try to read with very short timeout simulation
+                                byte = proc.stdout.read(1)
+                                now = time.time()
+                            except:
+                                # No data available, small sleep to avoid busy waiting
+                                time.sleep(0.01)
+                                byte = None
+                                now = time.time()
+                        else:
+                            # Process finished, try to read remaining data
+                            try:
+                                byte = proc.stdout.read(1)
+                                now = time.time()
+                            except:
+                                byte = None
+                                now = time.time()
 
                     if byte:
                         buffer += byte
@@ -71,7 +101,11 @@ class CommandExecutionMixin:
                     else:
                         if proc.poll() is not None:
                             break
-                        time.sleep(0.01)
+                        # Check for interruption more frequently
+                        if stop_event and stop_event.is_set():
+                            continue  # Go back to top of loop for clean interruption handling
+
+                    now = time.time()
 
                     # Flush buffer every 1 seconds even if no newline
                     if buffer and (now - last_yield_time >= flush_interval):
@@ -190,19 +224,25 @@ class CommandExecutionMixin:
             raise e
 
     def _execute_streaming_command(
-        self, 
-        command_args: List[str], 
+        self,
+        command_args: List[str],
         log_file: Optional[Path] = None,
         stop_event: Optional[threading.Event] = None,
         silent: bool = False,
         ctx_manager=None,
-        operation_name: str = "VBoxManage operation"
+        operation_name: str = "VBoxManage operation",
+        timeout: int = 300  # 5 minute default timeout
     ) -> int:
         """Generic method to execute VBoxManage commands with streaming output."""
-        log.info(f"Executing {operation_name} for VM '{self.vm_name}' with streaming output")
+        import time
+        start_time = time.time()
+
+        log.info(f"CLAUDE: Executing {operation_name} for VM '{self.vm_name}' with streaming output (timeout: {timeout}s)")
+        log.info(f"CLAUDE: VBoxManage command: {' '.join([self.vboxmanage_exe] + command_args)}")
+
         line_queue = queue.Queue()
         return_value = 0
-        
+
         # Update context manager to running status
         if ctx_manager:
             from adarelib.constants import StatusEnum
@@ -225,16 +265,28 @@ class CommandExecutionMixin:
         stream_thread = threading.Thread(target=stream_worker, daemon=True)
         stream_thread.start()
 
-        # Process streamed output
+        # Process streamed output with timeout handling
         try:
             with open(log_file, 'w', encoding='utf-8') if log_file else open(os.devnull, 'w') as f:
                 while True:
                     try:
                         line = line_queue.get(timeout=1)
                     except queue.Empty:
-                        if stop_event and stop_event.is_set():
-                            log.info(f"Stop event detected during {operation_name}")
+                        # Check for timeout
+                        elapsed = time.time() - start_time
+                        if elapsed > timeout:
+                            log.error(f"CLAUDE: {operation_name} timed out after {timeout}s for VM '{self.vm_name}'")
                             if ctx_manager:
+                                from adarelib.constants import StatusEnum
+                                ctx_manager.set_status(StatusEnum.FAILED)
+                            return_value = 1
+                            break
+
+                        # Check for interruption
+                        if stop_event and stop_event.is_set():
+                            log.info(f"CLAUDE: Stop event detected during {operation_name}")
+                            if ctx_manager:
+                                from adarelib.constants import StatusEnum
                                 ctx_manager.set_status(StatusEnum.INTERRUPTED)
                             break
                         continue
@@ -244,13 +296,13 @@ class CommandExecutionMixin:
 
                     if not silent:
                         log.info(f"[{self.vm_name}] {line.rstrip()}")
-                    
+
                     if log_file:
                         f.write(line)
                         f.flush()
 
         except Exception as e:
-            log.error(f"Error processing output during {operation_name}: {e}")
+            log.error(f"CLAUDE: Error processing output during {operation_name}: {e}")
             return_value = 1
 
         # Wait for stream thread to complete

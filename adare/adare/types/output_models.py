@@ -48,6 +48,7 @@ class EnvironmentInfo:
     osinfo_language: str = ""
     published: bool = False
     in_request: bool = False
+    file: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
@@ -76,7 +77,8 @@ class EnvironmentInfo:
             'metadata': {
                 'created_at': self.created_at.isoformat() if self.created_at else None,
                 'experiment_count': self.experiment_count,
-            }
+            },
+            'file': self.file
         }
 
 
@@ -138,7 +140,6 @@ class TestFunctionInfo:
     file_sha256: str = ""
     file_description: str = ""
     full_file_path: str = ""
-    project: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
@@ -150,7 +151,6 @@ class TestFunctionInfo:
             'description': self.description,
             'parameter_count': self.parameter_count,
             'parameters': self.parameters,
-            'project': self.project,
             'file': {
                 'id': self.file_id,
                 'name': self.file_name,
