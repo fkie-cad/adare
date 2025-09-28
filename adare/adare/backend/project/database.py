@@ -5,7 +5,8 @@ from pathlib import Path
 
 # internal imports
 from adare.database.api.project import ProjectDbApi
-# Project model import removed - returning data instead of objects
+from adare.database.api.testfunction import TestfunctionDbApi
+from adare.database.api.environment import EnvironmentDbApi
 
 
 # configure logging
@@ -119,16 +120,17 @@ def remove_project(project_path: Path):
         api.remove_project_by_path(project_path)
 
 
-def get_project_testfunction_hashes(project_path: Path) -> list:
-    with ProjectDbApi() as api:
-        project = api.get_project_by_path(project_path)
+def get_global_testfunction_hashes() -> list:
+    with TestfunctionDbApi() as api:
+        # Get all global test function files since they are no longer project-specific
+        testfunction_files = api.get_testfunction_files()
         hashes = [
             {
                 "hash": testfunction_file.sha256hash,
                 "file": testfunction_file.path,
                 "requirements": testfunction_file.requirements_path,
             }
-            for testfunction_file in project.test_function_files
+            for testfunction_file in testfunction_files
         ]
         return hashes
 
@@ -143,12 +145,14 @@ def get_project_summary(project_path: Path) -> dict | None:
     return get_project_by_path(project_path, fields=['id', 'name', 'description'])
 
 
-def get_project_environment_hashes(project_path: Path) -> dict:
-    with ProjectDbApi() as api:
-        project = api.get_project_by_path(project_path)
+def get_global_environment_hashes() -> dict:
+    with EnvironmentDbApi() as api:
+        # Get all global environments since they are no longer project-specific
+        environments = api.get_environments()
         hashes = {
-            environment_file.file: environment_file.sha256hash
-            for environment_file in project.environments
+            environment.file: environment.sha256hash
+            for environment in environments
+            if environment.file and environment.sha256hash  # Only include environments with file and hash
         }
         return hashes
 

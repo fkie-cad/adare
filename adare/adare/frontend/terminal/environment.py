@@ -24,7 +24,7 @@ class InfoPanel:
         grid = Table.grid(expand=True)
         grid.add_column(justify="left")
         grid.add_row(
-            f"{pad_string_to_length('name', 12)}: [b]{self.environment['dotnotation'].values[0]}[/b]",
+            f"{pad_string_to_length('name', 12)}: [b]{self.environment['name'].values[0]}[/b]",
         )
         grid.add_row(
             f"{pad_string_to_length('ulid', 12)}: [b]{self.environment['id'].values[0]}[/b]",
@@ -93,7 +93,7 @@ class EnvironmentPanel:
         self.environment = environment
 
     def __rich__(self) -> Panel:
-        title = f'[b gold3]{self.environment["dotnotation"].values[0]}[/b gold3]'
+        title = f'[b gold3]{self.environment["name"].values[0]}[/b gold3]'
         layout = Layout(name="env")
         layout.split(
             Layout(name="tags", size=1),
@@ -128,10 +128,10 @@ class EnvironmentPanel:
         return Panel(layout, title=title, border_style="blue", title_align="left")
 
 
-def print_environment(dotnotation: str):
+def print_environment(environment_name: str):
     with DataRetrievalApi() as db:
         console = DefaultConsole()
-        environment = db.get_environment_by_dotnotation(dotnotation)
+        environment = db.get_environment_by_name(environment_name)
         layout = Layout(name="root")
         panel = EnvironmentPanel(environment)
         layout.update(panel)

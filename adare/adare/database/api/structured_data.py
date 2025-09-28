@@ -5,8 +5,11 @@ from pathlib import Path
 from sqlalchemy.orm import joinedload, selectinload
 
 # internal imports
-from adare.database.models.experiment import (
-    Project, Environment, Experiment, ExperimentRun, TestFunction, TestParameter, TestFunctionFile, Vm, OsInfo
+from adare.database.models.global_models import (
+    Project, Environment, TestFunction, TestParameter, TestFunctionFile, Vm, OsInfo
+)
+from adare.database.models.project_models import (
+    Experiment, ExperimentRun, 
 )
 from adare.database.api.database import DatabaseApi
 import adare.config.database as config_database
@@ -44,16 +47,10 @@ class StructuredDataApi(DatabaseApi):
         result = []
 
         for project in projects:
-            # Count environments for this project
-            env_count = safe_count(self._session.query(Environment).filter(
-                Environment.project_id == project.id
-            ))
-
             project_info = ProjectInfo(
                 name=project.name,
                 description=project.description or "",
                 created_at=project.created_at,
-                environment_count=env_count
             )
             result.append(project_info)
 
@@ -92,7 +89,8 @@ class StructuredDataApi(DatabaseApi):
                 osinfo_language=osinfo_language,
                 created_at=env.created_at,
                 published=published,
-                in_request=in_request
+                in_request=in_request,
+                file=env.file or ""
             )
             result.append(env_info)
 
@@ -180,11 +178,6 @@ class StructuredDataApi(DatabaseApi):
                 file_name = tf_file.name if tf_file else "unknown"
                 file_name_clean = file_name.replace('.py', '') if file_name.endswith('.py') else file_name
 
-                # Get project information - take the first project if multiple exist
-                project_names = []
-                if tf_file and tf_file.projects:
-                    project_names = [project.name for project in tf_file.projects]
-                project_name = project_names[0] if project_names else ""
 
                 # Use utility function for smart display name
                 display_name = get_smart_display_name(tf, 'testfunction')
@@ -217,8 +210,7 @@ class StructuredDataApi(DatabaseApi):
                     file_path=file_name_clean,
                     full_file_path=tf_file.path if tf_file else "",
                     file_sha256=tf_file.sha256hash if tf_file else "",
-                    file_description=tf_file.description if tf_file else "",
-                    project=project_name
+                    file_description=tf_file.description if tf_file else ""
                 )
                 result.append(tf_info)
             except Exception as e:

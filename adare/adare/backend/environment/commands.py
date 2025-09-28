@@ -8,10 +8,11 @@ import adare.backend.environment.database as environment_database
 from adare.types.environment import EnvironmentMetadata, parse_environment_file
 from adare.backend.project.directory import ProjectDirectory
 from adare.helperfunctions.hash import hash_file_sha256
-from adare.config.configdirectory import TEMPLATES_DIR
+from adare.helperfunctions.file.hash import file_sha256_with_progress
+from adare.config.configdirectory import TEMPLATES_DIR, ENVIRONMENTS_DIR, VMS_DIR
 from adare.exceptions import TemplateMissingError
 from adare.backend.environment.exceptions import EnvironmentLoadFailed, EnvironmentFileAlreadyExists, \
-    EnvironmentDoesNotExistInDatabase, ExampleEnvironmentDoesNotExist
+    EnvironmentDoesNotExistInDatabase
 from adare.webappaccess.download import download_environment, sync
 from adare.webappaccess.login import is_logged_in
 from adare.exceptions import NotLoggedInError
@@ -25,24 +26,24 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def resolve_vm_from_url(url: str, project_path: Path) -> Path:
+def resolve_vm_from_url(url: str) -> Path:
     """
-    Download and cache an OVA file from URL using the project's vm directory.
-    
+    Download and cache an OVA file from URL using the global vm directory.
+
     Args:
         url: URL to the OVA file
-        project_path: Project root path
-        
+
     Returns:
         Path to the downloaded/cached OVA file
-        
+
     Raises:
         EnvironmentLoadFailed: If download fails
     """
-    from adare.backend.project.directory import ProjectDirectory
-    
-    project_dir = ProjectDirectory(project_path)
-    vm_dir = project_dir.vm
+    # Use global VM directory
+    vm_dir = VMS_DIR
+
+    # Ensure global VM directory exists
+    vm_dir.mkdir(parents=True, exist_ok=True)
     
     # Generate filename from URL
     parsed_url = urlparse(url)
@@ -112,30 +113,56 @@ def environment_sync(environment_ulid: str):
     log.info(f'environment {environment_ulid} synced')
 
 
-def environment_load(project: Path, environment: str, force: bool = False):
-    project_directory = ProjectDirectory(project)
+def environment_load(environment: str, force: bool = False):
+    import time
+    start_time = time.time()
 
-    for ext in ('.yml', '.yaml'):
-        environment_file = project_directory.environments / f'{environment}{ext}'
-        if environment_file.exists():
-            break
+    # Ensure global environments directory exists
+    ENVIRONMENTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Check if environment is a full path (external file) or just a name
+    if environment.startswith('/') or Path(environment).suffix in ['.yml', '.yaml']:
+        # It's a full path to an external file
+        environment_file = Path(environment)
+        if not environment_file.exists():
+            raise EnvironmentLoadFailed(
+                log,
+                f'environment file {environment_file} does not exist'
+            )
     else:
-        raise EnvironmentLoadFailed(
-            log,
-            f'environment file {project_directory.environments / f"{environment}.yml"} or .yaml does not exist',
-            possible_solutions=[
-                'Did you create the environment file?',
-                'If not, try to create the environment file via [i]adare env create[/i].',
-            ]
-        )
+        # It's a name, look in global environments directory
+        for ext in ('.yml', '.yaml'):
+            environment_file = ENVIRONMENTS_DIR / f'{environment}{ext}'
+            if environment_file.exists():
+                break
+        else:
+            raise EnvironmentLoadFailed(
+                log,
+                f'environment file {ENVIRONMENTS_DIR / f"{environment}.yml"} or .yaml does not exist',
+                possible_solutions=[
+                    'Did you create the environment file?',
+                    'If not, try to create the environment file via [i]adare env create[/i].',
+                    f'Check if the environment file exists in {ENVIRONMENTS_DIR}',
+                ]
+            )
 
-    environment_file_sha256 = hash_file_sha256(environment_file)
+    # CLAUDE: Calculate environment file hash with progress bar for better UX
+    log.info(f'🔍 Calculating environment file hash...')
+    environment_file_sha256 = file_sha256_with_progress(
+        environment_file,
+        description=f"Hashing environment file {environment_file.name}",
+        silent=False
+    )
+    log.info(f'🔑 Environment file hash: {environment_file_sha256}')
 
-    # checks if environment with same hash already exists in the database
+    # CLAUDE: Early check - if environment already exists by hash, skip VM processing entirely
     existing_environment_id = environment_database.get_environment_by_hash(environment_file_sha256, trigger_exception=False)
     if existing_environment_id:
         if not force:
-            log.info(f'Environment with hash {environment_file_sha256} already exists in database')
+            elapsed_time = time.time() - start_time
+            log.info(f'🚀 Environment with hash {environment_file_sha256} already exists in database - skipping all VM processing!')
+            log.info(f'⚡ Optimization: No file copying or VM processing needed!')
+            log.info(f'⏱️  Total time: {elapsed_time:.1f} seconds (vs potentially minutes for full VM processing)')
             return existing_environment_id
         else:
             log.info(f'Environment with hash {environment_file_sha256} exists, but force=True, so updating')
@@ -145,62 +172,118 @@ def environment_load(project: Path, environment: str, force: bool = False):
     
     environment_metadata: EnvironmentMetadata = parse_environment_file(environment_file)
 
-    # Override environment name with filename (ignore name in file)
-    environment_metadata.name = environment
+    # Override environment name with filename without extension (ignore name in file)
+    # Extract just the filename without extension for the name, store full path separately
+    environment_metadata.name = environment_file.stem
 
     # todo: maybe add validation for environment configuration semantic
 
     # Handle VM file copying and hashing during environment load (heavy file operations)
     vm_id = None
-    if environment_metadata.vm:
-        # Determine how to handle the VM specification
-        is_url = False
-        
-        if environment_metadata.vm_type == "auto":
-            # Auto-detect URL vs local path
-            is_url = environment_metadata.vm.startswith(('http://', 'https://'))
-        elif environment_metadata.vm_type == "url":
-            # Force treat as URL (even if it doesn't start with http)
-            is_url = True
-        elif environment_metadata.vm_type == "path":
-            # Force treat as local path
+    created_vm_id = None  # Track newly created VM for cleanup on failure
+
+    try:
+        if environment_metadata.vm:
+            # Determine how to handle the VM specification
             is_url = False
         
-        if is_url:
-            # Download VM from URL and cache in project/vm directory
-            log.info(f'Processing URL-based VM: {environment_metadata.vm}')
-            try:
-                vm_path = resolve_vm_from_url(environment_metadata.vm, project)
-                log.info(f'VM downloaded from URL and cached: {vm_path}')
-            except Exception as e:
-                log.error(f'Failed to download VM from URL {environment_metadata.vm}: {e}')
-                raise
-        else:
-            # Handle local file path - support both relative (to project) and absolute paths
-            vm_path = Path(environment_metadata.vm)
-            if not vm_path.is_absolute():
-                # For relative paths, resolve relative to project directory
-                vm_path = (project / vm_path).resolve()
-            else:
-                # For absolute paths, just resolve to normalize the path
-                vm_path = vm_path.resolve()
+            if environment_metadata.vm_type == "auto":
+                # Auto-detect URL vs local path
+                is_url = environment_metadata.vm.startswith(('http://', 'https://'))
+            elif environment_metadata.vm_type == "url":
+                # Force treat as URL (even if it doesn't start with http)
+                is_url = True
+            elif environment_metadata.vm_type == "path":
+                # Force treat as local path
+                is_url = False
         
-        if vm_path.exists():
-            from adare.backend.vm.commands import load_vm_file_for_environment
-            log.info(f'Processing VM file during environment load: {vm_path}')
-            vm_id = load_vm_file_for_environment(
-                project_path=project,
-                vm_path=vm_path,
-                environment_metadata=environment_metadata
-            )
-            log.info(f'VM file processed and stored in database with ID: {vm_id}')
-        else:
-            log.warning(f'VM file specified but not found: {vm_path}')
+            if is_url:
+                # Download VM from URL and cache in global vm directory
+                log.info(f'Processing URL-based VM: {environment_metadata.vm}')
+                try:
+                    vm_path = resolve_vm_from_url(environment_metadata.vm)
+                    log.info(f'VM downloaded from URL and cached: {vm_path}')
+                except Exception as e:
+                    log.error(f'Failed to download VM from URL {environment_metadata.vm}: {e}')
+                    raise
+            else:
+                # Handle local file path - support both relative and absolute paths
+                vm_path = Path(environment_metadata.vm)
+                if not vm_path.is_absolute():
+                    # Try relative to environment file first
+                    vm_path = environment_file.parent / environment_metadata.vm
 
-    environment_ulid = environment_database.update_environment(project, environment_metadata, environment_file, environment_file_sha256, vm_id=vm_id, force=force)
-    if not environment_ulid:
-        log.error(f'environment update failed')
-        return
+                if not vm_path.exists():
+                    raise EnvironmentLoadFailed(
+                        log,
+                        f'VM file not found: {vm_path}',
+                        possible_solutions=[
+                            'Check if the VM file path is correct',
+                            'Use absolute path for VM file',
+                            'Ensure VM file exists in the specified location'
+                        ]
+                    )
+        
+            if vm_path.exists():
+                from adare.backend.vm.commands import load_vm_file_for_environment
+                log.info(f'Processing VM file during environment load: {vm_path}')
+
+                # CLAUDE: Removed duplicate hash calculation - let load_vm_file_for_environment handle it
+                import adare.backend.vm.database as vm_database
+
+                # Call load_vm_file_for_environment which handles hash calculation and duplicate checking
+                vm_result = load_vm_file_for_environment(
+                    project_path=None,  # VMs are now global, no specific project
+                    vm_path=vm_path,
+                    environment_metadata=environment_metadata
+                )
+
+                # Handle both old return format (vm_id) and new return format (dict with vm_id and was_existing)
+                if isinstance(vm_result, dict):
+                    vm_id = vm_result['vm_id']
+                    was_existing = vm_result['was_existing']
+                    # If VM didn't exist before, mark it for potential cleanup
+                    if not was_existing:
+                        created_vm_id = vm_id
+                else:
+                    # Legacy return format (just vm_id)
+                    vm_id = vm_result
+                    # Check if this was an existing VM for cleanup purposes
+                    existing_vm = vm_database.get_vm_by_id(vm_id)
+                    if existing_vm and existing_vm.created_at:
+                        # This is a heuristic - if VM was created very recently, it's probably new
+                        import datetime
+                        now = datetime.datetime.utcnow()
+                        creation_time = existing_vm.created_at
+                        if isinstance(creation_time, str):
+                            creation_time = datetime.datetime.fromisoformat(creation_time.replace('Z', '+00:00'))
+                        time_diff = (now - creation_time).total_seconds()
+                        if time_diff < 60:  # Created within last minute
+                            created_vm_id = vm_id
+
+                log.info(f'VM file processed and stored in database with ID: {vm_id}')
+            else:
+                log.warning(f'VM file specified but not found: {vm_path}')
+
+        # Try to create environment - if this fails, cleanup VM if we created it
+        environment_ulid = environment_database.update_environment(None, environment_metadata, environment_file, environment_file_sha256, vm_id=vm_id, force=force)
+        if not environment_ulid:
+            log.error(f'environment update failed')
+            raise EnvironmentLoadFailed(log, 'Failed to create environment in database')
+
+    except Exception as e:
+        # If environment creation failed and we created a new VM, clean it up
+        if created_vm_id:
+            log.warning(f'Environment creation failed, cleaning up newly created VM {created_vm_id}')
+            try:
+                import adare.backend.vm.database as vm_database
+                vm_database.delete_vm(created_vm_id)
+                log.info(f'Successfully cleaned up VM {created_vm_id}')
+            except Exception as cleanup_error:
+                log.error(f'Failed to cleanup VM {created_vm_id}: {cleanup_error}')
+
+        # Re-raise the original exception
+        raise e
     
     environment_sync(environment_ulid)
     
@@ -315,22 +398,6 @@ def environment_create(project: Path, environment: str, vm_path: Path = None):
     log.info(f'environment file {environment_file} created')
 
 
-def environment_example(project: Path, environment: str):
-    from adare.config.configdirectory import EXAMPLES_DIR
-    import shutil
-
-    project_directory = ProjectDirectory(project)
-
-    environment_file_src = EXAMPLES_DIR / 'environments' / f'{environment}.yml'
-
-    if not environment_file_src.exists():
-        raise ExampleEnvironmentDoesNotExist(
-            log,
-            f'example environment file {environment_file_src} does not exist',
-            possible_solutions=[]
-        )
-    environment_file_dst = project_directory.environments
-    shutil.copy(environment_file_src, environment_file_dst)
 
 
 

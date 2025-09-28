@@ -11,16 +11,17 @@ import logging
 log = logging.getLogger(__name__)
 
 
-async def check_experiment_published(experiment_ulid, force_check=False, component_func=None, post_func=None):
+async def check_experiment_published(experiment_ulid, project_path, force_check=False, component_func=None, post_func=None):
     """
     Check if the experiment is published to the webapp
     :param post_func:
     :param component_func:
     :param force_check: force a check even if the publish status is known
     :param experiment_ulid: the experiment ulid
+    :param project_path: path to the project directory for database context
     """
 
-    with ExperimentApi() as experiment_api:
+    with ExperimentApi(project_path) as experiment_api:
         experiment = experiment_api.get_experiment_by_ulid(experiment_ulid)
         if not experiment:
             log.error(f"Experiment with ulid {experiment_ulid} not found in database")

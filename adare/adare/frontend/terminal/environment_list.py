@@ -21,6 +21,7 @@ class EnvironmentTablePanel:
         table = Table(expand=True)
         table.add_column("name", style="cyan", no_wrap=True)
         table.add_column("ulid", style="cyan", no_wrap=True)
+        table.add_column("file path", style="yellow", no_wrap=False)
         table.add_column("vm", style="cyan", no_wrap=True)
         table.add_column("os", style="cyan", no_wrap=True)
         table.add_column("web status", style="cyan", no_wrap=True)
@@ -37,6 +38,7 @@ class EnvironmentTablePanel:
             table.add_row(
                 row['display_name'],
                 row['id'],
+                row['file'] if 'file' in row and row['file'] else 'N/A',
                 row['vm_name'] if 'vm_name' in row and row['vm_name'] else 'No VM',
                 row['osinfo'] if 'osinfo' in row and row['osinfo'] else 'Unknown',
                 web_status,

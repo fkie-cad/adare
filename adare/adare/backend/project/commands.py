@@ -10,6 +10,7 @@ from adare.backend.project.exceptions import ProjectDirectoryCreationError, Proj
     ProjectDirectoryCopyError, ProjectDirectoryMissingError, ProjectMissingInDatabaseError, NoProjectsFoundMessage
 from adare.database.exceptions import DatabaseProjectCreationError
 from adare.console import print_success_message
+from adare.database.fixtures import fixture_stages, fixture_status
 
 # configure logging
 import logging
@@ -28,13 +29,32 @@ def project_create(path: Path, name: str, description: str = ''):
         log.info(f'project directory {path} removed, since project could not be added to database')
         raise e
 
+    # Initialize project database
     try:
-        project_directory.copy_standard_testfunction()
-    except ProjectDirectoryCopyError as e:
+        from adare.database.init import ensure_project_database_exists
+        ensure_project_database_exists(path)
+        log.info(f'project database initialized for {path}')
+    except Exception as e:
         project_directory.remove()
         project_database.remove_project(path)
-        log.info(f'project directory {path} removed, since testfunctions could not be copied')
+        log.error(f'project directory {path} removed, since project database could not be initialized: {e}')
         raise e
+
+    # Load stage and status fixtures for the project
+    try:
+        from adare.database.api.base import ProjectDatabaseApi
+        with ProjectDatabaseApi(path) as project_api:
+            fixture_status(project_api._session)
+            fixture_stages(project_api._session)
+        log.info(f'project fixtures loaded for {path}')
+    except Exception as e:
+        project_directory.remove()
+        project_database.remove_project(path)
+        log.error(f'project directory {path} removed, since project fixtures could not be loaded: {e}')
+        raise e
+
+    # Testfunctions are now global - no need to copy to individual projects
+    log.debug('Skipping testfunction copying - testfunctions are global resources')
 
     try:
         project_directory.copy_vm_runtime_files()
@@ -44,13 +64,8 @@ def project_create(path: Path, name: str, description: str = ''):
         log.info(f'project directory {path} removed, since vm runtime files could not be copied')
         raise e
 
-    # Auto-load all copied testfunctions
-    try:
-        _auto_load_testfunctions(project_directory)
-        log.info(f'all testfunctions loaded for project {path}')
-    except Exception as e:
-        log.warning(f'some testfunctions could not be loaded: {e}')
-        # Don't fail project creation if testfunction loading fails
+    # Testfunctions are now global - they are loaded once and shared across all projects
+    log.debug('Skipping testfunction loading - testfunctions are global resources')
 
     log.info(f'project in path {path} created')
     
@@ -75,11 +90,14 @@ def project_remove(path: Path):
         raise ProjectMissingInDatabaseError(log, message=f'project in path [i]{path}[/i] does not exist in database')
 
     project_directory = ProjectDirectory(path)
-    if not project_directory.exists():
-        raise ProjectDirectoryMissingError(log, message=f'project directory [i]{path}[/i] does not exist')
 
-    project_directory.remove()
+    # Remove directory if it exists, but don't fail if it's already gone
+    if project_directory.exists():
+        project_directory.remove()
+    else:
+        log.info(f'project directory [i]{path}[/i] already deleted, skipping directory removal')
 
+    # Always clean up database entry regardless of directory state
     project_database.remove_project(path)
 
 
@@ -88,32 +106,7 @@ def project_list():
     if not projects:
         raise NoProjectsFoundMessage(log, message='no projects found')
 
-    columns = ['name', 'path', 'description', 'environments']
-    projects_data = [(project.name, project.path, project.description, "\n".join([env.name for env in project.environments])) for project in projects]
-    df_env = pd.DataFrame(projects_data, columns=columns)
-    print_df(df_env, 'Projects:')
+    from adare.frontend.terminal.project_list import print_project_list
+    print_project_list()
 
 
-def _auto_load_testfunctions(project_directory: ProjectDirectory):
-    """Auto-load all testfunctions that were copied to the project"""
-    from adare.backend.testfunction.commands import testfunction_load
-
-    testfunction_sets_loaded = []
-
-    # Iterate through all testfunction directories
-    for testfunction_set_dir in project_directory.testfunctions.iterdir():
-        if testfunction_set_dir.is_dir():
-            # Look for python files in the testfunction set directory
-            python_files = list(testfunction_set_dir.glob("*.py"))
-
-            for python_file in python_files:
-                testfunction_name = testfunction_set_dir.name
-                try:
-                    testfunction_load(project_directory.path, testfunction_name)
-                    testfunction_sets_loaded.append(testfunction_name)
-                    log.info(f'loaded testfunction: {testfunction_name}')
-                except Exception as e:
-                    log.warning(f'failed to load testfunction {testfunction_name}: {e}')
-
-    if testfunction_sets_loaded:
-        log.info(f'loaded {len(testfunction_sets_loaded)} testfunctions: {", ".join(testfunction_sets_loaded)}')

@@ -145,8 +145,11 @@ def _execute_db_batch(batch):
     if not batch:
         return
 
-    try:
-        for operation in batch:
+    successful_operations = 0
+    failed_operations = 0
+
+    for operation in batch:
+        try:
             operation_type = operation['type']
             data = operation['data']
 
@@ -160,7 +163,7 @@ def _execute_db_batch(batch):
 
             elif operation_type == 'action_event':
                 from adare.database.api.event import EventDbApi
-                with EventDbApi() as api:
+                with EventDbApi(experiment_run_ulid=data['ulid']) as api:
                     api.add_action_event(
                         data['action_data'],
                         data['action_id'],
@@ -170,7 +173,7 @@ def _execute_db_batch(batch):
 
             elif operation_type == 'test_event':
                 from adare.database.api.event import EventDbApi
-                with EventDbApi() as api:
+                with EventDbApi(experiment_run_ulid=data['ulid']) as api:
                     api.add_test_event(
                         data['action_data'],
                         data['action_id'],
@@ -178,8 +181,18 @@ def _execute_db_batch(batch):
                         data.get('parent_event_id')
                     )
 
-    except Exception as e:
-        log.error(f"Error executing database batch: {e}", exc_info=True)
+            successful_operations += 1
+
+        except Exception as e:
+            failed_operations += 1
+            operation_type = operation.get('type', 'unknown')
+            ulid = operation.get('data', {}).get('ulid', 'unknown')
+            log.error(f"CLAUDE: Error executing {operation_type} operation for ULID {ulid}: {e}", exc_info=True)
+
+    if failed_operations > 0:
+        log.warning(f"CLAUDE: Database batch completed with {successful_operations} successful and {failed_operations} failed operations")
+    else:
+        log.debug(f"CLAUDE: Database batch completed successfully with {successful_operations} operations")
 
 
 def _get_stage_level(stage_name: str) -> int:

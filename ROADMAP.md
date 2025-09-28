@@ -38,6 +38,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] YAML  
 - [ ] integrated log viewer with `adare run log adare ULID` or `adare run log adarevm` that we can view logs but also filter them!
 - [ ] more advanced wait_until logic -> use image diffs to identify changed areas?! Only search in changed ares?! -> analyze if this works or is too complex?!
+- [ ] make adarevm installable via setuptools to allow for older python versions to also allow for older distros as Ubuntu 18.04 ...
+- [ ] add option --custom-testfunction PATH_TO_DIR; which is then used instead of the existing one (even if same name) -> not copied only used; this will help developing testfunctions!
 
 ---
 
@@ -55,15 +57,19 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] Make errors more readable and actionable
   - [ ] Remove Claude: log messages
 - [ ] Improve the possible solutions on Exceptions to be correct and provide only working options!
+- [ ] in help we see for alias the command doubled? can we only see e.g. list (l) and remove (rm) or somehting similar? 
 
 ---
 
 ## 🧹 Code Quality  
 - [ ] Rethink test function results: currently lists → should be dictionaries for better JSON/database handling  
-- [x] Replace generic `Exception` catches with specific ones  
 - [ ] We have custom exceptions? are these clever named and used? should we have more? (general question: Exception vs Return False/None)
 - [ ] Refactor `detect_xsession` to use existing system commands with proper parameterization  
 - [ ] Consider lazy loading of modules at least for certain libraries -> improve speed
+- [ ] Think about the access pattern to both database. Can we simplify/improve this?
+- [ ] as a lot of database need the project directory find a way to not give it as parameter but instead retrieve it everytime of find a better clever mechanism to keep the code clean
+- [ ] we validate on experiment load against files and analyze it would be faster and better to validate against database
+- [ ] we should load playbook into database on load already not only on exeuction or? we then run from database and not file?!
 
 ---
 
@@ -72,22 +78,24 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: Flow console occasionally shows three red dots at the bottom → cause unknown  
 - [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
 - [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
-- [x] Visual bug: when no tag is set for experiment or env only # is single in a line (in this case remove it)
-- [x] ctrl-c in multi execute setup does not show prompt that ask wheter to skip all coming or to continue with next experiment
 - [ ] commands can be lists and this gives some weird results! recognize on parsing
 - [ ] multiple project shared directory and vm?! should not happen -> clear separation for multiple projects not happening also not in testfunction sets -> maybe database per project?! 
-- [x] for environments only care about the filename!
 - [ ] even if vm does not exist the env is added to envs with "no vm"
-- [x] glob result in multi-execution! why? adare exp run "deletefile_nautilus_by_c*" -e ubuntu-2404 -> 3 executions?!
+- [ ] adare tf rm should remove not a testfunction but instead a testfunction file by name e.g. xml
 
 ---
 
 ## 🔍 Areas Needing More Testing  
-- [ ] Verify behavior when adding a new environment to an existing experiment  
 - [ ] Verify if ADARE runs without the cloned repository  
 - [ ] Test if VM download via URL in environment works 
-- [x] Test if list/info commands work outside of an project and then prefix all with the project name (also check if project name is unique?!)
 - [ ] Test if environment with zenodo url works!
-- [ ] Test Multiproject setup (same environemnt/name in different Projects)
 - [ ] Test if auto_pull_on_test_failure works!
 - [ ] Test how settings idle work
+- [ ] Test Multiproject experiments in same environment behaviour. We then need to import the VM again. We need to track created VMs and be able to clean them to get space back. Look how we do the websocket port thing? We then need on host to map to different tracked ports ... Analyze whats the best way to realize this and fix/improve
+
+
+# 
+- [ ] fix:  adare --format json env list
+- [ ] fix: adare --format json vm list shows not json!
+- [ ] in : adare --format json tf list  we paths but it seems we store the original paths of the tf and no the path we copied the data to?!
+- [ ] add env via metadata.yml should be recognizes on loading+running and trigger add environment or delete-environment ...

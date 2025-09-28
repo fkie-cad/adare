@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 from adare.database.api.base import EnhancedDatabaseApi
-from adare.database.models.experiment import SyncMetadata, Base
+from adare.database.models.global_models import SyncMetadata, GlobalBase
 from adare.database.exceptions import SyncError, EntityNotFoundError, ValidationError
 
 log = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class SyncMetadataApi(EnhancedDatabaseApi):
     
     def __init__(self, db_path: Optional[Path] = None):
         super().__init__(db_path)
-        Base.metadata.create_all(self.engine)
+        GlobalBase.metadata.create_all(self.engine)
     
     def create_sync_metadata(self, 
                            sync_direction: str = 'push',

@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import List, Optional
 
 # internal imports
-from adare.database.api.base import EnhancedDatabaseApi
-from adare.database.models.experiment import Vm, OsInfo
+from adare.database.api.base import GlobalDatabaseApi
+from adare.database.models.global_models import Vm, OsInfo
 from adare.exceptions import LoggedErrorException
 from adare.helperfunctions.file.hash import file_sha256_with_progress
 from adare.helperfunctions.file.validation import validate_tarfile_with_progress
@@ -37,18 +37,18 @@ class VMLoadError(LoggedErrorException):
     pass
 
 
-class VMDatabaseApi(EnhancedDatabaseApi):
+class VmApi(GlobalDatabaseApi):
     """
-    Database API for VM management operations.
-    
-    Handles both global and project-scoped VMs with validation and loading capabilities.
+    Database API for global VM management operations.
+
+    Handles globally shared VMs with validation and loading capabilities.
+    All VMs are now stored in the global database and shared across projects.
     """
-    
-    def __init__(self, db_path: Optional[Path] = None):
-        super().__init__(db_path)
-        # Ensure VM table exists
-        from adare.database.models import Base
-        Base.metadata.create_all(self._engine)
+
+    def __init__(self):
+        super().__init__()
+        self._start_session()
+        # VM table is automatically created by GlobalDatabaseApi
     
     def create_osinfo(self, platform: str = '', os: str = '', distribution: str = '', 
                      version: str = '', language: str = '', architecture: str = 'x86_64') -> OsInfo:
@@ -69,6 +69,8 @@ class VMDatabaseApi(EnhancedDatabaseApi):
         Raises:
             VMLoadError: If OSInfo creation fails
         """
+        from sqlalchemy.exc import SQLAlchemyError
+
         osinfo = OsInfo(
             platform=platform,
             os=os,
@@ -86,8 +88,9 @@ class VMDatabaseApi(EnhancedDatabaseApi):
                 osinfo_id = osinfo.id
                 log.info(f"Successfully created OSInfo (ID: {osinfo_id})")
                 return osinfo
-        except Exception as e:
-            raise VMLoadError(log, f"Failed to create OSInfo: {e}")
+        except SQLAlchemyError as e:
+            self._session.rollback()
+            raise VMLoadError(log, f"Database error while creating OSInfo: {e}")
     
     def create_vm(self, project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '', 
                   os_platform: str = '', os_type: str = '', os_distribution: str = '', 
@@ -286,7 +289,7 @@ class VMDatabaseApi(EnhancedDatabaseApi):
         Returns:
             True if created successfully
         """
-        from adare.database.models.experiment import VmSnapshot
+        from adare.database.models.global_models import VmSnapshot
         
         with self:
             snapshot_record = VmSnapshot(
@@ -313,7 +316,7 @@ class VMDatabaseApi(EnhancedDatabaseApi):
         Returns:
             List of VmSnapshot records
         """
-        from adare.database.models.experiment import VmSnapshot
+        from adare.database.models.global_models import VmSnapshot
         
         with self:
             query = self._session.query(VmSnapshot).filter_by(vm_id=vm_id)
@@ -338,7 +341,7 @@ class VMDatabaseApi(EnhancedDatabaseApi):
         Returns:
             True if deleted successfully (or didn't exist)
         """
-        from adare.database.models.experiment import VmSnapshot
+        from adare.database.models.global_models import VmSnapshot
         
         with self:
             snapshot = self._session.query(VmSnapshot).filter_by(
@@ -461,20 +464,23 @@ class VMDatabaseApi(EnhancedDatabaseApi):
     def _copy_vm_file(self, source_path: Path, project_path: Path, name: str, silent: bool = False) -> Path:
         """
         Copy VM file to global storage location.
-        
+
         Args:
             source_path: Original VM file path
+            project_path: Not used (VMs are global now)
             name: VM name
-            quiet: If True, suppress progress indicators
-            
+            silent: If True, suppress progress indicators
+
         Returns:
             Path to copied VM file
-            
+
         Raises:
             VMLoadError: If file copying fails
         """
         try:
-            target_dir = project_path / 'vm'
+            # Use global VM directory instead of project-specific directory
+            target_dir = VMS_DIR
+            target_dir.mkdir(parents=True, exist_ok=True)
             
             # Generate target filename with VM name
             target_filename = f"{name}{source_path.suffix}"
@@ -590,4 +596,4 @@ def load_vm_from_file(project_path: Path, file_path: Path, name: str = None, des
 
 
 # Convenience alias for backward compatibility
-VmApi = VMDatabaseApi
+VMDatabaseApi = VmApi

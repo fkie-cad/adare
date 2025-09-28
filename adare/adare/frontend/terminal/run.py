@@ -124,14 +124,35 @@ class ExperimentRunFlowPanel:
 
     @staticmethod
     def __generate_line(row: pd.Series) -> str:
-        icon = StatusEnum.get_icon(row['status'], color=True)
-        message = row['msg']
-        if row['sub_msg']:
-            message = f'{message}: {row["sub_msg"]}'
-        level_offset = 2 * ' ' * row['level']
+        # Defensive handling for status field
+        try:
+            status = row.get('status', StatusEnum.PENDING)
+            if pd.isna(status):
+                status = StatusEnum.PENDING
+            icon = StatusEnum.get_icon(status, color=True)
+        except (KeyError, TypeError, ValueError):
+            # Fallback to pending status if there's any issue
+            icon = StatusEnum.get_icon(StatusEnum.PENDING, color=True)
+
+        message = row.get('msg', 'Unknown stage')
+        sub_msg = row.get('sub_msg')
+        if sub_msg and not pd.isna(sub_msg):
+            message = f'{message}: {sub_msg}'
+
+        level = row.get('level', 0)
+        level_offset = 2 * ' ' * level
         line = f'{level_offset}{icon} {message}'
-        if row['result_status'] != 'nan':
-            line = f'{line} {StatusEnum.get_icon(row["result_status"], color=True)}'
+
+        # Handle result_status if present
+        result_status = row.get('result_status')
+        if result_status and str(result_status) != 'nan' and not pd.isna(result_status):
+            try:
+                result_icon = StatusEnum.get_icon(result_status, color=True)
+                line = f'{line} {result_icon}'
+            except (TypeError, ValueError):
+                # Skip result status icon if there's an issue
+                pass
+
         return line
 
     def __rich__(self) -> Panel:

@@ -22,13 +22,11 @@ class ProjectTablePanel:
         table = Table(expand=True)
         table.add_column("name", style="cyan", no_wrap=True)
         table.add_column("path", style="cyan", no_wrap=True)
-        table.add_column("environments", style="cyan", no_wrap=True)
 
         for i, row in self.projects.iterrows():
             table.add_row(
                 row['name'],
                 row['path'],
-                row['environments_names']
             )
         return Panel(table, title="[b gold3]projects[/b gold3]", border_style="blue", title_align="left")
 
@@ -36,9 +34,12 @@ class ProjectTablePanel:
 def print_project_list(formatter=None, output_file=None, dual_output=False):
     """Print project list in the configured output format."""
 
-    # Get data from database
-    with DataRetrievalApi() as db:
-        projects = db.get_projects()
+    # Get data from database - use global API directly for projects
+    from adare.database.api.base import GlobalDatabaseApi
+    from adare.database.models.global_models import Project
+    import pandas as pd
+    with GlobalDatabaseApi() as db:
+        projects = pd.read_sql(db._session.query(Project).statement, db._session.bind).map(str)
 
     # Get formatter if not provided
     if formatter is None:

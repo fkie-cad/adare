@@ -45,7 +45,7 @@ from adare.cli.project import (
     exec_create_project, exec_remove_project, exec_list_projects
 )
 from adare.cli.environment import (
-    exec_environment_load, exec_environment_create, exec_environment_delete, exec_environment_example
+    exec_environment_load, exec_environment_create, exec_environment_delete
 )
 from adare.cli.experiment import (
     exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example, exec_experiment_clean, exec_experiment_add_env, exec_experiment_remove_env
@@ -53,7 +53,7 @@ from adare.cli.experiment import (
 from adare.cli.interactive import (
     exec_experiment_dev
 )
-from adare.cli.manage import exec_manage_reset_db, exec_manage_reset_vm, exec_manage_vm_runtime_refresh
+from adare.cli.manage import exec_manage_reset_db, exec_manage_reset_vm, exec_manage_vm_runtime_refresh, exec_manage_init_db, exec_manage_db_status, exec_manage_repair_db, exec_manage_clean_install_db
 from adare.cli.show import (
     exec_show_environment, exec_show_environments,
     exec_show_experiment, exec_show_runs, exec_show_run,
@@ -171,6 +171,31 @@ def reset_db():
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_reset_db, args)
 
+@manage.command(name='init-db')
+def init_db():
+    """Initialize the database system."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_manage_init_db, args)
+
+@manage.command(name='db-status')
+def db_status():
+    """Check database system status."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_manage_db_status, args)
+
+@manage.command(name='repair-db')
+def repair_db():
+    """Repair the database system."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_manage_repair_db, args)
+
+@manage.command(name='clean-install-db')
+@click.option('--force', '-f', is_flag=True, help='Force clean installation without confirmation')
+def clean_install_db(force):
+    """Perform clean database installation (DANGER: deletes all data)."""
+    args = SimpleNamespace(force=force)
+    exec_with_error_printing(exec_manage_clean_install_db, args)
+
 @manage.command(name='reset-vm')
 @click.option('--force', '-f', is_flag=True, help='Force deletion of all VMs (required for confirmation)')
 def reset_vm(force):
@@ -193,7 +218,7 @@ def vm_runtime_refresh():
 # ------------------------------
 # Project commands
 # ------------------------------
-@cli.group()
+@cli.group(cls=AliasedGroup)
 def project():
     """Project-related commands."""
     pass
@@ -219,11 +244,15 @@ def list_projects():
     args = SimpleNamespace()
     exec_with_error_printing(exec_list_projects, args)
 
+# Add aliases for project commands
+project.add_alias('l', 'list')
+project.add_alias('rm', 'remove')
+
 
 # ------------------------------
 # Environment commands
 # ------------------------------
-@cli.group(name='environment')
+@cli.group(name='environment', cls=AliasedGroup)
 def environment():
     """Environment-related commands."""
     pass
@@ -260,7 +289,7 @@ def create(name, project, with_vm):
 @environment.command()
 @click.argument('ulid')
 @click.option('--force', '-f', is_flag=True, help='Force deletion of the environment and any orphaned experiments')
-def delete(ulid, force):
+def remove(ulid, force):
     """Delete an environment.
     
     WARNING: If this environment is the only one used by experiments,
@@ -269,16 +298,6 @@ def delete(ulid, force):
     args = SimpleNamespace(ulid=ulid, force=force)
     exec_with_error_printing(exec_environment_delete, args)
 
-@environment.command()
-@click.argument('name', default='win11test', required=False)
-@click.option('--project', '-p', help='Name of the project')
-def example(name, project):
-    """Create the example environment. (default: win11test)"""
-    args = SimpleNamespace(
-        project=project,
-        environment=name,
-    )
-    exec_with_error_printing(exec_environment_example, args)
 
 @environment.command(name='list')
 def list_environments():
@@ -287,13 +306,17 @@ def list_environments():
     exec_with_error_printing(exec_show_environments, args)
 
 @environment.command()
-@click.argument('dotnotation')
-def info(dotnotation):
+@click.argument('environment_name')
+def info(environment_name):
     """Show detailed information about a specific environment."""
     args = SimpleNamespace(
-        dotnotation=dotnotation,
+        environment_name=environment_name,
     )
     exec_with_error_printing(exec_show_environment, args)
+
+# Add aliases for environment commands
+environment.add_alias('l', 'list')
+environment.add_alias('rm', 'remove')
 
 
 # ------------------------------
@@ -305,6 +328,7 @@ def experiment():
     pass
 
 # Add aliases for experiment commands
+experiment.add_alias('l', 'list')
 experiment.add_alias('rm-env', 'remove-env')
 
 @experiment.command()
@@ -517,7 +541,7 @@ def remove_env(experiment_pattern, environments, force, project):
 # ------------------------------
 # Testfunction commands
 # ------------------------------
-@cli.group()
+@cli.group(cls=AliasedGroup)
 def testfunction():
     """Testfunction-related commands."""
     pass
@@ -550,24 +574,26 @@ def remove(name, project):
 
 @testfunction.command()
 @click.argument('name')
-@click.option('--project', '-p', help='Name of the project')
-def load(name, project):
+@click.option('--force', '-f', is_flag=True, help='Force overwrite if testfunction is used in experiments (will delete associated runs)')
+def load(name, force):
     """Load a testfunction.
 
     NAME can be:
-    - Simple name: my_test
-    - Relative path: testfunctions/my_test
+    - Testfunction name from appdata: standard, json, csv
+    - Absolute path: /path/to/testfunction
     - Relative path: ./testfunctions/my_test
+
+    By default, loading will skip testfunctions that are currently used in experiment runs.
+    Use --force to overwrite and delete associated experiment runs.
     """
-    args = SimpleNamespace(name=name, project=project)
+    args = SimpleNamespace(name=name, force=force)
     exec_with_error_printing(exec_load_testfunction, args)
 
 @testfunction.command(name='list')
-@click.option('--project', '-p', help='Name of the project')
 @click.option('--set', help='Filter testfunctions by set (e.g., standard)')
-def list_testfunctions(project, set):
+def list_testfunctions(set):
     """List all testfunctions."""
-    args = SimpleNamespace(project=project, set=set)
+    args = SimpleNamespace(set=set)
     exec_with_error_printing(exec_list_testfunctions, args)
 
 @testfunction.command()
@@ -584,11 +610,15 @@ def info(dotnotation):
     args = SimpleNamespace(dotnotation=dotnotation)
     exec_with_error_printing(exec_show_testfunction, args)
 
+# Add aliases for testfunction commands
+testfunction.add_alias('l', 'list')
+testfunction.add_alias('rm', 'remove')
+
 
 # ------------------------------
 # VM management commands
 # ------------------------------
-@cli.group()
+@cli.group(cls=AliasedGroup)
 def vm():
     """VM management commands."""
     pass
@@ -609,15 +639,15 @@ def info(vm_id):
 @vm.command()
 @click.argument('vm_id')
 @click.option('--force', '-f', is_flag=True, help='Force deletion even if VM is in use')
-def delete(vm_id, force):
+def remove(vm_id, force):
     """Delete a specific VM."""
     args = SimpleNamespace(vm_id=vm_id, force=force)
     exec_with_error_printing(exec_vm_delete, args)
 
-@vm.command(name='delete-snapshot')
+@vm.command(name='remove-snapshot')
 @click.argument('vm_id')
 @click.argument('snapshot_name')
-def delete_snapshot(vm_id, snapshot_name):
+def remove_snapshot(vm_id, snapshot_name):
     """Delete a single snapshot from a specific VM."""
     args = SimpleNamespace(vm_id=vm_id, snapshot_name=snapshot_name)
     exec_with_error_printing(exec_vm_delete_snapshot, args)
@@ -683,6 +713,11 @@ def clear_environment(environment_ulid, force):
     """Clear all VMs associated with a specific environment."""
     args = SimpleNamespace(environment_ulid=environment_ulid, force=force)
     exec_with_error_printing(exec_vm_clear_by_environment, args)
+
+# Add aliases for vm commands
+vm.add_alias('l', 'list')
+vm.add_alias('rm', 'remove')
+vm.add_alias('rm-snapshot', 'remove-snapshot')
 
 
 # ------------------------------

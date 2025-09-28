@@ -15,7 +15,7 @@ from adare.backend.vm import database as vm_database
 from adare.backend.vm.exceptions import VMError
 from adarelib.constants import VMStatus
 from adare.database.api.vm import VmApi
-from adare.database.models.experiment import VmSnapshot
+from adare.database.models.global_models import VmSnapshot
 
 log = logging.getLogger(__name__)
 
@@ -107,30 +107,41 @@ class SnapshotManager:
             log.error(f"Error creating base snapshot for VM '{vm_record.name}': {e}")
             return False
     
-    def restore_base_snapshot(self, vm_record, silent: bool = False) -> bool:
+    def restore_base_snapshot(self, vm_record, silent: bool = False,
+                             interrupt_event: Optional['threading.Event'] = None,
+                             timeout: int = 120) -> bool:
         """
         Restore VM to its clean base snapshot.
-        
+
         Args:
             vm_record: VM database record
             silent: Suppress logging
-            
+            interrupt_event: Event to check for user interruption
+            timeout: Timeout in seconds for the operation (default: 120)
+
         Returns:
             True if restored successfully
         """
+        import threading
+
         if not vm_record.base_snapshot_name:
             raise VMError(log, f"VM '{vm_record.name}' has no base snapshot configured")
-        
+
+        # Check for interruption before starting
+        if interrupt_event and interrupt_event.is_set():
+            log.info(f"CLAUDE: Snapshot restore cancelled before starting for VM '{vm_record.name}'")
+            return False
+
         # Get VirtualBox VM instance
         vm_name = self._get_vm_name_by_uuid(vm_record.vbox_uuid)
         if not vm_name:
             raise VMError(log, f"VM with UUID {vm_record.vbox_uuid} not found in VirtualBox")
-        
+
         # Get OS platform for credentials
         from adare.config import get_vm_credentials
         platform = getattr(vm_record.osinfo, 'platform', 'linux') if hasattr(vm_record, 'osinfo') and vm_record.osinfo else 'linux'
         username, password = get_vm_credentials(platform)
-        
+
         vbox_vm = VirtualBoxVM(
             vm_name=vm_name,
             guest_os=platform,
@@ -138,23 +149,39 @@ class SnapshotManager:
             username=username,
             password=password
         )
-        
+
         try:
-            # Restore to base snapshot
+            # Add detailed logging for debugging hanging issues
+            log.info(f"CLAUDE: Starting snapshot restore for VM '{vm_record.name}' to '{vm_record.base_snapshot_name}' (timeout: {timeout}s)")
+
+            # Restore to base snapshot with interrupt support
             result = vbox_vm.restore_snapshot(
                 snapshot_name=vm_record.base_snapshot_name,
-                silent=silent
+                silent=silent,
+                stop_event=interrupt_event
             )
-            
+
+            # Check for interruption after operation
+            if interrupt_event and interrupt_event.is_set():
+                log.info(f"CLAUDE: Snapshot restore interrupted for VM '{vm_record.name}'")
+                return False
+
             if result:
-                log.info(f"Restored VM '{vm_record.name}' to base snapshot '{vm_record.base_snapshot_name}'")
+                log.info(f"CLAUDE: Successfully restored VM '{vm_record.name}' to base snapshot '{vm_record.base_snapshot_name}'")
                 return True
             else:
-                log.error(f"Failed to restore VM '{vm_record.name}' to base snapshot")
+                log.error(f"CLAUDE: Failed to restore VM '{vm_record.name}' to base snapshot - VBoxManage returned failure")
                 return False
-                
+
+        except InterruptedError:
+            log.info(f"CLAUDE: Snapshot restore operation interrupted for VM '{vm_record.name}'")
+            return False
         except Exception as e:
-            log.error(f"Error restoring base snapshot for VM '{vm_record.name}': {e}")
+            # Provide more specific error information
+            if "timeout" in str(e).lower():
+                log.error(f"CLAUDE: Snapshot restore timed out after {timeout}s for VM '{vm_record.name}': {e}")
+            else:
+                log.error(f"CLAUDE: Error restoring base snapshot for VM '{vm_record.name}': {e}")
             return False
     
     def create_experiment_snapshot(self, vm_record, experiment_id: str, 
@@ -389,19 +416,26 @@ def create_base_snapshot_for_vm(vm_record, silent: bool = False) -> bool:
     return manager.create_base_snapshot(vm_record, silent=silent)
 
 
-def restore_vm_to_base_snapshot(vm_record, silent: bool = False) -> bool:
+def restore_vm_to_base_snapshot(vm_record, silent: bool = False,
+                                interrupt_event: Optional['threading.Event'] = None,
+                                timeout: int = 120) -> bool:
     """
     Convenience function to restore VM to base snapshot.
-    
+
     Args:
         vm_record: VM database record
         silent: Suppress logging
-        
+        interrupt_event: Event to check for user interruption
+        timeout: Timeout in seconds for the operation (default: 120)
+
     Returns:
         True if restored successfully
     """
+    import threading
     manager = SnapshotManager()
-    return manager.restore_base_snapshot(vm_record, silent=silent)
+    return manager.restore_base_snapshot(vm_record, silent=silent,
+                                       interrupt_event=interrupt_event,
+                                       timeout=timeout)
 
 
 def verify_base_snapshot_exists(vm_record) -> bool:

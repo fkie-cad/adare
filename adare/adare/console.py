@@ -28,3 +28,14 @@ def print_success_message(title: str, location: str = '', next_steps: list[str] 
         if tip:
             console.print()
             console.print(f'💡 Tip: {tip}', style='italic cyan')
+
+def print_error_message(title: str, details: str = '', next_steps: list[str] = None):
+    """Print a formatted error message with next steps using Rich."""
+    console.print(f'❌ {title}', style='bold red')
+    if details:
+        console.print(f'Details: {details}', style='dim')
+        console.print()
+    if next_steps:
+        console.print('📝 Next steps:', style='bold')
+        for i, step in enumerate(next_steps, 1):
+            console.print(f'   {i}. {step}', style='dim')

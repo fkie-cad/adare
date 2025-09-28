@@ -5,7 +5,7 @@ import attrs
 # internal imports
 from adare.types.environment import EnvironmentMetadata
 from adare.database.api.environment import EnvironmentDbApi
-from adare.database.models.experiment import Environment, Project
+from adare.database.models.global_models import Environment, Project
 from adare.backend.environment.exceptions import EnvironmentDeletionError, EnvironmentDoesNotExistInDatabase, \
     EnvironmentAlreadyExists, EnvironmentUpdateError
 
@@ -310,7 +310,6 @@ def get_environment_by_ulid(ulid: str, fields: list[str] = None) -> Environment 
         None: If environment not found
     """
     from sqlalchemy.orm import joinedload, selectinload
-    from adare.database.models.experiment import Project, Vm
     
     # Define which fields require which relationships
     RELATIONSHIP_REQUIREMENTS = {

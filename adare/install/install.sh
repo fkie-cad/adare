@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# ADARE Installation Script
+#
 
 # Navigate to the 'adare' directory
 cd adare || { echo "Directory 'adare' not found. Exiting..."; exit 1; }
@@ -52,3 +55,14 @@ else
     echo "The script 'install/copy_appdata.py' does not exist. Exiting..."
     exit 1
 fi
+
+# Load testfunctions directly from source appdata after installation is complete
+echo "Loading testfunctions from source appdata..."
+for testfunction_dir in ~/.adare/adare/adare/appdata/testfunctions/*/; do
+    if [ -d "$testfunction_dir" ]; then
+        testfunction_name=$(basename "$testfunction_dir")
+        echo "Loading $testfunction_name testfunctions..."
+        poetry run adare testfunction load "$testfunction_dir"
+    fi
+done
+echo "Testfunction loading complete."

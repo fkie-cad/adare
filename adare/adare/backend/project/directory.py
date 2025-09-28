@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 
 # internal imports
-from adare.config.configdirectory import ADARE_DIR, APPDATA_DIR, ADAREVM_DIR, ADARELIB_DIR
+from adare.config.configdirectory import ADARE_DIR, APPDATA_DIR, ADAREVM_DIR, ADARELIB_DIR, VMS_DIR, ENVIRONMENTS_DIR, STATE_DIR
 from adare.helperfunctions.web.download import download
 from adare.backend.project.exceptions import ProjectDirectoryCreationError, ProjectDirectoryRemovalError, ProjectDirectoryCopyError
 from adare.backend.directory import Directory
@@ -20,7 +20,7 @@ class ProjectDirectory(Directory):
 
     @property
     def environments(self) -> Path:
-        return self.path / 'environments'
+        return ENVIRONMENTS_DIR
 
     @property
     def experiments(self) -> Path:
@@ -44,7 +44,7 @@ class ProjectDirectory(Directory):
 
     @property
     def vm(self) -> Path:
-        return self.path / 'vm'
+        return VMS_DIR
 
     @property
     def vm_runtime(self) -> Path:
@@ -53,6 +53,10 @@ class ProjectDirectory(Directory):
     @property
     def run(self) -> Path:
         return self.path / 'run'
+
+    @property
+    def adare_config(self) -> Path:
+        return self.path / '.adare'
 
     def create(self):
         try:
@@ -88,22 +92,22 @@ class ProjectDirectory(Directory):
         return combine_hashes([hash_file_sha256(testfunction_file), hash_file_sha256(requirements_file)])
 
     def exists(self) -> bool:
-        # check if all paths exist
+        # check if all project paths exist (environments and vm are global, not checked here)
         return all(
-            [self.path.exists(), self.environments.exists(), self.experiments.exists(), self.testfunctions.exists(),
-             self.shared.exists(), self.vm.exists(), self.vm_runtime.exists(), self.run.exists()])
+            [self.path.exists(), self.experiments.exists(),
+             self.shared.exists(), self.vm_runtime.exists(), self.run.exists(), self.adare_config.exists()])
 
     def _create_project_directories(self):
         self.path.mkdir()
-        self.environments.mkdir()
+        # environments and vm directories are now global - not created per project
         self.experiments.mkdir()
-        self.testfunctions.mkdir()
+        # Testfunctions are now global - no need for project-specific directory
         self.shared.mkdir()
         self.shared_tools.mkdir()
         self.shared_data.mkdir()
-        self.vm.mkdir()
         self.vm_runtime.mkdir()
         self.run.mkdir()
+        self.adare_config.mkdir()
 
 
     def download_tool(self, url: str, zipped: bool):
@@ -120,31 +124,6 @@ class ProjectDirectory(Directory):
         log.info('download of tool was successful')
 
 
-    def copy_all_testfunctions(self):
-        try:
-            from adare.helperfunctions.file.copy import copytree_with_progress
-            appdata_testfunctions = APPDATA_DIR / 'testfunctions'
-
-            # Copy all testfunction directories from appdata to project
-            for testfunction_dir in appdata_testfunctions.iterdir():
-                if testfunction_dir.is_dir():
-                    copytree_with_progress(
-                        src=testfunction_dir,
-                        dst=self.testfunctions / testfunction_dir.name,
-                        preserve_metadata=True,
-                        dirs_exist_ok=True,
-                    )
-                    log.info(f'copied testfunction set: {testfunction_dir.name}')
-
-        except OSError as e:
-            raise ProjectDirectoryCopyError(
-                log,
-                message=f'testfunctions directory ([i]{APPDATA_DIR/"testfunctions"}[/i]) could not be copied to project directory ({self.testfunctions}): {e.strerror}',
-            ) from e
-
-    def copy_standard_testfunction(self):
-        # Keep for backward compatibility - redirect to copy_all_testfunctions
-        self.copy_all_testfunctions()
 
     def copy_vm_runtime_files(self):
         """Copy adarevm and adarelib to project vm_runtime directory for caching."""

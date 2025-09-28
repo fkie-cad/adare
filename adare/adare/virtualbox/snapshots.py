@@ -30,7 +30,8 @@ class SnapshotMixin:
                 stop_event=stop_event,
                 silent=silent,
                 ctx_manager=ctx_manager,
-                operation_name="snapshot creation"
+                operation_name="snapshot creation",
+                timeout=240  # 4 minute timeout for snapshot creation
             )
             
             if return_value == 0:
@@ -85,7 +86,8 @@ class SnapshotMixin:
                     stop_event=stop_event,
                     silent=silent,
                     ctx_manager=ctx_manager,
-                    operation_name="snapshot restoration"
+                    operation_name="snapshot restoration",
+                    timeout=180  # 3 minute timeout for snapshot operations
                 )
                 
                 if return_value == 0:

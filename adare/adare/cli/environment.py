@@ -9,20 +9,9 @@ log = logging.getLogger(__name__)
 
 def exec_environment_load(arguments):
     from adare.backend.environment.commands import environment_load
-    project_directory = determine_projectdirectory(arguments.project)
-    if not project_directory:
-        raise NoProjectFoundError(log, message='project directory not found')
-    environment_name = resolve_environment_path(arguments.environment, project_directory)
-    environment_load(project_directory, environment_name, force=arguments.force)
+    # Environments are now global - no project context needed
+    environment_load(arguments.environment, force=arguments.force)
 
-def exec_environment_example(arguments):
-    from adare.backend.environment.commands import environment_example, environment_load
-    project_directory = determine_projectdirectory(arguments.project)
-    if not project_directory:
-        raise NoProjectFoundError(log, message='project directory not found', possible_solutions=['use -p to specify the project directory', 'navigate to a project directory with cd'])
-    environment_name = resolve_environment_path(arguments.environment, project_directory)
-    environment_example(project_directory, environment_name)
-    environment_load(project_directory, environment_name, force=False)
 
 
 def exec_environment_create(arguments):

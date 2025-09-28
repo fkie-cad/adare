@@ -4,7 +4,7 @@ from threading import Lock
 import ulid
 
 # internal imports
-from adare.database.models.experiment import EventFactory, Event as ModelEvent, ExperimentRun, Result as ModelResult
+from adare.database.models.project_models import Event as ModelEvent, ExperimentRun, Result as ModelResult, EventFactory
 from adare.database.api.experiment import ExperimentApi
 from adare.config import database as config_database
 from adarelib.constants import StatusEnum
@@ -26,13 +26,71 @@ def replace_list_recursive_in_dict(d: dict):
 
 class EventDbApi(ExperimentApi):
 
-    def __init__(self, db_path: Path = config_database.get_database_location()):
-        super().__init__(db_path)
+    def __init__(self, project_path: Path = None, experiment_run_ulid: str = None):
+        if project_path is None and experiment_run_ulid is not None:
+            # Try to find project path from experiment run ULID
+            project_path = self._find_project_path_by_run_ulid(experiment_run_ulid)
+            if project_path is None:
+                raise ValueError(f"Cannot find project for experiment run {experiment_run_ulid}")
+        elif project_path is None:
+            raise ValueError("Either project_path or experiment_run_ulid is required for EventDbApi")
+        super().__init__(project_path)
+
+    def _find_project_path_by_run_ulid(self, experiment_run_ulid: str) -> Path | None:
+        """
+        Find project path by looking up experiment run ULID across all project databases.
+        """
+        from adare.backend.project.database import get_all_projects
+        from adare.database.api.experiment import ExperimentApi
+        from adare.database.models.project_models import ExperimentRun
+
+        projects = get_all_projects()
+        log.debug(f"CLAUDE: Searching for experiment run {experiment_run_ulid} across {len(projects)} projects")
+
+        for project_dict in projects:
+            try:
+                project_path = Path(project_dict['path'])
+                log.debug(f"CLAUDE: Checking project: {project_path}")
+                with ExperimentApi(project_path) as api:
+                    run = api._session.query(ExperimentRun).filter_by(id=experiment_run_ulid).first()
+                    if run:
+                        log.debug(f"CLAUDE: Found experiment run {experiment_run_ulid} in project {project_path}")
+                        return project_path
+            except Exception as e:
+                log.debug(f"CLAUDE: Error checking project {project_dict.get('path', 'unknown')}: {e}")
+                continue
+
+        log.error(f"CLAUDE: Could not find project containing experiment run {experiment_run_ulid}")
+        return None
 
     def get_or_create_test_result(self, test_result_data: dict):
-        test_result = self._session.query(ModelResult).filter_by(**test_result_data).first()
+        # Handle status enum conversion for relationship filtering
+        filter_data = test_result_data.copy()
+        create_data = test_result_data.copy()
+
+        # Convert StatusEnum to Status object for filtering and creation
+        if 'status' in filter_data:
+            from adare.database.models.project_models import Status
+            from adarelib.constants import StatusEnum
+            status_enum = filter_data['status']
+            if isinstance(status_enum, StatusEnum):
+                # Look up Status record by name
+                status_obj = self._session.query(Status).filter_by(name=status_enum.name).first()
+                if not status_obj:
+                    # Create Status record if it doesn't exist
+                    status_obj = Status(name=status_enum.name, id=status_enum.value)
+                    self._session.add(status_obj)
+                    self._session.flush()
+
+                # Use status object for filtering
+                filter_data['status'] = status_obj
+                # Use status_id for creation
+                create_data.pop('status')
+                create_data['status_id'] = status_obj.id
+
+        test_result = self._session.query(ModelResult).filter_by(**filter_data).first()
         if not test_result:
-            test_result = ModelResult(**test_result_data)
+            test_result = ModelResult(**create_data)
             self._session.add(test_result)
             self._session.commit()
         return test_result
@@ -55,7 +113,7 @@ class EventDbApi(ExperimentApi):
         with lock:
             try:
                 # Check if experiment run exists
-                experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
+                experiment_run = self._session.query(ExperimentRun).filter_by(id=experiment_run_ulid).first()
                 if not experiment_run:
                     log.error(f'No experiment run found for ULID {experiment_run_ulid}')
                     return
@@ -106,7 +164,7 @@ class EventDbApi(ExperimentApi):
         with lock:
             try:
                 # Check if experiment run exists
-                experiment_run = self._session.query(ExperimentRun).filter_by(ulid=experiment_run_ulid).first()
+                experiment_run = self._session.query(ExperimentRun).filter_by(id=experiment_run_ulid).first()
                 if not experiment_run:
                     log.error(f'No experiment run found for ULID {experiment_run_ulid}')
                     return

@@ -1,6 +1,7 @@
 # external imports
 from pathlib import Path
 from typing import Literal
+import shutil
 
 # internal imports
 from adare.backend.project.directory import ProjectDirectory
@@ -17,6 +18,50 @@ ResourceType = Literal['experiments', 'environments', 'testfunctions']
 class InvalidPathError(LoggedException):
     """Exception raised when a relative path is invalid or outside project boundaries."""
     pass
+
+
+def _copy_external_experiment(external_path: Path, experiments_dir: Path) -> str:
+    """
+    Copy external experiment directory to project experiments directory.
+
+    Args:
+        external_path: Path to external experiment directory
+        experiments_dir: Project experiments directory
+
+    Returns:
+        Experiment name (directory name)
+
+    Raises:
+        InvalidPathError: If target already exists or copy fails
+    """
+    experiment_name = external_path.name
+    target_path = experiments_dir / experiment_name
+
+    # Check if target already exists - never overwrite
+    if target_path.exists():
+        raise InvalidPathError(
+            log,
+            f'Experiment "{experiment_name}" already exists in experiments directory. Choose a different name or remove the existing experiment first.'
+        )
+
+    try:
+        # Ensure experiments directory exists
+        experiments_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy the entire external experiment directory
+        shutil.copytree(external_path, target_path)
+        log.info(f'CLAUDE: Copied external experiment from {external_path} to {target_path}')
+
+        return experiment_name
+
+    except OSError as e:
+        # Clean up on failure
+        if target_path.exists():
+            shutil.rmtree(target_path, ignore_errors=True)
+        raise InvalidPathError(
+            log,
+            f'Failed to copy external experiment from "{external_path}" to "{target_path}": {str(e)}'
+        ) from e
 
 
 def resolve_path_to_name(input_path: str, project_dir: Path, resource_type: ResourceType) -> str:
@@ -78,29 +123,57 @@ def _resolve_relative_path(relative_path: str, project_dir: Path, resource_type:
             # Resolve relative to current working directory (should be project dir)
             resolved_path = (Path.cwd() / input_path).resolve()
 
-        # Check if resolved path is within the appropriate resource directory
-        try:
-            # Get relative path from resource directory to target
-            relative_to_resource = resolved_path.relative_to(resource_dir.resolve())
-        except ValueError:
-            raise InvalidPathError(
-                log,
-                f'Path "{relative_path}" is not within the {resource_type} directory',
-                possible_solutions=[
-                    f'Use a path within the {resource_type}/ directory',
-                    f'Or use just the {resource_type[:-1]} name without path separators'
-                ]
-            )
-
-        # Extract the resource name (first part of the relative path)
+        # For environments, allow external files; for others, check within resource directory
         if resource_type == 'environments':
-            # For environments, handle .yml/.yaml extensions
-            name_with_ext = relative_to_resource.parts[0] if relative_to_resource.parts else relative_path
-            # Remove .yml/.yaml extension if present
-            name = Path(name_with_ext).stem
+            # For environments, if the file exists externally, return the full path
+            if resolved_path.exists() and resolved_path.suffix in ['.yml', '.yaml']:
+                # Check if it's outside the project environments directory
+                try:
+                    resolved_path.relative_to(resource_dir.resolve())
+                    # It's within the project directory, return just the name
+                    name = resolved_path.stem
+                except ValueError:
+                    # It's external, return the full path
+                    name = str(resolved_path)
+            else:
+                # Try to find within project environments directory
+                try:
+                    relative_to_resource = resolved_path.relative_to(resource_dir.resolve())
+                    name_with_ext = relative_to_resource.parts[0] if relative_to_resource.parts else relative_path
+                    name = Path(name_with_ext).stem
+                except ValueError:
+                    raise InvalidPathError(
+                        log,
+                        f'Environment file "{relative_path}" not found and not within the environments directory.'
+                    )
         else:
-            # For experiments and testfunctions, use directory name
-            name = relative_to_resource.parts[0] if relative_to_resource.parts else relative_path
+            # For experiments and testfunctions, check if within resource directory
+            try:
+                relative_to_resource = resolved_path.relative_to(resource_dir.resolve())
+                name = relative_to_resource.parts[0] if relative_to_resource.parts else relative_path
+            except ValueError:
+                # Path is outside resource directory - handle external experiments
+                if resource_type == 'experiments':
+                    if resolved_path.exists() and resolved_path.is_dir():
+                        name = _copy_external_experiment(resolved_path, resource_dir)
+                    else:
+                        # Provide more specific error for experiments
+                        if not resolved_path.exists():
+                            raise InvalidPathError(
+                                log,
+                                f'External experiment path "{relative_path}" does not exist. Please check the path and try again.'
+                            )
+                        else:
+                            raise InvalidPathError(
+                                log,
+                                f'External experiment path "{relative_path}" exists but is not a directory.'
+                            )
+                else:
+                    # For non-experiments, keep original behavior
+                    raise InvalidPathError(
+                        log,
+                        f'Path "{relative_path}" is not within the {resource_type} directory. Use a path within the {resource_type}/ directory or just the {resource_type[:-1]} name without path separators.'
+                    )
 
         return name
 
@@ -109,11 +182,7 @@ def _resolve_relative_path(relative_path: str, project_dir: Path, resource_type:
             raise
         raise InvalidPathError(
             log,
-            f'Failed to resolve path "{relative_path}": {str(e)}',
-            possible_solutions=[
-                'Check that the path is valid and exists',
-                f'Ensure the path points to a {resource_type[:-1]} within the {resource_type}/ directory'
-            ]
+            f'Failed to resolve path "{relative_path}": {str(e)}. Check that the path is valid and exists. Ensure the path points to a {resource_type[:-1]} within the {resource_type}/ directory.'
         )
 
 

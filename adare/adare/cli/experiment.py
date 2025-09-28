@@ -11,11 +11,42 @@ log = logging.getLogger(__name__)
 
 def exec_experiment_load(arguments):
     from adare.backend.experiment.commands import experiment_load
+    from adare.backend.project.directory import ProjectDirectory
+    import shutil
+    from pathlib import Path
+
     # if not arguments.environment:
     #     raise ArgumentsError(log, message='no environment given', possible_solutions=['use -e to specify the environment'])
     if project_directory := determine_projectdirectory(arguments.project):
-        experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
-        experiment_load(project_directory, experiment_name, force=arguments.force)
+        # Track if we copied an external experiment for cleanup on failure
+        original_input = arguments.experiment
+        project_dir_obj = ProjectDirectory(project_directory)
+
+        # Determine if this might result in copying an external experiment
+        might_copy_external = False
+        potential_copied_name = None
+        if ('/' in original_input or '\\' in original_input):
+            input_path = Path(original_input)
+            if input_path.is_absolute() or not (Path.cwd() / input_path).is_relative_to(project_dir_obj.experiments):
+                # This is an external path that might get copied
+                if input_path.exists() and input_path.is_dir():
+                    might_copy_external = True
+                    potential_copied_name = input_path.name
+
+        try:
+            experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+            experiment_load(project_directory, experiment_name, force=arguments.force)
+        except Exception as e:
+            # If we might have copied an external experiment and loading failed, try to clean it up
+            if might_copy_external and potential_copied_name:
+                copied_experiment_path = project_dir_obj.experiments / potential_copied_name
+                if copied_experiment_path.exists():
+                    try:
+                        shutil.rmtree(copied_experiment_path)
+                        log.info(f'CLAUDE: Cleaned up copied experiment {copied_experiment_path} after load failure')
+                    except OSError as cleanup_error:
+                        log.warning(f'CLAUDE: Failed to clean up copied experiment {copied_experiment_path}: {cleanup_error}')
+            raise
     else:
         raise NoProjectFoundError(log, message='no project directory found')
 
@@ -71,7 +102,8 @@ def _handle_environment_interruption(environments, current_index, results):
 
 async def exec_experiment_run_all_environments(project_directory, arguments, disable_printing):
     """Run experiment across all environments supported by the experiment and provide a summary."""
-    from adare.backend.experiment.commands import experiment_run, experiment_load
+    from adare.backend.experiment.commands import experiment_load
+    from adare.backend.experiment.run import experiment_run
     from adare.database.api.experiment import ExperimentApi
     from adare.exceptions import LoggedErrorException
     from datetime import datetime, timezone
@@ -80,7 +112,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
 
     # Get environments supported by the experiment (from experiment's metadata.yml)
-    with ExperimentApi() as api:
+    with ExperimentApi(project_directory) as api:
         experiment = api.get_experiment_by_project_and_name(project_directory, experiment_name)
         if not experiment:
             raise LoggedErrorException(log,
@@ -228,10 +260,6 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
     end_time = datetime.now(timezone.utc)
     total_duration = (end_time - start_time).total_seconds()
 
-    successful_runs = [r for r in results if r['status'] == 'SUCCESS']
-    failed_runs = [r for r in results if r['status'] == 'FAILED']
-    interrupted_runs = [r for r in results if r['status'] == 'INTERRUPTED']
-    skipped_runs = [r for r in results if r['status'] == 'SKIPPED']
 
     # Create and use flow console for beautiful summary
     from adare.backend.experiment.print import ExperimentFlowConsole
@@ -261,7 +289,8 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
 
 
 def exec_experiment_run(arguments):
-    from adare.backend.experiment.commands import experiment_run, experiment_load
+    from adare.backend.experiment.run import experiment_run
+    from adare.backend.experiment.commands import experiment_load
     from adare.exceptions import LoggedException, LoggedErrorException
     import sys
 
@@ -361,7 +390,7 @@ def exec_experiment_run(arguments):
             # Validate environment and experiment compatibility before starting execution
             from adare.database.api.experiment import ExperimentApi
             from adare.exceptions import EnvironmentNotFoundError, ExperimentNotFoundError
-            with ExperimentApi() as api:
+            with ExperimentApi(project_directory) as api:
                 environment = api.get_environment(environment_name, project_directory.name)
                 if environment is None:
                     raise EnvironmentNotFoundError(log, f'environment {environment_name} does not exist in project {project_directory.name}',
@@ -370,7 +399,7 @@ def exec_experiment_run(arguments):
                             'List available environments with: adare environment list',
                             'If not found via list, create or load: adare environment create <name> OR adare environment load <path>'
                         ])
-                experiment = api.get_experiment(experiment_name, environment)
+                experiment = api.get_experiment(experiment_name, environment.id)
                 if experiment is None:
                     raise ExperimentNotFoundError(log, f'experiment {experiment_name} is not available for environment {environment_name}',
                         possible_solutions=[

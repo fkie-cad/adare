@@ -172,15 +172,20 @@ def exec_show_environments(arguments):
 def exec_remove_run(arguments):
     """Remove a single experiment run by its ULID."""
     from adare.database.api.experiment import ExperimentApi
-    from adare.database.models.experiment import ExperimentRun
+    from adare.database.models.project_models import ExperimentRun
     from adare.console import print_success_message, console_print
 
     if not arguments.ulid:
         raise ArgumentsError(log, message='no run ULID provided',
                            possible_solutions=['use `adare run list` to find the ULID of the run to remove'])
 
+    # Get project path for database context
+    project_path = determine_projectdirectory(None)
+    if not project_path:
+        raise NoProjectFoundError(log, message='no project found in current directory or parent directories')
+
     try:
-        with ExperimentApi() as api:
+        with ExperimentApi(project_path) as api:
             # Get the run first to check if it exists
             run = api._session.query(ExperimentRun).filter(ExperimentRun.id == arguments.ulid).first()
             if not run:
@@ -209,6 +214,6 @@ def exec_remove_run(arguments):
 
 def exec_show_environment(arguments):
     from adare.frontend.terminal.environment import print_environment
-    print_environment(arguments.dotnotation)
+    print_environment(arguments.environment_name)
 
 

@@ -2,7 +2,7 @@
 from pathlib import Path
 
 # internal imports
-from adare.backend.basics import determine_projectdirectory
+from adare.backend.basics import determine_projectdirectory, determine_projectdirectory_for_removal
 
 # configure logging
 import logging
@@ -28,12 +28,9 @@ def exec_remove_project(arguments):
     :param arguments: arguments parsed via input
     """
     from adare.backend.project.commands import project_remove
-    path = determine_projectdirectory(arguments.name)
+    path = determine_projectdirectory_for_removal(arguments.name)
     if not path:
-        log.error("no valid project directory provided")
-        exit(1)
-    if not path:
-        log.error("no valid project directory provided")
+        log.error("no valid project found in database")
         exit(1)
     project_remove(path)
 

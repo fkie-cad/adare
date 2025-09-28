@@ -28,7 +28,7 @@ class Testset:
     executed_commands: list
 
     def __init__(self, testfunctions_directory: Path, testsetfile: Path, log_func: Callable[[str], Awaitable[None]]):
-        self.supported_tests = import_basictest_subclasses(testfunctions_directory)
+        self.supported_tests = import_basictest_subclasses(directory=testfunctions_directory)
         self.testsetfile: TestsetFile = parse_testsetfile(testsetfile)
 
         if get_missing_testfunctions(

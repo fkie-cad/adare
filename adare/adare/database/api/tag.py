@@ -13,7 +13,8 @@ from typing import Optional, List, Dict, Any, Union
 from pathlib import Path
 
 from adare.database.api.base import EnhancedDatabaseApi
-from adare.database.models.experiment import Tag, Experiment, Environment, Base
+from adare.database.models.global_models import Tag, Environment, GlobalBase
+from adare.database.models.project_models import Experiment
 from adare.database.exceptions import EntityNotFoundError, ValidationError
 
 log = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ class TagApi(EnhancedDatabaseApi):
     
     def __init__(self, db_path: Optional[Path] = None):
         super().__init__(db_path)
-        Base.metadata.create_all(self.engine)
+        GlobalBase.metadata.create_all(self.engine)
     
     def create_tag(self, name: str, description: Optional[str] = None) -> Tag:
         """

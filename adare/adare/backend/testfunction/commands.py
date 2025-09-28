@@ -58,20 +58,128 @@ def testfunction_remove(project_path: Path, name: str):
 
 
 def testfunction_load(project_path: Path, name: str):
+    from adare.backend.testfunction.manager import TestfunctionManager
+
     testfunction_directory = TestfunctionDirectory(project_path, name)
     if not testfunction_directory.testfunction_exists():
         raise TestfunctionMissingFileError(
             log,
             message=f'Testfunction {name} does not exist',
         )
-    testfunction_id = testfunction_database.load_testfunction_file(project_path, testfunction_directory.pythonfile, testfunction_directory.requirements)
+
+    # Use TestfunctionManager to install to global directory
+    manager = TestfunctionManager()
+    manager.ensure_global_directory_exists()
+
+    # Install testfunction to global directory (copies files if they don't exist)
+    target_python_file, target_requirements_file = manager.install_testfunction(
+        source_python_file=testfunction_directory.pythonfile,
+        source_requirements_file=testfunction_directory.requirements,
+        name=name
+    )
+
+    # Load testfunction using the global paths
+    testfunction_id = testfunction_database.load_testfunction_file(project_path, target_python_file, target_requirements_file)
     testfunction_sync(testfunction_id)
-    
-    # Protect testfunction files after loading
+
+    # Protect testfunction files after loading (protect the global copies)
     from adare.helperfunctions.integrity import protect_loaded_files
-    testfunction_files = [testfunction_directory.pythonfile, testfunction_directory.requirements]
+    testfunction_files = [target_python_file, target_requirements_file]
     protected_files = protect_loaded_files(testfunction_files)
     log.info(f'Protected {len(protected_files)} testfunction files for {name}')
+
+
+def testfunction_load_global(testfunction_path: Path, force: bool = False):
+    """Load a testfunction from an absolute path, independent of project structure."""
+    if not testfunction_path.exists():
+        raise TestfunctionMissingFileError(
+            log,
+            message=f'Testfunction file {testfunction_path} does not exist',
+        )
+
+    # Determine if it's a python file or a directory containing a testfunction
+    if testfunction_path.is_file() and testfunction_path.suffix == '.py':
+        # Direct python file
+        python_file = testfunction_path
+        requirements_file = testfunction_path.parent / 'requirements.txt'
+        # Use parent directory as a "fake" project path for database purposes
+        project_path = testfunction_path.parent
+        testfunction_name = python_file.stem
+    elif testfunction_path.is_dir():
+        # Directory containing testfunction - look for .py file inside
+        python_files = list(testfunction_path.glob('*.py'))
+        if not python_files:
+            raise TestfunctionMissingFileError(
+                log,
+                message=f'No Python file found in testfunction directory {testfunction_path}',
+            )
+        if len(python_files) > 1:
+            # Look for a main file or use the first one
+            main_files = [f for f in python_files if f.stem in ['main', 'testfunction', testfunction_path.name]]
+            python_file = main_files[0] if main_files else python_files[0]
+        else:
+            python_file = python_files[0]
+
+        requirements_file = testfunction_path / 'requirements.txt'
+        project_path = testfunction_path
+        testfunction_name = testfunction_path.name
+    else:
+        raise TestfunctionMissingFileError(
+            log,
+            message=f'Testfunction path {testfunction_path} must be a Python file or directory',
+        )
+
+    # Check if testfunction already exists and is being used
+    usage = testfunction_database.get_testfunction_usage(testfunction_name)
+
+    if usage['exists'] and not usage['can_safely_update']:
+        if not force:
+            log.info(f'Testfunction "{testfunction_name}" is currently used by {len(usage["experiments"])} experiments with {len(usage["runs"])} runs')
+            log.info(f'Use --force to overwrite and delete associated experiment runs')
+            log.info(f'Experiments affected: {", ".join([exp["name"] for exp in usage["experiments"]])}')
+            return usage['testfunction_id']  # Return existing ID without updating
+        else:
+            # Force mode - ask for confirmation
+            print(f'\n⚠️  WARNING: Testfunction "{testfunction_name}" is currently in use!')
+            print(f'   • Used by {len(usage["experiments"])} experiments: {", ".join([exp["name"] for exp in usage["experiments"]])}')
+            print(f'   • Would delete {len(usage["runs"])} experiment runs')
+            print(f'   • This action cannot be undone!')
+
+            response = input('\nContinue and delete all associated experiment runs? (y/N): ').strip().lower()
+
+            if response != 'y':
+                log.info('Operation cancelled by user')
+                return usage['testfunction_id']
+
+            # Delete associated experiment runs
+            deleted_count = testfunction_database.delete_experiment_runs_for_testfunction(testfunction_name)
+            log.info(f'Deleted {deleted_count} experiment runs for testfunction "{testfunction_name}"')
+
+    # Use TestfunctionManager to install to global directory
+    from adare.backend.testfunction.manager import TestfunctionManager
+    manager = TestfunctionManager()
+    manager.ensure_global_directory_exists()
+
+    # Install testfunction to global directory (copies files if they don't exist)
+    target_python_file, target_requirements_file = manager.install_testfunction(
+        source_python_file=python_file,
+        source_requirements_file=requirements_file,
+        name=testfunction_name
+    )
+
+    # Load the testfunction into the global database using global paths
+    testfunction_id = testfunction_database.load_testfunction_file(project_path, target_python_file, target_requirements_file)
+    testfunction_sync(testfunction_id)
+
+    # Protect testfunction files after loading (protect the global copies)
+    from adare.helperfunctions.integrity import protect_loaded_files
+    testfunction_files = [target_python_file]
+    if target_requirements_file.exists():
+        testfunction_files.append(target_requirements_file)
+    protected_files = protect_loaded_files(testfunction_files)
+    log.info(f'Protected {len(protected_files)} testfunction files for {python_file.name}')
+
+    return testfunction_id
 
 
 def testfunction_list(testfunction_set: str = None):

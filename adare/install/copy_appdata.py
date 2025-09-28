@@ -53,7 +53,8 @@ if __name__ == '__main__':
     # (if a file or directory already exists, it will be overwritten)
     shutil.copytree(adare, APPDATA_DIR / 'adare', dirs_exist_ok=True, ignore=shutil.ignore_patterns(*IGNORE_PATTERNS))
 
-    # move all files from adare/adare/appdata to appdata root
+    # move all files from adare/adare/appdata to appdata root (except testfunctions)
     for file in (APPDATA_DIR / 'adare' / 'adare' / 'appdata').iterdir():
-        shutil.copytree(file, APPDATA_DIR / file.name, dirs_exist_ok=True,
-                        ignore=shutil.ignore_patterns(*IGNORE_PATTERNS))
+        if file.name != 'testfunctions':  # Skip testfunctions - we'll load directly from source
+            shutil.copytree(file, APPDATA_DIR / file.name, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns(*IGNORE_PATTERNS))
