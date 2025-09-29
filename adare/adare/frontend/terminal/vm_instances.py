@@ -9,9 +9,14 @@ import logging
 from typing import List, Dict, Any
 from datetime import datetime
 
+from rich.table import Table
+from rich.panel import Panel
+from rich.layout import Layout
+
 from adare.backend.vm.instance_manager import get_vm_instance_stats
 from adare.backend.vm.port_manager import get_port_usage_stats
 from adare.database.api.vm import VmApi
+from adare.frontend.terminal.console import DefaultConsole
 
 log = logging.getLogger(__name__)
 
@@ -23,20 +28,36 @@ def print_vm_instances_list():
             instances = api.get_all_vm_instances()
 
         if not instances:
-            print("No VM instances found.")
+            console = DefaultConsole()
+            console.print("No VM instances found.")
             return
 
-        print("VM INSTANCES")
-        print("=" * 80)
-        print(f"{'ID':<26} {'Name':<20} {'Status':<12} {'Port':<6} {'Last Used':<20}")
-        print("-" * 80)
+        # Create Rich table
+        table = Table(expand=True)
+        table.add_column("ID", style="cyan", no_wrap=True)
+        table.add_column("Name", style="yellow", no_wrap=True)
+        table.add_column("Status", style="cyan", no_wrap=True)
+        table.add_column("Port", style="cyan", no_wrap=True)
+        table.add_column("Last Used", style="cyan", no_wrap=False)
 
         for instance in instances:
             last_used = instance.last_used_at.strftime("%Y-%m-%d %H:%M:%S") if instance.last_used_at else "Never"
             port = str(instance.websocket_port) if instance.websocket_port else "N/A"
-            print(f"{instance.id:<26} {instance.instance_name:<20} {instance.status:<12} {port:<6} {last_used:<20}")
+            table.add_row(
+                instance.id,
+                instance.instance_name,
+                instance.status,
+                port,
+                last_used
+            )
 
-        print(f"\nTotal instances: {len(instances)}")
+        # Display using Rich console
+        console = DefaultConsole()
+        layout = Layout(name="root")
+        panel = Panel(table, title="[b gold3]VM Instances[/b gold3]", border_style="blue", title_align="left")
+        layout.update(panel)
+        console.print(layout)
+        console.print(f"\nTotal instances: {len(instances)}")
 
     except Exception as e:
         log.error(f"Error listing VM instances: {e}")
@@ -49,30 +70,42 @@ def print_vm_instance_info(instance_id: str):
         with VmApi() as api:
             instance = api.get_vm_instance_by_id(instance_id)
 
-        if not instance:
-            print(f"VM instance with ID '{instance_id}' not found.")
-            return
+            if not instance:
+                console = DefaultConsole()
+                console.print(f"VM instance with ID '{instance_id}' not found.")
+                return
 
-        print("VM INSTANCE DETAILS")
-        print("=" * 60)
-        print(f"ID:                    {instance.id}")
-        print(f"Name:                  {instance.instance_name}")
-        print(f"Status:                {instance.status}")
-        print(f"Source VM ID:          {instance.vm_id}")
-        print(f"VirtualBox UUID:       {instance.vbox_uuid or 'Not assigned'}")
-        print(f"Websocket Port:        {instance.websocket_port or 'Not assigned'}")
-        print(f"Current Experiment:    {instance.current_experiment_run_id or 'None'}")
-        print(f"Base Snapshot:         {instance.base_snapshot_name or 'Not set'}")
-        print(f"Created:               {instance.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"Last Used:             {instance.last_used_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            # Create Rich table for instance details
+            table = Table(show_header=False, box=None, padding=(0, 2))
+            table.add_column("Field", style="cyan", no_wrap=True)
+            table.add_column("Value", style="yellow")
 
-        # Show source VM info
-        source_vm = api.get_vm_by_id(instance.vm_id)
-        if source_vm:
-            print(f"\nSource VM Information:")
-            print(f"  Name:                {source_vm.name}")
-            print(f"  Description:         {source_vm.description or 'None'}")
-            print(f"  File:                {source_vm.file}")
+            table.add_row("ID:", instance.id)
+            table.add_row("Name:", instance.instance_name)
+            table.add_row("Status:", instance.status)
+            table.add_row("Source VM ID:", instance.vm_id)
+            table.add_row("VirtualBox UUID:", instance.vbox_uuid or 'Not assigned')
+            table.add_row("Websocket Port:", str(instance.websocket_port) if instance.websocket_port else 'Not assigned')
+            table.add_row("Current Experiment:", instance.current_experiment_run_id or 'None')
+            table.add_row("Base Snapshot:", instance.base_snapshot_name or 'Not set')
+            table.add_row("Created:", instance.created_at.strftime('%Y-%m-%d %H:%M:%S'))
+            table.add_row("Last Used:", instance.last_used_at.strftime('%Y-%m-%d %H:%M:%S'))
+
+            # Show source VM info
+            source_vm = api.get_vm_by_id(instance.vm_id)
+            if source_vm:
+                table.add_row("", "")  # Empty row for spacing
+                table.add_row("[b]Source VM Information[/b]", "")
+                table.add_row("  Name:", source_vm.name)
+                table.add_row("  Description:", source_vm.description or 'None')
+                table.add_row("  File:", source_vm.file)
+
+        # Display using Rich console
+        console = DefaultConsole()
+        layout = Layout(name="root")
+        panel = Panel(table, title="[b gold3]VM Instance Details[/b gold3]", border_style="blue", title_align="left")
+        layout.update(panel)
+        console.print(layout)
 
     except Exception as e:
         log.error(f"Error getting VM instance info: {e}")
@@ -83,22 +116,41 @@ def print_vm_instance_usage():
     """Print VM instance usage statistics."""
     try:
         stats = get_vm_instance_stats()
+        console = DefaultConsole()
 
-        print("VM INSTANCE USAGE STATISTICS")
-        print("=" * 60)
-        print(f"Total Instances:       {stats['total_instances']}")
-        print(f"Active Instances:      {stats['active_instances']}")
-        print(f"Available Instances:   {stats['available_instances']}")
-        print(f"Cleanup Pending:       {stats['cleanup_pending_instances']}")
+        # Create summary table
+        summary_table = Table(show_header=False, box=None, padding=(0, 2))
+        summary_table.add_column("Metric", style="cyan", no_wrap=True)
+        summary_table.add_column("Value", style="yellow")
 
-        if stats['instances_by_vm']:
-            print("\nPer-VM Instance Breakdown:")
-            print("-" * 60)
-            print(f"{'VM ID':<26} {'Total':<6} {'Active':<7} {'Available':<10} {'Cleanup':<8}")
-            print("-" * 60)
+        summary_table.add_row("Total Instances:", str(stats['total_instances']))
+        summary_table.add_row("Total Disk Usage:", f"{stats['total_disk_gb']:.2f} GB")
+        summary_table.add_row("Running:", str(stats['running_instances']))
+        summary_table.add_row("Stopped:", str(stats['stopped_instances']))
 
-            for vm_id, vm_stats in stats['instances_by_vm'].items():
-                print(f"{vm_id:<26} {vm_stats['total']:<6} {vm_stats['active']:<7} {vm_stats['available']:<10} {vm_stats['cleanup_pending']:<8}")
+        # Display summary panel
+        summary_panel = Panel(summary_table, title="[b gold3]VM Instance Usage Statistics[/b gold3]", border_style="blue", title_align="left")
+        console.print(summary_panel)
+
+        # Show top disk consumers if any exist
+        if stats['top_disk_consumers'] and any(c['disk_gb'] > 0 for c in stats['top_disk_consumers']):
+            consumers_table = Table(expand=True)
+            consumers_table.add_column("Instance Name", style="cyan", no_wrap=True)
+            consumers_table.add_column("Disk Usage", style="yellow", justify="right")
+            consumers_table.add_column("Status", style="green", justify="center")
+
+            for consumer in stats['top_disk_consumers']:
+                if consumer['disk_gb'] > 0:  # Only show instances with actual disk usage
+                    status = "🟢 Running" if consumer['is_running'] else "⚫ Stopped"
+                    consumers_table.add_row(
+                        consumer['name'],
+                        f"{consumer['disk_gb']:.2f} GB",
+                        status
+                    )
+
+            # Display consumers panel
+            consumers_panel = Panel(consumers_table, title="[b gold3]Top Disk Consumers[/b gold3]", border_style="blue", title_align="left")
+            console.print(consumers_panel)
 
     except Exception as e:
         log.error(f"Error getting VM instance usage: {e}")
@@ -109,22 +161,37 @@ def print_port_usage_stats():
     """Print websocket port usage statistics."""
     try:
         stats = get_port_usage_stats()
+        console = DefaultConsole()
 
-        print("WEBSOCKET PORT USAGE STATISTICS")
-        print("=" * 60)
-        print(f"Port Range:            {stats['port_range']}")
-        print(f"Total Ports:           {stats['total_ports']}")
-        print(f"Allocated Ports:       {stats['allocated_count']}")
-        print(f"Available Ports:       {stats['available_count']}")
+        # Create summary table
+        summary_table = Table(show_header=False, box=None, padding=(0, 2))
+        summary_table.add_column("Metric", style="cyan", no_wrap=True)
+        summary_table.add_column("Value", style="yellow")
 
+        summary_table.add_row("Port Range:", stats['port_range'])
+        summary_table.add_row("Total Ports:", str(stats['total_ports']))
+        summary_table.add_row("Allocated Ports:", str(stats['allocated_count']))
+        summary_table.add_row("Available Ports:", str(stats['available_count']))
+
+        # Display summary panel
+        summary_panel = Panel(summary_table, title="[b gold3]WebSocket Port Usage Statistics[/b gold3]", border_style="blue", title_align="left")
+        console.print(summary_panel)
+
+        # Display allocated ports if any
         if stats['allocated_ports']:
-            print("\nAllocated Ports:")
-            print("-" * 30)
             ports_per_line = 10
             allocated_ports = stats['allocated_ports']
+            port_lines = []
+
             for i in range(0, len(allocated_ports), ports_per_line):
                 port_group = allocated_ports[i:i + ports_per_line]
-                print("  " + ", ".join(map(str, port_group)))
+                port_lines.append("  " + ", ".join(map(str, port_group)))
+
+            port_display = "\n".join(port_lines)
+
+            # Display allocated ports panel
+            ports_panel = Panel(port_display, title="[b gold3]Allocated Ports[/b gold3]", border_style="blue", title_align="left")
+            console.print(ports_panel)
 
     except Exception as e:
         log.error(f"Error getting port usage stats: {e}")

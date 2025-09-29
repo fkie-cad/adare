@@ -88,7 +88,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] fix: adare --format json vm list shows not json!
 - [ ] add env via metadata.yml should be recognizes on loading+running and trigger add environment or delete-environment ...
 - [ ] if dir exists exp load is weird and first deletes the directory but tells the directrory does already exist so load does not work? and then we can run it again it 
-- [ ] adare vm instance cleanup does not work (remove age-days) add flag --instace-id or --all! -> should be called remove/rm instead of cleanup
 - [ ] adare vm instance list does not have alias l and also does not use our tables as the other commands!
 - [ ] adare vm instance info also uses wrong printing do it as for the other commands adare env list, ...
 

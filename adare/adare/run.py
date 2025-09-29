@@ -7,38 +7,34 @@ from trogon import tui
 
 
 class AliasedGroup(click.Group):
-    """A Click Group that supports command aliases."""
-    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.aliases = {}
-    
+
     def add_alias(self, alias, command_name):
-        """Add an alias for a command."""
         self.aliases[alias] = command_name
-    
+
     def get_command(self, ctx, cmd_name):
-        # First try the alias mapping
-        if cmd_name in self.aliases:
-            cmd_name = self.aliases[cmd_name]
-        
-        rv = click.Group.get_command(self, ctx, cmd_name)
-        if rv is not None:
-            return rv
-            
-        # If no exact match, try prefix matching
-        matches = [x for x in self.list_commands(ctx)
-                   if x.startswith(cmd_name)]
-        if not matches:
-            return None
-        elif len(matches) == 1:
-            return click.Group.get_command(self, ctx, matches[0])
-        ctx.fail(f'Too many matches: {", ".join(sorted(matches))}')
-    
+        real = self.aliases.get(cmd_name, cmd_name)
+        return super().get_command(ctx, real)
+
     def list_commands(self, ctx):
-        """Return both commands and aliases."""
-        commands = super().list_commands(ctx)
-        return sorted(commands + list(self.aliases.keys()))
+        # Only the canonical command names
+        return sorted(super().list_commands(ctx))
+
+    def format_commands(self, ctx, formatter):
+        rows = []
+        for name in self.list_commands(ctx):
+            cmd = self.get_command(ctx, name)
+            if cmd is None or cmd.hidden:
+                continue
+            # collect aliases pointing to this command
+            alias_list = [a for a, target in self.aliases.items() if target == name]
+            suffix = f" (aliases: {', '.join(alias_list)})" if alias_list else ""
+            rows.append((name, cmd.get_short_help_str() + suffix))
+        with formatter.section("Commands"):
+            formatter.write_dl(rows)
+
 
 # Internal imports
 from adare.cli.project import (
@@ -69,8 +65,8 @@ from adare.cli.testfunction import (
     exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 )
 from adare.cli.vm import (
-    exec_vm_list, exec_vm_info, exec_vm_delete, exec_vm_delete_snapshot, exec_vm_clear_all, exec_vm_clear_by_environment, exec_vm_test,
-    exec_vm_list_instances, exec_vm_instance_info, exec_vm_instance_cleanup, exec_vm_instance_usage, exec_vm_port_usage
+    exec_vm_list, exec_vm_info, exec_vm_list_snapshots, exec_vm_delete_snapshot, exec_vm_clear_all, exec_vm_clear_by_environment, exec_vm_test,
+    exec_vm_instance_remove, exec_vm_instance_usage
 )
 from adare.cli.mcp import (
     exec_mcp_test_icon, exec_mcp_test_text, exec_mcp_get_all_text
@@ -638,20 +634,23 @@ def info(vm_id):
     exec_with_error_printing(exec_vm_info, args)
 
 @vm.command()
-@click.argument('vm_id')
-@click.option('--force', '-f', is_flag=True, help='Force deletion even if VM is in use')
-def remove(vm_id, force):
-    """Delete a specific VM."""
-    args = SimpleNamespace(vm_id=vm_id, force=force)
-    exec_with_error_printing(exec_vm_delete, args)
+@click.option('--instance-id', help='Remove specific instance by ULID')
+@click.option('--all', is_flag=True, help='Remove all stopped instances')
+@click.option('--experiment-id', help='Remove instances for specific experiment')
+def remove(instance_id, all, experiment_id):
+    """Remove VM instances. Running instances cannot be removed."""
+    args = SimpleNamespace(
+        instance_id=instance_id,
+        all=all,
+        experiment_id=experiment_id
+    )
+    exec_with_error_printing(exec_vm_instance_remove, args)
 
-@vm.command(name='remove-snapshot')
-@click.argument('vm_id')
-@click.argument('snapshot_name')
-def remove_snapshot(vm_id, snapshot_name):
-    """Delete a single snapshot from a specific VM."""
-    args = SimpleNamespace(vm_id=vm_id, snapshot_name=snapshot_name)
-    exec_with_error_printing(exec_vm_delete_snapshot, args)
+@vm.command()
+def usage():
+    """Show VM instance usage statistics."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_vm_instance_usage, args)
 
 @vm.command()
 @click.argument('ova_file', type=click.Path(exists=True))
@@ -715,56 +714,34 @@ def clear_environment(environment_ulid, force):
     args = SimpleNamespace(environment_ulid=environment_ulid, force=force)
     exec_with_error_printing(exec_vm_clear_by_environment, args)
 
-# Nested group for VM instance management
-@vm.group()
-def instance():
-    """VM instance management commands."""
+# Nested group for snapshot management
+@vm.group(cls=AliasedGroup)
+def snapshot():
+    """Snapshot management commands."""
     pass
 
-@instance.command(name='list')
-def instance_list():
-    """List all VM instances in the system."""
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_vm_list_instances, args)
-
-@instance.command()
-@click.argument('instance_id')
-def info(instance_id):
-    """Get detailed information about a specific VM instance."""
+@snapshot.command(name='list')
+@click.option('--instance', '-i', 'instance_id', help='Filter by specific VM instance ID')
+def snapshot_list(instance_id):
+    """List all snapshots. Use --instance to filter by specific VM instance."""
     args = SimpleNamespace(instance_id=instance_id)
-    exec_with_error_printing(exec_vm_instance_info, args)
+    exec_with_error_printing(exec_vm_list_snapshots, args)
 
-@instance.command()
-@click.option('--instance-id', help='Cleanup specific instance by ID')
-@click.option('--age-days', type=int, help='Cleanup instances older than specified days')
-@click.option('--experiment-id', help='Cleanup instances for specific experiment')
-@click.option('--force', '-f', is_flag=True, help='Force cleanup even if instances are active')
-def cleanup(instance_id, age_days, experiment_id, force):
-    """Clean up VM instances based on criteria."""
-    args = SimpleNamespace(
-        instance_id=instance_id,
-        age_days=age_days,
-        experiment_id=experiment_id,
-        force=force
-    )
-    exec_with_error_printing(exec_vm_instance_cleanup, args)
-
-@instance.command()
-def usage():
-    """Show VM instance usage statistics."""
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_vm_instance_usage, args)
-
-@vm.command(name='port-usage')
-def port_usage():
-    """Show websocket port usage statistics."""
-    args = SimpleNamespace()
-    exec_with_error_printing(exec_vm_port_usage, args)
+@snapshot.command()
+@click.argument('instance_id')
+@click.argument('snapshot_name')
+def remove(instance_id, snapshot_name):
+    """Delete a single snapshot from a specific VM instance."""
+    args = SimpleNamespace(instance_id=instance_id, snapshot_name=snapshot_name)
+    exec_with_error_printing(exec_vm_delete_snapshot, args)
 
 # Add aliases for vm commands
 vm.add_alias('l', 'list')
 vm.add_alias('rm', 'remove')
-vm.add_alias('rm-snapshot', 'remove-snapshot')
+
+# Add aliases for snapshot commands
+snapshot.add_alias('l', 'list')
+snapshot.add_alias('rm', 'remove')
 
 
 # ------------------------------

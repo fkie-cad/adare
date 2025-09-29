@@ -4,12 +4,78 @@ VirtualBox VM snapshot operations mixin.
 import contextlib
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict
 import threading
 
 from .utils import run_subprocess
 
 log = logging.getLogger(__name__)
+
+
+def list_snapshots(vm_name: str) -> List[Dict[str, str]]:
+    """
+    List all snapshots for a given VM.
+
+    Args:
+        vm_name: Name of the VM
+
+    Returns:
+        List of dictionaries with snapshot information (name, uuid, description)
+    """
+    try:
+        # Determine VBoxManage executable based on platform
+        import platform
+        host_os = platform.system().lower()
+        vboxmanage_exe = 'VBoxManage.exe' if host_os == 'windows' else 'VBoxManage'
+
+        result = run_subprocess(
+            [vboxmanage_exe, "snapshot", vm_name, "list", "--machinereadable"],
+            log_prefix=f"list_snapshots({vm_name}): ",
+            check=False
+        )
+
+        if result.returncode != 0:
+            log.debug(f"No snapshots found for VM '{vm_name}' or command failed")
+            return []
+
+        # Parse the output
+        snapshots = []
+        current_snapshot = {}
+
+        for line in result.stdout.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+
+            # Format: SnapshotName-<uuid>="<snapshot_name>"
+            if line.startswith('SnapshotName'):
+                if current_snapshot and 'name' in current_snapshot:
+                    snapshots.append(current_snapshot)
+                    current_snapshot = {}
+
+                # Extract UUID and name
+                parts = line.split('=', 1)
+                if len(parts) == 2:
+                    uuid = parts[0].replace('SnapshotName-', '').strip()
+                    name = parts[1].strip('"')
+                    current_snapshot = {'uuid': uuid, 'name': name, 'description': ''}
+
+            # Format: SnapshotDescription-<uuid>="<description>"
+            elif line.startswith('SnapshotDescription') and current_snapshot:
+                parts = line.split('=', 1)
+                if len(parts) == 2:
+                    description = parts[1].strip('"')
+                    current_snapshot['description'] = description
+
+        # Add the last snapshot if it exists
+        if current_snapshot and 'name' in current_snapshot:
+            snapshots.append(current_snapshot)
+
+        return snapshots
+
+    except Exception as e:
+        log.error(f"Error listing snapshots for VM '{vm_name}': {e}")
+        return []
 
 
 class SnapshotMixin:

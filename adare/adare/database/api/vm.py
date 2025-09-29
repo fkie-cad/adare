@@ -195,10 +195,11 @@ class VmApi(GlobalDatabaseApi):
     def get_vm_by_id(self, vm_id: str) -> Optional[Vm]:
         """Get VM by database ID."""
         from sqlalchemy.orm import joinedload
-        vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter(Vm.id == vm_id).first()
-        if vm:
-            self._session.expunge(vm)
-        return vm
+        with self:
+            vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter(Vm.id == vm_id).first()
+            if vm:
+                self._session.expunge(vm)
+            return vm
 
     def get_vm_by_vbox_uuid(self, vbox_uuid: str) -> Optional[Vm]:
         """
