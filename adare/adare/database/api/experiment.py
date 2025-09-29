@@ -388,6 +388,12 @@ class ExperimentApi(ProjectDatabaseApi):
                 experiment_run.end_time = datetime.now(timezone.utc)
             self._session.commit()
 
+    def update_experiment_run_vm_instance(self, experiment_run_ulid: str, vm_instance_id: str):
+        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_ulid).first()
+        if experiment_run:
+            experiment_run.vm_instance_id = vm_instance_id
+            self._session.commit()
+
     def sync_experiment(self, ulid: str, remote_ulid: str, abstract_tests_ulids: dict, remote_url: str, is_published: bool):
         # Retrieve the experiment by its ULID
         experiment = self.get_experiment_by_ulid(ulid)

@@ -69,7 +69,8 @@ from adare.cli.testfunction import (
     exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
 )
 from adare.cli.vm import (
-    exec_vm_list, exec_vm_info, exec_vm_delete, exec_vm_delete_snapshot, exec_vm_clear_all, exec_vm_clear_by_environment, exec_vm_test
+    exec_vm_list, exec_vm_info, exec_vm_delete, exec_vm_delete_snapshot, exec_vm_clear_all, exec_vm_clear_by_environment, exec_vm_test,
+    exec_vm_list_instances, exec_vm_instance_info, exec_vm_instance_cleanup, exec_vm_instance_usage, exec_vm_port_usage
 )
 from adare.cli.mcp import (
     exec_mcp_test_icon, exec_mcp_test_text, exec_mcp_get_all_text
@@ -714,6 +715,52 @@ def clear_environment(environment_ulid, force):
     args = SimpleNamespace(environment_ulid=environment_ulid, force=force)
     exec_with_error_printing(exec_vm_clear_by_environment, args)
 
+# Nested group for VM instance management
+@vm.group()
+def instance():
+    """VM instance management commands."""
+    pass
+
+@instance.command(name='list')
+def instance_list():
+    """List all VM instances in the system."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_vm_list_instances, args)
+
+@instance.command()
+@click.argument('instance_id')
+def info(instance_id):
+    """Get detailed information about a specific VM instance."""
+    args = SimpleNamespace(instance_id=instance_id)
+    exec_with_error_printing(exec_vm_instance_info, args)
+
+@instance.command()
+@click.option('--instance-id', help='Cleanup specific instance by ID')
+@click.option('--age-days', type=int, help='Cleanup instances older than specified days')
+@click.option('--experiment-id', help='Cleanup instances for specific experiment')
+@click.option('--force', '-f', is_flag=True, help='Force cleanup even if instances are active')
+def cleanup(instance_id, age_days, experiment_id, force):
+    """Clean up VM instances based on criteria."""
+    args = SimpleNamespace(
+        instance_id=instance_id,
+        age_days=age_days,
+        experiment_id=experiment_id,
+        force=force
+    )
+    exec_with_error_printing(exec_vm_instance_cleanup, args)
+
+@instance.command()
+def usage():
+    """Show VM instance usage statistics."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_vm_instance_usage, args)
+
+@vm.command(name='port-usage')
+def port_usage():
+    """Show websocket port usage statistics."""
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_vm_port_usage, args)
+
 # Add aliases for vm commands
 vm.add_alias('l', 'list')
 vm.add_alias('rm', 'remove')
@@ -918,22 +965,26 @@ def ws():
 @click.argument('action_file', type=click.Path(exists=True))
 @click.option('--host', default='localhost', help='AdareVM host (default: localhost)')
 @click.option('--port', type=int, default=18765, help='AdareVM WebSocket port (default: 18765)')
+@click.option('--vm-instance', help='VM instance name to look up WebSocket port (overrides --port)')
 @click.option('--connect-timeout', type=float, default=10.0, help='Connection timeout in seconds (default: 10.0)')
 @click.option('--default-timeout', type=float, default=30.0, help='Default action timeout in seconds (default: 30.0)')
 @click.option('--continue-on-error', is_flag=True, help='Continue executing actions even if one fails')
-@click.option('--output-format', type=click.Choice(['json', 'yaml', 'summary', 'simple']), 
+@click.option('--output-format', type=click.Choice(['json', 'yaml', 'summary', 'simple']),
               default='simple', help='Output format (default: simple)')
-def action(action_file, host, port, connect_timeout, default_timeout, continue_on_error, output_format):
+def action(action_file, host, port, vm_instance, connect_timeout, default_timeout, continue_on_error, output_format):
     """Execute actions from YAML file on adarevm via WebSocket.
-    
+
     ACTION_FILE: Path to YAML file containing actions to execute
-    
-    Example: adare ws action test.yml --host 192.168.1.100 --port 18765
+
+    Examples:
+        adare ws action test.yml --host 192.168.1.100 --port 18765
+        adare ws action test.yml --vm-instance my-vm-instance
     """
     args = SimpleNamespace(
         action_file=action_file,
         host=host,
         port=port,
+        vm_instance=vm_instance,
         connect_timeout=connect_timeout,
         default_timeout=default_timeout,
         continue_on_error=continue_on_error,

@@ -573,6 +573,9 @@ class ExperimentRun(SerializerMixin, ProjectBase):
     # Reference to global environment (stored as string ID, not FK)
     environment_id = Column(String, nullable=True)  # Global environment ID
 
+    # Reference to global VM instance (stored as string ID, not FK)
+    vm_instance_id = Column(String, nullable=True)  # Global VM instance ID
+
     path = Column(String, nullable=True)
 
     start_time = Column(DateTime, nullable=True)
@@ -609,6 +612,14 @@ class ExperimentRun(SerializerMixin, ProjectBase):
         """Get the environment name for this run."""
         env = self.environment
         return env.name if env else None
+
+    @property
+    def vm_instance(self):
+        """Get the global VM instance object for this run."""
+        if not self.vm_instance_id:
+            return None
+        from adare.database.reference_manager import reference_manager
+        return reference_manager.get_vm_instance_object(self.vm_instance_id)
 
     @hybrid_property
     def is_valid(self):

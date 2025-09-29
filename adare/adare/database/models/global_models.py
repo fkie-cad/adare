@@ -287,14 +287,82 @@ class VmSnapshot(SerializerMixin, GlobalBase):
     vbox_uuid = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=True, default=func.now())
 
-    vm_id = Column(CHAR(26), ForeignKey('vm.id', ondelete='CASCADE'), nullable=False)
+    vm_id = Column(CHAR(26), ForeignKey('vm.id', ondelete='CASCADE'), nullable=True)
     vm = relationship(Vm, backref=backref("snapshots", cascade="all, delete-orphan"))
+
+    # Optional reference to VM instance for instance-specific snapshots
+    vm_instance_id = Column(CHAR(26), ForeignKey('vm_instance.id', ondelete='CASCADE'), nullable=True)
+    vm_instance = relationship("VmInstance", backref=backref("snapshots", cascade="all, delete-orphan"))
 
     def __str__(self):
         return str(self.name)
 
     def __repr__(self):
         return f"<VmSnapshot(name='{self.name}', vm='{self.vm.name if self.vm else None}')>"
+
+
+class VmInstance(SerializerMixin, GlobalBase):
+    """
+    VM instance tracking for concurrent experiment support.
+
+    Tracks individual VirtualBox VM instances created from base VMs,
+    enabling multiple experiments to run concurrently with the same environment.
+    """
+    __tablename__ = 'vm_instance'
+    RELATIONSHIPS_TO_DICT = True
+
+    id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
+
+    # Reference to base VM this instance was created from
+    vm_id = Column(CHAR(26), ForeignKey('vm.id', ondelete='CASCADE'), nullable=False)
+    vm = relationship(Vm, backref=backref("instances", cascade="all, delete-orphan"))
+
+    # VirtualBox specific identifiers
+    vbox_uuid = Column(String, nullable=True, unique=True, index=True)
+    instance_name = Column(String, nullable=False, unique=True, index=True)
+
+    # Experiment tracking
+    current_experiment_run_id = Column(String, nullable=True, index=True)
+    websocket_port = Column(Integer, nullable=True, index=True)
+
+    # Instance lifecycle
+    status = Column(String, nullable=False, default='active', index=True)  # active/available/cleanup_pending
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    last_used_at = Column(DateTime, nullable=False, default=func.now())
+
+    # Snapshot configuration for this instance
+    base_snapshot_name = Column(String, nullable=True)
+    use_snapshots = Column(Boolean, default=True)
+
+    def __str__(self):
+        return str(self.instance_name)
+
+    def __repr__(self):
+        return f"<VmInstance(name='{self.instance_name}', vm='{self.vm.name if self.vm else None}', status='{self.status}')>"
+
+    @hybrid_property
+    def is_available(self):
+        return self.status == 'available'
+
+    @hybrid_property
+    def is_active(self):
+        return self.status == 'active'
+
+    def mark_available(self):
+        """Mark instance as available for reuse."""
+        self.status = 'available'
+        self.current_experiment_run_id = None
+        self.last_used_at = func.now()
+
+    def mark_active(self, experiment_run_id: str):
+        """Mark instance as active for an experiment."""
+        self.status = 'active'
+        self.current_experiment_run_id = experiment_run_id
+        self.last_used_at = func.now()
+
+    def mark_cleanup_pending(self):
+        """Mark instance for cleanup."""
+        self.status = 'cleanup_pending'
 
 
 class Environment(SerializerMixin, GlobalBase):

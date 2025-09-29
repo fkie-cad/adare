@@ -131,6 +131,50 @@ class NetworkingMixin:
         
         return await self.manager.run_async(_add_port_forward_async)
 
+    async def remove_port_forwarding(
+        self,
+        name: str,
+        ctx_manager=None,
+        stop_event=None,
+        log_file: Optional[Path] = None,
+        silent: bool = False
+    ) -> int:
+        """Remove a port forwarding rule from the VM."""
+        async def _remove_port_forward_async():
+            # First check if the rule exists
+            existing_rules = await self.list_port_forwarding_rules(ctx_manager, stop_event, log_file, silent=True)
+
+            if name not in existing_rules:
+                if not silent:
+                    log.info(f"Port forward '{name}' does not exist - skipping removal")
+                return 0
+
+            # Remove the port forwarding rule
+            args = ["modifyvm", self.vm_name, "--natpf1", "delete", name]
+
+            try:
+                log.info(f"Removing port forward '{name}' from VM '{self.vm_name}'")
+                return_value, _, _ = await self._execute_streaming_command_async(
+                    args,
+                    log_file=log_file,
+                    stop_event=stop_event,
+                    silent=silent,
+                    ctx_manager=ctx_manager,
+                    operation_name="port forward removal"
+                )
+
+                if return_value == 0:
+                    log.info(f"Port forward '{name}' removed successfully from VM '{self.vm_name}'")
+                else:
+                    log.error(f"Failed to remove port forward '{name}' from VM '{self.vm_name}': return code {return_value}")
+
+                return return_value
+            except Exception as e:
+                log.error(f"Error removing port forward '{name}' from VM '{self.vm_name}': {e}")
+                return 1
+
+        return await self.manager.run_async(_remove_port_forward_async)
+
     async def add_shared_folder(self, name: str, host_path: Path, readonly: bool = False, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
         """
         Add a shared folder to the VM (VirtualBox configuration only).

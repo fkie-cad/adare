@@ -30,7 +30,7 @@ def create_ova_test_context(ova_file_path: Path, guest_platform: str):
         preserve_snapshot=False,
         vm_cpus=2,
         vm_memory=2048,
-        websocket_port=18765,
+        websocket_port=19000,  # Test port outside production range
         vm_resolution=(1920, 1080)
     )
     
