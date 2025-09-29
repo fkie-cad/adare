@@ -476,6 +476,36 @@ class ReferenceManager:
 
         return results
 
+    def get_vm_instance_object(self, vm_instance_id: str):
+        """
+        Get VM instance object from global database.
+
+        Args:
+            vm_instance_id: Global VM instance ID
+
+        Returns:
+            VmInstance object or None if not found
+        """
+        cache_key = f"vmi_obj_{vm_instance_id}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        try:
+            from adare.database.models.global_models import VmInstance
+            with self._get_global_api() as api:
+                vm_instance = api._session.query(VmInstance).filter(
+                    VmInstance.id == vm_instance_id
+                ).first()
+
+                if vm_instance:
+                    api.expunge(vm_instance)  # Detach from session
+                    self._cache[cache_key] = vm_instance
+                    return vm_instance
+                return None
+        except Exception as e:
+            log.error(f"Error getting VM instance object {vm_instance_id}: {e}")
+            return None
+
 
 # Global instance for easy access
 reference_manager = ReferenceManager()

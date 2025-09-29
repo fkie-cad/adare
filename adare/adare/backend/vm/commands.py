@@ -304,31 +304,53 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
 # PHASE 2: UUID-BASED VM VERIFICATION
 # ==========================================
 
-def verify_vm_status(vm_record) -> VMStatus:
+def verify_vm_status(vm_record, auto_cleanup: bool = False, experiment_context: str = None) -> VMStatus:
     """
     Verify VM exists and determine its status using UUID-based identification.
-    
+
     Args:
         vm_record: VM database record with vbox_uuid field
-        
+        auto_cleanup: If True, automatically remove missing VMs from database
+        experiment_context: Experiment context for logging cleanup actions
+
     Returns:
         VMStatus enum indicating current VM state
+
+    Note:
+        When auto_cleanup=True and VM is missing from VirtualBox, the VM entry
+        will be automatically removed from the database. This should only be used
+        during experiment runs for VMs that are actually needed.
     """
     if not vm_record.vbox_uuid:
         log.debug(f"VM '{vm_record.name}' has no UUID - needs initial import")
         return VMStatus.IMPORTED
-    
+
     # Check if VM exists in VirtualBox using UUID
     if not VirtualBoxVM.verify_vm_exists_by_uuid(vm_record.vbox_uuid):
         log.warning(f"VM '{vm_record.name}' (UUID: {vm_record.vbox_uuid}) missing from VirtualBox")
+
+        # Perform automatic cleanup if requested (experiment context only)
+        if auto_cleanup:
+            context_info = f" (experiment: {experiment_context})" if experiment_context else ""
+            log.info(f"CLAUDE: Automatically removing orphaned VM '{vm_record.name}' from database{context_info}")
+            try:
+                vm_database.delete_vm(vm_record.id)
+                log.info(f"CLAUDE: Successfully cleaned up missing VM '{vm_record.name}' from database")
+                # Return MISSING to indicate the VM was found missing (even though now cleaned up)
+                # This allows the caller to handle the situation appropriately
+                return VMStatus.MISSING
+            except Exception as e:
+                log.error(f"CLAUDE: Failed to cleanup missing VM '{vm_record.name}': {e}")
+                return VMStatus.MISSING
+
         return VMStatus.MISSING
-    
+
     # Check if base snapshot exists (if using snapshots)
     if vm_record.use_snapshots and vm_record.base_snapshot_name:
         if not check_base_snapshot_exists(vm_record.vbox_uuid, vm_record.base_snapshot_name):
             log.warning(f"VM '{vm_record.name}' missing base snapshot '{vm_record.base_snapshot_name}'")
             return VMStatus.SNAPSHOT_MISSING
-    
+
     log.debug(f"VM '{vm_record.name}' verified as ready")
     return VMStatus.READY
 
@@ -403,136 +425,350 @@ def get_vm_by_uuid_from_db(vbox_uuid: str):
     return vm_database.get_vm_by_vbox_uuid(vbox_uuid)
 
 
+def verify_and_cleanup_vm_for_experiment(vm_id: str, experiment_id: str = None) -> bool:
+    """
+    Verify VM exists and automatically cleanup if missing (experiment context only).
+
+    Args:
+        vm_id: VM database ID to verify
+        experiment_id: Experiment context for logging
+
+    Returns:
+        True if VM exists and is ready, False if VM was missing and cleaned up
+
+    Raises:
+        VMError: If VM verification fails for reasons other than missing VM
+    """
+    # Get VM record from database
+    vm_record = vm_database.get_vm_by_id(vm_id)
+    if not vm_record:
+        raise VMError(log, f"VM with ID {vm_id} not found in database")
+
+    # Verify VM status with automatic cleanup enabled
+    status = verify_vm_status(vm_record, auto_cleanup=True, experiment_context=experiment_id)
+
+    if status == VMStatus.MISSING:
+        # VM was missing and has been cleaned up
+        log.warning(f"VM '{vm_record.name}' was missing from VirtualBox and has been removed from database")
+        return False
+    elif status in [VMStatus.READY, VMStatus.IMPORTED]:
+        # VM is available for use
+        return True
+    elif status == VMStatus.SNAPSHOT_MISSING:
+        # VM exists but snapshot is missing - this is recoverable
+        log.warning(f"VM '{vm_record.name}' exists but base snapshot is missing - will be recreated")
+        return True
+    else:
+        raise VMError(log, f"VM '{vm_record.name}' verification failed with status: {status}")
+
+
+def verify_and_cleanup_vm_instance_for_experiment(vm_instance_id: str, experiment_id: str = None) -> bool:
+    """
+    Verify VM instance exists in VirtualBox and automatically cleanup if missing.
+
+    Args:
+        vm_instance_id: VM instance database ID to verify
+        experiment_id: Experiment context for logging
+
+    Returns:
+        True if VM instance exists and is ready, False if VM instance was missing and cleaned up
+
+    Raises:
+        VMError: If VM instance verification fails for reasons other than missing VM instance
+    """
+    from adare.database.api.vm import VmApi
+
+    # Get VM instance record from database
+    with VmApi() as api:
+        vm_instance = api.get_vm_instance_by_id(vm_instance_id)
+
+    if not vm_instance:
+        raise VMError(log, f"VM instance with ID {vm_instance_id} not found in database")
+
+    # Check if VM instance has VirtualBox UUID
+    if not vm_instance.vbox_uuid:
+        log.debug(f"VM instance '{vm_instance.instance_name}' has no VirtualBox UUID - needs initial import")
+        return True
+
+    # Verify VM instance exists in VirtualBox using UUID
+    if not VirtualBoxVM.verify_vm_exists_by_uuid(vm_instance.vbox_uuid):
+        log.warning(f"VM instance '{vm_instance.instance_name}' (UUID: {vm_instance.vbox_uuid}) missing from VirtualBox")
+
+        # Perform automatic cleanup
+        context_info = f" (experiment: {experiment_id})" if experiment_id else ""
+        log.info(f"CLAUDE: Automatically removing orphaned VM instance '{vm_instance.instance_name}' from database{context_info}")
+
+        try:
+            with VmApi() as api:
+                api.delete_vm_instance(vm_instance_id)
+            log.info(f"CLAUDE: Successfully cleaned up missing VM instance '{vm_instance.instance_name}' from database")
+            return False  # VM instance was missing and cleaned up
+        except Exception as e:
+            log.error(f"CLAUDE: Failed to cleanup missing VM instance '{vm_instance.instance_name}': {e}")
+            raise VMError(log, f"Failed to cleanup missing VM instance: {e}")
+
+    log.debug(f"VM instance '{vm_instance.instance_name}' verified as ready in VirtualBox")
+    return True
+
+
 # ==========================================
 # PHASE 4: OPTIMIZED EXPERIMENT WORKFLOW
 # ==========================================
 
 async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environment_ulid: str = None, experiment_run_ulid: Optional[str] = None, preserve_experiment_snapshot: bool = False, interrupt_event: Optional[threading.Event] = None) -> str:
     """
-    🚀 FAST VM preparation for experiment - only VirtualBox import and snapshots!
-    
-    VM file hash calculation and copying already done during environment load.
-    This only handles VirtualBox import and snapshot operations.
-    
+    🚀 OPTIMIZED VM preparation using instance management for concurrent experiments!
+
+    This function now uses the VM instance system to support multiple concurrent
+    experiments with the same environment, including smart reuse and dynamic port allocation.
+
     Args:
         vm_id: VM database ID (from environment)
-        experiment_id: Unique experiment identifier
+        experiment_id: Unique experiment identifier (for instance naming)
         environment_ulid: Environment identifier for context
-        cleanup_snapshots: Whether to clean up old experiment snapshots (default: True)
-        experiment_run_ulid: Experiment run ID for stage tracking (optional)
-        preserve_experiment_snapshot: Whether to create experiment-specific snapshot (default: False)
-        
+        experiment_run_ulid: Experiment run ID for stage tracking and instance assignment
+        preserve_experiment_snapshot: Whether to create experiment-specific snapshot
+        interrupt_event: Optional event to check for user interruption
+
     Returns:
-        VM ID ready for experiment
-        
+        VM instance ID ready for experiment (not the source VM ID!)
+
     Raises:
         VMError: If VM preparation fails
     """
     import time
     start_time = time.time()
-    
-    from adare.backend.vm.snapshot_manager import SnapshotManager, create_base_snapshot_for_vm, restore_vm_to_base_snapshot
-    
-    log.info(f"Starting VM preparation for experiment {experiment_id}")
-    
-    # Get VM record from database (file operations already done during env load)
-    vm = vm_database.get_vm_by_id(vm_id)
-    if not vm:
-        raise VMError(log, f"VM with ID {vm_id} not found in database")
-    
-    log.info(f"Using pre-loaded VM: {vm.name} (hash: {vm.hash})")
-    
-    # Check VM status in VirtualBox
-    vm_status = verify_vm_status(vm)
-    log.info(f"VM VirtualBox status: {vm_status.name}")
-    
-    # Handle different VM states
-    if vm_status == VMStatus.IMPORTED or vm_status == VMStatus.MISSING:
-        # First time or missing: Import VM to VirtualBox + create base snapshot  
-        log.info(f"First time VM setup - importing to VirtualBox...")
-        
-        # Verify VM integrity before proceeding with import (only when importing)
-        await verify_vm_integrity(vm_id, experiment_run_ulid, interrupt_event)
 
-        # Check if verification was interrupted - if so, don't proceed with import
-        if interrupt_event and interrupt_event.is_set():
-            log.info("VM integrity verification was interrupted - skipping import")
-            return None
+    from adare.backend.vm.instance_manager import allocate_vm_instance_for_experiment
+    from adare.backend.vm.snapshot_manager import (SnapshotManager, create_base_snapshot_for_vm, restore_vm_to_base_snapshot,
+                                                   create_base_snapshot_for_instance, restore_instance_to_base_snapshot)
+    from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager
 
-        # Use dedicated VM import stage
-        if experiment_run_ulid:
-            with StageCtxManager(VMImportStage(), experiment_run_ulid):
-                vm = await vm_database.import_vm_to_virtualbox(vm, capture_uuid_after_import=True, environment_ulid=environment_ulid)
-        else:
-            log.info(f"⚡ Importing VM to VirtualBox...")
-            vm = await vm_database.import_vm_to_virtualbox(vm, capture_uuid_after_import=True, environment_ulid=environment_ulid)
-        
-        # Create base snapshot for future speed
-        log.info(f"📸 Creating base snapshot for future experiments...")
-        if experiment_run_ulid:
-            with StageCtxManager(VMSnapshotCreateStage(), experiment_run_ulid):
-                create_base_snapshot_for_vm(vm, silent=False)
-        else:
-            create_base_snapshot_for_vm(vm, silent=False)
-        
-        first_run_time = time.time() - start_time
-        log.info(f"First VirtualBox import completed in {first_run_time:.1f} seconds")
-        return vm.id
-        
-    elif vm_status == VMStatus.SNAPSHOT_MISSING:
-        log.warning(f"Base snapshot missing - recreating...")
-        # Recreate base snapshot
-        if experiment_run_ulid:
-            with StageCtxManager(VMSnapshotCreateStage(), experiment_run_ulid):
-                create_base_snapshot_for_vm(vm, silent=False)
-        else:
-            create_base_snapshot_for_vm(vm, silent=False)
-        
-    elif vm_status != VMStatus.READY:
-        # Handle other statuses
-        log.warning(f"VM not ready (status: {vm_status.name}) - attempting repair...")
-        # Additional repair logic could go here
-    
-    # VM exists in VirtualBox - use FAST snapshot workflow!
-    log.info(f"VM already in VirtualBox! Using FAST snapshot workflow...")
+    log.info(f"CLAUDE: 🚀 Starting OPTIMIZED VM instance preparation for experiment {experiment_id}")
+    log.debug(f"CLAUDE: ensure_vm_ready_for_experiment called with vm_id={vm_id}, experiment_id={experiment_id}, experiment_run_ulid={experiment_run_ulid}")
+    log.debug(f"CLAUDE: Performance tracking - function entry at {time.time():.3f}")
 
-    # 🚀 FAST RESTORE from base snapshot (this is where the magic happens!)
-    log.info(f"CLAUDE: Restoring from base snapshot with interrupt support...")
-    if experiment_run_ulid:
-        with StageCtxManager(VMSnapshotRestoreStage(), experiment_run_ulid):
-            restore_success = restore_vm_to_base_snapshot(
-                vm,
-                silent=False,
-                interrupt_event=interrupt_event,
-                timeout=180  # Increased timeout for snapshot operations
-            )
-    else:
-        restore_success = restore_vm_to_base_snapshot(
-            vm,
-            silent=False,
-            interrupt_event=interrupt_event,
-            timeout=180
-        )
-
-    # Check if operation was interrupted
+    # Check for interruption before starting
     if interrupt_event and interrupt_event.is_set():
-        log.info(f"CLAUDE: VM preparation interrupted during snapshot restore for '{vm.name}'")
+        log.info("CLAUDE: VM preparation cancelled before starting due to interrupt")
         return None
 
-    if not restore_success:
-        raise VMError(log, f"Failed to restore VM '{vm.name}' to base snapshot")
-    
-    
-    # Update verification timestamp
-    update_vm_status_in_db(vm.id, VMStatus.READY)
-    
+    # Step 0: Verify VM exists and cleanup if missing (experiment-scoped)
+    log.debug(f"CLAUDE: Step 0 - Verifying VM exists and cleaning up if missing")
+    try:
+        vm_is_available = verify_and_cleanup_vm_for_experiment(vm_id, experiment_id)
+        if not vm_is_available:
+            # VM was missing and cleaned up - cannot proceed
+            raise VMError(log, f"VM with ID {vm_id} was missing from VirtualBox and has been removed from database. Cannot proceed with experiment.")
+        log.debug(f"CLAUDE: VM verification passed - VM is available")
+    except Exception as e:
+        log.error(f"CLAUDE: VM verification failed: {e}")
+        raise
+
+    # Step 1: Allocate VM instance (reuse existing or create new)
+    log.debug(f"CLAUDE: Step 1 - Starting VM instance allocation for vm_id={vm_id}")
+    try:
+        if experiment_run_ulid:
+            log.debug(f"CLAUDE: Allocating instance with experiment_run_ulid={experiment_run_ulid}")
+            vm_instance = await allocate_vm_instance_for_experiment(vm_id, experiment_run_ulid)
+        else:
+            # Fallback for non-experiment use cases
+            import ulid
+            temp_run_id = str(ulid.ULID())
+            log.debug(f"CLAUDE: Allocating instance with temp_run_id={temp_run_id}")
+            vm_instance = await allocate_vm_instance_for_experiment(vm_id, temp_run_id)
+
+        log.info(f"CLAUDE: ✅ Allocated VM instance: {vm_instance.instance_name} on port {vm_instance.websocket_port}")
+        log.debug(f"CLAUDE: VM instance details - ID={vm_instance.id}, status={vm_instance.status}, vbox_uuid={vm_instance.vbox_uuid}")
+    except Exception as e:
+        log.error(f"CLAUDE: Failed to allocate VM instance: {e}")
+        import traceback
+        log.debug(f"CLAUDE: VM instance allocation traceback: {traceback.format_exc()}")
+        raise
+
+    # Step 2: Ensure source VM is ready in VirtualBox (if this is a new instance)
+    source_vm = vm_database.get_vm_by_id(vm_id)
+    if not source_vm:
+        raise VMError(log, f"Source VM with ID {vm_id} not found in database")
+
+    # Check if this is a reused instance or new instance
+    if vm_instance.vbox_uuid:
+        # Reused instance - VM already exists in VirtualBox
+        log.info(f"♻️  Reusing existing VM instance: {vm_instance.instance_name}")
+
+        # Check if instance has a base snapshot, create if missing
+        if not vm_instance.base_snapshot_name:
+            log.info(f"VM instance '{vm_instance.instance_name}' missing base snapshot - creating it now")
+            if experiment_run_ulid:
+                with StageCtxManager(VMSnapshotCreateStage(), experiment_run_ulid, interrupt_event):
+                    snapshot_success = create_base_snapshot_for_instance(vm_instance, silent=False)
+            else:
+                snapshot_success = create_base_snapshot_for_instance(vm_instance, silent=False)
+
+            if not snapshot_success:
+                log.warning(f"Failed to create base snapshot for reused instance {vm_instance.instance_name}")
+            else:
+                # Refresh instance data to get updated snapshot name
+                from adare.database.api.vm import VmApi
+                with VmApi() as api:
+                    vm_instance = api.get_vm_instance_by_id(vm_instance.id)
+
+        # Restore instance to clean state (only if base snapshot exists)
+        if vm_instance.base_snapshot_name:
+            if experiment_run_ulid:
+                with StageCtxManager(VMSnapshotRestoreStage(), experiment_run_ulid, interrupt_event):
+                    restore_success = restore_instance_to_base_snapshot(
+                        vm_instance,  # Pass VM instance record
+                        silent=False,
+                        interrupt_event=interrupt_event,
+                        timeout=180
+                    )
+            else:
+                restore_success = restore_instance_to_base_snapshot(
+                    vm_instance,
+                    silent=False,
+                    interrupt_event=interrupt_event,
+                    timeout=180
+                )
+
+            if interrupt_event and interrupt_event.is_set():
+                log.info("VM instance preparation interrupted during restore")
+                return None
+
+            if not restore_success:
+                log.warning(f"Failed to restore VM instance '{vm_instance.instance_name}' to clean state - will continue anyway")
+        else:
+            log.warning(f"VM instance '{vm_instance.instance_name}' has no base snapshot available - cannot restore to clean state")
+
+    else:
+        # New instance - need to import from source VM
+        log.info(f"🆕 Creating new VM instance: {vm_instance.instance_name}")
+
+        # Verify source VM integrity
+        await verify_vm_integrity(vm_id, experiment_run_ulid, interrupt_event)
+
+        if interrupt_event and interrupt_event.is_set():
+            log.info("VM integrity verification was interrupted")
+            return None
+
+        # Import VM instance to VirtualBox with unique name
+        if experiment_run_ulid:
+            with StageCtxManager(VMImportStage(), experiment_run_ulid, interrupt_event):
+                vm_instance = await _import_vm_instance_to_virtualbox(vm_instance, source_vm, environment_ulid)
+        else:
+            vm_instance = await _import_vm_instance_to_virtualbox(vm_instance, source_vm, environment_ulid)
+
+        if interrupt_event and interrupt_event.is_set():
+            log.info("VM instance import was interrupted")
+            return None
+
+        # Create base snapshot for this instance
+        if experiment_run_ulid:
+            with StageCtxManager(VMSnapshotCreateStage(), experiment_run_ulid, interrupt_event):
+                success = create_base_snapshot_for_instance(vm_instance, silent=False)
+        else:
+            success = create_base_snapshot_for_instance(vm_instance, silent=False)
+
+        if not success:
+            log.warning(f"Failed to create base snapshot for instance {vm_instance.instance_name}")
+
     total_time = time.time() - start_time
-    log.info(f"VM preparation completed in {total_time:.1f} seconds!")
-    
-    return vm.id
+    log.info(f"CLAUDE: 🎉 VM instance preparation completed in {total_time:.1f} seconds!")
+    log.info(f"CLAUDE: 📋 Instance: {vm_instance.instance_name}, Port: {vm_instance.websocket_port}")
+    log.debug(f"CLAUDE: Performance tracking - function exit at {time.time():.3f}, total duration: {total_time:.3f}s")
+
+    # Verify the instance exists before returning
+    log.debug(f"CLAUDE: Verifying instance exists before returning ID: {vm_instance.id}")
+    from adare.database.api.vm import VmApi
+    with VmApi() as api:
+        verification_instance = api.get_vm_instance_by_id(vm_instance.id)
+        if not verification_instance:
+            log.error(f"CLAUDE: CRITICAL - Instance {vm_instance.id} was created but cannot be retrieved!")
+            raise VMError(log, f"Instance {vm_instance.id} was created but cannot be retrieved from database")
+        else:
+            log.debug(f"CLAUDE: Instance verification successful: {verification_instance.instance_name}")
+
+    log.info(f"CLAUDE: Returning VM instance ID: {vm_instance.id}")
+    return vm_instance.id  # Return instance ID, not source VM ID
 
 
-def _reimport_missing_vm(vm_record, vm_path: Path, project_path: Path, 
+async def _import_vm_instance_to_virtualbox(vm_instance, source_vm, environment_ulid: str = None):
+    """
+    Import a VM instance to VirtualBox with unique naming.
+
+    Args:
+        vm_instance: VmInstance database record
+        source_vm: Source VM database record
+        environment_ulid: Environment identifier for context
+
+    Returns:
+        Updated VmInstance with VirtualBox UUID
+    """
+    from adare.virtualbox.api import VirtualBoxManager
+    from adare.database.api.vm import VmApi
+
+    log.info(f"Importing VM instance '{vm_instance.instance_name}' to VirtualBox...")
+
+    # Create VirtualBox manager and import VM with instance name
+    manager = VirtualBoxManager()
+    vm_file_path = Path(source_vm.file)
+
+    # Import VM with unique instance name
+    vbox_vm = await manager.import_vm_async(
+        vm_file_path,
+        vm_instance.instance_name,  # Use instance name instead of source name
+        environment_ulid=environment_ulid
+    )
+
+    # Update instance with VirtualBox UUID
+    vbox_uuid = vbox_vm.get_vm_uuid()
+    with VmApi() as api:
+        api.update_vm_instance(
+            vm_instance.id,
+            vbox_uuid=vbox_uuid,
+            base_snapshot_name=f"{vm_instance.instance_name}_base"
+        )
+
+    log.info(f"Successfully imported VM instance '{vm_instance.instance_name}' with UUID: {vbox_uuid}")
+
+    # Return updated instance
+    with VmApi() as api:
+        return api.get_vm_instance_by_id(vm_instance.id)
+
+
+async def release_vm_instance_for_experiment(vm_instance_id: str):
+    """
+    Release a VM instance when an experiment completes.
+
+    Args:
+        vm_instance_id: VM instance ID to release
+    """
+    from adare.backend.vm.instance_manager import release_vm_instance
+    await release_vm_instance(vm_instance_id)
+
+
+async def cleanup_vm_instances_for_experiment(experiment_run_id: str):
+    """
+    Clean up all VM instances used by an experiment run.
+
+    Args:
+        experiment_run_id: Experiment run ID
+    """
+    from adare.database.api.vm import VmApi
+    from adare.database.models.global_models import VmInstance
+    from adare.backend.vm.instance_manager import cleanup_vm_instance
+
+    with VmApi() as api:
+        instances = api._session.query(VmInstance).filter_by(
+            current_experiment_run_id=experiment_run_id
+        ).all()
+
+        for instance in instances:
+            log.info(f"Cleaning up VM instance for experiment {experiment_run_id}: {instance.instance_name}")
+            await cleanup_vm_instance(instance.id, force=True)
+
+
+def _reimport_missing_vm(vm_record, vm_path: Path, project_path: Path,
                         environment_metadata: EnvironmentMetadata):
     """
     Re-import a VM that exists in database but is missing from VirtualBox.

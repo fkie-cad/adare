@@ -92,35 +92,35 @@ class VmApi(GlobalDatabaseApi):
             self._session.rollback()
             raise VMLoadError(log, f"Database error while creating OSInfo: {e}")
     
-    def create_vm(self, project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '', 
-                  os_platform: str = '', os_type: str = '', os_distribution: str = '', 
-                  os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64', 
+    def create_vm(self, project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '',
+                  os_platform: str = '', os_type: str = '', os_distribution: str = '',
+                  os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
                   silent: bool = False) -> Vm:
         """
         Create a new VM entry in the database with file operations.
-        
+
         Args:
             name: Unique name for the VM
             file_path: Path to the VM file (OVA)
             description: Optional description
             os_platform: OS platform (windows, linux, etc.)
-            os_type: OS type 
+            os_type: OS type
             os_distribution: OS distribution
             os_version: OS version
             os_language: OS language
             os_architecture: Architecture (default: x86_64)
             quiet: If True, suppress progress bars
-            
+
         Returns:
             Created VM instance
-            
+
         Raises:
             ValidationError: If validation fails
             VMLoadError: If VM creation fails
         """
         # Validate and process VM file
         self.validate_vm_file(file_path, name, quiet=silent)
-        
+
         # Copy VM file to storage location
         target_file_path = self._copy_vm_file(file_path, project_path, name, silent=silent)
         
@@ -538,7 +538,309 @@ class VmApi(GlobalDatabaseApi):
         
         return suggestions
 
+    # VM Instance Management Methods
 
+    def create_vm_instance(self, vm_id: str, instance_name: str, experiment_run_id: str,
+                          websocket_port: int, status: str = 'active') -> 'VmInstance':
+        """
+        Create a new VM instance entry in the database.
+
+        Args:
+            vm_id: Source VM ID
+            instance_name: Unique name for the instance
+            experiment_run_id: Experiment run ID
+            websocket_port: Allocated websocket port
+            status: Instance status (default: 'active')
+
+        Returns:
+            Created VmInstance
+
+        Raises:
+            VMLoadError: If creation fails
+        """
+        from adare.database.models.global_models import VmInstance
+        from sqlalchemy.exc import SQLAlchemyError
+        from datetime import datetime
+
+        instance = VmInstance(
+            vm_id=vm_id,
+            instance_name=instance_name,
+            current_experiment_run_id=experiment_run_id,
+            websocket_port=websocket_port,
+            status=status,
+            created_at=datetime.utcnow(),
+            last_used_at=datetime.utcnow()
+        )
+
+        try:
+            with self:
+                self._session.add(instance)
+                self._session.commit()
+                self._session.refresh(instance)
+
+                # Eagerly load the VM relationship before detaching
+                from sqlalchemy.orm import joinedload
+                instance = self._session.query(VmInstance).options(
+                    joinedload(VmInstance.vm).joinedload(Vm.osinfo)
+                ).filter_by(id=instance.id).first()
+
+                if instance:
+                    self._session.expunge(instance)
+
+                log.info(f"Created VM instance: {instance_name} (ID: {instance.id})")
+                return instance
+        except SQLAlchemyError as e:
+            self._session.rollback()
+            raise VMLoadError(log, f"Database error while creating VM instance: {e}")
+
+    def get_vm_instance_by_id(self, instance_id: str) -> Optional['VmInstance']:
+        """
+        Get a VM instance by ID.
+
+        Args:
+            instance_id: VM instance ID
+
+        Returns:
+            VmInstance or None if not found
+        """
+        from adare.database.models.global_models import VmInstance
+        from sqlalchemy.orm import joinedload
+
+        with self:
+            instance = self._session.query(VmInstance).options(
+                joinedload(VmInstance.vm).joinedload(Vm.osinfo)
+            ).filter_by(id=instance_id).first()
+            if instance:
+                self._session.expunge(instance)
+            return instance
+
+    def get_vm_instances_for_vm(self, vm_id: str, status: str = None) -> List['VmInstance']:
+        """
+        Get all VM instances for a source VM.
+
+        Args:
+            vm_id: Source VM ID
+            status: Optional status filter
+
+        Returns:
+            List of VmInstance objects
+        """
+        from adare.database.models.global_models import VmInstance
+        from sqlalchemy.orm import joinedload
+
+        with self:
+            query = self._session.query(VmInstance).options(
+                joinedload(VmInstance.vm).joinedload(Vm.osinfo)
+            ).filter_by(vm_id=vm_id)
+            if status:
+                query = query.filter_by(status=status)
+            instances = query.all()
+            # Expunge objects from session to make them detached
+            for instance in instances:
+                self._session.expunge(instance)
+            return instances
+
+    def get_all_vm_instances(self) -> List['VmInstance']:
+        """
+        Get all VM instances.
+
+        Returns:
+            List of all VmInstance objects
+        """
+        from adare.database.models.global_models import VmInstance
+        from sqlalchemy.orm import joinedload
+
+        with self:
+            instances = self._session.query(VmInstance).options(
+                joinedload(VmInstance.vm).joinedload(Vm.osinfo)
+            ).all()
+            # Expunge objects from session to make them detached
+            for instance in instances:
+                self._session.expunge(instance)
+            return instances
+
+    def get_old_vm_instances(self, cutoff_date, status: str = None) -> List['VmInstance']:
+        """
+        Get VM instances older than cutoff date.
+
+        Args:
+            cutoff_date: Datetime cutoff for last_used_at
+            status: Optional status filter
+
+        Returns:
+            List of old VmInstance objects
+        """
+        from adare.database.models.global_models import VmInstance
+        from sqlalchemy.orm import joinedload
+
+        with self:
+            query = self._session.query(VmInstance).options(
+                joinedload(VmInstance.vm).joinedload(Vm.osinfo)
+            ).filter(VmInstance.last_used_at < cutoff_date)
+            if status:
+                query = query.filter_by(status=status)
+            instances = query.all()
+            # Expunge objects from session to make them detached
+            for instance in instances:
+                self._session.expunge(instance)
+            return instances
+
+    def update_vm_instance(self, instance_id: str, **kwargs):
+        """
+        Update a VM instance.
+
+        Args:
+            instance_id: VM instance ID
+            **kwargs: Fields to update
+        """
+        from adare.database.models.global_models import VmInstance
+        from sqlalchemy.exc import SQLAlchemyError
+
+        try:
+            with self:
+                instance = self._session.query(VmInstance).filter_by(id=instance_id).first()
+                if not instance:
+                    raise VMNotFoundError(log, f"VM instance with ID {instance_id} not found")
+
+                for key, value in kwargs.items():
+                    if hasattr(instance, key):
+                        setattr(instance, key, value)
+
+                self._session.commit()
+                log.info(f"Updated VM instance {instance.instance_name}: {kwargs}")
+        except SQLAlchemyError as e:
+            self._session.rollback()
+            raise VMLoadError(log, f"Database error while updating VM instance: {e}")
+
+    def delete_vm_instance(self, instance_id: str) -> bool:
+        """
+        Delete a VM instance from the database.
+
+        Args:
+            instance_id: VM instance ID
+
+        Returns:
+            True if deleted successfully
+
+        Raises:
+            VMNotFoundError: If instance not found
+        """
+        from adare.database.models.global_models import VmInstance
+
+        with self:
+            instance = self._session.query(VmInstance).filter_by(id=instance_id).first()
+            if not instance:
+                raise VMNotFoundError(log, f"VM instance with ID {instance_id} not found")
+
+            instance_name = instance.instance_name
+            self._session.delete(instance)
+            self._session.commit()
+            log.info(f"Successfully deleted VM instance '{instance_name}' (ID: {instance_id})")
+            return True
+
+    def get_vm_instance_by_name(self, instance_name: str) -> Optional['VmInstance']:
+        """
+        Get a VM instance by name.
+
+        Args:
+            instance_name: VM instance name
+
+        Returns:
+            VmInstance or None if not found
+        """
+        from adare.database.models.global_models import VmInstance
+        from sqlalchemy.orm import joinedload
+
+        with self:
+            instance = self._session.query(VmInstance).options(
+                joinedload(VmInstance.vm).joinedload(Vm.osinfo)
+            ).filter_by(instance_name=instance_name).first()
+            if instance:
+                self._session.expunge(instance)
+            return instance
+
+    def create_instance_snapshot_record(self, vm_instance_id: str, snapshot_name: str, snapshot_type: str,
+                                      experiment_id: str = None, description: str = None) -> bool:
+        """
+        Create a snapshot record for a VM instance in the database.
+
+        Args:
+            vm_instance_id: VM instance database ID
+            snapshot_name: Name of the snapshot
+            snapshot_type: Type of snapshot (base, experiment, backup)
+            experiment_id: Associated experiment ID (if applicable)
+            description: Snapshot description
+
+        Returns:
+            True if created successfully
+        """
+        from adare.database.models.global_models import VmSnapshot
+
+        with self:
+            snapshot_record = VmSnapshot(
+                vm_instance_id=vm_instance_id,
+                name=snapshot_name,
+                description=description
+            )
+
+            self._session.add(snapshot_record)
+            self._session.commit()
+            log.debug(f"Created instance snapshot record '{snapshot_name}' for VM instance {vm_instance_id}")
+            return True
+
+    def get_snapshots_for_instance(self, vm_instance_id: str, snapshot_type: str = None) -> List['VmSnapshot']:
+        """
+        Get all snapshots for a VM instance.
+
+        Args:
+            vm_instance_id: VM instance ID
+            snapshot_type: Optional filter by snapshot type
+
+        Returns:
+            List of VmSnapshot records
+        """
+        from adare.database.models.global_models import VmSnapshot
+
+        with self:
+            query = self._session.query(VmSnapshot).filter_by(vm_instance_id=vm_instance_id)
+            snapshots = query.all()
+
+            # Detach from session
+            for snapshot in snapshots:
+                self._session.expunge(snapshot)
+
+            return snapshots
+
+    def get_websocket_port_for_instance(self, instance_name: str) -> Optional[int]:
+        """
+        Get the WebSocket port for an active VM instance by name.
+
+        Args:
+            instance_name: VM instance name
+
+        Returns:
+            WebSocket port number if instance is active and has a port, None otherwise
+        """
+        try:
+            instance = self.get_vm_instance_by_name(instance_name)
+            if not instance:
+                log.warning(f"VM instance '{instance_name}' not found")
+                return None
+
+            if instance.status != 'active':
+                log.warning(f"VM instance '{instance_name}' is not active (status: {instance.status})")
+                return None
+
+            if instance.websocket_port is None:
+                log.warning(f"VM instance '{instance_name}' has no WebSocket port allocated")
+                return None
+
+            log.info(f"Found WebSocket port {instance.websocket_port} for instance '{instance_name}'")
+            return instance.websocket_port
+
+        except Exception as e:
+            log.error(f"Error looking up WebSocket port for instance '{instance_name}': {e}")
+            return None
 
 
 def ensure_vm_directories():
@@ -552,12 +854,12 @@ def ensure_vm_directories():
 
 
 def load_vm_from_file(project_path: Path, file_path: Path, name: str = None, description: str = '',
-                     os_platform: str = '', os_type: str = '', os_distribution: str = '', 
+                     os_platform: str = '', os_type: str = '', os_distribution: str = '',
                      os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
                      silent: bool = False) -> Vm:
     """
     Load a VM from file into the database.
-    
+
     Args:
         file_path: Path to VM file
         name: VM name (defaults to filename without extension)
@@ -569,21 +871,22 @@ def load_vm_from_file(project_path: Path, file_path: Path, name: str = None, des
         os_language: OS language
         os_architecture: Architecture (default: x86_64)
         silent: If True, suppress progress bars during validation
-        
+
     Returns:
         Created VM instance
-        
+
     Raises:
         VMLoadError: If loading fails
     """
     if not name:
         name = file_path.stem
-        
+
     api = VMDatabaseApi()
     return api.create_vm(
         project_path=project_path,
         name=name,
         file_path=file_path,
+        file_hash=api._calculate_file_hash(file_path, quiet=silent),
         description=description,
         os_platform=os_platform,
         os_type=os_type,

@@ -274,6 +274,10 @@ def update_experiment_run_end(project_path: Path, experiment_run_ulid: str, time
     with ExperimentApi(project_path) as api:
         api.update_experiment_run_end(experiment_run_ulid, timestamp)
 
+def update_experiment_run_vm_instance(project_path: Path, experiment_run_ulid: str, vm_instance_id: str):
+    with ExperimentApi(project_path) as api:
+        api.update_experiment_run_vm_instance(experiment_run_ulid, vm_instance_id)
+
 
 def get_experiment_testfunction_files(project_path: Path, environment_name: str,  experiment_name: str):
     testfunction_files = []

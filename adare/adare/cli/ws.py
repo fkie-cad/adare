@@ -24,10 +24,29 @@ class WSActionError(LoggedException):
 async def exec_ws_action(args: SimpleNamespace):
     """Execute WebSocket actions from YAML file."""
     try:
-        # Use provided host and port directly
+        # Determine connection parameters based on VM instance or explicit host/port
         host = getattr(args, 'host', 'localhost')
-        port = getattr(args, 'port', 18765)
-        
+        vm_instance = getattr(args, 'vm_instance', None)
+
+        if vm_instance:
+            # Look up port from VM instance in database
+            from adare.database.api.vm import VmApi
+
+            log.info(f"Looking up WebSocket port for VM instance: {vm_instance}")
+
+            with VmApi() as vm_api:
+                port = vm_api.get_websocket_port_for_instance(vm_instance)
+
+            if port is None:
+                raise WSActionError(f"Could not find active WebSocket port for VM instance '{vm_instance}'. "
+                                  f"Check that the instance exists, is active, and has a port allocated.")
+
+            log.info(f"Found port {port} for VM instance '{vm_instance}'")
+        else:
+            # Fall back to explicit port or default
+            port = getattr(args, 'port', 18765)
+            log.info(f"Using explicit port configuration")
+
         log.info(f"Connecting to adarevm at {host}:{port}")
         
         # Load action YAML

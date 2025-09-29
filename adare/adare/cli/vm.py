@@ -135,3 +135,57 @@ async def exec_vm_test(arguments):
             import traceback
             traceback.print_exc()
         sys.exit(1)
+
+
+# ==========================================
+# VM INSTANCE MANAGEMENT COMMANDS
+# ==========================================
+
+def exec_vm_list_instances(arguments):
+    """List all VM instances in the system."""
+    from adare.frontend.terminal.vm_instances import print_vm_instances_list
+    print_vm_instances_list()
+
+
+def exec_vm_instance_info(arguments):
+    """Get detailed information about a specific VM instance."""
+    from adare.frontend.terminal.vm_instances import print_vm_instance_info
+    print_vm_instance_info(arguments.instance_id)
+
+
+async def exec_vm_instance_cleanup(arguments):
+    """Clean up VM instances based on criteria."""
+    from adare.backend.vm.instance_manager import cleanup_old_vm_instances, cleanup_vm_instance
+    from adare.frontend.terminal.vm_instances import print_vm_instance_cleanup_results
+
+    try:
+        if arguments.instance_id:
+            # Clean up specific instance
+            await cleanup_vm_instance(arguments.instance_id, force=arguments.force)
+            print_vm_instance_cleanup_results([arguments.instance_id], "specific instance")
+        elif arguments.age_days:
+            # Clean up old instances
+            old_instances = await cleanup_old_vm_instances(arguments.age_days)
+            print_vm_instance_cleanup_results(old_instances, f"instances older than {arguments.age_days} days")
+        elif arguments.experiment_id:
+            # Clean up instances for specific experiment
+            from adare.backend.vm.commands import cleanup_vm_instances_for_experiment
+            await cleanup_vm_instances_for_experiment(arguments.experiment_id)
+            print_vm_instance_cleanup_results([arguments.experiment_id], "experiment instances")
+        else:
+            log.error("No cleanup criteria specified. Use --instance-id, --age-days, or --experiment-id")
+
+    except Exception as e:
+        log.error(f"Failed to cleanup VM instances: {e}")
+
+
+def exec_vm_instance_usage(arguments):
+    """Show VM instance usage statistics."""
+    from adare.frontend.terminal.vm_instances import print_vm_instance_usage
+    print_vm_instance_usage()
+
+
+def exec_vm_port_usage(arguments):
+    """Show websocket port usage statistics."""
+    from adare.frontend.terminal.vm_instances import print_port_usage_stats
+    print_port_usage_stats()

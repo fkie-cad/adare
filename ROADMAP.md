@@ -38,8 +38,9 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] YAML  
 - [ ] integrated log viewer with `adare run log adare ULID` or `adare run log adarevm` that we can view logs but also filter them!
 - [ ] more advanced wait_until logic -> use image diffs to identify changed areas?! Only search in changed ares?! -> analyze if this works or is too complex?!
-- [ ] make adarevm installable via setuptools to allow for older python versions to also allow for older distros as Ubuntu 18.04 ...
 - [ ] add option --custom-testfunction PATH_TO_DIR; which is then used instead of the existing one (even if same name) -> not copied only used; this will help developing testfunctions!
+- [ ] make adarevm installable via setuptools to allow for older python versions to also allow for older distros as Ubuntu 18.04 ...
+- [ ] visual tests
 
 ---
 
@@ -70,6 +71,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] as a lot of database need the project directory find a way to not give it as parameter but instead retrieve it everytime of find a better clever mechanism to keep the code clean
 - [ ] we validate on experiment load against files and analyze it would be faster and better to validate against database
 - [ ] we should load playbook into database on load already not only on exeuction or? we then run from database and not file?!
+- [ ] remove all kind of icons from logging messages. ✅🆕
 
 ---
 
@@ -82,6 +84,13 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] multiple project shared directory and vm?! should not happen -> clear separation for multiple projects not happening also not in testfunction sets -> maybe database per project?! 
 - [ ] even if vm does not exist the env is added to envs with "no vm"
 - [ ] adare tf rm should remove not a testfunction but instead a testfunction file by name e.g. xml
+- [ ] fix:  adare --format json env list
+- [ ] fix: adare --format json vm list shows not json!
+- [ ] add env via metadata.yml should be recognizes on loading+running and trigger add environment or delete-environment ...
+- [ ] if dir exists exp load is weird and first deletes the directory but tells the directrory does already exist so load does not work? and then we can run it again it 
+- [ ] adare vm instance cleanup does not work (remove age-days) add flag --instace-id or --all! -> should be called remove/rm instead of cleanup
+- [ ] adare vm instance list does not have alias l and also does not use our tables as the other commands!
+- [ ] adare vm instance info also uses wrong printing do it as for the other commands adare env list, ...
 
 ---
 
@@ -91,11 +100,4 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Test if environment with zenodo url works!
 - [ ] Test if auto_pull_on_test_failure works!
 - [ ] Test how settings idle work
-- [ ] Test Multiproject experiments in same environment behaviour. We then need to import the VM again. We need to track created VMs and be able to clean them to get space back. Look how we do the websocket port thing? We then need on host to map to different tracked ports ... Analyze whats the best way to realize this and fix/improve
-
-
-# 
-- [ ] fix:  adare --format json env list
-- [ ] fix: adare --format json vm list shows not json!
-- [ ] in : adare --format json tf list  we paths but it seems we store the original paths of the tf and no the path we copied the data to?!
-- [ ] add env via metadata.yml should be recognizes on loading+running and trigger add environment or delete-environment ...
+- [ ] Test that json output works fine for all commands 

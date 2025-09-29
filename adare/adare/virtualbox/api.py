@@ -481,6 +481,10 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin):
             log.error(f"Error getting UUID for VM '{vm_name}': {e}")
             return None
 
+    def get_vm_uuid(self) -> Optional[str]:
+        """Get VM UUID for this instance (convenience method)."""
+        return self.get_vm_uuid_by_name(self.vm_name)
+
     @staticmethod
     def get_vm_info_by_uuid(vbox_uuid: str) -> Optional[dict]:
         """Get VM information by UUID."""

@@ -22,7 +22,7 @@ class ExperimentConfig:
     vm_cpus: int = 4
     vm_memory: int = 4096  # Default, can be overridden based on guest platform or CLI
     vm_resolution: Tuple[int, int] = (1920, 1080)
-    websocket_port: int = 18765
+    websocket_port: Optional[int] = None  # Allocated dynamically from database
     shared_directories: Dict[str, Dict[str, Path]] = field(default_factory=dict)
 
 @dataclass

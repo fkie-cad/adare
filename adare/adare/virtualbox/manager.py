@@ -5,7 +5,8 @@ import asyncio
 import logging
 import queue
 import threading
-from typing import Any, Callable
+from pathlib import Path
+from typing import Any, Callable, Optional
 
 log = logging.getLogger(__name__)
 
@@ -54,3 +55,60 @@ class VirtualBoxManager:
         except Exception as e:
             log.error(f"Error running async function {func.__name__}: {e}")
             raise e
+
+    async def import_vm_async(self, vm_file_path: Path, vm_name: str, environment_ulid: Optional[str] = None):
+        """
+        Import a VM from OVF/OVA file asynchronously.
+
+        Args:
+            vm_file_path: Path to the OVF/OVA file
+            vm_name: Name for the imported VM
+            environment_ulid: Optional environment ULID for context
+
+        Returns:
+            VirtualBoxVM: The imported VM instance
+
+        Raises:
+            VMImportException: If import fails
+        """
+        from adare.virtualbox.api import VirtualBoxVM
+        from adare.config import get_vm_credentials
+
+        log.info(f"Importing VM '{vm_name}' from '{vm_file_path}' (environment: {environment_ulid})")
+
+        # Detect guest OS from file extension or assume Linux as default
+        # This is a simple heuristic - could be enhanced with OVF parsing
+        guest_os = "Linux_64"  # Default guest OS type for VirtualBox
+
+        # Get credentials based on guest OS
+        username, password = get_vm_credentials(guest_os)
+
+        # Create VirtualBoxVM instance
+        vm = VirtualBoxVM(
+            vm_name=vm_name,
+            guest_os=guest_os,
+            manager=self,
+            username=username,
+            password=password
+        )
+
+        try:
+            # Import the VM from OVF/OVA file
+            return_code, stdout = await vm.create_from_ovf_or_ova(
+                file_path=vm_file_path,
+                silent=False
+            )
+
+            if return_code != 0:
+                error_msg = f"VM import failed with return code {return_code}"
+                if stdout:
+                    error_msg += f": {stdout}"
+                log.error(error_msg)
+                raise Exception(error_msg)
+
+            log.info(f"Successfully imported VM '{vm_name}' from '{vm_file_path}'")
+            return vm
+
+        except Exception as e:
+            log.error(f"Failed to import VM '{vm_name}' from '{vm_file_path}': {e}")
+            raise
