@@ -363,13 +363,15 @@ class VmInstanceManager:
                 last_used_at=datetime.utcnow()
             )
 
-    async def cleanup_instance(self, instance_id: str, force: bool = False):
+    async def cleanup_instance(self, instance_id: str):
         """
         Clean up a specific VM instance.
 
         Args:
             instance_id: VM instance ID to cleanup
-            force: Force cleanup even if active
+
+        Raises:
+            VMError: If instance is actually running in VirtualBox
         """
         from adare.database.api.vm import VmApi
 
@@ -379,10 +381,14 @@ class VmInstanceManager:
                 log.warning(f"VM instance {instance_id} not found for cleanup")
                 return
 
-            if instance.status == 'active' and not force:
-                raise VMError(log, f"Cannot cleanup active VM instance {instance.instance_name} without force=True")
+            # Check actual VirtualBox state before removal
+            vbox_state = self._get_virtualbox_vm_state(instance)
 
-            log.info(f"Cleaning up VM instance: {instance.instance_name}")
+            if vbox_state in ["running", "paused"]:
+                raise VMError(log, f"Cannot remove running VM instance {instance.instance_name} (ID: {instance_id}). Stop the VM first.")
+
+            # If VM is stopped or doesn't exist in VirtualBox, safe to remove
+            log.info(f"Cleaning up VM instance: {instance.instance_name} (ID: {instance_id})")
 
             # Clean up VirtualBox VM if it exists
             if instance.vbox_uuid:
@@ -415,42 +421,142 @@ class VmInstanceManager:
 
             for instance in old_instances:
                 log.info(f"Cleaning up old instance: {instance.instance_name} (age: {(datetime.utcnow() - instance.last_used_at).days} days)")
-                await self.cleanup_instance(instance.id, force=False)
+                await self.cleanup_instance(instance.id)
+
+    async def remove_all_instances(self):
+        """
+        Remove all stopped VM instances.
+
+        Running instances will be skipped with a warning.
+
+        Returns:
+            List of removed instance IDs
+        """
+        from adare.database.api.vm import VmApi
+
+        with VmApi() as api:
+            # Get all instances
+            all_instances = api.get_all_vm_instances()
+
+            removed_instance_ids = []
+
+            for instance in all_instances:
+                log.info(f"Attempting to remove instance: {instance.instance_name} (ID: {instance.id})")
+                try:
+                    await self.cleanup_instance(instance.id)
+                    removed_instance_ids.append(instance.id)
+                except VMError as e:
+                    # Instance is running, skip it
+                    log.warning(f"Skipped running instance {instance.instance_name} (ID: {instance.id})")
+                except Exception as e:
+                    log.warning(f"Failed to remove instance {instance.id}: {e}")
+
+            return removed_instance_ids
+
+    def _get_instance_disk_usage(self, instance: VmInstance) -> float:
+        """
+        Get disk usage for a VM instance in GB.
+
+        Args:
+            instance: VmInstance to check
+
+        Returns:
+            Disk usage in GB, or 0 if cannot determine
+        """
+        if not instance.vbox_uuid:
+            return 0.0
+
+        try:
+            from adare.virtualbox.api import VirtualBoxVM
+            import subprocess
+
+            # Get VM name from UUID
+            vm_name = VirtualBoxVM.get_vm_name_by_uuid(instance.vbox_uuid)
+            if not vm_name:
+                return 0.0
+
+            # Get VM folder path from VirtualBox
+            result = subprocess.run(
+                ['VBoxManage', 'showvminfo', vm_name, '--machinereadable'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if result.returncode != 0:
+                return 0.0
+
+            # Parse output to find VM folder
+            vm_folder = None
+            for line in result.stdout.splitlines():
+                if line.startswith('CfgFile='):
+                    # CfgFile contains full path to .vbox file
+                    cfg_file = line.split('=', 1)[1].strip('"')
+                    vm_folder = Path(cfg_file).parent
+                    break
+
+            if not vm_folder or not vm_folder.exists():
+                return 0.0
+
+            # Calculate total size of VM folder
+            total_size = 0
+            for file_path in vm_folder.rglob('*'):
+                if file_path.is_file():
+                    total_size += file_path.stat().st_size
+
+            # Convert to GB
+            return total_size / (1024 ** 3)
+
+        except Exception as e:
+            log.debug(f"Could not determine disk usage for instance {instance.instance_name}: {e}")
+            return 0.0
 
     def get_instance_stats(self) -> dict:
         """
         Get statistics about VM instances.
 
         Returns:
-            Dictionary with instance statistics
+            Dictionary with instance statistics including disk usage
         """
         from adare.database.api.vm import VmApi
 
         with VmApi() as api:
             all_instances = api.get_all_vm_instances()
 
+            # Calculate disk usage and running status
+            total_disk_gb = 0.0
+            instance_details = []
+
+            for instance in all_instances:
+                disk_gb = self._get_instance_disk_usage(instance)
+                total_disk_gb += disk_gb
+
+                # Determine if running by checking VirtualBox state
+                vbox_state = self._get_virtualbox_vm_state(instance)
+                is_running = vbox_state in ["running", "paused"]
+
+                instance_details.append({
+                    'id': instance.id,
+                    'name': instance.instance_name,
+                    'disk_gb': disk_gb,
+                    'is_running': is_running,
+                    'vm_id': instance.vm_id
+                })
+
+            # Count running vs stopped
+            running_count = sum(1 for i in instance_details if i['is_running'])
+            stopped_count = len(instance_details) - running_count
+
+            # Sort by disk usage for top consumers
+            instance_details.sort(key=lambda x: x['disk_gb'], reverse=True)
+
             stats = {
                 'total_instances': len(all_instances),
-                'active_instances': len([i for i in all_instances if i.status == 'active']),
-                'available_instances': len([i for i in all_instances if i.status == 'available']),
-                'cleanup_pending_instances': len([i for i in all_instances if i.status == 'cleanup_pending']),
-                'instances_by_vm': {}
+                'running_instances': running_count,
+                'stopped_instances': stopped_count,
+                'total_disk_gb': round(total_disk_gb, 2),
+                'top_disk_consumers': instance_details[:10]  # Top 10 consumers
             }
-
-            # Group by source VM
-            for instance in all_instances:
-                vm_id = instance.vm_id
-                if vm_id not in stats['instances_by_vm']:
-                    stats['instances_by_vm'][vm_id] = {
-                        'total': 0,
-                        'active': 0,
-                        'available': 0,
-                        'cleanup_pending': 0
-                    }
-
-                vm_stats = stats['instances_by_vm'][vm_id]
-                vm_stats['total'] += 1
-                vm_stats[instance.status] += 1
 
             return stats
 
@@ -626,15 +732,17 @@ async def release_vm_instance(instance_id: str):
     await _instance_manager.release_instance(instance_id)
 
 
-async def cleanup_vm_instance(instance_id: str, force: bool = False):
+async def cleanup_vm_instance(instance_id: str):
     """
     Clean up a specific VM instance.
 
     Args:
         instance_id: VM instance ID to cleanup
-        force: Force cleanup even if active
+
+    Raises:
+        VMError: If instance is actually running in VirtualBox
     """
-    await _instance_manager.cleanup_instance(instance_id, force)
+    await _instance_manager.cleanup_instance(instance_id)
 
 
 async def cleanup_old_vm_instances(age_days: int = None):
@@ -645,6 +753,18 @@ async def cleanup_old_vm_instances(age_days: int = None):
         age_days: Age threshold in days
     """
     await _instance_manager.cleanup_old_instances(age_days)
+
+
+async def remove_all_instances():
+    """
+    Remove all stopped VM instances.
+
+    Running instances will be skipped with a warning.
+
+    Returns:
+        List of removed instance IDs
+    """
+    return await _instance_manager.remove_all_instances()
 
 
 def get_vm_instance_stats() -> dict:
