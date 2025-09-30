@@ -26,15 +26,16 @@ def load_testfunction_file(project_path: Path, testfunction_file: Path, requirem
             return api.create_testfunction_file_obj(project_path, testfunction_file, requirements_file).id
 
 
-def remove_testfunction_file(testfunction_file: Path):
+def remove_testfunction_file(name: str):
+    """Remove a testfunction file by name (e.g., 'xml', 'json', 'csv')."""
     with TestfunctionDbApi() as api:
-        if not api.testfunction_file_obj_exists(testfunction_file):
+        if not api.testfunction_file_obj_exists_by_name(name):
             raise TestfunctionUpdatedError(
                 log,
-                message=f'Testfunction {testfunction_file} does not exist',
+                message=f'Testfunction file "{name}" does not exist',
             )
-        api.remove_testfunction_file_obj(testfunction_file)
-        log.info(f'removed testfunction {testfunction_file}')
+        api.remove_testfunction_file_obj_by_name(name)
+        log.info(f'removed testfunction file "{name}"')
         return True
     return False
 
@@ -82,6 +83,12 @@ def list_testfunctions(fields: list[str] = None) -> list:
 def testfunction_exists(name: str):
     with TestfunctionDbApi() as api:
         return api.testfunction_exists(name)
+
+
+def testfunction_file_exists(name: str):
+    """Check if a testfunction file exists by name (e.g., 'xml', 'json', 'csv')."""
+    with TestfunctionDbApi() as api:
+        return api.testfunction_file_obj_exists_by_name(name)
 
 
 def get_testfunction_file_hash(testfunction_id: int):
@@ -145,59 +152,97 @@ def get_testfunction_files_data(project_path: Path = None, fields: list[str] = N
 
 def get_testfunction_usage(testfunction_name: str) -> dict:
     """
-    Get usage information for a testfunction - which experiments and runs use it.
+    Get usage information for a testfunction file - which experiments and runs use it across ALL projects.
 
     Args:
-        testfunction_name: Name of the testfunction to check
+        testfunction_name: Name of the testfunction file to check (e.g., 'xml', 'json', 'csv')
 
     Returns:
-        dict: Usage information with 'experiments', 'runs', 'can_safely_update' keys
+        dict: Usage information with 'exists', 'experiments', 'runs', 'can_safely_delete', 'projects_affected' keys
     """
+    from adare.database.models.global_models import TestFunctionFile, TestFunction, Project
+    from adare.database.models.project_models import AbstractTest, Experiment, ExperimentRun
+    from adare.database.api.base import ProjectDatabaseApi
+    from pathlib import Path
+
     with TestfunctionDbApi() as api:
-        # TODO CLAUDE: only do database operations in database API move methods to there!
-        from adare.database.models.global_models import TestFunction
-        from adare.database.models.project_models import AbstractTest, Experiment, ExperimentRun
+        # Find the testfunction file in global database
+        testfunction_file = api._session.query(TestFunctionFile).filter(
+            TestFunctionFile.name == testfunction_name).first()
 
-        # Find the testfunction
-        testfunction = api._session.query(TestFunction).filter(
-            TestFunction.name == testfunction_name).first()
-
-        if not testfunction:
+        if not testfunction_file:
             return {
                 'exists': False,
                 'experiments': [],
                 'runs': [],
-                'can_safely_update': True
+                'can_safely_delete': True,
+                'projects_affected': []
             }
 
-        # Find abstract tests using this testfunction
-        abstract_tests = api._session.query(AbstractTest).filter(
-            AbstractTest.testfunction_id == testfunction.id).all()
+        # Get all testfunctions in this file
+        testfunction_ids = [tf.id for tf in testfunction_file.test_functions]
 
-        experiments = []
-        runs = []
+        # Get all projects from global database
+        all_projects = api._session.query(Project).all()
 
-        for abstract_test in abstract_tests:
-            # Find experiments using this abstract test
-            test_experiments = api._session.query(Experiment).filter(
-                Experiment.abstract_tests.contains(abstract_test)).all()
+        all_experiments = []
+        all_runs = []
+        projects_affected = []
 
-            for experiment in test_experiments:
-                if experiment not in experiments:
-                    experiments.append(experiment)
+        # Check each project's database for usage
+        for project in all_projects:
+            project_path = Path(project.path)
 
-                # Find runs for this experiment
-                experiment_runs = api._session.query(ExperimentRun).filter(
-                    ExperimentRun.experiment_id == experiment.id).all()
+            try:
+                # Connect to project-specific database
+                with ProjectDatabaseApi(project_path) as project_api:
+                    # Find abstract tests using any testfunction from this file
+                    abstract_tests = project_api._session.query(AbstractTest).filter(
+                        AbstractTest.testfunction_id.in_(testfunction_ids)).all()
 
-                runs.extend(experiment_runs)
+                    if not abstract_tests:
+                        continue  # No usage in this project
+
+                    # Track that this project is affected
+                    if project.name not in [p['name'] for p in projects_affected]:
+                        projects_affected.append({'name': project.name, 'path': project.path})
+
+                    for abstract_test in abstract_tests:
+                        # Find experiments using this abstract test
+                        test_experiments = project_api._session.query(Experiment).filter(
+                            Experiment.abstract_tests.contains(abstract_test)).all()
+
+                        for experiment in test_experiments:
+                            exp_info = {
+                                'id': experiment.id,
+                                'name': experiment.name,
+                                'project': project.name
+                            }
+                            if exp_info not in all_experiments:
+                                all_experiments.append(exp_info)
+
+                            # Find runs for this experiment
+                            experiment_runs = project_api._session.query(ExperimentRun).filter(
+                                ExperimentRun.experiment_id == experiment.id).all()
+
+                            for run in experiment_runs:
+                                all_runs.append({
+                                    'id': run.id,
+                                    'experiment_name': experiment.name,
+                                    'project': project.name
+                                })
+
+            except Exception as e:
+                log.warning(f'Could not check project {project.name} at {project.path}: {e}')
+                continue
 
         return {
             'exists': True,
-            'testfunction_id': testfunction.id,
-            'experiments': [{'id': exp.id, 'name': exp.name} for exp in experiments],
-            'runs': [{'id': run.id, 'experiment_name': run.experiment.name if run.experiment else 'Unknown'} for run in runs],
-            'can_safely_update': len(runs) == 0
+            'testfunction_file_id': testfunction_file.id,
+            'experiments': all_experiments,
+            'runs': all_runs,
+            'can_safely_delete': len(all_runs) == 0,
+            'projects_affected': projects_affected
         }
 
 
@@ -244,4 +289,4 @@ def can_safely_update_testfunction(testfunction_name: str) -> bool:
         bool: True if safe to update, False if it would affect existing runs
     """
     usage = get_testfunction_usage(testfunction_name)
-    return usage['can_safely_update']
+    return usage['can_safely_delete']

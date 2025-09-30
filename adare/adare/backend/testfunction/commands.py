@@ -39,22 +39,55 @@ def testfunction_create(project_path: Path, name: str):
     testfunction_directory.create_testfunction()
 
 
-def testfunction_remove(project_path: Path, name: str):
-    testfunction_directory = TestfunctionDirectory(project_path, name)
-    if not testfunction_directory.testfunction_exists():
-        raise TestfunctionMissingFileError(
-            log,
-            message=f'Testfunction {name} does not exist',
-        )
-    
-    # Unprotect files before removal
-    from adare.helperfunctions.integrity import unprotect_files_for_update
-    testfunction_files = [testfunction_directory.pythonfile, testfunction_directory.requirements]
-    unprotected_files = unprotect_files_for_update(testfunction_files)
-    log.info(f'Unprotected {len(unprotected_files)} testfunction files for removal')
-    
-    testfunction_database.remove_testfunction_file(testfunction_directory.pythonfile)
-    testfunction_directory.remove_testfunction()
+def testfunction_remove(name: str):
+    """Remove a testfunction file by name (e.g., 'xml', 'json', 'csv')."""
+    # Check if testfunction file exists
+    if not testfunction_database.testfunction_file_exists(name):
+        log.error(f'Testfunction "{name}" does not exist')
+        return
+
+    # Check usage across all projects
+    usage = testfunction_database.get_testfunction_usage(name)
+
+    # Display what will be deleted
+    print(f'\n⚠️  About to delete testfunction: "{name}"')
+    print(f'   This action cannot be undone!\n')
+
+    if usage['projects_affected']:
+        print(f'   📊 Usage Statistics:')
+        print(f'      • Used in {len(usage["projects_affected"])} project(s)')
+        print(f'      • {len(usage["experiments"])} experiment(s) use this testfunction')
+        print(f'      • {len(usage["runs"])} experiment run(s) will be affected\n')
+
+        print(f'   📁 Projects affected:')
+        for proj in usage['projects_affected']:
+            print(f'      • {proj["name"]}')
+
+        if usage['experiments']:
+            print(f'\n   🧪 Experiments using this testfunction:')
+            for exp in usage['experiments'][:10]:  # Show first 10
+                print(f'      • {exp["project"]}.{exp["name"]}')
+            if len(usage['experiments']) > 10:
+                print(f'      ... and {len(usage["experiments"]) - 10} more')
+
+        if usage['runs']:
+            print(f'\n   ⚠️  WARNING: {len(usage["runs"])} experiment run(s) will lose data!')
+
+        print()
+    else:
+        print(f'   ✓ Testfunction is not used in any projects\n')
+
+    # Ask for confirmation
+    response = input(f'Are you sure you want to delete testfunction "{name}"? (y/N): ').strip().lower()
+
+    if response != 'y':
+        log.info('Deletion cancelled by user')
+        print('Deletion cancelled.')
+        return
+
+    # Remove testfunction file from database by name
+    testfunction_database.remove_testfunction_file(name)
+    log.info(f'Successfully deleted testfunction "{name}"')
 
 
 def testfunction_load(project_path: Path, name: str):
@@ -132,12 +165,12 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
     # Check if testfunction already exists and is being used
     usage = testfunction_database.get_testfunction_usage(testfunction_name)
 
-    if usage['exists'] and not usage['can_safely_update']:
+    if usage['exists'] and not usage['can_safely_delete']:
         if not force:
             log.info(f'Testfunction "{testfunction_name}" is currently used by {len(usage["experiments"])} experiments with {len(usage["runs"])} runs')
             log.info(f'Use --force to overwrite and delete associated experiment runs')
             log.info(f'Experiments affected: {", ".join([exp["name"] for exp in usage["experiments"]])}')
-            return usage['testfunction_id']  # Return existing ID without updating
+            return usage['testfunction_file_id']  # Return existing ID without updating
         else:
             # Force mode - ask for confirmation
             print(f'\n⚠️  WARNING: Testfunction "{testfunction_name}" is currently in use!')
@@ -149,7 +182,7 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
             if response != 'y':
                 log.info('Operation cancelled by user')
-                return usage['testfunction_id']
+                return usage['testfunction_file_id']
 
             # Delete associated experiment runs
             deleted_count = testfunction_database.delete_experiment_runs_for_testfunction(testfunction_name)

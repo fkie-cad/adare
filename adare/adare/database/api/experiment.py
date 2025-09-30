@@ -205,6 +205,53 @@ class ExperimentApi(ProjectDatabaseApi):
     def get_experiment_by_ulid(self, experiment_ulid: str) -> Experiment:
         return self._session.query(Experiment).filter(Experiment.id == experiment_ulid).first()
 
+    def get_experiment_environment_names(self, experiment_ulid: str) -> list[str]:
+        """Get current environment names from experiment's environment_ids."""
+        from adare.database.api.base import GlobalDatabaseApi
+        from adare.database.models.global_models import Environment
+
+        experiment = self.get_experiment_by_ulid(experiment_ulid)
+        if not experiment or not experiment.environment_ids:
+            return []
+
+        environment_names = []
+        try:
+            with GlobalDatabaseApi() as global_api:
+                for env_id in experiment.environment_ids:
+                    environment = global_api._session.query(Environment).filter_by(id=env_id).first()
+                    if environment:
+                        environment_names.append(environment.name)
+        except Exception as e:
+            log.error(f"Error querying environment names for experiment {experiment_ulid}: {e}")
+
+        return environment_names
+
+    def update_experiment_environments(self, experiment_ulid: str, new_env_names: list[str], auto_commit: bool = True):
+        """Update experiment's environment_ids based on new environment names."""
+        experiment = self.get_experiment_by_ulid(experiment_ulid)
+        if not experiment:
+            raise ValueError(f"Experiment {experiment_ulid} not found")
+
+        # Get new environment IDs from names
+        new_environment_ids = self.get_environments_by_name(new_env_names)
+        if not new_environment_ids and new_env_names:
+            raise EnvironmentMissingError(
+                log,
+                message=f'Environments not found: {new_env_names}',
+                possible_solutions=[
+                    'Load the environment with [i]adare environment load[/i]',
+                    'Create a new environment with [i]adare environment create[/i]'
+                ]
+            )
+
+        # Update environment_ids
+        experiment.environment_ids = new_environment_ids
+
+        if auto_commit:
+            self._session.commit()
+
+        log.debug(f"Updated experiment {experiment_ulid} environments to: {new_env_names}")
+
     def __create_logfile(self, path: Path) -> LogFile:
         logfile = LogFile(
             name=path.name,

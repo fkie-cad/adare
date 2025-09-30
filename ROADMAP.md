@@ -81,11 +81,10 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: Flow console occasionally shows three red dots at the bottom → cause unknown  
 - [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
 - [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
-- [ ] commands can be lists and this gives some weird results! recognize on parsing
+- [ ] commands can be lists and this gives some weird results! recognize on parsing and give error already on loading if possible
 - [ ] multiple project shared directory and vm?! should not happen -> clear separation for multiple projects not happening also not in testfunction sets -> maybe database per project?! 
 - [ ] even if vm does not exist the env is added to envs with "no vm"
 - [ ] adare tf rm should remove not a testfunction but instead a testfunction file by name e.g. xml
-- [ ] add env via metadata.yml should be recognizes on loading+running and trigger add environment or delete-environment ...
 - [ ] if dir exists exp load is weird and first deletes the directory but tells the directrory does already exist so load does not work? and then we can run it again it 
 
 ---

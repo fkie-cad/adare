@@ -7,6 +7,7 @@ import ast
 import adare.config.database as config_database
 from adare.config.configdirectory import STATE_DIR
 from adare.database.models.global_models import TestFunction, TestFunctionFile, TestParameter, Project
+from adare.database.models.project_models import AbstractTest, TestEvent
 from adare.database.api.base import GlobalDatabaseApi
 from adare.database.exceptions import DatabaseTestfunctionCreationError, DatabaseTestfunctionRemovalError, \
     DatabaseTestfunctionUpdateError, DatabaseTestValidationError
@@ -57,7 +58,8 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         testfunction_obj.parameters.extend(db_parameter_objects.values())
         return testfunction_obj
 
-    def remove_testfunction(self, testfunction_file: Path, name: str, safe=False):
+    def remove_testfunction(self, testfunction_file: Path, name: str):
+        """Remove a single testfunction. Does NOT commit - caller must commit."""
         testfunction_file_obj = self._session.query(TestFunctionFile).filter(
             TestFunctionFile.path == testfunction_file.as_posix()).first()
         if not testfunction_file_obj:
@@ -72,35 +74,15 @@ class TestfunctionDbApi(GlobalDatabaseApi):
                 log,
                 message=f'Testfunction {name} does not exist in database',
             )
-        if safe:
-            # check if testfunction is used in a test
-            if self._session.query(sqlalchemy.exists().where(
-                    AbstractTest.testfunction_id == testfunction_obj.id,
-                    AbstractTest.ulid == TestEvent.abstract_test_id
-            )).scalar():
-                raise DatabaseTestfunctionRemovalError(
-                    log,
-                    message=f'Testfunction {name} is used in a test. A removal would result in an inconsistent state',
-                    possible_solutions=[
-                        'Remove the test that uses the testfunction and then remove the testfunction',
-                        'Recover the old testfunction and create a new testfunction'
-                    ]
-                )
-
-        # delete all related tests as well as abstract tests
-        for abstract_test in testfunction_obj.abstract_tests:
-            for test in abstract_test.test_events:
-                self._session.delete(test)
-                log.info(f'Removed test {test.name} from database')
-            self._session.delete(abstract_test)
-            log.info(f'Removed abstract test {abstract_test.name} from database')
+        # Note: Usage checks should be done at command level using get_testfunction_usage()
+        # because abstract_tests and test_events are in project databases, not global database
 
         self._session.delete(testfunction_obj)
-        log.info(f'Removed testfunction {name} from database')
-        self._session.commit()
+        log.info(f'Marked testfunction {name} for removal from database')
 
 
     def remove_testfunction_file_obj(self, path: Path):
+        """Remove a testfunction file and all its testfunctions (cascade delete)."""
         testfunction_file_obj = self._session.query(TestFunctionFile).filter(
             TestFunctionFile.path == path.as_posix()).first()
         if not testfunction_file_obj:
@@ -108,24 +90,38 @@ class TestfunctionDbApi(GlobalDatabaseApi):
                 log,
                 message=f'Testfunction file {path} does not exist in database',
             )
-        for testfunction_obj in testfunction_file_obj.test_functions:
-            # check if testfunction is used in a test
-            if self._session.query(sqlalchemy.exists().where(
-                    AbstractTest.testfunction_id == testfunction_obj.id,
-                    AbstractTest.ulid == TestEvent.abstract_test_id
-            )).scalar():
-                raise DatabaseTestfunctionRemovalError(
-                    log,
-                    message=f'Testfunction {testfunction_obj.name} is used in a test. A removal would result in an inconsistent state',
-                    possible_solutions=[
-                        'Remove the test that uses the testfunction and then remove the testfunction',
-                        'Recover the old testfunction and create a new testfunction'
-                    ]
-                )
-            self.remove_testfunction(path, testfunction_obj.name)
+        # Note: Usage checks should be done at command level using get_testfunction_usage()
+
+        # Count testfunctions for logging
+        testfunction_count = len(testfunction_file_obj.test_functions)
+
+        # Delete the file object - cascade will automatically delete all testfunctions
         self._session.delete(testfunction_file_obj)
-        log.info(f'Removed testfunction file {path} from database')
+
+        # Single commit at the end
         self._session.commit()
+        log.info(f'Successfully removed testfunction file {path} and {testfunction_count} testfunction(s)')
+
+    def remove_testfunction_file_obj_by_name(self, name: str):
+        """Remove a testfunction file by name (e.g., 'xml', 'json', 'csv')."""
+        testfunction_file_obj = self._session.query(TestFunctionFile).filter(
+            TestFunctionFile.name == name).first()
+        if not testfunction_file_obj:
+            raise DatabaseTestfunctionRemovalError(
+                log,
+                message=f'Testfunction file "{name}" does not exist in database',
+            )
+        # Note: Usage checks should be done at command level using get_testfunction_usage()
+
+        # Count testfunctions for logging
+        testfunction_count = len(testfunction_file_obj.test_functions)
+
+        # Delete the file object - cascade will automatically delete all testfunctions
+        self._session.delete(testfunction_file_obj)
+
+        # Single commit at the end
+        self._session.commit()
+        log.info(f'Successfully removed testfunction file "{name}" and {testfunction_count} testfunction(s)')
 
     def parse_and_create_testfunction(self, testfunction_class, module_analyzer: PyModuleAnalyzer,
                                       testfunction_file: TestFunctionFile):
@@ -189,6 +185,11 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         return self._session.query(TestFunctionFile).filter(
             TestFunctionFile.name == path.stem).first() is not None
 
+    def testfunction_file_obj_exists_by_name(self, name: str) -> bool:
+        """Check if a testfunction file exists by name."""
+        return self._session.query(TestFunctionFile).filter(
+            TestFunctionFile.name == name).first() is not None
+
     def __get_testfunction_hash(self, test_class):
         testfunction_bytes = ast.unparse(test_class.get_method('test'))
         return hash_string_sha256(testfunction_bytes)
@@ -203,21 +204,8 @@ class TestfunctionDbApi(GlobalDatabaseApi):
                 testfunction_obj.description = test_description
                 log.info(f'Updated testfunction description for {testfunction_obj.name}')
         if testfunction_obj.sha256hash != sha256_testfunction:
-            if (
-                    self._session.query(sqlalchemy.exists().where(
-                        AbstractTest.testfunction_id == testfunction_obj.id,
-                        AbstractTest.id == TestEvent.abstract_test_id
-                    )).scalar()
-
-            ):
-                raise DatabaseTestfunctionUpdateError(
-                    log,
-                    message=f'Cannot update testfunction {testfunction_obj.name} because it is used in a test. A change would result in an inconsistent state',
-                    possible_solutions=[
-                        'Remove the test that uses the testfunction and then update the testfunction',
-                        'Recover the old testfunction and create a new testfunction'
-                    ]
-                )
+            # Note: Usage checks should be done at command level using can_safely_update_testfunction()
+            # because abstract_tests and test_events are in project databases, not global database
             self.remove_testfunction(Path(testfunction_file.path), testfunction_obj.name)
 
             self.parse_and_create_testfunction(
@@ -252,7 +240,7 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         class_names = [t_func_class.name for t_func_class in module_analyzer.get_classes(parent='BasicTest')]
         for testfunction_obj in testfunction_file.test_functions:
             if testfunction_obj.type not in class_names:
-                self.remove_testfunction(path, testfunction_obj.name, safe=True)
+                self.remove_testfunction(path, testfunction_obj.name)
         testfunction_file.sha256hash = combine_hashes([hash_file_sha256(path), hash_file_sha256(requirements_path)])
         self._session.commit()
         return testfunction_file

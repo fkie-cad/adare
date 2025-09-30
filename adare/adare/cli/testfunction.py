@@ -22,14 +22,8 @@ def exec_create_testfunction(arguments):
 
 def exec_remove_testfunction(arguments):
     from adare.backend.testfunction.commands import testfunction_remove
-    if project_directory := determine_projectdirectory(arguments.project):
-        testfunction_name = resolve_testfunction_path(arguments.name, project_directory)
-        testfunction_remove(
-            project_directory,
-            testfunction_name
-        )
-    else:
-        raise NoProjectFoundError(log, message='no project directory found')
+    # Remove testfunction file by name (not path-based)
+    testfunction_remove(arguments.name)
 
 
 def exec_load_testfunction(arguments):
