@@ -1,0 +1,10 @@
+environments:
+ - ubuntu24043
+
+description: "Visual test example using Ubuntu text editor"
+tags:
+  - linux
+  - ubuntu
+  - visual
+  - gui
+  - example

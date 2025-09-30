@@ -83,6 +83,7 @@ class BasicTest:
     """
     testname: ClassVar[str] = ''
     testdescription: ClassVar[str] = ''
+    execute_on_host: ClassVar[bool] = False  # If True, test executes on host instead of VM
 
     name: str
     parameter: Parameter

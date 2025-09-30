@@ -88,7 +88,7 @@ Base Configuration (all environments)
 
 - Install:
 
-  - Python 3.10 or newer
+  - Python 3.9 or newer
   - `Poetry <https://python-poetry.org/docs/#installing-with-the-official-installer>`_ and make sure it's in the PATH for the ``adare`` user. So open a new terminal and run ``poetry --version`` to confirm.
   - VirtualBox Guest Additions
   - ``python3-tk``

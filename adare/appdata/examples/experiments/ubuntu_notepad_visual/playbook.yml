@@ -1,0 +1,44 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+
+# Test definitions using visual test functions
+tests:
+  - name: untitled_document_visible
+    description: 'Verify "Untitled Document" text appears in new text editor window'
+    function: visual.exists
+    parameter:
+      text: 'Untitled Document'
+
+  - name: editor_window_visible
+    description: 'Verify text editor window is visible using text search'
+    function: visual.exists
+    parameter:
+      text: 'Text Editor'
+
+actions:
+  - click:
+      target:
+        text: "Text Editor"
+        strategy:
+          FirstStrategy: {}
+      description: "Open Ubuntu Text Editor from desktop or menu"
+
+  - idle:
+      duration: 2.0
+      description: "Wait for Text Editor window to fully open"
+
+  - test: untitled_document_visible
+
+  - test: editor_window_visible
+
+  - keyboard:
+      combination: ["alt", "F4"]
+      description: "Close Text Editor window using keyboard shortcut"
+
+  - idle:
+      duration: 1.0
+      description: "Wait for window to close"

@@ -508,3 +508,100 @@ class TestLoader:
             result_data = action_result.data.get('result', {})
             return 'status' in result_data and 'details' in result_data
         return False
+
+    def get_test_class(self, test_name: str) -> Optional[type]:
+        """
+        Get test class definition for a test by loading from database.
+
+        Args:
+            test_name: Name of the test from playbook
+
+        Returns:
+            Test class type or None if not found
+        """
+        try:
+            # Load test definition to get function name
+            playbook_path = self.experiment_dir / "playbook.yml"
+            if not playbook_path.exists():
+                log.warning(f"Playbook not found: {playbook_path}")
+                return None
+
+            from adarelib.testset.yaml.customloader import get_custom_loader
+            playbook_yaml = playbook_path.read_text()
+            playbook_data = yaml.load(playbook_yaml, Loader=get_custom_loader())
+
+            if 'tests' not in playbook_data:
+                return None
+
+            # Find test by name
+            test_function = None
+            for test in playbook_data['tests']:
+                if test.get('name') == test_name:
+                    test_function = test.get('function')
+                    break
+
+            if not test_function:
+                log.warning(f"Test '{test_name}' not found in playbook")
+                return None
+
+            # Load testfunction classes from database
+            from adare.config.configdirectory import STATE_DIR
+            from adarelib.testset.testfunction import import_basictest_subclasses
+
+            global_testfunctions_path = STATE_DIR / 'testfunctions'
+            if not global_testfunctions_path.exists():
+                log.warning(f"Global testfunctions not found: {global_testfunctions_path}")
+                return None
+
+            # Import testfunction classes
+            testfunction_collection = import_basictest_subclasses(directory=global_testfunctions_path)
+
+            # Get test class from collection
+            from adarelib.testset.testfunction import get_testclass_from_testfunction
+            test_class = get_testclass_from_testfunction(test_function, testfunction_collection)
+
+            return test_class
+
+        except (OSError, IOError, yaml.YAMLError) as e:
+            log.error(f"Failed to load test class for '{test_name}': {e}")
+            return None
+        except Exception as e:
+            log.error(f"Unexpected error loading test class for '{test_name}': {e}", exc_info=True)
+            return None
+
+    async def structure_host_test(self, test_name: str, resolved_test: Dict[str, Any]):
+        """
+        Structure test instance for host execution.
+
+        This method takes a resolved test dict and converts it to a
+        structured test instance (BasicTest subclass) for host execution.
+
+        Args:
+            test_name: Name of the test
+            resolved_test: Resolved test dict with substituted variables
+
+        Returns:
+            Structured test instance (BasicTest subclass)
+
+        Raises:
+            ValueError: If test cannot be structured
+        """
+        try:
+            # Get test class
+            test_class = self.get_test_class(test_name)
+            if not test_class:
+                raise ValueError(f"Test class not found for '{test_name}'")
+
+            # Structure the test using cattrs
+            import cattrs
+            test_instance = cattrs.structure(resolved_test, test_class)
+
+            log.debug(f"Test Loader: Structured host test '{test_name}' as {test_class.__name__}")
+            return test_instance
+
+        except cattrs.errors.ClassValidationError as e:
+            log.error(f"Test Loader: Validation error structuring test '{test_name}': {e}")
+            raise ValueError(f"Invalid test parameters: {e.message}")
+        except Exception as e:
+            log.error(f"Test Loader: Failed to structure test '{test_name}': {e}", exc_info=True)
+            raise ValueError(f"Failed to structure test: {e}")
