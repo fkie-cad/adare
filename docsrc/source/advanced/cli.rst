@@ -99,11 +99,11 @@ Experiments contain the actual test automation logic using YAML-based playbooks.
 .. _test-mode-development:
 
 ``adare experiment run <experiment>``
-  Execute an experiment in the specified environment.
+  Execute an experiment in the specified environment. By default runs in test mode.
 
   Options:
-    * ``--environment TEXT`` - Name of the environment (required)
-    * ``--test`` - Run in test mode for development (see :ref:`test-mode-development`)
+    * ``--environment TEXT`` - Name of the environment (if not specified, runs on all configured environments)
+    * ``--production`` - Run in production mode with strict integrity checks (default: test mode)
     * ``--debug-screenshots`` - Save screenshots to experiment run directory for debugging
     * ``--preserve-snapshot`` - Create experiment snapshot for preservation (default: only reset to base)
     * ``--project TEXT`` - Name of the project
@@ -140,19 +140,25 @@ ADARE supports advanced batch execution allowing you to run multiple experiments
   * Automatic error handling and continuation
   * Duration tracking for each combination
 
-**Test Mode Development (--test)**
+**Test vs Production Mode**
 
-The ``--test`` flag enables iterative experiment development:
+By default, experiments run in **test mode** which is ideal for development:
 
-* **Purpose**: Allows continuous modification and testing of playbook files
-* **Behavior**: Results are deleted after execution, experiment remains unlocked
-* **Use Case**: Perfect for developing and debugging experiments
+* **Test Mode (Default)**:
 
-**Important**: Once you run an experiment **without** ``--test``, the experiment becomes locked and cannot be modified. To continue development after a non-test run:
+  * Allows continuous modification and testing of playbook files
+  * Creates "fake runs" that can be cleaned up with ``adare experiment clean``
+  * Skips integrity checks to enable rapid iteration
+  * Perfect for developing and debugging experiments
 
-1. Copy the experiment directory to a new location
-2. Run the copied experiment with ``--test`` flag
-3. Develop and iterate on the copied version
+* **Production Mode (--production flag)**:
+
+  * Enforces strict integrity checks for reproducibility
+  * Creates real runs that are tracked in the database
+  * Prevents modifications to experiments with existing runs
+  * Use only when ready for production data collection
+
+**Workflow**: Develop and test in default test mode, then use ``--production`` only when ready for final data collection.
 
 ``adare experiment develop <experiment>``
   Run an experiment in development/test mode for iterative development.

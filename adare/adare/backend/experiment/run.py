@@ -782,7 +782,7 @@ def __start_event_listeners(experiment_run_ulid: str):
     return cli_thread, db_thread
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = False, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None):
     import signal
     import asyncio
 
@@ -838,11 +838,11 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     experiment_run_context = ExperimentRunCtx(config)
     # Enable debug screenshots by default for forensic logging (can be overridden by explicit flag)
     experiment_run_context.debug_screenshots = debug_screenshots or True  # Default to True for forensic logging
-    experiment_run_context.test_mode = test  # Store test mode flag for later use
+    experiment_run_context.test_mode = test  # Store test mode flag (default: True for test mode)
     if test:
-        step_initialize(experiment_run_context, fake=True)
+        step_initialize(experiment_run_context, fake=True)  # Test mode: creates fake run
     else:
-        step_initialize(experiment_run_context)
+        step_initialize(experiment_run_context)  # Production mode: creates real run
 
     # Create an asyncio Event to signal shutdown.
     stop_event = asyncio.Event()
@@ -1052,8 +1052,8 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 )
 
             if test:
-                # Fake runs are now kept until manually cleaned with 'adare experiment clean <name>'
-                log.info(f"Fake experiment run {experiment_run_context.experiment_run_ulid} completed and preserved for analysis")
+                # Test mode: fake runs are kept until manually cleaned with 'adare experiment clean <name>'
+                log.info(f"Test mode run {experiment_run_context.experiment_run_ulid} completed and preserved for analysis")
             # Give the flow console time to display the summary before stopping
             await asyncio.sleep(3)
 

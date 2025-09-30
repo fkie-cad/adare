@@ -138,7 +138,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
         )
 
     # Load experiment once before running on all environments
-    if arguments.test:
+    if not arguments.test:  # Production mode
         from adare.backend.experiment import database as experiment_database
         experiment_ulid = experiment_database.get_experiment_by_project_and_name(
             project_directory, experiment_name, trigger_error=False
@@ -146,19 +146,16 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
         if experiment_ulid:
             run_count = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
             if run_count > 0:
-                raise LoggedErrorException(log,
-                    f'Cannot run test mode on experiment "{experiment_name}" with existing runs ({run_count} runs found).\n'
-                    f'Test mode with file modifications could overwrite real experiment data.\n'
-                    f'Use a different experiment name for testing or remove existing runs first.',
-                    possible_solutions=[
-                        f'Create a new experiment: adare experiment create {experiment_name}_test',
-                        f'Remove existing runs (if safe): adare run list --filter {experiment_name}',
-                        'Use --force flag only if you understand the risks'
-                    ]
-                )
+                # In production mode with existing runs, load without force (strict integrity)
+                experiment_load(project_directory, experiment_name, force=False, silent=True)
+            else:
+                # No existing runs, can force load
+                experiment_load(project_directory, experiment_name, force=True, silent=True)
+        else:
+            experiment_load(project_directory, experiment_name, force=False, silent=True)
+    else:  # Test mode (default)
+        # Allow force loading in test mode to handle file changes during development
         experiment_load(project_directory, experiment_name, force=True, silent=True)
-    else:
-        experiment_load(project_directory, experiment_name, force=False, silent=True)
 
     print(f"Running experiment '{experiment_name}' on {len(environments)} environment(s)...")
     print(f"Environments: {', '.join([env.name for env in environments])}")
@@ -362,8 +359,8 @@ def exec_experiment_run(arguments):
 
         # Single environment run (existing logic)
         try:
-            # In test mode, check for existing runs before allowing force update
-            if arguments.test:
+            # In production mode, use strict loading; in test mode, allow modifications
+            if not arguments.test:  # Production mode
                 from adare.backend.experiment import database as experiment_database
                 experiment_ulid = experiment_database.get_experiment_by_project_and_name(
                     project_directory, experiment_name, trigger_error=False
@@ -371,21 +368,16 @@ def exec_experiment_run(arguments):
                 if experiment_ulid:
                     run_count = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
                     if run_count > 0:
-                        raise LoggedErrorException(log,
-                            f'Cannot run test mode on experiment "{experiment_name}" with existing runs ({run_count} runs found).\n'
-                            f'Test mode with file modifications could overwrite real experiment data.\n'
-                            f'Use a different experiment name for testing or remove existing runs first.',
-                            possible_solutions=[
-                                f'Create a new experiment: adare experiment create {experiment_name}_test',
-                                f'Remove existing runs (if safe): adare run list --filter {experiment_name}',
-                                'Use --force flag only if you understand the risks'
-                            ]
-                        )
+                        # Production mode with existing runs - strict integrity
+                        experiment_load(project_directory, experiment_name, force=False, silent=True)
+                    else:
+                        # No existing runs, can force load
+                        experiment_load(project_directory, experiment_name, force=True, silent=True)
+                else:
+                    experiment_load(project_directory, experiment_name, force=False, silent=True)
+            else:  # Test mode (default)
                 # Allow force loading in test mode to handle file changes during development
                 experiment_load(project_directory, experiment_name, force=True, silent=True)
-            else:
-                # Normal mode - no force loading
-                experiment_load(project_directory, experiment_name, force=False, silent=True)
 
             # Validate environment and experiment compatibility before starting execution
             from adare.database.api.experiment import ExperimentApi

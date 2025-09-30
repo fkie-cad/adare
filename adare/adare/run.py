@@ -365,16 +365,19 @@ def load(experiment, environment, force, project):
 @experiment.command()
 @click.argument('experiment')
 @click.option('-e', '--environment', help='Name of the environment (if not specified, runs on all environments in project)')
-@click.option('--test', '-t', is_flag=True, help='Run the experiment in test mode - delete results afterwards and do not block changes')
+@click.option('--production', '-p', is_flag=True, help='Run the experiment in production mode - creates real runs with integrity checks (default: test mode)')
 @click.option('--debug-screenshots', is_flag=True, help='Save screenshots to experiment run directory for debugging')
 @click.option('--preserve-snapshot', '-s', is_flag=True, help='Create experiment snapshot for preservation (default: only reset to base snapshot)')
 @click.option('--no-runlog', is_flag=True, help='Do not save adare log to the run/logs directory')
 @click.option('--vm-memory', type=int, help='VM RAM in MB (default: 4096 for Linux, 8192 for Windows)')
 @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
-@click.option('--project', '-p', help='Name of the project')
+@click.option('--project', help='Name of the project')
 @click.pass_context
-def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, project):
+def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, project):
     """Run an experiment in a given environment or all environments if none specified.
+
+    By default, runs in TEST mode (creates fake runs, skips integrity checks, allows modifications).
+    Use --production/-p for real production runs with full integrity validation.
 
     EXPERIMENT can be:
     - Simple name: test_csv
@@ -389,7 +392,7 @@ def run(ctx, experiment, environment, test, debug_screenshots, preserve_snapshot
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
-        test=test,
+        test=not production,  # Invert: production flag OFF means test mode ON
         debug_screenshots=debug_screenshots,
         preserve_snapshot=preserve_snapshot,
         runlog=not no_runlog,
