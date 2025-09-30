@@ -102,16 +102,21 @@ class ExperimentPanel:
         return Panel(layout, title=title, border_style="blue", title_align="left")
 
 
-def print_experiment(name: str = None, dotnotation: str = None, ulid: str = None, project_name: str = None, environment_name: str = None, experiment_name: str = None):
+def print_experiment(name: str = None, dotnotation: str = None, ulid: str = None, project_name: str = None, environment_name: str = None, experiment_name: str = None, formatter=None, output_file=None, dual_output=False):
+    # Get formatter if not provided
+    if formatter is None:
+        from adare.run import get_formatter_from_context
+        formatter, output_file, dual_output = get_formatter_from_context()
+
     with DataRetrievalApi() as db:
         console = DefaultConsole()
-        
+
         # Check for conflicting arguments
         provided_args = sum(bool(arg) for arg in [name, dotnotation, ulid])
         if provided_args > 1:
             from adare.exceptions import ArgumentsError
             raise ArgumentsError(log, 'Only one of name, --dotnotation, or --ulid should be provided')
-        
+
         if name:
             # Check if name contains dots - if so, treat as dotnotation
             if '.' in name:
@@ -128,9 +133,26 @@ def print_experiment(name: str = None, dotnotation: str = None, ulid: str = None
         else:
             from adare.exceptions import ArgumentsError
             raise ArgumentsError(log, 'Either name, dotnotation, ulid, or project_name/environment_name/experiment_name must be provided')
-        
+
         ulid = experiment['ulid'].values[0]
         abstract_tests = db.get_abstract_tests(ulid)
+
+        # Check if structured output is needed
+        if dual_output or formatter.format_type.value != 'rich':
+            structured_data = {
+                'name': experiment['name'].values[0],
+                'ulid': ulid,
+                'created_at': str(experiment['created_at'].values[0]),
+                'environments': experiment['environments'].values[0],
+                'tags': experiment['tags'].values[0] if 'tags' in experiment.columns else [],
+                'dotnotation': experiment.get('dotnotation', experiment['name']).values[0] if 'dotnotation' in experiment.columns else experiment['name'].values[0],
+                'abstract_tests': abstract_tests
+            }
+            formatter.print_or_save(structured_data, output_file, dual_output)
+
+            if not dual_output:
+                return
+
         layout = Layout(name="root")
         panel = ExperimentPanel(experiment, abstract_tests)
         layout.update(panel)

@@ -12,14 +12,13 @@ import ulid
 from pathlib import Path
 from sqlalchemy_serializer import SerializerMixin
 from sqlalchemy.ext.hybrid import hybrid_property
-from adarelib.constants import StatusEnum, VMStatus
+from adarelib.constants import StatusEnum
 from sqlalchemy.orm import declarative_base
 
 # Create separate base for global models
 GlobalBase = declarative_base()
 
 StatusEnumType = SAEnum(StatusEnum, name="statusenum")
-VMStatusEnumType = SAEnum(VMStatus, name="vmstatusenum")
 SyncStatusEnum = SAEnum('pending', 'synced', 'failed', 'local_only', name="syncstatusenum")
 SyncDirectionEnum = SAEnum('push', 'pull', 'bidirectional', name="syncdirectionenum")
 
@@ -256,11 +255,7 @@ class Vm(SerializerMixin, GlobalBase):
     hash = Column(String, nullable=False)
     description = Column(String, nullable=True)
 
-    # VirtualBox integration fields
-    vbox_uuid = Column(String, nullable=True, unique=True, index=True)
-    base_snapshot_name = Column(String, nullable=True)
-    import_status = Column(VMStatusEnumType, default=VMStatus.IMPORTED)
-    last_verified = Column(DateTime, nullable=True)
+    # Snapshot configuration
     use_snapshots = Column(Boolean, default=True)
 
     # OS information
@@ -284,6 +279,7 @@ class VmSnapshot(SerializerMixin, GlobalBase):
     id = Column(CHAR(26), primary_key=True, default=lambda: str(ulid.ULID()))
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
+    snapshot_type = Column(String, nullable=True, index=True)  # 'base' or 'experiment'
     vbox_uuid = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=True, default=func.now())
 

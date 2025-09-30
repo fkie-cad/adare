@@ -71,17 +71,21 @@ def exec_show_runs(arguments):
 
 
 def exec_show_run(arguments):
+    """Get detailed information about a specific run."""
     from adare.frontend.terminal.run import print_run
     from adare.database.api.frontend import DataRetrievalApi
-    
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
+
     if arguments.ulid:
-        print_run(arguments.ulid)
+        print_run(arguments.ulid, formatter, output_file, dual_output)
     else:
         # Get the latest run in the current project
         with DataRetrievalApi() as api:
             latest_run_data = api.get_latest_run_in_project()
             latest_run_ulid = latest_run_data['id'].iloc[0]
-            print_run(latest_run_ulid)
+            print_run(latest_run_ulid, formatter, output_file, dual_output)
 
 
 def exec_show_testfunctions(arguments):
@@ -102,12 +106,20 @@ def exec_show_testfunctions(arguments):
 
 
 def exec_show_testfunction(arguments):
+    """Get detailed information about a specific testfunction."""
     from adare.frontend.terminal.testfunction import print_testfunction
-    print_testfunction(arguments.dotnotation, None)
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
+    print_testfunction(arguments.dotnotation, None, formatter, output_file, dual_output)
 
 
 def exec_show_experiment(arguments):
+    """Get detailed information about a specific experiment."""
     from adare.frontend.terminal.experiment import print_experiment
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
 
     # Resolve experiment name if it's a path
     experiment_name = arguments.name
@@ -118,7 +130,8 @@ def exec_show_experiment(arguments):
             # If path resolution fails, use the original name (might be a simple name or dotnotation)
             experiment_name = arguments.name
 
-    print_experiment(name=experiment_name, ulid=arguments.ulid, dotnotation=arguments.dotnotation)
+    print_experiment(name=experiment_name, ulid=arguments.ulid, dotnotation=arguments.dotnotation,
+                    formatter=formatter, output_file=output_file, dual_output=dual_output)
 
 
 def exec_show_experiments(arguments):
@@ -213,7 +226,11 @@ def exec_remove_run(arguments):
 
 
 def exec_show_environment(arguments):
+    """Get detailed information about a specific environment."""
     from adare.frontend.terminal.environment import print_environment
-    print_environment(arguments.environment_name)
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
+    print_environment(arguments.environment_name, formatter, output_file, dual_output)
 
 

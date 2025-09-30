@@ -368,20 +368,52 @@ class ExperimentRunActionsPanel:
         return Panel(grid, title=title, border_style="blue", title_align='left', style='')
 
 
-def print_run(run_ulid: str):
+def print_run(run_ulid: str, formatter=None, output_file=None, dual_output=False):
     from adare.exceptions import RunNotFoundError
+
+    # Get formatter if not provided
+    if formatter is None:
+        from adare.run import get_formatter_from_context
+        formatter, output_file, dual_output = get_formatter_from_context()
+
     console = DefaultConsole()
 
     with DataRetrievalApi() as api:
         data: pd.DataFrame = api.get_run(run_ulid)
-        
+
         # Check if run exists
         if data.empty:
             raise RunNotFoundError(log, run_ulid)
-            
+
         stages: pd.DataFrame = api.get_run_stages(run_ulid)
         actions_data: pd.DataFrame = api.get_run_actions(run_ulid)
         tests_data: dict = api.get_tests(run_ulid)
+
+        # Check if structured output is needed
+        if dual_output or formatter.format_type.value != 'rich':
+            structured_data = {
+                'id': run_ulid,
+                'project_name': data['project_name'].values[0],
+                'environment_name': data['environment_name'].values[0],
+                'environment_id': data['environment_id'].values[0],
+                'experiment_name': data['experiment_name'].values[0],
+                'duration': str(data['duration'][0]) if not pd.isna(data['duration'][0]) else None,
+                'timestamp_start': data['timestamp_start'].values[0],
+                'timestamp_end': data['timestamp_end'].values[0],
+                'vm': data['vm'].values[0].name if hasattr(data['vm'].values[0], 'name') else str(data['vm'].values[0]),
+                'osinfo': data['osinfo'].values[0],
+                'published': bool(data['published'].values[0]),
+                'fake': bool(data['fake'].values[0]) if 'fake' in data.columns else False,
+                'status': int(data['status'].values[0]),
+                'result_status': int(data['result_status'].values[0]),
+                'stages': stages.to_dict('records') if not stages.empty else [],
+                'actions': actions_data.to_dict('records') if not actions_data.empty else [],
+                'tests': tests_data
+            }
+            formatter.print_or_save(structured_data, output_file, dual_output)
+
+            if not dual_output:
+                return
 
         height_header = 7
         height_actions = len(actions_data) // 2 + 2

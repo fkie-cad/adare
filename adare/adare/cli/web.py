@@ -18,8 +18,26 @@ def exec_web_logout(arguments):
 
 
 def exec_web_status(arguments):
+    """Get web login status."""
     from adare.web.login import is_logged_in
-    is_logged_in()
+    from adare.database.api.usersession import UserSessionApi
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
+
+    if dual_output or formatter.format_type.value != 'rich':
+        # Structured output
+        with UserSessionApi() as db:
+            db.remove_expired_user_sessions()
+            user_session = db.get_first_user_session()
+            status_data = {
+                'logged_in': bool(user_session),
+                'username': user_session.username if user_session else None,
+            }
+        formatter.print_or_save(status_data, output_file, dual_output)
+    else:
+        # Rich console output (existing behavior)
+        is_logged_in()
 
 
 def exec_download_environment(arguments):

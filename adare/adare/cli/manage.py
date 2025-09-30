@@ -47,24 +47,32 @@ def exec_manage_init_db(arguments):
 
 def exec_manage_db_status(arguments):
     """Check database system status."""
-    print("Checking database system status...")
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
 
     try:
         status = validate_database_integrity()
 
-        print(f"Global database exists: {'✅' if status['global_db_exists'] else '❌'}")
-        print(f"Global database accessible: {'✅' if status['global_db_accessible'] else '❌'}")
-        print(f"System valid: {'✅' if status['valid'] else '❌'}")
-
-        if status['errors']:
-            print("\nErrors found:")
-            for error in status['errors']:
-                print(f"  ❌ {error}")
-
-        if status['valid']:
-            print("\n✅ Database system is healthy")
+        if dual_output or formatter.format_type.value != 'rich':
+            # Structured output
+            formatter.print_or_save(status, output_file, dual_output)
         else:
-            print("\n❌ Database system has issues")
+            # Rich console output
+            print("Checking database system status...")
+            print(f"Global database exists: {'✅' if status['global_db_exists'] else '❌'}")
+            print(f"Global database accessible: {'✅' if status['global_db_accessible'] else '❌'}")
+            print(f"System valid: {'✅' if status['valid'] else '❌'}")
+
+            if status['errors']:
+                print("\nErrors found:")
+                for error in status['errors']:
+                    print(f"  ❌ {error}")
+
+            if status['valid']:
+                print("\n✅ Database system is healthy")
+            else:
+                print("\n❌ Database system has issues")
 
     except Exception as e:
         print(f"❌ Status check failed: {e}")

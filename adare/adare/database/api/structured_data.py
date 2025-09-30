@@ -61,7 +61,6 @@ class StructuredDataApi(DatabaseApi):
         # Use eager loading to prevent N+1 queries
         environments = safe_query_all(self._session.query(Environment).options(
             joinedload(Environment.vm).joinedload(Vm.osinfo),
-            joinedload(Environment.project),
             selectinload(Environment.sync_metadata)
         ))
         result = []
@@ -71,14 +70,15 @@ class StructuredDataApi(DatabaseApi):
             vm_name, vm_id = safe_get_vm_info(env)
             os_info_str, osinfo_os, osinfo_distribution, osinfo_version, osinfo_language = safe_get_os_info(env.vm)
             published, in_request = safe_get_sync_status(env)
-            display_name = get_smart_display_name(env, 'environment')
+            # Environments are global, display name is just the environment name
+            display_name = env.name
 
             env_info = EnvironmentInfo(
                 name=env.name,
                 display_name=display_name,
                 ulid=env.id,
-                dotnotation=env.dotnotation,
-                project=env.project.name,
+                dotnotation=env.name,  # Environments don't have dotnotation, just use name
+                project="Global",  # Environments are global resources
                 description=env.description or "",
                 os_info=os_info_str,
                 vm_box=vm_name,

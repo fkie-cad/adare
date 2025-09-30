@@ -64,8 +64,13 @@ def print_vm_instances_list():
         print(f"Error: {e}")
 
 
-def print_vm_instance_info(instance_id: str):
+def print_vm_instance_info(instance_id: str, formatter=None, output_file=None, dual_output=False):
     """Print detailed information about a specific VM instance."""
+    # Get formatter if not provided
+    if formatter is None:
+        from adare.run import get_formatter_from_context
+        formatter, output_file, dual_output = get_formatter_from_context()
+
     try:
         with VmApi() as api:
             instance = api.get_vm_instance_by_id(instance_id)
@@ -74,6 +79,34 @@ def print_vm_instance_info(instance_id: str):
                 console = DefaultConsole()
                 console.print(f"VM instance with ID '{instance_id}' not found.")
                 return
+
+            # Get source VM info
+            source_vm = api.get_vm_by_id(instance.vm_id)
+
+            # Check if structured output is needed
+            if dual_output or formatter.format_type.value != 'rich':
+                structured_data = {
+                    'type': 'instance',
+                    'id': instance.id,
+                    'instance_name': instance.instance_name,
+                    'status': instance.status,
+                    'vm_id': instance.vm_id,
+                    'vbox_uuid': instance.vbox_uuid,
+                    'websocket_port': instance.websocket_port,
+                    'current_experiment_run_id': instance.current_experiment_run_id,
+                    'base_snapshot_name': instance.base_snapshot_name,
+                    'created_at': instance.created_at.isoformat(),
+                    'last_used_at': instance.last_used_at.isoformat(),
+                    'source_vm': {
+                        'name': source_vm.name if source_vm else None,
+                        'description': source_vm.description if source_vm else None,
+                        'file': source_vm.file if source_vm else None
+                    } if source_vm else None
+                }
+                formatter.print_or_save(structured_data, output_file, dual_output)
+
+                if not dual_output:
+                    return
 
             # Create Rich table for instance details
             table = Table(show_header=False, box=None, padding=(0, 2))
@@ -92,7 +125,6 @@ def print_vm_instance_info(instance_id: str):
             table.add_row("Last Used:", instance.last_used_at.strftime('%Y-%m-%d %H:%M:%S'))
 
             # Show source VM info
-            source_vm = api.get_vm_by_id(instance.vm_id)
             if source_vm:
                 table.add_row("", "")  # Empty row for spacing
                 table.add_row("[b]Source VM Information[/b]", "")
@@ -112,11 +144,23 @@ def print_vm_instance_info(instance_id: str):
         print(f"Error: {e}")
 
 
-def print_vm_instance_usage():
+def print_vm_instance_usage(formatter=None, output_file=None, dual_output=False):
     """Print VM instance usage statistics."""
+    # Get formatter if not provided
+    if formatter is None:
+        from adare.run import get_formatter_from_context
+        formatter, output_file, dual_output = get_formatter_from_context()
+
     try:
         stats = get_vm_instance_stats()
         console = DefaultConsole()
+
+        # Check if structured output is needed
+        if dual_output or formatter.format_type.value != 'rich':
+            formatter.print_or_save(stats, output_file, dual_output)
+
+            if not dual_output:
+                return
 
         # Create summary table
         summary_table = Table(show_header=False, box=None, padding=(0, 2))

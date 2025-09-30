@@ -128,10 +128,40 @@ class EnvironmentPanel:
         return Panel(layout, title=title, border_style="blue", title_align="left")
 
 
-def print_environment(environment_name: str):
+def print_environment(environment_name: str, formatter=None, output_file=None, dual_output=False):
+    # Get formatter if not provided
+    if formatter is None:
+        from adare.run import get_formatter_from_context
+        formatter, output_file, dual_output = get_formatter_from_context()
+
     with DataRetrievalApi() as db:
         console = DefaultConsole()
         environment = db.get_environment_by_name(environment_name)
+
+        # Check if structured output is needed
+        if dual_output or formatter.format_type.value != 'rich':
+            structured_data = {
+                'name': environment['name'].values[0],
+                'id': environment['id'].values[0],
+                'vm_name': environment['vm_name'].values[0],
+                'project_name': environment['project_name'].values[0],
+                'file': environment['file'].values[0],
+                'created_at': str(environment['created_at'].values[0]),
+                'description': environment['description'].values[0],
+                'tags': environment['tags'].values[0] if 'tags' in environment.columns else [],
+                'osinfo': {
+                    'os': environment['osinfo_os'].values[0],
+                    'distribution': environment['osinfo_distribution'].values[0],
+                    'version': environment['osinfo_version'].values[0],
+                    'language': environment['osinfo_language'].values[0],
+                    'architecture': environment['osinfo_architecture'].values[0]
+                }
+            }
+            formatter.print_or_save(structured_data, output_file, dual_output)
+
+            if not dual_output:
+                return
+
         layout = Layout(name="root")
         panel = EnvironmentPanel(environment)
         layout.update(panel)

@@ -174,53 +174,6 @@ def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, de
         return result
 
 
-def get_vm_by_vbox_uuid(vbox_uuid: str, fields: list[str] = None) -> Optional[Vm] | dict | None:
-    """
-    Get VM by VirtualBox UUID - NEW for snapshot workflow.
-    
-    Args:
-        vbox_uuid: VirtualBox VM UUID
-        fields: Optional list of fields to extract. If None, returns full object.
-        
-    Returns:
-        VM: Full object if fields=None
-        dict: VM data if fields specified
-        None: If VM not found
-    """
-    with VmApi() as api:
-        vm = api.get_vm_by_vbox_uuid(vbox_uuid)
-        if not vm:
-            return None
-        
-        # Return full object for backward compatibility
-        if fields is None:
-            return vm
-        
-        # Extract requested fields
-        result = {}
-        for field in fields:
-            if field == 'id':
-                result['id'] = vm.id
-            elif field == 'name':
-                result['name'] = vm.name
-            elif field == 'file':
-                result['file'] = vm.file
-            elif field == 'hash':
-                result['hash'] = vm.hash
-            elif field == 'description':
-                result['description'] = vm.description
-            elif field == 'vbox_uuid':
-                result['vbox_uuid'] = vm.vbox_uuid
-            elif field == 'base_snapshot_name':
-                result['base_snapshot_name'] = vm.base_snapshot_name
-            elif field == 'import_status':
-                result['import_status'] = vm.import_status
-            elif field == 'osinfo':
-                result['osinfo'] = vm.osinfo
-            else:
-                log.warning(f'Unknown field requested: {field}. Available: id, name, file, hash, description, vbox_uuid, base_snapshot_name, import_status, osinfo')
-        
-        return result
 
 
 def create_vm_with_uuid_capture(project_path: Path, name: str, file_path: Path, file_hash: str, 
@@ -248,28 +201,8 @@ def create_vm_with_uuid_capture(project_path: Path, name: str, file_path: Path, 
         os_architecture=os_architecture, silent=silent
     )
     
-    # Attempt to capture VirtualBox UUID after VM creation
-    if capture_uuid_after_import and isinstance(vm, Vm):
-        try:
-            vbox_uuid = VirtualBoxVM.get_vm_uuid_by_name(vm.name)
-            if vbox_uuid:
-                # Update the VM with the captured UUID
-                with VmApi() as api:
-                    success = api.update_vm_uuid_and_snapshot_info(
-                        vm.id, 
-                        vbox_uuid=vbox_uuid,
-                        base_snapshot_name=f"adare_base_{file_hash[:8]}",
-                        use_snapshots=True
-                    )
-                if success:
-                    log.info(f"Captured VirtualBox UUID for VM '{vm.name}': {vbox_uuid}")
-                else:
-                    log.error(f"Failed to update UUID in database for VM '{vm.name}'")
-            else:
-                log.warning(f"Could not capture VirtualBox UUID for VM '{vm.name}' - may not be imported yet")
-        except Exception as e:
-            log.warning(f"Failed to capture UUID for VM '{vm.name}': {e}")
-    
+    # Note: UUID capture is now handled at VmInstance level, not Vm level
+    # VmInstances are created when experiments run and track actual VirtualBox VMs
     # Return according to fields parameter
     if fields is None:
         return vm
@@ -407,31 +340,16 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
         
         # Disable time synchronization to prevent VM from syncing with host time
         # await vbox_vm.disable_time_sync(silent=True)  # Commented out - makes clock weird
-        
-        # Capture UUID after successful import using the VirtualBox VM name
-        if capture_uuid_after_import:
-            vbox_uuid = VirtualBoxVM.get_vm_uuid_by_name(vbox_vm_name)
-            if vbox_uuid:
-                # Update the VM with the captured UUID and actual VirtualBox name
-                with VmApi() as api:
-                    # If we used a different name in VirtualBox, update the database name too
-                    if vbox_vm_name != original_vm_name:
-                        log.info(f"Updating VM database name from '{original_vm_name}' to '{vbox_vm_name}' to match VirtualBox")
-                        api.update_vm_name(vm.id, vbox_vm_name)
-                    
-                    success = api.update_vm_uuid_and_snapshot_info(
-                        vm.id, 
-                        vbox_uuid=vbox_uuid,
-                        base_snapshot_name=f"adare_base_{vm.hash[:8]}",
-                        use_snapshots=True
-                    )
-                if success:
-                    log.info(f"Successfully imported VM '{vbox_vm_name}' with UUID: {vbox_uuid}")
-                    vm = get_vm_by_id(vm.id)  # Refresh with updated data
-                else:
-                    log.error(f"Failed to update UUID in database for VM '{vbox_vm_name}'")
-            else:
-                log.warning(f"Could not capture UUID for VM '{vbox_vm_name}' after import")
+
+        # Note: UUID capture is now handled at VmInstance level when creating instances
+        # This function imports the base VM template to VirtualBox
+        if vbox_vm_name != original_vm_name:
+            log.info(f"Updating VM database name from '{original_vm_name}' to '{vbox_vm_name}' to match VirtualBox")
+            with VmApi() as api:
+                api.update_vm_name(vm.id, vbox_vm_name)
+            vm = get_vm_by_id(vm.id)  # Refresh with updated data
+
+        log.info(f"Successfully imported VM '{vbox_vm_name}' to VirtualBox")
         
     except Exception as e:
         log.error(f"Failed to import VM '{vbox_vm_name}' to VirtualBox: {e}", exc_info=True)
@@ -508,8 +426,6 @@ def get_all_vms(fields: list[str] = None) -> list:
                     result['hash'] = vm.hash
                 elif field == 'description':
                     result['description'] = vm.description
-                elif field == 'vbox_uuid':
-                    result['vbox_uuid'] = getattr(vm, 'vbox_uuid', None)
                 elif field == 'osinfo':
                     result['osinfo'] = vm.osinfo
                 else:
@@ -581,28 +497,22 @@ def delete_all_vms(force: bool = False) -> dict:
         
         for vm in all_vms:
             try:
-                # Clean up VirtualBox VM and snapshots if it exists
-                if hasattr(vm, 'vbox_uuid') and vm.vbox_uuid:
-                    try:
-                        # Check if VM exists in VirtualBox
-                        if VirtualBoxVM.verify_vm_exists_by_uuid(vm.vbox_uuid):
-                            log.info(f"Removing VM '{vm.name}' from VirtualBox")
-                            
-                            # Get VM name from UUID for VirtualBox operations
-                            vm_name = VirtualBoxVM.get_vm_name_by_uuid(vm.vbox_uuid)
-                            if vm_name:
-                                # Remove VM from VirtualBox (this also removes snapshots)
-                                from adare.virtualbox.api import VirtualBoxManager
-                                manager = VirtualBoxManager()
-                                vbox_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy")
-                                vbox_vm.delete_vm()
-                                log.info(f"Successfully removed VM '{vm.name}' from VirtualBox")
-                        else:
-                            log.debug(f"VM '{vm.name}' not found in VirtualBox - only cleaning database")
-                    except Exception as vbox_error:
-                        log.warning(f"Failed to remove VM '{vm.name}' from VirtualBox: {vbox_error}")
-                
-                # Delete from database
+                # Delete associated VmInstance records - they will handle VirtualBox cleanup
+                # VmInstances track actual VirtualBox VMs, not the abstract Vm model
+                from adare.database.api.vm import VmApi
+                with VmApi() as api:
+                    instances = api.get_vm_instances_by_vm_id(vm.id)
+                    if instances:
+                        log.info(f"Found {len(instances)} instances for VM '{vm.name}'")
+                        from adare.backend.vm.instance_manager import delete_vm_instance
+                        for instance in instances:
+                            try:
+                                delete_vm_instance(instance.id, force=True)
+                                log.info(f"Deleted VM instance: {instance.instance_name}")
+                            except Exception as inst_error:
+                                log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
+
+                # Delete from database (cascade will remove instances)
                 delete_vm(vm.id)
                 results['deleted_count'] += 1
                 results['deleted_vms'].append(vm.name)
@@ -654,25 +564,20 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
         
         for vm in vms:
             try:
-                # Clean up VirtualBox VM and snapshots if it exists
-                if hasattr(vm, 'vbox_uuid') and vm.vbox_uuid:
-                    try:
-                        # Check if VM exists in VirtualBox
-                        if VirtualBoxVM.verify_vm_exists_by_uuid(vm.vbox_uuid):
-                            log.info(f"Removing VM '{vm.name}' from VirtualBox")
-                            
-                            # Get VM name from UUID for VirtualBox operations
-                            vm_name = VirtualBoxVM.get_vm_name_by_uuid(vm.vbox_uuid)
-                            if vm_name:
-                                # Remove VM from VirtualBox (this also removes snapshots)
-                                from adare.virtualbox.api import VirtualBoxManager
-                                manager = VirtualBoxManager()
-                                vbox_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy")
-                                vbox_vm.delete_vm()
-                                log.info(f"Successfully removed VM '{vm.name}' from VirtualBox")
-                    except Exception as vbox_error:
-                        log.warning(f"Failed to remove VM '{vm.name}' from VirtualBox: {vbox_error}")
-                
+                # Delete associated VmInstance records - they will handle VirtualBox cleanup
+                from adare.database.api.vm import VmApi
+                with VmApi() as api:
+                    instances = api.get_vm_instances_by_vm_id(vm.id)
+                    if instances:
+                        log.info(f"Found {len(instances)} instances for VM '{vm.name}'")
+                        from adare.backend.vm.instance_manager import delete_vm_instance
+                        for instance in instances:
+                            try:
+                                delete_vm_instance(instance.id, force=True)
+                                log.info(f"Deleted VM instance: {instance.instance_name}")
+                            except Exception as inst_error:
+                                log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
+
                 # Delete from database
                 delete_vm(vm.id)
                 results['deleted_count'] += 1

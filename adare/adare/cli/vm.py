@@ -11,19 +11,28 @@ log = logging.getLogger(__name__)
 def exec_vm_list(arguments):
     """List all VMs and instances in the system."""
     from adare.frontend.terminal.vm_list import print_vm_and_instances_list
-    print_vm_and_instances_list()
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
+    print_vm_and_instances_list(formatter, output_file, dual_output)
 
 
 def exec_vm_info(arguments):
     """Get detailed information about a VM or instance (auto-detected)."""
     from adare.frontend.terminal.vm import print_vm_or_instance_info
-    print_vm_or_instance_info(arguments.vm_id)
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
+    print_vm_or_instance_info(arguments.vm_id, formatter, output_file, dual_output)
 
 
 def exec_vm_list_snapshots(arguments):
     """List all snapshots, optionally filtered by VM instance."""
     from adare.frontend.terminal.vm import print_all_snapshots
-    print_all_snapshots(arguments.instance_id)
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
+    print_all_snapshots(arguments.instance_id, formatter, output_file, dual_output)
 
 
 def exec_vm_delete_snapshot(arguments):
@@ -203,4 +212,7 @@ def _confirm_removal(target):
 def exec_vm_instance_usage(arguments):
     """Show VM instance usage statistics."""
     from adare.frontend.terminal.vm_instances import print_vm_instance_usage
-    print_vm_instance_usage()
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
+    print_vm_instance_usage(formatter, output_file, dual_output)

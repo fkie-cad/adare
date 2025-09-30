@@ -201,56 +201,6 @@ class VmApi(GlobalDatabaseApi):
                 self._session.expunge(vm)
             return vm
 
-    def get_vm_by_vbox_uuid(self, vbox_uuid: str) -> Optional[Vm]:
-        """
-        Get VM by VirtualBox UUID - NEW for snapshot workflow.
-        
-        Args:
-            vbox_uuid: VirtualBox UUID
-            
-        Returns:
-            VM instance if found, None otherwise
-        """
-        from sqlalchemy.orm import joinedload
-        with self:
-            vm = self._session.query(Vm).options(joinedload(Vm.osinfo)).filter_by(vbox_uuid=vbox_uuid).first()
-            if vm:
-                self._session.expunge(vm)
-            return vm
-    
-    def update_vm_uuid_and_snapshot_info(self, vm_id: str, vbox_uuid: str, 
-                                          base_snapshot_name: str = None, 
-                                          use_snapshots: bool = True) -> bool:
-        """
-        Update VM with VirtualBox UUID and snapshot information.
-        
-        Args:
-            vm_id: VM database ID
-            vbox_uuid: VirtualBox UUID to set
-            base_snapshot_name: Name of base snapshot
-            use_snapshots: Enable snapshot workflow
-            
-        Returns:
-            True if updated successfully
-        """
-        from datetime import datetime
-        
-        with self:
-            vm = self._session.query(Vm).filter_by(id=vm_id).first()
-            if not vm:
-                log.error(f"VM with ID {vm_id} not found for UUID update")
-                return False
-            
-            vm.vbox_uuid = vbox_uuid
-            if base_snapshot_name:
-                vm.base_snapshot_name = base_snapshot_name
-            vm.use_snapshots = use_snapshots
-            vm.last_verified = datetime.utcnow()
-            
-            self._session.commit()
-            log.debug(f"Updated VM '{vm.name}' with UUID {vbox_uuid}")
-            return True
-    
     def update_vm_name(self, vm_id: str, new_name: str) -> bool:
         """
         Update VM name in the database.
@@ -275,89 +225,60 @@ class VmApi(GlobalDatabaseApi):
             log.debug(f"Updated VM name from '{old_name}' to '{new_name}'")
             return True
     
-    def create_snapshot_record(self, vm_id: str, snapshot_name: str, snapshot_type: str,
+    def create_snapshot_record(self, vm_instance_id: str, snapshot_name: str, snapshot_type: str,
                               experiment_id: str = None, description: str = None) -> bool:
         """
-        Create a snapshot record in the database.
-        
+        DEPRECATED: Use create_instance_snapshot_record instead.
+        This method is kept for backward compatibility but will be removed.
+
         Args:
-            vm_id: VM database ID
+            vm_instance_id: VM instance database ID (formerly vm_id - now uses instance)
             snapshot_name: Name of the snapshot
             snapshot_type: Type of snapshot (base, experiment, backup)
             experiment_id: Associated experiment ID (if applicable)
             description: Snapshot description
-            
+
         Returns:
             True if created successfully
         """
-        from adare.database.models.global_models import VmSnapshot
-        
-        with self:
-            snapshot_record = VmSnapshot(
-                vm_id=vm_id,
-                snapshot_name=snapshot_name,
-                snapshot_type=snapshot_type,
-                experiment_id=experiment_id,
-                description=description
-            )
-            
-            self._session.add(snapshot_record)
-            self._session.commit()
-            log.debug(f"Created snapshot record '{snapshot_name}' for VM {vm_id}")
-            return True
+        log.warning("create_snapshot_record is deprecated - use create_instance_snapshot_record instead")
+        return self.create_instance_snapshot_record(
+            vm_instance_id=vm_instance_id,
+            snapshot_name=snapshot_name,
+            snapshot_type=snapshot_type,
+            experiment_id=experiment_id,
+            description=description
+        )
     
     def get_snapshots_for_vm(self, vm_id: str, snapshot_type: str = None) -> List:
         """
-        Get snapshots for a VM from database.
-        
+        DEPRECATED: This method gets snapshots for VM templates which is incorrect.
+        Use get_snapshots_for_instance instead.
+
         Args:
-            vm_id: VM database ID
+            vm_id: VM database ID (template - snapshots don't belong to templates)
             snapshot_type: Filter by snapshot type (optional)
-            
+
         Returns:
-            List of VmSnapshot records
+            Empty list (VMs don't have snapshots, instances do)
         """
-        from adare.database.models.global_models import VmSnapshot
-        
-        with self:
-            query = self._session.query(VmSnapshot).filter_by(vm_id=vm_id)
-            if snapshot_type:
-                query = query.filter_by(snapshot_type=snapshot_type)
-            
-            snapshots = query.all()
-            # Expunge objects from session
-            for snapshot in snapshots:
-                self._session.expunge(snapshot)
-            
-            return snapshots
+        log.warning("get_snapshots_for_vm is deprecated - VMs (templates) don't have snapshots. Use get_snapshots_for_instance instead.")
+        return []
     
     def delete_snapshot_record(self, vm_id: str, snapshot_name: str) -> bool:
         """
-        Delete a snapshot record from the database.
-        
+        DEPRECATED: This method deletes snapshots from VM templates which is incorrect.
+        Use delete_instance_snapshot_record instead.
+
         Args:
-            vm_id: VM database ID
+            vm_id: VM database ID (template - snapshots don't belong to templates)
             snapshot_name: Name of the snapshot to delete
-            
+
         Returns:
-            True if deleted successfully (or didn't exist)
+            False - operation not supported for VM templates
         """
-        from adare.database.models.global_models import VmSnapshot
-        
-        with self:
-            snapshot = self._session.query(VmSnapshot).filter_by(
-                vm_id=vm_id, 
-                snapshot_name=snapshot_name
-            ).first()
-            
-            if snapshot:
-                self._session.delete(snapshot)
-                self._session.commit()
-                log.debug(f"Deleted snapshot record '{snapshot_name}' for VM {vm_id}")
-            else:
-                log.debug(f"Snapshot record '{snapshot_name}' not found for VM {vm_id} - nothing to delete")
-            
-            return True
+        log.error("delete_snapshot_record is deprecated - VMs (templates) don't have snapshots. Use delete_instance_snapshot_record instead.")
+        return False
     
     def get_all_vms(self) -> List[Vm]:
         """
@@ -781,12 +702,13 @@ class VmApi(GlobalDatabaseApi):
             snapshot_record = VmSnapshot(
                 vm_instance_id=vm_instance_id,
                 name=snapshot_name,
+                snapshot_type=snapshot_type,
                 description=description
             )
 
             self._session.add(snapshot_record)
             self._session.commit()
-            log.debug(f"Created instance snapshot record '{snapshot_name}' for VM instance {vm_instance_id}")
+            log.debug(f"Created instance snapshot record '{snapshot_name}' (type: {snapshot_type}) for VM instance {vm_instance_id}")
             return True
 
     def get_snapshots_for_instance(self, vm_instance_id: str, snapshot_type: str = None) -> List['VmSnapshot']:
@@ -811,6 +733,34 @@ class VmApi(GlobalDatabaseApi):
                 self._session.expunge(snapshot)
 
             return snapshots
+
+    def delete_instance_snapshot_record(self, vm_instance_id: str, snapshot_name: str) -> bool:
+        """
+        Delete a snapshot record for a VM instance from the database.
+
+        Args:
+            vm_instance_id: VM instance database ID
+            snapshot_name: Name of the snapshot to delete
+
+        Returns:
+            True if deleted successfully (or didn't exist)
+        """
+        from adare.database.models.global_models import VmSnapshot
+
+        with self:
+            snapshot = self._session.query(VmSnapshot).filter_by(
+                vm_instance_id=vm_instance_id,
+                name=snapshot_name
+            ).first()
+
+            if snapshot:
+                self._session.delete(snapshot)
+                self._session.commit()
+                log.debug(f"Deleted snapshot record '{snapshot_name}' for VM instance {vm_instance_id}")
+            else:
+                log.debug(f"Snapshot record '{snapshot_name}' not found for VM instance {vm_instance_id} - nothing to delete")
+
+            return True
 
     def get_websocket_port_for_instance(self, instance_name: str) -> Optional[int]:
         """

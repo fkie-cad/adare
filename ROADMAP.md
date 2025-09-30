@@ -72,6 +72,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] we validate on experiment load against files and analyze it would be faster and better to validate against database
 - [ ] we should load playbook into database on load already not only on exeuction or? we then run from database and not file?!
 - [ ] remove all kind of icons from logging messages. ✅🆕
+- [ ] in some terminal files we use directly database and do queries. Should we not provide this through an API that provides the data? What is better code quality?
 
 ---
 
@@ -84,12 +85,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] multiple project shared directory and vm?! should not happen -> clear separation for multiple projects not happening also not in testfunction sets -> maybe database per project?! 
 - [ ] even if vm does not exist the env is added to envs with "no vm"
 - [ ] adare tf rm should remove not a testfunction but instead a testfunction file by name e.g. xml
-- [ ] fix:  adare --format json env list
-- [ ] fix: adare --format json vm list shows not json!
 - [ ] add env via metadata.yml should be recognizes on loading+running and trigger add environment or delete-environment ...
 - [ ] if dir exists exp load is weird and first deletes the directory but tells the directrory does already exist so load does not work? and then we can run it again it 
-- [ ] adare vm instance list does not have alias l and also does not use our tables as the other commands!
-- [ ] adare vm instance info also uses wrong printing do it as for the other commands adare env list, ...
 
 ---
 
