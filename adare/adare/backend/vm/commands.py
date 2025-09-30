@@ -347,22 +347,9 @@ def verify_and_cleanup_vm_for_experiment(vm_id: str, experiment_id: str = None) 
     if not vm_record:
         raise VMError(log, f"VM with ID {vm_id} not found in database")
 
-    # Verify VM status with automatic cleanup enabled
-    status = verify_vm_status(vm_record, auto_cleanup=True, experiment_context=experiment_id)
-
-    if status == VMStatus.MISSING:
-        # VM was missing and has been cleaned up
-        log.warning(f"VM '{vm_record.name}' was missing from VirtualBox and has been removed from database")
-        return False
-    elif status in [VMStatus.READY, VMStatus.IMPORTED]:
-        # VM is available for use
-        return True
-    elif status == VMStatus.SNAPSHOT_MISSING:
-        # VM exists but snapshot is missing - this is recoverable
-        log.warning(f"VM '{vm_record.name}' exists but base snapshot is missing - will be recreated")
-        return True
-    else:
-        raise VMError(log, f"VM '{vm_record.name}' verification failed with status: {status}")
+    # VM record exists in database - that's all we need to verify
+    # VmInstance records handle the actual VirtualBox state
+    return True
 
 
 def verify_and_cleanup_vm_instance_for_experiment(vm_instance_id: str, experiment_id: str = None) -> bool:

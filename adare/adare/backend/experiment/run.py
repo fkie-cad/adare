@@ -936,7 +936,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
-                input("Press Enter to continue to connect websocket...")
+                # input("Press Enter to continue to connect websocket...")
                 await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
                 await step_runner.run_async_step(step_execute_installations, experiment_run_context)
 
