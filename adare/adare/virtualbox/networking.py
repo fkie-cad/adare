@@ -256,9 +256,9 @@ class NetworkingMixin:
                     log.debug(f"CLAUDE: Verifying shared folder '{name}' was added to VirtualBox config")
                     existing_folders = await self.list_shared_folders(ctx_manager, stop_event, log_file, silent=True)
                     if name in existing_folders:
-                        log.info(f"CLAUDE: ✅ Verified shared folder '{name}' exists in VirtualBox config")
+                        log.info(f"CLAUDE: Verified shared folder '{name}' exists in VirtualBox config")
                     else:
-                        log.error(f"CLAUDE: ❌ Shared folder '{name}' not found in VirtualBox config after addition!")
+                        log.error(f"CLAUDE: Shared folder '{name}' not found in VirtualBox config after addition!")
                         return 1
                 else:
                     log.error(f"CLAUDE: Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
@@ -439,11 +439,11 @@ class NetworkingMixin:
             )
 
             if return_value == 0:
-                log.info(f"CLAUDE: ✅ Mount succeeded on {attempt_label}: {description}")
+                log.info(f"CLAUDE: Mount succeeded on {attempt_label}: {description}")
                 return True
             else:
                 # Mount failed
-                log.warning(f"CLAUDE: ❌ Mount failed on {attempt_label}: {description} (return code: {return_value})")
+                log.warning(f"CLAUDE: Mount failed on {attempt_label}: {description} (return code: {return_value})")
                 if stderr:
                     log.debug(f"CLAUDE: Mount error output: {stderr.strip()}")
 
@@ -454,7 +454,7 @@ class NetworkingMixin:
                     await asyncio.sleep(delay)
 
         # All retries exhausted
-        log.error(f"CLAUDE: ❌ Mount failed after {max_retries + 1} attempts: {description}")
+        log.error(f"CLAUDE: Mount failed after {max_retries + 1} attempts: {description}")
         return False
 
     async def list_shared_folders(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False) -> Dict[str, SharedFolderConfig]:
@@ -680,7 +680,7 @@ class NetworkingMixin:
                         f"This likely indicates VirtualBox shared folder is not properly configured or Guest Additions issue."
                     )
 
-            log.info("CLAUDE: ✅ All shared folders mounted successfully")
+            log.info("CLAUDE: All shared folders mounted successfully")
             return 0
         else:
             # Windows: use existing queue-based approach (no retry needed for Windows)

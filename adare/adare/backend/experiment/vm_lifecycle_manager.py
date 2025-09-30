@@ -73,9 +73,9 @@ class VMLifecycleManager:
             log.info(f"CLAUDE: Copying adarelib from {adarelib_source} to {adarelib_target}")
             shutil.copytree(adarelib_source, adarelib_target, dirs_exist_ok=True)
 
-            log.info("CLAUDE: ✅ Project VM runtime directory ready")
+            log.info("CLAUDE: Project VM runtime directory ready")
         else:
-            log.info("CLAUDE: ✅ Project VM runtime directory up-to-date")
+            log.info("CLAUDE: Project VM runtime directory up-to-date")
 
     def _get_latest_mtime(self, directory: Path) -> float:
         """Get the latest modification time in a directory tree."""
@@ -177,7 +177,7 @@ class VMLifecycleManager:
         if context.config.websocket_port is None:
             raise LoggedException(log, f"VM instance {vm_instance.instance_name} has no websocket port allocated")
 
-        log.info(f"✅ Using VM instance: {context.vm_name} on port {context.config.websocket_port}")
+        log.info(f"Using VM instance: {context.vm_name} on port {context.config.websocket_port}")
         
         # Setup VM runtime directory with smart copying
         await self._ensure_vm_runtime_ready(context)
@@ -333,7 +333,7 @@ class VMLifecycleManager:
                 if return_code != 0:
                     raise LoggedException(log, f"CLAUDE: Failed to add shared folder '{name}' to VirtualBox (return code: {return_code})")
 
-            log.info("CLAUDE: ✅ All shared folders added to VirtualBox successfully")
+            log.info("CLAUDE: All shared folders added to VirtualBox successfully")
 
         # Update experiment run with VM-specific data
         if not context.stop_event.is_set():
@@ -410,7 +410,7 @@ class VMLifecycleManager:
                     f"Expected folders: {list(folders.keys())}, Found: {list(existing_folders.keys())}"
                 )
 
-            log.info(f"CLAUDE: ✅ All {len(folders)} required shared folders exist in VirtualBox, proceeding with mount")
+            log.info(f"CLAUDE: All {len(folders)} required shared folders exist in VirtualBox, proceeding with mount")
             await context.vm.mount_multiple_shared_folders(
                 folders=folders,
                 stop_event=context.user_interrupt_event
