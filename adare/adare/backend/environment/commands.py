@@ -263,7 +263,16 @@ def environment_load(environment: str, force: bool = False):
 
                 log.info(f'VM file processed and stored in database with ID: {vm_id}')
             else:
-                log.warning(f'VM file specified but not found: {vm_path}')
+                raise EnvironmentLoadFailed(
+                    log,
+                    f'VM file specified but not found: {vm_path}',
+                    possible_solutions=[
+                        'Check if the VM file path is correct',
+                        'Ensure the VM file exists at the specified location',
+                        'If using a URL, check if the download completed successfully',
+                        'Check file permissions and accessibility'
+                    ]
+                )
 
         # Try to create environment - if this fails, cleanup VM if we created it
         environment_ulid = environment_database.update_environment(None, environment_metadata, environment_file, environment_file_sha256, vm_id=vm_id, force=force)

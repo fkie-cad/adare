@@ -135,14 +135,14 @@ Running Experiments
 
 .. code-block:: bash
 
-   # Development run (allows further modifications)
-   adare experiment run my-experiment -e ubuntu24043 --test
-
-   # Production run (locks experiment)
+   # Development/test run (default: allows modifications, creates fake runs)
    adare experiment run my-experiment -e ubuntu24043
 
-   # Run on multiple environments sequentially
-   adare experiment run my-experiment -e ubuntu24043 -e win11
+   # Production run (strict integrity checks, creates real runs)
+   adare experiment run my-experiment -e ubuntu24043 --production
+
+   # Run on all configured environments
+   adare experiment run my-experiment
 
 Managing Experiments
 ====================

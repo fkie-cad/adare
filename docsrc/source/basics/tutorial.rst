@@ -242,18 +242,19 @@ Now run your forensic experiment:
 
 .. code-block:: bash
 
-   # For development/testing (allows playbook modifications)
-   adare experiment run deletefileexample -e ubuntu24043 --test
-
-   # For final execution (locks experiment from further changes)
+   # Development/test run (default: allows playbook modifications, creates fake runs)
    adare experiment run deletefileexample -e ubuntu24043
 
-.. warning::
-   **Development vs Production Runs**
+   # Production run (strict integrity checks, creates real runs)
+   adare experiment run deletefileexample -e ubuntu24043 --production
 
-   - Use ``--test`` flag during development to keep experimenting with playbook changes
-   - Once you run **without** ``--test``, the experiment becomes locked
-   - To continue development after a non-test run, copy the experiment directory first
+.. note::
+   **Test vs Production Modes**
+
+   - **Default behavior** is test mode - ideal for development and iteration
+   - Test mode creates "fake runs" that can be cleaned up with ``adare experiment clean``
+   - Use ``--production`` flag only when ready for real data collection
+   - Production runs enforce strict integrity checks to ensure reproducibility
 
 You'll then see an dynamic console output showing progress, actions, and test results.
 At the end, a summary of the experiment run will be displayed.

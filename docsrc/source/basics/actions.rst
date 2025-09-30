@@ -192,7 +192,7 @@ Variable Filters
 
    Variable filters currently have **limited validation** during playbook parsing. Filter syntax errors or incorrect parameters may only be discovered during experiment execution, potentially causing failures mid-experiment.
 
-   **Recommendation**: Always test playbooks with filters in development mode first: ``adare experiment run <name> -e <env> --test``
+   **Recommendation**: Test playbooks thoroughly in test mode (the default) before using ``--production`` flag
 
 ADARE supports powerful filters for data transformation:
 
