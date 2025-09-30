@@ -426,7 +426,14 @@ class VMLifecycleManager:
         """Release the VM instance used by this experiment."""
         try:
             # Get the VM instance ID from the experiment run
-            experiment_run = experiment_database.get_experiment_run_by_id(context.experiment_run_ulid)
+            from adare.database.api.experiment import ExperimentApi
+            from adare.database.models.project_models import ExperimentRun
+
+            with ExperimentApi(context.config.project_path) as api:
+                experiment_run = api._session.query(ExperimentRun).filter(
+                    ExperimentRun.id == context.experiment_run_ulid
+                ).first()
+
             if experiment_run and experiment_run.vm_instance_id:
                 from adare.backend.vm.commands import release_vm_instance_for_experiment
                 await release_vm_instance_for_experiment(experiment_run.vm_instance_id)
@@ -442,37 +449,46 @@ class VMLifecycleManager:
         if context.vm and context.experiment_run_ulid:
             # Import snapshot manager for creating snapshot
             from adare.backend.vm.snapshot_manager import SnapshotManager
-            
-            # Get VM record from database to create snapshot
+
+            # Get VM instance from database to create snapshot
             try:
                 from adare.database.api.vm import VmApi
+                from adare.database.api.experiment import ExperimentApi
+                from adare.database.models.project_models import ExperimentRun
+
+                # Get the VM instance ID from the experiment run
+                with ExperimentApi(context.config.project_path) as api:
+                    experiment_run = api._session.query(ExperimentRun).filter(
+                        ExperimentRun.id == context.experiment_run_ulid
+                    ).first()
+
+                if not experiment_run or not experiment_run.vm_instance_id:
+                    log.warning('No VM instance ID found in experiment run - cannot create experiment snapshot')
+                    return
+
+                # Get the VM instance
                 with VmApi() as api:
-                    vm_records = api.get_all_vms()
-                    vm_record = None
-                    for record in vm_records:
-                        if record.name == context.vm_name:
-                            vm_record = record
-                            break
-                
-                if vm_record and vm_record.vbox_uuid:
+                    vm_instance = api.get_vm_instance_by_id(experiment_run.vm_instance_id)
+
+                if vm_instance and vm_instance.vbox_uuid:
                     snapshot_manager = SnapshotManager()
-                    
+
                     # Create new experiment snapshot with current state
                     with StageCtxManager(VMExperimentSnapshotStage(), context.experiment_run_ulid, event=event):
-                        created_snapshot = snapshot_manager.create_experiment_snapshot(
-                            vm_record, 
+                        created_snapshot = snapshot_manager.create_experiment_snapshot_for_instance(
+                            vm_instance,
                             context.experiment_run_ulid,
                             description=f"Final state snapshot for experiment {context.experiment_run_ulid}",
                             silent=False
                         )
-                    
+
                     if created_snapshot:
                         log.info(f'Created experiment snapshot: {created_snapshot}')
                     else:
                         log.warning('Failed to create experiment snapshot')
                 else:
-                    log.warning('VM record not found or missing UUID - cannot create experiment snapshot')
-                    
+                    log.warning('VM instance not found or missing UUID - cannot create experiment snapshot')
+
             except Exception as e:
                 log.warning(f'Error creating experiment snapshot: {e}')
 
@@ -481,33 +497,41 @@ class VMLifecycleManager:
         if context.vm and context.experiment_run_ulid:
             # Import snapshot manager for cleanup
             from adare.backend.vm.snapshot_manager import SnapshotManager
-            
-            # Get VM record from database to access snapshot management
+
+            # Get VM instance from database to delete snapshot
             try:
-                # Get the VM ID from the database using the VM name
                 from adare.database.api.vm import VmApi
+                from adare.database.api.experiment import ExperimentApi
+                from adare.database.models.project_models import ExperimentRun
+
+                # Get the VM instance ID from the experiment run
+                with ExperimentApi(context.config.project_path) as api:
+                    experiment_run = api._session.query(ExperimentRun).filter(
+                        ExperimentRun.id == context.experiment_run_ulid
+                    ).first()
+
+                if not experiment_run or not experiment_run.vm_instance_id:
+                    log.warning('No VM instance ID found in experiment run - cannot cleanup experiment snapshot')
+                    return
+
+                # Get the VM instance
                 with VmApi() as api:
-                    vm_records = api.get_all_vms()
-                    vm_record = None
-                    for record in vm_records:
-                        if record.name == context.vm_name:
-                            vm_record = record
-                            break
-                
-                if vm_record and vm_record.vbox_uuid:
+                    vm_instance = api.get_vm_instance_by_id(experiment_run.vm_instance_id)
+
+                if vm_instance and vm_instance.vbox_uuid:
                     snapshot_manager = SnapshotManager()
-                    
-                    # Generate the experiment snapshot name (same logic as in create_experiment_snapshot)
+
+                    # Generate the experiment snapshot name (same logic as in create_experiment_snapshot_for_instance)
                     exp_snapshot_name = f"adare_exp_{context.experiment_run_ulid[:8]}"
-                    
+
                     # Delete only the experiment-specific snapshot
-                    success = snapshot_manager._delete_snapshot(vm_record, exp_snapshot_name)
+                    success = snapshot_manager.delete_instance_snapshot(vm_instance, exp_snapshot_name, silent=True)
                     if success:
                         log.info(f'Successfully cleaned up experiment snapshot: {exp_snapshot_name}')
                     else:
                         log.warning(f'Failed to cleanup experiment snapshot: {exp_snapshot_name} (may not exist)')
                 else:
-                    log.warning('VM record not found or missing UUID - cannot cleanup experiment snapshot')
-                    
+                    log.warning('VM instance not found or missing UUID - cannot cleanup experiment snapshot')
+
             except Exception as e:
                 log.warning(f'Error during snapshot cleanup: {e}')

@@ -13,12 +13,11 @@ import ulid
 from pathlib import Path
 from sqlalchemy_serializer import SerializerMixin
 from sqlalchemy.ext.hybrid import hybrid_property
-from adarelib.constants import StatusEnum, VMStatus
+from adarelib.constants import StatusEnum
 
 from . import Base
 
 StatusEnumType = SAEnum(StatusEnum, name="statusenum")
-VMStatusEnumType = SAEnum(VMStatus, name="vmstatusenum")
 SyncStatusEnum = SAEnum('pending', 'synced', 'failed', 'local_only', name="syncstatusenum")
 SyncDirectionEnum = SAEnum('push', 'pull', 'bidirectional', name="syncdirectionenum")
 
@@ -570,12 +569,8 @@ class Vm(SerializerMixin, Base):
     file = Column(String, nullable=False, unique=True)
     hash = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    
-    # NEW FIELDS FOR SNAPSHOT-BASED VM MANAGEMENT
-    vbox_uuid = Column(String, nullable=True, unique=True, index=True)  # VirtualBox VM UUID
-    base_snapshot_name = Column(String, nullable=True)  # Name of clean base snapshot
-    import_status = Column(VMStatusEnumType, default=VMStatus.IMPORTED)  # VM status in VirtualBox
-    last_verified = Column(DateTime, nullable=True)  # Last time VM was verified to exist
+
+    # Snapshot configuration
     use_snapshots = Column(Boolean, default=True)  # Use snapshot workflow vs import
 
     osinfo_id = Column(CHAR(26), ForeignKey('os_info.id', ondelete='RESTRICT'), nullable=False)

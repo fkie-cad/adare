@@ -67,13 +67,32 @@ class TestfunctionPanel:
         return Panel(layout, title=title, border_style="blue", title_align='left')
 
 
-def print_testfunction(dotnotation: str = None, testfunction_id: str = None):
+def print_testfunction(dotnotation: str = None, testfunction_id: str = None, formatter=None, output_file=None, dual_output=False):
+    # Get formatter if not provided
+    if formatter is None:
+        from adare.run import get_formatter_from_context
+        formatter, output_file, dual_output = get_formatter_from_context()
+
     with DataRetrievalApi() as api:
         if dotnotation:
             testfunction_id = api.testfunction_dotnotation_to_id(dotnotation)
         else:
             testfunction_id = int(testfunction_id)
         testfunction, parameters = api.get_testfunction(testfunction_id)
+
+        # Check if structured output is needed
+        if dual_output or formatter.format_type.value != 'rich':
+            structured_data = {
+                'dotnotation': dotnotation,
+                'id': testfunction_id,
+                'description': testfunction['description'].values[0] if not testfunction.empty else None,
+                'parameters': parameters.to_dict('records') if not parameters.empty else []
+            }
+            formatter.print_or_save(structured_data, output_file, dual_output)
+
+            if not dual_output:
+                return
+
         console = DefaultConsole()
         layout = Layout(name="root")
 

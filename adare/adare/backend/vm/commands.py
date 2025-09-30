@@ -266,31 +266,24 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
             raise VMError(log, f"VM with ID {vm_id} not found")
         
         log.info(f"Deleting VM: {vm.name} (ID: {vm_id})")
-        
-        # Clean up VirtualBox VM and snapshots if it exists
-        if hasattr(vm, 'vbox_uuid') and vm.vbox_uuid:
-            try:
-                # Check if VM exists in VirtualBox
-                if VirtualBoxVM.verify_vm_exists_by_uuid(vm.vbox_uuid):
-                    log.info(f"Removing VM '{vm.name}' from VirtualBox")
-                    
-                    # Get VM name from UUID for VirtualBox operations
-                    vm_name = VirtualBoxVM.get_vm_name_by_uuid(vm.vbox_uuid)
-                    if vm_name:
-                        # Remove VM from VirtualBox (this also removes snapshots)
-                        from adare.virtualbox.api import VirtualBoxManager
-                        manager = VirtualBoxManager()
-                        vbox_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy")
-                        await vbox_vm.remove()
-                        log.info(f"Successfully removed VM '{vm.name}' from VirtualBox")
-                else:
-                    log.debug(f"VM '{vm.name}' not found in VirtualBox - only cleaning database")
-            except Exception as vbox_error:
-                log.warning(f"Failed to remove VM '{vm.name}' from VirtualBox: {vbox_error}")
-                if not force:
-                    raise VMError(log, f"Failed to remove VM from VirtualBox: {vbox_error}")
-        
-        # Delete from database
+
+        # Delete associated VmInstance records - they handle VirtualBox VM cleanup
+        from adare.database.api.vm import VmApi
+        with VmApi() as api:
+            instances = api.get_vm_instances_by_vm_id(vm_id)
+            if instances:
+                log.info(f"Found {len(instances)} VM instances to delete for '{vm.name}'")
+                from adare.backend.vm.instance_manager import delete_vm_instance
+                for instance in instances:
+                    try:
+                        await delete_vm_instance(instance.id, force=force)
+                        log.info(f"Deleted VM instance: {instance.instance_name}")
+                    except Exception as inst_error:
+                        log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
+                        if not force:
+                            raise VMError(log, f"Failed to delete VM instance: {inst_error}")
+
+        # Delete from database (cascade will remove instances)
         return vm_database.delete_vm(vm_id)
         
     except Exception as e:
@@ -306,53 +299,17 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
 
 def verify_vm_status(vm_record, auto_cleanup: bool = False, experiment_context: str = None) -> VMStatus:
     """
-    Verify VM exists and determine its status using UUID-based identification.
+    DEPRECATED: This function operates on Vm records which no longer track VirtualBox UUIDs.
+    Use VmInstance verification functions instead.
 
-    Args:
-        vm_record: VM database record with vbox_uuid field
-        auto_cleanup: If True, automatically remove missing VMs from database
-        experiment_context: Experiment context for logging cleanup actions
+    For VmInstance verification, use instance_manager.verify_vm_instance_status()
 
-    Returns:
-        VMStatus enum indicating current VM state
-
-    Note:
-        When auto_cleanup=True and VM is missing from VirtualBox, the VM entry
-        will be automatically removed from the database. This should only be used
-        during experiment runs for VMs that are actually needed.
+    This function now only checks if the Vm model exists in database.
     """
-    if not vm_record.vbox_uuid:
-        log.debug(f"VM '{vm_record.name}' has no UUID - needs initial import")
-        return VMStatus.IMPORTED
-
-    # Check if VM exists in VirtualBox using UUID
-    if not VirtualBoxVM.verify_vm_exists_by_uuid(vm_record.vbox_uuid):
-        log.warning(f"VM '{vm_record.name}' (UUID: {vm_record.vbox_uuid}) missing from VirtualBox")
-
-        # Perform automatic cleanup if requested (experiment context only)
-        if auto_cleanup:
-            context_info = f" (experiment: {experiment_context})" if experiment_context else ""
-            log.info(f"CLAUDE: Automatically removing orphaned VM '{vm_record.name}' from database{context_info}")
-            try:
-                vm_database.delete_vm(vm_record.id)
-                log.info(f"CLAUDE: Successfully cleaned up missing VM '{vm_record.name}' from database")
-                # Return MISSING to indicate the VM was found missing (even though now cleaned up)
-                # This allows the caller to handle the situation appropriately
-                return VMStatus.MISSING
-            except Exception as e:
-                log.error(f"CLAUDE: Failed to cleanup missing VM '{vm_record.name}': {e}")
-                return VMStatus.MISSING
-
-        return VMStatus.MISSING
-
-    # Check if base snapshot exists (if using snapshots)
-    if vm_record.use_snapshots and vm_record.base_snapshot_name:
-        if not check_base_snapshot_exists(vm_record.vbox_uuid, vm_record.base_snapshot_name):
-            log.warning(f"VM '{vm_record.name}' missing base snapshot '{vm_record.base_snapshot_name}'")
-            return VMStatus.SNAPSHOT_MISSING
-
-    log.debug(f"VM '{vm_record.name}' verified as ready")
-    return VMStatus.READY
+    log.warning("verify_vm_status is deprecated - Vm records no longer track VirtualBox state")
+    # Vm records are abstract templates, not concrete VMs
+    # Return IMPORTED to indicate it's just a template
+    return VMStatus.IMPORTED
 
 
 def check_base_snapshot_exists(vbox_uuid: str, snapshot_name: str) -> bool:
@@ -369,60 +326,6 @@ def check_base_snapshot_exists(vbox_uuid: str, snapshot_name: str) -> bool:
     from adare.backend.vm.snapshot_manager import check_snapshot_exists_by_uuid
     return check_snapshot_exists_by_uuid(vbox_uuid, snapshot_name)
 
-
-def update_vm_status_in_db(vm_id: str, status: VMStatus) -> None:
-    """
-    Update VM status and last_verified timestamp in database.
-    
-    Args:
-        vm_id: VM database ID
-        status: New VMStatus to set
-    """
-    from datetime import datetime
-    
-    # This would update the database record
-    # vm_database.update_vm_status(vm_id, status, datetime.utcnow())
-    log.debug(f"Would update VM {vm_id} status to {status.name}")
-
-
-def ensure_vm_has_uuid(vm_record) -> str:
-    """
-    Ensure VM record has a VirtualBox UUID, fetching it if missing.
-    
-    Args:
-        vm_record: VM database record
-        
-    Returns:
-        VirtualBox UUID string
-        
-    Raises:
-        VMError: If UUID cannot be determined
-    """
-    if vm_record.vbox_uuid:
-        return vm_record.vbox_uuid
-    
-    # Try to get UUID by VM name
-    vbox_uuid = VirtualBoxVM.get_vm_uuid_by_name(vm_record.name)
-    if vbox_uuid:
-        log.info(f"Found existing UUID for VM '{vm_record.name}': {vbox_uuid}")
-        # Update database record with UUID
-        # vm_database.update_vm_uuid(vm_record.id, vbox_uuid)
-        return vbox_uuid
-    
-    raise VMError(log, f"Could not determine VirtualBox UUID for VM '{vm_record.name}'")
-
-
-def get_vm_by_uuid_from_db(vbox_uuid: str):
-    """
-    Get VM record from database by VirtualBox UUID.
-    
-    Args:
-        vbox_uuid: VirtualBox UUID
-        
-    Returns:
-        VM database record or None if not found
-    """
-    return vm_database.get_vm_by_vbox_uuid(vbox_uuid)
 
 
 def verify_and_cleanup_vm_for_experiment(vm_id: str, experiment_id: str = None) -> bool:
@@ -869,7 +772,7 @@ def list_all_vms() -> List[dict]:
     Returns:
         List of VM information dictionaries
     """
-    return vm_database.get_all_vms(fields=['id', 'name', 'description', 'hash', 'vbox_uuid'])
+    return vm_database.get_all_vms(fields=['id', 'name', 'description', 'hash'])
 
 
 def get_vm_info(vm_id: str) -> dict:
@@ -901,8 +804,6 @@ def get_vm_info(vm_id: str) -> dict:
         'file': vm.file,
         'hash': vm.hash,
         'description': vm.description,
-        'vbox_uuid': getattr(vm, 'vbox_uuid', None),
-        'base_snapshot_name': getattr(vm, 'base_snapshot_name', None),
         'use_snapshots': getattr(vm, 'use_snapshots', False),
         'snapshots': snapshot_info
     }

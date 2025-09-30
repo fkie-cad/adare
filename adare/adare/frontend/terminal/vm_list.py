@@ -21,16 +21,9 @@ class VMTablePanel:
         table = Table(expand=True)
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("ID", style="dim", no_wrap=True)
-        table.add_column("VirtualBox Status", style="cyan", no_wrap=True)
         table.add_column("Description", style="dim")
 
         for vm in self.vms:
-            # VirtualBox status with colored indicators
-            if vm.get('vbox_uuid'):
-                vbox_status = Text("✅ Active", style="green")
-            else:
-                vbox_status = Text("❌ Not Imported", style="red")
-            
             # Truncate description if too long
             description = vm.get('description', '')
             if len(description) > 40:
@@ -39,7 +32,6 @@ class VMTablePanel:
             table.add_row(
                 vm['name'],
                 vm['id'],
-                vbox_status,
                 description or "No description"
             )
         
@@ -69,9 +61,14 @@ def print_vm_list():
         console.print(f"[red]Error listing VMs: {e}[/red]")
 
 
-def print_vm_and_instances_list():
+def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=False):
     """Print a formatted list of all VMs and instances in the system."""
     from adare.database.api.vm import VmApi
+
+    # Get formatter if not provided
+    if formatter is None:
+        from adare.run import get_formatter_from_context
+        formatter, output_file, dual_output = get_formatter_from_context()
 
     try:
         console = DefaultConsole()
@@ -83,16 +80,49 @@ def print_vm_and_instances_list():
         with VmApi() as api:
             instances = api.get_all_vm_instances()
 
+        # Check if structured output is needed
+        if dual_output or formatter.format_type.value != 'rich':
+            # Prepare structured data
+            structured_vms = []
+            for vm in vms:
+                structured_vms.append({
+                    'name': vm['name'],
+                    'id': vm['id'],
+                    'description': vm.get('description', '')
+                })
+
+            structured_instances = []
+            for instance in instances:
+                structured_instances.append({
+                    'instance_name': instance.instance_name,
+                    'id': instance.id,
+                    'vm_id': instance.vm_id,
+                    'vm_name': instance.vm.name if instance.vm else None,
+                    'status': instance.status,
+                    'websocket_port': instance.websocket_port,
+                    'last_used_at': instance.last_used_at.isoformat() if instance.last_used_at else None
+                })
+
+            structured_data = {
+                'vms': structured_vms,
+                'instances': structured_instances,
+                'vm_count': len(vms),
+                'instance_count': len(instances)
+            }
+
+            formatter.print_or_save(structured_data, output_file, dual_output)
+
+            if not dual_output:
+                return
+
         # Create VM table
         if vms:
             vm_table = Table(expand=True)
             vm_table.add_column("Name", style="cyan", no_wrap=True)
             vm_table.add_column("ID", style="dim", no_wrap=True)
-            vm_table.add_column("VirtualBox Status", style="cyan", no_wrap=True)
             vm_table.add_column("Description", style="dim")
 
             for vm in vms:
-                vbox_status = Text("✅ Active", style="green") if vm.get('vbox_uuid') else Text("❌ Not Imported", style="red")
                 description = vm.get('description', '')
                 if len(description) > 40:
                     description = description[:37] + "..."
@@ -100,7 +130,6 @@ def print_vm_and_instances_list():
                 vm_table.add_row(
                     vm['name'],
                     vm['id'],
-                    vbox_status,
                     description or "No description"
                 )
 
@@ -114,6 +143,7 @@ def print_vm_and_instances_list():
             instance_table = Table(expand=True)
             instance_table.add_column("Instance Name", style="cyan", no_wrap=True)
             instance_table.add_column("ID", style="dim", no_wrap=True)
+            instance_table.add_column("Parent VM", style="cyan", no_wrap=True)
             instance_table.add_column("Status", style="cyan", no_wrap=True)
             instance_table.add_column("Port", style="cyan", no_wrap=True)
             instance_table.add_column("Last Used", style="dim", no_wrap=False)
@@ -122,9 +152,11 @@ def print_vm_and_instances_list():
                 last_used = instance.last_used_at.strftime("%Y-%m-%d %H:%M:%S") if instance.last_used_at else "Never"
                 port = str(instance.websocket_port) if instance.websocket_port else "N/A"
                 status_color = "green" if instance.status == "running" else "dim"
+                parent_vm_name = instance.vm.name if instance.vm else "Unknown"
                 instance_table.add_row(
                     instance.instance_name,
                     instance.id,
+                    parent_vm_name,
                     Text(instance.status, style=status_color),
                     port,
                     last_used

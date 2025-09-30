@@ -35,11 +35,11 @@ class VMConfirmationPanel:
             if hasattr(vm, 'name'):  # VM object
                 name = vm.name
                 vm_id = vm.id
-                vbox_status = "✅ In VirtualBox" if getattr(vm, 'vbox_uuid', None) else "❌ Database only"
+                vbox_status = "📄 Template"  # Vm is abstract template, not in VirtualBox
             else:  # Dict
                 name = vm['name']
                 vm_id = vm['id']
-                vbox_status = "✅ In VirtualBox" if vm.get('vbox_uuid') else "❌ Database only"
+                vbox_status = "📄 Template"  # Vm is abstract template
             
             table.add_row(name, vm_id, vbox_status)
         
