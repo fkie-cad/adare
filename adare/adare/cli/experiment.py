@@ -18,27 +18,63 @@ def exec_experiment_load(arguments):
     # if not arguments.environment:
     #     raise ArgumentsError(log, message='no environment given', possible_solutions=['use -e to specify the environment'])
     if project_directory := determine_projectdirectory(arguments.project):
-        # Track if we copied an external experiment for cleanup on failure
         original_input = arguments.experiment
         project_dir_obj = ProjectDirectory(project_directory)
 
-        # Determine if this might result in copying an external experiment
-        might_copy_external = False
+        # Determine if this is an external path that needs special handling
+        is_external_path = False
+        external_source_path = None
         potential_copied_name = None
+
         if ('/' in original_input or '\\' in original_input):
             input_path = Path(original_input)
             if input_path.is_absolute() or not (Path.cwd() / input_path).is_relative_to(project_dir_obj.experiments):
-                # This is an external path that might get copied
+                # This is an external path
                 if input_path.exists() and input_path.is_dir():
-                    might_copy_external = True
+                    is_external_path = True
+                    external_source_path = input_path.resolve()
                     potential_copied_name = input_path.name
+
+        # Track whether a copy was actually performed during path resolution
+        copy_was_performed = False
+        target_existed_before = False
+
+        if is_external_path and potential_copied_name:
+            target_path = project_dir_obj.experiments / potential_copied_name
+            target_existed_before = target_path.exists()
 
         try:
             experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+
+            # If external path and target existed before, check if we should overwrite
+            if is_external_path and target_existed_before and external_source_path:
+                target_path = project_dir_obj.experiments / experiment_name
+
+                # Check if experiment has productive runs
+                from adare.backend.experiment import database as experiment_database
+                experiment_ulid = experiment_database.get_experiment_by_project_and_name(
+                    project_directory, experiment_name, trigger_error=False
+                )
+
+                has_productive_runs = False
+                if experiment_ulid:
+                    run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
+                    has_productive_runs = run_count > 0
+
+                if not has_productive_runs:
+                    # No productive runs - safe to overwrite
+                    log.info(f'CLAUDE: Overwriting experiment directory {target_path} with fresh copy from {external_source_path} (no productive runs found)')
+                    shutil.rmtree(target_path)
+                    shutil.copytree(external_source_path, target_path)
+                    copy_was_performed = True
+                else:
+                    log.info(f'CLAUDE: Using existing experiment directory {target_path} (has {run_count} productive runs, not overwriting)')
+
             experiment_load(project_directory, experiment_name, force=arguments.force)
+
         except Exception as e:
-            # If we might have copied an external experiment and loading failed, try to clean it up
-            if might_copy_external and potential_copied_name:
+            # Only cleanup if we actually copied during this run
+            if copy_was_performed and potential_copied_name:
                 copied_experiment_path = project_dir_obj.experiments / potential_copied_name
                 if copied_experiment_path.exists():
                     try:

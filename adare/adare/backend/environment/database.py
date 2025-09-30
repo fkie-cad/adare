@@ -223,6 +223,10 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
 
 
 def delete_environment(environment_ulid: str, force: bool = False):
+    from adare.database.reference_manager import reference_manager
+    from adare.database.api.base import ProjectDatabaseApi
+    from adare.database.models.project_models import ExperimentRun, Experiment
+
     with EnvironmentDbApi() as db:
         environment = _get_environment_or_raise(
             db,
@@ -230,60 +234,78 @@ def delete_environment(environment_ulid: str, force: bool = False):
             log,
             f'environment with ulid {environment_ulid} does not exist in the database',
         )
-        
+
         # Store VM info before deletion for cleanup
         vm_file_path = None
-        project_path = None
         if environment.vm and environment.vm.file:
             vm_file_path = Path(environment.vm.file)
-            if environment.project:
-                project_path = Path(environment.project.path)
-        
-        # Check for experiments that would become orphaned (have only this environment)
-        orphaned_experiments = []
-        for experiment in environment.experiments:
-            if len(experiment.environments) == 1:
-                orphaned_experiments.append(experiment.name)
-        
-        if orphaned_experiments and not force:
-            experiments_list = ', '.join(orphaned_experiments)
-            raise EnvironmentDeletionError(
-                log,
-                f'environment {environment.id} cannot be deleted because the following experiments would become orphaned (they only use this environment): {experiments_list}',
-                possible_solutions=[
-                    'run with --force to delete the environment and all orphaned experiments',
-                    'add other environments to the experiments first',
-                    'delete the experiments first',
-                ])
-        
-        if environment.runs:
-            if not force:
+
+        # Check for runs using this environment across all projects
+        projects_using_env = reference_manager.get_projects_using_environment(environment_ulid)
+
+        if projects_using_env:
+            # Count runs across all projects
+            total_runs = 0
+            orphaned_experiments = []
+
+            for project_path_str in projects_using_env:
+                project_path = Path(project_path_str)
+                try:
+                    with ProjectDatabaseApi(project_path) as project_api:
+                        # Get runs using this environment
+                        runs = project_api._session.query(ExperimentRun).filter(
+                            ExperimentRun.environment_id == environment_ulid
+                        ).all()
+                        total_runs += len(runs)
+
+                        # Check for experiments that would be orphaned
+                        experiments = project_api._session.query(Experiment).all()
+                        for exp in experiments:
+                            if exp.environment_ids and environment_ulid in exp.environment_ids:
+                                if len(exp.environment_ids) == 1:
+                                    orphaned_experiments.append(f"{exp.name} (project: {project_path.name})")
+                except Exception as e:
+                    log.warning(f"Error checking project {project_path}: {e}")
+
+            # Check for orphaned experiments
+            if orphaned_experiments and not force:
+                experiments_list = ', '.join(orphaned_experiments)
                 raise EnvironmentDeletionError(
                     log,
-                    f'environment {environment.id} has already been used for experiments, so it cannot be deleted because this would invalidate the results',
+                    f'environment {environment.id} cannot be deleted because the following experiments would become orphaned (they only use this environment): {experiments_list}',
+                    possible_solutions=[
+                        'run with --force to delete the environment and all runs',
+                        'add other environments to the experiments first',
+                    ])
+
+            # Check for existing runs
+            if total_runs > 0 and not force:
+                raise EnvironmentDeletionError(
+                    log,
+                    f'environment {environment.id} has {total_runs} experiment run(s) across {len(projects_using_env)} project(s), so it cannot be deleted because this would invalidate the results',
                     possible_solutions=[
                         'run with --force to delete all runs and the environment',
-                        'create a new environment with a new name',
                     ])
-            log.info(f'environment {environment.id} has already been used for experiments -> deleting all runs')
-            for run in environment.runs:
-                db.delete_experiment_run(run)
-                log.info(f'deleted run {run.id}')
-        
-        # Delete orphaned experiments if force is used
-        if orphaned_experiments and force:
-            experiments_list = ', '.join(orphaned_experiments)
-            log.info(f'environment {environment.id} deletion with --force -> deleting orphaned experiments: {experiments_list}')
-            for experiment in list(environment.experiments):  # Use list() to avoid modification during iteration
-                if len(experiment.environments) == 1:
-                    log.info(f'deleting orphaned experiment {experiment.name} ({experiment.id})')
-                    db.delete_experiment(experiment)
-        
+
+            # Delete runs if force is used
+            if total_runs > 0 and force:
+                log.info(f'environment {environment.id} has {total_runs} run(s) -> deleting with --force')
+                for project_path_str in projects_using_env:
+                    project_path = Path(project_path_str)
+                    try:
+                        with ProjectDatabaseApi(project_path) as project_api:
+                            runs = project_api._session.query(ExperimentRun).filter(
+                                ExperimentRun.environment_id == environment_ulid
+                            ).all()
+                            for run in runs:
+                                project_api._session.delete(run)
+                                log.info(f'deleted run {run.id} from project {project_path.name}')
+                            project_api._session.commit()
+                    except Exception as e:
+                        log.error(f"Error deleting runs from project {project_path}: {e}")
+
         db.delete_environment(environment)
         log.info(f'deleted environment {environment.id}')
-        
-        # Clean up VM file if no other environments in the project use it
-        _cleanup_vm_file_if_unused(vm_file_path, project_path, db)
 
 
 def get_environments_ulids(project_path: Path = None) -> list[str]:

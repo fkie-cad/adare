@@ -283,13 +283,35 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         mount_shared_folder = r'net use Z: \\vboxsvr\adare; net use Z: /delete'
         await vm.run_command(mount_shared_folder, stop_event=stop_event)
         # TODO: need to manually remount here - unclear why but it just fixes hours of trying to get it to work?! Windows I love you <3
-        install_command = r'cd \\vboxsvr\adare\adarevm; poetry install'
-        run_command = r'cd \\vboxsvr\adare\adarevm; poetry run adarevm'
+
+        # Check if Miniforge is installed, otherwise fall back to Poetry
+        check_miniforge = r'if (Test-Path "$env:USERPROFILE\.miniforge3") { exit 0 } else { exit 1 }'
+        miniforge_result = await vm.run_command(check_miniforge, stop_event=stop_event)
+
+        if miniforge_result.returncode == 0:
+            # Use Miniforge with pip install
+            install_command = r'cd \\vboxsvr\adare\adarelib; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
+            run_command = r'cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare adarevm'
+        else:
+            # Fall back to Poetry
+            install_command = r'cd \\vboxsvr\adare\adarevm; poetry install'
+            run_command = r'cd \\vboxsvr\adare\adarevm; poetry run adarevm'
     else:
         set_path_command = "grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc && source ~/.bashrc"
         set_path_command_experiment_tools = "grep -qxF 'export PATH=$PATH:/adare/experiment/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/experiment/shared/tools' >> ~/.bashrc && source ~/.bashrc"
-        install_command = 'cd /adare/app/adarevm && poetry install'
-        run_command = 'cd /adare/app/adarevm && poetry run adarevm /adare/run/logs/adarevm.log'
+
+        # Check if Miniforge is installed, otherwise fall back to Poetry
+        check_miniforge = 'test -d /home/adare/.miniforge3 && echo "exists" || echo "not_found"'
+        miniforge_result = await vm.run_command(check_miniforge, stop_event=stop_event)
+
+        if 'exists' in miniforge_result.stdout:
+            # Use Miniforge with pip install
+            install_command = 'cd /adare/app/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install .'
+            run_command = 'cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare adarevm /adare/run/logs/adarevm.log'
+        else:
+            # Fall back to Poetry
+            install_command = 'cd /adare/app/adarevm && poetry install'
+            run_command = 'cd /adare/app/adarevm && poetry run adarevm /adare/run/logs/adarevm.log'
 
     await vm.run_command(set_path_command, stop_event=stop_event)
     await vm.run_command(set_path_command_experiment_tools, stop_event=stop_event)
@@ -914,6 +936,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
+                input("Press Enter to continue to connect websocket...")
                 await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
                 await step_runner.run_async_step(step_execute_installations, experiment_run_context)
 

@@ -77,6 +77,10 @@ Linux Setup
 Base Configuration (all environments)
 -------------------------------------
 
+Needs to be updated with new conda install method!
+wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+
+
 - Create a user account with:
 
   - **Username:** ``adare``
@@ -85,6 +89,10 @@ Base Configuration (all environments)
 - Enable **autologin** so the VM boots directly into the ``adare`` user's desktop.
 
   - **Important:** autologin must start an **X11 session** (not Wayland).
+
+- Enable passwordless sudo for the ``adare`` user by adding the following line to the sudoers file at the end (edit with ``sudo visudo``):
+
+  ``adare ALL=(ALL) NOPASSWD:ALL``
 
 - Install:
 

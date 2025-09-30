@@ -111,7 +111,7 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
         log.info(f"✅ Skipping file copy operation - using existing VM")
 
         # Check if existing VM has proper snapshot configuration
-        if not existing_vm.use_snapshots or not existing_vm.base_snapshot_name:
+        if not existing_vm.use_snapshots:
             log.warning(f"⚠️  Existing VM '{existing_vm.name}' has no snapshot configuration!")
             log.warning(f"⚠️  This VM may be in an unknown state from previous experiments.")
             log.warning(f"⚠️  Creating a NEW VM entry to ensure clean state.")

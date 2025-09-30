@@ -12,7 +12,7 @@ from typing import Optional, List
 from pathlib import Path
 
 from adare.database.models.global_models import VmInstance
-from adare.backend.vm.port_manager import allocate_websocket_port
+from adare.backend.vm.port_manager import allocate_websocket_port, reserve_port_atomically
 from adare.backend.vm.exceptions import VMError
 from adarelib.constants import VMStatus
 import ulid

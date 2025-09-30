@@ -40,7 +40,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] more advanced wait_until logic -> use image diffs to identify changed areas?! Only search in changed ares?! -> analyze if this works or is too complex?!
 - [ ] add option --custom-testfunction PATH_TO_DIR; which is then used instead of the existing one (even if same name) -> not copied only used; this will help developing testfunctions!
 - [ ] make adarevm installable via setuptools to allow for older python versions to also allow for older distros as Ubuntu 18.04, 16.04, ... ...
-- [ ] visual tests
 
 ---
 
@@ -83,8 +82,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
 - [ ] commands can be lists and this gives some weird results! recognize on parsing and give error already on loading if possible
 - [ ] multiple project shared directory and vm?! should not happen -> clear separation for multiple projects not happening also not in testfunction sets -> maybe database per project?! 
-- [ ] even if vm does not exist the env is added to envs with "no vm"
-- [ ] if dir exists exp load is weird and first deletes the directory but tells the directrory does already exist so load does not work? and then we can run it again it 
 
 ---
 
@@ -95,3 +92,4 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Test if auto_pull_on_test_failure works!
 - [ ] Test how settings idle work
 - [ ] Test that json output works fine for all commands 
+- [ ] Visual tests

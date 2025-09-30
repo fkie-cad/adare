@@ -133,44 +133,44 @@ async def mount_shared_directories_in_test_vm(context):
 async def test_vm_response(context):
     """Test basic VM responsiveness."""
     test_result = await context.vm.run_command("true", stop_event=context.user_interrupt_event)
-    if test_result == 0:
+    if test_result.returncode == 0:
         log.info("CLAUDE: ✅ VM is responsive to commands")
         return True
     else:
-        log.warning(f"CLAUDE: ❌ VM not responding to commands. Exit code: {test_result}")
+        log.warning(f"CLAUDE: ❌ VM not responding to commands. Exit code: {test_result.returncode}")
         return False
 
 
 async def test_shared_folders(context):
     """Test shared folder accessibility."""
     ls_result = await context.vm.run_command("test -d /adare/app", stop_event=context.user_interrupt_event)
-    if ls_result == 0:
+    if ls_result.returncode == 0:
         log.info("CLAUDE: ✅ Shared folders are accessible")
         return True
     else:
-        log.warning(f"CLAUDE: ❌ Shared folders not accessible. Exit code: {ls_result}")
+        log.warning(f"CLAUDE: ❌ Shared folders not accessible. Exit code: {ls_result.returncode}")
         return False
 
 
 async def test_python_availability(context):
     """Test Python availability in VM."""
     python_result = await context.vm.run_command("python3 --version", stop_event=context.user_interrupt_event)
-    if python_result == 0:
+    if python_result.returncode == 0:
         log.info("CLAUDE: ✅ Python is available")
         return True
     else:
-        log.warning(f"CLAUDE: ❌ Python not available. Exit code: {python_result}")
+        log.warning(f"CLAUDE: ❌ Python not available. Exit code: {python_result.returncode}")
         return False
 
 
 async def test_poetry_availability(context):
     """Test Poetry availability in VM."""
     poetry_result = await context.vm.run_command("poetry --version", stop_event=context.user_interrupt_event)
-    if poetry_result == 0:
+    if poetry_result.returncode == 0:
         log.info("CLAUDE: ✅ Poetry is available")
         return True
     else:
-        log.warning(f"CLAUDE: ❌ Poetry not available. Exit code: {poetry_result}")
+        log.warning(f"CLAUDE: ❌ Poetry not available. Exit code: {poetry_result.returncode}")
         return False
 
 
@@ -179,17 +179,17 @@ async def test_adarevm_server_start(context):
     try:
         # Start adarevm server in background
         start_command = f"cd /adare/app && python3 -m poetry run python -m adarevm.server --port {context.config.websocket_port} &"
-        
+
         start_result = await context.vm.run_command(start_command, stop_event=context.user_interrupt_event)
-        
-        if start_result == 0:
+
+        if start_result.returncode == 0:
             log.info("CLAUDE: ✅ AdareVM server started successfully")
             # Give server time to initialize
             import asyncio
             await asyncio.sleep(3.0)
             return True
         else:
-            log.warning(f"CLAUDE: ❌ Failed to start adarevm server. Exit code: {start_result}")
+            log.warning(f"CLAUDE: ❌ Failed to start adarevm server. Exit code: {start_result.returncode}")
             return False
             
     except Exception as e:
