@@ -20,7 +20,7 @@ class InvalidPathError(LoggedException):
     pass
 
 
-def _copy_external_experiment(external_path: Path, experiments_dir: Path) -> str:
+def _copy_external_experiment(external_path: Path, experiments_dir: Path) -> tuple[str, bool]:
     """
     Copy external experiment directory to project experiments directory.
 
@@ -29,20 +29,20 @@ def _copy_external_experiment(external_path: Path, experiments_dir: Path) -> str
         experiments_dir: Project experiments directory
 
     Returns:
-        Experiment name (directory name)
+        Tuple of (experiment_name, was_copied) where:
+        - experiment_name: Name of the experiment (directory name)
+        - was_copied: True if directory was copied, False if it already existed
 
     Raises:
-        InvalidPathError: If target already exists or copy fails
+        InvalidPathError: If copy fails
     """
     experiment_name = external_path.name
     target_path = experiments_dir / experiment_name
 
-    # Check if target already exists - never overwrite
+    # Check if target already exists - return name without copying
     if target_path.exists():
-        raise InvalidPathError(
-            log,
-            f'Experiment "{experiment_name}" already exists in experiments directory. Choose a different name or remove the existing experiment first.'
-        )
+        log.info(f'CLAUDE: Experiment directory "{experiment_name}" already exists, using existing directory')
+        return experiment_name, False
 
     try:
         # Ensure experiments directory exists
@@ -52,7 +52,7 @@ def _copy_external_experiment(external_path: Path, experiments_dir: Path) -> str
         shutil.copytree(external_path, target_path)
         log.info(f'CLAUDE: Copied external experiment from {external_path} to {target_path}')
 
-        return experiment_name
+        return experiment_name, True
 
     except OSError as e:
         # Clean up on failure
@@ -155,7 +155,7 @@ def _resolve_relative_path(relative_path: str, project_dir: Path, resource_type:
                 # Path is outside resource directory - handle external experiments
                 if resource_type == 'experiments':
                     if resolved_path.exists() and resolved_path.is_dir():
-                        name = _copy_external_experiment(resolved_path, resource_dir)
+                        name, _ = _copy_external_experiment(resolved_path, resource_dir)
                     else:
                         # Provide more specific error for experiments
                         if not resolved_path.exists():

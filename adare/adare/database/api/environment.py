@@ -28,7 +28,8 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         if os_info:
             return os_info, False
         os_info = OsInfo(**os_info_dict)
-        self._add_commit(os_info)
+        self._session.add(os_info)
+        self._session.commit()
         return os_info, True
 
     def get_environments_by_path(self, path: Path) -> list[Environment]:
@@ -115,7 +116,8 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         return environment
 
     def delete_environment(self, environment: Environment):
-        self._delete_commit(environment)
+        self._session.delete(environment)
+        self._session.commit()
         log.info(f"Environment with hash '{environment.sha256hash}' deleted from database")
 
     def get_environments(self, project_path: Path = None) -> list[Environment]:

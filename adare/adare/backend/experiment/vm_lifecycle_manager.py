@@ -318,12 +318,22 @@ class VMLifecycleManager:
 
         # Setup shared folders - remove all existing and add fresh ones
         if not context.stop_event.is_set():
+            log.info("CLAUDE: Setting up shared folders for VM")
+
             # Remove all existing shared folders to prevent conflicts
+            log.debug("CLAUDE: Removing all existing shared folders to prevent conflicts")
             await context.vm.remove_all_shared_folders(stop_event=context.user_interrupt_event)
-            
+
             # Add the new shared folders for this experiment
+            log.info(f"CLAUDE: Adding {len(context.config.shared_directories)} shared folders to VirtualBox config")
             for name, paths in context.config.shared_directories.items():
-                await context.vm.add_shared_folder(name, host_path=paths['host'], stop_event=context.user_interrupt_event)
+                log.debug(f"CLAUDE: Adding shared folder '{name}': host={paths['host']} -> vm={paths['vm']}")
+                return_code = await context.vm.add_shared_folder(name, host_path=paths['host'], stop_event=context.user_interrupt_event)
+
+                if return_code != 0:
+                    raise LoggedException(log, f"CLAUDE: Failed to add shared folder '{name}' to VirtualBox (return code: {return_code})")
+
+            log.info("CLAUDE: ✅ All shared folders added to VirtualBox successfully")
 
         # Update experiment run with VM-specific data
         if not context.stop_event.is_set():
@@ -382,9 +392,25 @@ class VMLifecycleManager:
     async def mount_shared_directories(self, context: ExperimentRunCtx):
         """Mount all configured shared directories in the VM."""
         with StageCtxManager(VMMountSharedDirectoriesStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+            # Verify all shared folders exist in VirtualBox config before mounting
+            log.info("CLAUDE: Verifying shared folders exist in VirtualBox config before mounting")
+            existing_folders = await context.vm.list_shared_folders(stop_event=context.user_interrupt_event, silent=True)
+            log.debug(f"CLAUDE: Found {len(existing_folders)} shared folders in VirtualBox config: {list(existing_folders.keys())}")
+
             folders = {
                 name: paths['vm'] for name, paths in context.config.shared_directories.items()
             }
+
+            # Check that all required folders exist
+            missing_folders = [name for name in folders.keys() if name not in existing_folders]
+            if missing_folders:
+                raise LoggedException(
+                    log,
+                    f"CLAUDE: Cannot mount shared folders - the following folders are not configured in VirtualBox: {missing_folders}. "
+                    f"Expected folders: {list(folders.keys())}, Found: {list(existing_folders.keys())}"
+                )
+
+            log.info(f"CLAUDE: ✅ All {len(folders)} required shared folders exist in VirtualBox, proceeding with mount")
             await context.vm.mount_multiple_shared_folders(
                 folders=folders,
                 stop_event=context.user_interrupt_event

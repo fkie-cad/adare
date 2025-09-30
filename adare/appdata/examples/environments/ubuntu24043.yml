@@ -1,4 +1,3 @@
-name: ubuntu24043
 vm: "/media/miq/FKIE/AdareVMs/Adare-Ubuntu24043.ova"
 os:
   os: "Ubuntu"

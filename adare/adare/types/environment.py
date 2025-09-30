@@ -41,19 +41,19 @@ class OsInfo:
 class EnvironmentMetadata:
     """
     Consolidated class to store the configuration of an environment.
-    
+
     Supports both modern VM-based environments (with OVA files) and legacy Vagrant-based environments.
     """
     vm: str
-
-    name: Optional[str]
     os: OsInfo
+
+    name: Optional[str] = None
     postsetupinstallations: list[PostsetupInstallations] = attrs.Factory(list)
     tags: list[str] = attrs.Factory(list)
     description: str = attrs.Factory(str)
-    
+
     vm_type: Literal["auto", "path", "url"] = "auto"
-    
+
     # Legacy Vagrant-based environment fields (for backward compatibility)
     vagrantbox: Optional[str] = None
     

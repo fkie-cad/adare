@@ -156,12 +156,15 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin):
         cwd: Optional[str] = None,
         win_noprofile: bool = True,
         use_cmd: bool = False
-    ) -> int:
+    ):
         """Run a command inside the VM guest."""
+        from collections import namedtuple
+        CommandResult = namedtuple('CommandResult', ['returncode', 'stdout', 'stderr'])
+
         async def _run_command_async():
             try:
                 log.info(f"Running command in VM '{self.vm_name}': {command}")
-                
+
                 args = self._build_guest_command_args(command, background, cwd, win_noprofile, use_cmd)
                 return_value, stdout, stderr = await self._execute_streaming_command_async(
                     args,
@@ -169,7 +172,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin):
                     silent=silent,
                     operation_name=f"guest command: {command}"
                 )
-                
+
                 if background and return_value == 0:
                     # For background commands, try to extract PID from stdout
                     try:
@@ -178,12 +181,12 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin):
                         log.info(f"Background command started with PID {pid}")
                     except (ValueError, IndexError):
                         log.debug(f"Could not extract PID from background command output: {stdout}")
-                
-                return return_value
+
+                return CommandResult(returncode=return_value, stdout=stdout, stderr=stderr)
             except Exception as e:
                 log.error(f"Error running command in VM '{self.vm_name}': {e}")
-                return 1
-        
+                return CommandResult(returncode=1, stdout='', stderr=str(e))
+
         return await self.manager.run_async(_run_command_async)
 
     def queue_command(self, command: str, description: str = None):
@@ -224,10 +227,10 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin):
                     win_noprofile=win_noprofile,
                     use_cmd='net use' in command or 'mklink' in command
                 )
-                
-                if return_value != 0:
+
+                if return_value.returncode != 0:
                     log.error(f"Command failed in VM '{self.vm_name}': {description}")
-                    total_return_value = return_value
+                    total_return_value = return_value.returncode
                     break
             
             # Clear the queue after execution

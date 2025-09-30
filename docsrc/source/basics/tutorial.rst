@@ -66,7 +66,6 @@ Environments define the virtual machines where experiments run. Create an enviro
 
 .. code-block:: yaml
 
-   name: ubuntu24043
    vm: "/path/to/your/ubuntu-vm.ova"  # Update this path to your VM file
    os:
      os: "Ubuntu"

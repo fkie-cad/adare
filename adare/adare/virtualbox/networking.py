@@ -1,6 +1,7 @@
 """
 VirtualBox VM networking operations mixin.
 """
+import asyncio
 import logging
 from pathlib import Path
 from typing import Dict, Optional
@@ -237,8 +238,9 @@ class NetworkingMixin:
                 args.append("--readonly")
             
             try:
-                log.info(f"Adding shared folder '{name}' (host: {host_path}) to VM '{self.vm_name}'.")
-                return_value, _, _ = await self._execute_streaming_command_async(
+                log.info(f"CLAUDE: Adding shared folder '{name}' (host: {host_path}) to VM '{self.vm_name}'")
+                log.debug(f"CLAUDE: VBoxManage command: {' '.join(args)}")
+                return_value, stdout, stderr = await self._execute_streaming_command_async(
                     args,
                     log_file=log_file,
                     stop_event=stop_event,
@@ -246,15 +248,30 @@ class NetworkingMixin:
                     ctx_manager=ctx_manager,
                     operation_name="shared folder addition"
                 )
-                
+
                 if return_value == 0:
-                    log.info(f"Shared folder '{name}' added to VM '{self.vm_name}'.")
+                    log.info(f"CLAUDE: Shared folder '{name}' added to VM '{self.vm_name}' successfully")
+
+                    # Verify the shared folder was actually added
+                    log.debug(f"CLAUDE: Verifying shared folder '{name}' was added to VirtualBox config")
+                    existing_folders = await self.list_shared_folders(ctx_manager, stop_event, log_file, silent=True)
+                    if name in existing_folders:
+                        log.info(f"CLAUDE: ✅ Verified shared folder '{name}' exists in VirtualBox config")
+                    else:
+                        log.error(f"CLAUDE: ❌ Shared folder '{name}' not found in VirtualBox config after addition!")
+                        return 1
                 else:
-                    log.error(f"Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
-                
+                    log.error(f"CLAUDE: Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
+                    if stdout:
+                        log.error(f"CLAUDE: stdout: {stdout}")
+                    if stderr:
+                        log.error(f"CLAUDE: stderr: {stderr}")
+
                 return return_value
             except Exception as e:
-                log.error(f"Error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
+                log.error(f"CLAUDE: Error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
+                import traceback
+                log.debug(f"CLAUDE: Traceback: {traceback.format_exc()}")
                 return 1
         
         return await self.manager.run_async(_add_shared_folder_async)
@@ -331,8 +348,9 @@ class NetworkingMixin:
             })
             
             # Mount with proper uid/gid for adare user (1000:1000)
+            # Use /sbin/mount.vboxsf directly for better stability
             commands.append({
-                'command': f'sudo mount -t vboxsf -o uid=1000,gid=1000,dmode=775,fmode=664 {name} {unix_mountpoint}',
+                'command': f'sudo /sbin/mount.vboxsf -o uid=1000,gid=1000,dmode=775,fmode=664 {name} {unix_mountpoint}',
                 'description': f"Mount shared folder {name} with adare user permissions",
                 'ignore_errors': False
             })
@@ -384,6 +402,60 @@ class NetworkingMixin:
                 return 1
         
         return await self.manager.run_async(_mount_shared_folder_async)
+
+    async def _execute_linux_mount_with_retry(self, mount_command: str, description: str, stop_event=None, max_retries: int = 2) -> bool:
+        """
+        Execute a Linux mount command with retry logic.
+
+        Args:
+            mount_command: The mount command to execute
+            description: Description of what's being mounted
+            stop_event: Event to check for cancellation
+            max_retries: Maximum number of retries (default: 2, so 3 total attempts)
+
+        Returns:
+            True if mount succeeded, False if all retries exhausted
+        """
+        retry_delays = [1, 3]  # Delays in seconds: 1s after first failure, 3s after second
+
+        for attempt in range(max_retries + 1):  # +1 for initial attempt
+            if stop_event and stop_event.is_set():
+                log.info("CLAUDE: Mount operation cancelled by stop event")
+                return False
+
+            attempt_label = f"attempt {attempt + 1}/{max_retries + 1}"
+            if attempt == 0:
+                log.info(f"CLAUDE: Executing mount command: {description}")
+            else:
+                log.info(f"CLAUDE: Retrying mount command ({attempt_label}): {description}")
+
+            # Execute the mount command
+            args = self._build_guest_command_args(mount_command)
+            return_value, stdout, stderr = await self._execute_streaming_command_async(
+                args,
+                stop_event=stop_event,
+                silent=False,
+                operation_name=f"mount {description} ({attempt_label})"
+            )
+
+            if return_value == 0:
+                log.info(f"CLAUDE: ✅ Mount succeeded on {attempt_label}: {description}")
+                return True
+            else:
+                # Mount failed
+                log.warning(f"CLAUDE: ❌ Mount failed on {attempt_label}: {description} (return code: {return_value})")
+                if stderr:
+                    log.debug(f"CLAUDE: Mount error output: {stderr.strip()}")
+
+                # If this wasn't the last attempt, wait before retrying
+                if attempt < max_retries:
+                    delay = retry_delays[attempt]
+                    log.info(f"CLAUDE: Waiting {delay}s before retry...")
+                    await asyncio.sleep(delay)
+
+        # All retries exhausted
+        log.error(f"CLAUDE: ❌ Mount failed after {max_retries + 1} attempts: {description}")
+        return False
 
     async def list_shared_folders(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False) -> Dict[str, SharedFolderConfig]:
         """List all shared folders for the VM."""
@@ -541,32 +613,78 @@ class NetworkingMixin:
             self.queue_command(cmd_info['command'], cmd_info['description'])
 
     async def mount_multiple_shared_folders(self, folders: dict, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
-        """Mount multiple shared folders using the command queue for efficiency."""
-        # Clear any existing commands
+        """Mount multiple shared folders with retry logic for Linux mounts."""
+        is_linux = 'linux' in self.guest_os.lower()
+
+        # Phase 1: Setup (cleanup and directory creation) - no retries needed
         self.clear_command_queue()
-        
-        # Clean slate approach: remove /adare directory to avoid any mount conflicts
-        if 'linux' in self.guest_os.lower():
+
+        if is_linux:
+            # Clean slate approach: remove /adare directory to avoid any mount conflicts
             self.queue_command('sudo rm -rf /adare 2>/dev/null || true', "Remove /adare directory to clean any stale mounts")
-        
-        # Setup parent directories first
-        if 'linux' in self.guest_os.lower():
+
             # Create parent directories and set ownership
             processed_parents = set()
             for name, mountpoint in folders.items():
                 parent_dir = mountpoint.parent
                 parent_str = str(parent_dir)
-                
+
                 if parent_str not in processed_parents:
                     mkdir_command = f'sudo mkdir -p {parent_dir}'
                     chown_command = f'sudo chown -R adare:adare {parent_dir}'
                     self.queue_command(mkdir_command, f"Create parent directory {parent_dir}")
                     self.queue_command(chown_command, f"Set ownership of {parent_dir} to adare user")
                     processed_parents.add(parent_str)
-        
-        # Queue all mount commands
-        for name, mountpoint in folders.items():
-            self.queue_mount_shared_folder(name, mountpoint)
-        
-        # Execute all queued commands
-        return await self.execute_queued_commands(ctx_manager, stop_event, log_file, silent, win_noprofile=True)
+
+            # Execute setup commands
+            log.info("CLAUDE: Executing directory setup commands")
+            setup_result = await self.execute_queued_commands(ctx_manager, stop_event, log_file, silent, win_noprofile=True)
+            if setup_result != 0:
+                log.error(f"CLAUDE: Directory setup failed with return code {setup_result}")
+                return setup_result
+
+        # Phase 2: Mount commands - with retry logic for Linux
+        if is_linux:
+            # Execute mount commands individually with retry logic
+            log.info(f"CLAUDE: Mounting {len(folders)} shared folders with retry logic")
+            for name, mountpoint in folders.items():
+                # Create mount point
+                mkdir_cmd = f'sudo mkdir -p {mountpoint}'
+                umount_cmd = f'sudo umount {mountpoint} 2>/dev/null || true'
+                # Use /sbin/mount.vboxsf directly for better stability
+                mount_cmd = f'sudo /sbin/mount.vboxsf -o uid=1000,gid=1000,dmode=775,fmode=664 {name} {mountpoint}'
+
+                # Execute mkdir and umount without retry
+                log.debug(f"CLAUDE: Creating mount point {mountpoint}")
+                args = self._build_guest_command_args(mkdir_cmd)
+                await self._execute_streaming_command_async(args, stop_event=stop_event, silent=True)
+
+                log.debug(f"CLAUDE: Unmounting any existing mount at {mountpoint}")
+                args = self._build_guest_command_args(umount_cmd)
+                await self._execute_streaming_command_async(args, stop_event=stop_event, silent=True)
+
+                # Execute mount with retry logic
+                mount_success = await self._execute_linux_mount_with_retry(
+                    mount_cmd,
+                    f"shared folder {name} to {mountpoint}",
+                    stop_event=stop_event,
+                    max_retries=2
+                )
+
+                if not mount_success:
+                    # Mount failed after retries - raise exception to stop execution
+                    from adare.exceptions import LoggedException
+                    raise LoggedException(
+                        log,
+                        f"CLAUDE: Failed to mount shared folder '{name}' after 3 attempts (initial + 2 retries). "
+                        f"This likely indicates VirtualBox shared folder is not properly configured or Guest Additions issue."
+                    )
+
+            log.info("CLAUDE: ✅ All shared folders mounted successfully")
+            return 0
+        else:
+            # Windows: use existing queue-based approach (no retry needed for Windows)
+            for name, mountpoint in folders.items():
+                self.queue_mount_shared_folder(name, mountpoint)
+
+            return await self.execute_queued_commands(ctx_manager, stop_event, log_file, silent, win_noprofile=True)
