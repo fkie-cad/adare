@@ -144,7 +144,7 @@ class StructuredDataApi(DatabaseApi):
 
         # Build query with eager loading to prevent N+1 queries
         query_options = [
-            joinedload(TestFunction.file).selectinload(TestFunctionFile.projects)
+            joinedload(TestFunction.file)
         ]
         if include_parameters:
             query_options.append(selectinload(TestFunction.parameters))

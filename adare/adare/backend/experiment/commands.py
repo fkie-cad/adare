@@ -173,6 +173,38 @@ def experiment_example(project_path: Path, experiment: str):
 
 
 def __experiment_update(project_path: Path, experiment_ulid, experiment_name, experiment_directory, force):
+    from adare.database.api.experiment import ExperimentApi
+
+    # Detect environment changes before updating
+    env_changes_detected = False
+    added_envs = []
+    removed_envs = []
+
+    try:
+        with ExperimentApi(project_path) as api:
+            # Get current environments from database
+            old_env_names = api.get_experiment_environment_names(experiment_ulid)
+
+            # Get new environments from metadata.yml
+            new_metadata = experiment_directory.load_metadata()
+            new_env_names = new_metadata.environments
+
+            # Calculate diff
+            old_set = set(old_env_names)
+            new_set = set(new_env_names)
+            added_envs = list(new_set - old_set)
+            removed_envs = list(old_set - new_set)
+
+            if added_envs or removed_envs:
+                env_changes_detected = True
+                log.info(f'Detected environment changes for experiment {experiment_name}')
+                if added_envs:
+                    log.info(f'  + Added: {", ".join(added_envs)}')
+                if removed_envs:
+                    log.info(f'  - Removed: {", ".join(removed_envs)}')
+    except Exception as e:
+        log.warning(f'Failed to detect environment changes: {e}')
+
     if not force and not experiment_database.check_for_experiment_change(project_path, experiment_ulid, experiment_directory.sha256):
         raise ExperimentNotChanged(log, f'experiment [i]{experiment_ulid}[/i] has not changed')
     log.info(f'experiment {experiment_ulid} has changed')
@@ -188,7 +220,18 @@ def __experiment_update(project_path: Path, experiment_ulid, experiment_name, ex
         experiment_directory=experiment_directory
     )
     log.info(f'experiment {experiment_ulid} created')
-    print(f'Experiment {experiment_name} (ulid: {ulid}) was loaded successfully')
+
+    # Print user-friendly message about environment changes
+    if env_changes_detected:
+        print(f'Experiment {experiment_name} (ulid: {ulid}) was loaded successfully')
+        if added_envs or removed_envs:
+            print(f'  Environment changes detected:')
+            if added_envs:
+                print(f'    + Added: {", ".join(added_envs)}')
+            if removed_envs:
+                print(f'    - Removed: {", ".join(removed_envs)}')
+    else:
+        print(f'Experiment {experiment_name} (ulid: {ulid}) was loaded successfully')
 
 
 def __validate_testset_compatibility(experiment_directory: ExperimentDirectory):

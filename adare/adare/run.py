@@ -560,11 +560,10 @@ def create(name, project):
 @click.argument('name')
 @click.option('--project', '-p', help='Name of the project')
 def remove(name, project):
-    """Remove a testfunction.
+    """Remove a testfunction file by name.
 
-    NAME can be:
-    - Simple name: my_test
-    - Relative path: testfunctions/my_test
+    NAME is the testfunction file name (e.g., xml, json, csv).
+    This will remove the entire testfunction file and all functions within it.
     """
     args = SimpleNamespace(name=name, project=project)
     exec_with_error_printing(exec_remove_testfunction, args)
