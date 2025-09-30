@@ -147,22 +147,22 @@ def environment_load(environment: str, force: bool = False):
             )
 
     # CLAUDE: Calculate environment file hash with progress bar for better UX
-    log.info(f'🔍 Calculating environment file hash...')
+    log.info(f'Calculating environment file hash...')
     environment_file_sha256 = file_sha256_with_progress(
         environment_file,
         description=f"Hashing environment file {environment_file.name}",
         silent=False
     )
-    log.info(f'🔑 Environment file hash: {environment_file_sha256}')
+    log.info(f'Environment file hash: {environment_file_sha256}')
 
     # CLAUDE: Early check - if environment already exists by hash, skip VM processing entirely
     existing_environment_id = environment_database.get_environment_by_hash(environment_file_sha256, trigger_exception=False)
     if existing_environment_id:
         if not force:
             elapsed_time = time.time() - start_time
-            log.info(f'🚀 Environment with hash {environment_file_sha256} already exists in database - skipping all VM processing!')
-            log.info(f'⚡ Optimization: No file copying or VM processing needed!')
-            log.info(f'⏱️  Total time: {elapsed_time:.1f} seconds (vs potentially minutes for full VM processing)')
+            log.info(f'Environment with hash {environment_file_sha256} already exists in database - skipping all VM processing!')
+            log.info(f'Optimization: No file copying or VM processing needed!')
+            log.info(f'Total time: {elapsed_time:.1f} seconds (vs potentially minutes for full VM processing)')
             return existing_environment_id
         else:
             log.info(f'Environment with hash {environment_file_sha256} exists, but force=True, so updating')

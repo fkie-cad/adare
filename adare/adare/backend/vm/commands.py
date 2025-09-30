@@ -100,28 +100,28 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
     vm_manager = VMFileManager()
 
     # Calculate hash FIRST (heavy operation done during environment load)
-    log.info(f"📊 Calculating VM file hash during environment load...")
+    log.info(f"Calculating VM file hash during environment load...")
     file_hash = vm_manager.calculate_file_hash(vm_path, silent=False)
-    log.info(f"🔑 VM file hash: {file_hash}")
+    log.info(f"VM file hash: {file_hash}")
 
     # Check if VM already exists by hash BEFORE copying
     existing_vm = vm_database.get_vm_by_hash(file_hash)
     if existing_vm:
-        log.info(f"✅ VM with hash {file_hash} already exists: {existing_vm.name}")
-        log.info(f"✅ Skipping file copy operation - using existing VM")
+        log.info(f"VM with hash {file_hash} already exists: {existing_vm.name}")
+        log.info(f"Skipping file copy operation - using existing VM")
 
         # Check if existing VM has proper snapshot configuration
         if not existing_vm.use_snapshots:
-            log.warning(f"⚠️  Existing VM '{existing_vm.name}' has no snapshot configuration!")
-            log.warning(f"⚠️  This VM may be in an unknown state from previous experiments.")
-            log.warning(f"⚠️  Creating a NEW VM entry to ensure clean state.")
-            log.warning(f"⚠️  You may have a RELICT VM '{existing_vm.name}' in VirtualBox that needs manual cleanup!")
-            log.warning(f"⚠️  Consider running: VBoxManage unregistervm '{existing_vm.name}' --delete")
+            log.warning(f"Existing VM '{existing_vm.name}' has no snapshot configuration!")
+            log.warning(f"This VM may be in an unknown state from previous experiments.")
+            log.warning(f"Creating a NEW VM entry to ensure clean state.")
+            log.warning(f"You may have a RELICT VM '{existing_vm.name}' in VirtualBox that needs manual cleanup!")
+            log.warning(f"Consider running: VBoxManage unregistervm '{existing_vm.name}' --delete")
 
             # Don't reuse - fall through to create new VM
         else:
             # VM has snapshot configuration - safe to reuse
-            log.info(f"✅ VM ready for reuse with existing snapshot configuration")
+            log.info(f"VM ready for reuse with existing snapshot configuration")
             return {'vm_id': existing_vm.id, 'was_existing': True}
 
     # VM doesn't exist or existing VM can't be reused - create new one with file operations
@@ -216,7 +216,7 @@ def list_vms() -> List[dict]:
 
 def ensure_vm_available_for_environment(vm_id: str, experiment_id: str = None) -> str:
     """
-    🚀 OPTIMIZED VM preparation using snapshots - Always 10-15x faster!
+    OPTIMIZED VM preparation using snapshots - Always 10-15x faster!
     
     This function ALWAYS uses the snapshot-based workflow for maximum performance.
     VM file operations already done during environment load!
@@ -407,7 +407,7 @@ def verify_and_cleanup_vm_instance_for_experiment(vm_instance_id: str, experimen
 
 async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environment_ulid: str = None, experiment_run_ulid: Optional[str] = None, preserve_experiment_snapshot: bool = False, interrupt_event: Optional[threading.Event] = None) -> str:
     """
-    🚀 OPTIMIZED VM preparation using instance management for concurrent experiments!
+    OPTIMIZED VM preparation using instance management for concurrent experiments!
 
     This function now uses the VM instance system to support multiple concurrent
     experiments with the same environment, including smart reuse and dynamic port allocation.
@@ -434,7 +434,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
                                                    create_base_snapshot_for_instance, restore_instance_to_base_snapshot)
     from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager
 
-    log.info(f"CLAUDE: 🚀 Starting OPTIMIZED VM instance preparation for experiment {experiment_id}")
+    log.info(f"CLAUDE: Starting OPTIMIZED VM instance preparation for experiment {experiment_id}")
     log.debug(f"CLAUDE: ensure_vm_ready_for_experiment called with vm_id={vm_id}, experiment_id={experiment_id}, experiment_run_ulid={experiment_run_ulid}")
     log.debug(f"CLAUDE: Performance tracking - function entry at {time.time():.3f}")
 
@@ -468,7 +468,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
             log.debug(f"CLAUDE: Allocating instance with temp_run_id={temp_run_id}")
             vm_instance = await allocate_vm_instance_for_experiment(vm_id, temp_run_id)
 
-        log.info(f"CLAUDE: ✅ Allocated VM instance: {vm_instance.instance_name} on port {vm_instance.websocket_port}")
+        log.info(f"CLAUDE: Allocated VM instance: {vm_instance.instance_name} on port {vm_instance.websocket_port}")
         log.debug(f"CLAUDE: VM instance details - ID={vm_instance.id}, status={vm_instance.status}, vbox_uuid={vm_instance.vbox_uuid}")
     except Exception as e:
         log.error(f"CLAUDE: Failed to allocate VM instance: {e}")
@@ -484,7 +484,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     # Check if this is a reused instance or new instance
     if vm_instance.vbox_uuid:
         # Reused instance - VM already exists in VirtualBox
-        log.info(f"♻️  Reusing existing VM instance: {vm_instance.instance_name}")
+        log.info(f"Reusing existing VM instance: {vm_instance.instance_name}")
 
         # Check if instance has a base snapshot, create if missing
         if not vm_instance.base_snapshot_name:
@@ -532,7 +532,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
 
     else:
         # New instance - need to import from source VM
-        log.info(f"🆕 Creating new VM instance: {vm_instance.instance_name}")
+        log.info(f"Creating new VM instance: {vm_instance.instance_name}")
 
         # Verify source VM integrity
         await verify_vm_integrity(vm_id, experiment_run_ulid, interrupt_event)
@@ -563,8 +563,8 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
             log.warning(f"Failed to create base snapshot for instance {vm_instance.instance_name}")
 
     total_time = time.time() - start_time
-    log.info(f"CLAUDE: 🎉 VM instance preparation completed in {total_time:.1f} seconds!")
-    log.info(f"CLAUDE: 📋 Instance: {vm_instance.instance_name}, Port: {vm_instance.websocket_port}")
+    log.info(f"CLAUDE: VM instance preparation completed in {total_time:.1f} seconds!")
+    log.info(f"CLAUDE: Instance: {vm_instance.instance_name}, Port: {vm_instance.websocket_port}")
     log.debug(f"CLAUDE: Performance tracking - function exit at {time.time():.3f}, total duration: {total_time:.3f}s")
 
     # Verify the instance exists before returning
@@ -716,7 +716,7 @@ def clear_all_vms(force: bool = False) -> dict:
             log.error(f"   - {error}")
     
     if results['deleted_count'] == 0 and results['failed_count'] == 0:
-        log.info("ℹNo VMs found to delete")
+        log.info("No VMs found to delete")
     
     return results
 
@@ -732,7 +732,7 @@ def clear_vms_by_environment(environment_ulid: str, force: bool = False) -> dict
     Returns:
         Dictionary with deletion results
     """
-    log.info(f"🗑️  Starting VM cleanup for environment: {environment_ulid}")
+    log.info(f"Starting VM cleanup for environment: {environment_ulid}")
     
     results = vm_database.delete_vms_by_environment(environment_ulid, force=force)
     
@@ -747,7 +747,7 @@ def clear_vms_by_environment(environment_ulid: str, force: bool = False) -> dict
             log.error(f"   - {error}")
     
     if results['deleted_count'] == 0 and results['failed_count'] == 0:
-        log.info(f"ℹNo VMs found for environment {environment_ulid}")
+        log.info(f"No VMs found for environment {environment_ulid}")
     
     return results
 
@@ -794,5 +794,4 @@ def get_vm_info(vm_id: str) -> dict:
         'use_snapshots': getattr(vm, 'use_snapshots', False),
         'snapshots': snapshot_info
     }
-
 
