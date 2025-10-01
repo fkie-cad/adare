@@ -10,13 +10,10 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ---
 
 ## 🚀 Planned Features
-- [ ] make test mode default and --reproducible or other flag for those that are fixed and be used later
-- [ ] add clone to clone already existing experiment  
+- [x] add clone to clone already existing experiment  
 - [ ] add datasets that are downloaded to an project and retrieved from an URL (e.g. hosted by us in minio instance)
 - [ ] add no_idle action to disable the default idle (e.g. when wanting to save a timestamp) -> or better only idle between gui actions
 - [ ] experiment run by glob (does not work as load does not work by glob)
-- [x] add a wait_until action that wait until a specific icon/text occurs? (also with timeout parameter/chedcking itnerval) -> how to design it in a way we not make more screenshots than be able to check it as checking takes some time?! -> test
-- [x] add settings (default true) that in case of an failed test pulls all files mentioned in the playbook
 - [ ] Add support for Wayland-based Linux systems  
   - [ ] Validate if `ydotool` is suitable and reliable -> if yes make sure to coply to AGPLv3 
     - [ ] it is suitable but we need to develop some python bindings; build as indepedent package to be usable later similar to pyautogui! -> or wait until pyautogui supports wayland via ydotool (existing pr since 20.09.2025)
@@ -39,7 +36,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] integrated log viewer with `adare run log adare ULID` or `adare run log adarevm` that we can view logs but also filter them!
 - [ ] more advanced wait_until logic -> use image diffs to identify changed areas?! Only search in changed ares?! -> analyze if this works or is too complex?!
 - [ ] add option --custom-testfunction PATH_TO_DIR; which is then used instead of the existing one (even if same name) -> not copied only used; this will help developing testfunctions!
-- [ ] make adarevm installable via setuptools to allow for older python versions to also allow for older distros as Ubuntu 18.04, 16.04, ... ...
 
 ---
 
@@ -80,8 +76,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: Flow console occasionally shows three red dots at the bottom → cause unknown  
 - [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
 - [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
-- [ ] commands can be lists and this gives some weird results! recognize on parsing and give error already on loading if possible
-- [ ] multiple project shared directory and vm?! should not happen -> clear separation for multiple projects not happening also not in testfunction sets -> maybe database per project?! 
 
 ---
 
@@ -92,4 +86,5 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Test if auto_pull_on_test_failure works!
 - [ ] Test how settings idle work
 - [ ] Test that json output works fine for all commands 
+- [ ] Test clone feature
 - [ ] Visual tests

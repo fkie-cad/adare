@@ -44,7 +44,7 @@ from adare.cli.environment import (
     exec_environment_load, exec_environment_create, exec_environment_delete
 )
 from adare.cli.experiment import (
-    exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example, exec_experiment_clean, exec_experiment_add_env, exec_experiment_remove_env
+    exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example, exec_experiment_clean, exec_experiment_add_env, exec_experiment_remove_env, exec_experiment_clone
 )
 from adare.cli.interactive import (
     exec_experiment_dev
@@ -536,6 +536,34 @@ def remove_env(experiment_pattern, environments, force, project):
         project=project
     )
     exec_with_error_printing(exec_experiment_remove_env, args)
+
+
+@experiment.command()
+@click.argument('source_experiment')
+@click.argument('target_experiment')
+@click.option('-e', '--environments', multiple=True, help='Override environments for the cloned experiment (can specify multiple)')
+@click.option('--project', '-p', help='Name of the project')
+def clone(source_experiment, target_experiment, environments, project):
+    """Clone an existing experiment to create a variation.
+
+    Creates a copy of an experiment, optionally with different environments.
+    Useful for creating variations of production experiments.
+
+    SOURCE_EXPERIMENT is the name of the experiment to clone from.
+    TARGET_EXPERIMENT is the name for the new cloned experiment.
+
+    Examples:
+    - adare experiment clone firefox_test firefox_test_v2
+    - adare experiment clone prod_exp dev_exp -e ubuntu22 -e debian12
+    - adare experiment clone test1 test1_variant --project myproject
+    """
+    args = SimpleNamespace(
+        source_experiment=source_experiment,
+        target_experiment=target_experiment,
+        environments=list(environments) if environments else None,
+        project=project
+    )
+    exec_with_error_printing(exec_experiment_clone, args)
 
 
 # ------------------------------

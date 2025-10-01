@@ -586,3 +586,34 @@ def exec_experiment_remove_env(arguments):
                 sys.exit(0)
     else:
         raise NoProjectFoundError(log, message='no project directory found')
+
+
+def exec_experiment_clone(arguments):
+    """Execute experiment clone command to create experiment variations."""
+    from adare.backend.experiment.commands import experiment_clone
+    from adare.exceptions import LoggedException, LoggedErrorException
+    import sys
+
+    if project_directory := determine_projectdirectory(arguments.project):
+        try:
+            source_experiment = resolve_experiment_path(arguments.source_experiment, project_directory)
+            target_experiment = resolve_experiment_path(arguments.target_experiment, project_directory)
+
+            environments = None
+            if hasattr(arguments, 'environments') and arguments.environments:
+                environments = [resolve_environment_path(env, project_directory) for env in arguments.environments]
+
+            experiment_clone(
+                project_directory,
+                source_experiment,
+                target_experiment,
+                environments=environments
+            )
+        except LoggedException as e:
+            e.print()
+            if isinstance(e, LoggedErrorException):
+                sys.exit(-1)
+            else:
+                sys.exit(0)
+    else:
+        raise NoProjectFoundError(log, message='no project directory found')

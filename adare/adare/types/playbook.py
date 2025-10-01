@@ -148,6 +148,15 @@ class CommandAction:
     timeout: Optional[float] = None
     shell: bool = False
 
+    def __attrs_post_init__(self):
+        """Validate that command is a string, not a list."""
+        if isinstance(self.command, list):
+            raise ValueError(
+                f"CommandAction.command must be a string, not a list. "
+                f"Found: {self.command}. "
+                f"Use 'command: \"your command here\"' instead of array notation."
+            )
+
 @attrs.define
 class ScreenshotAction:
     description: str = ''
