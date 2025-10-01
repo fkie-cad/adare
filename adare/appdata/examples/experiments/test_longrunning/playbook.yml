@@ -18,7 +18,7 @@ actions:
       duration: 180
   - command:
       name: "sleep 2"
-      description: "Sleep with shell=False"
-      command: ["sleep", "120"]
-      shell: false
+      description: "Sleep with shell=True (command must be string)"
+      command: "sleep 120"
+      shell: true
       timeout: 180
