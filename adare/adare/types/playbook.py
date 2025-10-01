@@ -261,8 +261,6 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
 
     yaml_path = Path(yaml_path)  # Ensure it's a Path object
 
-    log.info(f"CLAUDE: parse_playbook called with path='{yaml_path}'")
-
     # Use custom YAML loader to handle our custom tags
     from adarelib.testset.yaml.customloader import get_custom_loader
 
@@ -318,8 +316,14 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
 
     # Register strict structure hooks for all main classes to validate fields
     _register_strict_hooks(converter)
-    
-    return converter.structure(data, Playbook)
+
+    playbook = converter.structure(data, Playbook)
+
+    # Validate playbook (variable definitions, etc.)
+    from adare.types.playbook_validators import validate_playbook
+    validate_playbook(playbook)
+
+    return playbook
 
 def _structure_action(obj, converter):
     if 'click' in obj:
