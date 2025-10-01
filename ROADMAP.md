@@ -20,10 +20,10 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Replace `pyautogui.screenshot` as default screenshot in linux vms with `maim` for improved stability (`grim` for wayland)
 - [ ] Implement interactive experiment development tools  
   - [ ] Idea: Use **NiceGUI** for web-based interactive playbook and test creation (e.g., cropping images, extracting icons)  
-- [ ] Add playbook variable validation:  
-  - [ ] Prevent duplicate variable names  
-  - [ ] Ensure all variables are defined before use  
-  - [ ] Validate filter correctness  
+- [ ] Add playbook variable validation:
+  - [ ] Prevent duplicate variable names
+  - [x] Ensure all variables are defined before use
+  - [x] Validate filter correctness  
 - [ ] Enhance `adare vm test` with automatic platform and desktop environment detection  
 - [ ] Use standardized installation directory (via `platformdirs`) and migrate installer scripts to Python  
 - [ ] Implement condition/wait/retry logic in playbooks  
@@ -53,7 +53,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] Make errors more readable and actionable
   - [ ] Remove Claude: log messages
 - [ ] Improve the possible solutions on Exceptions to be correct and provide only working options!
-- [ ] in help we see for alias the command doubled? can we only see e.g. list (l) and remove (rm) or somehting similar? 
 
 ---
 
@@ -63,11 +62,10 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Refactor `detect_xsession` to use existing system commands with proper parameterization  
 - [ ] Consider lazy loading of modules at least for certain libraries -> improve speed
 - [ ] Think about the access pattern to both database. Can we simplify/improve this?
-- [ ] as a lot of database need the project directory find a way to not give it as parameter but instead retrieve it everytime of find a better clever mechanism to keep the code clean
 - [ ] we validate on experiment load against files and analyze it would be faster and better to validate against database
-- [ ] we should load playbook into database on load already not only on exeuction or? we then run from database and not file?!
-- [ ] remove all kind of icons from logging messages. ✅🆕
+- [ ] remove all kind of emojis/icons from logging messages. ✅🆕
 - [ ] in some terminal files we use directly database and do queries. Should we not provide this through an API that provides the data? What is better code quality?
+- [ ] add tests for modular code parts; make code more modular where required!
 
 ---
 
