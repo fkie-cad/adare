@@ -319,33 +319,303 @@ class PlaybookApi(ProjectDatabaseApi):
     
     def recover_playbook_yaml(self, experiment_id: str) -> str:
         """Recover the original playbook YAML from database.
-        
+
         Args:
             experiment_id: The experiment ID to recover the playbook for
-            
+
         Returns:
             Original YAML content as string
-            
+
         Raises:
             ValueError: If no playbook found for experiment
         """
         playbook = self.get_playbook_by_experiment_id(experiment_id)
         if not playbook:
             raise ValueError(f"No playbook found for experiment {experiment_id}")
-        
+
         if not playbook.original_yaml_content:
             raise ValueError(f"No original YAML content stored for experiment {experiment_id} (legacy data)")
-        
+
         return playbook.original_yaml_content
+
+    # ============================================================================
+    # DESERIALIZATION METHODS (Database models -> Python objects)
+    # ============================================================================
+
+    def _json_to_settings(self, settings_json: Dict[str, Any]):
+        """Convert settings JSON to Settings object."""
+        if not settings_json:
+            from adare.types.playbook import Settings
+            return Settings()
+
+        from adare.types.playbook import Settings
+        return Settings(
+            idle=settings_json.get('idle', 0.1),
+            timeout=settings_json.get('timeout'),
+            screenshot=settings_json.get('screenshot'),
+            continue_on_test_failure=settings_json.get('continue_on_test_failure', False),
+            auto_pull_on_test_failure=settings_json.get('auto_pull_on_test_failure', True),
+            collect_system_info=settings_json.get('collect_system_info', True),
+            forensic_logging=settings_json.get('forensic_logging', True)
+        )
+
+    def _json_to_target(self, target_json: Optional[Dict[str, Any]]):
+        """Convert target JSON to Target object."""
+        if not target_json:
+            return None
+
+        from adare.types.playbook import Target
+
+        # Reconstruct strategy if present
+        strategy = None
+        if 'strategy' in target_json and target_json['strategy']:
+            strategy = self._json_to_strategy(target_json['strategy'])
+
+        return Target(
+            image=target_json.get('image'),
+            text=target_json.get('text'),
+            position=target_json.get('position'),
+            strategy=strategy
+        )
+
+    def _json_to_strategy(self, strategy_json: Dict[str, Any]):
+        """Convert strategy JSON to strategy object."""
+        from adare.types.playbook import (
+            SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
+            TopLeftStrategy, TopRightStrategy, BottomLeftStrategy, BottomRightStrategy,
+            LargestStrategy, SmallestStrategy
+        )
+
+        # Strategy JSON format: {"StrategyClassName": {params...}}
+        strategy_class_name = list(strategy_json.keys())[0]
+        strategy_params = strategy_json[strategy_class_name]
+
+        strategy_map = {
+            'SweepStrategy': SweepStrategy,
+            'BestConfidenceStrategy': BestConfidenceStrategy,
+            'ClosestToStrategy': ClosestToStrategy,
+            'TopLeftStrategy': TopLeftStrategy,
+            'TopRightStrategy': TopRightStrategy,
+            'BottomLeftStrategy': BottomLeftStrategy,
+            'BottomRightStrategy': BottomRightStrategy,
+            'LargestStrategy': LargestStrategy,
+            'SmallestStrategy': SmallestStrategy
+        }
+
+        strategy_class = strategy_map.get(strategy_class_name)
+        if not strategy_class:
+            raise ValueError(f"Unknown strategy type: {strategy_class_name}")
+
+        return strategy_class(**strategy_params)
+
+    def _json_to_conditions(self, conditions_json: Optional[Dict[str, Any]]):
+        """Convert conditions JSON to list of condition objects."""
+        if not conditions_json or 'when' not in conditions_json:
+            return None
+
+        from adare.types.playbook import ExistsCondition, NotExistsCondition
+
+        conditions = []
+        for cond_json in conditions_json['when']:
+            cond_type = cond_json.get('type')
+
+            if cond_type == 'exists':
+                conditions.append(ExistsCondition(
+                    text=cond_json.get('text'),
+                    image=cond_json.get('image')
+                ))
+            elif cond_type == 'notexists':
+                conditions.append(NotExistsCondition(
+                    text=cond_json.get('text'),
+                    image=cond_json.get('image')
+                ))
+            else:
+                log.warning(f"Unknown condition type: {cond_type}")
+
+        return conditions if conditions else None
+
+    def _playbook_item_to_action(self, item: PlaybookItem) -> ActionType:
+        """Convert PlaybookItem database model to Action object."""
+        from adare.types.playbook import (
+            ClickAction, DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,
+            ActionTestAction, CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction,
+            PullAction, PauseAction, WaitUntilAction, WaitCondition, Target
+        )
+
+        # Common fields
+        description = item.description or ''
+        conditions = self._json_to_conditions(item.conditions)
+
+        # Action-specific reconstruction based on action_type
+        action_type = item.action_type
+        params = item.parameters or {}
+
+        if action_type == 'click':
+            return ClickAction(
+                target=self._json_to_target(item.target),
+                type=params.get('type', 'left'),
+                description=description
+            )
+
+        elif action_type == 'drag':
+            # Drag has src and dst targets in parameters
+            src_target = self._json_to_target(params.get('src'))
+            dst_target = self._json_to_target(params.get('dst'))
+            return DragAction(
+                src=src_target,
+                dst=dst_target,
+                description=description
+            )
+
+        elif action_type == 'keyboard':
+            return KeyboardAction(
+                key=params.get('key'),
+                text=params.get('text'),
+                combination=params.get('combination'),
+                when=conditions,
+                description=description
+            )
+
+        elif action_type == 'idle':
+            return IdleAction(
+                duration=params.get('duration', 0.0),
+                description=description
+            )
+
+        elif action_type == 'scroll':
+            return ScrollAction(
+                direction=params.get('direction', 'down'),
+                amount=params.get('amount', 1),
+                description=description
+            )
+
+        elif action_type == 'goto':
+            return GotoAction(
+                target=self._json_to_target(item.target),
+                description=description
+            )
+
+        elif action_type == 'actiontest':
+            return ActionTestAction(
+                name=params.get('name', ''),
+                description=description
+            )
+
+        elif action_type == 'command':
+            return CommandAction(
+                command=params.get('command', ''),
+                name=params.get('name'),
+                description=description,
+                tool=params.get('tool'),
+                cwd=params.get('cwd'),
+                env=params.get('env'),
+                timeout=params.get('timeout'),
+                shell=params.get('shell', False)
+            )
+
+        elif action_type == 'screenshot':
+            return ScreenshotAction(
+                description=description,
+                x=params.get('x'),
+                y=params.get('y'),
+                width=params.get('width'),
+                height=params.get('height')
+            )
+
+        elif action_type == 'savetimestamp':
+            return SaveTimestampAction(
+                variable=params.get('variable', ''),
+                description=description
+            )
+
+        elif action_type == 'pull':
+            return PullAction(
+                src=params.get('src', ''),
+                dst=params.get('dst'),
+                description=description
+            )
+
+        elif action_type == 'pause':
+            return PauseAction(
+                message=params.get('message'),
+                name=params.get('name'),
+                description=description
+            )
+
+        elif action_type == 'waituntil':
+            # Reconstruct WaitCondition recursively
+            condition_data = params.get('condition', {})
+            condition = self._json_to_wait_condition(condition_data)
+            return WaitUntilAction(
+                condition=condition,
+                timeout=params.get('timeout', 60.0),
+                check_interval=params.get('check_interval', 0.0),
+                initial_delay=params.get('initial_delay', 5.0),
+                description=description
+            )
+
+        elif action_type == 'block':
+            # Block actions contain nested actions - reconstruct recursively
+            nested_actions = []
+            # Note: Nested actions would need to be stored as child PlaybookItems
+            # For now, log warning if block actions are encountered
+            log.warning(f"Block actions not yet fully supported in database deserialization")
+            return BlockAction(
+                actions=nested_actions,
+                description=description,
+                when=conditions
+            )
+
+        else:
+            raise ValueError(f"Unknown action type in database: {action_type}")
+
+    def _json_to_wait_condition(self, condition_data: Dict[str, Any]):
+        """Recursively convert condition JSON to WaitCondition object."""
+        from adare.types.playbook import WaitCondition
+
+        # Check which field is set
+        if 'exists' in condition_data and condition_data['exists']:
+            return WaitCondition(exists=self._json_to_target(condition_data['exists']))
+        elif 'not_exists' in condition_data and condition_data['not_exists']:
+            return WaitCondition(not_exists=self._json_to_target(condition_data['not_exists']))
+        elif 'all' in condition_data and condition_data['all']:
+            nested = [self._json_to_wait_condition(c) for c in condition_data['all']]
+            return WaitCondition(all=nested)
+        elif 'any' in condition_data and condition_data['any']:
+            nested = [self._json_to_wait_condition(c) for c in condition_data['any']]
+            return WaitCondition(any=nested)
+        elif 'negate' in condition_data and condition_data['negate']:
+            nested = self._json_to_wait_condition(condition_data['negate'])
+            return WaitCondition(negate=nested)
+        else:
+            raise ValueError(f"Invalid WaitCondition data: {condition_data}")
+
+    def _load_variables_and_tests_from_yaml(self, yaml_content: str):
+        """Load variables and tests from YAML content (complex structures)."""
+        import yaml
+        from adarelib.testset.yaml.customloader import get_custom_loader
+
+        data = yaml.load(yaml_content, Loader=get_custom_loader())
+
+        # Extract variables
+        variables = None
+        if 'variables' in data and data['variables']:
+            from adarelib.common.variables import VariableRegistry
+            variables = VariableRegistry.from_dict(data['variables'])
+
+        # Extract tests (keep as-is from YAML parsing)
+        tests = data.get('tests', [])
+
+        return variables, tests
     
     def load_playbook_from_database(self, experiment_id: str) -> PlaybookType:
-        """Load Playbook object from stored YAML in database (no file parsing needed).
+        """Load Playbook object from database models (no YAML parsing for actions).
 
         Args:
             experiment_id: The experiment ID to load the playbook for
 
         Returns:
-            Parsed Playbook object from stored YAML (automatic variables added during execution)
+            Playbook object reconstructed from PlaybookItem database models
 
         Raises:
             ValueError: If no playbook found for experiment
@@ -353,38 +623,28 @@ class PlaybookApi(ProjectDatabaseApi):
         playbook = self.get_playbook_by_experiment_id(experiment_id)
         if not playbook:
             raise ValueError(f"No playbook found for experiment {experiment_id}")
-        
-        if not playbook.original_yaml_content:
-            raise ValueError(f"No original YAML content stored for experiment {experiment_id} (legacy data)")
-        
-        # Parse YAML directly from memory
-        import yaml
-        import cattrs
-        from typing import Union, Optional
-        from adare.types.playbook import (
-            Playbook as PlaybookType, ActionType, ExistsCondition, NotExistsCondition, TargetStrategyType,
-            _structure_action, _structure_condition, _structure_strategy, _register_strict_hooks
+
+        # Reconstruct actions from PlaybookItem database models
+        log.info(f"CLAUDE: Loading playbook from database models (not parsing YAML for actions)")
+        items = self.get_playbook_items(playbook.id)
+        log.info(f"CLAUDE: Reconstructing {len(items)} actions from PlaybookItem database models")
+        actions = [self._playbook_item_to_action(item) for item in items]
+
+        # Reconstruct settings from JSON
+        settings = self._json_to_settings(playbook.settings)
+
+        # Parse variables and tests from original YAML (complex structures, kept as YAML)
+        variables = None
+        tests = []
+        if playbook.original_yaml_content:
+            log.info(f"CLAUDE: Parsing variables/tests from stored YAML (not re-parsing actions)")
+            variables, tests = self._load_variables_and_tests_from_yaml(playbook.original_yaml_content)
+
+        from adare.types.playbook import Playbook as PlaybookType
+        log.info(f"CLAUDE: Playbook reconstruction complete - {len(actions)} actions, {len(tests)} tests")
+        return PlaybookType(
+            actions=actions,
+            settings=settings,
+            variables=variables,
+            tests=tests
         )
-        
-        # Parse YAML content using custom loader for tags like !re
-        from adarelib.testset.yaml.customloader import get_custom_loader
-        data = yaml.load(playbook.original_yaml_content, Loader=get_custom_loader())
-
-        # Convert variables to VariableRegistry if present (automatic variables added during execution)
-        if 'variables' in data and data['variables']:
-            from adarelib.common.variables import VariableRegistry
-            data['variables'] = VariableRegistry.from_dict(data['variables'])
-        # Note: automatic variables will be merged during variable resolution, not during parsing
-
-        # Set up cattrs converter (same as in parse_playbook)
-        converter = cattrs.Converter()
-        converter.forbid_extra_keys = True
-        
-        # Register structure hooks
-        converter.register_structure_hook(ActionType, lambda obj, _: _structure_action(obj, converter))
-        converter.register_structure_hook(Union[ExistsCondition, NotExistsCondition], lambda obj, _: _structure_condition(obj, converter))
-        converter.register_structure_hook(Optional[TargetStrategyType], lambda obj, _: _structure_strategy(obj, converter) if obj is not None else None)
-        
-        _register_strict_hooks(converter)
-        
-        return converter.structure(data, PlaybookType)
