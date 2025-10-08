@@ -307,6 +307,16 @@ def delete_environment(environment_ulid: str, force: bool = False):
         db.delete_environment(environment)
         log.info(f'deleted environment {environment.id}')
 
+        # Delete the environment file from disk if force is used
+        if force and environment.file:
+            env_file = Path(environment.file)
+            if env_file.exists():
+                try:
+                    env_file.unlink()
+                    log.info(f'Deleted environment file: {env_file}')
+                except (OSError, PermissionError) as e:
+                    log.warning(f'Failed to delete environment file {env_file}: {e}')
+
 
 def get_environments_ulids(project_path: Path = None) -> list[str]:
     with EnvironmentDbApi() as db:

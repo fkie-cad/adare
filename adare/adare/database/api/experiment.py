@@ -65,17 +65,6 @@ class ExperimentApi(ProjectDatabaseApi):
         if not experiment:
             return None
 
-        # Validate that the experiment has environment references
-        if not experiment.environment_ids:
-            raise EnvironmentNotFoundError(
-                log,
-                message='no environment found for experiment',
-                possible_solutions=[
-                    'load the environment with [i]adare environment load[/i]',
-                    'create a new environment with [i]adare environment create[/i] and then load it'
-                ]
-            )
-
         return experiment
 
     def get_or_create_tags(self, tags: list[str]) -> list:
@@ -134,14 +123,7 @@ class ExperimentApi(ProjectDatabaseApi):
         abstract_test_objects: list = self.__get_abstracttests_from_testsetfile(testset)
         environment_ids = self.get_environments_by_name(metadata.environments)
         if not environment_ids:
-            raise EnvironmentMissingError(
-                log,
-                message='no environment found for experiment',
-                possible_solutions=[
-                    'load the environment with [i]adare environment load[/i]',
-                    'create a new environment with [i]adare environment create[/i] and then load it'
-                ]
-            )
+            log.info('no environments found for experiment - environments can be added later with: adare experiment add-env')
 
         experiment = Experiment(
             name=name,
