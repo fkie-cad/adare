@@ -407,38 +407,42 @@ class CommandExecutionMixin:
         return None   # better than returning a hardcoded, possibly wrong path
 
 
-    def _build_guest_command_args(self, command: str, background: bool = False, cwd: Optional[str] = None, win_noprofile: bool = True, use_cmd: bool = False) -> List[str]:
+    def _build_guest_command_args(self, command: str, background: bool = False, cwd: Optional[str] = None, win_noprofile: bool = True, use_cmd: bool = False, admin: bool = False) -> List[str]:
         """Build VBoxManage guestcontrol command arguments for running guest commands."""
         cmd_to_run = command
+
+        # Handle working directory change
         if cwd:
             if 'windows' in self.guest_os.lower():
                 cmd_to_run = f'cd {cwd}; {command}'
             else:
                 cmd_to_run = f'cd {cwd} && {command}'
-        
+
         if 'windows' in self.guest_os.lower():
             command_exe = r"C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe"
             noprofile_arg = "-NoProfile" if win_noprofile else ""
-            
+
             # If use_cmd is True, wrap the command in cmd /c from within PowerShell
             if use_cmd:
                 cmd_to_run = f"cmd /c '{cmd_to_run}'"
-            
+
             if background:
                 if use_cmd:
                     # For background commands with cmd, use cmd.exe directly in Start-Process
                     noprofile_inner = "'-NoProfile'," if win_noprofile else ""
                     # Remove the cmd /c wrapper since we'll use cmd.exe directly
                     original_cmd = cmd_to_run.replace("cmd /c '", "").rstrip("'")
+                    verb_arg = "-Verb RunAs " if admin else ""
                     ps_cmd = (
-                        f"$p=Start-Process -WindowStyle Hidden -PassThru -FilePath cmd.exe "
+                        f"$p=Start-Process -WindowStyle Hidden -PassThru {verb_arg}-FilePath cmd.exe "
                         f"-ArgumentList '/c','{original_cmd}';"
                         f"$p.Id"
                     )
                 else:
                     noprofile_inner = "'-NoProfile'," if win_noprofile else ""
+                    verb_arg = "-Verb RunAs " if admin else ""
                     ps_cmd = (
-                        f"$p=Start-Process -WindowStyle Hidden -PassThru -FilePath powershell.exe "
+                        f"$p=Start-Process -WindowStyle Hidden -PassThru {verb_arg}-FilePath powershell.exe "
                         f"-ArgumentList {noprofile_inner}'-ExecutionPolicy','Bypass','-Command','{cmd_to_run}';"
                         f"$p.Id"
                     )
@@ -446,12 +450,22 @@ class CommandExecutionMixin:
                 encoded_command = base64.b64encode(command_bytes).decode('ascii')
                 command_args = [arg for arg in [noprofile_arg, "-ExecutionPolicy Bypass", "-EncodedCommand", encoded_command] if arg]
             else:
+                # Foreground command - handle admin elevation
+                if admin:
+                    # Use Start-Process with -Verb RunAs and -Wait for synchronous admin execution
+                    cmd_to_run = f"Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','{cmd_to_run}' -Wait"
+
                 command_bytes = cmd_to_run.encode('utf-16le')
                 encoded_command = base64.b64encode(command_bytes).decode('ascii')
                 command_args = [arg for arg in [noprofile_arg, "-ExecutionPolicy Bypass", "-EncodedCommand", encoded_command] if arg]
         else:
             # Linux/Unix guest
             command_exe = "/bin/bash"
+
+            # Apply sudo if admin privileges requested
+            if admin:
+                cmd_to_run = f'sudo {cmd_to_run}'
+
             if background:
                 # Use nohup with bash -c to handle shell builtins and complex commands
                 # This ensures the background process survives when the parent shell exits

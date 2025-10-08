@@ -79,6 +79,12 @@ Base Configuration (all environments)
 
 Needs to be updated with new conda install method!
 wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+bash Miniforge3-Linux-x86_64.sh
+use commndas from github.com/conda-forge/miniforge
+also create a conda environment with python 3.10 with conda create -n pyadare python=3.10
+
+sudo systemctl stop unattended-upgrades
+sudo systemctl disable unattended-upgrades
 
 
 - Create a user account with:
@@ -88,7 +94,7 @@ wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge
 
 - Enable **autologin** so the VM boots directly into the ``adare`` user's desktop.
 
-  - **Important:** autologin must start an **X11 session** (not Wayland).
+  - **Important:** autologin must start an **X11 session** (not Wayland). (e.g sudo nano /etc/gdm3/custom.conf -> uncomment: WaylandEnable=false)
 
 - Enable passwordless sudo for the ``adare`` user by adding the following line to the sudoers file at the end (edit with ``sudo visudo``):
 

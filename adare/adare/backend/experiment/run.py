@@ -282,7 +282,16 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         # Mount VirtualBox shared folders shortly (VirtualBox shared folders are exposed as a network provider -> lazy loading prevents access otherwise)
         mount_shared_folder = r'net use Z: \\vboxsvr\adare; net use Z: /delete'
         await vm.run_command(mount_shared_folder, stop_event=stop_event)
-        # TODO: need to manually remount here - unclear why but it just fixes hours of trying to get it to work?! Windows I love you <3
+        shared_folders = {
+            name: paths['vm']
+            for name, paths in context.config.shared_directories.items()
+            if paths.get('vm')
+        }
+        if shared_folders:
+            await vm.mount_multiple_shared_folders(
+                folders=shared_folders,
+                stop_event=stop_event
+            )
 
         # Check if Miniforge is installed, otherwise fall back to Poetry
         check_miniforge = r'if (Test-Path "$env:USERPROFILE\.miniforge3") { exit 0 } else { exit 1 }'
@@ -316,7 +325,7 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     await vm.run_command(set_path_command, stop_event=stop_event)
     await vm.run_command(set_path_command_experiment_tools, stop_event=stop_event)
     await vm.run_command(install_command, stop_event=stop_event)
-    await vm.run_command(run_command, background=True, stop_event=stop_event)
+    await vm.run_command(run_command, background=True, stop_event=stop_event, admin=True)
 
 
 def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool, external_stop_event: threading.Event = None):
