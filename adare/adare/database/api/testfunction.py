@@ -42,12 +42,12 @@ class TestfunctionDbApi(GlobalDatabaseApi):
         testfunction_obj, created = self.get_or_create(
             TestFunction,
             defaults={
-                'file_id': testfunction_file.id,
                 'description': test_description,
                 'type': t_func_class.name,
                 'sha256hash': sha256_testfunction
             },
-            name=test_name
+            name=test_name,
+            file_id=testfunction_file.id
         )
         if not created:
             raise DatabaseTestfunctionCreationError(
