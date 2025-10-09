@@ -222,6 +222,44 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
         return environment_id
 
 
+def resolve_environment_identifier(identifier: str) -> str:
+    """
+    Resolve environment identifier (name or ULID) to ULID.
+
+    Args:
+        identifier: Environment name or ULID
+
+    Returns:
+        Environment ULID
+
+    Raises:
+        EnvironmentDoesNotExistInDatabase: If environment not found
+    """
+    from adare.database.models.global_models import Environment
+
+    with EnvironmentDbApi() as db:
+        # First try as ULID (check if it exists)
+        env = db.get_environment_by_ulid(identifier)
+        if env:
+            return env.id
+
+        # Try as name (global environments)
+        env = db._session.query(Environment).filter_by(name=identifier).first()
+        if env:
+            return env.id
+
+        # Not found by either method
+        raise EnvironmentDoesNotExistInDatabase(
+            log,
+            f'Environment "{identifier}" not found (tried as both ULID and name)',
+            possible_solutions=[
+                'Check if the environment name is spelled correctly',
+                'List available environments with: adare env list',
+                'Load the environment first with: adare env load <path>'
+            ]
+        )
+
+
 def delete_environment(environment_ulid: str, force: bool = False):
     from adare.database.reference_manager import reference_manager
     from adare.database.api.base import ProjectDatabaseApi
@@ -236,9 +274,12 @@ def delete_environment(environment_ulid: str, force: bool = False):
         )
 
         # Store VM info before deletion for cleanup
+        vm_id = None
         vm_file_path = None
-        if environment.vm and environment.vm.file:
-            vm_file_path = Path(environment.vm.file)
+        if environment.vm:
+            vm_id = environment.vm.id
+            if environment.vm.file:
+                vm_file_path = Path(environment.vm.file)
 
         # Check for runs using this environment across all projects
         projects_using_env = reference_manager.get_projects_using_environment(environment_ulid)
@@ -308,14 +349,56 @@ def delete_environment(environment_ulid: str, force: bool = False):
         log.info(f'deleted environment {environment.id}')
 
         # Delete the environment file from disk if force is used
+        # IMPORTANT: Only delete files within managed storage (ENVIRONMENTS_DIR)
         if force and environment.file:
             env_file = Path(environment.file)
             if env_file.exists():
+                # Safety check: Only delete files in managed storage
+                from adare.config.configdirectory import ENVIRONMENTS_DIR
                 try:
-                    env_file.unlink()
-                    log.info(f'Deleted environment file: {env_file}')
-                except (OSError, PermissionError) as e:
-                    log.warning(f'Failed to delete environment file {env_file}: {e}')
+                    env_file_resolved = env_file.resolve()
+                    environments_dir_resolved = ENVIRONMENTS_DIR.resolve()
+
+                    # Check if file is within managed environments directory
+                    if env_file_resolved.is_relative_to(environments_dir_resolved):
+                        try:
+                            env_file.unlink()
+                            log.info(f'Deleted managed environment file: {env_file}')
+                        except (OSError, PermissionError) as e:
+                            log.warning(f'Failed to delete environment file {env_file}: {e}')
+                    else:
+                        log.warning(f'Skipping deletion of environment file outside managed storage: {env_file}')
+                        log.warning(f'Only files in {ENVIRONMENTS_DIR} are automatically deleted')
+                except ValueError as e:
+                    log.warning(f'Could not verify environment file path {env_file}: {e}')
+
+    # Clean up VM if force is used and VM is not used by other environments
+    if force and vm_id:
+        try:
+            # Check if VM is still used by any other environments
+            with EnvironmentDbApi() as db:
+                all_environments = db.get_environments()
+                vm_still_in_use = any(env.vm_id == vm_id for env in all_environments)
+
+            if not vm_still_in_use:
+                log.info(f'VM {vm_id} is not used by any other environment, cleaning up...')
+
+                # Delete VM database record
+                import adare.backend.vm.database as vm_database
+                vm_database.delete_vm(vm_id)
+                log.info(f'Deleted VM database record: {vm_id}')
+
+                # Delete VM file from disk
+                if vm_file_path and vm_file_path.exists():
+                    try:
+                        vm_file_path.unlink()
+                        log.info(f'Deleted VM file: {vm_file_path}')
+                    except (OSError, PermissionError) as e:
+                        log.warning(f'Failed to delete VM file {vm_file_path}: {e}')
+            else:
+                log.info(f'VM {vm_id} is still used by other environments, skipping cleanup')
+        except Exception as e:
+            log.warning(f'Failed to cleanup VM {vm_id}: {e}')
 
 
 def get_environments_ulids(project_path: Path = None) -> list[str]:

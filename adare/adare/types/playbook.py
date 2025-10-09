@@ -147,6 +147,8 @@ class CommandAction:
     env: Optional[dict] = None
     timeout: Optional[float] = None
     shell: bool = False
+    admin: bool = False  # Run with elevated privileges (Windows: RunAs, Linux: sudo)
+    background: bool = False  # Run without waiting for completion
 
     def __attrs_post_init__(self):
         """Validate that command is a string, not a list."""

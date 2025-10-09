@@ -8,7 +8,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell: bool = True, env: dict = None, timeout: float = None, inherit_env: bool = True) -> dict:
+def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell: bool = True, env: dict = None, timeout: float = None, inherit_env: bool = True, admin: bool = False, background: bool = False) -> dict:
     """
     Executes a shell command.
     :param command: List of command and arguments, or string when shell=True.
@@ -18,20 +18,45 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     :param env: Dictionary of environment variables to set for the command.
     :param timeout: Timeout in seconds for the command execution.
     :param inherit_env: If True, inherit system environment variables (default: True).
+    :param admin: If True, run with elevated privileges (Windows: RunAs, Linux: sudo).
+    :param background: If True, don't wait for command completion (returns immediately with PID).
     :return: Dictionary containing return code, stdout, and stderr.
     """
     is_windows = platform.system().lower() == "windows"
 
+    # Warn if background + timeout specified
+    if background and timeout:
+        log.warning("background=True specified with timeout - timeout will be ignored for background processes")
+
     # Handle both string and list commands
     if isinstance(command, str):
         command_str = command
-        if shell and is_windows and powershell:
-            command = ["powershell", "-Command", command_str]
-        # For shell=True on Unix or when not using powershell, keep as string
     else:
         command_str = " ".join(command)
-        if shell and is_windows and powershell:
-            command = ["powershell", "-Command", command_str]
+
+    # Handle admin mode - prepend sudo on Linux or wrap with Start-Process on Windows
+    if admin:
+        if is_windows:
+            # Use Start-Process with RunAs for elevation
+            # Note: -Wait ensures we wait for completion, works with our script block approach
+            admin_wrapped = f"Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',''& {{ {command_str} }}''' -Verb RunAs -Wait -WindowStyle Hidden"
+            command_str = admin_wrapped
+            log.info(f"Running command with elevated privileges (Windows RunAs)")
+        else:
+            # Use sudo on Linux
+            command_str = f"sudo {command_str}"
+            log.info(f"Running command with elevated privileges (sudo)")
+
+    # Handle shell mode - wrap in PowerShell or cmd.exe
+    if shell and is_windows and powershell:
+        # Wrap in script block for synchronous execution and proper file I/O flushing
+        wrapped_cmd = f"& {{ {command_str} }}"
+        command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", wrapped_cmd]
+    elif isinstance(command, list):
+        command = command
+    else:
+        # Keep as string for Unix shell=True
+        command = command_str
 
     # Log command execution details
     log.info(f"Executing command: {command_str}")
@@ -61,6 +86,43 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     
     log.debug(f"Process started with PID: {proc.pid}")
 
+    # Handle background mode - return immediately without waiting
+    if background:
+        log.info(f"Background mode enabled - checking if process started successfully (PID: {proc.pid})")
+
+        # Quick non-blocking check if process failed immediately (100ms grace period)
+        time.sleep(0.1)
+        poll_result = proc.poll()
+
+        if poll_result is not None:
+            # Process already exited! This means it failed immediately
+            stdout, stderr = proc.communicate()
+            stdout_str = stdout.decode("utf-8").replace("\r", "") if stdout else ""
+            stderr_str = stderr.decode("utf-8").replace("\r", "") if stderr else ""
+
+            log.error(f"Background process {proc.pid} failed immediately with return code {poll_result}")
+            log.error(f"stdout: {stdout_str}")
+            log.error(f"stderr: {stderr_str}")
+
+            return {
+                'returncode': poll_result,
+                'stdout': stdout_str,
+                'stderr': stderr_str,
+                'pid': proc.pid,
+                'background': False  # Failed to start, not actually running in background
+            }
+
+        # Process still running after grace period - it started successfully
+        log.info(f"Background process {proc.pid} started successfully")
+        return {
+            'returncode': None,  # Process still running
+            'stdout': '',
+            'stderr': '',
+            'pid': proc.pid,
+            'background': True
+        }
+
+    # Normal mode - wait for completion
     try:
         log.debug(f"Waiting for process {proc.pid} to complete (timeout: {timeout})")
         stdout, stderr = proc.communicate(timeout=timeout)

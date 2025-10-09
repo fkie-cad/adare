@@ -34,8 +34,12 @@ def exec_environment_create(arguments):
 
 
 def exec_environment_delete(arguments):
+    from adare.backend.environment.database import resolve_environment_identifier
     from adare.backend.environment.commands import environment_delete
-    environment_delete(arguments.ulid, force=arguments.force)
+
+    # Resolve name or ULID to ULID
+    environment_ulid = resolve_environment_identifier(arguments.identifier)
+    environment_delete(environment_ulid, force=arguments.force)
 
 
 

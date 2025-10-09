@@ -62,6 +62,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] remove all kind of emojis/icons from logging messages. ✅🆕
 - [ ] in some terminal files we use directly database and do queries. Should we not provide this through an API that provides the data? What is better code quality?
 - [ ] add tests for modular code parts; make code more modular where required!
+- [ ] background commands in vm (as installation); when to check for results (move to separate thread?)
 
 ---
 

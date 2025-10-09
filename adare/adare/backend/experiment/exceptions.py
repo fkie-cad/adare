@@ -59,3 +59,9 @@ class ExperimentCommandError(LoggedErrorException):
     def __init__(self, log: logging.Logger, command: str, exit_code: int, stdout: str = '', stderr: str = ''):
         msg = f'Command "{command}" failed with exit code {exit_code}.\nstdout: {stdout}\nstderr: {stderr}'
         super().__init__(log, msg)
+
+
+class VMSetupError(LoggedErrorException):
+    def __init__(self, log: logging.Logger, vm_name: str, command: str, exit_code: int, stdout: str = '', stderr: str = ''):
+        msg = f'VM setup failed for "{vm_name}". Command "{command}" failed with exit code {exit_code}.\nstdout: {stdout}\nstderr: {stderr}'
+        super().__init__(log, msg)

@@ -26,6 +26,61 @@ import logging
 log = logging.getLogger(__name__)
 
 
+def _copy_environment_file(source_path: Path, environment_name: str, file_hash: str) -> Path:
+    """
+    Copy environment file to managed storage location.
+
+    Args:
+        source_path: Original environment file path
+        environment_name: Environment name
+        file_hash: SHA256 hash of the environment file (first 8 chars used in filename)
+
+    Returns:
+        Path to copied environment file in managed storage
+
+    Raises:
+        EnvironmentLoadFailed: If file copying fails
+    """
+    try:
+        # Ensure global environments directory exists
+        ENVIRONMENTS_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Generate target filename with environment name and hash prefix for uniqueness
+        hash_prefix = file_hash[:8]
+        target_filename = f"{environment_name}_{hash_prefix}{source_path.suffix}"
+        target_path = ENVIRONMENTS_DIR / target_filename
+
+        # Check if target already exists
+        if target_path.exists():
+            if target_path.samefile(source_path):
+                # Source and target are the same file, no need to copy
+                log.info(f"Environment file already in managed storage: {target_path}")
+                return target_path
+            else:
+                # File exists but is different - this is fine, we'll overwrite with the new version
+                log.info(f"Updating environment file in managed storage: {target_path}")
+
+        log.info(f"Copying environment file to managed storage: {target_path}")
+
+        # Simple file copy for YAML files (small, no progress bar needed)
+        import shutil
+        shutil.copy2(source_path, target_path)
+
+        log.info(f"Successfully copied environment file to {target_path}")
+        return target_path
+
+    except OSError as e:
+        raise EnvironmentLoadFailed(
+            log,
+            f"Failed to copy environment file to managed storage: {e}",
+            possible_solutions=[
+                'Check file system permissions',
+                'Ensure sufficient disk space',
+                'Verify the source file is accessible'
+            ]
+        )
+
+
 def resolve_vm_from_url(url: str) -> Path:
     """
     Download and cache an OVA file from URL using the global vm directory.
@@ -155,6 +210,17 @@ def environment_load(environment: str, force: bool = False):
     )
     log.info(f'Environment file hash: {environment_file_sha256}')
 
+    # Parse environment metadata to get the name
+    environment_metadata: EnvironmentMetadata = parse_environment_file(environment_file)
+    # Override environment name with filename without extension (ignore name in file)
+    environment_name = environment_file.stem
+
+    # Copy environment file to managed storage BEFORE checking if it exists
+    # This ensures the file is always in a safe location under our control
+    log.info(f'Copying environment file to managed storage...')
+    managed_environment_file = _copy_environment_file(environment_file, environment_name, environment_file_sha256)
+    log.info(f'Environment file stored at: {managed_environment_file}')
+
     # CLAUDE: Early check - if environment already exists by hash, skip VM processing entirely
     existing_environment_id = environment_database.get_environment_by_hash(environment_file_sha256, trigger_exception=False)
     if existing_environment_id:
@@ -169,12 +235,9 @@ def environment_load(environment: str, force: bool = False):
 
     if not existing_environment_id:
         log.info(f'Environment with hash {environment_file_sha256} not found, creating new one')
-    
-    environment_metadata: EnvironmentMetadata = parse_environment_file(environment_file)
 
     # Override environment name with filename without extension (ignore name in file)
-    # Extract just the filename without extension for the name, store full path separately
-    environment_metadata.name = environment_file.stem
+    environment_metadata.name = environment_name
 
     # todo: maybe add validation for environment configuration semantic
 
@@ -275,7 +338,8 @@ def environment_load(environment: str, force: bool = False):
                 )
 
         # Try to create environment - if this fails, cleanup VM if we created it
-        environment_ulid = environment_database.update_environment(None, environment_metadata, environment_file, environment_file_sha256, vm_id=vm_id, force=force)
+        # Use the managed file path (in .adare/environments/) instead of the original user file
+        environment_ulid = environment_database.update_environment(None, environment_metadata, managed_environment_file, environment_file_sha256, vm_id=vm_id, force=force)
         if not environment_ulid:
             log.error(f'environment update failed')
             raise EnvironmentLoadFailed(log, 'Failed to create environment in database')
@@ -295,35 +359,38 @@ def environment_load(environment: str, force: bool = False):
         raise e
     
     environment_sync(environment_ulid)
-    
-    # Protect environment file after loading
+
+    # Protect environment file after loading (protect the managed copy, not the original)
     from adare.helperfunctions.integrity import protect_loaded_files
-    protected_files = protect_loaded_files([environment_file])
+    protected_files = protect_loaded_files([managed_environment_file])
     log.info(f'Protected {len(protected_files)} environment files')
     
-    log.info(f'environment file {environment_file} loaded')
-    
+    log.info(f'environment file {environment_file} loaded and copied to managed storage')
+
     # Generate next steps based on environment configuration
     next_steps = [
-        f'Run experiments in this environment with: adare experiment run <experiment> -e {environment}',
+        f'Run experiments in this environment with: adare experiment run <experiment> -e {environment_name}',
         f'List available environments with: adare environment list',
-        f'View environment details with: adare environment show {environment}'
+        f'View environment details with: adare environment show {environment_name}'
     ]
-    
+
     # Add VM-specific info if VM was processed
     if vm_id:
         next_steps.insert(1, f'VM successfully configured and ready for use')
-    
+
     # Create tip based on environment features
-    tip = f'Environment "{environment}" is now ready for experiments'
+    tip = f'Environment "{environment_name}" is now ready for experiments'
     if environment_metadata.vm:
         tip += f' with VM "{environment_metadata.vm}"'
     if hasattr(environment_metadata, 'description') and environment_metadata.description:
         tip += f' - {environment_metadata.description}'
-    
+
+    # Add note about file being copied to managed storage
+    tip += f'\n\nOriginal file: {environment_file}\nManaged copy: {managed_environment_file}'
+
     print_success_message(
-        title=f'Environment "{environment}" loaded successfully!',
-        location=str(environment_file),
+        title=f'Environment "{environment_name}" loaded successfully!',
+        location=str(managed_environment_file),
         next_steps=next_steps,
         tip=tip
     )

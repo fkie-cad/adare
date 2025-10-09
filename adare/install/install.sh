@@ -61,6 +61,11 @@ echo "Loading testfunctions from source appdata..."
 for testfunction_dir in ~/.adare/adare/adare/appdata/testfunctions/*/; do
     if [ -d "$testfunction_dir" ]; then
         testfunction_name=$(basename "$testfunction_dir")
+        # Skip visual testfunctions (host-side only, loaded differently)
+        if [ "$testfunction_name" = "visual" ]; then
+            echo "Skipping visual testfunctions (host-side only)..."
+            continue
+        fi
         echo "Loading $testfunction_name testfunctions..."
         poetry run adare testfunction load "$testfunction_dir"
     fi
