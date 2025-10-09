@@ -360,7 +360,8 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     if result.returncode != 0:
         raise VMSetupError(log, vm.vm_name, install_command, result.returncode, result.stdout, result.stderr)
 
-    await vm.run_command(run_command, background=True, stop_event=stop_event, admin=True, cwd=run_cwd)
+    # TODO: figure out a way to run poetry as sudo in linux
+    await vm.run_command(run_command, background=True, stop_event=stop_event, admin=True if use_conda else False, cwd=run_cwd)
 
 
 def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool, external_stop_event: threading.Event = None):

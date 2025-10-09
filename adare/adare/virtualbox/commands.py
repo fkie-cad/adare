@@ -462,17 +462,23 @@ class CommandExecutionMixin:
             # Linux/Unix guest
             command_exe = "/bin/bash"
 
-            # Apply sudo if admin privileges requested
-            if admin:
-                cmd_to_run = f'sudo {cmd_to_run}'
-
             if background:
                 # Use nohup with bash -c to handle shell builtins and complex commands
                 # This ensures the background process survives when the parent shell exits
                 # Log errors to startup log file for debugging and background the nohup process
-                linux_command = f"nohup bash -c '{cmd_to_run}' >/dev/null 2>>/adare/run/logs/adarevmstartup.log & echo $!"
+                # Escape single quotes for bash -c
+                escaped_cmd = cmd_to_run.replace("'", "'\"'\"'")
+                # Apply sudo before nohup if admin privileges requested
+                sudo_prefix = 'sudo env "PATH=$PATH" "DISPLAY=$DISPLAY" "XAUTHORITY=$XAUTHORITY" ' if admin else ""
+                linux_command = f"nohup {sudo_prefix}bash -c '{escaped_cmd}' >/dev/null 2>>/adare/run/logs/adarevmstartup.log & echo $!"
             else:
-                linux_command = cmd_to_run
+                # Apply sudo if admin privileges requested (foreground commands)
+                if admin:
+                    # Escape single quotes in the command for bash -c
+                    escaped_cmd = cmd_to_run.replace("'", "'\"'\"'")
+                    linux_command = f'sudo env "PATH=$PATH" "DISPLAY=$DISPLAY" "XAUTHORITY=$XAUTHORITY" bash -c \'{escaped_cmd}\''
+                else:
+                    linux_command = cmd_to_run
 
         # Build the full VBoxManage guestcontrol command
         if 'windows' in self.guest_os.lower():
