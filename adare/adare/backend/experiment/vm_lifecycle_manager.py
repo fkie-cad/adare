@@ -188,8 +188,16 @@ class VMLifecycleManager:
             'run': {'host': context.experiment_run_directory.path, 'vm': shared_root / 'run'},
             'adare': {'host': context.project_directory.vm_runtime, 'vm': shared_root / 'app'},
             'experiment': {'host': context.experiment_directory.path, 'vm': shared_root / 'experiment'},
-            'shared': {'host': context.experiment_directory.shared, 'vm': shared_root / 'shared'},
         }
+
+        # Only add 'shared' directory if it exists
+        if context.experiment_directory.shared.exists():
+            context.config.shared_directories['shared'] = {
+                'host': context.experiment_directory.shared,
+                'vm': shared_root / 'shared'
+            }
+        else:
+            log.info(f"CLAUDE: Shared directory does not exist, skipping mount: {context.experiment_directory.shared}")
         
         # Create VirtualBox VM instance using the instance name and UUID
         from adare.config import get_vm_credentials

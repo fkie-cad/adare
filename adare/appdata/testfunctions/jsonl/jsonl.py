@@ -154,6 +154,10 @@ class LineMatches(BasicTest):
                 return TestResult.execution_error(None, f"Invalid match_mode: {match_mode}. Must be 'any' or 'all'")
 
             try:
+                # Check if file is empty (edge case handling)
+                import os
+                if os.path.getsize(dst) == 0:
+                    return TestResult.failed(['JSONL file is empty (0 bytes)'])
                 matching_lines = []
                 non_matching_lines = []
                 malformed_lines = []
@@ -315,6 +319,10 @@ class LineCount(BasicTest):
                 return TestResult.execution_error(None, "expected_count must be int or dict with 'min'/'max'")
 
             try:
+                # Check if file is empty (edge case handling)
+                import os
+                if os.path.getsize(dst) == 0:
+                    return TestResult.failed(['JSONL file is empty (0 bytes)'])
                 matching_count = 0
                 total_lines = 0
                 malformed_count = 0
@@ -444,6 +452,10 @@ class ValueInAnyLine(BasicTest):
             skip_malformed = self.parameter.skip_malformed
 
             try:
+                # Check if file is empty (edge case handling)
+                import os
+                if os.path.getsize(dst) == 0:
+                    return TestResult.failed(['JSONL file is empty (0 bytes)'])
                 matching_lines = []
                 total_lines = 0
                 malformed_count = 0
