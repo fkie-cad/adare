@@ -2,6 +2,7 @@
 import attrs
 from pathlib import Path
 import csv
+import sys
 from typing import ClassVar, Optional
 
 # internal imports
@@ -96,6 +97,13 @@ class ContainsLine(BasicTest):
             entry_pattern = self.parameter.entry
 
             try:
+                # Increase CSV field size limit to handle large fields (e.g., prefetch data)
+                try:
+                    csv.field_size_limit(sys.maxsize)
+                except OverflowError:
+                    # Fallback for systems where maxsize is too large
+                    csv.field_size_limit(10485760)  # 10MB
+
                 with open(dst, 'r') as f:
                     reader = csv.reader(f)
                     rows = list(reader)

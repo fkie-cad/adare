@@ -2,13 +2,28 @@ from pathlib import Path
 from subprocess import Popen, PIPE, TimeoutExpired
 import subprocess
 import platform
+import os
+import ctypes
 
 import logging
 
 log = logging.getLogger(__name__)
 
+# Default user to run commands as when running with elevated privileges
+DEFAULT_RUN_AS_USER = "adare"
+# Default password for Windows privilege dropping (Windows only)
+DEFAULT_RUN_AS_PASSWORD = "adare"
 
-def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell: bool = True, env: dict = None, timeout: float = None, inherit_env: bool = True, admin: bool = False, background: bool = False) -> dict:
+
+def is_admin_windows() -> bool:
+    """Check if the current process is running with Administrator privileges on Windows."""
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except Exception:
+        return False
+
+
+def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell: bool = True, env: dict = None, timeout: float = None, inherit_env: bool = True, admin: bool = False, background: bool = False, run_as_user: str = None) -> dict:
     """
     Executes a shell command.
     :param command: List of command and arguments, or string when shell=True.
@@ -20,9 +35,17 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     :param inherit_env: If True, inherit system environment variables (default: True).
     :param admin: If True, run with elevated privileges (Windows: RunAs, Linux: sudo).
     :param background: If True, don't wait for command completion (returns immediately with PID).
+    :param run_as_user: If specified, run as this user. If None and running with elevated privileges, defaults to DEFAULT_RUN_AS_USER.
     :return: Dictionary containing return code, stdout, and stderr.
     """
     is_windows = platform.system().lower() == "windows"
+
+    # Check if running with elevated privileges (root on Linux, Administrator on Windows)
+    is_running_elevated = False
+    if is_windows:
+        is_running_elevated = is_admin_windows()
+    else:
+        is_running_elevated = os.geteuid() == 0
 
     # Warn if background + timeout specified
     if background and timeout:
@@ -34,8 +57,9 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     else:
         command_str = " ".join(command)
 
-    # Handle admin mode - prepend sudo on Linux or wrap with Start-Process on Windows
+    # Handle privilege management (admin elevation or privilege dropping)
     if admin:
+        # Elevate privileges
         if is_windows:
             # Use Start-Process with RunAs for elevation
             # Note: -Wait ensures we wait for completion, works with our script block approach
@@ -46,6 +70,30 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
             # Use sudo on Linux
             command_str = f"sudo {command_str}"
             log.info(f"Running command with elevated privileges (sudo)")
+    elif is_running_elevated:
+        # Drop privileges when running with elevated privileges
+        target_user = run_as_user if run_as_user else DEFAULT_RUN_AS_USER
+
+        if is_windows:
+            # Windows: Use PowerShell Start-Process with credentials to run as different user
+            # Escape single quotes in command for PowerShell string
+            escaped_command = command_str.replace("'", "''")
+
+            # Build PowerShell credential and Start-Process command
+            ps_drop_privileges = (
+                f"$pass = ConvertTo-SecureString '{DEFAULT_RUN_AS_PASSWORD}' -AsPlainText -Force; "
+                f"$cred = New-Object System.Management.Automation.PSCredential('{target_user}', $pass); "
+                f"Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','{escaped_command}' "
+                f"-Credential $cred -Wait -NoNewWindow -PassThru"
+            )
+            command_str = ps_drop_privileges
+            log.info(f"Dropping privileges from Administrator to user '{target_user}'")
+        else:
+            # Linux: Use sudo -u to run as different user
+            # Wrap in bash -c to ensure shell redirections/pipes run as target user
+            escaped_cmd = command_str.replace("'", "'\\''")
+            command_str = f"sudo -u {target_user} bash -c '{escaped_cmd}'"
+            log.info(f"Dropping privileges from root to user '{target_user}'")
 
     # Handle shell mode - wrap in PowerShell or cmd.exe
     if shell and is_windows and powershell:
