@@ -284,15 +284,19 @@ def create(name, project, with_vm):
     exec_with_error_printing(exec_environment_create, args)
 
 @environment.command()
-@click.argument('ulid')
+@click.argument('identifier')
 @click.option('--force', '-f', is_flag=True, help='Force deletion of the environment and any orphaned experiments')
-def remove(ulid, force):
+def remove(identifier, force):
     """Delete an environment.
-    
+
+    IDENTIFIER can be:
+    - Environment name: ubuntu24
+    - Environment ULID: 01K72Q25GDNHWMEZB97N9RDPG0
+
     WARNING: If this environment is the only one used by experiments,
     those experiments will become orphaned and be deleted when using --force.
     Without --force, deletion will fail to prevent data loss."""
-    args = SimpleNamespace(ulid=ulid, force=force)
+    args = SimpleNamespace(identifier=identifier, force=force)
     exec_with_error_printing(exec_environment_delete, args)
 
 

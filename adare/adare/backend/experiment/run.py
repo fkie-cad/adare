@@ -8,7 +8,7 @@ from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRu
 import adare.backend.experiment.database as experiment_database
 import adare.backend.project.database as project_database
 import adare.backend.environment.database as environment_database
-from adare.backend.experiment.exceptions import ExperimentIntegrityError
+from adare.backend.experiment.exceptions import ExperimentIntegrityError, VMSetupError
 from adare.exceptions import LoggedException
 from adare.backend.project.directory import ProjectDirectory
 from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
@@ -297,14 +297,26 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         check_miniforge = r'if (Test-Path "$env:USERPROFILE\.miniforge3") { exit 0 } else { exit 1 }'
         miniforge_result = await vm.run_command(check_miniforge, stop_event=stop_event)
 
+        use_conda = False
         if miniforge_result.returncode == 0:
-            # Use Miniforge with pip install
-            install_command = r'cd \\vboxsvr\adare\adarelib; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
-            run_command = r'cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare adarevm'
-        else:
+            # Check if pyadare conda environment exists
+            check_conda_env = r'& "$env:USERPROFILE\.miniforge3\Scripts\conda.exe" env list | Select-String "^pyadare " | Out-Null; if ($?) { Write-Output "env_exists" } else { Write-Output "env_not_found" }'
+            conda_env_result = await vm.run_command(check_conda_env, stop_event=stop_event)
+
+            if 'env_exists' in conda_env_result.stdout:
+                log.info(f"Using Miniforge conda environment 'pyadare' for VM '{vm.vm_name}'")
+                use_conda = True
+                install_command = r'cd \\vboxsvr\adare\adarelib; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
+                run_command = r'cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare adarevm'
+            else:
+                log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to Poetry")
+
+        if not use_conda:
             # Fall back to Poetry
+            log.info(f"Using Poetry for VM '{vm.vm_name}'")
             install_command = r'cd \\vboxsvr\adare\adarevm; poetry install'
             run_command = r'cd \\vboxsvr\adare\adarevm; poetry run adarevm'
+            run_cwd = None
     else:
         set_path_command = "grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc && source ~/.bashrc"
         set_path_command_experiment_tools = "grep -qxF 'export PATH=$PATH:/adare/experiment/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/experiment/shared/tools' >> ~/.bashrc && source ~/.bashrc"
@@ -313,19 +325,42 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         check_miniforge = 'test -d /home/adare/.miniforge3 && echo "exists" || echo "not_found"'
         miniforge_result = await vm.run_command(check_miniforge, stop_event=stop_event)
 
+        use_conda = False
         if 'exists' in miniforge_result.stdout:
-            # Use Miniforge with pip install
-            install_command = 'cd /adare/app/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install .'
-            run_command = 'cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare adarevm /adare/run/logs/adarevm.log'
-        else:
-            # Fall back to Poetry
-            install_command = 'cd /adare/app/adarevm && poetry install'
-            run_command = 'cd /adare/app/adarevm && poetry run adarevm /adare/run/logs/adarevm.log'
+            # Check if pyadare conda environment exists
+            check_conda_env = '/home/adare/.miniforge3/bin/conda env list | grep -q "^pyadare " && echo "env_exists" || echo "env_not_found"'
+            conda_env_result = await vm.run_command(check_conda_env, stop_event=stop_event)
 
-    await vm.run_command(set_path_command, stop_event=stop_event)
-    await vm.run_command(set_path_command_experiment_tools, stop_event=stop_event)
-    await vm.run_command(install_command, stop_event=stop_event)
-    await vm.run_command(run_command, background=True, stop_event=stop_event, admin=True)
+            if 'env_exists' in conda_env_result.stdout:
+                log.info(f"Using Miniforge conda environment 'pyadare' for VM '{vm.vm_name}'")
+                use_conda = True
+                install_command = 'cd /adare/app/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && xhost +SI:localuser:root'
+                run_command = '/home/adare/.miniforge3/bin/conda run -n pyadare adarevm /adare/run/logs/adarevm.log'
+                run_cwd = None
+            else:
+                log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to Poetry")
+
+        if not use_conda:
+            # Fall back to Poetry
+            log.info(f"Using Poetry for VM '{vm.vm_name}'")
+            install_command = 'cd /adare/app/adarevm && poetry install && xhost +SI:localuser:root'
+            run_command = 'poetry run adarevm /adare/run/logs/adarevm.log'
+            run_cwd = '/adare/app/adarevm'
+
+    # Execute setup commands with error handling
+    result = await vm.run_command(set_path_command, stop_event=stop_event)
+    if result.returncode != 0:
+        raise VMSetupError(log, vm.vm_name, set_path_command, result.returncode, result.stdout, result.stderr)
+
+    result = await vm.run_command(set_path_command_experiment_tools, stop_event=stop_event)
+    if result.returncode != 0:
+        raise VMSetupError(log, vm.vm_name, set_path_command_experiment_tools, result.returncode, result.stdout, result.stderr)
+
+    result = await vm.run_command(install_command, stop_event=stop_event)
+    if result.returncode != 0:
+        raise VMSetupError(log, vm.vm_name, install_command, result.returncode, result.stdout, result.stderr)
+
+    await vm.run_command(run_command, background=True, stop_event=stop_event, admin=True, cwd=run_cwd)
 
 
 def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool, external_stop_event: threading.Event = None):
@@ -603,14 +638,55 @@ async def step_connect_websocket(context: ExperimentRunCtx):
         raise LoggedException(log, f"Failed to connect to AdareVM server after {max_attempts} attempts: {last_error}") from last_error
 
 async def step_execute_installations(context: ExperimentRunCtx):
-    with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage:
+    with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
         installations = environment_database.get_environment_installations(context.environment_ulid)
-        
+
         if not installations:
             log.info("No installations to execute")
             return
-        
-        pass
+
+        log.info(f"Executing {len(installations)} installation(s) from environment")
+
+        for idx, installation in enumerate(installations, 1):
+            installation_name = installation.name if hasattr(installation, 'name') else f"Installation {idx}"
+            installation_cmd = installation.command if hasattr(installation, 'command') else str(installation)
+            installation_desc = installation.description if hasattr(installation, 'description') else ""
+
+            stage_ctx.stage.sub_msg = f"[{idx}/{len(installations)}] {installation_name}"
+            stage_ctx.set_status(stage_ctx.stage.status)
+
+            log.info(f"Executing installation [{idx}/{len(installations)}]: {installation_name}")
+            if installation_desc:
+                log.info(f"Description: {installation_desc}")
+            log.info(f"Command: {installation_cmd}")
+
+            try:
+                # Execute installation command via WebSocket client
+                result = await context.client.execute_shell(
+                    installation_cmd,
+                    shell=True,
+                    timeout=600  # 10 minute timeout for installations
+                )
+
+                if result.get('returncode') == 0:
+                    log.info(f"Installation '{installation_name}' completed successfully")
+                    if result.get('stdout'):
+                        log.debug(f"Installation output: {result['stdout']}")
+                else:
+                    log.error(f"Installation '{installation_name}' failed with return code {result.get('returncode')}")
+                    if result.get('stderr'):
+                        log.error(f"Installation error: {result['stderr']}")
+                    if result.get('stdout'):
+                        log.error(f"Installation output: {result['stdout']}")
+
+                    # Continue with other installations but log the failure
+                    log.warning(f"Continuing with remaining installations despite failure")
+
+            except Exception as e:
+                log.error(f"Failed to execute installation '{installation_name}': {e}", exc_info=True)
+                log.warning(f"Continuing with remaining installations despite error")
+
+        log.info(f"All installations completed")
 
 async def step_start_mcp_server(context: ExperimentRunCtx):
     """Start the MCP GUI server for target detection."""
@@ -945,7 +1021,6 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
-                # input("Press Enter to continue to connect websocket...")
                 await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
                 await step_runner.run_async_step(step_execute_installations, experiment_run_context)
 

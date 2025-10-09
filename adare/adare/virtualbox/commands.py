@@ -359,7 +359,7 @@ class CommandExecutionMixin:
             log.error(f"Error during async {operation_name}: {e}")
             return_value = 1
 
-        stdout = '\n'.join(captured_output)
+        stdout = ''.join(captured_output)
         return return_value, stdout, ""
 
     def _detect_xauthority(self) -> Optional[str]:
@@ -435,7 +435,7 @@ class CommandExecutionMixin:
                     verb_arg = "-Verb RunAs " if admin else ""
                     ps_cmd = (
                         f"$p=Start-Process -WindowStyle Hidden -PassThru {verb_arg}-FilePath cmd.exe "
-                        f"-ArgumentList '/c','{original_cmd}';"
+                        f"-ArgumentList @('/c','{original_cmd}');"
                         f"$p.Id"
                     )
                 else:
@@ -443,7 +443,7 @@ class CommandExecutionMixin:
                     verb_arg = "-Verb RunAs " if admin else ""
                     ps_cmd = (
                         f"$p=Start-Process -WindowStyle Hidden -PassThru {verb_arg}-FilePath powershell.exe "
-                        f"-ArgumentList {noprofile_inner}'-ExecutionPolicy','Bypass','-Command','{cmd_to_run}';"
+                        f"-ArgumentList @({noprofile_inner}'-ExecutionPolicy','Bypass','-Command','{cmd_to_run}');"
                         f"$p.Id"
                     )
                 command_bytes = ps_cmd.encode('utf-16le')
@@ -453,7 +453,7 @@ class CommandExecutionMixin:
                 # Foreground command - handle admin elevation
                 if admin:
                     # Use Start-Process with -Verb RunAs and -Wait for synchronous admin execution
-                    cmd_to_run = f"Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','{cmd_to_run}' -Wait"
+                    cmd_to_run = f"Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-Command','{cmd_to_run}') -Wait"
 
                 command_bytes = cmd_to_run.encode('utf-16le')
                 encoded_command = base64.b64encode(command_bytes).decode('ascii')

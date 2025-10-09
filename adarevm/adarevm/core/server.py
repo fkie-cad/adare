@@ -787,17 +787,17 @@ class AdareVMServer:
             return {"status": "error", "message": str(e)}
     
     
-    async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True):
+    async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True, admin: bool = False, background: bool = False):
         """Execute a raw shell command with advanced options."""
         import time
         import uuid
-        
+
         # Generate unique command ID for tracking
         command_id = str(uuid.uuid4())[:8]
         start_time = time.time()
-        
+
         log.info(f"[{command_id}] Executing shell command: {shell_command}")
-        log.debug(f"[{command_id}] Command options - cwd: {cwd}, timeout: {timeout}, shell: {shell}, inherit_env: {inherit_env}")
+        log.debug(f"[{command_id}] Command options - cwd: {cwd}, timeout: {timeout}, shell: {shell}, inherit_env: {inherit_env}, admin: {admin}, background: {background}")
         
         try:
             await self.send_event(websocket, EventType.COMMAND_START, {
@@ -817,6 +817,10 @@ class AdareVMServer:
                 options['timeout'] = timeout
             if inherit_env is not None:
                 options['inherit_env'] = inherit_env
+            if admin is not None:
+                options['admin'] = admin
+            if background is not None:
+                options['background'] = background
             if shell is not None:
                 options['shell'] = shell
             else:
@@ -835,9 +839,27 @@ class AdareVMServer:
                 result = execute_on_shell(shell_command, **options)
             else:
                 result = execute_on_shell(shell_command.split(" "), **options)
-            
+
             execution_time = time.time() - start_time
-            
+
+            # Handle background mode response
+            if result.get('background'):
+                await self.send_event(websocket, EventType.COMMAND_COMPLETE, {
+                    "shell_command": shell_command,
+                    "command_id": command_id,
+                    "background": True,
+                    "pid": result.get('pid')
+                })
+                log.info(f"[{command_id}] Background command started with PID {result.get('pid')}: {shell_command}")
+                return {
+                    "status": "success",
+                    "message": f"Background command started",
+                    "background": True,
+                    "pid": result.get('pid'),
+                    "command_id": command_id
+                }
+
+            # Handle normal mode response
             if result['returncode'] == 0:
                 await self.send_event(websocket, EventType.COMMAND_COMPLETE, {
                     "shell_command": shell_command,
@@ -846,7 +868,7 @@ class AdareVMServer:
                 })
                 log.info(f"[{command_id}] Shell command completed successfully in {execution_time:.2f}s: {shell_command}")
                 return {
-                    "status": "success", 
+                    "status": "success",
                     "message": f"Shell command executed successfully",
                     "returncode": result['returncode'],
                     "stdout": result['stdout'],
@@ -861,7 +883,7 @@ class AdareVMServer:
                 })
                 log.error(f"[{command_id}] Shell command failed with return code {result['returncode']} in {execution_time:.2f}s: {shell_command}")
                 return {
-                    "status": "error", 
+                    "status": "error",
                     "message": f"Shell command failed with return code {result['returncode']}",
                     "returncode": result['returncode'],
                     "stdout": result['stdout'],
