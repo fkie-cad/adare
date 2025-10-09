@@ -787,7 +787,7 @@ class AdareVMServer:
             return {"status": "error", "message": str(e)}
     
     
-    async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True, admin: bool = False, background: bool = False):
+    async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True, admin: bool = False, background: bool = False, run_as_user: str = None):
         """Execute a raw shell command with advanced options."""
         import time
         import uuid
@@ -797,7 +797,7 @@ class AdareVMServer:
         start_time = time.time()
 
         log.info(f"[{command_id}] Executing shell command: {shell_command}")
-        log.debug(f"[{command_id}] Command options - cwd: {cwd}, timeout: {timeout}, shell: {shell}, inherit_env: {inherit_env}, admin: {admin}, background: {background}")
+        log.debug(f"[{command_id}] Command options - cwd: {cwd}, timeout: {timeout}, shell: {shell}, inherit_env: {inherit_env}, admin: {admin}, background: {background}, run_as_user: {run_as_user}")
         
         try:
             await self.send_event(websocket, EventType.COMMAND_START, {
@@ -821,6 +821,8 @@ class AdareVMServer:
                 options['admin'] = admin
             if background is not None:
                 options['background'] = background
+            if run_as_user is not None:
+                options['run_as_user'] = run_as_user
             if shell is not None:
                 options['shell'] = shell
             else:

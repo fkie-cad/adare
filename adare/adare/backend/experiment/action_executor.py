@@ -705,11 +705,21 @@ class ActionExecutor:
                 log.info(f"CLAUDE: Pull operation - using custom destination: {action.src} -> {dest_path} (dst specified: {action.dst})")
             else:
                 # Preserve full guest path structure relative to artifacts directory
-                # Remove leading slash to make it relative, then append to artifacts
-                guest_path = Path(action.src)
-                relative_guest_path = guest_path.relative_to('/') if guest_path.is_absolute() else guest_path
-                dest_path = artifacts_dir / relative_guest_path
-                log.info(f"CLAUDE: Pull operation - preserving structure: {action.src} -> {dest_path} (relative: {relative_guest_path})")
+                # Handle both Windows and Linux paths correctly
+                guest_path = action.src
+
+                # Handle Windows paths (remove drive letter and convert backslashes)
+                if ':' in guest_path:
+                    # Windows path like C:\Users\adare\Documents\prefetch.csv
+                    # Split by : and take the part after it, then clean up
+                    guest_path_cleaned = guest_path.split(':', 1)[1].lstrip('\\').lstrip('/')
+                    dest_path = artifacts_dir / guest_path_cleaned.replace('\\', '/')
+                else:
+                    # Unix path like /tmp/output.txt
+                    guest_path_cleaned = guest_path.lstrip('/')
+                    dest_path = artifacts_dir / guest_path_cleaned
+
+                log.info(f"CLAUDE: Pull operation - preserving structure: {action.src} -> {dest_path} (cleaned: {guest_path_cleaned})")
             
             # Create parent directories if they don't exist
             dest_path.parent.mkdir(parents=True, exist_ok=True)
