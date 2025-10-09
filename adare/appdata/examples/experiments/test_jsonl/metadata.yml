@@ -1,0 +1,11 @@
+name: test_jsonl
+description: Comprehensive test suite for JSONL (Line-delimited JSON) test functions
+category: testing
+tags:
+  - jsonl
+  - logs
+  - test_functions
+platforms:
+  - linux
+  - windows
+version: 1.0.0

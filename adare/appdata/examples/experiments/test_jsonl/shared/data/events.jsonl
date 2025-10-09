@@ -1,0 +1,5 @@
+{"event_id": 1, "type": "purchase", "amount": 99.99, "currency": "USD", "tags": ["online", "credit_card"], "metadata": {"ip": "192.168.1.100", "country": "US"}}
+{"event_id": 2, "type": "refund", "amount": 29.99, "currency": "EUR", "tags": ["online", "customer_request"], "metadata": {"ip": "10.0.0.50", "country": "DE"}}
+{"event_id": 3, "type": "purchase", "amount": 149.50, "currency": "USD", "tags": ["store", "cash"], "metadata": {"ip": "192.168.1.101", "country": "US"}}
+{"event_id": 4, "type": "purchase", "amount": 49.99, "currency": "GBP", "tags": ["online", "paypal"], "metadata": {"ip": "172.16.0.10", "country": "GB"}}
+{"event_id": 5, "type": "purchase", "amount": 199.99, "currency": "USD", "tags": ["online", "credit_card"], "metadata": {"ip": "192.168.1.102", "country": "US"}}

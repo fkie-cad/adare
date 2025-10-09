@@ -1,0 +1,8 @@
+{"id": 1, "status": "active", "value": 100}
+{"id": 2, "status": "active", "value": 200}
+
+{"id": 3, "status": "inactive", "value": 150}
+this is not valid json
+{"id": 4, "status": "active", "value": 300}
+{"id": 5, "status": "pending"
+{"id": 6, "status": "active", "value": 400}

@@ -1,0 +1,8 @@
+{"timestamp": "2025-01-15T10:30:00Z", "level": "INFO", "user": {"id": 101, "name": "alice"}, "action": "login", "success": true, "duration_ms": 245}
+{"timestamp": "2025-01-15T10:31:15Z", "level": "ERROR", "user": {"id": 102, "name": "bob"}, "action": "upload", "success": false, "error": "file_too_large", "duration_ms": 1523}
+{"timestamp": "2025-01-15T10:32:00Z", "level": "INFO", "user": {"id": 101, "name": "alice"}, "action": "read", "success": true, "duration_ms": 89}
+{"timestamp": "2025-01-15T10:33:45Z", "level": "WARN", "user": {"id": 103, "name": "charlie"}, "action": "delete", "success": true, "warning": "deprecated_api", "duration_ms": 312}
+{"timestamp": "2025-01-15T10:35:20Z", "level": "ERROR", "user": {"id": 102, "name": "bob"}, "action": "login", "success": false, "error": "invalid_password", "duration_ms": 156}
+{"timestamp": "2025-01-15T10:36:10Z", "level": "INFO", "user": {"id": 104, "name": "david"}, "action": "login", "success": true, "duration_ms": 198}
+{"timestamp": "2025-01-15T10:37:30Z", "level": "DEBUG", "user": {"id": 101, "name": "alice"}, "action": "update", "success": true, "duration_ms": 445}
+{"timestamp": "2025-01-15T10:38:00Z", "level": "ERROR", "user": {"id": 105, "name": "eve"}, "action": "access", "success": false, "error": "permission_denied", "duration_ms": 23}

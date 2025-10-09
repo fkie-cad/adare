@@ -1,0 +1,427 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+  continue_on_test_failure: true
+
+# Variables for cross-platform JSONL testing
+variables:
+  logs_file:
+    type: path
+    value: "{{adare_shared_data}}/logs.jsonl"
+    description: "Application logs in JSONL format"
+
+  events_file:
+    type: path
+    value: "{{adare_shared_data}}/events.jsonl"
+    description: "Event data in JSONL format"
+
+  mixed_file:
+    type: path
+    value: "{{adare_shared_data}}/mixed.jsonl"
+    description: "JSONL file with some malformed lines"
+
+  empty_file:
+    type: path
+    value: "{{adare_shared_data}}/empty.jsonl"
+    description: "Empty JSONL file"
+
+  test_timestamp:
+    type: timestamp
+    value: "2025-01-15 10:30:00"
+    timezone: "utc"
+    format: "%Y-%m-%dT%H:%M:%SZ"
+    description: "Timestamp for testing"
+
+# Test definitions for JSONL functions
+tests:
+  # ====================
+  # jsonl.line_matches tests
+  # ====================
+
+  - name: test_line_matches_any_single_condition
+    description: 'Test line_matches with single condition in any mode'
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        level: "ERROR"
+      match_mode: "any"
+
+  - name: test_line_matches_any_multiple_conditions
+    description: 'Test line_matches with multiple conditions in any mode'
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        level: "ERROR"
+        success: false
+      match_mode: "any"
+
+  - name: test_line_matches_any_nested_path
+    description: 'Test line_matches with nested key path in any mode'
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        user.name: "alice"
+        action: "login"
+      match_mode: "any"
+
+  - name: test_line_matches_all_pass
+    description: 'Test line_matches with all mode (should pass)'
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{events_file}}'
+      conditions:
+        currency: "USD"
+      match_mode: "all"
+    expect_to_fail: true  # Not all lines have USD
+
+  - name: test_line_matches_all_metadata_exists
+    description: 'Test line_matches checking all lines have metadata'
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{events_file}}'
+      conditions:
+        metadata.country: "*"
+      match_mode: "all"
+      regex_match: true
+
+  - name: test_line_matches_regex
+    description: 'Test line_matches with regex pattern'
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        user.name: "^(alice|bob)$"
+      match_mode: "any"
+      regex_match: true
+
+  - name: test_line_matches_integer_value
+    description: 'Test line_matches with integer value'
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        user.id: 101
+      match_mode: "any"
+
+  - name: test_line_matches_boolean
+    description: 'Test line_matches with boolean value'
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        success: false
+      match_mode: "any"
+
+  - name: test_line_matches_not_found
+    description: 'Test line_matches with non-matching conditions'
+    function: jsonl.line_matches
+    expect_to_fail: true
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        level: "CRITICAL"
+      match_mode: "any"
+
+  - name: test_line_matches_with_malformed
+    description: 'Test line_matches with file containing malformed lines'
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{mixed_file}}'
+      conditions:
+        status: "active"
+      match_mode: "any"
+      skip_malformed: true
+
+  # ====================
+  # jsonl.line_count tests
+  # ====================
+
+  - name: test_line_count_exact
+    description: 'Test line_count with exact count'
+    function: jsonl.line_count
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        level: "ERROR"
+      expected_count: 3
+
+  - name: test_line_count_range
+    description: 'Test line_count with min/max range'
+    function: jsonl.line_count
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        success: true
+      expected_count:
+        min: 3
+        max: 6
+
+  - name: test_line_count_all_lines
+    description: 'Test line_count without conditions (count all valid lines)'
+    function: jsonl.line_count
+    parameter:
+      dst: '{{logs_file}}'
+      expected_count: 8
+
+  - name: test_line_count_nested_condition
+    description: 'Test line_count with nested key path'
+    function: jsonl.line_count
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        user.name: "alice"
+      expected_count: 3
+
+  - name: test_line_count_zero_matches
+    description: 'Test line_count expecting zero matches'
+    function: jsonl.line_count
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        level: "CRITICAL"
+      expected_count: 0
+
+  - name: test_line_count_wrong_count
+    description: 'Test line_count with wrong expected count'
+    function: jsonl.line_count
+    expect_to_fail: true
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        level: "INFO"
+      expected_count: 10  # Actually only 3 INFO lines
+
+  - name: test_line_count_regex
+    description: 'Test line_count with regex condition'
+    function: jsonl.line_count
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        action: "^(login|logout)$"
+      expected_count: 3
+      regex_match: true
+
+  - name: test_line_count_multiple_conditions
+    description: 'Test line_count with multiple conditions'
+    function: jsonl.line_count
+    parameter:
+      dst: '{{logs_file}}'
+      conditions:
+        level: "ERROR"
+        success: false
+      expected_count: 3
+
+  - name: test_line_count_skip_malformed
+    description: 'Test line_count with malformed lines (skip mode)'
+    function: jsonl.line_count
+    parameter:
+      dst: '{{mixed_file}}'
+      conditions:
+        status: "active"
+      expected_count: 4
+      skip_malformed: true
+
+  # ====================
+  # jsonl.value_in_any_line tests
+  # ====================
+
+  - name: test_value_in_any_line_simple
+    description: 'Test value_in_any_line with simple string match'
+    function: jsonl.value_in_any_line
+    parameter:
+      dst: '{{logs_file}}'
+      key_path: "level"
+      expected_value: "ERROR"
+
+  - name: test_value_in_any_line_nested
+    description: 'Test value_in_any_line with nested path'
+    function: jsonl.value_in_any_line
+    parameter:
+      dst: '{{logs_file}}'
+      key_path: "user.name"
+      expected_value: "charlie"
+
+  - name: test_value_in_any_line_integer
+    description: 'Test value_in_any_line with integer value'
+    function: jsonl.value_in_any_line
+    parameter:
+      dst: '{{logs_file}}'
+      key_path: "user.id"
+      expected_value: 104
+
+  - name: test_value_in_any_line_boolean
+    description: 'Test value_in_any_line with boolean value'
+    function: jsonl.value_in_any_line
+    parameter:
+      dst: '{{events_file}}'
+      key_path: "type"
+      expected_value: "refund"
+
+  - name: test_value_in_any_line_regex
+    description: 'Test value_in_any_line with regex pattern'
+    function: jsonl.value_in_any_line
+    parameter:
+      dst: '{{logs_file}}'
+      key_path: "error"
+      expected_value: "^(invalid_password|permission_denied)$"
+      regex_match: true
+
+  - name: test_value_in_any_line_not_found
+    description: 'Test value_in_any_line with non-existent value'
+    function: jsonl.value_in_any_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{logs_file}}'
+      key_path: "level"
+      expected_value: "CRITICAL"
+
+  - name: test_value_in_any_line_key_not_found
+    description: 'Test value_in_any_line with non-existent key'
+    function: jsonl.value_in_any_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{logs_file}}'
+      key_path: "nonexistent.key"
+      expected_value: "anything"
+
+  - name: test_value_in_any_line_deep_nested
+    description: 'Test value_in_any_line with deeply nested path'
+    function: jsonl.value_in_any_line
+    parameter:
+      dst: '{{events_file}}'
+      key_path: "metadata.country"
+      expected_value: "GB"
+
+  - name: test_value_in_any_line_numeric_comparison
+    description: 'Test value_in_any_line with numeric value'
+    function: jsonl.value_in_any_line
+    parameter:
+      dst: '{{events_file}}'
+      key_path: "amount"
+      expected_value: 99.99
+
+  # ====================
+  # Edge case tests
+  # ====================
+
+  - name: test_jsonl_empty_file
+    description: 'Test JSONL functions with empty file'
+    function: jsonl.line_count
+    expect_to_fail: true
+    parameter:
+      dst: '{{empty_file}}'
+      expected_count: 0
+
+  - name: test_jsonl_nonexistent_file
+    description: 'Test JSONL functions with non-existent file'
+    function: jsonl.line_matches
+    expect_to_fail: true
+    parameter:
+      dst: '{{adare_shared_data}}/nonexistent.jsonl'
+      conditions:
+        any: "value"
+      match_mode: "any"
+
+  - name: test_jsonl_malformed_strict_mode
+    description: 'Test JSONL with malformed lines in strict mode (should fail)'
+    function: jsonl.line_matches
+    expect_to_fail: true
+    parameter:
+      dst: '{{mixed_file}}'
+      conditions:
+        status: "active"
+      match_mode: "any"
+      skip_malformed: false
+
+  # ====================
+  # Advanced tests with wildcards
+  # ====================
+
+  - name: test_line_matches_array_contains
+    description: 'Test line_matches checking array contains value'
+    function: jsonl.value_in_any_line
+    parameter:
+      dst: '{{events_file}}'
+      key_path: "tags"
+      expected_value: "online"
+    expect_to_fail: true  # Arrays need special handling
+
+  - name: test_line_count_purchase_events
+    description: 'Test counting specific event types'
+    function: jsonl.line_count
+    parameter:
+      dst: '{{events_file}}'
+      conditions:
+        type: "purchase"
+      expected_count: 4
+
+  - name: test_value_multiple_matches
+    description: 'Test value_in_any_line finding value in multiple lines'
+    function: jsonl.value_in_any_line
+    parameter:
+      dst: '{{events_file}}'
+      key_path: "currency"
+      expected_value: "USD"
+
+  # ====================
+  # Timestamp tests (if placeholder system works)
+  # ====================
+
+  - name: test_value_timestamp_match
+    description: 'Test value_in_any_line with timestamp'
+    function: jsonl.value_in_any_line
+    parameter:
+      dst: '{{logs_file}}'
+      key_path: "timestamp"
+      expected_value: "2025-01-15T10:30:00Z"
+
+actions:
+  # Run all line_matches tests
+  - test: test_line_matches_any_single_condition
+  - test: test_line_matches_any_multiple_conditions
+  - test: test_line_matches_any_nested_path
+  - test: test_line_matches_all_pass
+  - test: test_line_matches_all_metadata_exists
+  - test: test_line_matches_regex
+  - test: test_line_matches_integer_value
+  - test: test_line_matches_boolean
+  - test: test_line_matches_not_found
+  - test: test_line_matches_with_malformed
+
+  # Run all line_count tests
+  - test: test_line_count_exact
+  - test: test_line_count_range
+  - test: test_line_count_all_lines
+  - test: test_line_count_nested_condition
+  - test: test_line_count_zero_matches
+  - test: test_line_count_wrong_count
+  - test: test_line_count_regex
+  - test: test_line_count_multiple_conditions
+  - test: test_line_count_skip_malformed
+
+  # Run all value_in_any_line tests
+  - test: test_value_in_any_line_simple
+  - test: test_value_in_any_line_nested
+  - test: test_value_in_any_line_integer
+  - test: test_value_in_any_line_boolean
+  - test: test_value_in_any_line_regex
+  - test: test_value_in_any_line_not_found
+  - test: test_value_in_any_line_key_not_found
+  - test: test_value_in_any_line_deep_nested
+  - test: test_value_in_any_line_numeric_comparison
+
+  # Run edge case tests
+  - test: test_jsonl_empty_file
+  - test: test_jsonl_nonexistent_file
+  - test: test_jsonl_malformed_strict_mode
+
+  # Run advanced tests
+  - test: test_line_count_purchase_events
+  - test: test_value_multiple_matches
+  - test: test_value_timestamp_match
