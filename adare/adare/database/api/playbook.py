@@ -227,14 +227,20 @@ class PlaybookApi(ProjectDatabaseApi):
         elif isinstance(value, dict):
             return {k: self._serialize_value(v) for k, v in value.items()}
         elif hasattr(value, '__dict__'):
-            # Handle action objects and other custom classes
-            result = {}
-            for attr_name in dir(value):
-                if not attr_name.startswith('_') and hasattr(value, attr_name):
-                    attr_value = getattr(value, attr_name)
-                    if not callable(attr_value):
-                        result[attr_name] = self._serialize_value(attr_value)
-            return result
+            # Check if this is an attrs class first
+            import attrs
+            if attrs.has(value):
+                # Use attrs.asdict() for attrs-defined classes
+                return attrs.asdict(value, recurse=True, filter=lambda attr, val: val is not None)
+            else:
+                # Handle regular classes with __dict__
+                result = {}
+                for attr_name in dir(value):
+                    if not attr_name.startswith('_') and hasattr(value, attr_name):
+                        attr_value = getattr(value, attr_name)
+                        if not callable(attr_value):
+                            result[attr_name] = self._serialize_value(attr_value)
+                return result
         else:
             # Fallback: try to convert to string
             return str(value)

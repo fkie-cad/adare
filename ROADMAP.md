@@ -71,6 +71,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: Flow console occasionally shows three red dots at the bottom → cause unknown  
 - [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
 - [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
+- [ ] 
 
 ---
 
