@@ -221,7 +221,7 @@ def determine_action_status(action_type: ActionType, action_data: dict):
             status = StatusEnum.FINISHED
             result_status = None
     else:
-        # Failed action
+        # Failed action (success=False)
         if action_type == ActionType.TEST:
             # For test actions, check the specific error type and expect_to_fail flag
             result_category = action_data.get('result_category', 'execution_error')
@@ -230,10 +230,19 @@ def determine_action_status(action_type: ActionType, action_data: dict):
             if result_category == 'execution_error':
                 status = StatusEnum.FAILED  # Test execution failed - show as failed stage
                 result_status = None  # No result status for execution errors (never invert execution errors)
+            elif result_category == 'success' and expect_to_fail:
+                # Special case: test succeeded but expect_to_fail=True caused success to be inverted to False
+                # This means test passed when it should have failed - show as FAILED
+                status = StatusEnum.FINISHED
+                result_status = StatusEnum.TEST_FAILED
+            elif result_category == 'test_failure' and expect_to_fail:
+                # Test failed as expected - show as SUCCESS
+                status = StatusEnum.FINISHED
+                result_status = StatusEnum.SUCCESS
             else:
-                status = StatusEnum.FINISHED  # Test assertion failed - show as completed with failed result
-                # For expect_to_fail tests, failure means the test failed as expected (good)
-                result_status = StatusEnum.SUCCESS if expect_to_fail else StatusEnum.TEST_FAILED
+                # Normal test failure (no expect_to_fail or other cases)
+                status = StatusEnum.FINISHED
+                result_status = StatusEnum.TEST_FAILED
         else:
             status = StatusEnum.FAILED
             result_status = None
