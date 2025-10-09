@@ -1,9 +1,8 @@
 from pathlib import Path
 from subprocess import Popen, PIPE, TimeoutExpired
-import subprocess
 import platform
-import os
 import ctypes
+import os
 
 import logging
 
@@ -113,7 +112,6 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
         log.debug(f"Custom environment variables: {list(env.keys()) if env else 'None'}")
 
     # Prepare environment variables
-    import os
     process_env = None
     if inherit_env:
         process_env = os.environ.copy()
