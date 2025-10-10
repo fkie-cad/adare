@@ -6,7 +6,7 @@ import logging
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.types.stages import (
     VMCreateStage, VMRunStage, VMWaitTillReadyStage, VMMountSharedDirectoriesStage,
-    VMStopStage, VMDestroyStage, VMExperimentSnapshotStage
+    VMStopStage, VMDestroyStage, VMExperimentSnapshotStage, VMImportStage, VMSnapshotCreateStage
 )
 from adare.backend.experiment.runctx import ExperimentRunCtx
 from adare.exceptions import LoggedException
