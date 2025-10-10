@@ -66,9 +66,8 @@ Required Software Installation
 
 Install the following software:
 
-- **Python 3.9 or newer**
-- **Poetry** (`Installation Guide <https://python-poetry.org/docs/#installing-with-the-official-installer>`_)
 - **VirtualBox Guest Additions**
+- **Miniforge3**
   
 
 Linux Setup
@@ -76,16 +75,6 @@ Linux Setup
 
 Base Configuration (all environments)
 -------------------------------------
-
-Needs to be updated with new conda install method!
-wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
-bash Miniforge3-Linux-x86_64.sh
-use commndas from github.com/conda-forge/miniforge
-also create a conda environment with python 3.10 with conda create -n pyadare python=3.10
-
-sudo systemctl stop unattended-upgrades
-sudo systemctl disable unattended-upgrades
-
 
 - Create a user account with:
 
@@ -101,12 +90,11 @@ sudo systemctl disable unattended-upgrades
   ``adare ALL=(ALL) NOPASSWD:ALL``
 
 - Install:
-
-  - Python 3.9 or newer
-  - `Poetry <https://python-poetry.org/docs/#installing-with-the-official-installer>`_ and make sure it's in the PATH for the ``adare`` user. So open a new terminal and run ``poetry --version`` to confirm.
+  - Miniforge3
+    - Download Install script: ``cd /tmp && wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh''
+    - Install: ``cd /tmp && bash Miniforge3-Linux-x86_64.sh -b -p /home/adare/.miniforge3'' (install into /home/adare/.miniforge3 instead of /home/adare/miniforge3)
+    - Create a conda environment with Python 3.10: ``conda create -n pyadare python=3.10``
   - VirtualBox Guest Additions
-  - ``python3-tk``
-  - ``python3-dev``
   - to be ready for future updates also install:
     - for x11: maim (for screenshots)
     - for wayland: grim (for screenshots) + ydotool (for mouse/keyboard control)
@@ -123,6 +111,8 @@ GNOME/KDE
   - ``gnome-screenshot``
 
 - Configure Seahorse (keyring) to unlock automatically on login by setting an empty password.
+- Disbale Auto Updates/Notifications:
+  - GNOME: ``sudo systemctl stop unattended-upgrades'' und ``sudo systemctl disable unattended-upgrades''
 
 
 Other Desktop Environments
