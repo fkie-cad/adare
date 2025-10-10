@@ -3,6 +3,7 @@ from subprocess import Popen, PIPE, TimeoutExpired
 import platform
 import ctypes
 import os
+import base64
 
 import logging
 
@@ -61,8 +62,12 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
         # Elevate privileges
         if is_windows:
             # Use Start-Process with RunAs for elevation
-            # Note: -Wait ensures we wait for completion, works with our script block approach
-            admin_wrapped = f"Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',''& {{ {command_str} }}''' -Verb RunAs -Wait -WindowStyle Hidden"
+            # Use Base64 encoding to avoid quote escaping issues
+            # Encode the command in UTF-16LE (PowerShell's expected encoding for -EncodedCommand)
+            encoded_bytes = command_str.encode('utf-16le')
+            encoded_command = base64.b64encode(encoded_bytes).decode('ascii')
+            # Use -EncodedCommand to avoid any quote escaping issues
+            admin_wrapped = f"Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand','{encoded_command}' -Verb RunAs -Wait -WindowStyle Hidden"
             command_str = admin_wrapped
             log.info(f"Running command with elevated privileges (Windows RunAs)")
         else:
