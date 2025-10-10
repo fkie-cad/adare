@@ -216,6 +216,24 @@ class PlaybookApi(ProjectDatabaseApi):
         
         return parameters
     
+    def _serialize_wait_condition(self, condition) -> Dict[str, Any]:
+        """Serialize WaitCondition to JSON, only including the active field."""
+        from adare.types.playbook import WaitCondition
+
+        # Serialize only the non-None field (one must be set per WaitCondition validation)
+        if condition.exists is not None:
+            return {"exists": self._target_to_json(condition.exists)}
+        elif condition.not_exists is not None:
+            return {"not_exists": self._target_to_json(condition.not_exists)}
+        elif condition.all is not None:
+            return {"all": [self._serialize_wait_condition(c) for c in condition.all]}
+        elif condition.any is not None:
+            return {"any": [self._serialize_wait_condition(c) for c in condition.any]}
+        elif condition.negate is not None:
+            return {"negate": self._serialize_wait_condition(condition.negate)}
+        else:
+            raise ValueError(f"Invalid WaitCondition: no active field found")
+
     def _serialize_value(self, value) -> Any:
         """Recursively serialize complex objects to JSON-compatible format."""
         if value is None:
@@ -227,7 +245,12 @@ class PlaybookApi(ProjectDatabaseApi):
         elif isinstance(value, dict):
             return {k: self._serialize_value(v) for k, v in value.items()}
         elif hasattr(value, '__dict__'):
-            # Check if this is an attrs class first
+            # Check if this is a WaitCondition first (special handling needed)
+            from adare.types.playbook import WaitCondition
+            if isinstance(value, WaitCondition):
+                return self._serialize_wait_condition(value)
+
+            # Check if this is an attrs class
             import attrs
             if attrs.has(value):
                 # Use attrs.asdict() for attrs-defined classes
@@ -455,6 +478,22 @@ class PlaybookApi(ProjectDatabaseApi):
         # Action-specific reconstruction based on action_type
         action_type = item.action_type
         params = item.parameters or {}
+
+        # CLAUDE: Debug logging to diagnose serialization issues
+        log.debug(f"CLAUDE: Deserializing {action_type} action")
+        log.debug(f"CLAUDE: item.parameters type: {type(item.parameters)}")
+        log.debug(f"CLAUDE: params type: {type(params)}")
+
+        # CLAUDE: Defensive JSON parsing - handle case where SQLAlchemy returns string instead of dict
+        if isinstance(params, str):
+            import json
+            log.warning(f"CLAUDE: parameters is a string (double-encoding issue), parsing JSON: {params[:100]}...")
+            try:
+                params = json.loads(params)
+                log.info(f"CLAUDE: Successfully parsed JSON string to dict")
+            except json.JSONDecodeError as e:
+                log.error(f"CLAUDE: Failed to parse parameters JSON: {e}")
+                raise ValueError(f"Invalid JSON in {action_type} action parameters: {params[:200]}")
 
         if action_type == 'click':
             return ClickAction(
