@@ -461,13 +461,13 @@ class ActionExecutor:
             command = action.command
             cwd = action.cwd
             env = action.env
-        
+
             # Calculate WebSocket timeout with buffer for long-running commands
             websocket_timeout = None
             if action.timeout:
                 # Add 10 second buffer to shell timeout for WebSocket communication
                 websocket_timeout = action.timeout + 10
-        
+
             # Execute raw shell command directly with options
             result = await self.client.execute_shell(
                 shell_command=command,
@@ -475,6 +475,7 @@ class ActionExecutor:
                 env=env,
                 timeout=action.timeout,
                 shell=action.shell,
+                admin=action.admin,
                 websocket_timeout=websocket_timeout
             )
             return ActionResult(
