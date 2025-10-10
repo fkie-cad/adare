@@ -370,6 +370,8 @@ class CommandExecutionMixin:
                     "/run/user/$(id -u)/gdm/Xauthority" \
                     "/run/user/$(id -u)/X11-display" \
                     "$HOME/.Xauthority" \
+                    "/home/adare/.Xauthority" \
+                    /tmp/xauth_* \
                     /tmp/serverauth.* \
                     /run/sddm/xauth_* \
                     /run/user/$(id -u)/xauth_*; do
@@ -403,7 +405,10 @@ class CommandExecutionMixin:
             log.info(f"Detected XAUTHORITY at: {path}")
             return path
 
-        log.error(f"Failed to detect XAUTHORITY, using fallback. Error: {result.stderr.strip()}")
+        log.error(
+            f"Failed to detect XAUTHORITY (exit code {result.returncode}). "
+            f"stdout: {result.stdout.strip()!r}, stderr: {result.stderr.strip()!r}"
+        )
         return None   # better than returning a hardcoded, possibly wrong path
 
 

@@ -128,7 +128,7 @@ class VMLifecycleManager:
                 preserve_experiment_snapshot=context.config.preserve_snapshot,
                 interrupt_event=context.user_interrupt_event
             ),
-            timeout=120  # 2 minute timeout
+            timeout=300  # 5 minute timeout for VM import operations
         )
         log.info(f"CLAUDE: VM instance allocation completed successfully, instance_id={vm_instance_id}")
 
