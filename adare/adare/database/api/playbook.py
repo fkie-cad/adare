@@ -516,7 +516,9 @@ class PlaybookApi(ProjectDatabaseApi):
                 cwd=params.get('cwd'),
                 env=params.get('env'),
                 timeout=params.get('timeout'),
-                shell=params.get('shell', False)
+                shell=params.get('shell', False),
+                admin=params.get('admin', False),
+                background=params.get('background', False)
             )
 
         elif action_type == 'screenshot':

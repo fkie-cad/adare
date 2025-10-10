@@ -32,6 +32,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] integrated log viewer with `adare run log adare ULID` or `adare run log adarevm` that we can view logs but also filter them!
 - [ ] more advanced wait_until logic -> use image diffs to identify changed areas?! Only search in changed ares?! -> analyze if this works or is too complex?!
 - [ ] add option --custom-testfunction PATH_TO_DIR; which is then used instead of the existing one (even if same name) -> not copied only used; this will help developing testfunctions!
+- [ ] wait_until not search twice but remeber the action and execute it then directly?!
 
 ---
 
