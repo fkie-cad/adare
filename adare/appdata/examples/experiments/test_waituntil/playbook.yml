@@ -1,0 +1,16 @@
+actions:
+  - click:
+      target:
+        image: "explorer.png"
+      description: "Open File Explorer"
+  - wait_until:
+      condition:
+        exists:
+          text: "Documents"
+  - click:
+      target:
+        text: "Documents"
+        strategy:
+          SweepStrategy:
+            index: 2
+      description: "Navigate to Documents folder"

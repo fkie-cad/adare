@@ -244,12 +244,15 @@ class PlaybookApi(ProjectDatabaseApi):
             return [self._serialize_value(item) for item in value]
         elif isinstance(value, dict):
             return {k: self._serialize_value(v) for k, v in value.items()}
-        elif hasattr(value, '__dict__'):
-            # Check if this is a WaitCondition first (special handling needed)
-            from adare.types.playbook import WaitCondition
-            if isinstance(value, WaitCondition):
-                return self._serialize_wait_condition(value)
 
+        # CRITICAL: Check WaitCondition BEFORE hasattr(__dict__) because attrs classes
+        # may not have __dict__ (they use __slots__ by default)
+        from adare.types.playbook import WaitCondition
+        if isinstance(value, WaitCondition):
+            return self._serialize_wait_condition(value)
+
+        # Now check for __dict__ for other object types
+        if hasattr(value, '__dict__'):
             # Check if this is an attrs class
             import attrs
             if attrs.has(value):

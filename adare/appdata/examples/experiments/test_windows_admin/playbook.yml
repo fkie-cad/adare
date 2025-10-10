@@ -1,0 +1,36 @@
+variables:
+  admin_username:
+    type: string
+    value: "Administrator"
+    description: "Administrator account name"
+
+  admin_protected_file:
+    type: path
+    value: "C:/Windows/System32/config/SAM"
+    description: "Protected system file accessible only to admin"
+
+# Test definitions
+tests:
+  - name: admin_protected_file_exists
+    description: "Verify the admin-only protected file exists"
+    function: file_exists
+    parameter:
+      dst: '{{admin_protected_file}}'
+
+# Actions (admin-only)
+actions:
+  - command:
+      name: "Check Admin Access"
+      description: "Ensure this session is running with Administrator privileges"
+      command: "whoami /groups | findstr /i 'Administrators'"
+      shell: true
+      admin: true
+
+  - test: admin_protected_file_exists
+
+  - command:
+      name: "Inspect Protected File"
+      description: "Display information about the protected SAM file (admin-only)"
+      command: "powershell -Command \"Get-Item '{{admin_protected_file}}' | Select-Object FullName, Length, LastWriteTime, Attributes | Format-List\""
+      shell: true
+      admin: true
