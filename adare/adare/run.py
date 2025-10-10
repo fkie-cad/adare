@@ -44,7 +44,7 @@ from adare.cli.environment import (
     exec_environment_load, exec_environment_create, exec_environment_delete
 )
 from adare.cli.experiment import (
-    exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example, exec_experiment_clean, exec_experiment_add_env, exec_experiment_remove_env, exec_experiment_clone
+    exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example, exec_experiment_clean, exec_experiment_remove, exec_experiment_add_env, exec_experiment_remove_env, exec_experiment_clone
 )
 from adare.cli.interactive import (
     exec_experiment_dev
@@ -330,6 +330,7 @@ def experiment():
 
 # Add aliases for experiment commands
 experiment.add_alias('l', 'list')
+experiment.add_alias('rm', 'remove')
 experiment.add_alias('rm-env', 'remove-env')
 
 @experiment.command()
@@ -490,6 +491,39 @@ def clean(experiment, project):
         project=project
     )
     exec_with_error_printing(exec_experiment_clean, args)
+
+
+@experiment.command()
+@click.argument('experiment')
+@click.option('--project', '-p', help='Name of the project')
+@click.option('--force', '-f', is_flag=True, help='Force removal even if experiment has productive runs')
+@click.option('--keep-files', is_flag=True, help='Keep experiment directory on filesystem (only remove from database)')
+def remove(experiment, project, force, keep_files):
+    """Remove an experiment from the database and optionally from filesystem.
+
+    This command permanently deletes the experiment, all its runs (both productive
+    and fake), and optionally the experiment directory. Use with caution!
+
+    By default, the command will:
+    - Fail if the experiment has productive runs (use --force to override)
+    - Delete the experiment directory from filesystem (use --keep-files to preserve)
+
+    EXPERIMENT can be:
+    - Simple name: test_csv
+    - Relative path: experiments/test_csv
+
+    Examples:
+    - adare experiment remove test_csv (fails if has runs)
+    - adare experiment remove test_csv --force (removes with all runs)
+    - adare experiment remove test_csv --force --keep-files (DB only)
+    """
+    args = SimpleNamespace(
+        experiment=experiment,
+        project=project,
+        force=force,
+        keep_files=keep_files
+    )
+    exec_with_error_printing(exec_experiment_remove, args)
 
 
 @experiment.command(name='add-env')

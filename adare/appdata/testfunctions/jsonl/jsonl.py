@@ -280,7 +280,7 @@ class LineMatches(BasicTest):
 class LineCountParameter(Parameter):
     dst: str
     conditions: Optional[Dict[str, Union[str, int, float, bool, None]]] = None
-    expected_count: Union[int, Dict[str, int]] = None  # int or {"min": x, "max": y}
+    expected_count: Optional[Union[int, Dict[str, int]]] = None  # int, {"min": x, "max": y}, or None (at least 1)
     regex_match: Optional[bool] = False
     skip_malformed: Optional[bool] = True
 
@@ -288,7 +288,7 @@ class LineCountParameter(Parameter):
 @attrs.define
 class LineCount(BasicTest):
     testname: ClassVar[str] = 'line_count'
-    testdescription: ClassVar[str] = 'counts lines in JSONL file matching conditions and validates against expected count'
+    testdescription: ClassVar[str] = 'counts lines in JSONL file matching conditions and validates against expected count (if None, requires at least 1 match)'
 
     name: str
     parameter: LineCountParameter
@@ -309,14 +309,18 @@ class LineCount(BasicTest):
             skip_malformed = self.parameter.skip_malformed
 
             # Parse expected_count
-            if isinstance(expected_count, int):
+            if expected_count is None:
+                # No expected_count specified - require at least 1 match
+                min_count = 1
+                max_count = float('inf')
+            elif isinstance(expected_count, int):
                 min_count = expected_count
                 max_count = expected_count
             elif isinstance(expected_count, dict):
                 min_count = expected_count.get('min', 0)
                 max_count = expected_count.get('max', float('inf'))
             else:
-                return TestResult.execution_error(None, "expected_count must be int or dict with 'min'/'max'")
+                return TestResult.execution_error(None, "expected_count must be int, dict with 'min'/'max', or None (at least 1)")
 
             try:
                 # Check if file is empty (edge case handling)
@@ -391,10 +395,12 @@ class LineCount(BasicTest):
                 # Check if count is within expected range
                 if min_count <= matching_count <= max_count:
                     messages = [f'Found {matching_count} matching lines']
-                    if min_count == max_count:
+                    if self.parameter.expected_count is None:
+                        messages[0] += f' (expected at least 1)'
+                    elif min_count == max_count:
                         messages[0] += f' (expected exactly {min_count})'
                     else:
-                        messages[0] += f' (expected {min_count}-{max_count})'
+                        messages[0] += f' (expected {min_count}-{max_count if max_count != float("inf") else "∞"})'
                     messages.append(f'Total valid lines: {total_lines - malformed_count}')
                     if conditions:
                         messages.append(f'Conditions: {conditions}')
@@ -402,9 +408,14 @@ class LineCount(BasicTest):
                 else:
                     messages = [
                         f'Found {matching_count} matching lines',
-                        f'Expected: {min_count if min_count == max_count else f"{min_count}-{max_count}"}',
-                        f'Total valid lines: {total_lines - malformed_count}'
                     ]
+                    if self.parameter.expected_count is None:
+                        messages.append(f'Expected: at least 1')
+                    elif min_count == max_count:
+                        messages.append(f'Expected: {min_count}')
+                    else:
+                        messages.append(f'Expected: {min_count}-{max_count if max_count != float("inf") else "∞"}')
+                    messages.append(f'Total valid lines: {total_lines - malformed_count}')
                     if conditions:
                         messages.append(f'Conditions: {conditions}')
                     return TestResult.failed(messages)

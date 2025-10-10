@@ -230,7 +230,8 @@ def __project_integrity_check(project_path: Path, project_directory: ProjectDire
         )
 
 def __cleanup_experiment_run(experiment_run_directory: ExperimentRunDirectory):
-    experiment_run_directory.clean()
+    if experiment_run_directory is not None:
+        experiment_run_directory.clean()
 
 
 def __experiment_integrity_check(project_path: Path, experiment_name: str, environment_name:str, experiment_directory: ExperimentDirectory):
@@ -361,7 +362,10 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         raise VMSetupError(log, vm.vm_name, install_command, result.returncode, result.stdout, result.stderr)
 
     # TODO: figure out a way to run poetry as sudo in linux
-    await vm.run_command(run_command, background=True, stop_event=stop_event, admin=True if use_conda else False, cwd=run_cwd)
+    if context.guest_platform == 'linux':
+        await vm.run_command(run_command, background=True, stop_event=stop_event, admin=True if use_conda else False, cwd=run_cwd)
+    else:
+        await vm.run_command(run_command, background=True, stop_event=stop_event, admin=True)
 
 
 def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool, external_stop_event: threading.Event = None):
@@ -839,7 +843,8 @@ async def step_shutdown_mcp_server(context: ExperimentRunCtx, post_interrupt: bo
     event = None if post_interrupt else context.user_interrupt_event
     with StageCtxManager(ShutdownComputerVisionServerStage(), context.experiment_run_ulid, event=event):
         log.info('stopping MCP GUI server')
-        await context.mcp_server.stop()
+        if context.mcp_server is not None:
+            await context.mcp_server.stop()
 
 
 async def step_shutdown_ws(context: ExperimentRunCtx, post_interrupt: bool = False):

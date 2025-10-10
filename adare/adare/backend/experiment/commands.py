@@ -510,6 +510,159 @@ def experiment_clean(project_path: Path, experiment_name: str):
         raise LoggedException(log, f'Failed to clean experiment "{experiment_name}": {str(e)}')
 
 
+def experiment_remove(project_path: Path, experiment_name: str, force: bool = False, keep_files: bool = False):
+    """Remove an experiment from the database and optionally from the filesystem.
+
+    This function removes an experiment from the database, including all associated
+    runs and data. Optionally deletes the experiment directory from the filesystem.
+
+    Args:
+        project_path: Path to the project directory
+        experiment_name: Name of the experiment to remove
+        force: Force removal even if experiment has productive runs
+        keep_files: Keep experiment directory on filesystem (only remove from database)
+    """
+    from adare.console import print_success_message, print_error_message
+    from adare.database.api.experiment import ExperimentApi
+    from adare.exceptions import LoggedErrorException
+    import shutil
+
+    log.info(f'Removing experiment: {experiment_name}')
+
+    # Get experiment directory
+    experiment_directory = ExperimentDirectory(project_path, experiment_name)
+
+    if not experiment_directory.exists():
+        raise ExperimentDirectoryDoesNotExistError(
+            log,
+            f'experiment directory [b]{experiment_directory.path}[/b] does not exist',
+            possible_solutions=[
+                f'check if experiment name "{experiment_name}" is correct',
+                'list available experiments with: adare experiment list'
+            ]
+        )
+
+    try:
+        with ExperimentApi(project_path) as api:
+            # Get experiment from database
+            experiment = api.get_experiment_by_project_and_name(project_path, experiment_name)
+
+            if not experiment:
+                # Experiment exists on filesystem but not in database
+                log.warning(f'Experiment "{experiment_name}" exists on filesystem but not in database')
+
+                if not force:
+                    raise LoggedErrorException(
+                        log,
+                        f'experiment "{experiment_name}" not found in database',
+                        possible_solutions=[
+                            'use --force to remove the experiment directory anyway',
+                            f'load the experiment first with: adare experiment load {experiment_name}'
+                        ]
+                    )
+
+                # Force removal of directory only
+                if not keep_files:
+                    try:
+                        shutil.rmtree(experiment_directory.path)
+                        log.info(f'Removed experiment directory: {experiment_directory.path}')
+                        print_success_message(
+                            title=f'Experiment "{experiment_name}" directory removed!',
+                            location=str(experiment_directory.path),
+                            next_steps=[
+                                'Experiment directory has been deleted from filesystem',
+                                'Experiment was not found in database (already removed or never loaded)'
+                            ]
+                        )
+                        return
+                    except OSError as e:
+                        raise LoggedErrorException(
+                            log,
+                            f'failed to remove experiment directory: {e}',
+                            possible_solutions=[
+                                'check file permissions',
+                                f'manually delete directory: rm -rf {experiment_directory.path}'
+                            ]
+                        )
+                else:
+                    raise LoggedErrorException(
+                        log,
+                        f'experiment "{experiment_name}" not in database and --keep-files specified',
+                        possible_solutions=[
+                            f'load the experiment first with: adare experiment load {experiment_name}',
+                            'remove --keep-files flag to delete the directory'
+                        ]
+                    )
+
+            # Count productive runs
+            productive_run_count = len([run for run in experiment.runs if not run.fake])
+            total_run_count = len(experiment.runs)
+
+            # Check if experiment has productive runs and force flag not set
+            if productive_run_count > 0 and not force:
+                raise LoggedErrorException(
+                    log,
+                    f'experiment "{experiment_name}" has {productive_run_count} productive run(s)',
+                    possible_solutions=[
+                        'use --force to remove the experiment and all its runs',
+                        f'clean fake runs only with: adare experiment clean {experiment_name}',
+                        'back up important run data before removal'
+                    ]
+                )
+
+            # Remove experiment from database (cascades to all runs and related data)
+            experiment_ulid = experiment.id
+            api.remove_experiment(experiment)
+            api._session.commit()
+            log.info(f'Removed experiment "{experiment_name}" (ulid: {experiment_ulid}) from database')
+
+            # Optionally remove experiment directory
+            if not keep_files:
+                try:
+                    shutil.rmtree(experiment_directory.path)
+                    log.info(f'Removed experiment directory: {experiment_directory.path}')
+                    files_status = 'Experiment directory deleted from filesystem'
+                except OSError as e:
+                    log.warning(f'Failed to remove experiment directory: {e}')
+                    files_status = f'⚠️  Failed to remove directory: {e}'
+            else:
+                files_status = 'Experiment directory preserved on filesystem'
+
+            # Success message
+            next_steps = [
+                f'Removed experiment from database (ulid: {experiment_ulid})',
+                f'Deleted {total_run_count} run(s) ({productive_run_count} productive, {total_run_count - productive_run_count} fake)',
+                files_status
+            ]
+
+            if keep_files:
+                next_steps.append(f'You can reload the experiment with: adare experiment load {experiment_name}')
+            else:
+                next_steps.append(f'You can recreate the experiment with: adare experiment create {experiment_name}')
+
+            print_success_message(
+                title=f'Experiment "{experiment_name}" removed successfully!',
+                location=str(experiment_directory.path),
+                next_steps=next_steps
+            )
+
+    except LoggedErrorException:
+        raise
+    except ValueError as e:
+        raise LoggedErrorException(log, str(e))
+    except Exception as e:
+        log.error(f'Failed to remove experiment "{experiment_name}": {e}', exc_info=True)
+        raise LoggedErrorException(
+            log,
+            f'failed to remove experiment "{experiment_name}": {str(e)}',
+            possible_solutions=[
+                'check database connectivity',
+                'ensure you have write permissions',
+                'check the log output for specific error details'
+            ]
+        )
+
+
 async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = False, vm_cleanup_mode: str = 'prompt') -> bool:
     """
     Test OVA file compatibility with ADARE.

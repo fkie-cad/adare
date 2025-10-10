@@ -534,6 +534,31 @@ def exec_experiment_clean(arguments):
         raise NoProjectFoundError(log, message='no project directory found')
 
 
+def exec_experiment_remove(arguments):
+    """Execute experiment remove command to delete an experiment."""
+    from adare.backend.experiment.commands import experiment_remove
+    from adare.exceptions import LoggedException, LoggedErrorException
+    import sys
+
+    if project_directory := determine_projectdirectory(arguments.project):
+        try:
+            experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+            experiment_remove(
+                project_directory,
+                experiment_name,
+                force=arguments.force,
+                keep_files=arguments.keep_files
+            )
+        except LoggedException as e:
+            e.print()
+            if isinstance(e, LoggedErrorException):
+                sys.exit(-1)
+            else:
+                sys.exit(0)
+    else:
+        raise NoProjectFoundError(log, message='no project directory found')
+
+
 def exec_experiment_add_env(arguments):
     """Execute experiment add-env command to add environments to experiments."""
     from adare.backend.experiment.commands import experiment_add_environments
