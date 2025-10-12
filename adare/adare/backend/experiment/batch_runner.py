@@ -603,7 +603,7 @@ class BatchExperimentRunner:
 
         try:
             # Import here to avoid circular imports
-            from adare.backend.experiment.commands import experiment_run
+            from adare.backend.experiment.run import experiment_run
 
             # Execute the experiment
             was_interrupted, was_successful = await experiment_run(

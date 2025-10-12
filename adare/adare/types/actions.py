@@ -421,6 +421,30 @@ class WaitUntilActionCompleteEvent(ActionCompleteEvent):
 
 
 # -------------------------------
+# Loop Action Events
+# -------------------------------
+
+@attrs.define
+class LoopActionStartEvent(ActionStartEvent):
+    """Event for loop action start."""
+    iteration_count: Optional[int] = None
+    items: Optional[list] = None
+
+    def get_event_type(self) -> EventType:
+        return EventType.LOOP_START
+
+
+@attrs.define
+class LoopActionCompleteEvent(ActionCompleteEvent):
+    """Event for loop action completion."""
+    iterations_completed: Optional[int] = None
+    actions_executed: Optional[int] = None
+
+    def get_event_type(self) -> EventType:
+        return EventType.LOOP_COMPLETE
+
+
+# -------------------------------
 # Substage Action Events
 # -------------------------------
 

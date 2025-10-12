@@ -174,9 +174,9 @@ class PlaybookController:
             playbook=self.playbook,
             variable_resolver=self.variable_resolver
         )
-        
-        # Connect test loader to action executor
-        self.action_executor.test_loader = self.test_loader
+
+        # Connect test loader to action executor (use setter method to ensure proper initialization)
+        self.action_executor.set_test_loader(self.test_loader)
     
     def _create_jinja_environment(self):
         """Create Jinja environment with all necessary filters."""

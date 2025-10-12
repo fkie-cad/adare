@@ -182,6 +182,28 @@ def get_action_display_info(action_type: ActionType, action_data: dict, is_compl
             else:
                 return f"wait until {target_desc} appears"
 
+    elif action_type == ActionType.LOOP:
+        # For complete events, show summary
+        if is_complete:
+            iterations = action_data.get('iterations') or action_data.get('iterations_completed', 0)
+            actions_executed = action_data.get('actions_executed', 0)
+            if iterations and actions_executed:
+                return f"loop completed ({iterations} iterations, {actions_executed} actions)"
+            elif iterations:
+                return f"loop completed ({iterations} iterations)"
+            else:
+                return "loop completed"
+        else:
+            # For start events, show configuration
+            iteration_count = action_data.get('iteration_count')
+            items = action_data.get('items')
+            if iteration_count:
+                return f"loop ({iteration_count} iterations)"
+            elif items and isinstance(items, list):
+                return f"loop ({len(items)} items)"
+            else:
+                return "loop action"
+
     else:
         # Throw exception for unhandled action types to catch missing cases
         raise ValueError(f"Unhandled action type in get_action_display_info: {action_type} (value: {action_type.value})")

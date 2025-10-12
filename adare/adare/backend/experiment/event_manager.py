@@ -13,7 +13,7 @@ from adare.types.playbook import (
     ActionType, ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction,
     CommandAction, ScreenshotAction, BlockAction, ActionTestAction,
-    SaveTimestampAction, PullAction, WaitUntilAction
+    SaveTimestampAction, PullAction, WaitUntilAction, LoopAction, PauseAction
 )
 
 # Action event imports for flow console display
@@ -32,6 +32,8 @@ from adare.types.actions import (
     SaveTimestampActionStartEvent, SaveTimestampActionCompleteEvent,
     PullActionStartEvent, PullActionCompleteEvent,
     WaitUntilActionStartEvent, WaitUntilActionCompleteEvent,
+    LoopActionStartEvent, LoopActionCompleteEvent,
+    PauseActionStartEvent, PauseActionCompleteEvent,
     FindActionStartEvent, FindActionCompleteEvent,
     ExecuteActionStartEvent, ExecuteActionCompleteEvent
 )
@@ -134,6 +136,19 @@ class EventManager:
                 timeout=getattr(action, 'timeout', None),
                 check_interval=getattr(action, 'check_interval', None),
                 initial_delay=getattr(action, 'initial_delay', None),
+                **event_data
+            )
+        elif isinstance(action, LoopAction):
+            # Determine iteration count
+            iteration_count = action.times if action.times is not None else (len(action.items) if action.items else None)
+            return LoopActionStartEvent(
+                iteration_count=iteration_count,
+                items=action.items if hasattr(action, 'items') else None,
+                **event_data
+            )
+        elif isinstance(action, PauseAction):
+            return PauseActionStartEvent(
+                message=getattr(action, 'message', None),
                 **event_data
             )
         elif isinstance(action, FindAction):
@@ -240,6 +255,17 @@ class EventManager:
                 target_info=self._get_target_info(target),
                 coordinates=result.coordinates,
                 found=result.success,
+                **event_data
+            )
+        elif isinstance(action, LoopAction):
+            event = LoopActionCompleteEvent(
+                iterations_completed=result.data.get('iterations') if result.data else None,
+                actions_executed=result.data.get('actions_executed') if result.data else None,
+                **event_data
+            )
+        elif isinstance(action, PauseAction):
+            event = PauseActionCompleteEvent(
+                user_input=result.data.get('user_input') if result.data else None,
                 **event_data
             )
         elif isinstance(action, FindAction):
