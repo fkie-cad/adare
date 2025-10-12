@@ -20,6 +20,8 @@ log = logging.getLogger(__name__)
 def parse_metadata_file(metadata_file: Path) -> ExperimentMetadata:
     try:
         json_dict = yaml_to_dict(metadata_file)
+        # Handle empty YAML files (yaml.safe_load returns None for empty files)
+        json_dict = json_dict or {}
         metadata = cattrs.structure(json_dict, ExperimentMetadata)
     except cattrs.BaseValidationError as e:
         log.error(f'parsing errors while parsing metadata file {metadata_file}:')
@@ -37,6 +39,8 @@ def parse_metadata_file(metadata_file: Path) -> ExperimentMetadata:
 
 def parse_environment_file(environment_file: Path) -> EnvironmentMetadata|None:
     environment_dict = yaml_to_dict(environment_file)
+    # Handle empty YAML files (yaml.safe_load returns None for empty files)
+    environment_dict = environment_dict or {}
     try:
         environment = cattrs.structure(environment_dict, EnvironmentMetadata)
     except cattrs.BaseValidationError as e:

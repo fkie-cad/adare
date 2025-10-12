@@ -22,7 +22,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] Idea: Use **NiceGUI** for web-based interactive playbook and test creation (e.g., cropping images, extracting icons)  
 - [ ] Enhance `adare vm test` with automatic platform and desktop environment detection  
 - [ ] Use standardized installation directory (via `platformdirs`) and migrate installer scripts to Python  
-- [ ] Implement condition/wait/retry logic in playbooks  
 - [ ] Implement watchers that if gui find failed searches for specific things (e.g. remove popup) and then tries again
 - [ ] Extend `expect_to_fail` with `expect_to_fail_on: ExceptionType` (specific exception handling)  
 - [ ] Improve ULID handling in CLI → allow lookup by unique partial combinations  
@@ -33,7 +32,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] more advanced wait_until logic -> use image diffs to identify changed areas?! Only search in changed ares?! -> analyze if this works or is too complex?!
 - [ ] add option --custom-testfunction PATH_TO_DIR; which is then used instead of the existing one (even if same name) -> not copied only used; this will help developing testfunctions!
 - [ ] wait_until not search twice but remeber the action and execute it then directly?!
-
+- [ ] lets us save results in variables we use later again?! 
+ 
 ---
 
 ## 🛠 Quality of Life Improvements  
@@ -72,7 +72,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: Flow console occasionally shows three red dots at the bottom → cause unknown  
 - [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
 - [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
-- [ ] 
 
 ---
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import attrs
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Any
 import yaml
 import cattrs
 from pathlib import Path
@@ -242,12 +242,41 @@ class WaitUntilAction:
         """Validate condition tree depth."""
         self.condition.validate_depth()
 
+@attrs.define
+class LoopAction:
+    """Loop over actions multiple times or iterate over a list.
+
+    Provides automatic variables:
+    - index: Current iteration (0-based)
+    - total: Total number of iterations
+    - item: Current item (for list iteration)
+    """
+    actions: List[ActionType]  # Will be resolved after ActionType is defined
+
+    # Simple iteration (mutually exclusive with items)
+    times: Optional[int] = None
+
+    # List iteration (mutually exclusive with times)
+    items: Optional[Union[str, List[Any]]] = None  # Can be "{{var}}" or direct list
+
+    # Optional: customize item variable name (defaults to 'item')
+    item_var: Optional[str] = None
+
+    description: str = ''
+
+    def __attrs_post_init__(self):
+        """Validate that exactly one of times or items is specified."""
+        if (self.times is None) == (self.items is None):
+            raise ValueError("LoopAction must specify exactly one of: times or items")
+        if self.times is not None and self.times < 1:
+            raise ValueError(f"Loop times must be >= 1, got {self.times}")
+
 # Now define ActionType after all classes
 ActionType = Union[
     ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, ActionTestAction,
     CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, PullAction, PauseAction,
-    WaitUntilAction
+    WaitUntilAction, LoopAction
 ]
 
 @attrs.define
@@ -316,6 +345,12 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
         lambda obj, _: _structure_wait_condition(obj, converter) if obj is not None else None
     )
 
+    # Register structure hook for LoopAction items field (Union[str, List[Any]])
+    converter.register_structure_hook(
+        Optional[Union[str, List[Any]]],
+        lambda obj, _: obj  # Pass through as-is, will be resolved at runtime
+    )
+
     # Register strict structure hooks for all main classes to validate fields
     _register_strict_hooks(converter)
 
@@ -361,6 +396,8 @@ def _structure_action(obj, converter):
         return converter.structure(obj['pause'], PauseAction)
     if 'wait_until' in obj:
         return converter.structure(obj['wait_until'], WaitUntilAction)
+    if 'loop' in obj:
+        return converter.structure(obj['loop'], LoopAction)
     raise ValueError(f"Unknown action: {obj}")
 
 def _structure_condition(obj, converter):
@@ -463,6 +500,10 @@ def _register_strict_hooks(converter):
                 Optional[WaitCondition],
                 lambda obj, _: _structure_wait_condition(obj, fresh_converter) if obj is not None else None
             )
+            fresh_converter.register_structure_hook(
+                Optional[Union[str, List[Any]]],
+                lambda obj, _: obj  # Pass through as-is for LoopAction items
+            )
             return fresh_converter.structure(obj, cls)
         return strict_structure_hook
     
@@ -470,7 +511,7 @@ def _register_strict_hooks(converter):
     for cls in [Target, Settings, ClickAction,
                 DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,
                 ActionTestAction, CommandAction, ScreenshotAction, BlockAction,
-                SaveTimestampAction, PullAction, PauseAction, WaitUntilAction, WaitCondition, ExistsCondition, NotExistsCondition,
+                SaveTimestampAction, PullAction, PauseAction, WaitUntilAction, LoopAction, WaitCondition, ExistsCondition, NotExistsCondition,
                 SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
                 TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
                 BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook]:

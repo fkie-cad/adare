@@ -1,0 +1,70 @@
+# Minimal loop test for Linux - create and verify files
+
+variables:
+  test_dir:
+    type: path
+    value: "/tmp/adare_loop_test"
+    description: "Test directory for loop operations"
+
+  filenames:
+    type: list
+    value: ["alpha.txt", "beta.txt", "gamma.txt"]
+    description: "List of test files to create"
+
+tests:
+  - name: test_file_exists
+    description: "Check if a file exists"
+    function: file_exists
+    parameter:
+      dst: "{{test_dir}}/{{filename}}"
+
+actions:
+  # Setup: Create test directory
+  - command:
+      command: "mkdir -p {{test_dir}}"
+      description: "Create test directory"
+      shell: true
+
+  # Loop 1: Create files using simple counter loop
+  - loop:
+      times: 3
+      description: "Create 3 numbered files using loop counter"
+      actions:
+        - command:
+            command: "echo 'File {{index}} created at iteration {{index}} of {{total}}' > {{test_dir}}/file_{{index}}.txt"
+            description: "Create file_{{index}}.txt"
+            shell: true
+        - idle:
+            duration: 0.1
+
+  # Loop 2: Create named files from list variable
+  - loop:
+      items: "{{filenames}}"
+      description: "Create files from list variable"
+      actions:
+        - command:
+            command: "echo 'Content of {{item}}' > {{test_dir}}/{{item}}"
+            description: "Create {{item}}"
+            shell: true
+        - idle:
+            duration: 0.1
+
+  # Loop 3: Verify files exist using custom variable name
+  - loop:
+      items: "{{filenames}}"
+      item_var: filename
+      description: "Verify each file exists"
+      actions:
+        - test: test_file_exists
+  
+  # Loop 4: Pull files to local directory using custom variable name
+  - loop:
+      items: "{{filenames}}"
+      item_var: filename
+      description: "Verify each file exists"
+      actions:
+        - pull:
+            src: "{{test_dir}}/{{filename}}"
+            dst: "{{filename}}"
+            description: "Pull {{filename}} to local directory"
+

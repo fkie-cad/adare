@@ -1,7 +1,7 @@
 actions:
   - click:
       target:
-        image: "explorer.png"
+        image: "nautilus_taskbar.png"
       description: "Open File Explorer"
   - wait_until:
       condition:
