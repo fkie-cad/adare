@@ -88,8 +88,10 @@ def take_screenshot(x: int = None, y: int = None, width: int = None, height: int
     # Convert to base64
     img_base64 = base64.b64encode(img_bytes).decode("utf-8")
 
-    # Return JSON-serializable dict
+    # Return JSON-serializable dict with status/message fields (matching other GUI actions)
     return {
+        "status": "success",
+        "message": "Screenshot captured successfully",
         "image": {
             "data": img_base64,
             "format": "png"

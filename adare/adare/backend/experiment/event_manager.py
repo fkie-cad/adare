@@ -13,7 +13,8 @@ from adare.types.playbook import (
     ActionType, ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction,
     CommandAction, ScreenshotAction, BlockAction, ActionTestAction,
-    SaveTimestampAction, PullAction, WaitUntilAction, LoopAction, PauseAction
+    SaveTimestampAction, PullAction, WaitUntilAction, LoopAction, PauseAction,
+    StopAction, ContinueAction
 )
 
 # Action event imports for flow console display
@@ -34,6 +35,8 @@ from adare.types.actions import (
     WaitUntilActionStartEvent, WaitUntilActionCompleteEvent,
     LoopActionStartEvent, LoopActionCompleteEvent,
     PauseActionStartEvent, PauseActionCompleteEvent,
+    StopActionStartEvent, StopActionCompleteEvent,
+    ContinueActionStartEvent, ContinueActionCompleteEvent,
     FindActionStartEvent, FindActionCompleteEvent,
     ExecuteActionStartEvent, ExecuteActionCompleteEvent
 )
@@ -149,6 +152,30 @@ class EventManager:
         elif isinstance(action, PauseAction):
             return PauseActionStartEvent(
                 message=getattr(action, 'message', None),
+                **event_data
+            )
+        elif isinstance(action, StopAction):
+            # Extract condition info if available
+            condition_info = None
+            if hasattr(action, 'condition') and action.condition:
+                condition_info = {
+                    'variable': action.condition.variable,
+                    'has_condition': True
+                }
+            return StopActionStartEvent(
+                condition_info=condition_info,
+                **event_data
+            )
+        elif isinstance(action, ContinueAction):
+            # Extract condition info if available
+            condition_info = None
+            if hasattr(action, 'condition') and action.condition:
+                condition_info = {
+                    'variable': action.condition.variable,
+                    'has_condition': True
+                }
+            return ContinueActionStartEvent(
+                condition_info=condition_info,
                 **event_data
             )
         elif isinstance(action, FindAction):
@@ -268,6 +295,18 @@ class EventManager:
                 user_input=result.data.get('user_input') if result.data else None,
                 **event_data
             )
+        elif isinstance(action, StopAction):
+            event = StopActionCompleteEvent(
+                condition_met=result.data.get('condition_met') if result.data else None,
+                stopped_execution=result.data.get('should_stop', False) if result.data else False,
+                **event_data
+            )
+        elif isinstance(action, ContinueAction):
+            event = ContinueActionCompleteEvent(
+                condition_met=result.data.get('condition_met') if result.data else None,
+                skipped_remaining=result.data.get('should_continue', False) if result.data else False,
+                **event_data
+            )
         elif isinstance(action, FindAction):
             event = FindActionCompleteEvent(
                 target_info=getattr(action, 'target_info', None),
@@ -283,7 +322,7 @@ class EventManager:
             # Generic complete event for unknown action types
             from adare.types.actions import ActionEvent
             event = ActionEvent(**event_data)
-        
+
         return event
     
     def _get_target_info(self, target) -> Optional[Dict[str, Any]]:

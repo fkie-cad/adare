@@ -48,6 +48,10 @@ class EventType(Enum):
     WAIT_UNTIL_COMPLETE = "wait_until_complete"
     LOOP_START = "loop_start"
     LOOP_COMPLETE = "loop_complete"
+    STOP_START = "stop_start"
+    STOP_COMPLETE = "stop_complete"
+    CONTINUE_START = "continue_start"
+    CONTINUE_COMPLETE = "continue_complete"
 
 
 class ActionType(Enum):
@@ -70,6 +74,8 @@ class ActionType(Enum):
     BLOCK = "block"
     WAIT_UNTIL = "wait_until"
     LOOP = "loop"
+    STOP = "stop"
+    CONTINUE = "continue"
 
     # Internal step action types (not used in playbook YAML)
     FIND = "find"
@@ -113,6 +119,10 @@ class EventTypeResolver:
             "WaitUntilActionCompleteEvent": EventType.WAIT_UNTIL_COMPLETE,
             "LoopActionStartEvent": EventType.LOOP_START,
             "LoopActionCompleteEvent": EventType.LOOP_COMPLETE,
+            "StopActionStartEvent": EventType.STOP_START,
+            "StopActionCompleteEvent": EventType.STOP_COMPLETE,
+            "ContinueActionStartEvent": EventType.CONTINUE_START,
+            "ContinueActionCompleteEvent": EventType.CONTINUE_COMPLETE,
         }
     
     def resolve_event_type(self, event_data: Dict[str, Any]) -> EventType:
@@ -181,6 +191,10 @@ class EventTypeResolver:
             return EventType.WAIT_UNTIL_COMPLETE if is_complete else EventType.WAIT_UNTIL_START
         elif action_type_raw == "loop":
             return EventType.LOOP_COMPLETE if is_complete else EventType.LOOP_START
+        elif action_type_raw == "stop":
+            return EventType.STOP_COMPLETE if is_complete else EventType.STOP_START
+        elif action_type_raw == "continue":
+            return EventType.CONTINUE_COMPLETE if is_complete else EventType.CONTINUE_START
         elif action_type_raw == "find":
             return EventType.ACTION_COMPLETE if is_complete else EventType.ACTION_START
         elif action_type_raw == "execute":
@@ -224,6 +238,10 @@ class EventTypeResolver:
             return ActionType.WAIT_UNTIL
         elif event_name.startswith("loop_"):
             return ActionType.LOOP
+        elif event_name.startswith("stop_"):
+            return ActionType.STOP
+        elif event_name.startswith("continue_"):
+            return ActionType.CONTINUE
         else:
             # For generic action events, check the original action data
             if action_data:

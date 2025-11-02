@@ -385,10 +385,15 @@ class PlaybookController:
             # Update database execution record
             if execution_id:
                 await self._update_database_execution_record(execution_id, result, execution_time)
-            
+
+            # Check for stop action signal
+            if result.success and result.data and result.data.get('should_stop', False):
+                log.info(f"Stop action triggered - halting playbook execution")
+                break
+
             if not result.success:
                 log.error(f"Action {i+1} failed: {result.message}")
-                
+
                 # Check if we should continue on test failure
                 should_continue = False
                 if self._is_test_action(resolved_action):

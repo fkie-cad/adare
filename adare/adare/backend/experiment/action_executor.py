@@ -12,7 +12,7 @@ from adare.types.playbook import (
     ActionType, ClickAction, DragAction, KeyboardAction, IdleAction,
     ScrollAction, GotoAction, CommandAction, ScreenshotAction, BlockAction,
     ActionTestAction, SaveTimestampAction, PullAction, PauseAction,
-    WaitUntilAction, LoopAction
+    WaitUntilAction, LoopAction, StopAction, ContinueAction
 )
 from adare.backend.experiment.websocket_client import AdareVMClient
 from adare.backend.experiment.target_resolver import MCPTargetResolver, MCPConditionChecker
@@ -65,7 +65,7 @@ class ActionExecutor:
         self.condition_checker = condition_checker
         self.experiment_run_id = experiment_run_id
         self.playbook = playbook
-        self.execution_context = execution_context or {}
+        self.execution_context = execution_context if execution_context is not None else {}
         self.debug_screenshots = debug_screenshots
         self.screenshots_dir = screenshots_dir
         self.vm = vm
@@ -81,12 +81,14 @@ class ActionExecutor:
             screenshots_dir=screenshots_dir
         )
 
+        # CRITICAL: Pass the SAME execution_context reference to both executors
+        # This ensures captured variables from commands are visible to stop/continue conditions
         self.simple_actions = SimpleActionsExecutor(
             websocket_client=websocket_client,
             target_resolution_executor=self.target_resolution,
             experiment_run_id=experiment_run_id,
             playbook=playbook,
-            execution_context=self.execution_context,
+            execution_context=execution_context,  # Pass reference, not self.execution_context
             vm=vm,
             experiment_run_directory=experiment_run_directory
         )
@@ -96,7 +98,7 @@ class ActionExecutor:
             target_resolution_executor=self.target_resolution,
             condition_checker=condition_checker,
             experiment_run_id=experiment_run_id,
-            execution_context=self.execution_context,
+            execution_context=execution_context,  # Pass reference, not self.execution_context
             flow_console=flow_console
         )
 
@@ -135,39 +137,40 @@ class ActionExecutor:
             description = getattr(resolved_action, 'description', '')
             log.debug(f"Executing {action_type}: {description}")
 
-            # Dispatch to appropriate executor
+            # Dispatch to appropriate executor and capture result
+            result = None
             if isinstance(resolved_action, ClickAction):
-                return await self.simple_actions.execute_click(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_click(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, DragAction):
-                return await self.simple_actions.execute_drag(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_drag(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, KeyboardAction):
-                return await self.simple_actions.execute_keyboard(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_keyboard(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, IdleAction):
-                return await self.simple_actions.execute_idle(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_idle(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, ScrollAction):
-                return await self.simple_actions.execute_scroll(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_scroll(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, GotoAction):
-                return await self.simple_actions.execute_goto(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_goto(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, ScreenshotAction):
-                return await self.simple_actions.execute_screenshot(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_screenshot(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, CommandAction):
-                return await self.simple_actions.execute_command(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_command(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, SaveTimestampAction):
-                return await self.simple_actions.execute_save_timestamp(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_save_timestamp(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, PullAction):
-                return await self.simple_actions.execute_pull(resolved_action, parent_event_id, event_emitter)
+                result = await self.simple_actions.execute_pull(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, ActionTestAction):
-                return await self.test_actions.execute_test(
+                result = await self.test_actions.execute_test(
                     resolved_action,
                     websocket_client=self.client,
                     target_resolver=self.target_resolver,
@@ -178,7 +181,7 @@ class ActionExecutor:
                 )
 
             elif isinstance(resolved_action, BlockAction):
-                return await self.flow_control.execute_block(
+                result = await self.flow_control.execute_block(
                     resolved_action,
                     parent_event_id=parent_event_id,
                     event_emitter=event_emitter,
@@ -187,7 +190,7 @@ class ActionExecutor:
                 )
 
             elif isinstance(resolved_action, LoopAction):
-                return await self.flow_control.execute_loop(
+                result = await self.flow_control.execute_loop(
                     resolved_action,
                     parent_event_id=parent_event_id,
                     event_emitter=event_emitter,
@@ -196,16 +199,39 @@ class ActionExecutor:
                 )
 
             elif isinstance(resolved_action, WaitUntilAction):
-                return await self.flow_control.execute_wait_until(resolved_action, parent_event_id, event_emitter)
+                result = await self.flow_control.execute_wait_until(resolved_action, parent_event_id, event_emitter)
 
             elif isinstance(resolved_action, PauseAction):
-                return await self.flow_control.execute_pause(resolved_action, parent_event_id, event_emitter)
+                result = await self.flow_control.execute_pause(resolved_action, parent_event_id, event_emitter)
+
+            elif isinstance(resolved_action, StopAction):
+                result = await self.flow_control.execute_stop(resolved_action, parent_event_id, event_emitter)
+
+            elif isinstance(resolved_action, ContinueAction):
+                result = await self.flow_control.execute_continue(resolved_action, parent_event_id, event_emitter)
 
             else:
-                return ActionResult(
+                result = ActionResult(
                     success=False,
                     message=f"Unknown action type: {action_type}"
                 )
+
+            # Post-execution debug screenshot (if enabled and action was successful)
+            if self.debug_screenshots and result and result.success:
+                # Only capture for GUI-modifying actions (exclude non-GUI actions)
+                non_gui_actions = (IdleAction, SaveTimestampAction, PullAction,
+                                   BlockAction, LoopAction, ActionTestAction,
+                                   WaitUntilAction, PauseAction, StopAction, ContinueAction)
+                if not isinstance(resolved_action, non_gui_actions):
+                    try:
+                        # Capture and save post-execution screenshot
+                        # This reuses the existing screenshot infrastructure in target_resolution
+                        await self.target_resolution.get_current_screenshot_with_path()
+                    except Exception as screenshot_error:
+                        # Don't fail the action if screenshot capture fails
+                        log.warning(f"Failed to capture post-execution debug screenshot: {screenshot_error}")
+
+            return result
 
         except Exception as e:
             log.error(f"Error executing action: {e}", exc_info=True)

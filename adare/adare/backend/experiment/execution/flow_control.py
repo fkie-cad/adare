@@ -11,7 +11,10 @@ import asyncio
 import functools
 from typing import Optional
 
-from adare.types.playbook import BlockAction, LoopAction, WaitUntilAction, PauseAction
+from adare.types.playbook import (
+    BlockAction, LoopAction, WaitUntilAction, PauseAction,
+    StopAction, ContinueAction, VariableCondition
+)
 from adare.backend.events.emitters import emit_action
 from .base import ActionResult
 
@@ -39,7 +42,7 @@ class FlowControlExecutor:
         self.target_resolution = target_resolution_executor
         self.condition_checker = condition_checker
         self.experiment_run_id = experiment_run_id
-        self.execution_context = execution_context or {}
+        self.execution_context = execution_context if execution_context is not None else {}
         self.flow_console = flow_console
 
     async def execute_block(self, action: BlockAction, parent_event_id: str = None,
@@ -102,6 +105,12 @@ class FlowControlExecutor:
                     log.error(f"Failed to emit sub-action complete event: {e}")
 
             results.append(result)
+
+            # Check for continue signal (skip remaining actions in block)
+            if result.success and result.data and result.data.get('should_continue', False):
+                log.info(f"Continue triggered - skipping remaining actions in block")
+                break  # Break out of block action loop
+
             if not result.success:
                 # Handle testset-related errors specifically
                 if "No testset loaded" in result.message:
@@ -190,19 +199,22 @@ class FlowControlExecutor:
                 else:
                     log.debug(f"Loop iteration {i}/{iteration_count}")
 
-                # Execute each action in the loop body
-                for j, loop_action in enumerate(action.actions):
-                    # Create sub-action ID
-                    sub_action_id = f"loop_{i}_action_{j}_{int(time.time()*1000)}"
+                # Set execution context to loop context for entire iteration
+                # This ensures loop variables are scoped to the iteration and captured
+                # variables persist across actions within the same iteration
+                saved_flow_context = self.execution_context
+                saved_action_context = action_executor.execution_context
+                saved_simple_actions_context = action_executor.simple_actions.execution_context
+                self.execution_context = loop_context
+                action_executor.execution_context = loop_context
+                action_executor.simple_actions.execution_context = loop_context
 
-                    # Temporarily update execution context with loop variables for BOTH executors
-                    # This ensures loop variables are scoped to the loop only
-                    saved_flow_context = self.execution_context
-                    saved_action_context = action_executor.execution_context
-                    self.execution_context = loop_context
-                    action_executor.execution_context = loop_context
+                try:
+                    # Execute each action in the loop body
+                    for j, loop_action in enumerate(action.actions):
+                        # Create sub-action ID
+                        sub_action_id = f"loop_{i}_action_{j}_{int(time.time()*1000)}"
 
-                    try:
                         # Resolve variables in the loop action with loop context
                         resolved_loop_action = variable_resolver.resolve_action_variables(
                             loop_action, loop_context
@@ -242,6 +254,11 @@ class FlowControlExecutor:
 
                         results.append(result)
 
+                        # Check for continue signal (skip remaining actions in current iteration)
+                        if result.success and result.data and result.data.get('should_continue', False):
+                            log.info(f"Continue triggered - skipping remaining actions in iteration {i}")
+                            break  # Break out of inner action loop, continue to next iteration
+
                         # Stop loop on failure
                         if not result.success:
                             log.error(f"Loop failed at iteration {i}/{iteration_count}, action {j}")
@@ -251,11 +268,12 @@ class FlowControlExecutor:
                                 data={'completed_iterations': i, 'total_iterations': iteration_count}
                             )
 
-                    finally:
-                        # Always restore original contexts for BOTH executors
-                        # This ensures loop variables don't leak outside the loop scope
-                        self.execution_context = saved_flow_context
-                        action_executor.execution_context = saved_action_context
+                finally:
+                    # Restore original contexts after entire iteration completes
+                    # This ensures loop variables don't leak outside the loop scope
+                    self.execution_context = saved_flow_context
+                    action_executor.execution_context = saved_action_context
+                    action_executor.simple_actions.execution_context = saved_simple_actions_context
 
             log.info(f"Loop completed successfully: {iteration_count} iterations, {len(results)} total actions")
             return ActionResult(
@@ -500,3 +518,211 @@ class FlowControlExecutor:
                 success=False,
                 message=f"Pause action failed: {str(e)}"
             )
+
+    def _evaluate_variable_condition(self, condition: VariableCondition) -> bool:
+        """
+        Evaluate a variable condition locally (on host) using execution context.
+
+        Args:
+            condition: VariableCondition specifying variable and operator
+
+        Returns:
+            bool: True if condition is met, False otherwise
+
+        Raises:
+            ValueError: If variable is not found or condition evaluation fails
+        """
+        import re
+
+        # Get variable value from execution context
+        if condition.variable not in self.execution_context:
+            raise ValueError(f"Variable '{condition.variable}' not found in execution context")
+
+        value = self.execution_context[condition.variable]
+        log.debug(f"Evaluating condition for variable '{condition.variable}' with value: {value}")
+
+        # Evaluate based on operator
+        try:
+            if condition.equals is not None:
+                # Direct equality comparison (case-sensitive)
+                result = value == condition.equals
+                log.debug(f"Equals check: {value} == {condition.equals} -> {result}")
+                return result
+
+            elif condition.contains is not None:
+                # Substring check (convert to string)
+                value_str = str(value)
+                result = condition.contains in value_str
+                log.debug(f"Contains check: '{condition.contains}' in '{value_str}' -> {result}")
+                return result
+
+            elif condition.matches is not None:
+                # Regex match check
+                value_str = str(value)
+                result = bool(re.search(condition.matches, value_str))
+                log.debug(f"Matches check: pattern '{condition.matches}' in '{value_str}' -> {result}")
+                return result
+
+            elif condition.greater_than is not None:
+                # Numeric comparison (convert to number)
+                if isinstance(value, (int, float)):
+                    num_value = value
+                else:
+                    num_value = float(value)
+                result = num_value > condition.greater_than
+                log.debug(f"Greater than check: {num_value} > {condition.greater_than} -> {result}")
+                return result
+
+            elif condition.less_than is not None:
+                # Numeric comparison (convert to number)
+                if isinstance(value, (int, float)):
+                    num_value = value
+                else:
+                    num_value = float(value)
+                result = num_value < condition.less_than
+                log.debug(f"Less than check: {num_value} < {condition.less_than} -> {result}")
+                return result
+
+            elif condition.is_empty is not None:
+                # Empty/None check
+                if condition.is_empty:
+                    # Check if variable is empty/None
+                    result = value is None or (isinstance(value, str) and len(value.strip()) == 0)
+                    log.debug(f"Is empty check: {value} -> {result}")
+                else:
+                    # Check if variable is NOT empty/None
+                    result = value is not None and not (isinstance(value, str) and len(value.strip()) == 0)
+                    log.debug(f"Is not empty check: {value} -> {result}")
+                return result
+
+            else:
+                raise ValueError("No operator specified in VariableCondition")
+
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Failed to evaluate condition: {e}")
+
+    async def execute_stop(self, action: StopAction, parent_event_id: str = None,
+                          event_emitter = None) -> ActionResult:
+        """
+        Execute stop action - conditionally halt playbook execution.
+
+        If condition is present, only stops when condition evaluates to True.
+        If no condition, always stops (unconditional stop).
+
+        Returns:
+            ActionResult with special 'should_stop' flag in data dict
+        """
+        try:
+            # Evaluate condition if present
+            if action.condition:
+                try:
+                    condition_met = self._evaluate_variable_condition(action.condition)
+                    log.info(f"Stop condition evaluated to: {condition_met}")
+
+                    if condition_met:
+                        # Condition is true - stop execution
+                        log.info("Stop condition met - halting playbook execution")
+                        return ActionResult(
+                            success=True,
+                            message="Stop condition met - execution halted",
+                            data={
+                                'should_stop': True,
+                                'condition_met': True,
+                                'variable': action.condition.variable
+                            }
+                        )
+                    else:
+                        # Condition is false - continue execution
+                        log.info("Stop condition not met - continuing execution")
+                        return ActionResult(
+                            success=True,
+                            message="Stop condition not met - continuing",
+                            data={
+                                'should_stop': False,
+                                'condition_met': False,
+                                'variable': action.condition.variable
+                            }
+                        )
+
+                except ValueError as e:
+                    # Condition evaluation failed
+                    log.error(f"Stop condition evaluation failed: {e}")
+                    return ActionResult(
+                        success=False,
+                        message=f"Stop condition evaluation failed: {str(e)}"
+                    )
+            else:
+                # No condition - unconditional stop
+                log.info("Unconditional stop - halting playbook execution")
+                return ActionResult(
+                    success=True,
+                    message="Unconditional stop - execution halted",
+                    data={'should_stop': True, 'condition_met': None}
+                )
+
+        except Exception as e:
+            log.error(f"Stop action failed: {e}", exc_info=True)
+            return ActionResult(success=False, message=str(e))
+
+    async def execute_continue(self, action: ContinueAction, parent_event_id: str = None,
+                              event_emitter = None) -> ActionResult:
+        """
+        Execute continue action - conditionally skip remaining actions in loop/block.
+
+        If condition is present, only continues when condition evaluates to True.
+        If no condition, always continues (unconditional continue).
+
+        Returns:
+            ActionResult with special 'should_continue' flag in data dict
+        """
+        try:
+            # Evaluate condition if present
+            if action.condition:
+                try:
+                    condition_met = self._evaluate_variable_condition(action.condition)
+                    log.info(f"Continue condition evaluated to: {condition_met}")
+
+                    if condition_met:
+                        # Condition is true - skip remaining actions
+                        log.info("Continue condition met - skipping remaining actions in loop/block")
+                        return ActionResult(
+                            success=True,
+                            message="Continue condition met - skipping remaining actions",
+                            data={
+                                'should_continue': True,
+                                'condition_met': True,
+                                'variable': action.condition.variable
+                            }
+                        )
+                    else:
+                        # Condition is false - continue normally
+                        log.info("Continue condition not met - proceeding with remaining actions")
+                        return ActionResult(
+                            success=True,
+                            message="Continue condition not met - proceeding normally",
+                            data={
+                                'should_continue': False,
+                                'condition_met': False,
+                                'variable': action.condition.variable
+                            }
+                        )
+
+                except ValueError as e:
+                    # Condition evaluation failed
+                    log.error(f"Continue condition evaluation failed: {e}")
+                    return ActionResult(
+                        success=False,
+                        message=f"Continue condition evaluation failed: {str(e)}"
+                    )
+            else:
+                # No condition - unconditional continue
+                log.info("Unconditional continue - skipping remaining actions in loop/block")
+                return ActionResult(
+                    success=True,
+                    message="Unconditional continue - skipping remaining actions",
+                    data={'should_continue': True, 'condition_met': None}
+                )
+
+        except Exception as e:
+            log.error(f"Continue action failed: {e}", exc_info=True)
+            return ActionResult(success=False, message=str(e))
