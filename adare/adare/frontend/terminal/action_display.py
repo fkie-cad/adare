@@ -204,6 +204,48 @@ def get_action_display_info(action_type: ActionType, action_data: dict, is_compl
             else:
                 return "loop action"
 
+    elif action_type == ActionType.STOP:
+        # Show stop condition result
+        if is_complete:
+            should_stop = action_data.get('should_stop', False)
+            condition_met = action_data.get('condition_met')
+            variable = action_data.get('variable')
+
+            if should_stop:
+                if variable:
+                    return f"stop condition met (variable: {variable}) - execution halted"
+                else:
+                    return "unconditional stop - execution halted"
+            else:
+                if variable:
+                    return f"stop condition not met (variable: {variable}) - continuing"
+                else:
+                    return "stop action - continuing"
+        else:
+            # For start events
+            return "evaluating stop condition"
+
+    elif action_type == ActionType.CONTINUE:
+        # Show continue condition result
+        if is_complete:
+            should_continue = action_data.get('should_continue', False)
+            condition_met = action_data.get('condition_met')
+            variable = action_data.get('variable')
+
+            if should_continue:
+                if variable:
+                    return f"continue condition met (variable: {variable}) - skipping remaining actions"
+                else:
+                    return "unconditional continue - skipping remaining actions"
+            else:
+                if variable:
+                    return f"continue condition not met (variable: {variable}) - proceeding normally"
+                else:
+                    return "continue action - proceeding normally"
+        else:
+            # For start events
+            return "evaluating continue condition"
+
     else:
         # Throw exception for unhandled action types to catch missing cases
         raise ValueError(f"Unhandled action type in get_action_display_info: {action_type} (value: {action_type.value})")

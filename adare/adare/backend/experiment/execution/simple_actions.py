@@ -8,6 +8,8 @@ save_timestamp, and pull actions.
 import logging
 import time
 import asyncio
+import base64
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -20,6 +22,28 @@ from adare.backend.events.emitters import emit_action
 from .base import ActionResult, serialize_target
 
 log = logging.getLogger(__name__)
+
+
+def sanitize_filename(name: str) -> str:
+    """
+    Sanitize filename to remove invalid characters and ensure safety.
+
+    Args:
+        name: Desired filename (without extension)
+
+    Returns:
+        Sanitized filename safe for filesystem use
+    """
+    # Remove or replace invalid characters
+    sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name)
+    # Remove leading/trailing whitespace and dots
+    sanitized = sanitized.strip(' .')
+    # Limit length to 200 characters (leaves room for extension and path)
+    sanitized = sanitized[:200]
+    # If empty after sanitization, use fallback
+    if not sanitized:
+        sanitized = 'screenshot'
+    return sanitized
 
 
 class SimpleActionsExecutor:
@@ -44,9 +68,10 @@ class SimpleActionsExecutor:
         self.target_resolution = target_resolution_executor
         self.experiment_run_id = experiment_run_id
         self.playbook = playbook
-        self.execution_context = execution_context or {}
+        self.execution_context = execution_context if execution_context is not None else {}
         self.vm = vm
         self.experiment_run_directory = experiment_run_directory
+        self.explicit_screenshot_counter = 0  # Counter for explicit screenshot actions
 
     def get_click_handler(self, click_type: str):
         """Get the appropriate click handler based on click type."""
@@ -56,6 +81,98 @@ class SimpleActionsExecutor:
             return lambda x, y: self.client.double_click(x, y)
         else:  # 'left' or default
             return lambda x, y: self.client.click(x, y)
+
+    def _process_capture(self, capture_spec, command_result):
+        """
+        Process command output capture based on capture specification.
+
+        Args:
+            capture_spec: CaptureSpec object defining what to capture
+            command_result: Result dict from execute_shell containing stdout, stderr, returncode
+
+        Returns:
+            Captured and optionally parsed value
+
+        Raises:
+            ValueError: If capture processing fails
+        """
+        from adare.types.playbook import CaptureSpec
+
+        # Extract the output based on source
+        if capture_spec.source == 'stdout':
+            raw_output = command_result.get('stdout', '')
+        elif capture_spec.source == 'stderr':
+            raw_output = command_result.get('stderr', '')
+        elif capture_spec.source == 'returncode':
+            raw_output = command_result.get('returncode', -1)
+        elif capture_spec.source == 'all':
+            raw_output = {
+                'stdout': command_result.get('stdout', ''),
+                'stderr': command_result.get('stderr', ''),
+                'returncode': command_result.get('returncode', -1)
+            }
+        else:
+            raise ValueError(f"Invalid capture source: {capture_spec.source}")
+
+        # If no parser specified, strip whitespace from string outputs for cleaner variable usage
+        if not capture_spec.parser:
+            # Auto-strip stdout/stderr to avoid trailing newlines in variable substitution
+            if capture_spec.source in ('stdout', 'stderr') and isinstance(raw_output, str):
+                return raw_output.strip()
+            return raw_output
+
+        # Apply parser expression (user has full control with parser)
+        return self._evaluate_parser(capture_spec.parser, raw_output)
+
+    def _evaluate_parser(self, parser_expr: str, raw_output):
+        """
+        Safely evaluate parser expression with restricted context.
+
+        Args:
+            parser_expr: Python expression to evaluate
+            raw_output: The output value to parse
+
+        Returns:
+            Parsed value
+
+        Raises:
+            ValueError: If parser evaluation fails
+        """
+        import json
+        import re
+
+        # Create safe evaluation context
+        safe_context = {
+            'output': raw_output,
+            # Safe utilities
+            'json': json,
+            're': re,
+            'int': int,
+            'float': float,
+            'str': str,
+            'bool': bool,
+            'len': len,
+            'range': range,
+            'enumerate': enumerate,
+            'zip': zip,
+            'list': list,
+            'dict': dict,
+            'tuple': tuple,
+            'set': set,
+            # String methods are available through output.strip(), etc.
+        }
+
+        try:
+            # Evaluate the parser expression in safe context
+            result = eval(parser_expr, {"__builtins__": {}}, safe_context)
+            log.debug(f"Parser evaluation successful: '{parser_expr}' -> {result}")
+            return result
+        except SyntaxError as e:
+            raise ValueError(f"Parser syntax error: {e}")
+        except NameError as e:
+            raise ValueError(f"Parser references undefined name: {e}")
+        except Exception as e:
+            raise ValueError(f"Parser evaluation failed: {e}")
 
     async def execute_click(self, action: ClickAction, parent_event_id: str = None,
                            event_emitter = None) -> ActionResult:
@@ -186,18 +303,88 @@ class SimpleActionsExecutor:
 
     async def execute_screenshot(self, action: ScreenshotAction, parent_event_id: str = None,
                                 event_emitter = None) -> ActionResult:
-        """Execute screenshot action."""
+        """
+        Execute screenshot action.
+
+        Explicit screenshots are always saved (regardless of --debug-screenshots flag).
+        If action.name is provided, uses custom name; otherwise uses sequential numbering.
+        """
         try:
             result = await self.client.screenshot(
                 action.x, action.y, action.width, action.height
             )
+
+            screenshot_path = None
+            # Save explicit screenshot (always, not just in debug mode)
+            if result and 'image' in result:
+                try:
+                    # Extract base64 data from result
+                    if 'data' in result['image']:
+                        screenshot_base64 = result['image']['data']
+                    else:
+                        screenshot_base64 = result['image']
+
+                    # Save screenshot with custom naming logic
+                    screenshot_path = await self._save_explicit_screenshot(screenshot_base64, action.name)
+                except Exception as save_error:
+                    # Don't fail the action if screenshot save fails, but log it
+                    log.warning(f"Failed to save screenshot: {save_error}")
+
             return ActionResult(
                 success=result.get('status') == 'success',
                 message=result.get('message', ''),
-                data=result
+                data={**result, 'screenshot_path': screenshot_path} if screenshot_path else result
             )
         except Exception as e:
             return ActionResult(success=False, message=str(e))
+
+    async def _save_explicit_screenshot(self, screenshot_base64: str, custom_name: Optional[str] = None) -> Optional[str]:
+        """
+        Save explicit screenshot to disk with custom naming.
+
+        Args:
+            screenshot_base64: Base64 encoded screenshot data
+            custom_name: Optional custom name for the file (without extension)
+
+        Returns:
+            Relative path to saved screenshot (relative to run directory), or None if screenshots_dir not set
+        """
+        # Use screenshots directory from target_resolution executor
+        screenshots_dir = self.target_resolution.screenshots_dir
+        if not screenshots_dir:
+            log.warning("Screenshots directory not set, cannot save explicit screenshot")
+            return None
+
+        try:
+            # Create screenshots directory if it doesn't exist
+            screenshots_dir.mkdir(parents=True, exist_ok=True)
+
+            # Generate filename
+            if custom_name:
+                # Use custom name (sanitized)
+                sanitized_name = sanitize_filename(custom_name)
+                filename = f"{sanitized_name}.png"
+            else:
+                # Use sequential numbering for unnamed screenshots
+                filename = f"screenshot_{self.explicit_screenshot_counter:03d}.png"
+                self.explicit_screenshot_counter += 1
+
+            filepath = screenshots_dir / filename
+
+            # Decode and save the image
+            image_data = base64.b64decode(screenshot_base64)
+            with open(filepath, 'wb') as f:
+                f.write(image_data)
+
+            log.info(f"Explicit screenshot saved: {filepath}")
+
+            # Return relative path (relative to run directory)
+            relative_path = f"reporting/screenshots/{filename}"
+            return relative_path
+
+        except Exception as e:
+            log.error(f"Failed to save explicit screenshot: {e}")
+            return None
 
     async def execute_command(self, action: CommandAction, parent_event_id: str = None,
                              event_emitter = None) -> ActionResult:
@@ -224,8 +411,49 @@ class SimpleActionsExecutor:
                 admin=action.admin,
                 websocket_timeout=websocket_timeout
             )
+
+            # Determine command success
+            command_succeeded = result.get('status') == 'success'
+
+            # Process capture if specified
+            if action.capture:
+                try:
+                    captured_value = self._process_capture(action.capture, result)
+
+                    # Store in execution context for immediate use
+                    self.execution_context[action.capture.variable] = captured_value
+
+                    # Also store in variable registry if available
+                    if hasattr(self.playbook, 'variables') and self.playbook.variables:
+                        from adarelib.common.variables import Variable
+                        captured_var = Variable.auto_infer(captured_value)
+                        self.playbook.variables.add(action.capture.variable, captured_var)
+                        log.info(f"Captured command output to variable '{action.capture.variable}'")
+
+                except Exception as capture_error:
+                    log.error(f"Failed to capture command output: {capture_error}", exc_info=True)
+                    # Don't fail the entire command if capture fails
+                    return ActionResult(
+                        success=False,
+                        message=f"Command succeeded but capture failed: {str(capture_error)}",
+                        data=result
+                    )
+
+            # Handle allow_failure: treat failed commands as successful if allowed
+            if not command_succeeded and action.allow_failure:
+                log.warning(
+                    f"Command failed with exit code {result.get('returncode', 'unknown')} "
+                    f"but allow_failure=True, continuing execution. "
+                    f"Command: {command}"
+                )
+                return ActionResult(
+                    success=True,  # Report success to continue execution
+                    message=f"Command failed (exit code {result.get('returncode', 'unknown')}) but failure allowed",
+                    data=result
+                )
+
             return ActionResult(
-                success=result.get('status') == 'success',
+                success=command_succeeded,
                 message=result.get('message', ''),
                 data=result
             )

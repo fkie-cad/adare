@@ -445,6 +445,52 @@ class LoopActionCompleteEvent(ActionCompleteEvent):
 
 
 # -------------------------------
+# Stop Action Events
+# -------------------------------
+
+@attrs.define
+class StopActionStartEvent(ActionStartEvent):
+    """Event for stop action start."""
+    condition_info: Optional[Dict[str, Any]] = None
+
+    def get_event_type(self) -> EventType:
+        return EventType.STOP_START
+
+
+@attrs.define
+class StopActionCompleteEvent(ActionCompleteEvent):
+    """Event for stop action completion."""
+    condition_met: Optional[bool] = None
+    stopped_execution: bool = False
+
+    def get_event_type(self) -> EventType:
+        return EventType.STOP_COMPLETE
+
+
+# -------------------------------
+# Continue Action Events
+# -------------------------------
+
+@attrs.define
+class ContinueActionStartEvent(ActionStartEvent):
+    """Event for continue action start."""
+    condition_info: Optional[Dict[str, Any]] = None
+
+    def get_event_type(self) -> EventType:
+        return EventType.CONTINUE_START
+
+
+@attrs.define
+class ContinueActionCompleteEvent(ActionCompleteEvent):
+    """Event for continue action completion."""
+    condition_met: Optional[bool] = None
+    skipped_remaining: bool = False
+
+    def get_event_type(self) -> EventType:
+        return EventType.CONTINUE_COMPLETE
+
+
+# -------------------------------
 # Substage Action Events
 # -------------------------------
 

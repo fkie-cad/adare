@@ -1,0 +1,217 @@
+settings:
+  idle: 0.5
+  timeout: 60
+  continue_on_test_failure: true
+
+# Test playbook demonstrating command output capture feature
+
+variables:
+  test_dir:
+    type: path
+    value: "{{adare_temp_dir}}/capture_test"
+
+actions:
+  # Example 1: Simple capture - capture stdout directly (default)
+  - command:
+      command: "whoami"
+      description: "Capture current username"
+      capture:
+        variable: current_user
+
+  # Validation: Stop if username wasn't captured
+  - stop:
+      condition:
+        variable: current_user
+        is_empty: true
+      description: "Stop if username capture failed"
+
+  # Example 2: Capture with parser - extract line count
+  - command:
+      command: "echo -e 'line1\\nline2\\nline3'"
+      shell: true
+      description: "Count lines using parser"
+      capture:
+        variable: line_count
+        parser: "len(output.strip().split('\\n'))"
+
+  # Info: Line count should be 3, continuing if correct
+  # Note: We would stop if line_count != 3, but there's no not_equals operator
+  # So we just continue - in real usage you'd add proper validation
+
+  # Example 3: Capture stderr
+  - command:
+      command: "python3 -c 'import sys; sys.stderr.write(\"error message\")'"
+      shell: true
+      description: "Capture stderr output"
+      capture:
+        variable: error_output
+        source: stderr
+
+  # Example 4: Capture return code
+  - command:
+      command: "test -d /tmp"
+      shell: true
+      description: "Check if /tmp exists"
+      capture:
+        variable: tmp_exists
+        source: returncode
+        parser: "output == 0"
+
+  # Validation: Stop if /tmp doesn't exist (tmp_exists should be True)
+  - stop:
+      condition:
+        variable: tmp_exists
+        equals: false
+      description: "Stop if /tmp directory check failed"
+
+  # Example 5: JSON parsing
+  - command:
+      command: "echo '{\"status\": \"success\", \"count\": 42}'"
+      shell: true
+      description: "Parse JSON output"
+      capture:
+        variable: json_data
+        parser: "json.loads(output)"
+
+  # Example 6: Extract specific field from JSON
+  - command:
+      command: "echo '{\"name\": \"test\", \"version\": \"1.2.3\"}'"
+      shell: true
+      description: "Extract version from JSON"
+      capture:
+        variable: app_version
+        parser: "json.loads(output)['version']"
+
+  # Info: Version captured should match X.Y.Z format (1.2.3)
+  # Note: Stop happens when condition is TRUE, so we'd need a NOT operator
+  # to stop when version is invalid. Skipping this validation for now.
+
+  # Example 7: Use captured variable in subsequent command
+  - command:
+      command: "echo 'Hello, {{current_user}}!'"
+      shell: true
+      description: "Use captured username variable"
+
+  # Example 8: String manipulation with parser
+  - command:
+      command: "echo 'HELLO WORLD'"
+      shell: true
+      description: "Convert to lowercase"
+      capture:
+        variable: lower_text
+        parser: "output.strip().lower()"
+
+  # Example 9: Complex parsing - extract first word
+  - command:
+      command: "echo 'foo bar baz'"
+      shell: true
+      description: "Extract first word"
+      capture:
+        variable: first_word
+        parser: "output.strip().split()[0]"
+
+  # Example 10: Regex extraction
+  - command:
+      command: "echo 'Version: 3.14.159'"
+      shell: true
+      description: "Extract version number with regex"
+      capture:
+        variable: version_number
+        parser: "re.search(r'\\d+\\.\\d+\\.\\d+', output).group(0) if re.search(r'\\d+\\.\\d+\\.\\d+', output) else 'unknown'"
+
+  # Example 11: Capture all outputs for complex decision
+  - command:
+      command: "ls /nonexistent 2>&1"
+      shell: true
+      description: "Capture full output for error handling"
+      allow_failure: true
+      capture:
+        variable: ls_result
+        source: all
+        parser: |
+          'success' if output['returncode'] == 0 else 'failed'
+
+  # Validation: This should have failed - stop if it unexpectedly succeeded
+  - stop:
+      condition:
+        variable: ls_result
+        equals: "success"
+      description: "Stop if listing nonexistent directory unexpectedly succeeded"
+
+  # Example 12: Integer conversion
+  - command:
+      command: "echo '123'"
+      shell: true
+      description: "Parse integer from output"
+      capture:
+        variable: number_value
+        parser: "int(output.strip())"
+
+  # Validation: Stop if number is not within expected range
+  - stop:
+      condition:
+        variable: number_value
+        greater_than: 200
+      description: "Stop if number_value is unexpectedly large (> 200)"
+
+  # Example 13: Continue in loop - skip iteration based on captured variable
+  - loop:
+      times: 5
+      description: "Loop with continue - test skipping iterations"
+      actions:
+        - command:
+            command: "echo {{index}}"
+            shell: true
+            description: "Capture current iteration index"
+            capture:
+              variable: current_index_str
+
+        - command:
+            command: "echo $(({{index}} + 1))"
+            shell: true
+            description: "Calculate iteration number (index + 1)"
+            capture:
+              variable: iteration_num
+              parser: "int(output.strip())"
+
+        # Continue (skip) when iteration_num equals 3
+        - continue:
+            condition:
+              variable: iteration_num
+              equals: 3
+            description: "Skip iteration when iteration_num equals 3"
+
+        # This should only execute for iterations 0,1,2,4 (not 3)
+        - command:
+            command: "echo 'Processing iteration {{iteration_num}}'"
+            shell: true
+            description: "This should skip iteration 3"
+
+  # Example 14: Continue in block with captured variable condition
+  - command:
+      command: "echo 'skip'"
+      shell: true
+      description: "Capture action indicator"
+      capture:
+        variable: action_flag
+
+  - block:
+      description: "Block with continue based on captured variable"
+      actions:
+        - command:
+            command: "echo 'First action in block'"
+            shell: true
+            description: "First action before continue check"
+
+        # Continue when action_flag equals 'skip'
+        - continue:
+            condition:
+              variable: action_flag
+              equals: "skip"
+            description: "Skip remaining block actions when flag is 'skip'"
+
+        # This should NOT execute because continue triggers above
+        - command:
+            command: "echo 'This should be skipped'"
+            shell: true
+            description: "This action should be skipped by continue"

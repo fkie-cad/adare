@@ -17,7 +17,8 @@ import logging
 from adare.types.playbook import (
     Playbook, ActionType, ClickAction, DragAction, KeyboardAction,
     CommandAction, SaveTimestampAction, PullAction, ActionTestAction,
-    GotoAction, BlockAction, WaitUntilAction, Target
+    GotoAction, BlockAction, WaitUntilAction, Target,
+    StopAction, ContinueAction
 )
 
 log = logging.getLogger(__name__)
@@ -204,6 +205,14 @@ class VariableUsageValidator(PlaybookValidator):
             self._extract_from_wait_condition(action.condition, 'condition',
                                              action_index, action_type, references)
 
+        # Check StopAction and ContinueAction conditions
+        if isinstance(action, (StopAction, ContinueAction)) and action.condition:
+            # Variable condition references the variable being tested
+            var_name = action.condition.variable
+            if var_name not in references:
+                references[var_name] = []
+            references[var_name].append((action_index, action_type, 'condition.variable'))
+
         return references
 
     def _extract_from_target(self, target: Target, field_prefix: str,
@@ -375,6 +384,15 @@ class FilterValidator(PlaybookValidator):
                 if var_name:
                     types[var_name] = 'TIMESTAMP'
 
+            # Variables created by command capture use auto-inference (STRING by default)
+            # We can't statically determine their type, so mark as STRING
+            if isinstance(action, CommandAction) and action.capture:
+                var_name = self._extract_variable_name(action.capture.variable)
+                if var_name:
+                    # Default to STRING for captured command output
+                    # The actual type will be determined at runtime
+                    types[var_name] = 'STRING'
+
             # Check nested actions in blocks
             if isinstance(action, BlockAction):
                 types.update(self._get_types_from_block(action))
@@ -389,6 +407,10 @@ class FilterValidator(PlaybookValidator):
                 var_name = self._extract_variable_name(action.variable)
                 if var_name:
                     types[var_name] = 'TIMESTAMP'
+            if isinstance(action, CommandAction) and action.capture:
+                var_name = self._extract_variable_name(action.capture.variable)
+                if var_name:
+                    types[var_name] = 'STRING'
             if isinstance(action, BlockAction):
                 types.update(self._get_types_from_block(action))
         return types
@@ -491,9 +513,13 @@ class DuplicateVariableValidator(PlaybookValidator):
                 for source_type, action_idx, action_type in sources:
                     if source_type == 'variables_section':
                         source_descriptions.append("variables section")
-                    else:  # save_timestamp
+                    elif source_type == 'save_timestamp':
                         source_descriptions.append(
                             f"save_timestamp at action index {action_idx} ({action_type})"
+                        )
+                    elif source_type == 'command_capture':
+                        source_descriptions.append(
+                            f"command capture at action index {action_idx} ({action_type})"
                         )
 
                 # Check if it's an automatic variable being overridden
@@ -519,7 +545,7 @@ class DuplicateVariableValidator(PlaybookValidator):
         action_offset: int = 0
     ) -> None:
         """
-        Collect variable names from save_timestamp actions recursively.
+        Collect variable names from save_timestamp and command capture actions recursively.
 
         Args:
             actions: List of actions to scan
@@ -536,6 +562,18 @@ class DuplicateVariableValidator(PlaybookValidator):
                         variable_sources[var_name] = []
                     variable_sources[var_name].append((
                         'save_timestamp',
+                        action_index,
+                        action.__class__.__name__
+                    ))
+
+            # Check command capture actions
+            if isinstance(action, CommandAction) and action.capture:
+                var_name = self._extract_variable_name(action.capture.variable)
+                if var_name:
+                    if var_name not in variable_sources:
+                        variable_sources[var_name] = []
+                    variable_sources[var_name].append((
+                        'command_capture',
                         action_index,
                         action.__class__.__name__
                     ))
@@ -642,6 +680,12 @@ class VariableDefinitionValidator(PlaybookValidator):
                 if var_name:
                     defined.add(var_name)
 
+            # Variables created by command capture
+            if isinstance(action, CommandAction) and action.capture:
+                var_name = self._extract_variable_name(action.capture.variable)
+                if var_name:
+                    defined.add(var_name)
+
             # Check nested actions in blocks
             if isinstance(action, BlockAction):
                 defined.update(self._collect_from_block(action))
@@ -682,6 +726,10 @@ class VariableDefinitionValidator(PlaybookValidator):
         for action in block_action.actions:
             if isinstance(action, SaveTimestampAction):
                 var_name = self._extract_variable_name(action.variable)
+                if var_name:
+                    defined.add(var_name)
+            if isinstance(action, CommandAction) and action.capture:
+                var_name = self._extract_variable_name(action.capture.variable)
                 if var_name:
                     defined.add(var_name)
             if isinstance(action, BlockAction):

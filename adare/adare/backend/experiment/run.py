@@ -951,8 +951,8 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         log.info(f"Using custom VM CPUs: {vm_cpus}")
     
     experiment_run_context = ExperimentRunCtx(config)
-    # Enable debug screenshots by default for forensic logging (can be overridden by explicit flag)
-    experiment_run_context.debug_screenshots = debug_screenshots or True  # Default to True for forensic logging
+    # Respect the --debug-screenshots CLI flag (default: False unless flag is provided)
+    experiment_run_context.debug_screenshots = debug_screenshots
     experiment_run_context.test_mode = test  # Store test mode flag (default: True for test mode)
     if test:
         step_initialize(experiment_run_context, fake=True)  # Test mode: creates fake run

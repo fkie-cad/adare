@@ -138,6 +138,21 @@ class ActionTestAction:
     description: str = ''
 
 @attrs.define
+class CaptureSpec:
+    """Specification for capturing command output to a variable."""
+    variable: str  # Variable name to store the captured output
+    source: str = 'stdout'  # Source to capture from: stdout, stderr, returncode, all
+    parser: Optional[str] = None  # Optional Python expression to parse the output
+
+    def __attrs_post_init__(self):
+        """Validate capture specification."""
+        valid_sources = {'stdout', 'stderr', 'returncode', 'all'}
+        if self.source not in valid_sources:
+            raise ValueError(
+                f"CaptureSpec.source must be one of {valid_sources}, got '{self.source}'"
+            )
+
+@attrs.define
 class CommandAction:
     command: str  # Required field - the shell command to execute
     name: Optional[str] = None
@@ -149,6 +164,8 @@ class CommandAction:
     shell: bool = False
     admin: bool = False  # Run with elevated privileges (Windows: RunAs, Linux: sudo)
     background: bool = False  # Run without waiting for completion
+    capture: Optional[CaptureSpec] = None  # Capture command output to variable
+    allow_failure: bool = False  # Continue execution even if command returns non-zero exit code
 
     def __attrs_post_init__(self):
         """Validate that command is a string, not a list."""
@@ -162,6 +179,7 @@ class CommandAction:
 @attrs.define
 class ScreenshotAction:
     description: str = ''
+    name: Optional[str] = None  # Optional custom name for screenshot file
     x: Optional[int] = None
     y: Optional[int] = None
     width: Optional[int] = None
@@ -183,6 +201,61 @@ class PullAction:
 class PauseAction:
     message: Optional[str] = None  # Optional message to display during pause
     name: Optional[str] = None     # Optional name for the pause action
+    description: str = ''
+
+@attrs.define
+class VariableCondition:
+    """Condition for testing variable values locally (evaluated on host).
+
+    Exactly one operator must be specified per condition.
+    """
+    variable: str  # Variable name to test
+
+    # Operators (mutually exclusive - exactly one must be specified)
+    equals: Optional[Any] = None  # Variable value equals this value (case-sensitive)
+    contains: Optional[str] = None  # String variable contains this substring
+    matches: Optional[str] = None  # Variable matches this regex pattern
+    greater_than: Optional[Union[int, float]] = None  # Numeric comparison
+    less_than: Optional[Union[int, float]] = None  # Numeric comparison
+    is_empty: Optional[bool] = None  # Check if variable is empty/None (True) or not empty (False)
+
+    def __attrs_post_init__(self):
+        """Validation: exactly one operator must be set."""
+        operators = [
+            self.equals is not None,
+            self.contains is not None,
+            self.matches is not None,
+            self.greater_than is not None,
+            self.less_than is not None,
+            self.is_empty is not None
+        ]
+        operators_set = sum(operators)
+
+        if operators_set != 1:
+            raise ValueError(
+                "VariableCondition must have exactly one operator set. "
+                f"Valid operators: equals, contains, matches, greater_than, less_than, is_empty"
+            )
+
+@attrs.define
+class StopAction:
+    """Stop playbook execution based on a condition.
+
+    If condition is specified, stops only when condition evaluates to True.
+    If no condition, always stops (unconditional stop).
+    """
+    condition: Optional[VariableCondition] = None
+    description: str = ''
+
+@attrs.define
+class ContinueAction:
+    """Skip remaining actions in current loop iteration/block based on a condition.
+
+    If condition is specified, continues only when condition evaluates to True.
+    If no condition, always continues (unconditional continue).
+    Only valid within loop or block contexts.
+    """
+    condition: Optional[VariableCondition] = None
     description: str = ''
 
 @attrs.define
@@ -276,7 +349,7 @@ ActionType = Union[
     ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, ActionTestAction,
     CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, PullAction, PauseAction,
-    WaitUntilAction, LoopAction
+    WaitUntilAction, LoopAction, StopAction, ContinueAction
 ]
 
 @attrs.define
@@ -351,6 +424,28 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
         lambda obj, _: obj  # Pass through as-is, will be resolved at runtime
     )
 
+    # Register structure hook for numeric comparison fields (Union[int, float, None])
+    def structure_optional_numeric(obj, _):
+        if obj is None:
+            return None
+        if isinstance(obj, (int, float)):
+            return obj
+        # Try to convert string to number if needed
+        if isinstance(obj, str):
+            try:
+                return int(obj)
+            except ValueError:
+                try:
+                    return float(obj)
+                except ValueError:
+                    raise ValueError(f"Cannot convert '{obj}' to numeric value")
+        return obj
+
+    converter.register_structure_hook(
+        Optional[Union[int, float]],
+        structure_optional_numeric
+    )
+
     # Register strict structure hooks for all main classes to validate fields
     _register_strict_hooks(converter)
 
@@ -398,6 +493,10 @@ def _structure_action(obj, converter):
         return converter.structure(obj['wait_until'], WaitUntilAction)
     if 'loop' in obj:
         return converter.structure(obj['loop'], LoopAction)
+    if 'stop' in obj:
+        return converter.structure(obj['stop'], StopAction)
+    if 'continue' in obj:
+        return converter.structure(obj['continue'], ContinueAction)
     raise ValueError(f"Unknown action: {obj}")
 
 def _structure_condition(obj, converter):
@@ -504,14 +603,35 @@ def _register_strict_hooks(converter):
                 Optional[Union[str, List[Any]]],
                 lambda obj, _: obj  # Pass through as-is for LoopAction items
             )
+            # Register numeric structure hook for VariableCondition fields
+            def structure_optional_numeric(obj, _):
+                if obj is None:
+                    return None
+                if isinstance(obj, (int, float)):
+                    return obj
+                if isinstance(obj, str):
+                    try:
+                        return int(obj)
+                    except ValueError:
+                        try:
+                            return float(obj)
+                        except ValueError:
+                            raise ValueError(f"Cannot convert '{obj}' to numeric value")
+                return obj
+            fresh_converter.register_structure_hook(
+                Optional[Union[int, float]],
+                structure_optional_numeric
+            )
             return fresh_converter.structure(obj, cls)
         return strict_structure_hook
     
     # Register hooks for all main attrs classes
     for cls in [Target, Settings, ClickAction,
                 DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,
-                ActionTestAction, CommandAction, ScreenshotAction, BlockAction,
-                SaveTimestampAction, PullAction, PauseAction, WaitUntilAction, LoopAction, WaitCondition, ExistsCondition, NotExistsCondition,
+                ActionTestAction, CommandAction, CaptureSpec, ScreenshotAction, BlockAction,
+                SaveTimestampAction, PullAction, PauseAction, WaitUntilAction, LoopAction,
+                StopAction, ContinueAction, VariableCondition,
+                WaitCondition, ExistsCondition, NotExistsCondition,
                 SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
                 TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
                 BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook]:
