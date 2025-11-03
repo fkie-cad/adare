@@ -764,7 +764,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             experiment_dir=context.experiment_directory.path,
             project_dir=context.project_directory.path,
             debug_screenshots=context.debug_screenshots,
-            screenshots_dir=context.experiment_run_directory.screenshots_directory if context.debug_screenshots else None,
+            screenshots_dir=context.experiment_run_directory.screenshots_directory,
             playbook=context.playbook,  # Pass pre-parsed playbook
             experiment_id=experiment_id,
             experiment_run_id=context.experiment_run_ulid,
