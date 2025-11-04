@@ -566,6 +566,7 @@ class PlaybookApi(ProjectDatabaseApi):
         elif action_type == 'screenshot':
             return ScreenshotAction(
                 description=description,
+                name=params.get('name'),
                 x=params.get('x'),
                 y=params.get('y'),
                 width=params.get('width'),
