@@ -72,6 +72,7 @@ class SimpleActionsExecutor:
         self.vm = vm
         self.experiment_run_directory = experiment_run_directory
         self.explicit_screenshot_counter = 0  # Counter for explicit screenshot actions
+        self.custom_screenshot_counters = {}  # Track counters for custom screenshot names
 
     def get_click_handler(self, click_type: str):
         """Get the appropriate click handler based on click type."""
@@ -363,7 +364,24 @@ class SimpleActionsExecutor:
             if custom_name:
                 # Use custom name (sanitized)
                 sanitized_name = sanitize_filename(custom_name)
-                filename = f"{sanitized_name}.png"
+
+                # Handle duplicate names by adding counter suffix
+                if sanitized_name in self.custom_screenshot_counters:
+                    # Name already used, increment counter and add suffix
+                    self.custom_screenshot_counters[sanitized_name] += 1
+                    counter = self.custom_screenshot_counters[sanitized_name]
+                    filename = f"{sanitized_name}_{counter:03d}.png"
+                else:
+                    # First use of this name, check if file exists
+                    base_filepath = screenshots_dir / f"{sanitized_name}.png"
+                    if base_filepath.exists():
+                        # File exists, start counter at 1
+                        self.custom_screenshot_counters[sanitized_name] = 1
+                        filename = f"{sanitized_name}_001.png"
+                    else:
+                        # File doesn't exist, use base name and initialize counter
+                        self.custom_screenshot_counters[sanitized_name] = 0
+                        filename = f"{sanitized_name}.png"
             else:
                 # Use sequential numbering for unnamed screenshots
                 filename = f"screenshot_{self.explicit_screenshot_counter:03d}.png"
