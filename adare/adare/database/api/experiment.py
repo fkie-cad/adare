@@ -481,3 +481,27 @@ class ExperimentApi(ProjectDatabaseApi):
 
         self._session.commit()
         return count
+
+    def mark_run_as_published(self, run_ulid: str):
+        """
+        Mark an experiment run as published to the server.
+
+        Args:
+            run_ulid: ULID of the experiment run
+
+        Returns:
+            The updated ExperimentRun object
+        """
+        run = self._session.query(ExperimentRun).filter(ExperimentRun.id == run_ulid).first()
+        if not run:
+            from adare.exceptions import ExperimentRunNotFoundError
+            raise ExperimentRunNotFoundError(
+                log,
+                f'Experiment run {run_ulid} not found',
+                possible_solutions=['Check the run ULID']
+            )
+
+        run.published = True
+        self._session.commit()
+        log.info(f'Marked run {run_ulid} as published')
+        return run
