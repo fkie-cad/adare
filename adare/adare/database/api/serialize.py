@@ -46,7 +46,9 @@ class SerializeApi(DatabaseApi):
             event_dict['returncode'] = event.returncode
             event_dict['stdout'] = event.stdout
         elif event_type == 'test_event':
-            event_dict['abstract_test_ulid'] = event.abstract_test.remote_ulid
+            # Use remote_ulid if available, fallback to id
+            test_ulid = getattr(event.abstract_test, 'remote_ulid', None) or event.abstract_test.id
+            event_dict['abstract_test_ulid'] = test_ulid
             event_dict['result'] = self.serialize_result(event.result)
         elif event_type == 'error_event':
             event_dict['error_name'] = event.error_name
@@ -70,6 +72,20 @@ class SerializeApi(DatabaseApi):
         return event_dict
 
     def serialize_run(self, run: ExperimentRun) -> (dict, dict):
+        """
+        Serialize an experiment run for API upload.
+
+        Returns:
+            Tuple of (run_data, files_dict) where run_data contains metadata
+            and files_dict contains paths to log files.
+        """
+        # Use remote_ulid if available (after experiment is published), fallback to local id
+        experiment_ulid = getattr(run.experiment, 'remote_ulid', None) or run.experiment.id
+
+        # Environment is accessed via property, use remote_ulid if available
+        env = run.environment
+        environment_ulid = getattr(env, 'remote_ulid', None) or run.environment_id
+
         run_dict = {
             'ulid': run.id,
             'status': run.status,
@@ -77,8 +93,8 @@ class SerializeApi(DatabaseApi):
             'timestamp_start': run.start_time.strftime(TIMESTAMP_FORMAT),
             'timestamp_end': run.end_time.strftime(TIMESTAMP_FORMAT),
             'events': [self.serialize_event(event) for event in run.events],
-            'experiment_ulid': run.experiment.remote_ulid,
-            'environment_ulid': run.environment.remote_ulid,
+            'experiment_ulid': experiment_ulid,
+            'environment_ulid': environment_ulid,
         }
         files_dict = {
             'adarevm_log': run.files.log_adarevm.path,

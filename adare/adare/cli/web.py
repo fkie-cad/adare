@@ -75,3 +75,66 @@ def exec_web_sync(arguments):
 def exec_web_upload_experiment_run(arguments):
     from adare.webappaccess.upload import publish_experiment_run
     publish_experiment_run(arguments.ulid)
+
+
+def exec_web_publish_run(arguments):
+    """Publish an experiment run to the server."""
+    from adare.backend.experiment.commands import publish_run_command
+    project_directory = determine_projectdirectory(arguments.project)
+    if not project_directory:
+        raise NoProjectFoundError(log, message='project directory not found')
+    publish_run_command(project_directory, arguments.ulid)
+
+
+def exec_web_check_experiment(arguments):
+    """Check if an experiment exists on the server."""
+    from adare.webappaccess.api_client import check_experiment_exists
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
+
+    try:
+        exists = check_experiment_exists(arguments.ulid)
+        result_data = {
+            'experiment_ulid': arguments.ulid,
+            'exists': exists,
+            'status': 'published' if exists else 'not_found'
+        }
+
+        if dual_output or formatter.format_type.value != 'rich':
+            formatter.print_or_save(result_data, output_file, dual_output)
+        else:
+            if exists:
+                print(f'Experiment {arguments.ulid} exists on server and is published.')
+            else:
+                print(f'Experiment {arguments.ulid} not found on server.')
+    except Exception as e:
+        log.error(f'Error checking experiment: {e}')
+        raise
+
+
+def exec_web_check_run(arguments):
+    """Check if an experiment run exists on the server."""
+    from adare.webappaccess.api_client import check_run_exists
+    from adare.run import get_formatter_from_context
+
+    formatter, output_file, dual_output = get_formatter_from_context()
+
+    try:
+        exists = check_run_exists(arguments.ulid)
+        result_data = {
+            'run_ulid': arguments.ulid,
+            'exists': exists,
+            'status': 'published' if exists else 'not_found'
+        }
+
+        if dual_output or formatter.format_type.value != 'rich':
+            formatter.print_or_save(result_data, output_file, dual_output)
+        else:
+            if exists:
+                print(f'Experiment run {arguments.ulid} exists on server.')
+            else:
+                print(f'Experiment run {arguments.ulid} not found on server.')
+    except Exception as e:
+        log.error(f'Error checking run: {e}')
+        raise

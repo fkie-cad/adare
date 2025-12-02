@@ -59,7 +59,8 @@ from adare.cli.show import (
 from adare.cli.web import (
     exec_web_login, exec_web_logout, exec_web_status,
     exec_download_experiment, exec_download_testfunction, exec_download_environment,
-    exec_web_sync, exec_web_upload_experiment_run
+    exec_web_sync, exec_web_upload_experiment_run,
+    exec_web_publish_run, exec_web_check_experiment, exec_web_check_run
 )
 from adare.cli.testfunction import (
     exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
@@ -904,6 +905,28 @@ def publish(ulid):
     """Publish an experiment run to the web interface."""
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_web_upload_experiment_run, args)
+
+@web.command('publish-run')
+@click.argument('ulid')
+@click.option('--project', '-p', help='Name of the project')
+def publish_run(ulid, project):
+    """Publish an experiment run to the server with progress tracking."""
+    args = SimpleNamespace(ulid=ulid, project=project)
+    exec_with_error_printing(exec_web_publish_run, args)
+
+@web.command('check-experiment')
+@click.argument('ulid')
+def check_experiment(ulid):
+    """Check if an experiment exists on the server."""
+    args = SimpleNamespace(ulid=ulid)
+    exec_with_error_printing(exec_web_check_experiment, args)
+
+@web.command('check-run')
+@click.argument('ulid')
+def check_run(ulid):
+    """Check if an experiment run exists on the server."""
+    args = SimpleNamespace(ulid=ulid)
+    exec_with_error_printing(exec_web_check_run, args)
 
 @web.command()
 @click.option('--project', '-p', help='Name of the project')

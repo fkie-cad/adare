@@ -935,3 +935,122 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
         print(f"\nSummary: {len(updated_experiments)} updated, {len(skipped_experiments)} already had environments, {len(environment_missing_experiments)} missing environments, {len(failed_experiments)} failed.")
     else:
         print(f"\nNo experiments were successfully updated. See error details above.")
+
+
+def publish_run_command(project_directory: Path, run_ulid: str):
+    """
+    Publish an experiment run to the server with validation and progress tracking.
+
+    Args:
+        project_directory: Path to the project directory
+        run_ulid: ULID of the experiment run to publish
+
+    Raises:
+        Various exceptions from webappaccess.exceptions for different error conditions
+    """
+    from adare.database.api.experiment import ExperimentApi
+    from adare.webappaccess.api_client import ApiClient
+    from adare.webappaccess.exceptions import (
+        NotLoggedInError,
+        ExperimentNotFoundError,
+        RunAlreadyExistsError,
+        ApiConnectionError,
+    )
+    from rich.console import Console
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+
+    console = Console()
+
+    # Validate login status
+    if not is_logged_in():
+        raise NotLoggedInError(
+            log,
+            'You are not logged in to the server.',
+            possible_solutions=['Run: adare web login']
+        )
+
+    # Validate run exists locally
+    with ExperimentApi(project_directory) as exp_api:
+        run = exp_api.get_run_by_ulid(run_ulid)
+        if not run:
+            from adare.exceptions import ExperimentRunNotFoundError
+            raise ExperimentRunNotFoundError(
+                log,
+                f'Experiment run {run_ulid} not found in project database.',
+                possible_solutions=['Check the run ULID', 'List runs with: adare run list']
+            )
+
+        experiment = run.experiment
+        if not experiment:
+            from adare.exceptions import ExperimentNotFoundError as LocalExpNotFound
+            raise LocalExpNotFound(
+                log,
+                f'Experiment associated with run {run_ulid} not found.',
+                possible_solutions=['Check database integrity']
+            )
+
+    # Create API client
+    client = ApiClient()
+
+    # Show progress with rich
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        # Task 1: Check experiment exists on server
+        task1 = progress.add_task("[cyan]Checking experiment on server...", total=1)
+        try:
+            exp_exists = client.check_experiment_exists(experiment.id)
+            if not exp_exists:
+                progress.update(task1, completed=1)
+                raise ExperimentNotFoundError(
+                    log,
+                    f'Experiment {experiment.name} (ULID: {experiment.id}) is not published on the server.',
+                    possible_solutions=['Publish the experiment first with: adare web publish <experiment>']
+                )
+            progress.update(task1, completed=1, description=f"[green]Experiment {experiment.name} verified on server")
+        except ApiConnectionError as e:
+            progress.update(task1, completed=1)
+            raise
+
+        # Task 2: Check if run already exists
+        task2 = progress.add_task("[cyan]Checking run status...", total=1)
+        try:
+            run_exists = client.check_run_exists(run_ulid)
+            if run_exists:
+                progress.update(task2, completed=1, description="[yellow]Run already exists on server")
+                console.print(f"[yellow]Run {run_ulid} already published to server. No action needed.[/yellow]")
+                return
+            progress.update(task2, completed=1, description="[green]Run not yet published")
+        except ApiConnectionError as e:
+            progress.update(task2, completed=1)
+            raise
+
+        # Task 3: Upload run
+        task3 = progress.add_task("[cyan]Uploading experiment run...", total=1)
+        try:
+            result = client.publish_experiment_run(run_ulid)
+            progress.update(task3, completed=1, description="[green]Run published successfully")
+
+            # Update local database to mark as published
+            with ExperimentApi(project_directory) as exp_api:
+                exp_api.mark_run_as_published(run_ulid)
+
+            console.print(f"\n[green]Successfully published run {run_ulid}![/green]")
+            console.print(f"Experiment: {experiment.name}")
+            console.print(f"Server ULID: {result.get('ulid', run_ulid)}")
+
+        except RunAlreadyExistsError:
+            progress.update(task3, completed=1)
+            console.print(f"[yellow]Run {run_ulid} already exists on server (concurrent upload?).[/yellow]")
+        except ExperimentNotFoundError as e:
+            progress.update(task3, completed=1)
+            console.print(f"[red]Failed: {e.message}[/red]")
+            raise
+        except ApiConnectionError as e:
+            progress.update(task3, completed=1)
+            console.print(f"[red]Upload failed: {e.message}[/red]")
+            raise
