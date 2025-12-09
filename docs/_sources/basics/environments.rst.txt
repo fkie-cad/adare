@@ -11,7 +11,6 @@ Environments are defined using YAML files with these key fields:
 
 .. code-block:: yaml
 
-   name: my-environment
    vm: "/path/to/vm.ova"
    os:
      os: "Windows"

@@ -269,6 +269,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="playbook-patterns.html">Advanced Playbook Patterns</a></li>
 <li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="testfunction-create.html">Create your own testfunction set (in development)</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">VM Creation Guide</a></li>
@@ -386,9 +387,8 @@
 <h3>Required Software Installation<a class="headerlink" href="#required-software-installation" title="Link to this heading">¶</a></h3>
 <p>Install the following software:</p>
 <ul class="simple">
-<li><p><strong>Python 3.9 or newer</strong></p></li>
-<li><p><strong>Poetry</strong> (<a class="reference external" href="https://python-poetry.org/docs/#installing-with-the-official-installer">Installation Guide</a>)</p></li>
 <li><p><strong>VirtualBox Guest Additions</strong></p></li>
+<li><p><strong>Miniforge3</strong></p></li>
 </ul>
 </section>
 </section>
@@ -396,25 +396,32 @@
 <h2>Linux Setup<a class="headerlink" href="#linux-setup" title="Link to this heading">¶</a></h2>
 <section id="base-configuration-all-environments">
 <h3>Base Configuration (all environments)<a class="headerlink" href="#base-configuration-all-environments" title="Link to this heading">¶</a></h3>
-<ul class="simple">
-<li><p>Create a user account with:</p>
 <ul>
+<li><p>Create a user account with:</p>
+<ul class="simple">
 <li><p><strong>Username:</strong> <code class="docutils literal notranslate"><span class="pre">adare</span></code></p></li>
 <li><p><strong>Password:</strong> <code class="docutils literal notranslate"><span class="pre">adare</span></code></p></li>
 </ul>
 </li>
 <li><p>Enable <strong>autologin</strong> so the VM boots directly into the <code class="docutils literal notranslate"><span class="pre">adare</span></code> user’s desktop.</p>
-<ul>
-<li><p><strong>Important:</strong> autologin must start an <strong>X11 session</strong> (not Wayland).</p></li>
+<ul class="simple">
+<li><p><strong>Important:</strong> autologin must start an <strong>X11 session</strong> (not Wayland). (e.g sudo nano /etc/gdm3/custom.conf -&gt; uncomment: WaylandEnable=false)</p></li>
 </ul>
 </li>
-<li><p>Install:</p>
-<ul>
-<li><p>Python 3.10 or newer</p></li>
-<li><p><a class="reference external" href="https://python-poetry.org/docs/#installing-with-the-official-installer">Poetry</a> and make sure it’s in the PATH for the <code class="docutils literal notranslate"><span class="pre">adare</span></code> user. So open a new terminal and run <code class="docutils literal notranslate"><span class="pre">poetry</span> <span class="pre">--version</span></code> to confirm.</p></li>
+<li><p>Enable passwordless sudo for the <code class="docutils literal notranslate"><span class="pre">adare</span></code> user by adding the following line to the sudoers file at the end (edit with <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">visudo</span></code>):</p>
+<p><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">ALL=(ALL)</span> <span class="pre">NOPASSWD:ALL</span></code></p>
+</li>
+<li><p>Install:
+- Miniforge3</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Download Install script: <a href="#id1"><span class="problematic" id="id2">``</span></a>cd /tmp &amp;&amp; wget <a class="reference external" href="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh">https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh</a>’’</p></li>
+<li><p>Install: <a href="#id3"><span class="problematic" id="id4">``</span></a>cd /tmp &amp;&amp; bash Miniforge3-Linux-x86_64.sh -b -p /home/adare/.miniforge3’’ (install into /home/adare/.miniforge3 instead of /home/adare/miniforge3)</p></li>
+<li><p>Create a conda environment with Python 3.10: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">create</span> <span class="pre">-n</span> <span class="pre">pyadare</span> <span class="pre">python=3.10</span></code></p></li>
+</ul>
+</div></blockquote>
+<ul class="simple">
 <li><p>VirtualBox Guest Additions</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">python3-tk</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">python3-dev</span></code></p></li>
 <li><p>to be ready for future updates also install:
 - for x11: maim (for screenshots)
 - for wayland: grim (for screenshots) + ydotool (for mouse/keyboard control)</p></li>
@@ -433,6 +440,8 @@
 </ul>
 </li>
 <li><p>Configure Seahorse (keyring) to unlock automatically on login by setting an empty password.</p></li>
+<li><p>Disbale Auto Updates/Notifications:
+- GNOME: <a href="#id5"><span class="problematic" id="id6">``</span></a>sudo systemctl stop unattended-upgrades’’ und <a href="#id7"><span class="problematic" id="id8">``</span></a>sudo systemctl disable unattended-upgrades’’</p></li>
 </ul>
 </section>
 <section id="other-desktop-environments">

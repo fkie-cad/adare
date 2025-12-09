@@ -269,6 +269,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/output-formats.html">Output Formats (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/vm-create.html">VM Creation Guide</a></li>
@@ -493,7 +494,7 @@
 <p class="admonition-title">Warning</p>
 <p><strong>Variable Filter Validation Limitation</strong></p>
 <p>Variable filters currently have <strong>limited validation</strong> during playbook parsing. Filter syntax errors or incorrect parameters may only be discovered during experiment execution, potentially causing failures mid-experiment.</p>
-<p><strong>Recommendation</strong>: Always test playbooks with filters in development mode first: <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">run</span> <span class="pre">&lt;name&gt;</span> <span class="pre">-e</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--test</span></code></p>
+<p><strong>Recommendation</strong>: Test playbooks thoroughly in test mode (the default) before using <code class="docutils literal notranslate"><span class="pre">--production</span></code> flag</p>
 </div>
 <p>ADARE supports powerful filters for data transformation:</p>
 <p><strong>Date and Time Filters</strong></p>
@@ -763,6 +764,10 @@
 <span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Commands can capture output to variables for use in conditional flow control. See <span class="xref std std-ref">Command Output Capture</span> in the Conditional Flow Control section.</p>
+</div>
 <p><strong>File Operations</strong></p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
 <span class="w">  </span><span class="c1"># File copy</span>
@@ -911,6 +916,79 @@
 <span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Record</span><span class="nv"> </span><span class="s">when</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">deletion</span><span class="nv"> </span><span class="s">began&quot;</span>
 </pre></div>
 </div>
+<p><strong>File Transfer from VM</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Pull single file (preserves full path structure)</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pull</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">src</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/var/log/app.log&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Application</span><span class="nv"> </span><span class="s">logs&quot;</span>
+
+<span class="w">  </span><span class="c1"># Pull file with custom destination name</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pull</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">src</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{test_file_path}}&quot;</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;my_log.txt&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Custom</span><span class="nv"> </span><span class="s">named</span><span class="nv"> </span><span class="s">log&quot;</span>
+
+<span class="w">  </span><span class="c1"># Pull entire directory (recursive)</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pull</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">src</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/home/user/evidence&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Evidence</span><span class="nv"> </span><span class="s">directory&quot;</span>
+
+<span class="w">  </span><span class="c1"># Pull Windows file</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pull</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">src</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;C:\\Users\\adare\\Documents\\data.csv&quot;</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;windows_data.csv&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Windows</span><span class="nv"> </span><span class="s">data</span><span class="nv"> </span><span class="s">file&quot;</span>
+</pre></div>
+</div>
+<p>Files are saved to <code class="docutils literal notranslate"><span class="pre">&lt;run-directory&gt;/artifacts/</span></code>. Without <code class="docutils literal notranslate"><span class="pre">dst</span></code>, the full VM path structure is preserved.</p>
+</section>
+<section id="loop-actions">
+<h3>Loop Actions<a class="headerlink" href="#loop-actions" title="Link to this heading">¶</a></h3>
+<p><strong>Repeat Actions Multiple Times</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Counter-based loop</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">times</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">5</span><span class="nv"> </span><span class="s">numbered</span><span class="nv"> </span><span class="s">files&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;File</span><span class="nv"> </span><span class="s">{{index}}&#39;</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">/tmp/file_{{index}}.txt&quot;</span>
+<span class="w">            </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p><strong>Iterate Over Lists</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">filenames</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">list</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;alpha.txt&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;beta.txt&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;gamma.txt&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Loop over list items</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">items</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{filenames}}&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Process</span><span class="nv"> </span><span class="s">each</span><span class="nv"> </span><span class="s">filename&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;touch</span><span class="nv"> </span><span class="s">/tmp/{{item}}&quot;</span>
+<span class="w">            </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">  </span><span class="c1"># Custom variable name for clarity</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">items</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{filenames}}&quot;</span>
+<span class="w">      </span><span class="nt">item_var</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">filename</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">pull</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">src</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/tmp/{{filename}}&quot;</span>
+<span class="w">            </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{filename}}&quot;</span>
+</pre></div>
+</div>
+<p><strong>Loop Variables:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">{{index}}</span></code>: Current iteration (0-based)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">{{total}}</span></code>: Total iterations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">{{item}}</span></code>: Current list item (or custom name via <code class="docutils literal notranslate"><span class="pre">item_var</span></code>)</p></li>
+</ul>
 </section>
 <section id="block-actions">
 <h3>Block Actions<a class="headerlink" href="#block-actions" title="Link to this heading">¶</a></h3>
@@ -940,6 +1018,225 @@
 <span class="w">              </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;delete&quot;</span><span class="p p-Indicator">]}</span>
 <span class="w">              </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;deletion_time&quot;</span><span class="p p-Indicator">}</span>
 </pre></div>
+</div>
+</section>
+</section>
+<section id="conditional-flow-control">
+<h2>Conditional Flow Control<a class="headerlink" href="#conditional-flow-control" title="Link to this heading">¶</a></h2>
+<p>ADARE provides powerful conditional flow control to make playbooks dynamic and responsive to runtime conditions. You can conditionally stop execution, skip actions, or execute blocks based on variable values or UI state.</p>
+<section id="stop-action">
+<h3>Stop Action<a class="headerlink" href="#stop-action" title="Link to this heading">¶</a></h3>
+<p>Stop playbook execution conditionally or unconditionally.</p>
+<p><strong>Unconditional Stop</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;whoami&quot;</span>
+<span class="w">      </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_user</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">stop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Stop</span><span class="nv"> </span><span class="s">here</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">debugging&quot;</span>
+</pre></div>
+</div>
+<p><strong>Conditional Stop</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;whoami&quot;</span>
+<span class="w">      </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_user</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">stop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_user</span>
+<span class="w">        </span><span class="nt">is_empty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Stop</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">capture</span><span class="nv"> </span><span class="s">failed&quot;</span>
+</pre></div>
+</div>
+<p>When a stop condition evaluates to true, the playbook execution halts immediately. Without a condition, the stop always executes.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>See <a class="reference internal" href="../advanced/playbook-patterns.html"><span class="doc">Advanced Playbook Patterns</span></a> for complex stop patterns with regex matching and multi-stage validation.</p>
+</div>
+</section>
+<section id="continue-action">
+<h3>Continue Action<a class="headerlink" href="#continue-action" title="Link to this heading">¶</a></h3>
+<p>Skip remaining actions in the current loop iteration or block.</p>
+<p><strong>Continue in Loops</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">times</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">{{index}}&quot;</span>
+<span class="w">            </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iteration_num</span>
+<span class="w">              </span><span class="nt">parser</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;int(output.strip())&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">continue</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iteration_num</span>
+<span class="w">              </span><span class="nt">equals</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">            </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Skip</span><span class="nv"> </span><span class="s">iteration</span><span class="nv"> </span><span class="s">3&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;Processing</span><span class="nv"> </span><span class="s">{{iteration_num}}&#39;&quot;</span>
+</pre></div>
+</div>
+<p><strong>Continue in Blocks</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;skip&#39;&quot;</span>
+<span class="w">      </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">action_flag</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;First</span><span class="nv"> </span><span class="s">action&#39;&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">continue</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">action_flag</span>
+<span class="w">              </span><span class="nt">equals</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;skip&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;This</span><span class="nv"> </span><span class="s">will</span><span class="nv"> </span><span class="s">be</span><span class="nv"> </span><span class="s">skipped&#39;&quot;</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>See <a class="reference internal" href="../advanced/playbook-patterns.html"><span class="doc">Advanced Playbook Patterns</span></a> for advanced continue patterns and nested loop control.</p>
+</div>
+</section>
+<section id="variable-conditions">
+<h3>Variable Conditions<a class="headerlink" href="#variable-conditions" title="Link to this heading">¶</a></h3>
+<p>Variable conditions are evaluated on the host machine and support multiple operators for flexible control flow.</p>
+<p><strong>Available Operators</strong></p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Exactly one operator must be specified per condition.</p>
+</div>
+<p><strong>String Comparison</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;success&#39;&quot;</span>
+<span class="w">    </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">status</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">stop</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">status</span>
+<span class="w">      </span><span class="nt">equals</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;error&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Stop</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">status</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">error&quot;</span>
+</pre></div>
+</div>
+<p><strong>Numeric Comparison</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;42&#39;&quot;</span>
+<span class="w">    </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">count</span>
+<span class="w">      </span><span class="nt">parser</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;int(output.strip())&quot;</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">stop</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">count</span>
+<span class="w">      </span><span class="nt">greater_than</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Stop</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">count</span><span class="nv"> </span><span class="s">exceeds</span><span class="nv"> </span><span class="s">limit&quot;</span>
+</pre></div>
+</div>
+<p><strong>Empty Check</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;whoami&quot;</span>
+<span class="w">    </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">username</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">stop</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">username</span>
+<span class="w">      </span><span class="nt">is_empty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Stop</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">username</span><span class="nv"> </span><span class="s">wasn&#39;t</span><span class="nv"> </span><span class="s">captured&quot;</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>See <a class="reference internal" href="../advanced/playbook-patterns.html"><span class="doc">Advanced Playbook Patterns</span></a> for regex patterns, substring matching, and complex condition combinations.</p>
+</div>
+</section>
+<section id="command-output-capture">
+<h3>Command Output Capture<a class="headerlink" href="#command-output-capture" title="Link to this heading">¶</a></h3>
+<p>Capture command output to variables for use in conditional flow control.</p>
+<p><strong>Basic Capture</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Capture stdout (default)</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;whoami&quot;</span>
+<span class="w">      </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">current_user</span>
+
+<span class="w">  </span><span class="c1"># Use captured variable in subsequent commands</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;Hello,</span><span class="nv"> </span><span class="s">{{current_user}}!&#39;&quot;</span>
+</pre></div>
+</div>
+<p><strong>Capture with Parser</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Parse integer from output</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;123&#39;&quot;</span>
+<span class="w">      </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">number_value</span>
+<span class="w">        </span><span class="nt">parser</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;int(output.strip())&quot;</span>
+
+<span class="w">  </span><span class="c1"># Use in numeric condition</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">stop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">number_value</span>
+<span class="w">        </span><span class="nt">greater_than</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+</pre></div>
+</div>
+<p><strong>Capture Sources</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Capture stderr</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;python3</span><span class="nv"> </span><span class="s">-c</span><span class="nv"> </span><span class="s">&#39;import</span><span class="nv"> </span><span class="s">sys;</span><span class="nv"> </span><span class="s">sys.stderr.write(\&quot;error\&quot;)&#39;&quot;</span>
+<span class="w">      </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">error_output</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stderr</span>
+
+<span class="w">  </span><span class="c1"># Capture return code</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;test</span><span class="nv"> </span><span class="s">-d</span><span class="nv"> </span><span class="s">/tmp&quot;</span>
+<span class="w">      </span><span class="nt">capture</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dir_exists</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">returncode</span>
+<span class="w">        </span><span class="nt">parser</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;output</span><span class="nv"> </span><span class="s">==</span><span class="nv"> </span><span class="s">0&quot;</span>
+</pre></div>
+</div>
+<p><strong>Available capture sources</strong>: <code class="docutils literal notranslate"><span class="pre">stdout</span></code> (default), <code class="docutils literal notranslate"><span class="pre">stderr</span></code>, <code class="docutils literal notranslate"><span class="pre">returncode</span></code>, <code class="docutils literal notranslate"><span class="pre">all</span></code></p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>See <a class="reference internal" href="../advanced/playbook-patterns.html"><span class="doc">Advanced Playbook Patterns</span></a> for JSON parsing, regex extraction, and complex output processing.</p>
+</div>
+</section>
+<section id="conditional-blocks-and-keyboard">
+<h3>Conditional Blocks and Keyboard<a class="headerlink" href="#conditional-blocks-and-keyboard" title="Link to this heading">¶</a></h3>
+<p>Blocks and keyboard actions support <code class="docutils literal notranslate"><span class="pre">when</span></code> conditions that check UI state before execution.</p>
+<p><strong>Conditional Block Execution</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Save&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Save&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">idle</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+</pre></div>
+</div>
+<p>The block only executes if the “Save” text exists on screen. Use <code class="docutils literal notranslate"><span class="pre">not_exists</span></code> to check for absence of UI elements.</p>
+<p><strong>Conditional Keyboard Input</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyboard</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;ctrl&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;s&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">when</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">exists</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Document&quot;</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>See <a class="reference internal" href="../advanced/playbook-patterns.html"><span class="doc">Advanced Playbook Patterns</span></a> for complex when conditions with multiple exists/not_exists checks.</p>
 </div>
 </section>
 </section>
@@ -1077,7 +1374,16 @@
 <li><a class="reference internal" href="#system-actions">System Actions</a></li>
 <li><a class="reference internal" href="#timing-control-actions">Timing Control Actions</a></li>
 <li><a class="reference internal" href="#evidence-collection-actions">Evidence Collection Actions</a></li>
+<li><a class="reference internal" href="#loop-actions">Loop Actions</a></li>
 <li><a class="reference internal" href="#block-actions">Block Actions</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#conditional-flow-control">Conditional Flow Control</a><ul>
+<li><a class="reference internal" href="#stop-action">Stop Action</a></li>
+<li><a class="reference internal" href="#continue-action">Continue Action</a></li>
+<li><a class="reference internal" href="#variable-conditions">Variable Conditions</a></li>
+<li><a class="reference internal" href="#command-output-capture">Command Output Capture</a></li>
+<li><a class="reference internal" href="#conditional-blocks-and-keyboard">Conditional Blocks and Keyboard</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#best-practices">Best Practices</a><ul>

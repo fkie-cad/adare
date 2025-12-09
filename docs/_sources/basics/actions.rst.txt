@@ -192,7 +192,7 @@ Variable Filters
 
    Variable filters currently have **limited validation** during playbook parsing. Filter syntax errors or incorrect parameters may only be discovered during experiment execution, potentially causing failures mid-experiment.
 
-   **Recommendation**: Always test playbooks with filters in development mode first: ``adare experiment run <name> -e <env> --test``
+   **Recommendation**: Test playbooks thoroughly in test mode (the default) before using ``--production`` flag
 
 ADARE supports powerful filters for data transformation:
 
@@ -485,6 +485,9 @@ System Actions
            echo "Case started: {{now()}}" > case_{{case_id}}/log.txt
          shell: true
 
+.. note::
+   Commands can capture output to variables for use in conditional flow control. See :ref:`Command Output Capture` in the Conditional Flow Control section.
+
 **File Operations**
 
 .. code-block:: yaml
@@ -646,6 +649,86 @@ Evidence Collection Actions
          description: "Record when file deletion began"
 
 
+**File Transfer from VM**
+
+.. code-block:: yaml
+
+   actions:
+     # Pull single file (preserves full path structure)
+     - pull:
+         src: "/var/log/app.log"
+         description: "Application logs"
+
+     # Pull file with custom destination name
+     - pull:
+         src: "{{test_file_path}}"
+         dst: "my_log.txt"
+         description: "Custom named log"
+
+     # Pull entire directory (recursive)
+     - pull:
+         src: "/home/user/evidence"
+         description: "Evidence directory"
+
+     # Pull Windows file
+     - pull:
+         src: "C:\\Users\\adare\\Documents\\data.csv"
+         dst: "windows_data.csv"
+         description: "Windows data file"
+
+Files are saved to ``<run-directory>/artifacts/``. Without ``dst``, the full VM path structure is preserved.
+
+Loop Actions
+============
+
+**Repeat Actions Multiple Times**
+
+.. code-block:: yaml
+
+   actions:
+     # Counter-based loop
+     - loop:
+         times: 5
+         description: "Create 5 numbered files"
+         actions:
+           - command:
+               command: "echo 'File {{index}}' > /tmp/file_{{index}}.txt"
+               shell: true
+
+**Iterate Over Lists**
+
+.. code-block:: yaml
+
+   variables:
+     filenames:
+       type: list
+       value: ["alpha.txt", "beta.txt", "gamma.txt"]
+
+   actions:
+     # Loop over list items
+     - loop:
+         items: "{{filenames}}"
+         description: "Process each filename"
+         actions:
+           - command:
+               command: "touch /tmp/{{item}}"
+               shell: true
+
+     # Custom variable name for clarity
+     - loop:
+         items: "{{filenames}}"
+         item_var: filename
+         actions:
+           - pull:
+               src: "/tmp/{{filename}}"
+               dst: "{{filename}}"
+
+**Loop Variables:**
+
+- ``{{index}}``: Current iteration (0-based)
+- ``{{total}}``: Total iterations
+- ``{{item}}``: Current list item (or custom name via ``item_var``)
+
 Block Actions
 =============
 
@@ -677,6 +760,269 @@ Block Actions
                actions:
                  - keyboard: {combination: ["delete"]}
                  - save_timestamp: {variable: "deletion_time"}
+
+Conditional Flow Control
+*************************
+
+ADARE provides powerful conditional flow control to make playbooks dynamic and responsive to runtime conditions. You can conditionally stop execution, skip actions, or execute blocks based on variable values or UI state.
+
+Stop Action
+===========
+
+Stop playbook execution conditionally or unconditionally.
+
+**Unconditional Stop**
+
+.. code-block:: yaml
+
+   actions:
+     - command:
+         command: "whoami"
+         capture:
+           variable: current_user
+     - stop:
+         description: "Stop here for debugging"
+
+**Conditional Stop**
+
+.. code-block:: yaml
+
+   actions:
+     - command:
+         command: "whoami"
+         capture:
+           variable: current_user
+     - stop:
+         condition:
+           variable: current_user
+           is_empty: true
+         description: "Stop if username capture failed"
+
+When a stop condition evaluates to true, the playbook execution halts immediately. Without a condition, the stop always executes.
+
+.. note::
+   See :doc:`../advanced/playbook-patterns` for complex stop patterns with regex matching and multi-stage validation.
+
+Continue Action
+===============
+
+Skip remaining actions in the current loop iteration or block.
+
+**Continue in Loops**
+
+.. code-block:: yaml
+
+   actions:
+     - loop:
+         times: 5
+         actions:
+           - command:
+               command: "echo {{index}}"
+               capture:
+                 variable: iteration_num
+                 parser: "int(output.strip())"
+           - continue:
+               condition:
+                 variable: iteration_num
+                 equals: 3
+               description: "Skip iteration 3"
+           - command:
+               command: "echo 'Processing {{iteration_num}}'"
+
+**Continue in Blocks**
+
+.. code-block:: yaml
+
+   actions:
+     - command:
+         command: "echo 'skip'"
+         capture:
+           variable: action_flag
+     - block:
+         actions:
+           - command:
+               command: "echo 'First action'"
+           - continue:
+               condition:
+                 variable: action_flag
+                 equals: "skip"
+           - command:
+               command: "echo 'This will be skipped'"
+
+.. note::
+   See :doc:`../advanced/playbook-patterns` for advanced continue patterns and nested loop control.
+
+Variable Conditions
+===================
+
+Variable conditions are evaluated on the host machine and support multiple operators for flexible control flow.
+
+**Available Operators**
+
++----------------+-----------------------------------------------------+
+| Operator       | Description                                         |
++================+=====================================================+
+| equals         | Direct equality comparison (case-sensitive)         |
++----------------+-----------------------------------------------------+
+| contains       | Substring match                                     |
++----------------+-----------------------------------------------------+
+| matches        | Regex pattern match                                 |
++----------------+-----------------------------------------------------+
+| greater_than   | Numeric comparison (>)                              |
++----------------+-----------------------------------------------------+
+| less_than      | Numeric comparison (<)                              |
++----------------+-----------------------------------------------------+
+| is_empty       | Check if variable is None/empty (true) or not (false)|
++----------------+-----------------------------------------------------+
+
+.. note::
+   Exactly one operator must be specified per condition.
+
+**String Comparison**
+
+.. code-block:: yaml
+
+   - command:
+       command: "echo 'success'"
+       capture:
+         variable: status
+   - stop:
+       condition:
+         variable: status
+         equals: "error"
+       description: "Stop if status is error"
+
+**Numeric Comparison**
+
+.. code-block:: yaml
+
+   - command:
+       command: "echo '42'"
+       capture:
+         variable: count
+         parser: "int(output.strip())"
+   - stop:
+       condition:
+         variable: count
+         greater_than: 100
+       description: "Stop if count exceeds limit"
+
+**Empty Check**
+
+.. code-block:: yaml
+
+   - command:
+       command: "whoami"
+       capture:
+         variable: username
+   - stop:
+       condition:
+         variable: username
+         is_empty: true
+       description: "Stop if username wasn't captured"
+
+.. note::
+   See :doc:`../advanced/playbook-patterns` for regex patterns, substring matching, and complex condition combinations.
+
+Command Output Capture
+======================
+
+Capture command output to variables for use in conditional flow control.
+
+**Basic Capture**
+
+.. code-block:: yaml
+
+   actions:
+     # Capture stdout (default)
+     - command:
+         command: "whoami"
+         capture:
+           variable: current_user
+
+     # Use captured variable in subsequent commands
+     - command:
+         command: "echo 'Hello, {{current_user}}!'"
+
+**Capture with Parser**
+
+.. code-block:: yaml
+
+   actions:
+     # Parse integer from output
+     - command:
+         command: "echo '123'"
+         capture:
+           variable: number_value
+           parser: "int(output.strip())"
+
+     # Use in numeric condition
+     - stop:
+         condition:
+           variable: number_value
+           greater_than: 100
+
+**Capture Sources**
+
+.. code-block:: yaml
+
+   actions:
+     # Capture stderr
+     - command:
+         command: "python3 -c 'import sys; sys.stderr.write(\"error\")'"
+         capture:
+           variable: error_output
+           source: stderr
+
+     # Capture return code
+     - command:
+         command: "test -d /tmp"
+         capture:
+           variable: dir_exists
+           source: returncode
+           parser: "output == 0"
+
+**Available capture sources**: ``stdout`` (default), ``stderr``, ``returncode``, ``all``
+
+.. note::
+   See :doc:`../advanced/playbook-patterns` for JSON parsing, regex extraction, and complex output processing.
+
+Conditional Blocks and Keyboard
+================================
+
+Blocks and keyboard actions support ``when`` conditions that check UI state before execution.
+
+**Conditional Block Execution**
+
+.. code-block:: yaml
+
+   actions:
+     - block:
+         when:
+           - exists:
+               text: "Save"
+         actions:
+           - click:
+               target:
+                 text: "Save"
+           - idle:
+               duration: 1.0
+
+The block only executes if the "Save" text exists on screen. Use ``not_exists`` to check for absence of UI elements.
+
+**Conditional Keyboard Input**
+
+.. code-block:: yaml
+
+   actions:
+     - keyboard:
+         combination: ["ctrl", "s"]
+         when:
+           - exists:
+               text: "Document"
+
+.. note::
+   See :doc:`../advanced/playbook-patterns` for complex when conditions with multiple exists/not_exists checks.
 
 Best Practices
 **************
