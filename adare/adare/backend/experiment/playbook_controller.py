@@ -35,6 +35,11 @@ from adare.backend.events.emitters import emit_action
 # Import playbook analysis utility
 from adare.helperfunctions.playbook_analysis import collect_pull_action_files
 
+# Import filesystem snapshot utilities
+from adare.backend.experiment.filesystem_snapshot import (
+    FilesystemSnapshot, calculate_diff, export_diff_json, export_diff_csv
+)
+
 log = logging.getLogger(__name__)
 
 
@@ -224,31 +229,54 @@ class PlaybookController:
     async def execute_experiment(self, experiment_dir: Path) -> PlaybookExecutionResult:
         """
         Execute complete experiment: playbook actions + tests.
-        
+        Automatically captures filesystem snapshots at start/end if enabled.
+
         Args:
             experiment_dir: Path to experiment directory
-            
+
         Returns:
             PlaybookExecutionResult with execution summary
         """
         log.info(f"Starting experiment execution in {experiment_dir}")
         self.start_time = time.time()
-        
+
+        # Check if automatic filesystem diff is enabled
+        auto_fs_diff = False
+        if hasattr(self.playbook, 'settings') and self.playbook.settings:
+            auto_fs_diff = self.playbook.settings.enable_filesystem_diff
+
+        # Capture initial filesystem snapshot if enabled
+        initial_snapshot = None
+        if auto_fs_diff:
+            log.info("Automatic filesystem diff enabled - capturing initial snapshot")
+            initial_snapshot = await self._capture_automatic_snapshot("_fs_snapshot_initial")
+            if not initial_snapshot:
+                log.warning("Failed to capture initial filesystem snapshot - diff will be skipped")
+                auto_fs_diff = False
+
         # 1. Load testfunctions and testset (dependencies should already be installed)
         await self.test_loader.load_tests(self.client)
-        
+
         # 2. Execute playbook actions (can now use loaded tests)
         playbook_path = experiment_dir / "playbook.yml"
         if playbook_path.exists():
             log.info("Executing playbook actions...")
             playbook_result = await self.execute_playbook()
             if not playbook_result.success:
+                # Even on failure, try to capture final snapshot for partial diff
+                if auto_fs_diff and initial_snapshot:
+                    await self._capture_and_export_diff(initial_snapshot, "_fs_snapshot_final")
                 return playbook_result
         else:
             log.warning("No playbook.yml found, skipping GUI actions")
-        
+
+        # Capture final snapshot and calculate diff if enabled
+        if auto_fs_diff and initial_snapshot:
+            log.info("Capturing final filesystem snapshot and calculating diff")
+            await self._capture_and_export_diff(initial_snapshot, "_fs_snapshot_final")
+
         # Tests are now executed inline during playbook execution via 'test:' actions
-        
+
         execution_time = time.time() - self.start_time
         log.info(f"Experiment completed successfully in {execution_time:.2f}s")
         
@@ -527,3 +555,99 @@ class PlaybookController:
 
             except Exception as e:
                 log.error(f"Error during auto-pull of {file_path}: {e}", exc_info=True)
+
+    async def _capture_automatic_snapshot(self, variable_name: str) -> Optional[FilesystemSnapshot]:
+        """
+        Capture filesystem snapshot programmatically (for automatic diff).
+
+        Args:
+            variable_name: Variable name to store snapshot (internal, starts with _)
+
+        Returns:
+            FilesystemSnapshot object, or None if capture failed
+        """
+        from adare.types.playbook import SnapshotFilesystemAction
+
+        try:
+            # Create programmatic snapshot action
+            snapshot_action = SnapshotFilesystemAction(
+                variable=variable_name,
+                timeout=300.0,  # 5 minute timeout
+                description=f"Automatic snapshot for filesystem diff"
+            )
+
+            # Execute via simple actions executor
+            result = await self.action_executor.simple_actions.execute_snapshot_filesystem(
+                snapshot_action,
+                parent_event_id=None,
+                event_emitter=None
+            )
+
+            if not result.success:
+                log.error(f"Failed to capture automatic snapshot: {result.message}")
+                return None
+
+            # Retrieve snapshot from execution context
+            snapshot = self.execution_context.get(variable_name)
+            if not snapshot or not isinstance(snapshot, FilesystemSnapshot):
+                log.error(f"Snapshot variable '{variable_name}' not found or invalid type")
+                return None
+
+            return snapshot
+
+        except Exception as e:
+            log.error(f"Error capturing automatic snapshot: {e}", exc_info=True)
+            return None
+
+    async def _capture_and_export_diff(self, initial_snapshot: FilesystemSnapshot, final_variable: str):
+        """
+        Capture final snapshot, calculate diff, and export to files.
+
+        Args:
+            initial_snapshot: Initial snapshot captured at experiment start
+            final_variable: Variable name for final snapshot
+        """
+        try:
+            # Capture final snapshot
+            final_snapshot = await self._capture_automatic_snapshot(final_variable)
+            if not final_snapshot:
+                log.error("Failed to capture final filesystem snapshot - diff export skipped")
+                return
+
+            # Calculate diff
+            log.info("Calculating filesystem diff...")
+            diff = calculate_diff(initial_snapshot, final_snapshot)
+
+            log.info(f"Filesystem changes detected - "
+                    f"Added: {len(diff['added'])}, "
+                    f"Removed: {len(diff['removed'])}, "
+                    f"Modified: {len(diff['modified'])}")
+
+            # Determine output directory (artifacts folder in run directory)
+            if not self.experiment_run_directory:
+                log.warning("No experiment run directory set - cannot export filesystem diff")
+                return
+
+            artifacts_dir = self.experiment_run_directory / 'artifacts'
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+            # Prepare metadata for JSON export
+            metadata = {
+                'initial_snapshot_time': initial_snapshot.timestamp,
+                'final_snapshot_time': final_snapshot.timestamp,
+                'os_type': initial_snapshot.os_type,
+                'experiment_run_directory': str(self.experiment_run_directory)
+            }
+
+            # Export JSON
+            json_path = artifacts_dir / 'filesystem_diffs.json'
+            export_diff_json(diff, json_path, metadata)
+
+            # Export CSV
+            csv_path = artifacts_dir / 'filesystem_diffs.csv'
+            export_diff_csv(diff, csv_path)
+
+            log.info(f"Filesystem diff exported to {artifacts_dir}")
+
+        except Exception as e:
+            log.error(f"Error exporting filesystem diff: {e}", exc_info=True)
