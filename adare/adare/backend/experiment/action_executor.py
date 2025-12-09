@@ -12,7 +12,7 @@ from adare.types.playbook import (
     ActionType, ClickAction, DragAction, KeyboardAction, IdleAction,
     ScrollAction, GotoAction, CommandAction, ScreenshotAction, BlockAction,
     ActionTestAction, SaveTimestampAction, PullAction, PauseAction,
-    WaitUntilAction, LoopAction, StopAction, ContinueAction
+    WaitUntilAction, LoopAction, StopAction, ContinueAction, SnapshotFilesystemAction
 )
 from adare.backend.experiment.websocket_client import AdareVMClient
 from adare.backend.experiment.target_resolver import MCPTargetResolver, MCPConditionChecker
@@ -210,6 +210,9 @@ class ActionExecutor:
             elif isinstance(resolved_action, ContinueAction):
                 result = await self.flow_control.execute_continue(resolved_action, parent_event_id, event_emitter)
 
+            elif isinstance(resolved_action, SnapshotFilesystemAction):
+                result = await self.simple_actions.execute_snapshot_filesystem(resolved_action, parent_event_id, event_emitter)
+
             else:
                 result = ActionResult(
                     success=False,
@@ -221,7 +224,8 @@ class ActionExecutor:
                 # Only capture for GUI-modifying actions (exclude non-GUI actions)
                 non_gui_actions = (IdleAction, SaveTimestampAction, PullAction,
                                    BlockAction, LoopAction, ActionTestAction,
-                                   WaitUntilAction, PauseAction, StopAction, ContinueAction)
+                                   WaitUntilAction, PauseAction, StopAction, ContinueAction,
+                                   SnapshotFilesystemAction)
                 if not isinstance(resolved_action, non_gui_actions):
                     try:
                         # Capture and save post-execution screenshot

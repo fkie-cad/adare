@@ -77,6 +77,7 @@ class Settings:
     auto_pull_on_test_failure: bool = True
     collect_system_info: bool = True
     forensic_logging: bool = True  # Generate forensic audit logs (YAML) after experiment completion
+    enable_filesystem_diff: bool = True  # Enable automatic snapshots at experiment start/end
 
 @attrs.define
 class Target:
@@ -196,6 +197,14 @@ class PullAction:
     dst: Optional[str] = None  # Optional destination name in artifacts folder
     description: str = ''
     # Note: Always pulls recursively - no need for recursive parameter
+
+@attrs.define
+class SnapshotFilesystemAction:
+    """Capture filesystem snapshot and store in variable."""
+    variable: str  # Variable name to store snapshot data
+    root_path: Optional[str] = None  # Root path to scan (default: / or C:\)
+    timeout: Optional[float] = 300.0  # Timeout in seconds (default: 5 minutes)
+    description: str = ''
 
 @attrs.define
 class PauseAction:
@@ -349,7 +358,7 @@ ActionType = Union[
     ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, ActionTestAction,
     CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, PullAction, PauseAction,
-    WaitUntilAction, LoopAction, StopAction, ContinueAction
+    WaitUntilAction, LoopAction, StopAction, ContinueAction, SnapshotFilesystemAction
 ]
 
 @attrs.define
@@ -497,6 +506,8 @@ def _structure_action(obj, converter):
         return converter.structure(obj['stop'], StopAction)
     if 'continue' in obj:
         return converter.structure(obj['continue'], ContinueAction)
+    if 'snapshot_filesystem' in obj:
+        return converter.structure(obj['snapshot_filesystem'], SnapshotFilesystemAction)
     raise ValueError(f"Unknown action: {obj}")
 
 def _structure_condition(obj, converter):

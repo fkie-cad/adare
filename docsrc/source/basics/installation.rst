@@ -41,6 +41,26 @@ Required Software
 
    If below 3.10 or not installed, download and install from `python.org <https://www.python.org/downloads/>`_ or use your package manager.
 
+   **Windows Installation**
+
+   For Windows users, you can install Python using PowerShell:
+
+   .. code-block:: powershell
+
+      # Download Python installer
+      $pythonInstaller = "https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe"
+      $installerPath = "$env:TEMP\python-installer.exe"
+      Invoke-WebRequest $pythonInstaller -OutFile $installerPath
+
+      # Install Python (add to PATH, install pip)
+      Start-Process -FilePath $installerPath -ArgumentList "/quiet", "InstallAllUsers=1", "PrependPath=1" -Wait
+
+   After installation, restart your PowerShell session and verify:
+
+   .. code-block:: powershell
+
+      python --version
+
 2. **Poetry** (Python package manager)
 
    Install using the official installer:
@@ -48,6 +68,28 @@ Required Software
    .. code-block:: bash
 
       curl -sSL https://install.python-poetry.org | python3 -
+
+   **Windows: Add Poetry to PATH**
+
+   On Windows, Poetry needs to be added to PATH permanently. Add the following directory to your system PATH:
+
+   .. code-block:: text
+
+      C:\Users\<YourUsername>\AppData\Roaming\Python\Scripts
+
+   To add to PATH using PowerShell (as Administrator):
+
+   .. code-block:: powershell
+
+      # Add Poetry to PATH permanently
+      $poetryPath = "$env:APPDATA\Python\Scripts"
+      [Environment]::SetEnvironmentVariable("Path", $env:Path + ";$poetryPath", "User")
+
+   After adding to PATH, restart your PowerShell session and verify:
+
+   .. code-block:: powershell
+
+      poetry --version
 
 3. **VirtualBox**
 

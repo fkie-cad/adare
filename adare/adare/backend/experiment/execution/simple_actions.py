@@ -15,10 +15,14 @@ from typing import Optional
 
 from adare.types.playbook import (
     ClickAction, DragAction, KeyboardAction, IdleAction, ScrollAction,
-    GotoAction, ScreenshotAction, CommandAction, SaveTimestampAction, PullAction
+    GotoAction, ScreenshotAction, CommandAction, SaveTimestampAction, PullAction,
+    SnapshotFilesystemAction
 )
 from adare.types.step_actions import ExecuteAction
 from adare.backend.events.emitters import emit_action
+from adare.backend.experiment.filesystem_snapshot import (
+    get_snapshot_command, parse_snapshot_output, FilesystemSnapshot
+)
 from .base import ActionResult, serialize_target
 
 log = logging.getLogger(__name__)
@@ -619,3 +623,100 @@ class SimpleActionsExecutor:
 
         # Execute using the existing execute_pull logic
         return await self.execute_pull(pull_action, parent_event_id=None, event_emitter=None)
+
+    async def execute_snapshot_filesystem(self, action: SnapshotFilesystemAction,
+                                          parent_event_id: str = None,
+                                          event_emitter = None) -> ActionResult:
+        """
+        Execute filesystem snapshot action.
+
+        Captures filesystem state (file list + timestamps) and stores in variable.
+        """
+        from datetime import datetime, timezone
+
+        try:
+            # Determine OS type from VM
+            os_type = None
+            if self.vm and hasattr(self.vm, 'osinfo') and self.vm.osinfo:
+                os_type = self.vm.osinfo.platform
+
+            if not os_type:
+                return ActionResult(
+                    success=False,
+                    message="Cannot determine VM OS type for filesystem snapshot"
+                )
+
+            log.info(f"Capturing filesystem snapshot for {os_type} (variable: {action.variable})")
+
+            # Get OS-specific snapshot command
+            try:
+                snapshot_cmd = get_snapshot_command(os_type, action.root_path)
+            except ValueError as e:
+                return ActionResult(success=False, message=str(e))
+
+            # Calculate timeout for WebSocket (add buffer)
+            websocket_timeout = None
+            if action.timeout:
+                websocket_timeout = action.timeout + 10
+
+            # Execute snapshot command via WebSocket
+            result = await self.client.execute_shell(
+                shell_command=snapshot_cmd,
+                timeout=action.timeout,
+                shell=True,  # Use shell for find/PowerShell
+                websocket_timeout=websocket_timeout
+            )
+
+            # Check command success
+            if result.get('status') != 'success':
+                error_msg = result.get('stderr', result.get('message', 'Unknown error'))
+                return ActionResult(
+                    success=False,
+                    message=f"Snapshot command failed: {error_msg}"
+                )
+
+            # Parse output
+            stdout = result.get('stdout', '')
+            if not stdout:
+                log.warning("Snapshot command returned empty output")
+                files = {}
+            else:
+                try:
+                    files = parse_snapshot_output(stdout, os_type)
+                    log.info(f"Snapshot captured {len(files)} files")
+                except ValueError as e:
+                    return ActionResult(
+                        success=False,
+                        message=f"Failed to parse snapshot output: {e}"
+                    )
+
+            # Create snapshot object
+            snapshot = FilesystemSnapshot(
+                files=files,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                os_type=os_type
+            )
+
+            # Store in execution context
+            self.execution_context[action.variable] = snapshot
+
+            # Also store in variable registry if available
+            if hasattr(self.playbook, 'variables') and self.playbook.variables:
+                from adarelib.common.variables import Variable
+                snapshot_var = Variable(value=snapshot, type='object')
+                self.playbook.variables.add(action.variable, snapshot_var)
+                log.info(f"Stored snapshot in variable '{action.variable}'")
+
+            return ActionResult(
+                success=True,
+                message=f"Captured filesystem snapshot ({len(files)} files) in variable '{action.variable}'",
+                data={
+                    'variable': action.variable,
+                    'file_count': len(files),
+                    'os_type': os_type
+                }
+            )
+
+        except Exception as e:
+            log.error(f"Error executing snapshot_filesystem action: {e}", exc_info=True)
+            return ActionResult(success=False, message=str(e))
