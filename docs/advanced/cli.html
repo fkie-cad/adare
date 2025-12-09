@@ -3,7 +3,7 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Output Formats (in development)" href="output-formats.html" /><link rel="prev" title="registry_value_matches" href="../basics/testfunctions/windows/registry_value_matches.html" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Advanced Playbook Patterns" href="playbook-patterns.html" /><link rel="prev" title="registry_value_matches" href="../basics/testfunctions/windows/registry_value_matches.html" />
         <link rel="prefetch" href="../_static/logo.png" as="image" />
 
     <link rel="shortcut icon" href="../_static/favicon.ico"/><!-- Generated with Sphinx 7.4.7 and Furo 2025.07.19 -->
@@ -269,6 +269,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul class="current">
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="playbook-patterns.html">Advanced Playbook Patterns</a></li>
 <li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="testfunction-create.html">Create your own testfunction set (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="vm-create.html">VM Creation Guide</a></li>
@@ -447,11 +448,11 @@
 </dd>
 </dl>
 <dl id="test-mode-development">
-<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">run</span> <span class="pre">&lt;experiment&gt;</span></code></dt><dd><p>Execute an experiment in the specified environment.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">run</span> <span class="pre">&lt;experiment&gt;</span></code></dt><dd><p>Execute an experiment in the specified environment. By default runs in test mode.</p>
 <dl class="simple">
 <dt>Options:</dt><dd><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">--environment</span> <span class="pre">TEXT</span></code> - Name of the environment (required)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--test</span></code> - Run in test mode for development (see <a class="reference internal" href="#test-mode-development"><span class="std std-ref">adare experiment run &lt;experiment&gt;</span></a>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--environment</span> <span class="pre">TEXT</span></code> - Name of the environment (if not specified, runs on all configured environments)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--production</span></code> - Run in production mode with strict integrity checks (default: test mode)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--debug-screenshots</span></code> - Save screenshots to experiment run directory for debugging</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--preserve-snapshot</span></code> - Create experiment snapshot for preservation (default: only reset to base)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--project</span> <span class="pre">TEXT</span></code> - Name of the project</p></li>
@@ -500,19 +501,27 @@
 </ul>
 </dd>
 </dl>
-<p><strong>Test Mode Development (–test)</strong></p>
-<p>The <code class="docutils literal notranslate"><span class="pre">--test</span></code> flag enables iterative experiment development:</p>
+<p><strong>Test vs Production Mode</strong></p>
+<p>By default, experiments run in <strong>test mode</strong> which is ideal for development:</p>
 <ul class="simple">
-<li><p><strong>Purpose</strong>: Allows continuous modification and testing of playbook files</p></li>
-<li><p><strong>Behavior</strong>: Results are deleted after execution, experiment remains unlocked</p></li>
-<li><p><strong>Use Case</strong>: Perfect for developing and debugging experiments</p></li>
+<li><p><strong>Test Mode (Default)</strong>:</p>
+<ul>
+<li><p>Allows continuous modification and testing of playbook files</p></li>
+<li><p>Creates “fake runs” that can be cleaned up with <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">clean</span></code></p></li>
+<li><p>Skips integrity checks to enable rapid iteration</p></li>
+<li><p>Perfect for developing and debugging experiments</p></li>
 </ul>
-<p><strong>Important</strong>: Once you run an experiment <strong>without</strong> <code class="docutils literal notranslate"><span class="pre">--test</span></code>, the experiment becomes locked and cannot be modified. To continue development after a non-test run:</p>
-<ol class="arabic simple">
-<li><p>Copy the experiment directory to a new location</p></li>
-<li><p>Run the copied experiment with <code class="docutils literal notranslate"><span class="pre">--test</span></code> flag</p></li>
-<li><p>Develop and iterate on the copied version</p></li>
-</ol>
+</li>
+<li><p><strong>Production Mode (–production flag)</strong>:</p>
+<ul>
+<li><p>Enforces strict integrity checks for reproducibility</p></li>
+<li><p>Creates real runs that are tracked in the database</p></li>
+<li><p>Prevents modifications to experiments with existing runs</p></li>
+<li><p>Use only when ready for production data collection</p></li>
+</ul>
+</li>
+</ul>
+<p><strong>Workflow</strong>: Develop and test in default test mode, then use <code class="docutils literal notranslate"><span class="pre">--production</span></code> only when ready for final data collection.</p>
 <dl>
 <dt><code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">develop</span> <span class="pre">&lt;experiment&gt;</span></code></dt><dd><p>Run an experiment in development/test mode for iterative development.</p>
 <dl class="simple">
@@ -844,12 +853,12 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="output-formats.html">
+          <a class="next-page" href="playbook-patterns.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Output Formats (in development)</div>
+                <div class="title">Advanced Playbook Patterns</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>

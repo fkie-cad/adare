@@ -269,6 +269,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/output-formats.html">Output Formats (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/vm-create.html">VM Creation Guide</a></li>
@@ -361,10 +362,40 @@
 </pre></div>
 </div>
 <p>If below 3.10 or not installed, download and install from <a class="reference external" href="https://www.python.org/downloads/">python.org</a> or use your package manager.</p>
+<p><strong>Windows Installation</strong></p>
+<p>For Windows users, you can install Python using PowerShell:</p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># Download Python installer</span>
+<span class="nv">$pythonInstaller</span> <span class="p">=</span> <span class="s2">&quot;https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe&quot;</span>
+<span class="nv">$installerPath</span> <span class="p">=</span> <span class="s2">&quot;$env:TEMP\python-installer.exe&quot;</span>
+<span class="nb">Invoke-WebRequest</span> <span class="nv">$pythonInstaller</span> <span class="n">-OutFile</span> <span class="nv">$installerPath</span>
+
+<span class="c"># Install Python (add to PATH, install pip)</span>
+<span class="nb">Start-Process</span> <span class="n">-FilePath</span> <span class="nv">$installerPath</span> <span class="n">-ArgumentList</span> <span class="s2">&quot;/quiet&quot;</span><span class="p">,</span> <span class="s2">&quot;InstallAllUsers=1&quot;</span><span class="p">,</span> <span class="s2">&quot;PrependPath=1&quot;</span> <span class="n">-Wait</span>
+</pre></div>
+</div>
+<p>After installation, restart your PowerShell session and verify:</p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="p">-</span><span class="n">-version</span>
+</pre></div>
+</div>
 </li>
 <li><p><strong>Poetry</strong> (Python package manager)</p>
 <p>Install using the official installer:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-sSL<span class="w"> </span>https://install.python-poetry.org<span class="w"> </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-
+</pre></div>
+</div>
+<p><strong>Windows: Add Poetry to PATH</strong></p>
+<p>On Windows, Poetry needs to be added to PATH permanently. Add the following directory to your system PATH:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>C:\Users\&lt;YourUsername&gt;\AppData\Roaming\Python\Scripts
+</pre></div>
+</div>
+<p>To add to PATH using PowerShell (as Administrator):</p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># Add Poetry to PATH permanently</span>
+<span class="nv">$poetryPath</span> <span class="p">=</span> <span class="s2">&quot;$env:APPDATA\Python\Scripts&quot;</span>
+<span class="no">[Environment]</span><span class="p">::</span><span class="n">SetEnvironmentVariable</span><span class="p">(</span><span class="s2">&quot;Path&quot;</span><span class="p">,</span> <span class="nv">$env:Path</span> <span class="p">+</span> <span class="s2">&quot;;$poetryPath&quot;</span><span class="p">,</span> <span class="s2">&quot;User&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>After adding to PATH, restart your PowerShell session and verify:</p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">poetry</span> <span class="p">-</span><span class="n">-version</span>
 </pre></div>
 </div>
 </li>

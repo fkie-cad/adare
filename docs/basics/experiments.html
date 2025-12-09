@@ -269,6 +269,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/output-formats.html">Output Formats (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/vm-create.html">VM Creation Guide</a></li>
@@ -436,14 +437,14 @@ adare<span class="w"> </span>experiment<span class="w"> </span>info<span class="
 </section>
 <section id="running-experiments">
 <h3>Running Experiments<a class="headerlink" href="#running-experiments" title="Link to this heading">¶</a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Development run (allows further modifications)</span>
-adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>my-experiment<span class="w"> </span>-e<span class="w"> </span>ubuntu24043<span class="w"> </span>--test
-
-<span class="c1"># Production run (locks experiment)</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Development/test run (default: allows modifications, creates fake runs)</span>
 adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>my-experiment<span class="w"> </span>-e<span class="w"> </span>ubuntu24043
 
-<span class="c1"># Run on multiple environments sequentially</span>
-adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>my-experiment<span class="w"> </span>-e<span class="w"> </span>ubuntu24043<span class="w"> </span>-e<span class="w"> </span>win11
+<span class="c1"># Production run (strict integrity checks, creates real runs)</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>my-experiment<span class="w"> </span>-e<span class="w"> </span>ubuntu24043<span class="w"> </span>--production
+
+<span class="c1"># Run on all configured environments</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>my-experiment
 </pre></div>
 </div>
 </section>

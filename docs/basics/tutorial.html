@@ -269,6 +269,7 @@
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/output-formats.html">Output Formats (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/vm-create.html">VM Creation Guide</a></li>
@@ -368,8 +369,7 @@ adare<span class="w"> </span>project<span class="w"> </span>create<span class="w
 <section id="step-2-set-up-a-vm-environment">
 <h2>Step 2: Set Up a VM Environment<a class="headerlink" href="#step-2-set-up-a-vm-environment" title="Link to this heading">¶</a></h2>
 <p>Environments define the virtual machines where experiments run. Create an environment configuration file <cite>ubuntu24043.yml</cite>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu24043</span>
-<span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/your/ubuntu-vm.ova&quot;</span><span class="w">  </span><span class="c1"># Update this path to your VM file</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vm</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/your/ubuntu-vm.ova&quot;</span><span class="w">  </span><span class="c1"># Update this path to your VM file</span>
 <span class="nt">os</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">os</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Ubuntu&quot;</span>
 <span class="w">  </span><span class="nt">platform</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;linux&quot;</span>
@@ -535,20 +535,21 @@ mkdir<span class="w"> </span>-p<span class="w"> </span>experiments/deletefileexa
 <section id="step-5-run-your-experiment">
 <h2>Step 5: Run Your Experiment<a class="headerlink" href="#step-5-run-your-experiment" title="Link to this heading">¶</a></h2>
 <p>Now run your forensic experiment:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># For development/testing (allows playbook modifications)</span>
-adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>deletefileexample<span class="w"> </span>-e<span class="w"> </span>ubuntu24043<span class="w"> </span>--test
-
-<span class="c1"># For final execution (locks experiment from further changes)</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Development/test run (default: allows playbook modifications, creates fake runs)</span>
 adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>deletefileexample<span class="w"> </span>-e<span class="w"> </span>ubuntu24043
+
+<span class="c1"># Production run (strict integrity checks, creates real runs)</span>
+adare<span class="w"> </span>experiment<span class="w"> </span>run<span class="w"> </span>deletefileexample<span class="w"> </span>-e<span class="w"> </span>ubuntu24043<span class="w"> </span>--production
 </pre></div>
 </div>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p><strong>Development vs Production Runs</strong></p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Test vs Production Modes</strong></p>
 <ul class="simple">
-<li><p>Use <code class="docutils literal notranslate"><span class="pre">--test</span></code> flag during development to keep experimenting with playbook changes</p></li>
-<li><p>Once you run <strong>without</strong> <code class="docutils literal notranslate"><span class="pre">--test</span></code>, the experiment becomes locked</p></li>
-<li><p>To continue development after a non-test run, copy the experiment directory first</p></li>
+<li><p><strong>Default behavior</strong> is test mode - ideal for development and iteration</p></li>
+<li><p>Test mode creates “fake runs” that can be cleaned up with <code class="docutils literal notranslate"><span class="pre">adare</span> <span class="pre">experiment</span> <span class="pre">clean</span></code></p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">--production</span></code> flag only when ready for real data collection</p></li>
+<li><p>Production runs enforce strict integrity checks to ensure reproducibility</p></li>
 </ul>
 </div>
 <p>You’ll then see an dynamic console output showing progress, actions, and test results.
