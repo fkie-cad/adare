@@ -15,7 +15,7 @@ fastmcp = "^2.9.2"
 click = "^8.1.7"
 opencv-python = "^4.10.0"
 paddleocr = "^3.1.0"
-paddlepaddle = { version = "3.0.0", source = "paddlepaddle" }
+paddlepaddle = { version = "3.2.2", source = "paddlepaddle" }
 numpy = "^1.26.0"
 scikit-learn = "^1.7.2"
 

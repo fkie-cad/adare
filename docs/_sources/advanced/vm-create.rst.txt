@@ -67,7 +67,33 @@ Required Software Installation
 Install the following software:
 
 - **VirtualBox Guest Additions**
-- **Miniforge3**
+- **Python 3.9**
+
+  - Download and install from `python.org <https://www.python.org/downloads/>`_
+  - Ensure Python is added to PATH during installation
+
+- **Poetry** (Python package manager)
+
+  Install using the official installer:
+
+  .. code-block:: powershell
+
+     # Install Poetry
+     (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
+
+  Add Poetry to PATH permanently:
+
+  .. code-block:: powershell
+
+     # Add Poetry to PATH
+     $poetryPath = "$env:APPDATA\Python\Scripts"
+     [Environment]::SetEnvironmentVariable("Path", $env:Path + ";$poetryPath", "User")
+
+  After installation, restart your PowerShell session and verify:
+
+  .. code-block:: powershell
+
+     poetry --version
   
 
 Linux Setup

@@ -386,9 +386,31 @@
 <section id="required-software-installation">
 <h3>Required Software Installation<a class="headerlink" href="#required-software-installation" title="Link to this heading">¶</a></h3>
 <p>Install the following software:</p>
-<ul class="simple">
+<ul>
 <li><p><strong>VirtualBox Guest Additions</strong></p></li>
-<li><p><strong>Miniforge3</strong></p></li>
+<li><p><strong>Python 3.9</strong></p>
+<ul class="simple">
+<li><p>Download and install from <a class="reference external" href="https://www.python.org/downloads/">python.org</a></p></li>
+<li><p>Ensure Python is added to PATH during installation</p></li>
+</ul>
+</li>
+<li><p><strong>Poetry</strong> (Python package manager)</p>
+<p>Install using the official installer:</p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># Install Poetry</span>
+<span class="p">(</span><span class="nb">Invoke-WebRequest</span> <span class="n">-Uri</span> <span class="n">https</span><span class="p">://</span><span class="n">install</span><span class="p">.</span><span class="n">python-poetry</span><span class="p">.</span><span class="n">org</span> <span class="n">-UseBasicParsing</span><span class="p">).</span><span class="n">Content</span> <span class="p">|</span> <span class="n">python</span> <span class="p">-</span>
+</pre></div>
+</div>
+<p>Add Poetry to PATH permanently:</p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># Add Poetry to PATH</span>
+<span class="nv">$poetryPath</span> <span class="p">=</span> <span class="s2">&quot;$env:APPDATA\Python\Scripts&quot;</span>
+<span class="no">[Environment]</span><span class="p">::</span><span class="n">SetEnvironmentVariable</span><span class="p">(</span><span class="s2">&quot;Path&quot;</span><span class="p">,</span> <span class="nv">$env:Path</span> <span class="p">+</span> <span class="s2">&quot;;$poetryPath&quot;</span><span class="p">,</span> <span class="s2">&quot;User&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>After installation, restart your PowerShell session and verify:</p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">poetry</span> <span class="p">-</span><span class="n">-version</span>
+</pre></div>
+</div>
+</li>
 </ul>
 </section>
 </section>

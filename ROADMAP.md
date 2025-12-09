@@ -33,6 +33,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] add option --custom-testfunction PATH_TO_DIR; which is then used instead of the existing one (even if same name) -> not copied only used; this will help developing testfunctions!
 - [ ] wait_until not search twice but remeber the action and execute it then directly?!
 - [ ] lets us save results in variables we use later again?! 
+- [ ] support for python3.14
  
 ---
 
