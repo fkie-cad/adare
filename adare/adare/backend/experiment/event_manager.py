@@ -14,12 +14,13 @@ from adare.types.playbook import (
     KeyboardAction, IdleAction, ScrollAction, GotoAction,
     CommandAction, ScreenshotAction, BlockAction, ActionTestAction,
     SaveTimestampAction, PullAction, WaitUntilAction, LoopAction, PauseAction,
-    StopAction, ContinueAction
+    StopAction, ContinueAction, SnapshotFilesystemAction, PullChangedFilesAction
 )
 
 # Action event imports for flow console display
 from adare.types.step_actions import FindAction, ExecuteAction
 from adare.types.actions import (
+    ActionStartEvent, ActionCompleteEvent,
     ClickActionStartEvent, ClickActionCompleteEvent,
     KeyboardActionStartEvent, KeyboardActionCompleteEvent,
     CommandActionStartEvent, CommandActionCompleteEvent,
@@ -38,7 +39,9 @@ from adare.types.actions import (
     StopActionStartEvent, StopActionCompleteEvent,
     ContinueActionStartEvent, ContinueActionCompleteEvent,
     FindActionStartEvent, FindActionCompleteEvent,
-    ExecuteActionStartEvent, ExecuteActionCompleteEvent
+    ExecuteActionStartEvent, ExecuteActionCompleteEvent,
+    SnapshotFilesystemActionStartEvent, SnapshotFilesystemActionCompleteEvent,
+    PullChangedFilesActionStartEvent, PullChangedFilesActionCompleteEvent
 )
 
 log = logging.getLogger(__name__)
@@ -182,10 +185,19 @@ class EventManager:
             return FindActionStartEvent(target_info=getattr(action, 'target_info', None), **event_data)
         elif isinstance(action, ExecuteAction):
             return ExecuteActionStartEvent(coordinates=getattr(action, 'coordinates', None), **event_data)
+        elif isinstance(action, SnapshotFilesystemAction):
+            return SnapshotFilesystemActionStartEvent(
+                snapshot_type=getattr(action, 'snapshot_type', None),
+                **event_data
+            )
+        elif isinstance(action, PullChangedFilesAction):
+            return PullChangedFilesActionStartEvent(
+                destination=getattr(action, 'destination', None),
+                **event_data
+            )
         else:
             # Generic start event for unknown action types
-            from adare.types.actions import ActionEvent
-            return ActionEvent(**event_data)
+            return ActionStartEvent(**event_data)
     
     def create_action_complete_event(self, action: ActionType, action_index: int, action_id: str, result, parent_event_id: str = None):
         """Create appropriate complete event for the given action type and result."""
@@ -318,10 +330,22 @@ class EventManager:
                 coordinates=result.coordinates,
                 **event_data
             )
+        elif isinstance(action, SnapshotFilesystemAction):
+            event = SnapshotFilesystemActionCompleteEvent(
+                snapshot_type=getattr(action, 'snapshot_type', None),
+                files_count=result.data.get('files_count') if result.data else None,
+                **event_data
+            )
+        elif isinstance(action, PullChangedFilesAction):
+            event = PullChangedFilesActionCompleteEvent(
+                destination=getattr(action, 'destination', None),
+                files_pulled=result.data.get('files_pulled') if result.data else None,
+                total_size=result.data.get('total_size') if result.data else None,
+                **event_data
+            )
         else:
             # Generic complete event for unknown action types
-            from adare.types.actions import ActionEvent
-            event = ActionEvent(**event_data)
+            event = ActionCompleteEvent(**event_data)
 
         return event
     

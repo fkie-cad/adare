@@ -417,7 +417,264 @@ class AdareVMClient:
             Dict containing system information or error details
         """
         return await self.call_tool(ToolRegistry.COLLECT_SYSTEM_INFO, timeout=timeout)
-    
+
+    async def get_filesystem_snapshot(self, root_path: str = '/', timeout: float = 660.0) -> Dict[str, Any]:
+        """
+        Get filesystem snapshot from the VM.
+
+        Captures file metadata using platform-specific approaches:
+        - Windows: MFT reader for NTFS timestamps
+        - Linux: find command for file metadata
+
+        Args:
+            root_path: Root directory to scan (default: '/')
+            timeout: WebSocket timeout in seconds (default: 660s = 11 min)
+
+        Returns:
+            Dict with snapshot data:
+            {
+                "status": "success",
+                "snapshot": {"/path/to/file": {"size": 1024, "mtime": 1234567890.0, ...}},
+                "file_count": 12345,
+                "collection_time": 45.23
+            }
+        """
+        return await self.call_tool(ToolRegistry.GET_FILESYSTEM_SNAPSHOT, {
+            "root_path": root_path,
+            "timeout": timeout - 60  # Subtract buffer for tool timeout
+        }, timeout=timeout)
+
+    async def pull_file_chunked(self, guest_path: str, host_path: Path,
+                               chunk_size: int = 1048576,
+                               progress_callback = None) -> Dict[str, Any]:
+        """
+        Pull a file from guest to host using chunked transfer.
+
+        Args:
+            guest_path: Path to file on guest
+            host_path: Destination path on host
+            chunk_size: Bytes per chunk (default 1MB)
+            progress_callback: Optional callback(chunk_idx, total_chunks, bytes_transferred, total_bytes)
+
+        Returns:
+            Dict with status, file_size, chunks_transferred, metadata
+
+        Raises:
+            RuntimeError: If transfer fails
+        """
+        import base64
+        from pathlib import Path
+
+        log.info(f"Starting chunked pull: {guest_path} -> {host_path}")
+
+        # Create temp file for writing chunks
+        temp_path = host_path.with_suffix(host_path.suffix + '.tmp')
+        temp_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Get first chunk to determine total chunks
+            first_result = await self.call_tool(
+                ToolRegistry.PULL_FILE_CHUNK,
+                {
+                    "guest_path": guest_path,
+                    "chunk_index": 0,
+                    "chunk_size": chunk_size
+                },
+                timeout=60.0
+            )
+
+            if first_result.get("status") == "error":
+                raise RuntimeError(f"Failed to pull {guest_path}: {first_result.get('error')}")
+
+            total_chunks = first_result["total_chunks"]
+            file_size = first_result["file_size"]
+            metadata = first_result.get("file_metadata", {})
+
+            log.info(f"File size: {file_size} bytes, chunks: {total_chunks}")
+
+            # Write first chunk
+            with open(temp_path, 'wb') as f:
+                chunk_data = base64.b64decode(first_result["chunk_data"])
+                f.write(chunk_data)
+
+            if progress_callback:
+                progress_callback(0, total_chunks, len(chunk_data), file_size)
+
+            # Pull remaining chunks
+            bytes_transferred = len(chunk_data)
+            for chunk_idx in range(1, total_chunks):
+                chunk_result = await self.call_tool(
+                    ToolRegistry.PULL_FILE_CHUNK,
+                    {
+                        "guest_path": guest_path,
+                        "chunk_index": chunk_idx,
+                        "chunk_size": chunk_size
+                    },
+                    timeout=60.0
+                )
+
+                if chunk_result.get("status") == "error":
+                    raise RuntimeError(
+                        f"Failed to pull chunk {chunk_idx}/{total_chunks}: "
+                        f"{chunk_result.get('error')}"
+                    )
+
+                # Append chunk to temp file
+                with open(temp_path, 'ab') as f:
+                    chunk_data = base64.b64decode(chunk_result["chunk_data"])
+                    f.write(chunk_data)
+                    bytes_transferred += len(chunk_data)
+
+                if progress_callback:
+                    progress_callback(chunk_idx, total_chunks, bytes_transferred, file_size)
+
+            # Verify file size
+            actual_size = temp_path.stat().st_size
+            if actual_size != file_size:
+                raise RuntimeError(
+                    f"File size mismatch: expected {file_size}, got {actual_size}"
+                )
+
+            # Move temp file to final location
+            if host_path.exists():
+                host_path.unlink()
+            temp_path.rename(host_path)
+
+            log.info(f"Successfully pulled {guest_path} ({file_size} bytes, {total_chunks} chunks)")
+
+            return {
+                "status": "success",
+                "file_size": file_size,
+                "chunks_transferred": total_chunks,
+                "metadata": metadata,
+                "destination": str(host_path)
+            }
+
+        except Exception as e:
+            # Clean up temp file on failure
+            if temp_path.exists():
+                temp_path.unlink()
+            log.error(f"Chunked pull failed for {guest_path}: {e}")
+            raise
+
+    async def pull_multiple_files_chunked(self, guest_paths: List[str], host_dest_dir: Path,
+                                         chunk_size: int = 1048576,
+                                         progress_callback = None) -> Dict[str, Any]:
+        """
+        Pull multiple files from guest to host using chunked transfer.
+
+        Args:
+            guest_paths: List of paths to files on guest
+            host_dest_dir: Destination directory on host
+            chunk_size: Bytes per chunk (default 1MB)
+            progress_callback: Optional callback(current_file_idx, total_files,
+                              file_path, chunk_idx, total_chunks, bytes_transferred, total_bytes)
+
+        Returns:
+            Dict with:
+                - success_count: Number of successfully transferred files
+                - failed_count: Number of failed transfers
+                - total_bytes: Total bytes transferred
+                - failures: List of {path, error} dicts for failed files
+                - file_results: List of individual file results
+
+        Raises:
+            RuntimeError: If all transfers fail
+        """
+        log.info(f"CLAUDE: Starting batch chunked pull: {len(guest_paths)} files -> {host_dest_dir}")
+
+        total_files = len(guest_paths)
+        success_count = 0
+        failed_count = 0
+        total_bytes_transferred = 0
+        failures = []
+        file_results = []
+
+        for file_idx, guest_path in enumerate(guest_paths, start=1):
+            try:
+                log.info(f"CLAUDE: Pulling file {file_idx}/{total_files}: {guest_path}")
+
+                # Preserve directory structure
+                # Extract relative path from guest_path
+                if ':' in guest_path:  # Windows path
+                    guest_path_cleaned = guest_path.split(':', 1)[1].lstrip('\\').lstrip('/')
+                    relative_path = guest_path_cleaned.replace('\\', '/')
+                else:  # Unix path
+                    relative_path = guest_path.lstrip('/')
+
+                # Construct host destination path
+                host_path = host_dest_dir / relative_path
+
+                # Create per-file progress callback that wraps the overall progress callback
+                def file_progress_callback(chunk_idx, total_chunks, bytes_xfer, file_size):
+                    if progress_callback:
+                        progress_callback(
+                            file_idx, total_files, guest_path,
+                            chunk_idx, total_chunks, bytes_xfer, file_size
+                        )
+
+                # Pull the file using existing single-file method
+                result = await self.pull_file_chunked(
+                    guest_path=guest_path,
+                    host_path=host_path,
+                    chunk_size=chunk_size,
+                    progress_callback=file_progress_callback
+                )
+
+                # Track success
+                success_count += 1
+                total_bytes_transferred += result['file_size']
+                file_results.append({
+                    'path': guest_path,
+                    'success': True,
+                    'destination': str(host_path),
+                    'file_size': result['file_size'],
+                    'chunks': result['chunks_transferred']
+                })
+
+                log.info(f"CLAUDE: Successfully pulled {guest_path} ({result['file_size']} bytes)")
+
+            except Exception as e:
+                # Log and track failure, but continue with remaining files
+                failed_count += 1
+                error_msg = str(e)
+                log.error(f"CLAUDE: Failed to pull {guest_path}: {error_msg}")
+
+                failures.append({
+                    'path': guest_path,
+                    'error': error_msg
+                })
+
+                file_results.append({
+                    'path': guest_path,
+                    'success': False,
+                    'error': error_msg
+                })
+
+        # Prepare summary
+        summary = {
+            'success_count': success_count,
+            'failed_count': failed_count,
+            'total_files': total_files,
+            'total_bytes': total_bytes_transferred,
+            'failures': failures,
+            'file_results': file_results
+        }
+
+        log.info(
+            f"CLAUDE: Batch pull complete: {success_count}/{total_files} succeeded, "
+            f"{failed_count} failed, {total_bytes_transferred} bytes transferred"
+        )
+
+        # Raise exception if ALL files failed
+        if failed_count == total_files:
+            raise RuntimeError(
+                f"All {total_files} file transfers failed. "
+                f"First error: {failures[0]['error'] if failures else 'Unknown'}"
+            )
+
+        return summary
+
     # Convenience Methods
     
     async def ping(self) -> bool:

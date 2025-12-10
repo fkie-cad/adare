@@ -98,16 +98,19 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
             escaped_cmd = command_str.replace("'", "'\\''")
             command_str = f"sudo -u {target_user} bash -c '{escaped_cmd}'"
             log.info(f"Dropping privileges from root to user '{target_user}'")
+            # Force shell=True since we wrapped in bash -c (needs shell interpretation)
+            shell = True
 
     # Handle shell mode - wrap in PowerShell or cmd.exe
     if shell and is_windows and powershell:
         # Wrap in script block for synchronous execution and proper file I/O flushing
         wrapped_cmd = f"& {{ {command_str} }}"
         command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", wrapped_cmd]
-    elif isinstance(command, list):
+    elif isinstance(command, list) and not shell:
+        # Only keep as list if shell=False and no privilege wrapping occurred
         command = command
     else:
-        # Keep as string for Unix shell=True
+        # Use command_str for shell mode or when privilege dropping wrapped the command
         command = command_str
 
     # Log command execution details

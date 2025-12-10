@@ -471,7 +471,8 @@ class PlaybookApi(ProjectDatabaseApi):
         from adare.types.playbook import (
             ClickAction, DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,
             ActionTestAction, CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction,
-            PullAction, PauseAction, WaitUntilAction, WaitCondition, Target
+            PullAction, PauseAction, WaitUntilAction, WaitCondition, Target,
+            SnapshotFilesystemAction, PullChangedFilesAction
         )
 
         # Common fields
@@ -580,9 +581,12 @@ class PlaybookApi(ProjectDatabaseApi):
             )
 
         elif action_type == 'pull':
+            # Handle both old format (src as string) and new format (src as list)
+            src = params.get('src', '')
             return PullAction(
-                src=params.get('src', ''),
+                src=src,  # Already Union[str, List[str]], cattrs handles it
                 dst=params.get('dst'),
+                mode=params.get('mode', 'hypervisor'),  # Add mode with default
                 description=description
             )
 
@@ -615,6 +619,25 @@ class PlaybookApi(ProjectDatabaseApi):
                 actions=nested_actions,
                 description=description,
                 when=conditions
+            )
+
+        elif action_type == 'snapshotfilesystem':
+            return SnapshotFilesystemAction(
+                variable=params.get('variable', ''),
+                root_path=params.get('root_path'),
+                timeout=params.get('timeout', 300.0),
+                description=description
+            )
+
+        elif action_type == 'pullchangedfiles':
+            return PullChangedFilesAction(
+                snapshot_before=params.get('snapshot_before', ''),
+                snapshot_after=params.get('snapshot_after', ''),
+                dst=params.get('dst', 'changed_files'),
+                mode=params.get('mode', 'websocket'),
+                include_modified=params.get('include_modified', True),
+                include_added=params.get('include_added', True),
+                description=description
             )
 
         else:

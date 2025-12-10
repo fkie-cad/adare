@@ -177,8 +177,14 @@ class VariableUsageValidator(PlaybookValidator):
         # Check pull action paths
         if isinstance(action, PullAction):
             if action.src:
-                self._extract_from_string(action.src, 'src',
-                                         action_index, action_type, references)
+                # Handle both string and list of strings
+                if isinstance(action.src, list):
+                    for src_item in action.src:
+                        self._extract_from_string(src_item, 'src',
+                                                 action_index, action_type, references)
+                else:
+                    self._extract_from_string(action.src, 'src',
+                                             action_index, action_type, references)
             if action.dst:
                 self._extract_from_string(action.dst, 'dst',
                                          action_index, action_type, references)

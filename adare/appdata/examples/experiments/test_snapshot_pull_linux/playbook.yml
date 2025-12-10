@@ -1,0 +1,158 @@
+settings:
+  idle: 0.1
+  timeout: 300
+
+actions:
+  # =============================================================================
+  # Test 1: Basic Filesystem Snapshot Functionality (Linux)
+  # =============================================================================
+
+  - snapshot_filesystem:
+      variable: initial_snapshot
+      description: "Capture initial filesystem state (Linux find-based)"
+
+  # =============================================================================
+  # Test 2: Create Test Files to Generate Changes
+  # =============================================================================
+
+  - command:
+      command: "mkdir -p /tmp/adare_test/subdir1 /tmp/adare_test/subdir2"
+      description: "Create test directory structure"
+
+  - command:
+      command: "echo 'This is a new file created for testing' > /tmp/adare_test/new_file_1.txt"
+      description: "Create new test file 1"
+
+  - command:
+      command: "echo 'Another new file in subdirectory' > /tmp/adare_test/subdir1/new_file_2.txt"
+      description: "Create new test file 2 in subdirectory"
+
+  - command:
+      command: "echo 'Nested file' > /tmp/adare_test/subdir2/nested.txt"
+      description: "Create nested test file"
+
+  - command:
+      command: "date > /tmp/adare_test/timestamp.txt"
+      description: "Create file with timestamp"
+
+  - command:
+      command: "echo 'Test log entry' > /tmp/adare_test/test_data.log"
+      description: "Create log file"
+
+  # =============================================================================
+  # Test 2b: Create Hidden Files (Dotfiles)
+  # =============================================================================
+
+  - command:
+      command: "echo 'Hidden file content' > /tmp/adare_test/.hidden_file.txt"
+      description: "Create hidden dotfile in test directory"
+
+  - command:
+      command: "echo 'Another hidden file' > /tmp/adare_test/subdir1/.hidden_config"
+      description: "Create hidden dotfile in subdirectory"
+
+  # =============================================================================
+  # Test 3: Take Snapshot After Changes
+  # =============================================================================
+
+  - snapshot_filesystem:
+      variable: after_changes_snapshot
+      description: "Capture filesystem state after creating test files"
+
+  # =============================================================================
+  # Test 4: Pull Changed Files - WebSocket Mode (NEW FUNCTIONALITY)
+  # =============================================================================
+
+  - pull_changed_files:
+      snapshot_before: initial_snapshot
+      snapshot_after: after_changes_snapshot
+      dst: "changed_files_websocket"
+      mode: "websocket"
+      include_modified: true
+      include_added: true
+      description: "Pull all changed/added files via WebSocket (batch transfer)"
+
+  # =============================================================================
+  # Test 5: Pull Changed Files - Hypervisor Mode
+  # =============================================================================
+
+  - pull_changed_files:
+      snapshot_before: initial_snapshot
+      snapshot_after: after_changes_snapshot
+      dst: "changed_files_hypervisor"
+      mode: "hypervisor"
+      include_modified: true
+      include_added: true
+      description: "Pull all changed/added files via Hypervisor (VBoxManage)"
+
+  # =============================================================================
+  # Test 6: Selective Pulling - Only Added Files
+  # =============================================================================
+
+  - pull_changed_files:
+      snapshot_before: initial_snapshot
+      snapshot_after: after_changes_snapshot
+      dst: "only_added_files"
+      mode: "websocket"
+      include_modified: false
+      include_added: true
+      description: "Pull only newly added files (exclude modified)"
+
+  # =============================================================================
+  # Test 7: Regular Pull Action - Single File (WebSocket)
+  # =============================================================================
+
+  - pull:
+      src: "/tmp/adare_test/new_file_1.txt"
+      dst: "single_file_test.txt"
+      mode: "websocket"
+      description: "Test basic single file pull via WebSocket"
+
+  # =============================================================================
+  # Test 8: Regular Pull Action - Multiple Files (WebSocket)
+  # =============================================================================
+
+  - pull:
+      src:
+        - "/tmp/adare_test/subdir1/new_file_2.txt"
+        - "/tmp/adare_test/timestamp.txt"
+      dst: "multi_file_test"
+      mode: "websocket"
+      description: "Test pulling multiple files via WebSocket"
+
+  # =============================================================================
+  # Test 9: Create More Changes - Incremental Snapshot Test
+  # =============================================================================
+
+  - command:
+      command: "echo 'Additional content' >> /tmp/adare_test/new_file_1.txt"
+      description: "Modify existing test file"
+
+  - command:
+      command: "echo 'Yet another new file' > /tmp/adare_test/incremental.txt"
+      description: "Create one more new file"
+
+  - snapshot_filesystem:
+      variable: final_snapshot
+      description: "Capture final filesystem state"
+
+  # =============================================================================
+  # Test 10: Pull Incremental Changes
+  # =============================================================================
+
+  - pull_changed_files:
+      snapshot_before: after_changes_snapshot
+      snapshot_after: final_snapshot
+      dst: "incremental_changes"
+      mode: "websocket"
+      include_modified: true
+      include_added: true
+      description: "Pull only incremental changes between second and third snapshot"
+
+  # =============================================================================
+  # Test 11: Cleanup Test Files
+  # =============================================================================
+
+  - command:
+      command: "rm -rf /tmp/adare_test"
+      description: "Clean up test directory"

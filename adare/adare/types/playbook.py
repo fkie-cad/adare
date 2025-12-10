@@ -193,10 +193,18 @@ class SaveTimestampAction:
 
 @attrs.define
 class PullAction:
-    src: str  # Path to file/directory in VM to pull
+    src: Union[str, List[str]]  # Single path or list of paths to pull
     dst: Optional[str] = None  # Optional destination name in artifacts folder
     description: str = ''
-    # Note: Always pulls recursively - no need for recursive parameter
+    mode: str = 'hypervisor'  # Transfer mode: 'hypervisor' or 'websocket'
+
+    def __attrs_post_init__(self):
+        """Validate mode field."""
+        valid_modes = {'hypervisor', 'websocket'}
+        if self.mode not in valid_modes:
+            raise ValueError(
+                f"PullAction.mode must be one of {valid_modes}, got '{self.mode}'"
+            )
 
 @attrs.define
 class SnapshotFilesystemAction:
@@ -205,6 +213,35 @@ class SnapshotFilesystemAction:
     root_path: Optional[str] = None  # Root path to scan (default: / or C:\)
     timeout: Optional[float] = 300.0  # Timeout in seconds (default: 5 minutes)
     description: str = ''
+
+@attrs.define
+class PullChangedFilesAction:
+    """Pull files that changed between two filesystem snapshots.
+
+    Automatically calculates diff between snapshots and pulls all changed/added files
+    in batch using efficient chunked transfer.
+    """
+    snapshot_before: str  # Variable name containing initial snapshot
+    snapshot_after: str   # Variable name containing final snapshot
+    dst: str = 'changed_files'  # Destination folder in artifacts
+    mode: str = 'websocket'  # Transfer mode: 'hypervisor' or 'websocket'
+    include_modified: bool = True  # Pull modified files
+    include_added: bool = True  # Pull added files
+    description: str = ''
+
+    def __attrs_post_init__(self):
+        """Validate fields."""
+        valid_modes = {'hypervisor', 'websocket'}
+        if self.mode not in valid_modes:
+            raise ValueError(
+                f"PullChangedFilesAction.mode must be one of {valid_modes}, got '{self.mode}'"
+            )
+
+        if not self.include_modified and not self.include_added:
+            raise ValueError(
+                "PullChangedFilesAction must include at least one of: "
+                "include_modified or include_added"
+            )
 
 @attrs.define
 class PauseAction:
@@ -358,7 +395,8 @@ ActionType = Union[
     ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, ActionTestAction,
     CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, PullAction, PauseAction,
-    WaitUntilAction, LoopAction, StopAction, ContinueAction, SnapshotFilesystemAction
+    WaitUntilAction, LoopAction, StopAction, ContinueAction, SnapshotFilesystemAction,
+    PullChangedFilesAction
 ]
 
 @attrs.define
@@ -415,6 +453,12 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
     converter.register_structure_hook(
         Optional[VariableRegistry],
         lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
+    )
+
+    # Register structure hook for Union[str, List[str]] in PullAction.src
+    converter.register_structure_hook(
+        Union[str, List[str]],
+        lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj)
     )
 
     # Register structure hook for WaitCondition
@@ -508,6 +552,8 @@ def _structure_action(obj, converter):
         return converter.structure(obj['continue'], ContinueAction)
     if 'snapshot_filesystem' in obj:
         return converter.structure(obj['snapshot_filesystem'], SnapshotFilesystemAction)
+    if 'pull_changed_files' in obj:
+        return converter.structure(obj['pull_changed_files'], PullChangedFilesAction)
     raise ValueError(f"Unknown action: {obj}")
 
 def _structure_condition(obj, converter):
@@ -633,6 +679,11 @@ def _register_strict_hooks(converter):
                 Optional[Union[int, float]],
                 structure_optional_numeric
             )
+            # Register structure hook for Union[str, List[str]] in PullAction.src
+            fresh_converter.register_structure_hook(
+                Union[str, List[str]],
+                lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj)
+            )
             return fresh_converter.structure(obj, cls)
         return strict_structure_hook
     
@@ -645,6 +696,7 @@ def _register_strict_hooks(converter):
                 WaitCondition, ExistsCondition, NotExistsCondition,
                 SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
                 TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
-                BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook]:
+                BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook,
+                SnapshotFilesystemAction, PullChangedFilesAction]:
         if attrs.has(cls):
             converter.register_structure_hook(cls, _validate_attrs_class(cls))

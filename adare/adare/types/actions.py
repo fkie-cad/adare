@@ -526,6 +526,53 @@ class ExecuteActionStartEvent(ActionStartEvent):
 class ExecuteActionCompleteEvent(ActionCompleteEvent):
     """Event for execute substage completion."""
     coordinates: Optional[Tuple[int, int]] = None
-    
+
     def get_event_type(self) -> EventType:
         return EventType.ACTION_COMPLETE
+
+
+# -------------------------------
+# Snapshot Filesystem Action Events
+# -------------------------------
+
+@attrs.define
+class SnapshotFilesystemActionStartEvent(ActionStartEvent):
+    """Event for snapshot filesystem action start."""
+    snapshot_type: Optional[str] = None  # 'initial' or 'final'
+
+    def get_event_type(self) -> EventType:
+        return EventType.SNAPSHOT_FILESYSTEM_START
+
+
+@attrs.define
+class SnapshotFilesystemActionCompleteEvent(ActionCompleteEvent):
+    """Event for snapshot filesystem action completion."""
+    snapshot_type: Optional[str] = None
+    files_count: Optional[int] = None
+
+    def get_event_type(self) -> EventType:
+        return EventType.SNAPSHOT_FILESYSTEM_COMPLETE
+
+
+# -------------------------------
+# Pull Changed Files Action Events
+# -------------------------------
+
+@attrs.define
+class PullChangedFilesActionStartEvent(ActionStartEvent):
+    """Event for pull changed files action start."""
+    destination: Optional[str] = None
+
+    def get_event_type(self) -> EventType:
+        return EventType.PULL_CHANGED_FILES_START
+
+
+@attrs.define
+class PullChangedFilesActionCompleteEvent(ActionCompleteEvent):
+    """Event for pull changed files action completion."""
+    destination: Optional[str] = None
+    files_pulled: Optional[int] = None
+    total_size: Optional[int] = None
+
+    def get_event_type(self) -> EventType:
+        return EventType.PULL_CHANGED_FILES_COMPLETE
