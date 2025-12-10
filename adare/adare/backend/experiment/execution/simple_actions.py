@@ -11,17 +11,17 @@ import asyncio
 import base64
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from adare.types.playbook import (
     ClickAction, DragAction, KeyboardAction, IdleAction, ScrollAction,
     GotoAction, ScreenshotAction, CommandAction, SaveTimestampAction, PullAction,
-    SnapshotFilesystemAction
+    SnapshotFilesystemAction, PullChangedFilesAction
 )
 from adare.types.step_actions import ExecuteAction
 from adare.backend.events.emitters import emit_action
 from adare.backend.experiment.filesystem_snapshot import (
-    get_snapshot_command, parse_snapshot_output, FilesystemSnapshot
+    FilesystemSnapshot, calculate_diff
 )
 from .base import ActionResult, serialize_target
 
@@ -512,7 +512,13 @@ class SimpleActionsExecutor:
 
     async def execute_pull(self, action: PullAction, parent_event_id: str = None,
                           event_emitter = None) -> ActionResult:
-        """Pull files/directories from VM to host artifacts directory."""
+        """Pull files/directories from VM to host artifacts directory.
+
+        Supports:
+        - Single or multiple source files
+        - Hypervisor (VBoxManage) or WebSocket transfer modes
+        - Progress tracking for WebSocket transfers
+        """
         try:
             if not self.vm:
                 return ActionResult(
@@ -523,78 +529,74 @@ class SimpleActionsExecutor:
             if not self.experiment_run_directory:
                 return ActionResult(
                     success=False,
-                    message="Experiment run directory not available for pull operation"
+                    message="Experiment run directory not available"
                 )
 
-            # Create artifacts directory if it doesn't exist
+            # Create artifacts directory
             artifacts_dir = Path(self.experiment_run_directory) / "artifacts"
             artifacts_dir.mkdir(exist_ok=True)
-            log.info(f"CLAUDE: Pull operation - artifacts directory: {artifacts_dir}")
 
-            # Determine destination path
-            if action.dst:
-                # Use custom destination relative to artifacts directory
-                dest_path = artifacts_dir / action.dst
-                log.info(f"CLAUDE: Pull operation - using custom destination: {action.src} -> {dest_path} (dst specified: {action.dst})")
-            else:
-                # Preserve full guest path structure relative to artifacts directory
-                # Handle both Windows and Linux paths correctly
-                guest_path = action.src
+            # Normalize src to list
+            src_paths = action.src if isinstance(action.src, list) else [action.src]
 
-                # Handle Windows paths (remove drive letter and convert backslashes)
-                if ':' in guest_path:
-                    # Windows path like C:\Users\adare\Documents\prefetch.csv
-                    # Split by : and take the part after it, then clean up
-                    guest_path_cleaned = guest_path.split(':', 1)[1].lstrip('\\').lstrip('/')
-                    dest_path = artifacts_dir / guest_path_cleaned.replace('\\', '/')
-                else:
-                    # Unix path like /tmp/output.txt
-                    guest_path_cleaned = guest_path.lstrip('/')
-                    dest_path = artifacts_dir / guest_path_cleaned
+            # Track results for multi-file transfer
+            results = []
+            failed_files = []
+            total_files = len(src_paths)
 
-                log.info(f"CLAUDE: Pull operation - preserving structure: {action.src} -> {dest_path} (cleaned: {guest_path_cleaned})")
-
-            # Create parent directories if they don't exist
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            log.info(f"CLAUDE: Pull operation - created parent directories for: {dest_path.parent}")
-
-            # No internal execution step events needed - main action events handle the spinner
-
-            # Execute the pull operation
             start_time = time.time()
-            log.info(f"CLAUDE: Starting pull operation - VM copy_from_guest: guest_path='{action.src}' -> host_path='{dest_path}' (recursive=True)")
-            success = await self.vm.copy_from_guest(
-                guest_path=action.src,
-                host_path=str(dest_path),
-                recursive=True
-            )
+
+            # Process each source file
+            for file_idx, src_path in enumerate(src_paths, start=1):
+                log.info(f"CLAUDE: Pull {file_idx}/{total_files}: {src_path} (mode: {action.mode})")
+
+                # Determine destination path
+                dest_path = self._determine_dest_path(
+                    src_path, action.dst, artifacts_dir, total_files, file_idx
+                )
+
+                # Execute transfer based on mode
+                if action.mode == 'websocket':
+                    file_result = await self._pull_via_websocket(
+                        src_path, dest_path, file_idx, total_files, event_emitter
+                    )
+                else:  # hypervisor mode
+                    file_result = await self._pull_via_hypervisor(
+                        src_path, dest_path
+                    )
+
+                results.append(file_result)
+                if not file_result["success"]:
+                    failed_files.append(src_path)
+
             execution_time = time.time() - start_time
-            log.info(f"CLAUDE: Pull operation completed - success={success}, execution_time={execution_time:.2f}s")
+
+            # Determine overall success
+            success = len(failed_files) == 0
 
             if success:
-                log.info(f"CLAUDE: Pull SUCCESS - {action.src} -> {dest_path}")
-                log.info(f"Successfully pulled {action.src} to {dest_path}")
-                return ActionResult(
-                    success=True,
-                    message=f"Pulled {action.src} to artifacts/{dest_path.name}",
-                    execution_time=execution_time,
-                    data={
-                        "source": action.src,
-                        "destination": str(dest_path),
-                        "artifacts_path": f"artifacts/{dest_path.name}"
-                    }
-                )
+                message = f"Successfully pulled {total_files} file(s) via {action.mode}"
             else:
-                log.error(f"CLAUDE: Pull FAILED - {action.src} -> {dest_path}")
-                return ActionResult(
-                    success=False,
-                    message=f"Failed to pull {action.src}",
-                    execution_time=execution_time
+                message = (
+                    f"Pulled {total_files - len(failed_files)}/{total_files} files. "
+                    f"Failed: {', '.join(failed_files)}"
                 )
 
+            return ActionResult(
+                success=success,
+                message=message,
+                execution_time=execution_time,
+                data={
+                    "mode": action.mode,
+                    "total_files": total_files,
+                    "successful_files": total_files - len(failed_files),
+                    "failed_files": failed_files,
+                    "file_results": results
+                }
+            )
+
         except Exception as e:
-            log.error(f"CLAUDE: Pull EXCEPTION - {action.src} -> {getattr(locals().get('dest_path'), 'path', 'unknown')}: {e}")
-            log.error(f"Error in pull operation: {e}")
+            log.error(f"Pull operation failed: {e}", exc_info=True)
             return ActionResult(
                 success=False,
                 message=f"Pull operation failed: {str(e)}"
@@ -624,6 +626,98 @@ class SimpleActionsExecutor:
         # Execute using the existing execute_pull logic
         return await self.execute_pull(pull_action, parent_event_id=None, event_emitter=None)
 
+    def _determine_dest_path(self, src_path: str, custom_dst: Optional[str],
+                            artifacts_dir: Path, total_files: int,
+                            file_idx: int) -> Path:
+        """Determine destination path for a file."""
+        if custom_dst and total_files == 1:
+            # Single file with custom destination
+            return artifacts_dir / custom_dst
+        elif custom_dst and total_files > 1:
+            # Multiple files with custom destination prefix
+            filename = Path(src_path).name
+            return artifacts_dir / custom_dst / filename
+        else:
+            # Preserve guest path structure
+            guest_path = src_path
+            if ':' in guest_path:  # Windows path
+                guest_path_cleaned = guest_path.split(':', 1)[1].lstrip('\\').lstrip('/')
+                return artifacts_dir / guest_path_cleaned.replace('\\', '/')
+            else:  # Unix path
+                guest_path_cleaned = guest_path.lstrip('/')
+                return artifacts_dir / guest_path_cleaned
+
+    async def _pull_via_websocket(self, src_path: str, dest_path: Path,
+                                  file_idx: int, total_files: int,
+                                  event_emitter) -> Dict[str, Any]:
+        """Pull file via WebSocket with chunked transfer."""
+        try:
+            # Progress callback for logging
+            def progress_callback(chunk_idx, total_chunks, bytes_xfer, total_bytes):
+                log.info(
+                    f"CLAUDE: Transfer progress [{file_idx}/{total_files}]: "
+                    f"chunk {chunk_idx + 1}/{total_chunks} "
+                    f"({bytes_xfer}/{total_bytes} bytes, "
+                    f"{(bytes_xfer/total_bytes*100):.1f}%)"
+                )
+
+            result = await self.client.pull_file_chunked(
+                guest_path=src_path,
+                host_path=dest_path,
+                progress_callback=progress_callback
+            )
+
+            return {
+                "success": True,
+                "source": src_path,
+                "destination": str(dest_path),
+                "file_size": result["file_size"],
+                "chunks": result["chunks_transferred"],
+                "metadata": result.get("metadata", {})
+            }
+
+        except Exception as e:
+            log.error(f"WebSocket pull failed for {src_path}: {e}")
+            return {
+                "success": False,
+                "source": src_path,
+                "error": str(e)
+            }
+
+    async def _pull_via_hypervisor(self, src_path: str, dest_path: Path) -> Dict[str, Any]:
+        """Pull file via VBoxManage (existing method)."""
+        try:
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+            success = await self.vm.copy_from_guest(
+                guest_path=src_path,
+                host_path=str(dest_path),
+                recursive=True
+            )
+
+            if success:
+                file_size = dest_path.stat().st_size if dest_path.is_file() else 0
+                return {
+                    "success": True,
+                    "source": src_path,
+                    "destination": str(dest_path),
+                    "file_size": file_size
+                }
+            else:
+                return {
+                    "success": False,
+                    "source": src_path,
+                    "error": "VBoxManage copy_from_guest returned False"
+                }
+
+        except Exception as e:
+            log.error(f"Hypervisor pull failed for {src_path}: {e}")
+            return {
+                "success": False,
+                "source": src_path,
+                "error": str(e)
+            }
+
     async def execute_snapshot_filesystem(self, action: SnapshotFilesystemAction,
                                           parent_event_id: str = None,
                                           event_emitter = None) -> ActionResult:
@@ -631,14 +725,15 @@ class SimpleActionsExecutor:
         Execute filesystem snapshot action.
 
         Captures filesystem state (file list + timestamps) and stores in variable.
+        Uses native WebSocket tool instead of shelling out to Python.
         """
         from datetime import datetime, timezone
 
         try:
             # Determine OS type from VM
             os_type = None
-            if self.vm and hasattr(self.vm, 'osinfo') and self.vm.osinfo:
-                os_type = self.vm.osinfo.platform
+            if self.vm and hasattr(self.vm, 'guest_os'):
+                os_type = self.vm.guest_os
 
             if not os_type:
                 return ActionResult(
@@ -648,47 +743,37 @@ class SimpleActionsExecutor:
 
             log.info(f"Capturing filesystem snapshot for {os_type} (variable: {action.variable})")
 
-            # Get OS-specific snapshot command
-            try:
-                snapshot_cmd = get_snapshot_command(os_type, action.root_path)
-            except ValueError as e:
-                return ActionResult(success=False, message=str(e))
+            # Set appropriate timeout for snapshot (can take several minutes for large drives)
+            snapshot_timeout = action.timeout if action.timeout else 600.0  # Default 10 minutes
 
-            # Calculate timeout for WebSocket (add buffer)
-            websocket_timeout = None
-            if action.timeout:
-                websocket_timeout = action.timeout + 10
-
-            # Execute snapshot command via WebSocket
-            result = await self.client.execute_shell(
-                shell_command=snapshot_cmd,
-                timeout=action.timeout,
-                shell=True,  # Use shell for find/PowerShell
-                websocket_timeout=websocket_timeout
+            # Use native WebSocket tool instead of shell command
+            result = await self.client.get_filesystem_snapshot(
+                root_path=action.root_path or '/',
+                timeout=snapshot_timeout + 60  # Add buffer for WebSocket timeout
             )
 
-            # Check command success
+            # Check result status
             if result.get('status') != 'success':
-                error_msg = result.get('stderr', result.get('message', 'Unknown error'))
-                return ActionResult(
-                    success=False,
-                    message=f"Snapshot command failed: {error_msg}"
-                )
+                error_msg = result.get('message', 'Unknown error')
 
-            # Parse output
-            stdout = result.get('stdout', '')
-            if not stdout:
-                log.warning("Snapshot command returned empty output")
-                files = {}
-            else:
-                try:
-                    files = parse_snapshot_output(stdout, os_type)
-                    log.info(f"Snapshot captured {len(files)} files")
-                except ValueError as e:
+                # Enhanced error handling for MFT privilege issues
+                if 'Administrator privileges required' in error_msg:
                     return ActionResult(
                         success=False,
-                        message=f"Failed to parse snapshot output: {e}"
+                        message=(
+                            "MFT snapshot requires Administrator privileges. "
+                            "Please ensure adarevm is running as Administrator in the VM."
+                        )
                     )
+
+                return ActionResult(
+                    success=False,
+                    message=f"Snapshot failed: {error_msg}"
+                )
+
+            # Extract files directly from result (already parsed JSON)
+            files = result.get('snapshot', {})
+            log.info(f"Snapshot captured {len(files)} files")
 
             # Create snapshot object
             snapshot = FilesystemSnapshot(
@@ -720,3 +805,257 @@ class SimpleActionsExecutor:
         except Exception as e:
             log.error(f"Error executing snapshot_filesystem action: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
+
+    async def execute_pull_changed_files(self, action: PullChangedFilesAction,
+                                        parent_event_id: str = None,
+                                        event_emitter = None) -> ActionResult:
+        """
+        Execute pull_changed_files action.
+
+        Retrieves two snapshots from variable registry, calculates diff,
+        and pulls all changed/added files in batch.
+        """
+        try:
+            # 1. Retrieve snapshots from execution context
+            snapshot_before = self.execution_context.get(action.snapshot_before)
+            snapshot_after = self.execution_context.get(action.snapshot_after)
+
+            # Validate snapshots exist
+            if snapshot_before is None:
+                return ActionResult(
+                    success=False,
+                    message=f"Snapshot variable '{action.snapshot_before}' not found in execution context"
+                )
+
+            if snapshot_after is None:
+                return ActionResult(
+                    success=False,
+                    message=f"Snapshot variable '{action.snapshot_after}' not found in execution context"
+                )
+
+            # Validate snapshot types
+            if not isinstance(snapshot_before, FilesystemSnapshot):
+                return ActionResult(
+                    success=False,
+                    message=f"Variable '{action.snapshot_before}' is not a FilesystemSnapshot object"
+                )
+
+            if not isinstance(snapshot_after, FilesystemSnapshot):
+                return ActionResult(
+                    success=False,
+                    message=f"Variable '{action.snapshot_after}' is not a FilesystemSnapshot object"
+                )
+
+            log.info(
+                f"CLAUDE: Computing diff between snapshots: "
+                f"{action.snapshot_before} ({len(snapshot_before.files)} files) -> "
+                f"{action.snapshot_after} ({len(snapshot_after.files)} files)"
+            )
+
+            # 2. Calculate diff
+            diff = calculate_diff(snapshot_before, snapshot_after)
+
+            # 3. Build file list based on include flags
+            files_to_pull = []
+
+            if action.include_modified:
+                modified_paths = [item['path'] for item in diff['modified']]
+                files_to_pull.extend(modified_paths)
+                log.info(f"CLAUDE: Including {len(modified_paths)} modified files")
+
+            if action.include_added:
+                added_paths = [item['path'] for item in diff['added']]
+                files_to_pull.extend(added_paths)
+                log.info(f"CLAUDE: Including {len(added_paths)} added files")
+
+            # Check if there are files to pull
+            if not files_to_pull:
+                log.info("CLAUDE: No changed files to pull")
+                return ActionResult(
+                    success=True,
+                    message="No changed files found between snapshots",
+                    data={
+                        'modified_count': len(diff['modified']),
+                        'added_count': len(diff['added']),
+                        'files_pulled': 0
+                    }
+                )
+
+            log.info(f"CLAUDE: Total files to pull: {len(files_to_pull)}")
+
+            # 4. Ensure experiment run directory exists
+            if not self.experiment_run_directory:
+                return ActionResult(
+                    success=False,
+                    message="Experiment run directory not available"
+                )
+
+            # Create destination directory
+            dest_dir = Path(self.experiment_run_directory) / "artifacts" / action.dst
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            log.info(f"CLAUDE: Destination directory: {dest_dir}")
+
+            # 5. Execute transfer based on mode
+            start_time = time.time()
+
+            if action.mode == 'websocket':
+                # Use batch chunked transfer
+                result = await self._pull_changed_files_websocket(
+                    files_to_pull, dest_dir, event_emitter
+                )
+            else:  # hypervisor mode
+                result = await self._pull_changed_files_hypervisor(
+                    files_to_pull, dest_dir
+                )
+
+            execution_time = time.time() - start_time
+
+            # 6. Prepare result
+            success = result['success_count'] > 0
+
+            if result['failed_count'] == 0:
+                message = (
+                    f"Successfully pulled {result['success_count']} changed files "
+                    f"via {action.mode} ({result['total_bytes']} bytes)"
+                )
+            else:
+                message = (
+                    f"Pulled {result['success_count']}/{len(files_to_pull)} files "
+                    f"({result['failed_count']} failed)"
+                )
+
+            return ActionResult(
+                success=success,
+                message=message,
+                execution_time=execution_time,
+                data={
+                    'mode': action.mode,
+                    'snapshot_before': action.snapshot_before,
+                    'snapshot_after': action.snapshot_after,
+                    'total_files': len(files_to_pull),
+                    'success_count': result['success_count'],
+                    'failed_count': result['failed_count'],
+                    'total_bytes': result['total_bytes'],
+                    'failures': result['failures'],
+                    'modified_count': len(diff['modified']) if action.include_modified else 0,
+                    'added_count': len(diff['added']) if action.include_added else 0,
+                    'destination': str(dest_dir)
+                }
+            )
+
+        except Exception as e:
+            log.error(f"CLAUDE: Error executing pull_changed_files action: {e}", exc_info=True)
+            return ActionResult(success=False, message=str(e))
+
+    async def _pull_changed_files_websocket(self, file_paths: list, dest_dir: Path,
+                                           event_emitter) -> Dict[str, Any]:
+        """Pull changed files via WebSocket with batch chunked transfer."""
+        try:
+            # Progress callback for logging
+            def progress_callback(file_idx, total_files, file_path,
+                                chunk_idx, total_chunks, bytes_xfer, file_size):
+                # Calculate overall progress percentage
+                overall_progress = (file_idx - 1) / total_files * 100
+                file_progress = bytes_xfer / file_size * 100 if file_size > 0 else 0
+
+                log.info(
+                    f"CLAUDE: Transfer progress: file {file_idx}/{total_files} "
+                    f"({overall_progress:.1f}% overall) - "
+                    f"chunk {chunk_idx + 1}/{total_chunks} "
+                    f"({bytes_xfer}/{file_size} bytes, {file_progress:.1f}%)"
+                )
+
+            # Call batch pull method
+            result = await self.client.pull_multiple_files_chunked(
+                guest_paths=file_paths,
+                host_dest_dir=dest_dir,
+                progress_callback=progress_callback
+            )
+
+            return result
+
+        except Exception as e:
+            log.error(f"CLAUDE: WebSocket batch pull failed: {e}")
+            return {
+                'success_count': 0,
+                'failed_count': len(file_paths),
+                'total_files': len(file_paths),
+                'total_bytes': 0,
+                'failures': [{'path': p, 'error': str(e)} for p in file_paths],
+                'file_results': []
+            }
+
+    async def _pull_changed_files_hypervisor(self, file_paths: list, dest_dir: Path) -> Dict[str, Any]:
+        """Pull changed files via VBoxManage (hypervisor mode)."""
+        if not self.vm:
+            return {
+                'success_count': 0,
+                'failed_count': len(file_paths),
+                'total_files': len(file_paths),
+                'total_bytes': 0,
+                'failures': [{'path': p, 'error': 'VM instance not available'} for p in file_paths],
+                'file_results': []
+            }
+
+        success_count = 0
+        failed_count = 0
+        total_bytes = 0
+        failures = []
+        file_results = []
+
+        for file_idx, guest_path in enumerate(file_paths, start=1):
+            try:
+                log.info(f"CLAUDE: Pulling file {file_idx}/{len(file_paths)}: {guest_path}")
+
+                # Preserve directory structure
+                if ':' in guest_path:  # Windows path
+                    guest_path_cleaned = guest_path.split(':', 1)[1].lstrip('\\').lstrip('/')
+                    relative_path = guest_path_cleaned.replace('\\', '/')
+                else:  # Unix path
+                    relative_path = guest_path.lstrip('/')
+
+                host_path = dest_dir / relative_path
+                host_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Use VBoxManage to copy file
+                success = await self.vm.copy_from_guest(
+                    guest_path=guest_path,
+                    host_path=str(host_path),
+                    recursive=False
+                )
+
+                if success:
+                    file_size = host_path.stat().st_size if host_path.is_file() else 0
+                    success_count += 1
+                    total_bytes += file_size
+
+                    file_results.append({
+                        'path': guest_path,
+                        'success': True,
+                        'destination': str(host_path),
+                        'file_size': file_size
+                    })
+
+                    log.info(f"CLAUDE: Successfully pulled {guest_path} ({file_size} bytes)")
+                else:
+                    failed_count += 1
+                    error_msg = "VBoxManage copy_from_guest returned False"
+                    failures.append({'path': guest_path, 'error': error_msg})
+                    file_results.append({'path': guest_path, 'success': False, 'error': error_msg})
+
+            except Exception as e:
+                failed_count += 1
+                error_msg = str(e)
+                log.error(f"CLAUDE: Hypervisor pull failed for {guest_path}: {error_msg}")
+                failures.append({'path': guest_path, 'error': error_msg})
+                file_results.append({'path': guest_path, 'success': False, 'error': error_msg})
+
+        return {
+            'success_count': success_count,
+            'failed_count': failed_count,
+            'total_files': len(file_paths),
+            'total_bytes': total_bytes,
+            'failures': failures,
+            'file_results': file_results
+        }

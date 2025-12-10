@@ -246,6 +246,26 @@ def get_action_display_info(action_type: ActionType, action_data: dict, is_compl
             # For start events
             return "evaluating continue condition"
 
+    elif action_type == ActionType.SNAPSHOT_FILESYSTEM:
+        snapshot_type = action_data.get('snapshot_type')
+        files_count = action_data.get('files_count')
+        if is_complete:
+            if files_count:
+                return f"filesystem snapshot ({snapshot_type or 'snapshot'}) - {files_count} files"
+            return f"filesystem snapshot ({snapshot_type or 'snapshot'}) complete"
+        return f"capturing filesystem snapshot ({snapshot_type or 'snapshot'})"
+
+    elif action_type == ActionType.PULL_CHANGED_FILES:
+        destination = action_data.get('destination')
+        files_pulled = action_data.get('files_pulled')
+        if is_complete:
+            if files_pulled:
+                return f"pulled {files_pulled} changed files"
+            return "pull changed files complete"
+        if destination:
+            return f"pulling changed files to {destination}"
+        return "pulling changed files"
+
     else:
         # Throw exception for unhandled action types to catch missing cases
         raise ValueError(f"Unhandled action type in get_action_display_info: {action_type} (value: {action_type.value})")

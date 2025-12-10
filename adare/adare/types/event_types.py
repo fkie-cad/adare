@@ -52,6 +52,10 @@ class EventType(Enum):
     STOP_COMPLETE = "stop_complete"
     CONTINUE_START = "continue_start"
     CONTINUE_COMPLETE = "continue_complete"
+    SNAPSHOT_FILESYSTEM_START = "snapshot_filesystem_start"
+    SNAPSHOT_FILESYSTEM_COMPLETE = "snapshot_filesystem_complete"
+    PULL_CHANGED_FILES_START = "pull_changed_files_start"
+    PULL_CHANGED_FILES_COMPLETE = "pull_changed_files_complete"
 
 
 class ActionType(Enum):
@@ -76,6 +80,8 @@ class ActionType(Enum):
     LOOP = "loop"
     STOP = "stop"
     CONTINUE = "continue"
+    SNAPSHOT_FILESYSTEM = "snapshot_filesystem"
+    PULL_CHANGED_FILES = "pull_changed_files"
 
     # Internal step action types (not used in playbook YAML)
     FIND = "find"
@@ -123,6 +129,10 @@ class EventTypeResolver:
             "StopActionCompleteEvent": EventType.STOP_COMPLETE,
             "ContinueActionStartEvent": EventType.CONTINUE_START,
             "ContinueActionCompleteEvent": EventType.CONTINUE_COMPLETE,
+            "SnapshotFilesystemActionStartEvent": EventType.SNAPSHOT_FILESYSTEM_START,
+            "SnapshotFilesystemActionCompleteEvent": EventType.SNAPSHOT_FILESYSTEM_COMPLETE,
+            "PullChangedFilesActionStartEvent": EventType.PULL_CHANGED_FILES_START,
+            "PullChangedFilesActionCompleteEvent": EventType.PULL_CHANGED_FILES_COMPLETE,
         }
     
     def resolve_event_type(self, event_data: Dict[str, Any]) -> EventType:
@@ -195,6 +205,10 @@ class EventTypeResolver:
             return EventType.STOP_COMPLETE if is_complete else EventType.STOP_START
         elif action_type_raw == "continue":
             return EventType.CONTINUE_COMPLETE if is_complete else EventType.CONTINUE_START
+        elif action_type_raw == "snapshotfilesystem":
+            return EventType.SNAPSHOT_FILESYSTEM_COMPLETE if is_complete else EventType.SNAPSHOT_FILESYSTEM_START
+        elif action_type_raw == "pullchangedfiles":
+            return EventType.PULL_CHANGED_FILES_COMPLETE if is_complete else EventType.PULL_CHANGED_FILES_START
         elif action_type_raw == "find":
             return EventType.ACTION_COMPLETE if is_complete else EventType.ACTION_START
         elif action_type_raw == "execute":
@@ -242,6 +256,10 @@ class EventTypeResolver:
             return ActionType.STOP
         elif event_name.startswith("continue_"):
             return ActionType.CONTINUE
+        elif event_name.startswith("snapshot_filesystem_"):
+            return ActionType.SNAPSHOT_FILESYSTEM
+        elif event_name.startswith("pull_changed_files_"):
+            return ActionType.PULL_CHANGED_FILES
         else:
             # For generic action events, check the original action data
             if action_data:

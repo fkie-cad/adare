@@ -61,28 +61,34 @@ def get_snapshot_command(os_type: str, root_path: Optional[str] = None) -> str:
     Returns:
         Shell command string
     """
-    if os_type == 'Linux' or os_type.startswith('Linux'):
-        # Linux: use find with printf for timestamp + size + path
-        scan_root = root_path or '/'
-        # Format: <epoch_timestamp> <size> <path>
-        # -type f = files only, -printf = custom format
-        # 2>/dev/null = suppress permission errors
-        return f"find {scan_root} -type f -printf '%T@ %s %p\\n' 2>/dev/null"
-
-    elif os_type == 'Windows':
-        # Windows PowerShell: use Get-ChildItem with JSON output
-        scan_root = root_path or 'C:\\'
-        # Escape backslashes for PowerShell
-        scan_root_escaped = scan_root.replace('\\', '\\\\')
-
-        # PowerShell command to recursively list files with metadata
-        ps_cmd = (
-            f"Get-ChildItem -Path '{scan_root_escaped}' -Recurse -File "
-            f"-ErrorAction SilentlyContinue | "
-            f"Select-Object FullName,@{{Name='LastWriteTimeEpoch';Expression={{[int][double]::Parse((Get-Date $_.LastWriteTime -UFormat %s))}}}},Length | "
-            f"ConvertTo-Json -Compress"
+    if os_type == 'linux':
+        # Linux: use LinuxFSSnapshot module (parallels Windows MFT approach)
+        python_cmd = (
+            f"python -c \""
+            f"from adarevm.platforms.linux_fs_snapshot import LinuxFSSnapshot; "
+            f"import json; "
+            f"result = LinuxFSSnapshot.get_snapshot(); "
+            f"print(json.dumps(result, indent=None))"
+            f"\""
         )
-        return ps_cmd
+        return python_cmd
+
+    elif os_type == 'windows':
+        # Windows: use MFT reader for efficient snapshot with all 4 NTFS timestamps
+        scan_root = root_path or 'C:\\'
+        # Escape single quotes for Python inline command
+        scan_root_escaped = scan_root.replace("'", "\\'")
+
+        # Python command to run MFT reader
+        python_cmd = (
+            f"python -c \""
+            f"from adarevm.platforms.mft_reader import MFTReader; "
+            f"import json; "
+            f"result = MFTReader.get_mft_snapshot(volume='C:', root_path='{scan_root_escaped}'); "
+            f"print(json.dumps(result, indent=None))"
+            f"\""
+        )
+        return python_cmd
 
     else:
         raise ValueError(f"Unsupported OS type: {os_type}")
@@ -91,13 +97,14 @@ def get_snapshot_command(os_type: str, root_path: Optional[str] = None) -> str:
 def parse_snapshot_output(output: str, os_type: str) -> Dict[str, Dict[str, Any]]:
     """
     Parse command output into file metadata dict.
+    Both Windows and Linux now return JSON in common format.
 
     Args:
-        output: Raw command stdout
+        output: Raw command stdout (JSON)
         os_type: 'Windows' or 'Linux'
 
     Returns:
-        Dict mapping file path -> {mtime: float, size: int}
+        Dict mapping file path -> {mtime: float, size: int, timestamps: {...}}
 
     Raises:
         ValueError: If parsing fails
@@ -105,54 +112,42 @@ def parse_snapshot_output(output: str, os_type: str) -> Dict[str, Dict[str, Any]
     files = {}
 
     try:
-        if os_type == 'Linux' or os_type.startswith('Linux'):
-            # Parse Linux find output: <timestamp> <size> <path>
-            for line in output.strip().split('\n'):
-                if not line:
-                    continue
+        # Both platforms now return JSON
+        data = json.loads(output)
 
-                parts = line.split(None, 2)  # Split on whitespace, max 3 parts
-                if len(parts) < 3:
-                    log.warning(f"Skipping malformed line: {line}")
-                    continue
+        if not isinstance(data, dict):
+            raise ValueError(f"Expected dict, got {type(data)}")
 
-                try:
-                    mtime_str, size_str, path = parts
-                    files[path] = {
-                        'mtime': float(mtime_str),
-                        'size': int(size_str)
-                    }
-                except (ValueError, IndexError) as e:
-                    log.warning(f"Failed to parse line: {line} - {e}")
-                    continue
+        # Process each file entry
+        for path, metadata in data.items():
+            # Backward compatibility: migrate old format to new format
+            if 'timestamps' not in metadata:
+                # Old format - migrate to new format
+                log.debug(f"Migrating old format for {path}")
+                metadata['timestamps'] = {}
 
-        elif os_type == 'Windows':
-            # Parse Windows PowerShell JSON output
-            data = json.loads(output)
+                # Copy timestamp fields to nested object
+                for ts_field in ['created', 'modified', 'accessed', 'mft_modified', 'changed']:
+                    if ts_field in metadata:
+                        metadata['timestamps'][ts_field] = metadata[ts_field]
 
-            # Handle single file (dict) vs multiple files (list)
-            if isinstance(data, dict):
-                data = [data]
+                # Ensure mtime is set (primary timestamp for diff)
+                if 'mtime' not in metadata:
+                    metadata['mtime'] = metadata.get('modified', 0.0)
 
-            for entry in data:
-                path = entry.get('FullName')
-                mtime_epoch = entry.get('LastWriteTimeEpoch')
-                size = entry.get('Length')
+            # Validate required fields
+            if 'mtime' not in metadata or 'size' not in metadata:
+                log.warning(f"Missing required fields (mtime, size) for {path}, skipping")
+                continue
 
-                if path and mtime_epoch is not None and size is not None:
-                    files[path] = {
-                        'mtime': float(mtime_epoch),
-                        'size': int(size)
-                    }
+            files[path] = metadata
 
-        else:
-            raise ValueError(f"Unsupported OS type: {os_type}")
+        log.info(f"Parsed {len(files)} files from {os_type} snapshot")
+        return files
 
     except json.JSONDecodeError as e:
-        log.error(f"Failed to parse Windows JSON output: {e}")
-        raise ValueError(f"Invalid JSON output from Windows snapshot command: {e}")
-
-    return files
+        log.error(f"Failed to parse JSON output: {e}")
+        raise ValueError(f"Invalid JSON output from snapshot command: {e}")
 
 
 def calculate_diff(before: FilesystemSnapshot, after: FilesystemSnapshot) -> Dict[str, List[Dict]]:
