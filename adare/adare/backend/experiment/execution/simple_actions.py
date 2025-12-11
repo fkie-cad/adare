@@ -15,8 +15,8 @@ from typing import Optional, Dict, Any
 
 from adare.types.playbook import (
     ClickAction, DragAction, KeyboardAction, IdleAction, ScrollAction,
-    GotoAction, ScreenshotAction, CommandAction, SaveTimestampAction, PullAction,
-    SnapshotFilesystemAction, PullChangedFilesAction
+    GotoAction, ScreenshotAction, CommandAction, SaveTimestampAction,
+    SaveVariableAction, PullAction, SnapshotFilesystemAction, PullChangedFilesAction
 )
 from adare.types.step_actions import ExecuteAction
 from adare.backend.events.emitters import emit_action
@@ -509,6 +509,105 @@ class SimpleActionsExecutor:
             )
         except Exception as e:
             return ActionResult(success=False, message=str(e))
+
+    async def execute_save_variable(
+        self,
+        action: SaveVariableAction,
+        parent_event_id: str = None,
+        event_emitter = None
+    ) -> ActionResult:
+        """Save a static value or evaluated expression to execution context and variable registry."""
+        import jinja2
+
+        try:
+            value = action.value
+
+            # Check if value is a Jinja2 expression that needs evaluation
+            if isinstance(value, str) and '{{' in value and '}}' in value:
+                evaluated_value = self._evaluate_jinja_expression(value)
+            else:
+                # Static value - use as-is
+                evaluated_value = value
+
+            # Save to execution context for immediate use
+            self.execution_context[action.name] = evaluated_value
+
+            # Also save to variable registry if available
+            if hasattr(self.playbook, 'variables') and self.playbook.variables:
+                from adarelib.common.variables import Variable
+                # Use auto_infer to determine the appropriate VariableType
+                var = Variable.auto_infer(evaluated_value)
+                self.playbook.variables.add(action.name, var)
+                log.debug(f"Added variable '{action.name}' to variable registry with type {var.type}")
+
+            log.info(f"Saved value to variable '{action.name}': {evaluated_value}")
+
+            return ActionResult(
+                success=True,
+                message=f"Variable '{action.name}' set to: {evaluated_value}",
+                data={action.name: evaluated_value}
+            )
+        except jinja2.TemplateError as e:
+            return ActionResult(
+                success=False,
+                message=f"Jinja2 template error: {str(e)}"
+            )
+        except (ValueError, TypeError) as e:
+            return ActionResult(
+                success=False,
+                message=f"Failed to evaluate expression: {str(e)}"
+            )
+
+    def _evaluate_jinja_expression(self, expression: str) -> Any:
+        """Evaluate a Jinja2 expression using current execution context.
+
+        Args:
+            expression: Jinja2 template string like "{{ counter + 1 }}"
+
+        Returns:
+            Evaluated result with appropriate Python type
+        """
+        import jinja2
+
+        # Create Jinja2 environment with StrictUndefined to catch missing variables
+        env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+
+        # Add custom filters from variable registry if available
+        if hasattr(self.playbook, 'variables') and self.playbook.variables:
+            custom_filters = self.playbook.variables.get_all_jinja_filters()
+            env.filters.update(custom_filters)
+
+        template = env.from_string(expression)
+        result_str = template.render(self.execution_context)
+
+        # Attempt type coercion for common types
+        return self._coerce_result_type(result_str)
+
+    def _coerce_result_type(self, value: str) -> Any:
+        """Attempt to coerce string result to appropriate Python type.
+
+        Tries in order: int, float, bool, then keeps as string.
+        """
+        # Check for boolean
+        if value.lower() == 'true':
+            return True
+        if value.lower() == 'false':
+            return False
+
+        # Check for integer
+        try:
+            return int(value)
+        except ValueError:
+            pass
+
+        # Check for float
+        try:
+            return float(value)
+        except ValueError:
+            pass
+
+        # Keep as string
+        return value
 
     async def execute_pull(self, action: PullAction, parent_event_id: str = None,
                           event_emitter = None) -> ActionResult:

@@ -269,8 +269,20 @@ class FlowControlExecutor:
                             )
 
                 finally:
-                    # Restore original contexts after entire iteration completes
-                    # This ensures loop variables don't leak outside the loop scope
+                    # Merge new variables from loop iteration back to parent contexts
+                    # This preserves variables created by save_timestamp, command capture, etc.
+                    # while ensuring loop control variables (index, total, item) don't leak
+                    loop_control_vars = {'index', 'total', action.item_var if action.item_var else 'item'}
+                    new_vars = {k: v for k, v in loop_context.items()
+                                if k not in loop_control_vars and k not in saved_flow_context}
+
+                    if new_vars:
+                        log.debug(f"Merging {len(new_vars)} new variables from loop iteration {i}: {list(new_vars.keys())}")
+                        saved_flow_context.update(new_vars)
+                        saved_action_context.update(new_vars)
+                        saved_simple_actions_context.update(new_vars)
+
+                    # Restore contexts with merged variables
                     self.execution_context = saved_flow_context
                     action_executor.execution_context = saved_action_context
                     action_executor.simple_actions.execution_context = saved_simple_actions_context

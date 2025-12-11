@@ -192,6 +192,13 @@ class SaveTimestampAction:
     description: str = ''
 
 @attrs.define
+class SaveVariableAction:
+    """Save a value (static or Jinja2 expression) to a variable."""
+    name: str  # Variable name to save to
+    value: Any  # Static value OR Jinja2 template string
+    description: str = ''
+
+@attrs.define
 class PullAction:
     src: Union[str, List[str]]  # Single path or list of paths to pull
     dst: Optional[str] = None  # Optional destination name in artifacts folder
@@ -394,9 +401,9 @@ class LoopAction:
 ActionType = Union[
     ClickAction, DragAction,
     KeyboardAction, IdleAction, ScrollAction, GotoAction, ActionTestAction,
-    CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, PullAction, PauseAction,
-    WaitUntilAction, LoopAction, StopAction, ContinueAction, SnapshotFilesystemAction,
-    PullChangedFilesAction
+    CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, SaveVariableAction,
+    PullAction, PauseAction, WaitUntilAction, LoopAction, StopAction, ContinueAction,
+    SnapshotFilesystemAction, PullChangedFilesAction
 ]
 
 @attrs.define
@@ -538,6 +545,8 @@ def _structure_action(obj, converter):
         return converter.structure(obj['screenshot'], ScreenshotAction)
     if 'save_timestamp' in obj:
         return converter.structure(obj['save_timestamp'], SaveTimestampAction)
+    if 'save_variable' in obj:
+        return converter.structure(obj['save_variable'], SaveVariableAction)
     if 'pull' in obj:
         return converter.structure(obj['pull'], PullAction)
     if 'pause' in obj:
@@ -691,8 +700,8 @@ def _register_strict_hooks(converter):
     for cls in [Target, Settings, ClickAction,
                 DragAction, KeyboardAction, IdleAction, ScrollAction, GotoAction,
                 ActionTestAction, CommandAction, CaptureSpec, ScreenshotAction, BlockAction,
-                SaveTimestampAction, PullAction, PauseAction, WaitUntilAction, LoopAction,
-                StopAction, ContinueAction, VariableCondition,
+                SaveTimestampAction, SaveVariableAction, PullAction, PauseAction,
+                WaitUntilAction, LoopAction, StopAction, ContinueAction, VariableCondition,
                 WaitCondition, ExistsCondition, NotExistsCondition,
                 SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
                 TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
