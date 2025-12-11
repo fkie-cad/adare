@@ -1,0 +1,1106 @@
+settings:
+  idle: 0.5
+  timeout: 60
+  continue_on_test_failure: true
+
+# Comprehensive test playbook for ADARE variable functionality
+# Tests all variable types, scoping, persistence, capture, and conditions
+
+variables:
+  # String variables
+  test_string:
+    type: string
+    value: "hello_world"
+    description: "Basic string variable"
+
+  prefix:
+    type: string
+    value: "test"
+    description: "String prefix for concatenation"
+
+  suffix:
+    type: string
+    value: "file"
+    description: "String suffix for concatenation"
+
+  # Integer variables
+  test_integer:
+    type: integer
+    value: 42
+    description: "Integer variable"
+
+  # Float variables
+  test_float:
+    type: float
+    value: 3.14
+    description: "Float variable"
+
+  # Boolean variables
+  test_bool_true:
+    type: boolean
+    value: true
+    description: "Boolean true variable"
+
+  test_bool_false:
+    type: boolean
+    value: false
+    description: "Boolean false variable"
+
+  # List variables
+  filenames:
+    type: list
+    value: ["alpha.txt", "beta.txt", "gamma.txt"]
+    description: "List of file names for iteration"
+
+  numbers:
+    type: list
+    value: [10, 20, 30, 40, 50]
+    description: "List of numbers"
+
+  # Dict variables
+  config:
+    type: dict
+    value:
+      setting: "enabled"
+      mode: "debug"
+      count: 5
+    description: "Dictionary configuration"
+
+  # Path variables
+  test_dir:
+    type: path
+    value: "{{adare_temp_dir}}/var_test"
+    description: "Test directory path"
+
+  # Regex variables
+  email_pattern:
+    type: regex
+    value: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    description: "Email validation regex"
+
+  alpha_pattern:
+    type: regex
+    value: '^alpha_'
+    description: "Pattern matching alpha prefix"
+
+# Test definitions
+tests:
+  - name: test_file_exists
+    description: "Check if a file exists"
+    function: file_exists
+    parameter:
+      dst: "{{test_dir}}/{{filename}}"
+
+  - name: test_dir_exists
+    description: "Check if directory exists"
+    function: dir_exists
+    parameter:
+      dst: "{{test_dir}}"
+
+  - name: test_file_content
+    description: "Check file content matches expected value"
+    function: file_content_equals
+    parameter:
+      dst: "{{test_dir}}/{{filename}}"
+      content: "{{expected_content}}"
+
+actions:
+  # Setup: Create test directory
+  - command:
+      command: "mkdir -p {{test_dir}}"
+      description: "Create test directory"
+      shell: true
+
+  #############################################################################
+  # Test 1: Simple Variable Usage
+  #############################################################################
+  - command:
+      command: "echo 'Test string: {{test_string}}'"
+      description: "[Test 1] Use predefined string variable"
+      shell: true
+
+  - command:
+      command: "echo 'Test integer: {{test_integer}}'"
+      description: "[Test 1] Use predefined integer variable"
+      shell: true
+
+  - command:
+      command: "echo 'Test float: {{test_float}}'"
+      description: "[Test 1] Use predefined float variable"
+      shell: true
+
+  - command:
+      command: "echo 'Test bool true: {{test_bool_true}}'"
+      description: "[Test 1] Use predefined boolean variable"
+      shell: true
+
+  - command:
+      command: "echo 'Config setting: {{config[\"setting\"]}}'"
+      description: "[Test 1] Access dict variable"
+      shell: true
+
+  #############################################################################
+  # Test 2: save_variable Action
+  #############################################################################
+  - save_variable:
+      name: runtime_string
+      value: "created_at_runtime"
+      description: "[Test 2] Create string variable at runtime"
+
+  - command:
+      command: "echo 'Runtime string: {{runtime_string}}'"
+      description: "[Test 2] Use runtime-created variable"
+      shell: true
+
+  - save_variable:
+      name: computed_value
+      value: "{{ test_integer + 10 }}"
+      description: "[Test 2] Create variable with Jinja2 expression"
+
+  - command:
+      command: "echo 'Computed value: {{computed_value}}'"
+      description: "[Test 2] Use computed variable"
+      shell: true
+
+  # Test type coercion
+  - save_variable:
+      name: string_to_int
+      value: "123"
+      description: "[Test 2] String that should coerce to int"
+
+  - save_variable:
+      name: string_to_bool_true
+      value: "true"
+      description: "[Test 2] String 'true' to bool"
+
+  - save_variable:
+      name: string_to_bool_false
+      value: "false"
+      description: "[Test 2] String 'false' to bool"
+
+  - save_variable:
+      name: string_to_float
+      value: "3.14159"
+      description: "[Test 2] String to float"
+
+  # Test arithmetic increment
+  - save_variable:
+      name: counter
+      value: 0
+      description: "[Test 2] Initialize counter"
+
+  - save_variable:
+      name: counter
+      value: "{{ counter + 1 }}"
+      description: "[Test 2] Increment counter to 1"
+
+  - save_variable:
+      name: counter
+      value: "{{ counter + 1 }}"
+      description: "[Test 2] Increment counter to 2"
+
+  - command:
+      command: "echo 'Counter value: {{counter}}'"
+      description: "[Test 2] Display counter (should be 2)"
+      shell: true
+
+  #############################################################################
+  # Test 3: save_timestamp Action
+  #############################################################################
+  - save_timestamp:
+      variable: current_time
+      description: "[Test 3] Capture current timestamp"
+
+  - command:
+      command: "echo 'Captured timestamp: {{current_time}}'"
+      description: "[Test 3] Display captured timestamp"
+      shell: true
+
+  - stop:
+      condition:
+        variable: current_time
+        is_empty: true
+      description: "[Test 3] Assert timestamp was captured (fail if empty)"
+
+  - command:
+      command: "echo 'Timestamp {{current_time}}' > {{test_dir}}/timestamp_test.txt"
+      description: "[Test 3] Use timestamp in file operation"
+      shell: true
+
+  #############################################################################
+  # Test 4: Variables in Simple Loop (times)
+  #############################################################################
+  - save_variable:
+      name: loop_accumulator
+      value: 0
+      description: "[Test 4] Initialize accumulator before loop"
+
+  - loop:
+      times: 5
+      description: "[Test 4] Simple counter loop with 5 iterations"
+      actions:
+        - command:
+            command: "echo 'Iteration {{index}} of {{total}}'"
+            description: "[Test 4] Display loop variables"
+            shell: true
+
+        # Create variable inside loop with dynamic name
+        - save_variable:
+            name: "loop_var_{{index}}"
+            value: "value_at_{{index}}"
+            description: "[Test 4] Create variable with dynamic name"
+
+        # Accumulate values
+        - save_variable:
+            name: loop_accumulator
+            value: "{{ loop_accumulator + index }}"
+            description: "[Test 4] Accumulate index values"
+
+        - idle:
+            duration: 0.1
+
+  # Verify loop variables persist after loop
+  - stop:
+      condition:
+        variable: loop_var_0
+        is_empty: true
+      description: "[Test 4] Assert loop_var_0 exists after loop"
+
+  - stop:
+      condition:
+        variable: loop_var_4
+        is_empty: true
+      description: "[Test 4] Assert loop_var_4 exists after loop"
+
+  - command:
+      command: "echo 'Loop accumulator final value: {{loop_accumulator}}'"
+      description: "[Test 4] Display accumulated value (should be 0+1+2+3+4=10)"
+      shell: true
+
+  # Assert accumulator equals 10 using boundaries
+  - stop:
+      condition:
+        variable: loop_accumulator
+        less_than: 10
+      description: "[Test 4] Assert loop_accumulator >= 10"
+
+  - stop:
+      condition:
+        variable: loop_accumulator
+        greater_than: 10
+      description: "[Test 4] Assert loop_accumulator <= 10"
+
+  #############################################################################
+  # Test 5: Variables in List Loop (items)
+  #############################################################################
+  - loop:
+      items: "{{filenames}}"
+      description: "[Test 5] Iterate over list variable"
+      actions:
+        - command:
+            command: "echo 'Processing: {{item}}' > {{test_dir}}/{{item}}"
+            description: "[Test 5] Create file using item variable"
+            shell: true
+
+        - idle:
+            duration: 0.1
+
+  # Verify files were created
+  - save_variable:
+      name: filename
+      value: "alpha.txt"
+      description: "[Test 5] Set filename for test"
+
+  - test: test_file_exists
+
+  - save_variable:
+      name: filename
+      value: "beta.txt"
+      description: "[Test 5] Set filename for test"
+
+  - test: test_file_exists
+
+  - save_variable:
+      name: filename
+      value: "gamma.txt"
+      description: "[Test 5] Set filename for test"
+
+  - test: test_file_exists
+
+  #############################################################################
+  # Test 6: Custom Item Variable Name
+  #############################################################################
+  - loop:
+      items: "{{numbers}}"
+      item_var: number
+      description: "[Test 6] Loop with custom item variable name"
+      actions:
+        - command:
+            command: "echo 'Number: {{number}}'"
+            description: "[Test 6] Use custom item variable"
+            shell: true
+
+        - save_variable:
+            name: "num_{{index}}"
+            value: "{{number}}"
+            description: "[Test 6] Save number with custom variable"
+
+        - idle:
+            duration: 0.1
+
+  # Verify custom variable usage worked
+  - stop:
+      condition:
+        variable: num_0
+        is_empty: true
+      description: "[Test 6] Assert num_0 exists"
+
+  - command:
+      command: "echo 'First number was: {{num_0}}'"
+      description: "[Test 6] Display first number (should be 10)"
+      shell: true
+
+  #############################################################################
+  # Test 7: Command Output Capture
+  #############################################################################
+
+  # Capture stdout (default)
+  - command:
+      command: "whoami"
+      description: "[Test 7] Capture username"
+      capture:
+        variable: captured_user
+
+  - stop:
+      condition:
+        variable: captured_user
+        is_empty: true
+      description: "[Test 7] Assert username was captured"
+
+  - command:
+      command: "echo 'Captured user: {{captured_user}}'"
+      description: "[Test 7] Use captured variable"
+      shell: true
+
+  # Capture stderr
+  - command:
+      command: "python3 -c 'import sys; sys.stderr.write(\"error_output\")'"
+      description: "[Test 7] Capture stderr"
+      shell: true
+      capture:
+        variable: captured_stderr
+        source: stderr
+
+  - stop:
+      condition:
+        variable: captured_stderr
+        is_empty: true
+      description: "[Test 7] Assert stderr was captured"
+
+  # Capture returncode
+  - command:
+      command: "test -d /tmp"
+      description: "[Test 7] Check /tmp exists"
+      shell: true
+      capture:
+        variable: tmp_check_code
+        source: returncode
+        parser: "output == 0"
+
+  - stop:
+      condition:
+        variable: tmp_check_code
+        equals: false
+      description: "[Test 7] Assert /tmp exists (returncode should be 0/True)"
+
+  # Capture all
+  - command:
+      command: "echo 'test output'"
+      description: "[Test 7] Capture all outputs"
+      shell: true
+      capture:
+        variable: all_outputs
+        source: all
+        parser: "'success' if output['returncode'] == 0 else 'failed'"
+
+  - stop:
+      condition:
+        variable: all_outputs
+        equals: "failed"
+      description: "[Test 7] Assert command succeeded"
+
+  # JSON parsing
+  - command:
+      command: "echo '{\"status\": \"ok\", \"value\": 100}'"
+      description: "[Test 7] Parse JSON output"
+      shell: true
+      capture:
+        variable: json_result
+        parser: "json.loads(output)"
+
+  - stop:
+      condition:
+        variable: json_result
+        is_empty: true
+      description: "[Test 7] Assert JSON was parsed"
+
+  # Extract specific JSON field
+  - command:
+      command: "echo '{\"name\": \"testapp\", \"version\": \"2.5.0\"}'"
+      description: "[Test 7] Extract version from JSON"
+      shell: true
+      capture:
+        variable: app_version
+        parser: "json.loads(output)['version']"
+
+  - command:
+      command: "echo 'App version: {{app_version}}'"
+      description: "[Test 7] Display extracted version"
+      shell: true
+
+  # String manipulation
+  - command:
+      command: "echo 'UPPERCASE TEXT'"
+      description: "[Test 7] Convert to lowercase"
+      shell: true
+      capture:
+        variable: lowercase_text
+        parser: "output.strip().lower()"
+
+  - stop:
+      condition:
+        variable: lowercase_text
+        contains: "UPPERCASE"
+      description: "[Test 7] Assert text was lowercased (should not contain uppercase)"
+
+  # Regex extraction
+  - command:
+      command: "echo 'Version: 1.2.3'"
+      description: "[Test 7] Extract version with regex"
+      shell: true
+      capture:
+        variable: extracted_version
+        parser: "re.search(r'\\d+\\.\\d+\\.\\d+', output).group(0) if re.search(r'\\d+\\.\\d+\\.\\d+', output) else 'unknown'"
+
+  - stop:
+      condition:
+        variable: extracted_version
+        equals: "unknown"
+      description: "[Test 7] Assert version was extracted"
+
+  # Integer parsing
+  - command:
+      command: "echo '456'"
+      description: "[Test 7] Parse integer from output"
+      shell: true
+      capture:
+        variable: parsed_int
+        parser: "int(output.strip())"
+
+  - stop:
+      condition:
+        variable: parsed_int
+        less_than: 400
+      description: "[Test 7] Assert parsed_int >= 400"
+
+  - stop:
+      condition:
+        variable: parsed_int
+        greater_than: 500
+      description: "[Test 7] Assert parsed_int <= 500"
+
+  #############################################################################
+  # Test 8: Variable Conditions - Stop (all operators)
+  #############################################################################
+
+  # Test equals operator
+  - save_variable:
+      name: test_equals
+      value: "exact_match"
+      description: "[Test 8] Variable for equals test"
+
+  - stop:
+      condition:
+        variable: test_equals
+        equals: "wrong_value"
+      description: "[Test 8] This should NOT stop (values don't match)"
+
+  # Test contains operator
+  - save_variable:
+      name: test_contains
+      value: "this_contains_substring"
+      description: "[Test 8] Variable for contains test"
+
+  - stop:
+      condition:
+        variable: test_contains
+        contains: "missing"
+      description: "[Test 8] This should NOT stop (substring not found)"
+
+  # Test matches operator (regex)
+  - save_variable:
+      name: test_matches
+      value: "test@example.com"
+      description: "[Test 8] Variable for matches test"
+
+  - stop:
+      condition:
+        variable: test_matches
+        matches: "^invalid"
+      description: "[Test 8] This should NOT stop (pattern doesn't match)"
+
+  # Test greater_than operator
+  - save_variable:
+      name: test_number
+      value: 50
+      description: "[Test 8] Variable for numeric comparisons"
+
+  - stop:
+      condition:
+        variable: test_number
+        greater_than: 100
+      description: "[Test 8] This should NOT stop (50 is not > 100)"
+
+  # Test less_than operator
+  - stop:
+      condition:
+        variable: test_number
+        less_than: 10
+      description: "[Test 8] This should NOT stop (50 is not < 10)"
+
+  # Test is_empty operator (false = not empty)
+  - save_variable:
+      name: non_empty_var
+      value: "has_content"
+      description: "[Test 8] Variable for is_empty test"
+
+  - stop:
+      condition:
+        variable: non_empty_var
+        is_empty: true
+      description: "[Test 8] This should NOT stop (variable is not empty)"
+
+  # Test is_empty operator (true = is empty) - should stop if NOT empty
+  - save_variable:
+      name: actually_empty
+      value: ""
+      description: "[Test 8] Empty variable"
+
+  - stop:
+      condition:
+        variable: actually_empty
+        is_empty: false
+      description: "[Test 8] This should NOT stop (variable IS empty)"
+
+  #############################################################################
+  # Test 9: Variable Conditions - Continue
+  #############################################################################
+
+  # Continue in simple loop
+  - loop:
+      times: 5
+      description: "[Test 9] Loop with continue based on variable"
+      actions:
+        - save_variable:
+            name: iteration_value
+            value: "{{index}}"
+            description: "[Test 9] Save current index"
+
+        # Skip iteration 2
+        - continue:
+            condition:
+              variable: iteration_value
+              equals: 2
+            description: "[Test 9] Skip iteration 2"
+
+        - command:
+            command: "echo 'Processing iteration {{index}}'"
+            description: "[Test 9] This should not execute for iteration 2"
+            shell: true
+
+        - idle:
+            duration: 0.1
+
+  # Continue in block
+  - save_variable:
+      name: skip_flag
+      value: "skip"
+      description: "[Test 9] Flag to trigger continue in block"
+
+  - block:
+      description: "[Test 9] Block with continue"
+      actions:
+        - command:
+            command: "echo 'First action in block'"
+            description: "[Test 9] This should execute"
+            shell: true
+
+        - continue:
+            condition:
+              variable: skip_flag
+              equals: "skip"
+            description: "[Test 9] Skip remaining block actions"
+
+        - command:
+            command: "echo 'This should be skipped'"
+            description: "[Test 9] This should NOT execute"
+            shell: true
+
+  #############################################################################
+  # Test 10: Variable Persistence and Scope
+  #############################################################################
+
+  # Variable from outer scope accessible in loop
+  - save_variable:
+      name: outer_var
+      value: "from_outer_scope"
+      description: "[Test 10] Variable in outer scope"
+
+  - loop:
+      times: 2
+      description: "[Test 10] Test scope and persistence"
+      actions:
+        # Access outer variable
+        - command:
+            command: "echo 'Outer var: {{outer_var}}'"
+            description: "[Test 10] Access outer scope variable"
+            shell: true
+
+        # Create inner variable
+        - save_variable:
+            name: "inner_var_{{index}}"
+            value: "created_inside_loop"
+            description: "[Test 10] Create variable inside loop"
+
+        - idle:
+            duration: 0.1
+
+  # Inner variables persist after loop
+  - stop:
+      condition:
+        variable: inner_var_0
+        is_empty: true
+      description: "[Test 10] Assert inner_var_0 persists after loop"
+
+  - stop:
+      condition:
+        variable: inner_var_1
+        is_empty: true
+      description: "[Test 10] Assert inner_var_1 persists after loop"
+
+  # Test accumulation pattern
+  - save_variable:
+      name: accumulator
+      value: 0
+      description: "[Test 10] Initialize accumulator"
+
+  - loop:
+      times: 3
+      description: "[Test 10] Accumulation loop"
+      actions:
+        - save_variable:
+            name: accumulator
+            value: "{{ accumulator + 5 }}"
+            description: "[Test 10] Add 5 each iteration"
+
+        - idle:
+            duration: 0.1
+
+  - command:
+      command: "echo 'Accumulator value: {{accumulator}}'"
+      description: "[Test 10] Should be 15 (5+5+5)"
+      shell: true
+
+  - stop:
+      condition:
+        variable: accumulator
+        less_than: 15
+      description: "[Test 10] Assert accumulator >= 15"
+
+  - stop:
+      condition:
+        variable: accumulator
+        greater_than: 15
+      description: "[Test 10] Assert accumulator <= 15"
+
+  #############################################################################
+  # Test 11: Complex Jinja2 Expressions
+  #############################################################################
+
+  # Arithmetic
+  - save_variable:
+      name: calc_result
+      value: "{{ test_integer + 8 }}"
+      description: "[Test 11] Arithmetic expression (42 + 8 = 50)"
+
+  - command:
+      command: "echo 'Calc result: {{calc_result}}'"
+      description: "[Test 11] Display arithmetic result"
+      shell: true
+
+  # String concatenation
+  - save_variable:
+      name: concatenated
+      value: "{{ prefix + '_' + suffix }}"
+      description: "[Test 11] String concatenation (test_file)"
+
+  - command:
+      command: "echo 'Concatenated: {{concatenated}}'"
+      description: "[Test 11] Display concatenation result"
+      shell: true
+
+  # List access
+  - save_variable:
+      name: first_filename
+      value: "{{ filenames[0] }}"
+      description: "[Test 11] Access first list element"
+
+  - command:
+      command: "echo 'First filename: {{first_filename}}'"
+      description: "[Test 11] Display first filename (alpha.txt)"
+      shell: true
+
+  - stop:
+      condition:
+        variable: first_filename
+        equals: "alpha.txt"
+      description: "[Test 11] This should NOT stop (should equal alpha.txt)"
+
+  # Dict access
+  - save_variable:
+      name: config_setting
+      value: "{{ config['setting'] }}"
+      description: "[Test 11] Access dict value"
+
+  - command:
+      command: "echo 'Config setting: {{config_setting}}'"
+      description: "[Test 11] Display config setting (enabled)"
+      shell: true
+
+  #############################################################################
+  # Test 12: Variables in Test Parameters
+  #############################################################################
+
+  # Create test file with variable content
+  - save_variable:
+      name: test_content
+      value: "This is test content"
+      description: "[Test 12] Content for test file"
+
+  - command:
+      command: "echo '{{test_content}}' > {{test_dir}}/test_file_for_testing.txt"
+      description: "[Test 12] Create file with variable content"
+      shell: true
+
+  # Test with variable in path
+  - save_variable:
+      name: filename
+      value: "test_file_for_testing.txt"
+      description: "[Test 12] Filename for test"
+
+  - test: test_file_exists
+
+  # Test with variable in expected content
+  - save_variable:
+      name: expected_content
+      value: "This is test content"
+      description: "[Test 12] Expected content for comparison"
+
+  - test: test_file_content
+
+  #############################################################################
+  # Test 13: Type Coercion Edge Cases
+  #############################################################################
+
+  # Verify coercion happened in Test 2 variables
+  - command:
+      command: "echo 'string_to_int: {{string_to_int}}'"
+      description: "[Test 13] Display coerced int (was '123')"
+      shell: true
+
+  - command:
+      command: "echo 'string_to_bool_true: {{string_to_bool_true}}'"
+      description: "[Test 13] Display coerced bool true (was 'true')"
+      shell: true
+
+  - command:
+      command: "echo 'string_to_bool_false: {{string_to_bool_false}}'"
+      description: "[Test 13] Display coerced bool false (was 'false')"
+      shell: true
+
+  - command:
+      command: "echo 'string_to_float: {{string_to_float}}'"
+      description: "[Test 13] Display coerced float (was '3.14159')"
+      shell: true
+
+  #############################################################################
+  # Test 14: Variable Usage Across Actions
+  #############################################################################
+
+  - save_variable:
+      name: cross_action_var
+      value: "shared_value"
+      description: "[Test 14] Create variable for cross-action usage"
+
+  # Use in command
+  - command:
+      command: "echo 'Cross-action var: {{cross_action_var}}'"
+      description: "[Test 14] Use in command action"
+      shell: true
+
+  # Use in conditional (stop if wrong value)
+  - stop:
+      condition:
+        variable: cross_action_var
+        equals: "wrong_value"
+      description: "[Test 14] This should NOT stop (correct value)"
+
+  # Use in loop items (create list from variable)
+  - save_variable:
+      name: dynamic_list
+      value: ["item1", "item2", "item3"]
+      description: "[Test 14] Dynamic list variable"
+
+  - loop:
+      items: "{{dynamic_list}}"
+      description: "[Test 14] Loop using dynamic list variable"
+      actions:
+        - command:
+            command: "echo 'Dynamic item: {{item}}'"
+            description: "[Test 14] Process dynamic list item"
+            shell: true
+
+        - idle:
+            duration: 0.1
+
+  #############################################################################
+  # Test 15: Dynamic Variable Creation in Loop with Local Assertions
+  # This is the USER'S SPECIFIC REQUEST
+  #############################################################################
+
+  # Part A: Timestamps with dynamic names
+  - loop:
+      times: 3
+      description: "[Test 15A] Create timestamps with dynamic names"
+      actions:
+        - save_timestamp:
+            variable: "loop_timestamp_{{index}}"
+            description: "[Test 15A] Save timestamp for iteration {{index}}"
+
+        - idle:
+            duration: 0.1
+
+  # Local assertions after loop - verify each timestamp exists
+  - stop:
+      condition:
+        variable: loop_timestamp_0
+        is_empty: true
+      description: "[Test 15A] Assert loop_timestamp_0 exists (fail if empty)"
+
+  - stop:
+      condition:
+        variable: loop_timestamp_1
+        is_empty: true
+      description: "[Test 15A] Assert loop_timestamp_1 exists (fail if empty)"
+
+  - stop:
+      condition:
+        variable: loop_timestamp_2
+        is_empty: true
+      description: "[Test 15A] Assert loop_timestamp_2 exists (fail if empty)"
+
+  - command:
+      command: "echo 'All timestamps created: {{loop_timestamp_0}}, {{loop_timestamp_1}}, {{loop_timestamp_2}}'"
+      description: "[Test 15A] Display all timestamps"
+      shell: true
+
+  # Part B: Variables with values and assertions
+  - loop:
+      times: 5
+      description: "[Test 15B] Create computed variables in loop"
+      actions:
+        - save_variable:
+            name: "result_{{index}}"
+            value: "{{ index * 10 }}"
+            description: "[Test 15B] Save computed value for iteration {{index}}"
+
+        - idle:
+            duration: 0.1
+
+  # Assertions for specific values
+  - stop:
+      condition:
+        variable: result_0
+        is_empty: true
+      description: "[Test 15B] Assert result_0 exists"
+
+  - stop:
+      condition:
+        variable: result_4
+        is_empty: true
+      description: "[Test 15B] Assert result_4 exists"
+
+  # Assert result_4 = 40 using boundaries
+  - stop:
+      condition:
+        variable: result_4
+        less_than: 40
+      description: "[Test 15B] Assert result_4 >= 40 (should be 40)"
+
+  - stop:
+      condition:
+        variable: result_4
+        greater_than: 40
+      description: "[Test 15B] Assert result_4 <= 40 (should be 40)"
+
+  - command:
+      command: "echo 'Result values: {{result_0}}, {{result_1}}, {{result_2}}, {{result_3}}, {{result_4}}'"
+      description: "[Test 15B] Display all result values"
+      shell: true
+
+  # Part C: String variables with pattern assertions
+  - loop:
+      items: ["alpha", "beta", "gamma"]
+      item_var: name
+      description: "[Test 15C] Create string variables with patterns"
+      actions:
+        - save_variable:
+            name: "item_{{index}}"
+            value: "{{name}}_processed"
+            description: "[Test 15C] Save processed name"
+
+        - idle:
+            duration: 0.1
+
+  # Assert patterns using regex and contains
+  - stop:
+      condition:
+        variable: item_0
+        is_empty: true
+      description: "[Test 15C] Assert item_0 exists"
+
+  - stop:
+      condition:
+        variable: item_1
+        is_empty: true
+      description: "[Test 15C] Assert item_1 exists"
+
+  - stop:
+      condition:
+        variable: item_2
+        is_empty: true
+      description: "[Test 15C] Assert item_2 exists"
+
+  # Check patterns (should NOT stop - patterns should match)
+  - stop:
+      condition:
+        variable: item_0
+        matches: "^beta_"
+      description: "[Test 15C] This should NOT stop (item_0 starts with 'alpha_', not 'beta_')"
+
+  - stop:
+      condition:
+        variable: item_1
+        contains: "alpha"
+      description: "[Test 15C] This should NOT stop (item_1 contains 'beta', not 'alpha')"
+
+  - command:
+      command: "echo 'Processed items: {{item_0}}, {{item_1}}, {{item_2}}'"
+      description: "[Test 15C] Display all processed items"
+      shell: true
+
+  #############################################################################
+  # Test 16: Negative Assertions (Assert False Conditions)
+  #############################################################################
+
+  - save_variable:
+      name: should_be_empty
+      value: ""
+      description: "[Test 16] Empty variable for negative assertion"
+
+  # This should NOT stop because variable IS empty
+  - stop:
+      condition:
+        variable: should_be_empty
+        is_empty: false
+      description: "[Test 16] This should NOT stop (variable IS empty, condition checks not-empty)"
+
+  - save_variable:
+      name: should_not_contain_xyz
+      value: "abc123"
+      description: "[Test 16] Variable that doesn't contain 'xyz'"
+
+  # This should NOT stop because variable doesn't contain 'xyz'
+  - stop:
+      condition:
+        variable: should_not_contain_xyz
+        contains: "xyz"
+      description: "[Test 16] This should NOT stop (variable doesn't contain 'xyz')"
+
+  #############################################################################
+  # Test 17: Complex Assertion Chains
+  #############################################################################
+
+  - save_variable:
+      name: chain_counter
+      value: 0
+      description: "[Test 17] Initialize counter for accumulation"
+
+  - loop:
+      times: 10
+      description: "[Test 17] Accumulate values in loop"
+      actions:
+        - save_variable:
+            name: chain_counter
+            value: "{{ chain_counter + 1 }}"
+            description: "[Test 17] Increment counter by 1"
+
+        - idle:
+            duration: 0.1
+
+  # Assert final accumulated value equals 10 using boundary checks
+  - stop:
+      condition:
+        variable: chain_counter
+        less_than: 10
+      description: "[Test 17] Assert chain_counter >= 10 (should be exactly 10)"
+
+  - stop:
+      condition:
+        variable: chain_counter
+        greater_than: 10
+      description: "[Test 17] Assert chain_counter <= 10 (should be exactly 10)"
+
+  - command:
+      command: "echo 'Chain counter final value: {{chain_counter}}'"
+      description: "[Test 17] Display final value (should be 10)"
+      shell: true
+
+  # Multiple assertions on different aspects
+  - save_variable:
+      name: final_string
+      value: "test_complete_success"
+      description: "[Test 17] Final validation variable"
+
+  - stop:
+      condition:
+        variable: final_string
+        is_empty: true
+      description: "[Test 17] Assert final_string exists"
+
+  - stop:
+      condition:
+        variable: final_string
+        contains: "fail"
+      description: "[Test 17] Assert final_string doesn't contain 'fail'"
+
+  - stop:
+      condition:
+        variable: final_string
+        matches: "^error"
+      description: "[Test 17] Assert final_string doesn't start with 'error'"
+
+  - command:
+      command: "echo '=== ALL VARIABLE TESTS COMPLETED SUCCESSFULLY ==='"
+      description: "Final success message"
+      shell: true

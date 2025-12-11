@@ -259,15 +259,20 @@ def environment():
 @click.argument('environment')
 @click.option('--project', '-p', help='Name of the project')
 @click.option('--force', '-f', is_flag=True, help='Force update of the environment')
-def load(environment, project, force):
+@click.option('--no-copy', is_flag=True, help='Keep VM file at original location instead of copying to managed storage (local files only). WARNING: Do not move or delete the original file!')
+def load(environment, project, force, no_copy):
     """Load an environment.
 
     ENVIRONMENT can be:
     - Simple name: ubuntu24
     - Relative path: environments/ubuntu24.yml
     - Relative path: ./environments/ubuntu24.yaml
+
+    The --no-copy flag prevents copying VM files to managed storage (~/.adare/state/vms).
+    This is useful for large VMs or when disk space is limited.
+    Note: The VM file must remain at the original location for experiments to work.
     """
-    args = SimpleNamespace(environment=environment, project=project, force=force)
+    args = SimpleNamespace(environment=environment, project=project, force=force, no_copy=no_copy)
     exec_with_error_printing(exec_environment_load, args)
 
 @environment.command()

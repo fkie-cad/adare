@@ -39,17 +39,33 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
     
     # Get VM file path
     vm_file_path = Path(vm_record.file)
+
+    # CLAUDE: Check if this is an external VM file
+    is_external = not _is_vm_managed(vm_file_path)
+
     if not vm_file_path.exists():
         from adare.backend.experiment.exceptions import ExperimentIntegrityError
-        raise ExperimentIntegrityError(
-            log,
-            f"VM file not found: {vm_file_path}",
-            possible_solutions=[
-                "Check if VM file was moved or deleted",
-                "Re-import VM with correct file path",
-                "Verify file system permissions"
-            ]
-        )
+        if is_external:
+            raise ExperimentIntegrityError(
+                log,
+                f"External VM file not found: {vm_file_path}\n"
+                f"This VM was loaded with --no-copy and the original file is missing.",
+                possible_solutions=[
+                    f"Restore the VM file to its original location: {vm_file_path}",
+                    "Re-load the environment with a new VM file",
+                    "Use 'adare environment load' without --no-copy to copy the VM to managed storage"
+                ]
+            )
+        else:
+            raise ExperimentIntegrityError(
+                log,
+                f"VM file not found: {vm_file_path}",
+                possible_solutions=[
+                    "Check if VM file was moved or deleted",
+                    "Re-import VM with correct file path",
+                    "Verify file system permissions"
+                ]
+            )
     
     # Calculate current hash and compare with stored hash
     vm_manager = VMFileManager()
@@ -84,7 +100,7 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
         await verify_in_stage()
 
 
-def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_metadata) -> dict:
+def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_metadata, no_copy: bool = False) -> dict:
     """
     Load VM file during environment load - only hash calculation and file copying.
     No VirtualBox import happens here!
@@ -93,6 +109,7 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
         project_path: Path to the project
         vm_path: Path to VM file
         environment_metadata: Environment configuration
+        no_copy: If True, reference file at original location instead of copying
 
     Returns:
         Dict with 'vm_id' and 'was_existing' keys
@@ -126,6 +143,12 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
 
     # VM doesn't exist or existing VM can't be reused - create new one with file operations
     log.info(f"Creating new VM entry with file operations...")
+
+    # CLAUDE: Determine if we should copy or reference
+    if no_copy:
+        log.info(f"Using --no-copy mode: VM file will be referenced at original location")
+        log.warning(f"IMPORTANT: VM file must remain at {vm_path} for experiments to work!")
+
     vm = vm_database.create_vm(
         project_path=project_path,
         name=vm_path.stem,
@@ -138,7 +161,8 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
         os_version=environment_metadata.os.version,
         os_language=environment_metadata.os.language,
         os_architecture=environment_metadata.os.architecture,
-        silent=False
+        silent=False,
+        no_copy=no_copy  # Pass the flag
     )
 
     log.info(f"VM file loaded into database: {vm.name} (ID: {vm.id})")
@@ -794,4 +818,24 @@ def get_vm_info(vm_id: str) -> dict:
         'use_snapshots': getattr(vm, 'use_snapshots', False),
         'snapshots': snapshot_info
     }
+
+
+def _is_vm_managed(vm_file_path: Path) -> bool:
+    """
+    Check if a VM file is managed (in VMS_DIR) or external.
+
+    Args:
+        vm_file_path: Path to VM file
+
+    Returns:
+        True if VM is in managed storage, False if external
+    """
+    from adare.config.configdirectory import VMS_DIR
+    try:
+        # Check if vm_file_path is relative to VMS_DIR
+        vm_file_path.resolve().relative_to(VMS_DIR.resolve())
+        return True
+    except ValueError:
+        # Path is not relative to VMS_DIR - it's external
+        return False
 

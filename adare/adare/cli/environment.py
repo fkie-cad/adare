@@ -10,7 +10,8 @@ log = logging.getLogger(__name__)
 def exec_environment_load(arguments):
     from adare.backend.environment.commands import environment_load
     # Environments are now global - no project context needed
-    environment_load(arguments.environment, force=arguments.force)
+    no_copy = getattr(arguments, 'no_copy', False)
+    environment_load(arguments.environment, force=arguments.force, no_copy=no_copy)
 
 
 
