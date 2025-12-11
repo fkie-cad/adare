@@ -11,7 +11,7 @@ from pathlib import Path
 from adare.types.playbook import (
     ActionType, ClickAction, DragAction, KeyboardAction, IdleAction,
     ScrollAction, GotoAction, CommandAction, ScreenshotAction, BlockAction,
-    ActionTestAction, SaveTimestampAction, PullAction, PauseAction,
+    ActionTestAction, SaveTimestampAction, SaveVariableAction, PullAction, PauseAction,
     WaitUntilAction, LoopAction, StopAction, ContinueAction, SnapshotFilesystemAction,
     PullChangedFilesAction
 )
@@ -167,6 +167,9 @@ class ActionExecutor:
             elif isinstance(resolved_action, SaveTimestampAction):
                 result = await self.simple_actions.execute_save_timestamp(resolved_action, parent_event_id, event_emitter)
 
+            elif isinstance(resolved_action, SaveVariableAction):
+                result = await self.simple_actions.execute_save_variable(resolved_action, parent_event_id, event_emitter)
+
             elif isinstance(resolved_action, PullAction):
                 result = await self.simple_actions.execute_pull(resolved_action, parent_event_id, event_emitter)
 
@@ -226,8 +229,8 @@ class ActionExecutor:
             # Post-execution debug screenshot (if enabled and action was successful)
             if self.debug_screenshots and result and result.success:
                 # Only capture for GUI-modifying actions (exclude non-GUI actions)
-                non_gui_actions = (IdleAction, SaveTimestampAction, PullAction,
-                                   BlockAction, LoopAction, ActionTestAction,
+                non_gui_actions = (IdleAction, SaveTimestampAction, SaveVariableAction,
+                                   PullAction, BlockAction, LoopAction, ActionTestAction,
                                    WaitUntilAction, PauseAction, StopAction, ContinueAction,
                                    SnapshotFilesystemAction, PullChangedFilesAction)
                 if not isinstance(resolved_action, non_gui_actions):

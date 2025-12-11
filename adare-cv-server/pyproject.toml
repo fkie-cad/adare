@@ -10,7 +10,7 @@ packages = [{include = "adare_cv_server"}]
 adare-cv-server = "adare_cv_server.server:main"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = ">=3.13,<3.14"
 fastmcp = "^2.9.2"
 click = "^8.1.7"
 opencv-python = "^4.10.0"

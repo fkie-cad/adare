@@ -1,0 +1,1079 @@
+*******
+Actions
+*******
+
+Playbooks are the heart of ADARE experiments - YAML files that define automated forensic scenarios through GUI actions, system commands, and validation tests. This comprehensive guide covers everything you need to create effective playbooks.
+
+Getting Started
+***************
+
+Every playbook follows this structure:
+
+.. code-block:: yaml
+
+   # Global experiment settings
+   settings:
+     idle: 1.0              # Default pause between actions
+     timeout: 300           # Maximum experiment duration
+     screenshot:
+       format: "png"
+       quality: 95
+
+   # Reusable variables with templating
+   variables:
+     username:
+       type: string
+       value: "adare"
+       description: "System username"
+
+     evidence_file:
+       type: path
+       value: "/home/{{username}}/evidence.txt"
+       description: "File path for evidence"
+
+   # Validation tests for forensic artifacts
+   tests:
+     - name: file_exists_check
+       description: "Verify evidence file was created"
+       function: file_exists
+       parameter:
+         dst: '{{evidence_file}}'
+
+   # Automation sequence
+   actions:
+     - command:
+         name: "Create Evidence"
+         command: "touch {{evidence_file}}"
+     - test: file_exists_check
+
+Required Sections
+=================
+
+**settings** (Optional)
+  Global configuration for the experiment
+
+**variables** (Optional)
+  Reusable values with templating support
+
+**tests** (Required)
+  Forensic validation definitions
+
+**actions** (Required)
+  Sequence of automated interactions
+
+Settings Configuration
+**********************
+
+Global Settings
+===============
+
+Configure experiment-wide behavior:
+
+.. code-block:: yaml
+
+   settings:
+     # Timing configuration
+     idle: 1.5                    # Default pause between actions (seconds)
+     timeout: 600                 # Max experiment duration (seconds)
+
+     # Screenshot settings
+     screenshot:
+       format: "png"              # or "jpg"
+       quality: 95                # 1-100 (PNG) or 1-100 (JPG)
+       on_action: true            # Screenshot after each action
+       on_error: true             # Screenshot on failures
+
+     # Test failure handling
+     continue_on_test_failure: true # Continue experiment even if tests fail
+     auto_pull_on_test_failure: true # Automatically pull files on test failure for analysis
+
+     # Retry behavior
+     retry:
+       attempts: 3                # Retry failed actions
+       delay: 2.0                 # Delay between retries
+
+     # GUI automation settings
+     gui:
+       click_delay: 0.1           # Delay after clicks
+       type_delay: 0.05           # Delay between keystrokes
+
+     # OCR configuration
+     ocr:
+       language: "eng"            # Tesseract language code
+       confidence: 0.8            # Text matching confidence
+
+     # Performance settings
+     performance:
+       parallel_tests: false      # Run tests in parallel
+       cache_screenshots: true    # Cache images for speed
+
+Platform-Specific Settings
+===========================
+
+.. code-block:: yaml
+
+   settings:
+     # Windows-specific
+     windows:
+       disable_animations: true   # Speed up GUI
+       use_win32_api: true       # Native Windows APIs
+
+     # Linux-specific
+     linux:
+       display: ":0"             # X11 display
+       window_manager: "gnome"   # Desktop environment
+
+Variables and Templating
+************************
+
+Variable Types
+==============
+
+Define typed variables for better validation:
+
+.. code-block:: yaml
+
+   variables:
+     # String variables
+     username:
+       type: string
+       value: "forensics"
+       description: "System username for testing"
+
+     # Path variables (with validation)
+     evidence_dir:
+       type: path
+       value: "/home/{{username}}/evidence"
+       description: "Directory for storing evidence"
+
+     # Integer variables
+     file_count:
+       type: integer
+       value: 5
+       description: "Number of test files to create"
+
+     # Boolean variables
+     cleanup_after:
+       type: boolean
+       value: true
+       description: "Clean up test files after experiment"
+
+     # List variables
+     test_files:
+       type: list
+       value:
+         - "document1.pdf"
+         - "spreadsheet.xlsx"
+         - "presentation.pptx"
+       description: "Files to test deletion behavior"
+
+Template Syntax
+===============
+
+ADARE uses Jinja2 templating for dynamic content:
+
+.. code-block:: yaml
+
+   variables:
+     base_path: "/home/adare"
+     username: "forensics"
+     case_id: "CASE-2025-001"
+
+   actions:
+     # Basic variable substitution
+     - command:
+         command: "mkdir {{base_path}}/{{case_id}}"
+
+Variable Filters
+================
+
+.. warning::
+   **Variable Filter Validation Limitation**
+
+   Variable filters currently have **limited validation** during playbook parsing. Filter syntax errors or incorrect parameters may only be discovered during experiment execution, potentially causing failures mid-experiment.
+
+   **Recommendation**: Test playbooks thoroughly in test mode (the default) before using ``--production`` flag
+
+ADARE supports powerful filters for data transformation:
+
+**Date and Time Filters**
+
+.. code-block:: yaml
+
+   variables:
+     current_time:
+       type: timestamp
+       value: "{{ now() }}"
+
+   tests:
+     - name: check_modification_time
+       function: file_modified_since
+       parameter:
+         dst: "/evidence/test.txt"
+         # Format timestamp and add tolerance for timing variations
+         since: "{{ current_time | format('%Y-%m-%d %H:%M:%S') | tolerance(10, -10) }}"
+
+**Available Date/Time Filters:**
+
+- ``format(pattern)``: Format timestamp using strftime patterns
+- ``tolerance(+seconds, -seconds)``: Add time range for flexible matching
+- ``timezone(tz)``: Convert to specified timezone (e.g., "UTC", "America/New_York")
+- ``localtime(bool)``: Interpret timestamp as local time if true
+
+.. code-block:: yaml
+
+   variables:
+     deletion_time: "2025-09-10T10:30:00"
+
+   actions:
+     - save_timestamp:
+         variable: actual_deletion
+
+   tests:
+     - name: verify_deletion_time
+       function: timestamp_within_range
+       parameter:
+         actual: "{{ actual_deletion | format('%Y-%m-%d %H:%M:%S') }}"
+         expected: "{{ deletion_time | format('%Y-%m-%d %H:%M:%S') | tolerance(5, -5) }}"
+
+Test Definitions
+****************
+
+Basic Test Structure
+====================
+
+.. code-block:: yaml
+
+   tests:
+     - name: file_created_successfully
+       description: "Verify the evidence file was created"
+       function: file_exists
+       parameter:
+         dst: "/evidence/test.txt"
+
+Test Failure Handling
+======================
+
+**Auto-Pull on Test Failure**
+
+When ``auto_pull_on_test_failure`` is enabled (default: ``true``), ADARE automatically pulls all files mentioned in pull actions when any test fails. This provides valuable forensic data for failure analysis:
+
+.. code-block:: yaml
+
+   settings:
+     auto_pull_on_test_failure: true  # Pull files for failure analysis (default)
+     continue_on_test_failure: true   # Continue after test failures
+
+   actions:
+     - command:
+         command: "echo 'log entry' > /var/log/app.log"
+     - pull:
+         src: "/var/log/app.log"
+         description: "Application logs"
+     - test: validate_log_content
+
+If ``validate_log_content`` fails, ADARE will automatically pull ``/var/log/app.log`` to the artifacts directory for analysis, even if the explicit pull action hasn't been reached yet.
+
+Key behaviors:
+
+* Auto-pull only triggers once per experiment execution
+* Files are pulled with variable resolution applied
+* Failed auto-pulls are logged but don't cause experiment failure
+* Auto-pulled files are stored in the standard artifacts directory
+
+**Expect Test to Fail**
+
+Use ``expect_to_fail`` when testing negative conditions:
+
+.. code-block:: yaml
+
+   tests:
+     - name: file_should_not_exist
+       description: "Verify file was deleted completely"
+       function: file_exists
+       expect_to_fail: true    # Test passes if function fails
+       parameter:
+         dst: "/evidence/deleted.txt"
+
+     - name: invalid_registry_key
+       description: "Confirm registry key doesn't exist"
+       function: windows.registry_key_exists
+       expect_to_fail: true
+       parameter:
+         key: "HKEY_CURRENT_USER\\Software\\NonExistentApp"
+
+**Continue on Test Failure**
+
+Configure behavior when tests fail:
+
+.. code-block:: yaml
+
+   settings:
+     continue_on_test_failure: true  # Don't stop experiment on test failures
+
+   tests:
+     - name: optional_check
+       description: "This test might fail, but experiment continues"
+       function: file_exists
+       parameter:
+         dst: "/optional/file.txt"
+
+Actions Reference
+*****************
+
+For detailed action documentation, see :doc:`actions/index`.
+
+This section provides a quick overview. For comprehensive documentation of all actions organized by category, refer to the full actions reference.
+
+Quick Action Overview
+=====================
+
+.. list-table::
+   :widths: 25 75
+   :header-rows: 1
+
+   * - Action Type
+     - Description
+   * - :doc:`actions/gui/index`
+     - Click, keyboard input, drag-and-drop, scrolling
+   * - :doc:`actions/command/index`
+     - Shell command execution with output capture
+   * - :doc:`actions/test/index`
+     - Execute forensic validation tests
+   * - :doc:`actions/flow/index`
+     - Delays, loops, conditional execution, branching
+   * - :doc:`actions/variable/index`
+     - Save timestamps and computed values
+   * - :doc:`actions/file/index`
+     - File transfer and filesystem tracking
+   * - :doc:`actions/debug/index`
+     - Interactive pauses and screenshots
+
+**For complete action reference with all parameters and examples, see:**
+
+.. toctree::
+   :maxdepth: 1
+
+   actions/index
+
+Playbook Organization
+
+.. code-block:: yaml
+
+   actions:
+     # Type text
+     - type:
+         text: "forensic evidence data"
+         description: "Enter evidence data"
+
+     # Keyboard shortcuts
+     - keyboard:
+         combination: ["ctrl", "s"]
+         description: "Save file with Ctrl+S"
+
+     # Complex key sequences
+     - keyboard:
+         combination: ["alt", "f4"]
+         description: "Close application"
+
+     # Special keys
+     - keyboard:
+         key: "delete"
+         description: "Press Delete key"
+
+     # Function keys
+     - keyboard:
+         key: "f5"
+         description: "Refresh view"
+
+     # Arrow keys
+     - keyboard:
+         key: "arrow_down"
+         description: "Navigate down"
+
+     # Other special keys
+     - keyboard:
+         key: "escape"
+         description: "Press Escape"
+
+     - keyboard:
+         key: "enter"
+         description: "Press Enter"
+
+     - keyboard:
+         key: "tab"
+         description: "Press Tab"
+
+     - keyboard:
+         key: "space"
+         description: "Press Space"
+
+**Available Special Keys:**
+
+- Function keys: ``f1``, ``f2``, ... ``f12``
+- Arrow keys: ``arrow_up``, ``arrow_down``, ``arrow_left``, ``arrow_right``
+- Navigation: ``home``, ``end``, ``page_up``, ``page_down``
+- Editing: ``insert``, ``delete``, ``backspace``
+- System: ``escape``, ``enter``, ``tab``, ``space``
+- Modifiers: ``ctrl``, ``alt``, ``shift``, ``cmd`` (Mac)
+
+**Mouse Actions**
+
+.. code-block:: yaml
+
+   actions:
+     # Double-click
+     - double_click:
+         target:
+           image: "file_icon.png"
+         description: "Open file by double-clicking"
+
+     # Right-click for context menu
+     - right_click:
+         target:
+           text: "filename.txt"
+         description: "Right-click for context menu"
+
+     # Drag and drop
+     - drag:
+         from:
+           coordinates: [100, 200]
+         to:
+           coordinates: [300, 400]
+         description: "Drag file to trash"
+
+System Actions
+==============
+
+**Command Execution**
+
+.. code-block:: yaml
+
+   actions:
+     # Simple commands
+     - command:
+         name: "Create Evidence Directory"
+         command: "mkdir -p /evidence/{{case_id}}"
+         shell: true
+
+     # Commands with output capture
+     - command:
+         name: "List Files"
+         command: "ls -la /evidence/"
+         shell: true
+         capture_output: true
+         save_to: "file_listing"
+
+     # Admin/elevated commands
+     - command:
+         name: "Install Forensic Tool"
+         command: "msi /i ForensicTool.msi /quiet"
+         admin: true              # Windows: Run as Administrator
+         shell: true
+
+     # Multi-line commands
+     - command:
+         name: "Complex Setup"
+         command: |
+           cd /evidence
+           mkdir case_{{case_id}}
+           chmod 755 case_{{case_id}}
+           echo "Case started: {{now()}}" > case_{{case_id}}/log.txt
+         shell: true
+
+.. note::
+   Commands can capture output to variables for use in conditional flow control. See :ref:`Command Output Capture` in the Conditional Flow Control section.
+
+**File Operations**
+
+.. code-block:: yaml
+
+   actions:
+     # File copy
+     - file_copy:
+         source: "/source/evidence.txt"
+         destination: "/evidence/copied_evidence.txt"
+         preserve_metadata: true
+
+     # File move
+     - file_move:
+         source: "/tmp/temp_evidence.txt"
+         destination: "/evidence/final_evidence.txt"
+
+     # File deletion (for testing deletion artifacts)
+     - file_delete:
+         path: "/evidence/to_be_deleted.txt"
+         secure: false            # Normal deletion (creates artifacts)
+
+Timing Control Actions
+======================
+
+**Delays and Pauses**
+
+.. code-block:: yaml
+
+   actions:
+     # Simple delays
+     - idle:
+         duration: 2.5
+         description: "Wait for application to load"
+
+     # Variable delays
+     - idle:
+         duration: '{{load_time}}'
+         description: "Wait for configurable load time"
+
+**Interactive Pauses**
+
+.. code-block:: yaml
+
+  - pause:
+      name: "Configuration Check"
+
+**Wait Until Conditions**
+
+.. code-block:: yaml
+
+   actions:
+     # Wait for specific element to appear
+     - wait_until:
+         condition:
+           exists:
+             text: "Documents"
+         timeout: 30.0
+         description: "Wait for Documents text to appear"
+
+     # Wait for element with image
+     - wait_until:
+         condition:
+           exists:
+             image: "save_button.png"
+             confidence: 0.8
+         timeout: 60.0
+         check_interval: 1.0
+         initial_delay: 2.0
+         description: "Wait for Save button to become visible"
+
+     # Wait for element to disappear
+     - wait_until:
+         condition:
+           not_exists:
+             text: "Loading..."
+         timeout: 45.0
+         description: "Wait for loading text to disappear"
+
+     # Complex conditions with boolean logic
+     - wait_until:
+         condition:
+           all:  # AND logic - all conditions must be true
+             - exists:
+                 text: "Ready"
+             - not_exists:
+                 text: "Loading"
+         timeout: 30.0
+         description: "Wait for application to be ready"
+
+     - wait_until:
+         condition:
+           any:  # OR logic - any condition can be true
+             - exists:
+                 text: "Save"
+             - exists:
+                 text: "Export"
+         timeout: 20.0
+         description: "Wait for either Save or Export button"
+
+     # Negated conditions
+     - wait_until:
+         condition:
+           negate:  # NOT logic - condition must be false
+             exists:
+               text: "Error"
+         timeout: 15.0
+         description: "Wait until no error is displayed"
+
+**Wait Until Parameters:**
+
+- ``condition``: The condition to wait for (required)
+
+  - ``exists``: Wait for element to appear
+  - ``not_exists``: Wait for element to disappear
+  - ``all``: All sub-conditions must be true (AND logic)
+  - ``any``: Any sub-condition can be true (OR logic)
+  - ``negate``: Condition must be false (NOT logic)
+
+- ``timeout``: Maximum time to wait in seconds (default: 60.0)
+- ``check_interval``: Delay between condition checks in seconds (default: 0.0 - no delay)
+- ``initial_delay``: Initial delay before first check in seconds (default: 5.0)
+- ``description``: Human-readable description of what we're waiting for
+
+
+Evidence Collection Actions
+===========================
+
+**Screenshots**
+
+.. code-block:: yaml
+
+   actions:
+     # Full screen capture
+     - screenshot:
+         name: "evidence_screen_{{timestamp}}"
+         description: "Capture current screen state"
+
+     # Region capture
+     - screenshot:
+         name: "dialog_capture"
+         region: [100, 100, 400, 300]  # x, y, width, height
+         description: "Capture dialog box only"
+
+     # High-quality evidence capture
+     - screenshot:
+         name: "forensic_evidence"
+         quality: 100
+         format: "png"
+         description: "High-quality evidence capture"
+
+**Timestamp Recording**
+
+.. code-block:: yaml
+
+   actions:
+     # Simple timestamp
+     - save_timestamp:
+         variable: "deletion_start"
+         description: "Record when file deletion began"
+
+
+**File Transfer from VM**
+
+.. code-block:: yaml
+
+   actions:
+     # Pull single file (preserves full path structure)
+     - pull:
+         src: "/var/log/app.log"
+         description: "Application logs"
+
+     # Pull file with custom destination name
+     - pull:
+         src: "{{test_file_path}}"
+         dst: "my_log.txt"
+         description: "Custom named log"
+
+     # Pull entire directory (recursive)
+     - pull:
+         src: "/home/user/evidence"
+         description: "Evidence directory"
+
+     # Pull Windows file
+     - pull:
+         src: "C:\\Users\\adare\\Documents\\data.csv"
+         dst: "windows_data.csv"
+         description: "Windows data file"
+
+Files are saved to ``<run-directory>/artifacts/``. Without ``dst``, the full VM path structure is preserved.
+
+Loop Actions
+============
+
+**Repeat Actions Multiple Times**
+
+.. code-block:: yaml
+
+   actions:
+     # Counter-based loop
+     - loop:
+         times: 5
+         description: "Create 5 numbered files"
+         actions:
+           - command:
+               command: "echo 'File {{index}}' > /tmp/file_{{index}}.txt"
+               shell: true
+
+**Iterate Over Lists**
+
+.. code-block:: yaml
+
+   variables:
+     filenames:
+       type: list
+       value: ["alpha.txt", "beta.txt", "gamma.txt"]
+
+   actions:
+     # Loop over list items
+     - loop:
+         items: "{{filenames}}"
+         description: "Process each filename"
+         actions:
+           - command:
+               command: "touch /tmp/{{item}}"
+               shell: true
+
+     # Custom variable name for clarity
+     - loop:
+         items: "{{filenames}}"
+         item_var: filename
+         actions:
+           - pull:
+               src: "/tmp/{{filename}}"
+               dst: "{{filename}}"
+
+**Loop Variables:**
+
+- ``{{index}}``: Current iteration (0-based)
+- ``{{total}}``: Total iterations
+- ``{{item}}``: Current list item (or custom name via ``item_var``)
+
+Block Actions
+=============
+
+**Grouping Actions**
+
+.. code-block:: yaml
+
+   actions:
+     # Group related actions
+     - block:
+         name: "Evidence File Setup"
+         description: "Prepare evidence files for testing"
+         actions:
+           - command: {command: "mkdir /evidence"}
+           - command: {command: "touch /evidence/test.txt"}
+           - test: file_created_successfully
+
+     # Nested blocks
+     - block:
+         name: "File Deletion Test"
+         actions:
+           - block:
+               name: "Select File"
+               actions:
+                 - click: {target: {text: "test.txt"}}
+                 - screenshot: {name: "file_selected"}
+           - block:
+               name: "Delete File"
+               actions:
+                 - keyboard: {combination: ["delete"]}
+                 - save_timestamp: {variable: "deletion_time"}
+
+Conditional Flow Control
+*************************
+
+ADARE provides powerful conditional flow control to make playbooks dynamic and responsive to runtime conditions. You can conditionally stop execution, skip actions, or execute blocks based on variable values or UI state.
+
+Stop Action
+===========
+
+Stop playbook execution conditionally or unconditionally.
+
+**Unconditional Stop**
+
+.. code-block:: yaml
+
+   actions:
+     - command:
+         command: "whoami"
+         capture:
+           variable: current_user
+     - stop:
+         description: "Stop here for debugging"
+
+**Conditional Stop**
+
+.. code-block:: yaml
+
+   actions:
+     - command:
+         command: "whoami"
+         capture:
+           variable: current_user
+     - stop:
+         condition:
+           variable: current_user
+           is_empty: true
+         description: "Stop if username capture failed"
+
+When a stop condition evaluates to true, the playbook execution halts immediately. Without a condition, the stop always executes.
+
+.. note::
+   See :doc:`../advanced/playbook-patterns` for complex stop patterns with regex matching and multi-stage validation.
+
+Continue Action
+===============
+
+Skip remaining actions in the current loop iteration or block.
+
+**Continue in Loops**
+
+.. code-block:: yaml
+
+   actions:
+     - loop:
+         times: 5
+         actions:
+           - command:
+               command: "echo {{index}}"
+               capture:
+                 variable: iteration_num
+                 parser: "int(output.strip())"
+           - continue:
+               condition:
+                 variable: iteration_num
+                 equals: 3
+               description: "Skip iteration 3"
+           - command:
+               command: "echo 'Processing {{iteration_num}}'"
+
+**Continue in Blocks**
+
+.. code-block:: yaml
+
+   actions:
+     - command:
+         command: "echo 'skip'"
+         capture:
+           variable: action_flag
+     - block:
+         actions:
+           - command:
+               command: "echo 'First action'"
+           - continue:
+               condition:
+                 variable: action_flag
+                 equals: "skip"
+           - command:
+               command: "echo 'This will be skipped'"
+
+.. note::
+   See :doc:`../advanced/playbook-patterns` for advanced continue patterns and nested loop control.
+
+Variable Conditions
+===================
+
+Variable conditions are evaluated on the host machine and support multiple operators for flexible control flow.
+
+**Available Operators**
+
++----------------+-----------------------------------------------------+
+| Operator       | Description                                         |
++================+=====================================================+
+| equals         | Direct equality comparison (case-sensitive)         |
++----------------+-----------------------------------------------------+
+| contains       | Substring match                                     |
++----------------+-----------------------------------------------------+
+| matches        | Regex pattern match                                 |
++----------------+-----------------------------------------------------+
+| greater_than   | Numeric comparison (>)                              |
++----------------+-----------------------------------------------------+
+| less_than      | Numeric comparison (<)                              |
++----------------+-----------------------------------------------------+
+| is_empty       | Check if variable is None/empty (true) or not (false)|
++----------------+-----------------------------------------------------+
+
+.. note::
+   Exactly one operator must be specified per condition.
+
+**String Comparison**
+
+.. code-block:: yaml
+
+   - command:
+       command: "echo 'success'"
+       capture:
+         variable: status
+   - stop:
+       condition:
+         variable: status
+         equals: "error"
+       description: "Stop if status is error"
+
+**Numeric Comparison**
+
+.. code-block:: yaml
+
+   - command:
+       command: "echo '42'"
+       capture:
+         variable: count
+         parser: "int(output.strip())"
+   - stop:
+       condition:
+         variable: count
+         greater_than: 100
+       description: "Stop if count exceeds limit"
+
+**Empty Check**
+
+.. code-block:: yaml
+
+   - command:
+       command: "whoami"
+       capture:
+         variable: username
+   - stop:
+       condition:
+         variable: username
+         is_empty: true
+       description: "Stop if username wasn't captured"
+
+.. note::
+   See :doc:`../advanced/playbook-patterns` for regex patterns, substring matching, and complex condition combinations.
+
+Command Output Capture
+======================
+
+Capture command output to variables for use in conditional flow control.
+
+**Basic Capture**
+
+.. code-block:: yaml
+
+   actions:
+     # Capture stdout (default)
+     - command:
+         command: "whoami"
+         capture:
+           variable: current_user
+
+     # Use captured variable in subsequent commands
+     - command:
+         command: "echo 'Hello, {{current_user}}!'"
+
+**Capture with Parser**
+
+.. code-block:: yaml
+
+   actions:
+     # Parse integer from output
+     - command:
+         command: "echo '123'"
+         capture:
+           variable: number_value
+           parser: "int(output.strip())"
+
+     # Use in numeric condition
+     - stop:
+         condition:
+           variable: number_value
+           greater_than: 100
+
+**Capture Sources**
+
+.. code-block:: yaml
+
+   actions:
+     # Capture stderr
+     - command:
+         command: "python3 -c 'import sys; sys.stderr.write(\"error\")'"
+         capture:
+           variable: error_output
+           source: stderr
+
+     # Capture return code
+     - command:
+         command: "test -d /tmp"
+         capture:
+           variable: dir_exists
+           source: returncode
+           parser: "output == 0"
+
+**Available capture sources**: ``stdout`` (default), ``stderr``, ``returncode``, ``all``
+
+.. note::
+   See :doc:`../advanced/playbook-patterns` for JSON parsing, regex extraction, and complex output processing.
+
+Conditional Blocks and Keyboard
+================================
+
+Blocks and keyboard actions support ``when`` conditions that check UI state before execution.
+
+**Conditional Block Execution**
+
+.. code-block:: yaml
+
+   actions:
+     - block:
+         when:
+           - exists:
+               text: "Save"
+         actions:
+           - click:
+               target:
+                 text: "Save"
+           - idle:
+               duration: 1.0
+
+The block only executes if the "Save" text exists on screen. Use ``not_exists`` to check for absence of UI elements.
+
+**Conditional Keyboard Input**
+
+.. code-block:: yaml
+
+   actions:
+     - keyboard:
+         combination: ["ctrl", "s"]
+         when:
+           - exists:
+               text: "Document"
+
+.. note::
+   See :doc:`../advanced/playbook-patterns` for complex when conditions with multiple exists/not_exists checks.
+
+Best Practices
+**************
+
+Playbook Organization
+=====================
+
+**Group Related Actions**
+
+.. code-block:: yaml
+
+   actions:
+     # Setup phase
+     - block:
+         name: "Evidence File Setup"
+         actions:
+           - command: {command: "mkdir /evidence"}
+           - command: {command: "touch /evidence/test.txt"}
+           - test: file_created_successfully
+
+     # Execution phase
+     - block:
+         name: "File Deletion Test"
+         actions:
+           - click: {target: {text: "test.txt"}}
+           - keyboard: {combination: ["delete"]}
+           - save_timestamp: {variable: "deletion_time"}
+
+     # Validation phase
+     - block:
+         name: "Artifact Verification"
+         actions:
+           - test: file_deleted_from_original_location
+           - test: file_exists_in_trash_bin
+           - test: trash_metadata_correct
+
+Troubleshooting
+***************
+
+When experiments fail or behave unexpectedly, detailed logs can help identify issues:
+
+Run Directory Logs
+==================
+
+Each experiment run creates a dedicated log directory:
+
+**Location:** ``<project>/runs/<experiment_name>/<timestamp>/logs/``
+
+**adare.log**
+  Main ADARE application log containing experiment setup, VM lifecycle, integrity checks, and detailed error messages
+
+**adarevm.log**
+  Guest VM agent logs with GUI action execution, target detection results, and WebSocket communication status
+
+**mcp_gui.log**
+  Computer vision server logs with screenshot analysis, target recognition, and GUI element detection
+
+These logs are created automatically when running experiments (controlled by ``--no-runlog`` flag).
