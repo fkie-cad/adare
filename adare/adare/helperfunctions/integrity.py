@@ -24,11 +24,26 @@ class IntegrityManager:
     @staticmethod
     def protect_file(filepath: Path) -> bool:
         """Make file read-only (cross-platform)"""
+        # CLAUDE: Check if file is in managed storage before protecting
+        # External files (loaded with --no-copy) should not be protected (user-managed)
+        try:
+            from adare.config.configdirectory import VMS_DIR
+            try:
+                filepath.resolve().relative_to(VMS_DIR.resolve())
+                # File is in managed storage - proceed with protection
+            except ValueError:
+                # External file - don't attempt to protect
+                log.info(f'File protection skipped for external file (user-managed): {filepath}')
+                return True
+        except ImportError:
+            # VMS_DIR not available - skip the check
+            pass
+
         # CLAUDE: Temporarily disabled for development - files remain editable
         # TODO: Re-enable with proper development mode flag
         log.info(f'File protection DISABLED for development: {filepath}')
         return True  # Always return success without actually protecting
-        
+
         # Original protection logic (commented out):
         # try:
         #     if platform.system() == "Windows":

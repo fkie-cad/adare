@@ -95,13 +95,14 @@ class VmApi(GlobalDatabaseApi):
     def create_vm(self, project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '',
                   os_platform: str = '', os_type: str = '', os_distribution: str = '',
                   os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
-                  silent: bool = False) -> Vm:
+                  silent: bool = False, no_copy: bool = False) -> Vm:
         """
         Create a new VM entry in the database with file operations.
 
         Args:
             name: Unique name for the VM
             file_path: Path to the VM file (OVA)
+            file_hash: SHA256 hash of the VM file
             description: Optional description
             os_platform: OS platform (windows, linux, etc.)
             os_type: OS type
@@ -109,7 +110,8 @@ class VmApi(GlobalDatabaseApi):
             os_version: OS version
             os_language: OS language
             os_architecture: Architecture (default: x86_64)
-            quiet: If True, suppress progress bars
+            silent: If True, suppress progress bars
+            no_copy: If True, reference file at original location instead of copying
 
         Returns:
             Created VM instance
@@ -121,8 +123,16 @@ class VmApi(GlobalDatabaseApi):
         # Validate and process VM file
         self.validate_vm_file(file_path, name, quiet=silent)
 
-        # Copy VM file to storage location
-        target_file_path = self._copy_vm_file(file_path, project_path, name, silent=silent)
+        # CLAUDE: Copy file to storage location OR use original path
+        if no_copy:
+            log.info(f"Using --no-copy mode: storing reference to {file_path}")
+            target_file_path = file_path.resolve()  # Store absolute path
+
+            # Don't attempt write-protection for external files
+            log.info(f"Skipping write-protection for external VM file (user-managed)")
+        else:
+            # Copy VM file to storage location
+            target_file_path = self._copy_vm_file(file_path, project_path, name, silent=silent)
         
         # Create OsInfo first using the dedicated method
         osinfo = self.create_osinfo(
@@ -283,7 +293,7 @@ class VmApi(GlobalDatabaseApi):
     def get_all_vms(self) -> List[Vm]:
         """
         Get all VMs.
-        
+
         Returns:
             List of VM instances
         """
@@ -294,7 +304,29 @@ class VmApi(GlobalDatabaseApi):
             for vm in vms:
                 self._session.expunge(vm)
             return vms
-    
+
+    def is_vm_external(self, vm_id: str) -> bool:
+        """
+        Check if a VM is external (not in managed storage).
+
+        Args:
+            vm_id: VM database ID
+
+        Returns:
+            True if VM is external, False if managed
+        """
+        vm = self.get_vm_by_id(vm_id)
+        if not vm:
+            return False
+
+        from adare.config.configdirectory import VMS_DIR
+        vm_path = Path(vm.file)
+        try:
+            vm_path.resolve().relative_to(VMS_DIR.resolve())
+            return False  # Managed
+        except ValueError:
+            return True  # External
+
     def get_available_vms(self) -> List[Vm]:
         """
         Get all VMs available for use.

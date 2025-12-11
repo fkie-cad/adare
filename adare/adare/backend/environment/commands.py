@@ -168,7 +168,15 @@ def environment_sync(environment_ulid: str):
     log.info(f'environment {environment_ulid} synced')
 
 
-def environment_load(environment: str, force: bool = False):
+def environment_load(environment: str, force: bool = False, no_copy: bool = False):
+    """
+    Load environment from YAML file.
+
+    Args:
+        environment: Environment name or path
+        force: Force reload even if already exists
+        no_copy: Keep VM file at original location (local files only)
+    """
     import time
     start_time = time.time()
 
@@ -244,6 +252,8 @@ def environment_load(environment: str, force: bool = False):
     # Handle VM file copying and hashing during environment load (heavy file operations)
     vm_id = None
     created_vm_id = None  # Track newly created VM for cleanup on failure
+    vm_path = None  # Track VM path for success message
+    is_url = False  # Track if VM was loaded from URL
 
     try:
         if environment_metadata.vm:
@@ -262,7 +272,10 @@ def environment_load(environment: str, force: bool = False):
         
             if is_url:
                 # Download VM from URL and cache in global vm directory
+                # NOTE: URLs ALWAYS download to managed storage, ignoring --no-copy
                 log.info(f'Processing URL-based VM: {environment_metadata.vm}')
+                if no_copy:
+                    log.info(f'Note: --no-copy flag is ignored for URL-based VMs (always downloaded to managed storage)')
                 try:
                     vm_path = resolve_vm_from_url(environment_metadata.vm)
                     log.info(f'VM downloaded from URL and cached: {vm_path}')
@@ -298,7 +311,8 @@ def environment_load(environment: str, force: bool = False):
                 vm_result = load_vm_file_for_environment(
                     project_path=None,  # VMs are now global, no specific project
                     vm_path=vm_path,
-                    environment_metadata=environment_metadata
+                    environment_metadata=environment_metadata,
+                    no_copy=no_copy if not is_url else False  # Pass the flag (but never for URLs)
                 )
 
                 # Handle both old return format (vm_id) and new return format (dict with vm_id and was_existing)
@@ -385,8 +399,13 @@ def environment_load(environment: str, force: bool = False):
     if hasattr(environment_metadata, 'description') and environment_metadata.description:
         tip += f' - {environment_metadata.description}'
 
-    # Add note about file being copied to managed storage
-    tip += f'\n\nOriginal file: {environment_file}\nManaged copy: {managed_environment_file}'
+    # Add note about file being copied to managed storage OR external reference
+    if no_copy and not is_url and vm_path:
+        tip += f'\n\nNote: VM file is referenced at original location: {vm_path}'
+        tip += f'\n[bold red]IMPORTANT: Do not move or delete this file![/bold red]'
+        tip += f'\n\nOriginal file: {environment_file}\nManaged copy: {managed_environment_file}'
+    else:
+        tip += f'\n\nOriginal file: {environment_file}\nManaged copy: {managed_environment_file}'
 
     print_success_message(
         title=f'Environment "{environment_name}" loaded successfully!',
