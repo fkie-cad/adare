@@ -105,10 +105,10 @@ def get_vm_by_name(name: str, fields: list[str] = None) -> Optional[Vm] | dict |
         return result
 
 
-def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '', 
-              os_platform: str = '', os_type: str = '', os_distribution: str = '', 
+def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '',
+              os_platform: str = '', os_type: str = '', os_distribution: str = '',
               os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
-              silent: bool = False, fields: list[str] = None) -> Vm | dict:
+              silent: bool = False, no_copy: bool = False, fields: list[str] = None) -> Vm | dict:
     """
     Create a new VM entry in the database with file operations.
     
@@ -124,6 +124,7 @@ def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, de
         os_language: OS language
         os_architecture: Architecture (default: x86_64)
         quiet: If True, suppress progress bars
+        no_copy: If True, reference file at original location instead of copying
         fields: Optional list of fields to extract. If None, returns full object.
         
     Returns:
@@ -146,7 +147,8 @@ def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, de
             os_version=os_version,
             os_language=os_language,
             os_architecture=os_architecture,
-            silent=silent
+            silent=silent,
+            no_copy=no_copy
         )
         
         # Return full object for backward compatibility
