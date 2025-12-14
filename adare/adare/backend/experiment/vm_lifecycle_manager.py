@@ -190,14 +190,23 @@ class VMLifecycleManager:
             'experiment': {'host': context.experiment_directory.path, 'vm': shared_root / 'experiment'},
         }
 
-        # Only add 'shared' directory if it exists
+        # Add project-level shared directory if it exists
+        if context.project_directory.shared.exists():
+            context.config.shared_directories['project_shared'] = {
+                'host': context.project_directory.shared,
+                'vm': shared_root / 'project_shared'
+            }
+        else:
+            log.info(f"CLAUDE: Project shared directory does not exist, skipping mount: {context.project_directory.shared}")
+
+        # Add experiment-level shared directory if it exists
         if context.experiment_directory.shared.exists():
             context.config.shared_directories['shared'] = {
                 'host': context.experiment_directory.shared,
                 'vm': shared_root / 'shared'
             }
         else:
-            log.info(f"CLAUDE: Shared directory does not exist, skipping mount: {context.experiment_directory.shared}")
+            log.info(f"CLAUDE: Experiment shared directory does not exist, skipping mount: {context.experiment_directory.shared}")
         
         # Create VirtualBox VM instance using the instance name and UUID
         from adare.config import get_vm_credentials
@@ -439,9 +448,6 @@ class VMLifecycleManager:
             if context.config.preserve_snapshot:
                 log.info('Creating experiment snapshot (--preserve-snapshot enabled)')
                 await self._create_experiment_snapshot(context, event)
-            else:
-                log.info('Cleaning up experiment snapshot (default behavior)')
-                await self._cleanup_experiment_snapshot(context)
 
             # Clean up port forwarding before releasing VM instance
             if context.vm:

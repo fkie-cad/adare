@@ -66,6 +66,96 @@ Target Options
 - ``coordinates``: [x, y] pixel coordinates
 - ``strategy``: Selection strategy when multiple matches found (SweepStrategy, BestConfidenceStrategy, etc.)
 
+Target Selection Strategies
+----------------------------
+
+When multiple matches are found for a target, you can use strategies to select which one to click.
+
+**ClosestToStrategy - Find Target Near Another Element**
+
+Click elements based on proximity to reference targets (text or images). Useful when the same icon appears multiple times but you want the one near specific text.
+
+**Find icon closest to text:**
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           image: "delete_icon.png"
+           strategy:
+             ClosestToStrategy:
+               text: "File1.txt"
+         description: "Click delete icon nearest to File1.txt"
+
+**Find text closest to image:**
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           text: "OK"
+           strategy:
+             ClosestToStrategy:
+               image: "warning_icon.png"
+         description: "Click OK button near warning icon"
+
+**Limit search distance (optimization):**
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           image: "submit_button.png"
+           strategy:
+             ClosestToStrategy:
+               text: "Form Title"
+               max_distance: 200
+         description: "Click submit button within 200 pixels of form title"
+
+The ``max_distance`` parameter (in pixels):
+
+- Filters out matches beyond the specified distance
+- Enables performance optimization by cropping the screenshot before CV processing
+- Action fails if no matches found within the distance limit
+
+**Fixed coordinates (backwards compatible):**
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           image: "button.png"
+           strategy:
+             ClosestToStrategy:
+               x: 500
+               y: 300
+         description: "Click button closest to coordinates (500, 300)"
+
+**Other Selection Strategies**
+
+- ``SweepStrategy``: Select nth occurrence in reading order (top-to-bottom, left-to-right)
+- ``BestConfidenceStrategy``: Select match with highest confidence score (default for images)
+- ``TopLeftStrategy``: Select top-left match (default for text)
+- ``TopRightStrategy``, ``BottomLeftStrategy``, ``BottomRightStrategy``: Corner-based selection
+- ``LargestStrategy``, ``SmallestStrategy``: Select by bounding box area
+
+**Example with SweepStrategy:**
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           text: "Documents"
+           strategy:
+             SweepStrategy:
+               index: 2
+         description: "Click the second occurrence of Documents"
+
 Notes
 -----
 

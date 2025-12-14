@@ -95,15 +95,40 @@ class MCPTargetResolver:
             return best_matches[0]
         
         elif isinstance(strategy, ClosestToStrategy):
-            def distance(match):
-                x, y = match.coordinates
-                return ((x - strategy.x) ** 2 + (y - strategy.y) ** 2) ** 0.5
-            
-            min_distance = min(distance(m) for m in matches)
-            closest_matches = [m for m in matches if distance(m) == min_distance]
-            if len(closest_matches) > 1:
-                log.warning(f"ClosestToStrategy: {len(closest_matches)} matches tied at distance {min_distance:.1f}, using first")
-            return closest_matches[0]
+            # Check mode: target reference vs coordinates
+            if strategy.text or strategy.image:
+                # TARGET REFERENCE MODE (new)
+                reference_coords = strategy._resolved_reference_coords
+
+                def distance(match):
+                    x, y = match.coordinates
+                    ref_x, ref_y = reference_coords
+                    return ((x - ref_x) ** 2 + (y - ref_y) ** 2) ** 0.5
+
+                # Filter by max_distance if specified
+                if strategy.max_distance:
+                    matches = [m for m in matches if distance(m) <= strategy.max_distance]
+                    if not matches:
+                        log.warning(f"ClosestToStrategy: No matches within max_distance {strategy.max_distance}px")
+                        return None
+
+                # Find closest
+                min_distance = min(distance(m) for m in matches)
+                closest_matches = [m for m in matches if distance(m) == min_distance]
+                if len(closest_matches) > 1:
+                    log.warning(f"ClosestToStrategy: {len(closest_matches)} matches tied at distance {min_distance:.1f}, using first")
+                return closest_matches[0]
+            else:
+                # COORDINATES MODE (existing - unchanged for backwards compatibility)
+                def distance(match):
+                    x, y = match.coordinates
+                    return ((x - strategy.x) ** 2 + (y - strategy.y) ** 2) ** 0.5
+
+                min_distance = min(distance(m) for m in matches)
+                closest_matches = [m for m in matches if distance(m) == min_distance]
+                if len(closest_matches) > 1:
+                    log.warning(f"ClosestToStrategy: {len(closest_matches)} matches tied at distance {min_distance:.1f}, using first")
+                return closest_matches[0]
         
         elif isinstance(strategy, TopLeftStrategy):
             # Sort by y (top), then x (left) - deterministic order
@@ -209,6 +234,48 @@ class MCPTargetResolver:
             TargetMatch if found, None otherwise
         """
         try:
+            # Handle ClosestToStrategy with target reference
+            if isinstance(target.strategy, ClosestToStrategy):
+                if target.strategy.text or target.strategy.image:
+                    # Reference-based mode - resolve reference target first
+                    log.info(f"ClosestToStrategy using reference: text='{target.strategy.text}', image='{target.strategy.image}'")
+
+                    # Create reference target
+                    reference_target = Target(
+                        text=target.strategy.text,
+                        image=target.strategy.image,
+                        strategy=None  # Use default strategy for reference
+                    )
+
+                    # Resolve reference target
+                    reference_match = await self.resolve_target(
+                        reference_target, screenshot_base64, offset_x, offset_y
+                    )
+
+                    if not reference_match:
+                        # Reference target not found - fail immediately
+                        ref_desc = target.strategy.text or target.strategy.image
+                        log.error(f"ClosestToStrategy: Reference target '{ref_desc}' not found")
+                        return None
+
+                    reference_coords = reference_match.coordinates
+                    log.info(f"Reference target found at {reference_coords}")
+
+                    # Store reference coordinates in strategy for _select_match_by_strategy
+                    target.strategy._resolved_reference_coords = reference_coords
+
+                    # Optionally crop screenshot for performance optimization
+                    if target.strategy.max_distance:
+                        # OPTIMIZATION: Crop screenshot to region around reference
+                        screenshot_base64, offset_x, offset_y = await self._crop_screenshot_region(
+                            screenshot_base64,
+                            reference_coords,
+                            target.strategy.max_distance,
+                            offset_x,
+                            offset_y
+                        )
+                        log.debug(f"Cropped screenshot to region around {reference_coords} ±{target.strategy.max_distance}px")
+
             # Direct position coordinates
             if target.position:
                 return TargetMatch(
@@ -416,7 +483,68 @@ class MCPTargetResolver:
         except Exception as e:
             log.error(f"Error resolving target via MCP: {e}")
             return None
-    
+
+    async def _crop_screenshot_region(
+        self,
+        screenshot_base64: str,
+        center_coords: Tuple[int, int],
+        padding: int,
+        offset_x: int = 0,
+        offset_y: int = 0
+    ) -> Tuple[str, int, int]:
+        """Crop screenshot to region around reference coordinates for optimization.
+
+        Args:
+            screenshot_base64: Full screenshot (base64)
+            center_coords: Center point (x, y)
+            padding: Distance in pixels to extend from center
+            offset_x: Current X offset
+            offset_y: Current Y offset
+
+        Returns:
+            Tuple of (cropped_screenshot_base64, new_offset_x, new_offset_y)
+        """
+        import cv2
+        import numpy as np
+        import base64
+
+        try:
+            # Decode screenshot
+            img_bytes = base64.b64decode(screenshot_base64)
+            img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+
+            if img is None:
+                log.warning("Failed to decode screenshot for cropping, using full screenshot")
+                return screenshot_base64, offset_x, offset_y
+
+            h, w = img.shape[:2]
+            cx, cy = center_coords
+
+            # Calculate crop region with bounds checking
+            x1 = max(0, cx - padding)
+            y1 = max(0, cy - padding)
+            x2 = min(w, cx + padding)
+            y2 = min(h, cy + padding)
+
+            # Crop image
+            cropped_img = img[y1:y2, x1:x2]
+
+            # Encode back to base64
+            _, buffer = cv2.imencode('.png', cropped_img)
+            cropped_base64 = base64.b64encode(buffer).decode('utf-8')
+
+            # Calculate new offsets (coordinates in cropped image need adjustment)
+            new_offset_x = offset_x + x1
+            new_offset_y = offset_y + y1
+
+            log.debug(f"Cropped region: ({x1},{y1}) to ({x2},{y2}), new offsets: ({new_offset_x},{new_offset_y})")
+
+            return cropped_base64, new_offset_x, new_offset_y
+
+        except Exception as e:
+            log.warning(f"Screenshot cropping failed: {e}, using full screenshot")
+            return screenshot_base64, offset_x, offset_y
 
 
 class MCPConditionChecker:

@@ -30,12 +30,13 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] YAML  
 - [ ] integrated log viewer with `adare run log adare ULID` or `adare run log adarevm` that we can view logs but also filter them!
 - [ ] more advanced wait_until logic -> use image diffs to identify changed areas?! Only search in changed ares?! -> analyze if this works or is too complex?!
-- [ ] add option --custom-testfunction PATH_TO_DIR; which is then used instead of the existing one (even if same name) -> not copied only used; this will help developing testfunctions!
 - [ ] wait_until not search twice but remeber the action and execute it then directly?!
+- [ ] add option --custom-testfunction PATH_TO_DIR; which is then used instead of the existing one (even if same name) -> not copied only used; this will help developing testfunctions!
 - [ ] lets us save results in variables we use later again?! 
 - [ ] document (potentially implment variable feature to write/overwrite variables in playbook dynamically)
 - [ ] diff feature documentation; also test for windows with mft parsing
 - [ ] glob dokumentieren
+- [ ] Anaylze how we can make project wide shared data work with online experiment download? We therefore need references to data that needs to be downloaded in experiment directory!
 - [ ] support for python3.14
  
 ---

@@ -21,12 +21,13 @@ log = logging.getLogger(__name__)
 @attrs.define
 class FileExistsParameter(Parameter):
     dst: str
+    match_mode: str = "any"
 
 
 @attrs.define
 class FileExists(BasicTest):
     testname: ClassVar[str] = 'file_exists'
-    testdescription: ClassVar[str] = 'tests if a file with path destination(dst)  is existing'
+    testdescription: ClassVar[str] = 'tests if file(s) with path destination(dst) exist (supports glob patterns with match_mode)'
 
     name: str
     parameter: FileExistsParameter
@@ -35,10 +36,32 @@ class FileExists(BasicTest):
 
     def test(self):
         try:
-            if Path(self.parameter.dst).is_file():
-                return TestResult.success()
-            else:
-                return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
+            paths, status = self.resolve_globfilepath(
+                self.parameter.dst,
+                match_mode=self.parameter.match_mode,
+                return_list=True
+            )
+            if status:
+                return TestResult.error([f'path {self.parameter.dst} cannot be used, '
+                                        f'because no unambiguous file could be identified (because {status})'])
+
+            files = [p for p in paths if Path(p).is_file()]
+
+            if self.parameter.match_mode == "single":
+                if len(files) == 1:
+                    return TestResult.success([f'file {files[0]} exists'])
+                elif not files and paths:
+                    return TestResult.failed([f'path {paths[0]} exists but is not a file'])
+                else:
+                    return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
+            else:  # "any"
+                if files:
+                    return TestResult.success([f'{len(files)} file(s) found: {", ".join(files)}'])
+                else:
+                    if paths:
+                        return TestResult.failed([f'{len(paths)} path(s) matched but none are files'])
+                    else:
+                        return TestResult.failed([f'no files match pattern {self.parameter.dst}'])
         except (OSError, PermissionError) as e:
             return TestResult.execution_error(e, f"Cannot check file existence for {self.parameter.dst}")
 
@@ -46,12 +69,13 @@ class FileExists(BasicTest):
 @attrs.define
 class FileDoesNotExistParameter(Parameter):
     dst: str
+    match_mode: str = "any"
 
 
 @attrs.define
 class FileDoesNotExist(BasicTest):
     testname: ClassVar[str] = 'file_does_not_exist'
-    testdescription: ClassVar[str] = 'tests if a file with path destination(dst) is NOT existing'
+    testdescription: ClassVar[str] = 'tests if file(s) with path destination(dst) do NOT exist (supports glob patterns with match_mode)'
 
     name: str
     parameter: FileDoesNotExistParameter
@@ -60,10 +84,31 @@ class FileDoesNotExist(BasicTest):
 
     def test(self):
         try:
-            if not Path(self.parameter.dst).is_file():
-                return TestResult.success()
-            else:
-                return TestResult.failed([f'file with path {self.parameter.dst} does exist'])
+            paths, status = self.resolve_globfilepath(
+                self.parameter.dst,
+                match_mode=self.parameter.match_mode,
+                return_list=True
+            )
+            if status:
+                return TestResult.error([f'path {self.parameter.dst} cannot be used, '
+                                        f'because no unambiguous file could be identified (because {status})'])
+
+            files = [p for p in paths if Path(p).is_file()]
+
+            if self.parameter.match_mode == "single":
+                if not files:
+                    return TestResult.success([f'file {self.parameter.dst} does not exist'])
+                else:
+                    return TestResult.failed([f'file {files[0]} exists'])
+            else:  # "any"
+                if not files:
+                    count = len(paths)
+                    if count > 0:
+                        return TestResult.success([f'{count} path(s) matched but none are files'])
+                    else:
+                        return TestResult.success([f'no files match pattern {self.parameter.dst}'])
+                else:
+                    return TestResult.failed([f'{len(files)} file(s) exist matching pattern: {", ".join(files)}'])
         except (OSError, PermissionError) as e:
             return TestResult.execution_error(e, f"Cannot check file existence for {self.parameter.dst}")
 
@@ -72,12 +117,13 @@ class FileDoesNotExist(BasicTest):
 @attrs.define
 class DirExistsParameter(Parameter):
     dst: str
+    match_mode: str = "any"
 
 
 @attrs.define
 class DirExists(BasicTest):
     testname: ClassVar[str] = 'dir_exists'
-    testdescription: ClassVar[str] = 'tests if a directory with path destination(dst) is existing'
+    testdescription: ClassVar[str] = 'tests if directory(ies) with path destination(dst) exist (supports glob patterns with match_mode)'
 
     name: str
     parameter: DirExistsParameter
@@ -86,10 +132,32 @@ class DirExists(BasicTest):
 
     def test(self):
         try:
-            if Path(self.parameter.dst).is_dir():
-                return TestResult.success()
-            else:
-                return TestResult.failed([f'directory with path {self.parameter.dst} does not exist'])
+            paths, status = self.resolve_globfilepath(
+                self.parameter.dst,
+                match_mode=self.parameter.match_mode,
+                return_list=True
+            )
+            if status:
+                return TestResult.error([f'path {self.parameter.dst} cannot be used, '
+                                        f'because no unambiguous directory could be identified (because {status})'])
+
+            dirs = [p for p in paths if Path(p).is_dir()]
+
+            if self.parameter.match_mode == "single":
+                if len(dirs) == 1:
+                    return TestResult.success([f'directory {dirs[0]} exists'])
+                elif not dirs and paths:
+                    return TestResult.failed([f'path {paths[0]} exists but is not a directory'])
+                else:
+                    return TestResult.failed([f'directory with path {self.parameter.dst} does not exist'])
+            else:  # "any"
+                if dirs:
+                    return TestResult.success([f'{len(dirs)} directory(ies) found: {", ".join(dirs)}'])
+                else:
+                    if paths:
+                        return TestResult.failed([f'{len(paths)} path(s) matched but none are directories'])
+                    else:
+                        return TestResult.failed([f'no directories match pattern {self.parameter.dst}'])
         except (OSError, PermissionError) as e:
             return TestResult.execution_error(e, f"Cannot check directory existence for {self.parameter.dst}")
 
@@ -97,12 +165,13 @@ class DirExists(BasicTest):
 @attrs.define
 class DirDoesNotExistParameter(Parameter):
     dst: str
+    match_mode: str = "any"
 
 
 @attrs.define
 class DirDoesNotExist(BasicTest):
     testname: ClassVar[str] = 'dir_does_not_exist'
-    testdescription: ClassVar[str] = 'tests if a directory with path destination(dst) is NOT existing'
+    testdescription: ClassVar[str] = 'tests if directory(ies) with path destination(dst) do NOT exist (supports glob patterns with match_mode)'
 
     name: str
     parameter: DirDoesNotExistParameter
@@ -111,10 +180,31 @@ class DirDoesNotExist(BasicTest):
 
     def test(self):
         try:
-            if not Path(self.parameter.dst).is_dir():
-                return TestResult.success()
-            else:
-                return TestResult.failed([f'directory with path {self.parameter.dst} does exist'])
+            paths, status = self.resolve_globfilepath(
+                self.parameter.dst,
+                match_mode=self.parameter.match_mode,
+                return_list=True
+            )
+            if status:
+                return TestResult.error([f'path {self.parameter.dst} cannot be used, '
+                                        f'because no unambiguous directory could be identified (because {status})'])
+
+            dirs = [p for p in paths if Path(p).is_dir()]
+
+            if self.parameter.match_mode == "single":
+                if not dirs:
+                    return TestResult.success([f'directory {self.parameter.dst} does not exist'])
+                else:
+                    return TestResult.failed([f'directory {dirs[0]} exists'])
+            else:  # "any"
+                if not dirs:
+                    count = len(paths)
+                    if count > 0:
+                        return TestResult.success([f'{count} path(s) matched but none are directories'])
+                    else:
+                        return TestResult.success([f'no directories match pattern {self.parameter.dst}'])
+                else:
+                    return TestResult.failed([f'{len(dirs)} directory(ies) exist matching pattern: {", ".join(dirs)}'])
         except (OSError, PermissionError) as e:
             return TestResult.execution_error(e, f"Cannot check directory existence for {self.parameter.dst}")
 

@@ -22,9 +22,53 @@ class BestConfidenceStrategy:
 
 @attrs.define
 class ClosestToStrategy:
-    """Select match closest to specified coordinates."""
-    x: int
-    y: int
+    """Select match closest to coordinates or target reference.
+
+    Supports three modes:
+    1. Fixed coordinates: x, y specified
+    2. Text reference: text specified
+    3. Image reference: image specified
+
+    Optional max_distance enables region-based search optimization.
+    """
+    # Mode 1: Fixed coordinates (existing - backwards compatible)
+    x: Optional[int] = None
+    y: Optional[int] = None
+
+    # Mode 2: Text reference (new)
+    text: Optional[str] = None
+
+    # Mode 3: Image reference (new)
+    image: Optional[str] = None
+
+    # Optional distance limit (new)
+    max_distance: Optional[int] = None  # pixels
+
+    def __attrs_post_init__(self):
+        """Validate that exactly one mode is specified."""
+        modes_set = sum([
+            self.x is not None and self.y is not None,  # coordinates mode
+            self.text is not None,  # text reference mode
+            self.image is not None  # image reference mode
+        ])
+
+        if modes_set != 1:
+            raise ValueError(
+                "ClosestToStrategy must specify exactly one of: "
+                "(x, y) coordinates, text reference, or image reference"
+            )
+
+        # Validate x,y together
+        if (self.x is None) != (self.y is None):
+            raise ValueError(
+                "ClosestToStrategy: x and y must both be specified or both be None"
+            )
+
+        # Validate max_distance
+        if self.max_distance is not None and self.max_distance <= 0:
+            raise ValueError(
+                f"ClosestToStrategy: max_distance must be positive, got {self.max_distance}"
+            )
 
 @attrs.define
 class TopLeftStrategy:

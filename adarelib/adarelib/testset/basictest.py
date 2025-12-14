@@ -1,6 +1,6 @@
 # external imports
 import glob
-from typing import Optional, ClassVar, Dict, Any, List, Tuple
+from typing import Optional, ClassVar, Dict, Any, List, Tuple, Union
 import attrs
 import re
 
@@ -90,13 +90,15 @@ class BasicTest:
     description: Optional[str]
     variable_metadata: Optional[Dict[str, Any]]
 
-    def resolve_globfilepath(self, globfilepath: str) -> tuple[str, str]:
+    def resolve_globfilepath(self, globfilepath: str, match_mode: str = "single",
+                            return_list: bool = False) -> tuple[Union[str, list[str]], str]:
         """
-        find a file that matches the given glob expression and return it. If no file is found or more than one file is
-        found, return an error message.
-        For simple paths without glob patterns, returns the path directly to allow testing of non-existent files.
-        :param globfilepath: glob expression to find a file, or simple file path
-        :return: (filepath, error message)
+        Find file(s) matching glob expression with flexible matching modes.
+
+        :param globfilepath: glob expression or simple file path
+        :param match_mode: "single" requires exactly 1 match, "any" allows 0+ matches
+        :param return_list: if True, return list even for single/no matches (for API consistency)
+        :return: (filepath(s), error message) - str or list[str] based on return_list
         """
         # Check if path contains glob patterns
         has_glob_patterns = any(char in globfilepath for char in ['*', '?', '[', ']'])
@@ -104,16 +106,22 @@ class BasicTest:
         if not has_glob_patterns:
             # For simple paths without glob patterns, return the path directly
             # This allows testing file-not-found scenarios where files intentionally don't exist
-            return globfilepath, ""
+            return [globfilepath] if return_list else globfilepath, ""
 
-        # Use glob resolution for paths with glob patterns (original behavior)
+        # Use glob resolution for paths with glob patterns
         found_files = list(glob.glob(globfilepath))
-        if not found_files:
-            return "", "no files match the given path (glob) expression"
-        elif len(found_files) > 1:
-            return "", f"{len(found_files)} files found that match given path (glob) expression"
-        else:
-            return found_files[0], ""
+
+        if match_mode == "single":
+            # Existing behavior: exactly 1 match required
+            if not found_files:
+                return ([] if return_list else ""), "no files match the given path (glob) expression"
+            elif len(found_files) > 1:
+                return ([] if return_list else ""), f"{len(found_files)} files found that match given path (glob) expression"
+            else:
+                return (found_files if return_list else found_files[0]), ""
+        else:  # match_mode == "any"
+            # New behavior: 0+ matches allowed
+            return found_files if return_list else (found_files[0] if found_files else ""), ""
 
 
     # === PLACEHOLDER HELPER METHODS ===
