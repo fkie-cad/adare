@@ -7,7 +7,7 @@ resource usage while enabling multiple experiments to run concurrently.
 
 import logging
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional, List
 from pathlib import Path
 
@@ -275,7 +275,7 @@ class VmInstanceManager:
                 status='active',
                 current_experiment_run_id=experiment_run_id,
                 websocket_port=websocket_port,
-                last_used_at=datetime.utcnow()
+                last_used_at=datetime.now(UTC)
             )
 
         # Refresh instance data
@@ -360,7 +360,7 @@ class VmInstanceManager:
                 status='available',
                 current_experiment_run_id=None,
                 websocket_port=None,  # Clear port so it can be reallocated
-                last_used_at=datetime.utcnow()
+                last_used_at=datetime.now(UTC)
             )
 
     async def cleanup_instance(self, instance_id: str):
@@ -414,13 +414,13 @@ class VmInstanceManager:
         if age_days is None:
             age_days = self.CLEANUP_AGE_DAYS
 
-        cutoff_date = datetime.utcnow() - timedelta(days=age_days)
+        cutoff_date = datetime.now(UTC) - timedelta(days=age_days)
 
         with VmApi() as api:
             old_instances = api.get_old_vm_instances(cutoff_date, status='available')
 
             for instance in old_instances:
-                log.info(f"Cleaning up old instance: {instance.instance_name} (age: {(datetime.utcnow() - instance.last_used_at).days} days)")
+                log.info(f"Cleaning up old instance: {instance.instance_name} (age: {(datetime.now(UTC) - instance.last_used_at).days} days)")
                 await self.cleanup_instance(instance.id)
 
     async def remove_all_instances(self):
@@ -649,7 +649,7 @@ class VmInstanceManager:
                         api.update_vm_instance(
                             instance.id,
                             status=new_db_status,
-                            last_used_at=datetime.utcnow()
+                            last_used_at=datetime.now(UTC)
                         )
                         updated_count += 1
                         log.info(f"CLAUDE: Updated instance {instance.instance_name} status: {current_db_status} -> {new_db_status}")

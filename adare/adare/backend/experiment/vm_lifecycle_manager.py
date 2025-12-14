@@ -74,6 +74,84 @@ class VMLifecycleManager:
             shutil.copytree(adarelib_source, adarelib_target, dirs_exist_ok=True)
 
             log.info("CLAUDE: Project VM runtime directory ready")
+
+        # Build wheels (separate from copy logic since we check mtime separately)
+        wheels_dir = vm_runtime_dir / 'wheels'
+        wheels_dir.mkdir(exist_ok=True)
+
+        adarelib_wheel = list(wheels_dir.glob('adarelib-*.whl'))
+        adarevm_wheel = list(wheels_dir.glob('adarevm-*.whl'))
+
+        # Check if wheels need rebuilding
+        rebuild_wheels = False
+        if not adarelib_wheel or not adarevm_wheel:
+            log.info("CLAUDE: Wheels not found - building...")
+            rebuild_wheels = True
+        else:
+            # Check if source is newer than wheels
+            adarelib_wheel_time = adarelib_wheel[0].stat().st_mtime
+            adarevm_wheel_time = adarevm_wheel[0].stat().st_mtime
+
+            adarelib_source_time = self._get_latest_mtime(adarevm_source)
+            adarevm_source_time = self._get_latest_mtime(adarevm_source)
+
+            if (adarelib_source_time > adarelib_wheel_time or
+                adarevm_source_time > adarevm_wheel_time):
+                log.info("CLAUDE: Source code newer than wheels - rebuilding...")
+                rebuild_wheels = True
+            else:
+                log.info("CLAUDE: Wheels are up-to-date - skipping build")
+
+        if rebuild_wheels:
+            try:
+                # Clean old wheels
+                for old_wheel in wheels_dir.glob('*.whl'):
+                    old_wheel.unlink()
+
+                # Build adarelib wheel first (it has no path dependencies)
+                log.info("CLAUDE: Building adarelib wheel...")
+                import subprocess
+                subprocess.run(
+                    ["poetry", "build", "-f", "wheel", "--output", str(wheels_dir)],
+                    cwd=adarelib_target,
+                    check=True,
+                    capture_output=True
+                )
+
+                # Build adarevm wheel without path dependency
+                log.info("CLAUDE: Building adarevm wheel...")
+
+                # Temporarily modify pyproject.toml to use version dependency instead of path
+                # This is necessary because Poetry embeds absolute paths for path dependencies,
+                # which don't exist in the VM filesystem
+                adarevm_pyproject = adarevm_target / 'pyproject.toml'
+                original_content = adarevm_pyproject.read_text()
+
+                # Replace path dependency with version dependency (handle both with/without develop=true)
+                import re
+                modified_content = re.sub(
+                    r'adarelib\s*=\s*\{path\s*=\s*"[^"]+?"(?:,\s*develop\s*=\s*true)?\}',
+                    'adarelib = "^0.1.0"',
+                    original_content
+                )
+                adarevm_pyproject.write_text(modified_content)
+
+                try:
+                    subprocess.run(
+                        ["poetry", "build", "-f", "wheel", "--output", str(wheels_dir)],
+                        cwd=adarevm_target,
+                        check=True,
+                        capture_output=True
+                    )
+                finally:
+                    # Restore original pyproject.toml
+                    adarevm_pyproject.write_text(original_content)
+
+                log.info(f"CLAUDE: Wheels built in {wheels_dir}")
+            except subprocess.CalledProcessError as e:
+                log.warning(f"CLAUDE: Wheel build failed: {e.stderr.decode() if e.stderr else str(e)}")
+                log.warning("CLAUDE: Falling back to editable install mode (wheels will not be available)")
+                # Don't raise - let it fall back to editable install
         else:
             log.info("CLAUDE: Project VM runtime directory up-to-date")
 

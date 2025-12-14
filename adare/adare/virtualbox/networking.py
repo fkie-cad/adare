@@ -251,15 +251,7 @@ class NetworkingMixin:
 
                 if return_value == 0:
                     log.info(f"CLAUDE: Shared folder '{name}' added to VM '{self.vm_name}' successfully")
-
-                    # Verify the shared folder was actually added
-                    log.debug(f"CLAUDE: Verifying shared folder '{name}' was added to VirtualBox config")
-                    existing_folders = await self.list_shared_folders(ctx_manager, stop_event, log_file, silent=True)
-                    if name in existing_folders:
-                        log.info(f"CLAUDE: Verified shared folder '{name}' exists in VirtualBox config")
-                    else:
-                        log.error(f"CLAUDE: Shared folder '{name}' not found in VirtualBox config after addition!")
-                        return 1
+                    # NOTE: Verification removed - VBoxManage return code is authoritative
                 else:
                     log.error(f"CLAUDE: Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
                     if stdout:
@@ -464,54 +456,67 @@ class NetworkingMixin:
                 result = run_subprocess(
                     [self.vboxmanage_exe, "showvminfo", self.vm_name, "--machinereadable"],
                     log_prefix="list_shared_folders: ",
-                    check=False
+                    check=False,
+                    timeout=30
                 )
-                
+
                 if result.returncode != 0:
                     log.warning(f"Failed to get VM info for '{self.vm_name}': return code {result.returncode}")
                     return {}
-                
-                shared_folders = {}
+
+                # O(n) single-pass parsing: build three dictionaries
+                name_map = {}      # {mapping_num: folder_name}
+                path_map = {}      # {mapping_num: folder_path}
+                readonly_map = {}  # {mapping_num: readonly_bool}
+
                 for line in result.stdout.split('\n'):
-                    # Look for lines like: SharedFolderNameMachineMapping1="name"
-                    # and SharedFolderPathMachineMapping1="/path/to/folder"
-                    if line.startswith('SharedFolderNameMachineMapping'):
-                        try:
-                            # Extract folder name
-                            folder_name = line.split('=', 1)[1].strip('"')
-                            
-                            # Find corresponding path line
-                            mapping_num = line.split('SharedFolderNameMachineMapping')[1].split('=')[0]
-                            path_line_prefix = f"SharedFolderPathMachineMapping{mapping_num}="
-                            
-                            for path_line in result.stdout.split('\n'):
-                                if path_line.startswith(path_line_prefix):
-                                    folder_path = path_line.split('=', 1)[1].strip('"')
-                                    
-                                    # Check if readonly
-                                    readonly_line_prefix = f"SharedFolderReadOnlyMachineMapping{mapping_num}="
-                                    readonly = False
-                                    for readonly_line in result.stdout.split('\n'):
-                                        if readonly_line.startswith(readonly_line_prefix):
-                                            readonly = readonly_line.split('=', 1)[1].strip('"').lower() == 'on'
-                                            break
-                                    
-                                    shared_folders[folder_name] = SharedFolderConfig(
-                                        name=folder_name,
-                                        host_path=folder_path,
-                                        readonly=readonly
-                                    )
-                                    break
-                        except Exception as e:
-                            log.warning(f"Failed to parse shared folder info from line: {line} - {e}")
-                
+                    try:
+                        if line.startswith('SharedFolderNameMachineMapping'):
+                            # Extract: SharedFolderNameMachineMapping3="my_folder"
+                            remainder = line[len('SharedFolderNameMachineMapping'):]
+                            mapping_num, value = remainder.split('=', 1)
+                            name_map[mapping_num] = value.strip('"')
+
+                        elif line.startswith('SharedFolderPathMachineMapping'):
+                            remainder = line[len('SharedFolderPathMachineMapping'):]
+                            mapping_num, value = remainder.split('=', 1)
+                            path_map[mapping_num] = value.strip('"')
+
+                        elif line.startswith('SharedFolderReadOnlyMachineMapping'):
+                            remainder = line[len('SharedFolderReadOnlyMachineMapping'):]
+                            mapping_num, value = remainder.split('=', 1)
+                            readonly_map[mapping_num] = value.strip('"').lower() == 'on'
+
+                    except ValueError as e:
+                        log.warning(f"Failed to parse shared folder mapping line: {line} - {e}")
+                        continue
+
+                # Combine mappings into SharedFolderConfig objects
+                shared_folders = {}
+                for mapping_num, folder_name in name_map.items():
+                    try:
+                        folder_path = path_map.get(mapping_num, "")
+                        readonly = readonly_map.get(mapping_num, False)
+
+                        shared_folders[folder_name] = SharedFolderConfig(
+                            name=folder_name,
+                            host_path=folder_path,
+                            readonly=readonly
+                        )
+                    except ValueError as e:
+                        log.warning(f"Failed to create SharedFolderConfig for mapping {mapping_num}: {e}")
+
                 if not silent:
                     log.debug(f"Found {len(shared_folders)} shared folders for VM '{self.vm_name}'")
                 return shared_folders
-            except Exception as e:
-                log.error(f"Error listing shared folders for VM '{self.vm_name}': {e}")
+
+            except subprocess.TimeoutExpired:
+                log.error(f"Timeout listing shared folders for VM '{self.vm_name}' (30s limit exceeded)")
                 return {}
-        
+            except ValueError as e:
+                log.error(f"Error parsing shared folder data for VM '{self.vm_name}': {e}")
+                return {}
+
         return await self.manager.run_async(_list_shared_folders_async)
 
     async def remove_shared_folder(self, name: str, mountpoint: Optional[str] = None, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):

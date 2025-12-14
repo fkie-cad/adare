@@ -10,7 +10,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ---
 
 ## 🚀 Planned Features
-- [x] add clone to clone already existing experiment  
+- [x] Add support for preinstalled agent to make especially windows development faster? -> needs to be tested!
 - [ ] add datasets that are downloaded to an project and retrieved from an URL (e.g. hosted by us in minio instance)
 - [ ] add no_idle action to disable the default idle (e.g. when wanting to save a timestamp) -> or better only idle between gui actions
 - [ ] experiment run by glob (does not work as load does not work by glob)
@@ -38,6 +38,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] glob dokumentieren
 - [ ] Anaylze how we can make project wide shared data work with online experiment download? We therefore need references to data that needs to be downloaded in experiment directory!
 - [ ] support for python3.14
+- [ ] rethink environments; why not let an experiment run in any environment and just provide an warning if not in the environments; update environments in database from file every time we do any experiment run oder env load command!
+- [ ] check if we need to place building wheel into a single stage showing? I think yes!
  
 ---
 
@@ -69,6 +71,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] in some terminal files we use directly database and do queries. Should we not provide this through an API that provides the data? What is better code quality?
 - [ ] add tests for modular code parts; make code more modular where required!
 - [ ] background commands in vm (as installation); when to check for results (move to separate thread?)
+- [x] address: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. 
 
 ---
 
@@ -77,6 +80,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Visual bug: Flow console occasionally shows three red dots at the bottom → cause unknown  
 - [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
 - [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
+- [ ] adare exp list gives error
 
 ---
 
