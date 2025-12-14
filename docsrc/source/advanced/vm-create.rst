@@ -145,3 +145,105 @@ Other Desktop Environments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Not tested so far. Confirm PyAutoGUI can make screenshots and control the mouse and keyboard.
+
+
+*************************************************
+Installing ADARE Guest Agent (adarevm & adarelib)
+*************************************************
+
+Overview
+========
+
+The ADARE guest agent consists of two packages:
+
+- **adarevm**: Guest agent that runs inside the VM and executes playbook actions
+- **adarelib**: Shared library providing test functions and utilities
+
+.. note::
+
+   **Manual installation is optional.** ADARE automatically installs/updates the agent during experiment runs. Preinstalling saves 10-30 seconds per experiment.
+
+Installation Methods
+====================
+
+Choose the method that matches your VM setup:
+
+Windows with Conda (Miniforge)
+-------------------------------
+
+Install using pip in the ``pyadare`` conda environment:
+
+.. code-block:: powershell
+
+   # First, mount the shared folder if not already mounted
+   net use Z: \\vboxsvr\adare\wheels
+
+   # Install wheels (PowerShell requires explicit wildcard expansion)
+   %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem Z:\wheels\*.whl | Select-Object -ExpandProperty FullName)
+
+Windows with Poetry
+-------------------
+
+Install using system pip:
+
+.. code-block:: powershell
+
+   # First, mount the shared folder if not already mounted
+   net use Z: \\vboxsvr\adare\wheels
+
+   # Install wheels (PowerShell requires explicit wildcard expansion)
+   pip install --force-reinstall @(Get-ChildItem Z:\wheels\*.whl | Select-Object -ExpandProperty FullName)
+
+Linux with Conda (Miniforge)
+-----------------------------
+
+Install using pip in the ``pyadare`` conda environment:
+
+.. code-block:: bash
+
+   /home/adare/.miniforge3/bin/conda run -n pyadare pip install /adare/app/wheels/*.whl
+
+Linux with Poetry
+-----------------
+
+Install using system pip:
+
+.. code-block:: bash
+
+   pip install /adare/app/wheels/*.whl
+
+Verification
+============
+
+Verify the installation by checking package versions:
+
+.. code-block:: bash
+
+   # For Conda (Windows)
+   %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip show adarevm adarelib
+
+   # For Conda (Linux)
+   /home/adare/.miniforge3/bin/conda run -n pyadare pip show adarevm adarelib
+
+   # For Poetry (Windows/Linux)
+   pip show adarevm adarelib
+
+Expected output:
+
+.. code-block:: text
+
+   Name: adarevm
+   Version: 0.1.0
+   ...
+
+   Name: adarelib
+   Version: 0.1.0
+   ...
+
+.. important::
+
+   - Wheels are provided automatically by the ADARE host in the shared folder
+   - Windows: Mount as ``Z:\wheels`` using ``net use Z: \\vboxsvr\adare\wheels``
+   - Linux: Automatically available at ``/adare/app/wheels/``
+   - The shared folder is only accessible during experiment runs
+   - ADARE automatically detects version mismatches and reinstalls when needed

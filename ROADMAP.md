@@ -11,6 +11,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 
 ## 🚀 Planned Features
 - [x] Add support for preinstalled agent to make especially windows development faster? -> needs to be tested!
+- [ ] perform actions with virtualbox SDK and get screenshots from video stream directly!
 - [ ] add datasets that are downloaded to an project and retrieved from an URL (e.g. hosted by us in minio instance)
 - [ ] add no_idle action to disable the default idle (e.g. when wanting to save a timestamp) -> or better only idle between gui actions
 - [ ] experiment run by glob (does not work as load does not work by glob)
@@ -45,6 +46,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 
 ## 🛠 Quality of Life Improvements  
 - [ ] Expand documentation:  
+  - [ ] update VM creation with prev. installation for speedup 
   - [ ] Timezone handling (VM syncs with local time vs. UTC)  
   - [ ] Experiment development guide (pause, idle, tips)  
   - [ ] Default VM resources (cores, RAM) and how to configure them  

@@ -427,15 +427,23 @@ def exec_experiment_run(arguments):
                             'List available environments with: adare environment list',
                             'If not found via list, create or load: adare environment create <name> OR adare environment load <path>'
                         ])
+
+                # Try WITH environment validation first
                 experiment = api.get_experiment(experiment_name, environment.id)
+
+                # If not found, try WITHOUT environment validation
                 if experiment is None:
-                    raise ExperimentNotFoundError(log, f'experiment {experiment_name} is not available for environment {environment_name}',
-                        possible_solutions=[
-                            f'Check if experiment name "{experiment_name}" is spelled correctly',
-                            'List available experiments with: adare experiment list',
-                            f'Check if experiment "{experiment_name}" supports environment "{environment_name}"',
-                            'List available environments for this experiment or create a compatible one'
-                        ])
+                    experiment = api.get_experiment_by_project_and_name(project_directory, experiment_name)
+                    if experiment is None:
+                        raise ExperimentNotFoundError(log, f'experiment {experiment_name} not found',
+                            possible_solutions=[
+                                f'Check if experiment name "{experiment_name}" is spelled correctly',
+                                'List available experiments with: adare experiment list',
+                            ])
+
+                    # Environment is unlisted - print warning but continue
+                    log.warning(f'WARNING: environment "{environment_name}" is not listed in {experiment_name}/metadata.yml')
+                    log.warning(f'         Running experiment anyway as explicitly requested via -e flag')
 
             was_interrupted, was_successful = asyncio.run(experiment_run(project_directory, experiment_name, environment_name, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot, runlog=arguments.runlog, vm_memory=arguments.vm_memory, vm_cpus=arguments.vm_cpus))
 

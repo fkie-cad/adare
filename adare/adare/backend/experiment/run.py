@@ -14,6 +14,7 @@ from adare.backend.project.directory import ProjectDirectory
 from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
 from adare.backend.experiment.step_runner import ExperimentStepRunner
 from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
+from adare.backend.experiment.agent_installer import should_skip_installation
 from adare.types.stages import (
     # Top-level parent stages
     ExperimentPreparationStage, VirtualMachineSetupStage, SoftwareInstallationStage,
@@ -312,6 +313,22 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
             if 'env_exists' in conda_env_result.stdout:
                 log.info(f"Using Miniforge conda environment 'pyadare' for VM '{vm.vm_name}'")
                 use_conda = True
+
+                # Check if we can skip installation
+                skip_installation = False
+                if wheels_available:
+                    try:
+                        skip_installation = await should_skip_installation(
+                            wheels_dir=wheels_dir,
+                            vm=vm,
+                            use_conda=True,
+                            platform='windows',
+                            stop_event=stop_event
+                        )
+                    except Exception as e:
+                        log.warning(f"Version check failed: {e}, proceeding with installation")
+                        skip_installation = False
+
                 if wheels_available:
                     log.info(f"CLAUDE: Using wheel installation (fast mode)")
                     # PowerShell array expansion: @(Get-ChildItem ...) forces wildcard expansion
@@ -328,6 +345,22 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         if not use_conda:
             # Fall back to Poetry
             log.info(f"Using Poetry for VM '{vm.vm_name}'")
+
+            # Check if we can skip installation
+            skip_installation = False
+            if wheels_available:
+                try:
+                    skip_installation = await should_skip_installation(
+                        wheels_dir=wheels_dir,
+                        vm=vm,
+                        use_conda=False,
+                        platform='windows',
+                        stop_event=stop_event
+                    )
+                except Exception as e:
+                    log.warning(f"Version check failed: {e}, proceeding with installation")
+                    skip_installation = False
+
             if wheels_available:
                 log.info(f"CLAUDE: Using wheel installation (fast mode)")
                 install_command = r'pip install --force-reinstall @(Get-ChildItem \\vboxsvr\adare\wheels\*.whl | Select-Object -ExpandProperty FullName)'
@@ -353,6 +386,22 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
             if 'env_exists' in conda_env_result.stdout:
                 log.info(f"Using Miniforge conda environment 'pyadare' for VM '{vm.vm_name}'")
                 use_conda = True
+
+                # Check if we can skip installation
+                skip_installation = False
+                if wheels_available:
+                    try:
+                        skip_installation = await should_skip_installation(
+                            wheels_dir=wheels_dir,
+                            vm=vm,
+                            use_conda=True,
+                            platform='linux',
+                            stop_event=stop_event
+                        )
+                    except Exception as e:
+                        log.warning(f"Version check failed: {e}, proceeding with installation")
+                        skip_installation = False
+
                 if wheels_available:
                     log.info(f"CLAUDE: Using wheel installation (fast mode)")
                     install_command = '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --force-reinstall /adare/app/wheels/*.whl && xhost +SI:localuser:root'
@@ -367,6 +416,22 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         if not use_conda:
             # Fall back to Poetry
             log.info(f"Using Poetry for VM '{vm.vm_name}'")
+
+            # Check if we can skip installation
+            skip_installation = False
+            if wheels_available:
+                try:
+                    skip_installation = await should_skip_installation(
+                        wheels_dir=wheels_dir,
+                        vm=vm,
+                        use_conda=False,
+                        platform='linux',
+                        stop_event=stop_event
+                    )
+                except Exception as e:
+                    log.warning(f"Version check failed: {e}, proceeding with installation")
+                    skip_installation = False
+
             if wheels_available:
                 log.info(f"CLAUDE: Using wheel installation (fast mode)")
                 install_command = 'pip install --force-reinstall /adare/app/wheels/*.whl && xhost +SI:localuser:root'
@@ -385,9 +450,13 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     if result.returncode != 0:
         raise VMSetupError(log, vm.vm_name, set_path_command_experiment_tools, result.returncode, result.stdout, result.stderr)
 
-    result = await vm.run_command(install_command, stop_event=stop_event)
-    if result.returncode != 0:
-        raise VMSetupError(log, vm.vm_name, install_command, result.returncode, result.stdout, result.stderr)
+    # Conditional installation based on version check
+    if not skip_installation:
+        result = await vm.run_command(install_command, stop_event=stop_event)
+        if result.returncode != 0:
+            raise VMSetupError(log, vm.vm_name, install_command, result.returncode, result.stdout, result.stderr)
+    else:
+        log.info("Installation skipped - using preinstalled agent")
 
     # TODO: figure out a way to run poetry as sudo in linux
     if context.guest_platform == 'linux':

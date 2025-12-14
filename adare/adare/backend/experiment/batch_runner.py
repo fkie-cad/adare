@@ -287,8 +287,18 @@ class ExperimentEnvironmentMatcher:
                 if environment is None:
                     return False
 
+                # Try environment-specific validation first
                 experiment = api.get_experiment(experiment_name, environment.id)
-                return experiment is not None
+                if experiment is not None:
+                    return True
+
+                # Fall back to checking if experiment exists at all
+                experiment = api.get_experiment_by_project_and_name(self.project_path, experiment_name)
+                if experiment is not None:
+                    log.warning(f'experiment "{experiment_name}" does not list "{environment_name}" in metadata.yml - running anyway')
+                    return True
+
+                return False
 
         except Exception as e:
             log.warning(f"Failed to validate compatibility between '{experiment_name}' and '{environment_name}': {e}")
