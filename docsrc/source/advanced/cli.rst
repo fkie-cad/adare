@@ -54,10 +54,13 @@ Environments define virtual machine configurations and contain experiments that 
 
 ``adare environment load <environment>``
   Load an environment from a YAML configuration file.
-  
+
   Options:
     * ``--project TEXT`` - Name of the project
     * ``--force`` - Force update of the environment
+    * ``--no-copy`` - Keep VM file at original location instead of copying to managed storage.
+      Useful for very large VMs. **Important:** The VM file must remain at its original path.
+      Only works with local files (URLs are always downloaded).
 
 ``adare environment delete <ulid>``
   Delete an environment by its ULID.

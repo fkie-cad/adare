@@ -174,25 +174,45 @@ class AutomaticVariables:
         else:  # linux
             shared_root = "/adare"
 
-        # Add shared mount directory variables
+        # Experiment-level shared directory variables
         registry.add('adare_shared', Variable(
             value=f"{shared_root}/shared",
             type=VariableType.PATH,
-            description="Base shared directory mount point in VM"
+            description="Experiment-level shared directory mount point in VM"
         ))
 
         registry.add('adare_shared_tools', Variable(
             value=f"{shared_root}/shared/tools",
             type=VariableType.PATH,
-            description="Shared tools directory mount point in VM"
+            description="Experiment-level shared tools directory mount point in VM"
         ))
 
         registry.add('adare_shared_data', Variable(
             value=f"{shared_root}/shared/data",
             type=VariableType.PATH,
-            description="Shared data directory mount point in VM"
+            description="Experiment-level shared data directory mount point in VM"
         ))
 
+        # Project-level shared directory variables
+        registry.add('adare_project_shared', Variable(
+            value=f"{shared_root}/project_shared",
+            type=VariableType.PATH,
+            description="Project-level shared directory mount point in VM"
+        ))
+
+        registry.add('adare_project_shared_tools', Variable(
+            value=f"{shared_root}/project_shared/tools",
+            type=VariableType.PATH,
+            description="Project-level shared tools directory mount point in VM"
+        ))
+
+        registry.add('adare_project_shared_data', Variable(
+            value=f"{shared_root}/project_shared/data",
+            type=VariableType.PATH,
+            description="Project-level shared data directory mount point in VM"
+        ))
+
+        # Run directory
         registry.add('adare_run_dir', Variable(
             value=f"{shared_root}/run",
             type=VariableType.PATH,
