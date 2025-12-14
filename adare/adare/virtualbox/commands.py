@@ -138,6 +138,7 @@ class CommandExecutionMixin:
         # Create process with proper signal handling
         proc = await asyncio.create_subprocess_exec(
             *command,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             preexec_fn=os.setsid if os.name != 'windows' else None
@@ -193,9 +194,8 @@ class CommandExecutionMixin:
                         buffer = b""
                         last_yield_time = now
                 else:
-                    # EOF reached
-                    if proc.returncode is not None:
-                        break
+                    # EOF reached - break immediately regardless of returncode
+                    break
 
                 # Flush buffer every 1 seconds even if no newline
                 if buffer and (now - last_yield_time >= flush_interval):

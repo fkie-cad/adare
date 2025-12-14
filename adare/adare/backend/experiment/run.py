@@ -275,6 +275,11 @@ def __experiment_integrity_check(project_path: Path, experiment_name: str, envir
 async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: threading.Event):
     vm = context.vm
     # TODO: maybe speed up by queuing the commands and running them as a single command to avoid VBoxManager overhead
+
+    # Check if wheels are available for faster installation
+    wheels_dir = context.project_directory.vm_runtime / 'wheels'
+    wheels_available = wheels_dir.exists() and list(wheels_dir.glob('*.whl'))
+
     if context.guest_platform == 'windows':
         firewall_rule = f'New-NetFirewallRule -DisplayName "adarevm" -Direction Inbound -Action Allow -Protocol TCP -LocalPort {context.config.websocket_port}'
         await vm.run_command(firewall_rule, stop_event=stop_event)
@@ -307,7 +312,15 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
             if 'env_exists' in conda_env_result.stdout:
                 log.info(f"Using Miniforge conda environment 'pyadare' for VM '{vm.vm_name}'")
                 use_conda = True
-                install_command = r'cd \\vboxsvr\adare\adarelib; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
+                if wheels_available:
+                    log.info(f"CLAUDE: Using wheel installation (fast mode)")
+                    # PowerShell array expansion: @(Get-ChildItem ...) forces wildcard expansion
+                    # before pip sees the arguments. PowerShell doesn't expand wildcards in
+                    # base64-encoded commands, so we must explicitly use Get-ChildItem.
+                    install_command = r'%USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem \\vboxsvr\adare\wheels\*.whl | Select-Object -ExpandProperty FullName)'
+                else:
+                    log.info(f"CLAUDE: Wheels not available - using editable install (slower)")
+                    install_command = r'cd \\vboxsvr\adare\adarelib; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
                 run_command = r'cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare adarevm'
             else:
                 log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to Poetry")
@@ -315,7 +328,12 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         if not use_conda:
             # Fall back to Poetry
             log.info(f"Using Poetry for VM '{vm.vm_name}'")
-            install_command = r'cd \\vboxsvr\adare\adarevm; poetry install'
+            if wheels_available:
+                log.info(f"CLAUDE: Using wheel installation (fast mode)")
+                install_command = r'pip install --force-reinstall @(Get-ChildItem \\vboxsvr\adare\wheels\*.whl | Select-Object -ExpandProperty FullName)'
+            else:
+                log.info(f"CLAUDE: Wheels not available - using editable install (slower)")
+                install_command = r'cd \\vboxsvr\adare\adarevm; poetry install'
             run_command = r'cd \\vboxsvr\adare\adarevm; poetry run adarevm'
             run_cwd = None
     else:
@@ -335,7 +353,12 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
             if 'env_exists' in conda_env_result.stdout:
                 log.info(f"Using Miniforge conda environment 'pyadare' for VM '{vm.vm_name}'")
                 use_conda = True
-                install_command = 'cd /adare/app/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && xhost +SI:localuser:root'
+                if wheels_available:
+                    log.info(f"CLAUDE: Using wheel installation (fast mode)")
+                    install_command = '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --force-reinstall /adare/app/wheels/*.whl && xhost +SI:localuser:root'
+                else:
+                    log.info(f"CLAUDE: Wheels not available - using editable install (slower)")
+                    install_command = 'cd /adare/app/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && xhost +SI:localuser:root'
                 run_command = '/home/adare/.miniforge3/bin/conda run -n pyadare adarevm /adare/run/logs/adarevm.log'
                 run_cwd = None
             else:
@@ -344,7 +367,12 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         if not use_conda:
             # Fall back to Poetry
             log.info(f"Using Poetry for VM '{vm.vm_name}'")
-            install_command = 'cd /adare/app/adarevm && poetry install && xhost +SI:localuser:root'
+            if wheels_available:
+                log.info(f"CLAUDE: Using wheel installation (fast mode)")
+                install_command = 'pip install --force-reinstall /adare/app/wheels/*.whl && xhost +SI:localuser:root'
+            else:
+                log.info(f"CLAUDE: Wheels not available - using editable install (slower)")
+                install_command = 'cd /adare/app/adarevm && poetry install && xhost +SI:localuser:root'
             run_command = 'poetry run adarevm /adare/run/logs/adarevm.log'
             run_cwd = '/adare/app/adarevm'
 
