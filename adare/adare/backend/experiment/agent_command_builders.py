@@ -31,9 +31,16 @@ class EnvironmentInfo:
 
 
 @dataclass
+class SetupCommand:
+    """A setup command with its admin requirement."""
+    command: str
+    requires_admin: bool
+
+
+@dataclass
 class CommandSet:
     """Collection of commands needed to set up and run adarevm."""
-    setup_commands: List[str]  # PATH setup, firewall rules, etc.
+    setup_commands: List[SetupCommand]  # Setup commands with admin flags
     install_command: str
     run_command: str
     run_cwd: Optional[str]
@@ -50,8 +57,8 @@ class AgentCommandBuilder(ABC):
         self.wheels_available = wheels_dir.exists() and bool(list(wheels_dir.glob('*.whl')))
 
     @abstractmethod
-    async def build_setup_commands(self, env_info: EnvironmentInfo) -> List[str]:
-        """Build platform-specific setup commands (PATH, firewall, etc.)."""
+    async def build_setup_commands(self, env_info: EnvironmentInfo) -> List[SetupCommand]:
+        """Build platform-specific setup commands with admin requirements."""
         pass
 
     @abstractmethod
@@ -103,20 +110,31 @@ class AgentCommandBuilder(ABC):
 class WindowsAgentCommandBuilder(AgentCommandBuilder):
     """Windows-specific command builder."""
 
-    async def build_setup_commands(self, env_info: EnvironmentInfo) -> List[str]:
-        """Build Windows setup commands."""
+    async def build_setup_commands(self, env_info: EnvironmentInfo) -> List[SetupCommand]:
+        """Build Windows setup commands with per-command admin requirements."""
         commands = []
 
-        # Firewall rule for adarevm WebSocket server
+        # Firewall rule for adarevm WebSocket server (REQUIRES ADMIN)
         firewall_cmd = f'New-NetFirewallRule -DisplayName "adarevm" -Direction Inbound -Action Allow -Protocol TCP -LocalPort {self.websocket_port}'
-        commands.append(firewall_cmd)
+        commands.append(SetupCommand(command=firewall_cmd, requires_admin=True))
 
-        # PATH setup for project-wide and experiment-specific tools
-        commands.append(r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\shared\tools", "User")')
-        commands.append(r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\experiment\shared\tools", "User")')
+        # PATH setup for project-wide tools (User-level, no admin needed)
+        commands.append(SetupCommand(
+            command=r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\shared\tools", "User")',
+            requires_admin=False
+        ))
 
-        # Mount VirtualBox shared folders temporarily (forces network provider initialization)
-        commands.append(r'net use Z: \\vboxsvr\adare; net use Z: /delete')
+        # PATH setup for experiment-specific tools (User-level, no admin needed)
+        commands.append(SetupCommand(
+            command=r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\experiment\shared\tools", "User")',
+            requires_admin=False
+        ))
+
+        # Mount VirtualBox shared folders temporarily (no admin needed)
+        commands.append(SetupCommand(
+            command=r'net use Z: \\vboxsvr\adare; net use Z: /delete',
+            requires_admin=False
+        ))
 
         return commands
 
@@ -167,13 +185,19 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
 class LinuxAgentCommandBuilder(AgentCommandBuilder):
     """Linux-specific command builder."""
 
-    async def build_setup_commands(self, env_info: EnvironmentInfo) -> List[str]:
-        """Build Linux setup commands."""
+    async def build_setup_commands(self, env_info: EnvironmentInfo) -> List[SetupCommand]:
+        """Build Linux setup commands with per-command admin requirements."""
         return [
-            # Add project-wide tools to PATH
-            "grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc && source ~/.bashrc",
-            # Add experiment-specific tools to PATH
-            "grep -qxF 'export PATH=$PATH:/adare/experiment/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/experiment/shared/tools' >> ~/.bashrc && source ~/.bashrc"
+            # Add project-wide tools to PATH (user bashrc, no admin needed)
+            SetupCommand(
+                command="grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc && source ~/.bashrc",
+                requires_admin=False
+            ),
+            # Add experiment-specific tools to PATH (user bashrc, no admin needed)
+            SetupCommand(
+                command="grep -qxF 'export PATH=$PATH:/adare/experiment/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/experiment/shared/tools' >> ~/.bashrc && source ~/.bashrc",
+                requires_admin=False
+            )
         ]
 
     def build_install_command(self, env_info: EnvironmentInfo) -> str:

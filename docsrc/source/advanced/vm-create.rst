@@ -1,6 +1,7 @@
 ********************
-VM Creation Guide  
+Create an ADARE VM  
 ********************
+
 
 This guide shows you how to set up a virtual machine that's compatible with ADARE. You'll need to create a custom VM if:
 
@@ -9,10 +10,36 @@ This guide shows you how to set up a virtual machine that's compatible with ADAR
 - You want a customized forensic analysis environment
 
 Once configured, export the VM as an ``.ova`` or ``.ovf`` file in **OVF 1.0 format**.
+At the moment, ADARE only supports VirtualBox VMs but it is planned to support Qemu/KVM in the future.
 
 
-General
-=======
+General Guideline
+=================
+There are two options for creating your own ADARE-compatible VM:
+1. **Start from scratch:** Create a new VM with a minimal OS installation and set it up as explained in TODO.
+2. **Modify an existing VM:** Take one of the provided ADARE VMs and customize it by e.g. installing additional software as explained in TODO
+
+
+
+Extend
+======
+
+VirtualBox
+----------
+
+
+
+
+Create
+======
+
+
+
+
+
+
+VirtualBox
+==========
 
 - Disable all that can create pop up's as far as possible (like update notifications etc., automatic updates, error reporting, etc.)
 - Disable screen lock and sleep mode if possible

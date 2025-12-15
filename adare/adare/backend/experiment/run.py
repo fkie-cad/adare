@@ -311,10 +311,14 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
 
     # Step 4: Execute setup commands (PATH, firewall, etc.)
     for setup_cmd in commands.setup_commands:
-        result = await vm.run_command(setup_cmd, stop_event=stop_event)
+        result = await vm.run_command(
+            setup_cmd.command,
+            stop_event=stop_event,
+            admin=setup_cmd.requires_admin
+        )
         if result.returncode != 0:
             raise VMSetupError(
-                log, vm.vm_name, setup_cmd,
+                log, vm.vm_name, setup_cmd.command,
                 result.returncode, result.stdout, result.stderr
             )
 
@@ -1095,7 +1099,6 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 flow_console.finish_experiment_timer(success=False)
         
         try:
-            input("Press Enter to continue to cleanup and shutdown...")
             log.info("Starting cleanup and shutdown...")
             # Wrap cleanup in proper stage context (don't pass interrupt event - we want to show actual cleanup work)
             with StageCtxManager(CleanupShutdownStage(), experiment_run_context.experiment_run_ulid, event=None):
