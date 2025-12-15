@@ -279,8 +279,8 @@ class DataRetrievalApi:
         data['dotnotation'] = [f'{project_name}.{obj.name}' if project_name else obj.name for obj in data['object']]
         # Add smart display name based on current project context
         data['display_name'] = [self._get_smart_display_name(obj, 'experiment') for obj in data['object']]
-        data['environments'] = [', '.join([env.name for env in obj.environments]) for obj in data['object']]
-        data['environments_names'] = [', '.join([env.name for env in obj.environments]) for obj in data['object']]
+        data['environments'] = [', '.join([env.name for env in obj.environments if env]) for obj in data['object']]
+        data['environments_names'] = [', '.join([env.name for env in obj.environments if env]) for obj in data['object']]
         data['tags'] = [', '.join([tag.name for tag in obj.tags]) for obj in data['object']]
         # Add ulid field (which is same as id for experiments)
         data['ulid'] = data['id']

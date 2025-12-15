@@ -1,22 +1,8 @@
 """
-DEPRECATED: Use adare.hypervisor.virtualbox.manager instead.
+VirtualBox Manager for handling VirtualBox operations in a thread-safe manner.
 
-Backward compatibility shim for VirtualBoxManager class.
+Implements AbstractHypervisorManager for VirtualBox-specific operations.
 """
-import warnings
-
-warnings.warn(
-    "adare.virtualbox.manager is deprecated, use adare.hypervisor.virtualbox.manager instead",
-    DeprecationWarning,
-    stacklevel=2
-)
-
-# Import from new location
-from adare.hypervisor.virtualbox.manager import VirtualBoxManager
-
-__all__ = ['VirtualBoxManager']
-
-# Keep original imports
 import asyncio
 import logging
 import queue
@@ -24,16 +10,16 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from adare.hypervisor.base.manager import AbstractHypervisorManager
+
 log = logging.getLogger(__name__)
 
 
-class VirtualBoxManager:
+class VirtualBoxManager(AbstractHypervisorManager):
     """Thread-safe manager for VirtualBox operations."""
-    
+
     def __init__(self):
-        self._cmd_queue = queue.Queue()
-        self._worker = threading.Thread(target=self._worker_loop, daemon=True)
-        self._worker.start()
+        super().__init__()
         log.debug("VirtualBoxManager initialized and worker thread started.")
 
     def _worker_loop(self):
@@ -87,7 +73,8 @@ class VirtualBoxManager:
         Raises:
             VMImportException: If import fails
         """
-        from adare.virtualbox.api import VirtualBoxVM
+        # Import here to avoid circular dependency
+        from adare.hypervisor.virtualbox.vm import VirtualBoxVM
         from adare.config import get_vm_credentials
 
         log.info(f"Importing VM '{vm_name}' from '{vm_file_path}' (environment: {environment_ulid})")

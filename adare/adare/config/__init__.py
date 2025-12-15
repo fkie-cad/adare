@@ -99,17 +99,42 @@ DEFAULT_VM_CREDENTIALS = {
 def get_vm_credentials(guest_os: str) -> tuple[str, str]:
     """
     Get default username and password for a guest OS.
-    
+
     Args:
         guest_os: Guest OS type (e.g., 'windows', 'linux')
-        
+
     Returns:
         Tuple of (username, password)
     """
     if 'windows' in guest_os.lower():
-        return (DEFAULT_VM_CREDENTIALS['windows']['username'], 
+        return (DEFAULT_VM_CREDENTIALS['windows']['username'],
                 DEFAULT_VM_CREDENTIALS['windows']['password'])
     else:
         return (DEFAULT_VM_CREDENTIALS['linux']['username'],
                 DEFAULT_VM_CREDENTIALS['linux']['password'])
+
+
+# Hypervisor Configuration
+DEFAULT_HYPERVISOR = "virtualbox"
+SUPPORTED_HYPERVISORS = ["virtualbox", "qemu"]
+
+HYPERVISOR_CONFIGS = {
+    'virtualbox': {
+        'vboxmanage_exe': 'VBoxManage',  # Will be auto-detected based on platform
+        'default_graphics': 'vmsvga',
+        'default_vram': 128
+    },
+    'qemu': {
+        'qemu_system_exe': 'qemu-system-x86_64',
+        'qemu_img_exe': 'qemu-img',
+        'default_machine': 'pc',
+        'default_accel': 'kvm',
+        'default_drive_format': 'qcow2',
+        'default_network': 'user',
+        'monitor_socket': True,           # Use QMP socket for control
+        'guest_agent': True,              # Require QEMU Guest Agent
+        'guest_agent_socket': True,       # Use Unix socket for guest agent
+        'use_libguestfs': True            # Use libguestfs for file ops when stopped
+    }
+}
 

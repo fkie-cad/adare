@@ -54,6 +54,10 @@ class EnvironmentMetadata:
 
     vm_type: Literal["auto", "path", "url"] = "auto"
 
+    # Hypervisor configuration
+    hypervisor: str = "virtualbox"  # Default hypervisor
+    hypervisor_config: dict = attrs.Factory(dict)  # Hypervisor-specific configuration
+
     # Legacy Vagrant-based environment fields (for backward compatibility)
     vagrantbox: Optional[str] = None
     

@@ -73,7 +73,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] in some terminal files we use directly database and do queries. Should we not provide this through an API that provides the data? What is better code quality?
 - [ ] add tests for modular code parts; make code more modular where required!
 - [ ] background commands in vm (as installation); when to check for results (move to separate thread?)
-- [x] address: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. 
+- [ ] address: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. 
+- [ ] command line seems slow responsive; improve
 
 ---
 

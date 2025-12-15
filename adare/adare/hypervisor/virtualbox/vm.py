@@ -1,22 +1,8 @@
 """
-DEPRECATED: Use adare.hypervisor.virtualbox.vm instead.
+VirtualBox VM - Main VM class with modular operations.
 
-Backward compatibility shim for VirtualBoxVM class.
+Implements AbstractVM for VirtualBox-specific VM management.
 """
-import warnings
-
-warnings.warn(
-    "adare.virtualbox.api is deprecated, use adare.hypervisor.virtualbox.vm instead",
-    DeprecationWarning,
-    stacklevel=2
-)
-
-# Import from new location
-from adare.hypervisor.virtualbox.vm import VirtualBoxVM
-
-__all__ = ['VirtualBoxVM']
-
-# Keep original imports to avoid breaking code that does "from adare.virtualbox.api import ..."
 import asyncio
 import contextlib
 import logging
@@ -27,17 +13,16 @@ from typing import Optional, List, Dict, Any
 
 from adarelib.constants import StatusEnum
 
-from .manager import VirtualBoxManager
-from .models import VMImportException, VMAlreadyRunningException, VMNotFoundException
-from .commands import CommandExecutionMixin
-from .snapshots import SnapshotMixin
-from .networking import NetworkingMixin
-from .utils import run_subprocess, read_file_hash
+from adare.hypervisor.base.vm import AbstractVM
+from adare.hypervisor.exceptions import VMImportException, VMAlreadyRunningException, VMNotFoundException
+from adare.hypervisor.virtualbox.manager import VirtualBoxManager
+from adare.hypervisor.virtualbox.mixins import CommandExecutionMixin, SnapshotMixin, NetworkingMixin
+from adare.hypervisor.virtualbox.utils import run_subprocess, read_file_hash
 
 log = logging.getLogger(__name__)
 
 
-class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin):
+class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
     """
     VirtualBox VM management class with modular operations.
     Inherits from mixins for command execution, snapshots, and networking.

@@ -11,7 +11,7 @@ from adare.types.stages import (
 from adare.backend.experiment.runctx import ExperimentRunCtx
 from adare.exceptions import LoggedException
 from adare.config import SHARE_POINT_VM
-from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager
+from adare.hypervisor.virtualbox import VirtualBoxVM, VirtualBoxManager
 import adare.backend.experiment.database as experiment_database
 import adare.backend.environment.database as environment_database
 import adare.backend.vm.database as vm_database

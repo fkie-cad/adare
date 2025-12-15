@@ -113,7 +113,7 @@ class StructuredDataApi(DatabaseApi):
             dotnotation = f"{project_name}.{exp.name}" if project_name else exp.name
 
             display_name = get_smart_display_name(exp, 'experiment')
-            env_names = [env.name for env in exp.environments]
+            env_names = [env.name for env in exp.environments if env]
             primary_env = env_names[0] if env_names else ""
             tags = safe_get_tags(exp)
             published, in_request = safe_get_sync_status(exp)

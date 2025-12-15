@@ -115,9 +115,9 @@ def get_experiment_by_ulid(project_path: Path, experiment_ulid: str, fields: lis
                     result['project_id'] = experiment.project_id
                 # Foreign key relationship fields
                 elif field == 'environments':
-                    result['environments'] = [env.name for env in experiment.environments] if hasattr(experiment, 'environments') else []
+                    result['environments'] = [env.name for env in experiment.environments if env] if hasattr(experiment, 'environments') else []
                 elif field == 'environment_names':
-                    result['environment_names'] = [env.name for env in experiment.environments] if hasattr(experiment, 'environments') else []
+                    result['environment_names'] = [env.name for env in experiment.environments if env] if hasattr(experiment, 'environments') else []
                 elif field == 'environment_count':
                     result['environment_count'] = len(experiment.environments) if hasattr(experiment, 'environments') else 0
                 elif field == 'runs_count':
