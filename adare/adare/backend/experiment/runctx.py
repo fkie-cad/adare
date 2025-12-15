@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 import threading
 from typing import Optional, Tuple, Dict
-from adare.virtualbox.api import VirtualBoxVM
+from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 from adare.backend.project.directory import ProjectDirectory
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 from adare.backend.experiment.websocket_client import AdareVMClient

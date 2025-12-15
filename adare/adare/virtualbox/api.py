@@ -1,6 +1,22 @@
 """
-VirtualBox API - Main VM class with modular operations.
+DEPRECATED: Use adare.hypervisor.virtualbox.vm instead.
+
+Backward compatibility shim for VirtualBoxVM class.
 """
+import warnings
+
+warnings.warn(
+    "adare.virtualbox.api is deprecated, use adare.hypervisor.virtualbox.vm instead",
+    DeprecationWarning,
+    stacklevel=2
+)
+
+# Import from new location
+from adare.hypervisor.virtualbox.vm import VirtualBoxVM
+
+__all__ = ['VirtualBoxVM']
+
+# Keep original imports to avoid breaking code that does "from adare.virtualbox.api import ..."
 import asyncio
 import contextlib
 import logging

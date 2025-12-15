@@ -1,6 +1,30 @@
 """
-VirtualBox API data models and exceptions.
+DEPRECATED: Use adare.hypervisor.virtualbox.models and adare.hypervisor.exceptions instead.
+
+Backward compatibility shim for VirtualBox models and exceptions.
 """
+import warnings
+
+warnings.warn(
+    "adare.virtualbox.models is deprecated, use adare.hypervisor.virtualbox.models and adare.hypervisor.exceptions instead",
+    DeprecationWarning,
+    stacklevel=2
+)
+
+# Import from new location
+from adare.hypervisor.virtualbox.models import PortForwardingRule, SharedFolderConfig, CommandResult
+from adare.hypervisor.exceptions import VMImportException, VMAlreadyRunningException, VMNotFoundException
+
+__all__ = [
+    'PortForwardingRule',
+    'SharedFolderConfig',
+    'CommandResult',
+    'VMImportException',
+    'VMAlreadyRunningException',
+    'VMNotFoundException',
+]
+
+# Keep original imports
 import logging
 from dataclasses import dataclass
 from typing import Optional

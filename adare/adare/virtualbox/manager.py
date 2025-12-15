@@ -1,6 +1,22 @@
 """
-VirtualBox Manager for handling VirtualBox operations in a thread-safe manner.
+DEPRECATED: Use adare.hypervisor.virtualbox.manager instead.
+
+Backward compatibility shim for VirtualBoxManager class.
 """
+import warnings
+
+warnings.warn(
+    "adare.virtualbox.manager is deprecated, use adare.hypervisor.virtualbox.manager instead",
+    DeprecationWarning,
+    stacklevel=2
+)
+
+# Import from new location
+from adare.hypervisor.virtualbox.manager import VirtualBoxManager
+
+__all__ = ['VirtualBoxManager']
+
+# Keep original imports
 import asyncio
 import logging
 import queue
