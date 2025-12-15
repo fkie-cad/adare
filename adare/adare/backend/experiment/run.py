@@ -274,21 +274,52 @@ def __experiment_integrity_check(project_path: Path, experiment_name: str, envir
         )
 
 async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: threading.Event):
+    """Install and run adarevm agent in the VM using appropriate environment.
+
+    This function uses the command builder pattern to construct platform-specific
+    commands for installing and running the adarevm agent. The builders handle
+    the complexity of 8 different execution paths (Windows/Linux × Conda/Poetry × Wheels/Editable).
+    """
+    from .agent_command_builders import (
+        detect_environment,
+        WindowsAgentCommandBuilder,
+        LinuxAgentCommandBuilder
+    )
+
     vm = context.vm
-    # TODO: maybe speed up by queuing the commands and running them as a single command to avoid VBoxManager overhead
-
-    # Check if wheels are available for faster installation
     wheels_dir = context.project_directory.vm_runtime / 'wheels'
-    wheels_available = wheels_dir.exists() and list(wheels_dir.glob('*.whl'))
 
+    # Step 1: Detect Python environment in the VM
+    env_info = await detect_environment(vm, context.guest_platform, stop_event)
+
+    # Step 2: Create platform-specific command builder
     if context.guest_platform == 'windows':
-        firewall_rule = f'New-NetFirewallRule -DisplayName "adarevm" -Direction Inbound -Action Allow -Protocol TCP -LocalPort {context.config.websocket_port}'
-        await vm.run_command(firewall_rule, stop_event=stop_event)
-        set_path_command = r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\shared\tools", "User")'
-        set_path_command_experiment_tools = r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\experiment\shared\tools", "User")'
-        # Mount VirtualBox shared folders shortly (VirtualBox shared folders are exposed as a network provider -> lazy loading prevents access otherwise)
-        mount_shared_folder = r'net use Z: \\vboxsvr\adare; net use Z: /delete'
-        await vm.run_command(mount_shared_folder, stop_event=stop_event)
+        builder = WindowsAgentCommandBuilder(
+            wheels_dir=wheels_dir,
+            shared_folders=context.config.shared_directories,
+            websocket_port=context.config.websocket_port
+        )
+    else:
+        builder = LinuxAgentCommandBuilder(
+            wheels_dir=wheels_dir,
+            shared_folders=context.config.shared_directories,
+            websocket_port=context.config.websocket_port
+        )
+
+    # Step 3: Build all commands (setup, install, run)
+    commands = await builder.build_commands(env_info, vm, stop_event)
+
+    # Step 4: Execute setup commands (PATH, firewall, etc.)
+    for setup_cmd in commands.setup_commands:
+        result = await vm.run_command(setup_cmd, stop_event=stop_event)
+        if result.returncode != 0:
+            raise VMSetupError(
+                log, vm.vm_name, setup_cmd,
+                result.returncode, result.stdout, result.stderr
+            )
+
+    # Step 5: Mount shared folders (Windows only)
+    if context.guest_platform == 'windows':
         shared_folders = {
             name: paths['vm']
             for name, paths in context.config.shared_directories.items()
@@ -300,169 +331,36 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
                 stop_event=stop_event
             )
 
-        # Check if Miniforge is installed, otherwise fall back to Poetry
-        check_miniforge = r'if (Test-Path "$env:USERPROFILE\.miniforge3") { exit 0 } else { exit 1 }'
-        miniforge_result = await vm.run_command(check_miniforge, stop_event=stop_event)
-
-        use_conda = False
-        if miniforge_result.returncode == 0:
-            # Check if pyadare conda environment exists
-            check_conda_env = r'& "$env:USERPROFILE\.miniforge3\Scripts\conda.exe" env list | Select-String "^pyadare " | Out-Null; if ($?) { Write-Output "env_exists" } else { Write-Output "env_not_found" }'
-            conda_env_result = await vm.run_command(check_conda_env, stop_event=stop_event)
-
-            if 'env_exists' in conda_env_result.stdout:
-                log.info(f"Using Miniforge conda environment 'pyadare' for VM '{vm.vm_name}'")
-                use_conda = True
-
-                # Check if we can skip installation
-                skip_installation = False
-                if wheels_available:
-                    try:
-                        skip_installation = await should_skip_installation(
-                            wheels_dir=wheels_dir,
-                            vm=vm,
-                            use_conda=True,
-                            platform='windows',
-                            stop_event=stop_event
-                        )
-                    except Exception as e:
-                        log.warning(f"Version check failed: {e}, proceeding with installation")
-                        skip_installation = False
-
-                if wheels_available:
-                    log.info(f"CLAUDE: Using wheel installation (fast mode)")
-                    # PowerShell array expansion: @(Get-ChildItem ...) forces wildcard expansion
-                    # before pip sees the arguments. PowerShell doesn't expand wildcards in
-                    # base64-encoded commands, so we must explicitly use Get-ChildItem.
-                    install_command = r'%USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem \\vboxsvr\adare\wheels\*.whl | Select-Object -ExpandProperty FullName)'
-                else:
-                    log.info(f"CLAUDE: Wheels not available - using editable install (slower)")
-                    install_command = r'cd \\vboxsvr\adare\adarelib; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
-                run_command = r'cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare adarevm'
-            else:
-                log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to Poetry")
-
-        if not use_conda:
-            # Fall back to Poetry
-            log.info(f"Using Poetry for VM '{vm.vm_name}'")
-
-            # Check if we can skip installation
-            skip_installation = False
-            if wheels_available:
-                try:
-                    skip_installation = await should_skip_installation(
-                        wheels_dir=wheels_dir,
-                        vm=vm,
-                        use_conda=False,
-                        platform='windows',
-                        stop_event=stop_event
-                    )
-                except Exception as e:
-                    log.warning(f"Version check failed: {e}, proceeding with installation")
-                    skip_installation = False
-
-            if wheels_available:
-                log.info(f"CLAUDE: Using wheel installation (fast mode)")
-                install_command = r'pip install --force-reinstall @(Get-ChildItem \\vboxsvr\adare\wheels\*.whl | Select-Object -ExpandProperty FullName)'
-            else:
-                log.info(f"CLAUDE: Wheels not available - using editable install (slower)")
-                install_command = r'cd \\vboxsvr\adare\adarevm; poetry install'
-            run_command = r'cd \\vboxsvr\adare\adarevm; poetry run adarevm'
-            run_cwd = None
-    else:
-        set_path_command = "grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc && source ~/.bashrc"
-        set_path_command_experiment_tools = "grep -qxF 'export PATH=$PATH:/adare/experiment/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/experiment/shared/tools' >> ~/.bashrc && source ~/.bashrc"
-
-        # Check if Miniforge is installed, otherwise fall back to Poetry
-        check_miniforge = 'test -d /home/adare/.miniforge3 && echo "exists" || echo "not_found"'
-        miniforge_result = await vm.run_command(check_miniforge, stop_event=stop_event)
-
-        use_conda = False
-        if 'exists' in miniforge_result.stdout:
-            # Check if pyadare conda environment exists
-            check_conda_env = '/home/adare/.miniforge3/bin/conda env list | grep -q "^pyadare " && echo "env_exists" || echo "env_not_found"'
-            conda_env_result = await vm.run_command(check_conda_env, stop_event=stop_event)
-
-            if 'env_exists' in conda_env_result.stdout:
-                log.info(f"Using Miniforge conda environment 'pyadare' for VM '{vm.vm_name}'")
-                use_conda = True
-
-                # Check if we can skip installation
-                skip_installation = False
-                if wheels_available:
-                    try:
-                        skip_installation = await should_skip_installation(
-                            wheels_dir=wheels_dir,
-                            vm=vm,
-                            use_conda=True,
-                            platform='linux',
-                            stop_event=stop_event
-                        )
-                    except Exception as e:
-                        log.warning(f"Version check failed: {e}, proceeding with installation")
-                        skip_installation = False
-
-                if wheels_available:
-                    log.info(f"CLAUDE: Using wheel installation (fast mode)")
-                    install_command = '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --force-reinstall /adare/app/wheels/*.whl && xhost +SI:localuser:root'
-                else:
-                    log.info(f"CLAUDE: Wheels not available - using editable install (slower)")
-                    install_command = 'cd /adare/app/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && xhost +SI:localuser:root'
-                run_command = '/home/adare/.miniforge3/bin/conda run -n pyadare adarevm /adare/run/logs/adarevm.log'
-                run_cwd = None
-            else:
-                log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to Poetry")
-
-        if not use_conda:
-            # Fall back to Poetry
-            log.info(f"Using Poetry for VM '{vm.vm_name}'")
-
-            # Check if we can skip installation
-            skip_installation = False
-            if wheels_available:
-                try:
-                    skip_installation = await should_skip_installation(
-                        wheels_dir=wheels_dir,
-                        vm=vm,
-                        use_conda=False,
-                        platform='linux',
-                        stop_event=stop_event
-                    )
-                except Exception as e:
-                    log.warning(f"Version check failed: {e}, proceeding with installation")
-                    skip_installation = False
-
-            if wheels_available:
-                log.info(f"CLAUDE: Using wheel installation (fast mode)")
-                install_command = 'pip install --force-reinstall /adare/app/wheels/*.whl && xhost +SI:localuser:root'
-            else:
-                log.info(f"CLAUDE: Wheels not available - using editable install (slower)")
-                install_command = 'cd /adare/app/adarevm && poetry install && xhost +SI:localuser:root'
-            run_command = 'poetry run adarevm /adare/run/logs/adarevm.log'
-            run_cwd = '/adare/app/adarevm'
-
-    # Execute setup commands with error handling
-    result = await vm.run_command(set_path_command, stop_event=stop_event)
-    if result.returncode != 0:
-        raise VMSetupError(log, vm.vm_name, set_path_command, result.returncode, result.stdout, result.stderr)
-
-    result = await vm.run_command(set_path_command_experiment_tools, stop_event=stop_event)
-    if result.returncode != 0:
-        raise VMSetupError(log, vm.vm_name, set_path_command_experiment_tools, result.returncode, result.stdout, result.stderr)
-
-    # Conditional installation based on version check
-    if not skip_installation:
-        result = await vm.run_command(install_command, stop_event=stop_event)
+    # Step 6: Install adarevm if needed
+    if not commands.skip_installation:
+        log.info(f"Installing adarevm ({'wheels' if builder.wheels_available else 'editable'} mode)")
+        result = await vm.run_command(commands.install_command, stop_event=stop_event)
         if result.returncode != 0:
-            raise VMSetupError(log, vm.vm_name, install_command, result.returncode, result.stdout, result.stderr)
+            raise VMSetupError(
+                log, vm.vm_name, commands.install_command,
+                result.returncode, result.stdout, result.stderr
+            )
     else:
         log.info("Installation skipped - using preinstalled agent")
 
+    # Step 7: Run adarevm as background process
     # TODO: figure out a way to run poetry as sudo in linux
     if context.guest_platform == 'linux':
-        await vm.run_command(run_command, background=True, stop_event=stop_event, admin=True if use_conda else False, cwd=run_cwd)
+        await vm.run_command(
+            commands.run_command,
+            background=True,
+            stop_event=stop_event,
+            admin=True if env_info.use_conda else False,
+            cwd=commands.run_cwd
+        )
     else:
-        await vm.run_command(run_command, background=True, stop_event=stop_event, admin=True)
+        await vm.run_command(
+            commands.run_command,
+            background=True,
+            stop_event=stop_event,
+            admin=True,
+            cwd=commands.run_cwd
+        )
 
 
 def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool, external_stop_event: threading.Event = None):
@@ -477,7 +375,6 @@ def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: 
     flowconsolemanager.add_handler(experiment_run_ulid, flow_console)
     flow_console.start()
     return flow_console
-
 
 
 def step_initialize(context: ExperimentRunCtx, fake: bool = False):
@@ -1198,7 +1095,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 flow_console.finish_experiment_timer(success=False)
         
         try:
-            # input("Press Enter to continue to cleanup and shutdown...")
+            input("Press Enter to continue to cleanup and shutdown...")
             log.info("Starting cleanup and shutdown...")
             # Wrap cleanup in proper stage context (don't pass interrupt event - we want to show actual cleanup work)
             with StageCtxManager(CleanupShutdownStage(), experiment_run_context.experiment_run_ulid, event=None):
