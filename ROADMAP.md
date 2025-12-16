@@ -41,6 +41,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] support for python3.14
 - [ ] rethink environments; why not let an experiment run in any environment and just provide an warning if not in the environments; update environments in database from file every time we do any experiment run oder env load command!
 - [ ] check if we need to place building wheel into a single stage showing? I think yes!
+- [ ] adjust our tool be Model View Controller for frontend and terminal support later
  
 ---
 
@@ -64,6 +65,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 
 ## 🧹 Code Quality  
 - [ ] Rethink test function results: currently lists → should be dictionaries for better JSON/database handling  
+- [ ] backend/experiment has way to many files. Try to structure the overall software better!
 - [ ] We have custom exceptions? are these clever named and used? should we have more? (general question: Exception vs Return False/None)
 - [ ] Refactor `detect_xsession` to use existing system commands with proper parameterization  
 - [ ] Consider lazy loading of modules at least for certain libraries -> improve speed

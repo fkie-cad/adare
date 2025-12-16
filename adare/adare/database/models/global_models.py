@@ -380,6 +380,7 @@ class Environment(SerializerMixin, GlobalBase):
 
     file = Column(String, nullable=True)
     sha256hash = Column(String, nullable=True)
+    hypervisor = Column(String, nullable=False, default='virtualbox', server_default='virtualbox')
 
     created_at = Column(DateTime, nullable=True, default=func.now())
 

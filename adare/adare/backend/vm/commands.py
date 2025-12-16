@@ -13,7 +13,7 @@ from adare.backend.vm import database as vm_database
 from adare.backend.vm.manager import VMFileManager
 from adare.backend.vm.exceptions import VMError
 from adare.types.environment import EnvironmentMetadata
-from adare.virtualbox.api import VirtualBoxVM
+from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 from adarelib.constants import VMStatus
 from adare.types.stages import VMIntegrityVerificationStage, VMImportStage, VMSnapshotRestoreStage, VMSnapshotCreateStage, VMExperimentSnapshotStage
 from adare.backend.experiment.stagectxmanager import StageCtxManager
@@ -456,7 +456,8 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     from adare.backend.vm.instance_manager import allocate_vm_instance_for_experiment
     from adare.backend.vm.snapshot_manager import (SnapshotManager, create_base_snapshot_for_vm, restore_vm_to_base_snapshot,
                                                    create_base_snapshot_for_instance, restore_instance_to_base_snapshot)
-    from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager
+    from adare.hypervisor.virtualbox.vm import VirtualBoxVM
+    from adare.hypervisor.virtualbox.manager import VirtualBoxManager
 
     log.info(f"CLAUDE: Starting OPTIMIZED VM instance preparation for experiment {experiment_id}")
     log.debug(f"CLAUDE: ensure_vm_ready_for_experiment called with vm_id={vm_id}, experiment_id={experiment_id}, experiment_run_ulid={experiment_run_ulid}")
@@ -618,7 +619,7 @@ async def _import_vm_instance_to_virtualbox(vm_instance, source_vm, environment_
     Returns:
         Updated VmInstance with VirtualBox UUID
     """
-    from adare.virtualbox.api import VirtualBoxManager
+    from adare.hypervisor.virtualbox.manager import VirtualBoxManager
     from adare.database.api.vm import VmApi
 
     log.info(f"Importing VM instance '{vm_instance.instance_name}' to VirtualBox...")

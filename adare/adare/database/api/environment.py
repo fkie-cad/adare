@@ -70,7 +70,7 @@ class EnvironmentDbApi(GlobalDatabaseApi):
     def get_or_create_environment(self, project_path: Path, name: str, description: str,
                                   vm_id: str, tags: list[str],
                                   installations: list[dict], environment_file: Path,
-                                  sha256hash: str) -> tuple[Environment, bool]:
+                                  sha256hash: str, hypervisor: str = 'virtualbox') -> tuple[Environment, bool]:
         # For global environments, check by hash only (no project dependency)
         environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
         if environment:
@@ -84,6 +84,7 @@ class EnvironmentDbApi(GlobalDatabaseApi):
             description=description,
             vm_id=vm_id,
             sha256hash=sha256hash,
+            hypervisor=hypervisor,
             file=environment_file.resolve().as_posix(),  # Store absolute path
             tags=tag_objects
         )
@@ -96,8 +97,8 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         self._session.commit()
         return environment, True
 
-    def update_environment(self, name: str, description: str, vm_id: str, 
-                          environment_file: Path, sha256hash: str) -> Environment | None:
+    def update_environment(self, name: str, description: str, vm_id: str,
+                          environment_file: Path, sha256hash: str, hypervisor: str = 'virtualbox') -> Environment | None:
         environment = self._session.query(Environment).filter(Environment.sha256hash == sha256hash).first()
         if not environment:
             log.error(f"Environment with hash '{sha256hash}' not found in database -> cannot update")
@@ -110,6 +111,7 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         environment.name = name
         environment.description = description
         environment.vm_id = vm_id
+        environment.hypervisor = hypervisor
         environment.file = environment_file.resolve().as_posix()  # Store absolute path
         self._session.commit()
         log.info(f"Environment with hash '{sha256hash}' updated in database")

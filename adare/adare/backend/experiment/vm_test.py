@@ -55,7 +55,8 @@ async def import_ova_for_test(context):
     log.info("CLAUDE: Phase 1 - Importing OVA file...")
     
     from adare.config import get_vm_credentials
-    from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager
+    from adare.hypervisor.virtualbox.vm import VirtualBoxVM
+    from adare.hypervisor.virtualbox.manager import VirtualBoxManager
     
     # Get credentials for guest platform
     username, password = get_vm_credentials(context.guest_platform)
