@@ -126,16 +126,30 @@ def get_environment_vm_file(environment_ulid: str) -> Path:
 def get_environment_os(environment_ulid: str) -> str:
     """
     Get the OS type for a given environment ULID.
-    
+
     Args:
         environment_ulid: Environment ULID
-    
+
     Returns:
         OS type as a string
     """
     with EnvironmentDbApi() as db:
         env = db._session.query(Environment).filter_by(id=environment_ulid).first()
         return env.vm.osinfo.platform if env and env.vm and env.vm.osinfo else None
+
+def get_environment_hypervisor(environment_ulid: str) -> str:
+    """
+    Get the hypervisor type for a given environment ULID.
+
+    Args:
+        environment_ulid: Environment ULID
+
+    Returns:
+        Hypervisor type as a string (defaults to 'virtualbox' if not specified)
+    """
+    with EnvironmentDbApi() as db:
+        env = db._session.query(Environment).filter_by(id=environment_ulid).first()
+        return env.hypervisor if env else 'virtualbox'
 
 def update_environment(project_path: Path, environment_metadata: EnvironmentMetadata, environment_file: Path, sha256hash: str, vm_id: str, force: bool = False):    
     
@@ -151,7 +165,8 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
                 tags=environment_metadata.tags,
                 installations=[attrs.asdict(inst) for inst in environment_metadata.postsetupinstallations],
                 environment_file=environment_file,
-                sha256hash=sha256hash
+                sha256hash=sha256hash,
+                hypervisor=environment_metadata.hypervisor
             )
             # Extract ID while session is still active to avoid DetachedInstanceError
             environment_id = environment.id
@@ -185,7 +200,8 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
                 description=environment_metadata.description,
                 vm_id=vm_id,
                 environment_file=environment_file,
-                sha256hash=sha256hash
+                sha256hash=sha256hash,
+                hypervisor=environment_metadata.hypervisor
             )
             if not environment:
                 raise EnvironmentUpdateError(
@@ -205,7 +221,8 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
                 description=environment_metadata.description,
                 vm_id=vm_id,
                 environment_file=environment_file,
-                sha256hash=sha256hash
+                sha256hash=sha256hash,
+                hypervisor=environment_metadata.hypervisor
             )
             if not environment:
                 raise EnvironmentUpdateError(

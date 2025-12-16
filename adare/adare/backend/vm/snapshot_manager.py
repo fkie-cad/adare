@@ -10,7 +10,8 @@ from typing import Optional, List
 import logging
 from datetime import datetime, timedelta
 
-from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager
+from adare.hypervisor.virtualbox.vm import VirtualBoxVM
+from adare.hypervisor.virtualbox.manager import VirtualBoxManager
 from adare.backend.vm import database as vm_database
 from adare.backend.vm.exceptions import VMError
 from adarelib.constants import VMStatus

@@ -467,7 +467,7 @@ class VmInstanceManager:
             return 0.0
 
         try:
-            from adare.virtualbox.api import VirtualBoxVM
+            from adare.hypervisor.virtualbox.vm import VirtualBoxVM
             import subprocess
 
             # Get VM name from UUID
@@ -575,7 +575,7 @@ class VmInstanceManager:
             return "not_found"
 
         try:
-            from adare.virtualbox.api import VirtualBoxVM
+            from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 
             # Get VM name from UUID
             vm_name = VirtualBoxVM.get_vm_name_by_uuid(instance.vbox_uuid)
@@ -584,7 +584,7 @@ class VmInstanceManager:
                 return "not_found"
 
             # Create temporary VirtualBox VM instance to check state
-            from adare.virtualbox.manager import VirtualBoxManager
+            from adare.hypervisor.virtualbox.manager import VirtualBoxManager
             manager = VirtualBoxManager()
             vbox_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy")
 
@@ -685,7 +685,8 @@ class VmInstanceManager:
         Args:
             instance: VmInstance to cleanup
         """
-        from adare.virtualbox.api import VirtualBoxVM, VirtualBoxManager
+        from adare.hypervisor.virtualbox.vm import VirtualBoxVM
+        from adare.hypervisor.virtualbox.manager import VirtualBoxManager
 
         if not instance.vbox_uuid:
             return

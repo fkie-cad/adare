@@ -474,7 +474,8 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
         # For lazy loading, VM file might not be available yet - will be resolved during VM creation
         context.vm_file = environment_database.get_environment_vm_file(context.environment_ulid)
         context.guest_platform = environment_database.get_environment_os(context.environment_ulid)
-        
+        context.hypervisor_type = environment_database.get_environment_hypervisor(context.environment_ulid)
+
         # If VM file is not available, get from environment metadata directly
         if not context.vm_file or not context.guest_platform:
             from adare.types.environment import parse_environment_file
@@ -484,7 +485,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
             if not context.guest_platform:
                 context.guest_platform = environment_metadata.os.platform
 
-        log.info(f'found environment {context.config.environment_name}')
+        log.info(f'found environment {context.config.environment_name} (hypervisor: {context.hypervisor_type})')
 
 def step_validate_integrity(context: ExperimentRunCtx):
     """Consolidated step: Check experiment and project integrity."""
@@ -995,9 +996,6 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
     # Create step runner to handle execution logic
     step_runner = ExperimentStepRunner(stop_event, user_interrupt_event)
-    
-    # Create VM lifecycle manager
-    vm_manager = VMLifecycleManager()
 
     # --- Execution Flow ---
 
@@ -1015,7 +1013,13 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 # Start MCP server early (independent of VM)
                 await step_runner.run_async_step(step_start_mcp_server, experiment_run_context)
 
-        # Virtual Machine Setup Phase  
+        # Create VM lifecycle manager with hypervisor from environment
+        # (Must be created after step_setup_experiment_environment sets hypervisor_type)
+        hypervisor = experiment_run_context.hypervisor_type or 'virtualbox'
+        vm_manager = VMLifecycleManager(hypervisor_type=hypervisor)
+        log.info(f'Using hypervisor: {hypervisor}')
+
+        # Virtual Machine Setup Phase
         if not stop_event.is_set():
             with StageCtxManager(VirtualMachineSetupStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 await step_runner.run_async_step(vm_manager.create_and_prepare_vm, experiment_run_context)

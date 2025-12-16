@@ -22,10 +22,26 @@ log = logging.getLogger(__name__)
 
 
 class VMLifecycleManager:
-    """Manages the complete lifecycle of VirtualBox VMs for experiments."""
-    
-    def __init__(self):
-        self.vbox_manager = VirtualBoxManager()
+    """Manages the complete lifecycle of VMs for experiments using hypervisor-specific strategies."""
+
+    def __init__(self, hypervisor_type: str = 'virtualbox'):
+        """
+        Initialize VM lifecycle manager with appropriate hypervisor strategy.
+
+        Args:
+            hypervisor_type: Type of hypervisor ('virtualbox' or 'qemu')
+        """
+        self.hypervisor_type = hypervisor_type
+
+        # Instantiate appropriate lifecycle strategy based on hypervisor type
+        if hypervisor_type == 'virtualbox':
+            from adare.hypervisor.virtualbox.lifecycle import VirtualBoxLifecycleStrategy
+            self.strategy = VirtualBoxLifecycleStrategy()
+        elif hypervisor_type == 'qemu':
+            from adare.hypervisor.qemu.lifecycle import QEMULifecycleStrategy
+            self.strategy = QEMULifecycleStrategy()
+        else:
+            raise ValueError(f"Unsupported hypervisor: {hypervisor_type}. Supported: 'virtualbox', 'qemu'")
 
     async def _ensure_vm_runtime_ready(self, context: ExperimentRunCtx):
         """Ensure project VM runtime directory is ready with up-to-date adarevm and adarelib."""
@@ -260,44 +276,8 @@ class VMLifecycleManager:
         # Setup VM runtime directory with smart copying
         await self._ensure_vm_runtime_ready(context)
 
-        # Setup shared directories configuration
-        shared_root = Path(SHARE_POINT_VM[context.guest_platform])
-        context.config.shared_directories = {
-            'run': {'host': context.experiment_run_directory.path, 'vm': shared_root / 'run'},
-            'adare': {'host': context.project_directory.vm_runtime, 'vm': shared_root / 'app'},
-            'experiment': {'host': context.experiment_directory.path, 'vm': shared_root / 'experiment'},
-        }
-
-        # Add project-level shared directory if it exists
-        if context.project_directory.shared.exists():
-            context.config.shared_directories['project_shared'] = {
-                'host': context.project_directory.shared,
-                'vm': shared_root / 'project_shared'
-            }
-        else:
-            log.info(f"CLAUDE: Project shared directory does not exist, skipping mount: {context.project_directory.shared}")
-
-        # Add experiment-level shared directory if it exists
-        if context.experiment_directory.shared.exists():
-            context.config.shared_directories['shared'] = {
-                'host': context.experiment_directory.shared,
-                'vm': shared_root / 'shared'
-            }
-        else:
-            log.info(f"CLAUDE: Experiment shared directory does not exist, skipping mount: {context.experiment_directory.shared}")
-        
-        # Create VirtualBox VM instance using the instance name and UUID
-        from adare.config import get_vm_credentials
-        username, password = get_vm_credentials(context.guest_platform)
-        context.vm = VirtualBoxVM(
-            vm_name=context.vm_name,  # Use the VM instance name
-            guest_os=context.guest_platform,
-            manager=self.vbox_manager,
-            username=username,
-            password=password,
-            cpus=context.config.vm_cpus,
-            ram=context.config.vm_memory
-        )
+        # Delegate VM instance creation to hypervisor-specific strategy
+        await self.strategy.prepare_vm_for_experiment(context)
 
         # VM instance is already prepared with snapshots - verify it exists and cleanup if missing
         with StageCtxManager(VMCreateStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
@@ -365,7 +345,7 @@ class VMLifecycleManager:
                             log.info(f"Importing new VM instance '{vm_instance.instance_name}' to VirtualBox...")
 
                             # Import using VirtualBox manager directly (inline implementation)
-                            from adare.virtualbox.api import VirtualBoxManager
+                            from adare.hypervisor.virtualbox.manager import VirtualBoxManager
 
                             manager = VirtualBoxManager()
                             vm_file_path = Path(source_vm.file)
@@ -411,24 +391,10 @@ class VMLifecycleManager:
                 raise LoggedException(log, f"VM instance '{context.vm_name}' was not properly prepared - missing from VirtualBox")
             log.info(f"Using prepared VM instance '{context.vm_name}' with snapshots (UUID: {vm_instance.vbox_uuid})")
 
-        # Setup shared folders - remove all existing and add fresh ones
+        # Delegate file transfer setup to hypervisor-specific strategy
+        # (VirtualBox: shared folders + port forwarding, QEMU: libguestfs file copy)
         if not context.stop_event.is_set():
-            log.info("CLAUDE: Setting up shared folders for VM")
-
-            # Remove all existing shared folders to prevent conflicts
-            log.debug("CLAUDE: Removing all existing shared folders to prevent conflicts")
-            await context.vm.remove_all_shared_folders(stop_event=context.user_interrupt_event)
-
-            # Add the new shared folders for this experiment
-            log.info(f"CLAUDE: Adding {len(context.config.shared_directories)} shared folders to VirtualBox config")
-            for name, paths in context.config.shared_directories.items():
-                log.debug(f"CLAUDE: Adding shared folder '{name}': host={paths['host']} -> vm={paths['vm']}")
-                return_code = await context.vm.add_shared_folder(name, host_path=paths['host'], stop_event=context.user_interrupt_event)
-
-                if return_code != 0:
-                    raise LoggedException(log, f"CLAUDE: Failed to add shared folder '{name}' to VirtualBox (return code: {return_code})")
-
-            log.info("CLAUDE: All shared folders added to VirtualBox successfully")
+            await self.strategy.setup_file_transfer(context)
 
         # Update experiment run with VM-specific data
         if not context.stop_event.is_set():
@@ -437,79 +403,38 @@ class VMLifecycleManager:
                 context.experiment_run_directory
             )
 
-        # Add port forwarding for the websocket server
-        if not context.stop_event.is_set():
-            # Clean up any existing 'adarevm' port forwarding rule first
-            await context.vm.remove_port_forwarding(
-                name='adarevm',
-                stop_event=context.user_interrupt_event,
-                silent=True
-            )
-
-            # Add port forwarding: host uses allocated unique port, guest always uses 18765
-            # Validate port is allocated before attempting port forwarding
-            if context.config.websocket_port is None:
-                raise LoggedException(log, "Cannot set up port forwarding: no websocket port allocated")
-
-            await context.vm.add_port_forwarding(
-                name='adarevm',
-                protocol='tcp',
-                host_port=context.config.websocket_port,  # Unique allocated port
-                guest_port=18765,  # Always use 18765 in guest VM
-                stop_event=context.user_interrupt_event
-            )
-            log.info(f'added port forwarding for websocket server: host:{context.config.websocket_port} -> guest:18765')
-
         context.timestamp_before_vm_start = datetime.now(timezone.utc)
 
     async def start_vm(self, context: ExperimentRunCtx):
-        """Start the virtual machine."""
+        """
+        Start the virtual machine and perform initialization.
+
+        Delegates to hypervisor-specific strategy which handles:
+        - VirtualBox: start -> set video mode -> wait for boot -> mount shared folders
+        - QEMU: start -> wait for guest agent ready
+        """
         with StageCtxManager(VMRunStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-            await context.vm.start(stop_event=context.user_interrupt_event)
-            
-            # Set video mode hint to default resolution after VM starts
-            if not context.stop_event.is_set():
-                width, height = context.config.vm_resolution
-                await context.vm.set_video_mode_hint(
-                    width=width, 
-                    height=height,
-                    stop_event=context.user_interrupt_event
-                )
+            await self.strategy.start_and_initialize_vm(context)
 
     async def wait_until_ready(self, context: ExperimentRunCtx):
-        """Wait until VM is fully booted and ready."""
-        with StageCtxManager(VMWaitTillReadyStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-            log.info('waiting until VM is ready')
-            if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.user_interrupt_event):
-                raise LoggedException(log, 'VM did not become ready in time')
-            log.info('VM is ready')
+        """
+        Wait until VM is fully booted and ready.
+
+        NOTE: This is now handled by strategy.start_and_initialize_vm()
+        but kept for backward compatibility with existing code that may call it separately.
+        """
+        # For backward compatibility - this is now a no-op as the strategy handles waiting
+        log.debug("wait_until_ready() called - VM should already be ready from start_and_initialize_vm()")
 
     async def mount_shared_directories(self, context: ExperimentRunCtx):
-        """Mount all configured shared directories in the VM."""
-        with StageCtxManager(VMMountSharedDirectoriesStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-            # Verify all shared folders exist in VirtualBox config before mounting
-            log.info("CLAUDE: Verifying shared folders exist in VirtualBox config before mounting")
-            existing_folders = await context.vm.list_shared_folders(stop_event=context.user_interrupt_event, silent=True)
-            log.debug(f"CLAUDE: Found {len(existing_folders)} shared folders in VirtualBox config: {list(existing_folders.keys())}")
+        """
+        Mount all configured shared directories in the VM.
 
-            folders = {
-                name: paths['vm'] for name, paths in context.config.shared_directories.items()
-            }
-
-            # Check that all required folders exist
-            missing_folders = [name for name in folders.keys() if name not in existing_folders]
-            if missing_folders:
-                raise LoggedException(
-                    log,
-                    f"CLAUDE: Cannot mount shared folders - the following folders are not configured in VirtualBox: {missing_folders}. "
-                    f"Expected folders: {list(folders.keys())}, Found: {list(existing_folders.keys())}"
-                )
-
-            log.info(f"CLAUDE: All {len(folders)} required shared folders exist in VirtualBox, proceeding with mount")
-            await context.vm.mount_multiple_shared_folders(
-                folders=folders,
-                stop_event=context.user_interrupt_event
-            )
+        NOTE: This is now handled by strategy.start_and_initialize_vm()
+        but kept for backward compatibility with existing code that may call it separately.
+        """
+        # For backward compatibility - this is now a no-op as the strategy handles mounting
+        log.debug("mount_shared_directories() called - directories should already be mounted from start_and_initialize_vm()")
 
     async def stop_vm(self, context: ExperimentRunCtx, post_interrupt: bool = False):
         """Stop the virtual machine."""
@@ -520,21 +445,26 @@ class VMLifecycleManager:
                 await context.vm.stop()
 
     async def cleanup_vm(self, context: ExperimentRunCtx, post_interrupt: bool = False):
-        """Cleanup VM resources and handle experiment snapshots."""
+        """
+        Cleanup VM resources and handle experiment snapshots.
+
+        Delegates to hypervisor-specific strategy for:
+        - Artifact retrieval (QEMU: libguestfs copy, VirtualBox: no-op)
+        - Hypervisor-specific cleanup (port forwarding, etc.)
+        """
         event = None if post_interrupt else context.user_interrupt_event
         with StageCtxManager(VMDestroyStage(), context.experiment_run_ulid, event=event):
+            # Retrieve artifacts (hypervisor-specific)
+            if context.vm:
+                await self.strategy.retrieve_artifacts(context)
+
+            # Create experiment snapshot if requested
             if context.config.preserve_snapshot:
                 log.info('Creating experiment snapshot (--preserve-snapshot enabled)')
                 await self._create_experiment_snapshot(context, event)
 
-            # Clean up port forwarding before releasing VM instance
-            if context.vm:
-                log.info('Cleaning up port forwarding rules before VM instance release')
-                await context.vm.remove_port_forwarding(
-                    name='adarevm',
-                    stop_event=event,
-                    silent=True
-                )
+            # Hypervisor-specific cleanup (port forwarding, etc.)
+            await self.strategy.cleanup_vm(context, post_interrupt)
 
             # Release VM instance for reuse by other experiments
             log.info('Releasing VM instance for reuse by future experiments')

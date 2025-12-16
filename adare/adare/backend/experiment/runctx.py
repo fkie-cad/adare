@@ -37,6 +37,7 @@ class ExperimentRunCtx:
     environment_file: Optional[Path] = None
     environment_ulid: Optional[str] = None
     guest_platform: Optional[str] = None
+    hypervisor_type: Optional[str] = None
     experiment_run_directory: Optional[ExperimentRunDirectory] = None
     vm_name: Optional[str] = None
     client: Optional[AdareVMClient] = None

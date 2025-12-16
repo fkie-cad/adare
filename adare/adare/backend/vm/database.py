@@ -193,7 +193,7 @@ def create_vm_with_uuid_capture(project_path: Path, name: str, file_path: Path, 
     Returns:
         VM with UUID captured if successful
     """
-    from adare.virtualbox.api import VirtualBoxVM
+    from adare.hypervisor.virtualbox.vm import VirtualBoxVM
     
     # Create VM using standard method
     vm = create_vm(
@@ -282,7 +282,7 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
     """
     import asyncio
     from pathlib import Path
-    from adare.virtualbox.api import VirtualBoxVM
+    from adare.hypervisor.virtualbox.vm import VirtualBoxVM
     from adare.database.api.vm import VmApi
     
     # Check if a VM with the same name already exists in VirtualBox
@@ -319,7 +319,7 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
                 log.debug(f"Could not get OS info from environment {environment_ulid}, using default")
         
         # Create VirtualBoxVM instance and import using the unique name
-        from adare.virtualbox.api import VirtualBoxManager
+        from adare.hypervisor.virtualbox.manager import VirtualBoxManager
         from adare.config import get_vm_credentials
         from adare.backend.vm.exceptions import VMImportError
         manager = VirtualBoxManager()
@@ -479,7 +479,7 @@ def delete_all_vms(force: bool = False) -> dict:
     Returns:
         Dictionary with deletion results
     """
-    from adare.virtualbox.api import VirtualBoxVM
+    from adare.hypervisor.virtualbox.vm import VirtualBoxVM
     from adare.backend.vm.snapshot_manager import SnapshotManager
     
     results = {
@@ -562,7 +562,7 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
         
         log.info(f"Found {len(vms)} VMs for environment {environment_ulid}")
         
-        from adare.virtualbox.api import VirtualBoxVM
+        from adare.hypervisor.virtualbox.vm import VirtualBoxVM
         
         for vm in vms:
             try:
