@@ -20,7 +20,19 @@ class VirtualBoxManager(AbstractHypervisorManager):
 
     def __init__(self):
         super().__init__()
-        log.debug("VirtualBoxManager initialized and worker thread started.")
+        from adare.config import HYPERVISOR_CONFIGS
+        from adare.hypervisor.executable_manager import ExecutableManager
+
+        vbox_config = HYPERVISOR_CONFIGS.get('virtualbox', {})
+
+        # Initialize executable manager (validates executables exist)
+        self.executables = ExecutableManager('virtualbox', vbox_config)
+
+        # Store defaults from config
+        self.default_graphics = vbox_config.get('default_graphics', 'vmsvga')
+        self.default_vram = vbox_config.get('default_vram', 128)
+
+        log.info("CLAUDE: Initialized VirtualBoxManager")
 
     def _worker_loop(self):
         """Main worker loop for executing queued functions."""
@@ -92,7 +104,8 @@ class VirtualBoxManager(AbstractHypervisorManager):
             guest_os=guest_os,
             manager=self,
             username=username,
-            password=password
+            password=password,
+            executables=self.executables
         )
 
         try:

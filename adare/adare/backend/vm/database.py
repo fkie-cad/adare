@@ -108,10 +108,11 @@ def get_vm_by_name(name: str, fields: list[str] = None) -> Optional[Vm] | dict |
 def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '',
               os_platform: str = '', os_type: str = '', os_distribution: str = '',
               os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
-              silent: bool = False, no_copy: bool = False, fields: list[str] = None) -> Vm | dict:
+              silent: bool = False, no_copy: bool = False, fields: list[str] = None,
+              hypervisor: str = 'virtualbox', force: bool = False) -> Vm | dict:
     """
     Create a new VM entry in the database with file operations.
-    
+
     Args:
         name: VM name
         file_path: Path to VM file
@@ -126,11 +127,13 @@ def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, de
         quiet: If True, suppress progress bars
         no_copy: If True, reference file at original location instead of copying
         fields: Optional list of fields to extract. If None, returns full object.
-        
+        hypervisor: Hypervisor type ('virtualbox', 'qemu') - default: 'virtualbox'
+        force: If True, overwrite existing VM with same name but different hash
+
     Returns:
         VM: Full object if fields=None
         dict: VM data if fields specified
-        
+
     Raises:
         VMError: If creation fails
     """
@@ -148,7 +151,9 @@ def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, de
             os_language=os_language,
             os_architecture=os_architecture,
             silent=silent,
-            no_copy=no_copy
+            no_copy=no_copy,
+            hypervisor=hypervisor,
+            force=force
         )
         
         # Return full object for backward compatibility

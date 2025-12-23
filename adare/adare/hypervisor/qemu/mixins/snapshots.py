@@ -2,6 +2,18 @@
 QEMU VM snapshot operations mixin.
 
 Implements AbstractSnapshotMixin for QEMU using qcow2 internal snapshots.
+
+NOTE: For experiment isolation and integrity preservation, QEMU now uses qcow2 backing
+files (external snapshots/overlays) as the primary mechanism. See lifecycle.py's
+prepare_vm_for_experiment() for details.
+
+Internal snapshots provided by this mixin are retained for:
+- Manual VM management and testing
+- Backward compatibility with existing code
+- Situations where backing files are not suitable
+
+The backing file approach ensures base disk integrity by creating experiment-specific
+overlay disks, leaving the immutable base disk untouched for forensic validation.
 """
 import logging
 import subprocess
@@ -54,8 +66,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             log.error("CLAUDE: VM config or disk_path not available")
             return 1
 
-        from adare.config import HYPERVISOR_CONFIGS
-        qemu_img_exe = HYPERVISOR_CONFIGS.get('qemu', {}).get('qemu_img_exe', 'qemu-img')
+        qemu_img_exe = self.executables.qemu_img
 
         # Build qemu-img snapshot command
         args = [qemu_img_exe, 'snapshot', '-c', snapshot_name, self.config.disk_path]
@@ -98,8 +109,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             log.error("CLAUDE: VM config or disk_path not available")
             return False
 
-        from adare.config import HYPERVISOR_CONFIGS
-        qemu_img_exe = HYPERVISOR_CONFIGS.get('qemu', {}).get('qemu_img_exe', 'qemu-img')
+        qemu_img_exe = self.executables.qemu_img
 
         # List snapshots
         args = [qemu_img_exe, 'snapshot', '-l', self.config.disk_path]
@@ -170,8 +180,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             log.error("CLAUDE: VM config or disk_path not available")
             return False
 
-        from adare.config import HYPERVISOR_CONFIGS
-        qemu_img_exe = HYPERVISOR_CONFIGS.get('qemu', {}).get('qemu_img_exe', 'qemu-img')
+        qemu_img_exe = self.executables.qemu_img
 
         # Build qemu-img snapshot restore command
         args = [qemu_img_exe, 'snapshot', '-a', snapshot_name, self.config.disk_path]
@@ -187,6 +196,13 @@ class SnapshotMixin(AbstractSnapshotMixin):
             if result.returncode == 0:
                 if not silent:
                     log.info(f"CLAUDE: Successfully restored snapshot '{snapshot_name}'")
+
+                # Invalidate PATH cache after snapshot restore
+                # PATH will be re-discovered when VM boots
+                self._path_discovery_attempted = False
+                self._cached_guest_path = None
+                log.debug("CLAUDE: PATH cache invalidated after snapshot restore")
+
                 return True
             else:
                 log.error(f"CLAUDE: Failed to restore snapshot: {result.stderr}")
@@ -235,8 +251,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             log.error("CLAUDE: VM config or disk_path not available")
             return False
 
-        from adare.config import HYPERVISOR_CONFIGS
-        qemu_img_exe = HYPERVISOR_CONFIGS.get('qemu', {}).get('qemu_img_exe', 'qemu-img')
+        qemu_img_exe = self.executables.qemu_img
 
         # Build qemu-img snapshot delete command
         args = [qemu_img_exe, 'snapshot', '-d', snapshot_name, self.config.disk_path]

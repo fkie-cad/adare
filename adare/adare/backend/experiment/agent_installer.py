@@ -82,13 +82,13 @@ async def check_installed_version(
     if platform == 'windows':
         if use_conda:
             cmd = f'%USERPROFILE%\\.miniforge3\\Scripts\\conda.exe run -n pyadare pip show {package_name}'
-        else:
-            cmd = f'pip show {package_name}'
+        else:  # poetry environment
+            cmd = f'poetry run pip show {package_name}'
     else:  # linux
         if use_conda:
             cmd = f'/home/adare/.miniforge3/bin/conda run -n pyadare pip show {package_name}'
-        else:
-            cmd = f'pip show {package_name}'
+        else:  # poetry environment
+            cmd = f'poetry run pip show {package_name}'
 
     try:
         # Execute command silently (avoid cluttering logs with routine checks)

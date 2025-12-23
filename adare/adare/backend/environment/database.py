@@ -174,13 +174,26 @@ def update_environment(project_path: Path, environment_metadata: EnvironmentMeta
             return environment_id
         for env in environments:
             if env.sha256hash == sha256hash:
-                raise EnvironmentAlreadyExists(
-                    log,
-                    f'environment file {environment_file} already exists in the database',
-                    possible_solutions=[
-                        'delete the environment from the database',
-                        'use a different environment file',
-                    ])
+                if not force:
+                    raise EnvironmentAlreadyExists(
+                        log,
+                        f'environment file {environment_file} already exists in the database',
+                        possible_solutions=[
+                            'delete the environment from the database',
+                            'use a different environment file',
+                            'use --force flag to update the existing environment'
+                        ])
+                else:
+                    log.info(f'Environment with hash {sha256hash[:16]}... already exists, but force=True - updating VM association')
+                    # Update the existing environment with new VM reference
+                    with db:
+                        env.vm_id = vm_id
+                        env.hypervisor = environment_metadata.hypervisor
+                        env.name = environment_metadata.name
+                        env.description = environment_metadata.description
+                        # Commit happens automatically when context exits
+                    log.info(f'Updated environment {env.id} with VM {vm_id}')
+                    return env.id
 
         latest_env = environments[-1]
         if latest_env.runs:

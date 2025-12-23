@@ -8,7 +8,14 @@ cd adare || { echo "Directory 'adare' not found. Exiting..."; exit 1; }
 
 # Install dependencies using Poetry
 if command -v poetry >/dev/null 2>&1; then
-    poetry install
+    if [[ "$1" == "qemu" ]]; then
+        echo "Argument 'qemu' detected. Installing with QEMU extras..."
+        poetry install --extras "qemu"
+    else
+        echo "Installing standard dependencies (no QEMU)..."
+        echo "To install with QEMU support, run this script as: ./install.sh qemu"
+        poetry install
+    fi
 else
     echo "Poetry is not installed. Please install Poetry to continue."
     exit 1
@@ -58,16 +65,22 @@ fi
 
 # Load testfunctions directly from source appdata after installation is complete
 echo "Loading testfunctions from source appdata..."
-for testfunction_dir in ~/.adare/adare/adare/appdata/testfunctions/*/; do
-    if [ -d "$testfunction_dir" ]; then
-        testfunction_name=$(basename "$testfunction_dir")
-        # Skip visual testfunctions (host-side only, loaded differently)
-        if [ "$testfunction_name" = "visual" ]; then
-            echo "Skipping visual testfunctions (host-side only)..."
-            continue
+# Check if the directory exists before iterating to avoid errors if empty
+if [ -d ~/.adare/adare/adare/appdata/testfunctions/ ]; then
+    for testfunction_dir in ~/.adare/adare/adare/appdata/testfunctions/*/; do
+        if [ -d "$testfunction_dir" ]; then
+            testfunction_name=$(basename "$testfunction_dir")
+            # Skip visual testfunctions (host-side only, loaded differently)
+            if [ "$testfunction_name" = "visual" ]; then
+                echo "Skipping visual testfunctions (host-side only)..."
+                continue
+            fi
+            echo "Loading $testfunction_name testfunctions..."
+            poetry run adare testfunction load "$testfunction_dir"
         fi
-        echo "Loading $testfunction_name testfunctions..."
-        poetry run adare testfunction load "$testfunction_dir"
-    fi
-done
+    done
+else
+    echo "Testfunctions directory not found, skipping load."
+fi
+
 echo "Testfunction loading complete."

@@ -2,6 +2,7 @@
 from pathlib import Path
 from datetime import datetime, timezone
 import threading
+import asyncio
 
 # internal imports
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
@@ -22,6 +23,7 @@ from adare.types.stages import (
     # Sub-stages
     SetupExperimentEnvironmentStage, ValidateIntegrityStage, PrepareRunEnvironmentStage, StartComputerVisionServerStage,
     ExperimentIntegrityCheckStage, ProjectIntegrityCheckStage,
+    VMCreateStage,  # VM creation and preparation stage
     InstallAdareVMStage, ConnectToVMStage, InstallationsStage,
     ExperimentRunStage, SystemInfoCollectionStage,
     FinalizeStage, ShutdownComputerVisionServerStage, ShutdownWebSocketStage,
@@ -310,17 +312,56 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     commands = await builder.build_commands(env_info, vm, stop_event)
 
     # Step 4: Execute setup commands (PATH, firewall, etc.)
-    for setup_cmd in commands.setup_commands:
-        result = await vm.run_command(
-            setup_cmd.command,
-            stop_event=stop_event,
-            admin=setup_cmd.requires_admin
-        )
-        if result.returncode != 0:
-            raise VMSetupError(
-                log, vm.vm_name, setup_cmd.command,
-                result.returncode, result.stdout, result.stderr
-            )
+    # Add brief stabilization delay after boot check completes
+    log.debug("CLAUDE: Waiting 2s for guest agent to stabilize after boot")
+    await asyncio.sleep(2)
+
+    for idx, setup_cmd in enumerate(commands.setup_commands):
+        # Add retry logic for first command (most likely to fail due to transient issues)
+        max_retries = 3 if idx == 0 else 1
+        retry_delay = 1.0
+
+        for attempt in range(max_retries):
+            try:
+                result = await vm.run_command(
+                    setup_cmd.command,
+                    stop_event=stop_event,
+                    admin=setup_cmd.requires_admin
+                )
+
+                if result.returncode == 0:
+                    break  # Success
+
+                # Command failed
+                if attempt < max_retries - 1:
+                    log.warning(
+                        f"CLAUDE: Setup command attempt {attempt + 1}/{max_retries} failed "
+                        f"(exit code {result.returncode}), retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    # Final attempt failed
+                    raise VMSetupError(
+                        log, vm.vm_name, setup_cmd.command,
+                        result.returncode, result.stdout, result.stderr
+                    )
+
+            except asyncio.TimeoutError as e:
+                if attempt < max_retries - 1:
+                    log.warning(
+                        f"CLAUDE: Setup command attempt {attempt + 1}/{max_retries} timed out, "
+                        f"retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2
+                else:
+                    raise VMSetupError(
+                        log, vm.vm_name, setup_cmd.command,
+                        -1, "", f"Timeout after {max_retries} attempts: {e}"
+                    )
+
+    #input("Press Enter to continue after setup commands...")  # Debug pause
 
     # Step 5: Mount shared folders (Windows only)
     if context.guest_platform == 'windows':
@@ -338,7 +379,16 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     # Step 6: Install adarevm if needed
     if not commands.skip_installation:
         log.info(f"Installing adarevm ({'wheels' if builder.wheels_available else 'editable'} mode)")
-        result = await vm.run_command(commands.install_command, stop_event=stop_event)
+
+        # Use admin for Linux installations (--break-system-packages requires sudo)
+        # Windows uses user site-packages and doesn't need admin
+        needs_admin = context.guest_platform == 'linux'
+
+        result = await vm.run_command(
+            commands.install_command,
+            stop_event=stop_event,
+            admin=needs_admin
+        )
         if result.returncode != 0:
             raise VMSetupError(
                 log, vm.vm_name, commands.install_command,
@@ -1022,10 +1072,18 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         # Virtual Machine Setup Phase
         if not stop_event.is_set():
             with StageCtxManager(VirtualMachineSetupStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
+                # Create and prepare VM
+                # VirtualBox: VM import (VMImportStage) and snapshot creation (VMSnapshotCreateStage) happen here as child stages
+                # QEMU: Overlay disk creation happens here (no separate stage)
+                # Note: Instance allocation and wheel building also happen here but have no separate stages
                 await step_runner.run_async_step(vm_manager.create_and_prepare_vm, experiment_run_context)
+
+                # File transfer now explicit with its own stage
+                # (VirtualBox: shared folders, QEMU: libguestfs copy to disk)
+                await step_runner.run_async_step(vm_manager.setup_file_transfer, experiment_run_context)
+
+                # Start VM
                 await step_runner.run_async_step(vm_manager.start_vm, experiment_run_context)
-                await step_runner.run_async_step(vm_manager.wait_until_ready, experiment_run_context)
-                await step_runner.run_async_step(vm_manager.mount_shared_directories, experiment_run_context)
 
         # Software Installation Phase
         if not stop_event.is_set():

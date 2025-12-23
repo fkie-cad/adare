@@ -51,6 +51,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
             manager=self.vbox_manager,
             username=username,
             password=password,
+            executables=self.vbox_manager.executables,
             cpus=context.config.vm_cpus,
             ram=context.config.vm_memory
         )

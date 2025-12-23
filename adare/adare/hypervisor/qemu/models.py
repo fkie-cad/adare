@@ -5,7 +5,7 @@ Extends base hypervisor models with QEMU-specific format conversion.
 """
 import logging
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from adare.hypervisor.base.models import (
     PortForwardingRule as BasePortForwardingRule,
@@ -117,6 +117,12 @@ class QEMUVMConfig:
     qmp_socket_path: str = ""  # Path to QMP monitor socket
     guest_agent_socket_path: str = ""  # Path to guest agent socket
     pid_file_path: str = ""  # Path to PID file for running VM
+    is_external: bool = False  # True if disk is external (--no-copy mode)
+
+    # Display configuration (for libvirt integration)
+    display_enabled: bool = False  # False = headless (virt-manager can still connect via VNC)
+    vnc_port: Optional[int] = None  # None = autoport, or specify explicit port
+    libvirt_domain_name: Optional[str] = None  # Track libvirt domain name
 
     def __post_init__(self):
         """Initialize empty dict for port forwarding rules if None."""
@@ -139,10 +145,21 @@ class QEMUVMConfig:
             'port_forwarding_rules': self.port_forwarding_rules,
             'qmp_socket_path': self.qmp_socket_path,
             'guest_agent_socket_path': self.guest_agent_socket_path,
-            'pid_file_path': self.pid_file_path
+            'pid_file_path': self.pid_file_path,
+            'is_external': self.is_external,
+            'display_enabled': self.display_enabled,
+            'vnc_port': self.vnc_port,
+            'libvirt_domain_name': self.libvirt_domain_name
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'QEMUVMConfig':
-        """Create config from dictionary (JSON deserialization)."""
+        """Create config from dictionary (JSON deserialization).
+
+        Provides backward compatibility for VMs created before libvirt integration.
+        """
+        # Provide defaults for new fields if missing (backward compatibility)
+        data.setdefault('display_enabled', False)
+        data.setdefault('vnc_port', None)
+        data.setdefault('libvirt_domain_name', None)
         return cls(**data)

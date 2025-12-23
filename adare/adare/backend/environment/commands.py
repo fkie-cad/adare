@@ -312,7 +312,8 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                     project_path=None,  # VMs are now global, no specific project
                     vm_path=vm_path,
                     environment_metadata=environment_metadata,
-                    no_copy=no_copy if not is_url else False  # Pass the flag (but never for URLs)
+                    no_copy=no_copy if not is_url else False,  # Pass the flag (but never for URLs)
+                    force=force  # Pass force flag for VM overwriting
                 )
 
                 # Handle both old return format (vm_id) and new return format (dict with vm_id and was_existing)

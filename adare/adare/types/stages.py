@@ -156,7 +156,8 @@ class VMImportStage(Stage):
 @attrs.define
 class VMMountSharedDirectoriesStage(Stage):
     name: ClassVar[str] = 'vm_mount_shared_directories'
-    msg: ClassVar[str] = 'Mounting shared directories in VM'
+    msg: ClassVar[str] = 'Setting up file transfer'
+    description: ClassVar[str] = 'Setting up file transfer mechanism (shared folders for VirtualBox, disk copy for QEMU)'
     parent: ClassVar[str] = 'vm_setup'
 
 @register_stage
@@ -501,3 +502,11 @@ class VMClickTestStage(Stage):
     msg: ClassVar[str] = 'Testing mouse click commands'
     description: ClassVar[str] = 'Verify mouse click functionality via WebSocket'
     parent: ClassVar[str] = 'vm_compatibility_test'
+
+@register_stage
+@attrs.define
+class VMFileTransferRetrievalStage(Stage):
+    name: ClassVar[str] = 'vm_file_transfer_retrieval'
+    msg: ClassVar[str] = 'Retrieving artifacts from VM'
+    description: ClassVar[str] = 'Copying experiment artifacts from VM to host'
+    parent: ClassVar[str] = 'cleanup_shutdown'

@@ -1,17 +1,19 @@
 """
 QEMU-specific VM lifecycle strategy.
 
-This module implements the QEMU lifecycle strategy using libguestfs for file
+This module implements the QEMU lifecycle strategy using guestfish CLI for file
 transfer. Files must be copied to the disk image before boot and retrieved
 after shutdown, as QEMU doesn't support live shared folders like VirtualBox.
 """
 from pathlib import Path
 import logging
 import asyncio
+import subprocess
+import shutil
 from typing import List, Dict
 
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
-from adare.hypervisor.qemu import QEMUVM, QEMUManager
+from adare.hypervisor.qemu.manager import QEMUManager
 from adare.hypervisor.exceptions import HypervisorException
 from adare.exceptions import LoggedException
 from adare.config import get_vm_credentials
@@ -21,16 +23,50 @@ log = logging.getLogger(__name__)
 
 class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
     """
-    QEMU-specific lifecycle strategy using libguestfs.
+    QEMU-specific lifecycle strategy using guestfish CLI.
 
-    QEMU uses libguestfs to transfer files to/from the VM. This requires:
-    1. VM must be stopped to mount disk with libguestfs
+    QEMU uses guestfish to transfer files to/from the VM. This requires:
+    1. VM must be stopped to mount disk with guestfish
     2. Files are copied to disk before boot
     3. Artifacts are retrieved after shutdown
     """
 
     def __init__(self):
         self.qemu_manager = QEMUManager()
+
+    def _run_guestfish_command(
+        self,
+        disk_path: str,
+        commands: List[str],
+        readonly: bool = False
+    ) -> tuple[int, str, str]:
+        """
+        Execute guestfish commands on a disk image.
+
+        Args:
+            disk_path: Path to disk image
+            commands: List of guestfish command parts (will be joined with ':')
+            readonly: If True, mount disk read-only
+
+        Returns:
+            Tuple of (returncode, stdout, stderr)
+        """
+        mode_flag = '--ro' if readonly else '--rw'
+        cmd = ['guestfish', mode_flag, '-a', disk_path, '-i'] + commands
+
+        log.debug(f"Running guestfish: {' '.join(cmd)}")
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        if result.returncode != 0:
+            log.debug(f"Guestfish stderr: {result.stderr}")
+
+        return result.returncode, result.stdout, result.stderr
 
     def _copy_files_to_disk_via_libguestfs(
         self,
@@ -39,7 +75,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         target_base_dir: str = "/adare"
     ) -> None:
         """
-        Copy files to guest disk using libguestfs.
+        Copy files to guest disk using guestfish CLI.
 
         Args:
             disk_path: Absolute path to VM disk image (qcow2)
@@ -49,145 +85,66 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         Raises:
             HypervisorException: If any operation fails
         """
-        # Import check
-        try:
-            import guestfs
-        except ImportError:
-            raise HypervisorException(
-                "libguestfs Python bindings not available. "
-                "Install with: sudo apt install python3-guestfs (Ubuntu/Debian) "
-                "or sudo dnf install python3-libguestfs (Fedora/RHEL)"
-            )
-
-        # Verify disk file exists
+        # Validate disk exists
         if not Path(disk_path).exists():
             raise HypervisorException(
                 f"VM disk not found at {disk_path}. "
                 f"Ensure the VM has been created before transferring files."
             )
 
-        log.info(f"Mounting guest disk {disk_path} via libguestfs for file transfer")
-
-        g = None
-        try:
-            # Initialize libguestfs handle
-            g = guestfs.GuestFS(python_return_dict=True)
-
-            # Add disk with WRITE access (readonly=0)
-            log.debug(f"Adding disk {disk_path} with write access")
-            g.add_drive_opts(disk_path, readonly=0)
-
-            # Launch guestfs appliance
-            log.debug("Launching libguestfs appliance")
-            g.launch()
-
-            # Inspect OS and get root filesystem
-            log.debug("Inspecting guest OS")
-            roots = g.inspect_os()
-            if not roots:
+        # Validate all source files exist
+        for file_spec in files_to_copy:
+            source_path = Path(file_spec['source'])
+            if not source_path.exists():
                 raise HypervisorException(
-                    f"No operating system found in VM disk {disk_path}. "
-                    f"Ensure the VM has been properly installed."
+                    f"Source file/directory not found: {source_path}"
                 )
 
-            root = roots[0]
-            log.debug(f"Detected OS root: {root}")
+        log.info(f"Mounting guest disk {disk_path} via guestfish for file transfer")
 
-            # Get and mount filesystems
-            log.debug("Mounting guest filesystems")
-            mps = g.inspect_get_mountpoints(root)
+        # Build command list
+        commands = []
 
-            # Sort by mountpoint length to mount / before /usr, /boot, etc.
-            for mountpoint, device in sorted(mps.items(), key=lambda x: len(x[0])):
-                try:
-                    log.debug(f"Mounting {device} on {mountpoint}")
-                    g.mount(device, mountpoint)  # Read-write mount
-                except RuntimeError as e:
-                    # Some filesystems may fail to mount (e.g., swap, EFI)
-                    log.warning(f"Could not mount {device} on {mountpoint}: {e}")
+        # Create base directory
+        commands.extend(['mkdir-p', target_base_dir, ':'])
 
-            # Create base target directory if it doesn't exist
-            log.debug(f"Creating base directory {target_base_dir}")
-            try:
-                g.mkdir_p(target_base_dir)
-            except RuntimeError as e:
-                raise HypervisorException(
-                    f"Failed to create directory {target_base_dir} in guest: {e}"
-                )
+        # Collect and create all parent directories
+        parent_dirs = set()
+        for file_spec in files_to_copy:
+            dest_full = f"{target_base_dir}/{file_spec['dest']}"
+            parent = str(Path(dest_full).parent)
+            parent_dirs.add(parent)
 
-            # Copy each file/directory
-            for file_spec in files_to_copy:
-                source_path = Path(file_spec['source'])
-                dest_relative = file_spec['dest']
-                dest_full = f"{target_base_dir}/{dest_relative}"
+        # Sort by depth to create parents before children
+        for parent_dir in sorted(parent_dirs, key=lambda p: len(p.split('/'))):
+            if parent_dir != target_base_dir:
+                commands.extend(['mkdir-p', parent_dir, ':'])
 
-                # Verify source exists on host
-                if not source_path.exists():
-                    raise HypervisorException(
-                        f"Source file/directory not found: {source_path}"
-                    )
+        # Copy each file/directory
+        for file_spec in files_to_copy:
+            source_path = file_spec['source']
+            dest_relative = file_spec['dest']
+            dest_full = f"{target_base_dir}/{dest_relative}"
+            dest_parent = str(Path(dest_full).parent)
 
-                # Create parent directory in guest
-                dest_parent = str(Path(dest_full).parent)
-                try:
-                    g.mkdir_p(dest_parent)
-                except RuntimeError as e:
-                    raise HypervisorException(
-                        f"Failed to create parent directory {dest_parent} in guest: {e}"
-                    )
+            log.info(f"Copying {source_path} -> {dest_full}")
+            commands.extend(['copy-in', source_path, dest_parent, ':'])
 
-                # Copy file or directory
-                if source_path.is_file():
-                    log.info(f"Copying file {source_path} -> {dest_full}")
-                    try:
-                        g.upload(str(source_path), dest_full)
-                    except RuntimeError as e:
-                        raise HypervisorException(
-                            f"Failed to upload {source_path} to {dest_full}: {e}"
-                        )
+        # Remove trailing ':'
+        if commands and commands[-1] == ':':
+            commands = commands[:-1]
 
-                elif source_path.is_dir():
-                    log.info(f"Copying directory {source_path} -> {dest_full}")
-                    try:
-                        # Create destination directory first
-                        g.mkdir_p(dest_full)
+        # Execute all commands in single guestfish invocation
+        returncode, stdout, stderr = self._run_guestfish_command(
+            disk_path, commands, readonly=False
+        )
 
-                        # Copy each item in the directory
-                        for item in source_path.iterdir():
-                            item_dest = f"{dest_full}/{item.name}"
-                            if item.is_file():
-                                g.upload(str(item), item_dest)
-                            elif item.is_dir():
-                                # For nested directories, use copy_in
-                                g.copy_in(str(item), dest_full)
-                    except RuntimeError as e:
-                        raise HypervisorException(
-                            f"Failed to copy directory {source_path} to {dest_full}: {e}"
-                        )
-
-            # Sync and unmount
-            log.debug("Syncing filesystems")
-            g.sync()
-
-            log.debug("Unmounting filesystems")
-            g.umount_all()
-
-        except HypervisorException:
-            # Re-raise our own exceptions
-            raise
-        except Exception as e:
-            # Catch any unexpected errors and wrap them
+        if returncode != 0:
             raise HypervisorException(
-                f"Unexpected error during libguestfs file transfer: {e}"
+                f"Failed to copy files to guest disk.\n"
+                f"Guestfish error: {stderr}\n"
+                f"Disk: {disk_path}"
             )
-        finally:
-            # Always close the handle
-            if g is not None:
-                try:
-                    g.close()
-                    log.debug("Closed libguestfs handle")
-                except:
-                    pass  # Ignore errors during cleanup
 
         log.info(f"Successfully copied {len(files_to_copy)} items to guest disk")
 
@@ -198,7 +155,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         destination_path: Path
     ) -> None:
         """
-        Copy artifacts from guest disk using libguestfs.
+        Copy artifacts from guest disk using guestfish CLI.
 
         Args:
             disk_path: Absolute path to VM disk image (qcow2)
@@ -208,23 +165,13 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         Raises:
             HypervisorException: If critical operations fail
         """
-        # Import check
-        try:
-            import guestfs
-        except ImportError:
-            raise HypervisorException(
-                "libguestfs Python bindings not available. "
-                "Install with: sudo apt install python3-guestfs (Ubuntu/Debian) "
-                "or sudo dnf install python3-libguestfs (Fedora/RHEL)"
-            )
-
-        # Verify disk file exists
+        # Validate disk exists
         if not Path(disk_path).exists():
             raise HypervisorException(
                 f"VM disk not found at {disk_path}"
             )
 
-        log.info(f"Mounting guest disk {disk_path} via libguestfs to retrieve artifacts")
+        log.info(f"Mounting guest disk {disk_path} via guestfish to retrieve artifacts")
 
         # Create destination directory on host
         try:
@@ -234,127 +181,175 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 f"Failed to create destination directory {destination_path}: {e}"
             )
 
-        g = None
-        try:
-            # Initialize libguestfs handle
-            g = guestfs.GuestFS(python_return_dict=True)
+        # Check if source path exists in guest
+        returncode, stdout, stderr = self._run_guestfish_command(
+            disk_path, ['exists', source_path], readonly=True
+        )
 
-            # Add disk with READ-ONLY access (readonly=1)
-            log.debug(f"Adding disk {disk_path} with read-only access")
-            g.add_drive_opts(disk_path, readonly=1)
-
-            # Launch guestfs appliance
-            log.debug("Launching libguestfs appliance")
-            g.launch()
-
-            # Inspect OS and get root filesystem
-            log.debug("Inspecting guest OS")
-            roots = g.inspect_os()
-            if not roots:
-                raise HypervisorException(
-                    f"No operating system found in VM disk {disk_path}"
-                )
-
-            root = roots[0]
-            log.debug(f"Detected OS root: {root}")
-
-            # Get and mount filesystems (read-only)
-            log.debug("Mounting guest filesystems (read-only)")
-            mps = g.inspect_get_mountpoints(root)
-
-            # Sort by mountpoint length
-            for mountpoint, device in sorted(mps.items(), key=lambda x: len(x[0])):
-                try:
-                    log.debug(f"Mounting {device} on {mountpoint} (read-only)")
-                    g.mount_ro(device, mountpoint)  # Read-only mount
-                except RuntimeError as e:
-                    log.warning(f"Could not mount {device} on {mountpoint}: {e}")
-
-            # Check if source path exists
-            try:
-                exists = g.exists(source_path)
-            except RuntimeError as e:
-                raise HypervisorException(
-                    f"Failed to check if {source_path} exists: {e}"
-                )
-
-            if not exists:
-                # This is not necessarily an error - experiments may not produce artifacts
-                log.warning(
-                    f"Artifact path {source_path} does not exist in guest. "
-                    f"This may be normal if the experiment did not produce artifacts."
-                )
-                # Don't raise exception, just return early
-                return
-
-            # Check if it's a directory or file
-            try:
-                is_dir = g.is_dir(source_path)
-            except RuntimeError as e:
-                raise HypervisorException(
-                    f"Failed to determine if {source_path} is a directory: {e}"
-                )
-
-            # Copy artifacts
-            if is_dir:
-                log.info(f"Copying artifact directory {source_path} -> {destination_path}")
-                try:
-                    # copy_out() copies directory contents to parent
-                    # We want to copy the directory itself
-                    # So we copy its contents to the destination
-                    g.copy_out(source_path, str(destination_path.parent))
-
-                    # copy_out will create source_path name in parent
-                    # We may need to rename it
-                    source_name = Path(source_path).name
-                    copied_dir = destination_path.parent / source_name
-                    if copied_dir != destination_path:
-                        import shutil
-                        shutil.move(str(copied_dir), str(destination_path))
-
-                except RuntimeError as e:
-                    raise HypervisorException(
-                        f"Failed to copy artifacts from {source_path}: {e}"
-                    )
-            else:
-                # Single file
-                log.info(f"Copying artifact file {source_path} -> {destination_path}")
-                try:
-                    g.download(source_path, str(destination_path))
-                except RuntimeError as e:
-                    raise HypervisorException(
-                        f"Failed to download artifact file {source_path}: {e}"
-                    )
-
-            # Unmount (read-only, no sync needed)
-            log.debug("Unmounting filesystems")
-            g.umount_all()
-
-        except HypervisorException:
-            raise
-        except Exception as e:
-            raise HypervisorException(
-                f"Unexpected error during artifact retrieval: {e}"
+        if returncode != 0 or 'false' in stdout.lower():
+            log.warning(
+                f"Artifact path {source_path} does not exist in guest. "
+                f"This may be normal if the experiment did not produce artifacts."
             )
-        finally:
-            # Always close the handle
-            if g is not None:
-                try:
-                    g.close()
-                    log.debug("Closed libguestfs handle")
-                except:
-                    pass
+            return
+
+        # Check if directory or file
+        returncode, stdout, stderr = self._run_guestfish_command(
+            disk_path, ['is-dir', source_path], readonly=True
+        )
+
+        is_directory = returncode == 0 and 'true' in stdout.lower()
+
+        if is_directory:
+            log.info(f"Copying artifact directory {source_path} -> {destination_path}")
+
+            # copy-out copies directory to parent with its original name
+            temp_parent = destination_path.parent
+
+            returncode, stdout, stderr = self._run_guestfish_command(
+                disk_path, ['copy-out', source_path, str(temp_parent)], readonly=True
+            )
+
+            if returncode != 0:
+                raise HypervisorException(
+                    f"Failed to copy artifacts from {source_path}: {stderr}"
+                )
+
+            # Handle path adjustment if needed
+            source_name = Path(source_path).name
+            copied_dir = temp_parent / source_name
+            if copied_dir != destination_path:
+                if destination_path.exists():
+                    shutil.rmtree(destination_path)
+                shutil.move(str(copied_dir), str(destination_path))
+        else:
+            log.info(f"Copying artifact file {source_path} -> {destination_path}")
+
+            returncode, stdout, stderr = self._run_guestfish_command(
+                disk_path, ['download', source_path, str(destination_path)], readonly=True
+            )
+
+            if returncode != 0:
+                raise HypervisorException(
+                    f"Failed to download artifact file {source_path}: {stderr}"
+                )
 
         log.info(f"Successfully retrieved artifacts from {source_path}")
+
+    def _validate_external_disk_writable(self, disk_path: Path) -> None:
+        """
+        Validate that external disk path is writable (required for snapshots).
+
+        Args:
+            disk_path: Path to external disk image
+
+        Raises:
+            HypervisorException: If disk is not writable
+        """
+        import os
+
+        # Check if file exists (for existing qcow2)
+        if disk_path.exists():
+            # Test write permission
+            if not os.access(disk_path, os.W_OK):
+                raise HypervisorException(
+                    f"External disk is not writable: {disk_path}\n"
+                    f"QEMU requires write access to disk for snapshot operations.\n"
+                    f"Please ensure the file has write permissions."
+                )
+            log.debug(f"CLAUDE: Validated write access to external disk: {disk_path}")
+        else:
+            # File doesn't exist yet (will be created by conversion)
+            # Check parent directory is writable
+            parent_dir = disk_path.parent
+            if not parent_dir.exists():
+                raise HypervisorException(
+                    f"Parent directory does not exist: {parent_dir}\n"
+                    f"Cannot create converted qcow2 file."
+                )
+            if not os.access(parent_dir, os.W_OK):
+                raise HypervisorException(
+                    f"Parent directory is not writable: {parent_dir}\n"
+                    f"Cannot create converted qcow2 file for external VM.\n"
+                    f"Please ensure directory has write permissions."
+                )
+            log.debug(f"CLAUDE: Validated write access to parent directory: {parent_dir}")
 
     async def prepare_vm_for_experiment(self, context):
         """
         Create QEMU VM instance and allocate resources.
 
+        Supports both managed and external (--no-copy) disk images.
+        For external disks: detects format and uses in-place if qcow2, or determines conversion path.
+
         Args:
             context: ExperimentRunCtx with vm_name and guest_platform already set
         """
-        # Create QEMU VM instance
+        from adare.database.api.vm import VmApi
+        from adare.backend.environment import database as environment_database
+        from adare.backend.vm.commands import _is_vm_managed
+        from adare.hypervisor.qemu.vm import QEMUVM
+
+        # Query database for source VM to get disk path
+        env_data = environment_database.get_environment_by_ulid(
+            context.environment_ulid,
+            fields=['vm_id']
+        )
+
+        if not env_data or not env_data.get('vm_id'):
+            raise HypervisorException(
+                "No VM associated with environment. Run 'adare environment load' first."
+            )
+
+        # Get source VM file path from database
+        with VmApi() as api:
+            source_vm = api.get_vm_by_id(env_data['vm_id'])
+
+        if not source_vm:
+            raise HypervisorException(f"Source VM not found in database")
+
+        source_vm_path = Path(source_vm.file)
+
+        # Determine if this is an external VM (--no-copy mode)
+        is_external = not _is_vm_managed(source_vm_path)
+
+        # Determine disk path for QEMU VM
+        disk_path = None  # None = use managed storage (default behavior)
+
+        if is_external:
+            log.info(f"CLAUDE: External VM detected (--no-copy mode): {source_vm_path}")
+
+            # Detect file format
+            try:
+                detected_format = QEMUVM._detect_disk_format_static(
+                    source_vm_path,
+                    self.qemu_manager.executables.qemu_img
+                )
+                log.debug(f"CLAUDE: Detected format: {detected_format}")
+            except HypervisorException as e:
+                log.warning(f"CLAUDE: Could not detect format: {e}")
+                detected_format = 'unknown'
+
+            if detected_format == 'qcow2':
+                # Already qcow2 - use directly
+                log.info("CLAUDE: Source is qcow2 format, will use directly without conversion")
+                disk_path = str(source_vm_path.resolve())
+            elif detected_format in ['ova', 'vmdk', 'vdi', 'raw', 'unknown']:
+                # Non-qcow2 format - need to convert in-place
+                log.info(f"CLAUDE: Source is {detected_format} format, will convert to qcow2 in-place")
+                converted_path = source_vm_path.parent / f"{source_vm_path.stem}_adare_converted.qcow2"
+                disk_path = str(converted_path.resolve())
+            else:
+                log.warning(f"CLAUDE: Unknown format {detected_format}, treating as non-qcow2")
+                converted_path = source_vm_path.parent / f"{source_vm_path.stem}_adare_converted.qcow2"
+                disk_path = str(converted_path.resolve())
+
+            # Validate write permissions for external disk path
+            self._validate_external_disk_writable(Path(disk_path))
+        else:
+            log.debug(f"CLAUDE: Managed VM detected, using managed storage")
+
+        # Create QEMU VM instance with optional external disk path
         username, password = get_vm_credentials(context.guest_platform)
         context.vm = QEMUVM(
             vm_name=context.vm_name,
@@ -362,10 +357,55 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             manager=self.qemu_manager,
             username=username,
             password=password,
+            executables=self.qemu_manager.executables,
             cpus=context.config.vm_cpus,
-            ram=context.config.vm_memory
+            ram=context.config.vm_memory,
+            disk_path=disk_path  # NEW: Pass external disk path for --no-copy mode
         )
-        log.info(f"Created QEMU VM instance: {context.vm_name}")
+        log.info(f"CLAUDE: Created QEMU VM instance: {context.vm_name}")
+
+        # If external VM with non-qcow2 source, ensure conversion happens
+        # This creates the base disk (with -base suffix) from the source
+        if is_external and detected_format != 'qcow2':
+            base_disk_path = context.vm.get_base_disk_path()
+            if not Path(base_disk_path).exists():
+                log.info(f"CLAUDE: Converting {detected_format} to qcow2 base disk...")
+                return_code, message = await context.vm.create_from_ovf_or_ova(
+                    source_vm_path,
+                    silent=False,
+                    try_extract=True
+                )
+                if return_code != 0:
+                    raise HypervisorException(f"Failed to convert VM disk: {message}")
+                log.info(f"CLAUDE: Conversion to base disk completed successfully")
+
+        # Create experiment overlay backed by immutable base disk
+        # This ensures libguestfs operations don't modify the base disk,
+        # preserving hash integrity for forensic validation
+        experiment_id = context.experiment_run_ulid or 'default'
+        log.info(f"CLAUDE: Creating overlay disk for experiment {experiment_id}...")
+
+        try:
+            overlay_path = await context.vm.create_overlay_disk(experiment_id)
+
+            # Update VM config to use overlay (not base)
+            # This ensures all disk operations (especially libguestfs) write to overlay
+            context.vm.config.disk_path = overlay_path
+            log.info(f"CLAUDE: Using overlay disk for experiment: {overlay_path}")
+
+            # Log base disk location for reference
+            if Path(context.vm.config.disk_path).exists():
+                base_info = "external qcow2"
+            else:
+                base_info = context.vm.get_base_disk_path()
+            log.info(f"CLAUDE: Base disk preserved for integrity checks: {base_info}")
+
+        except Exception as e:
+            raise HypervisorException(
+                f"Failed to create overlay disk: {e}\n"
+                f"Overlay creation failed. Ensure base disk exists and is accessible.\n"
+                f"VM: {context.vm_name}, External: {is_external}"
+            )
 
     async def setup_file_transfer(self, context):
         """
@@ -430,13 +470,18 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
     async def start_and_initialize_vm(self, context):
         """
-        Start QEMU VM (files already on disk from setup_file_transfer).
+        Start QEMU VM via libvirt (files already on disk from setup_file_transfer).
+
+        VM will be visible in virsh and virt-manager. Display can be accessed
+        by opening the VM in virt-manager and clicking 'Open'.
 
         Args:
             context: ExperimentRunCtx containing VM
         """
-        # Start the VM
+        # Start the VM (via libvirt)
+        log.info(f"CLAUDE: Starting VM '{context.vm.vm_name}' via libvirt")
         await context.vm.start(stop_event=context.user_interrupt_event)
+        log.info(f"CLAUDE: VM visible in virt-manager (use 'Open' button to access display)")
 
         # Wait until VM is fully booted and guest agent is ready
         log.info('Waiting until VM is ready (QEMU Guest Agent)')

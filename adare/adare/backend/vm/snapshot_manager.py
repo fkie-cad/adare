@@ -12,6 +12,9 @@ from datetime import datetime, timedelta
 
 from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 from adare.hypervisor.virtualbox.manager import VirtualBoxManager
+from adare.hypervisor.qemu.vm import QEMUVM
+from adare.hypervisor.qemu.manager import QEMUManager
+from adare.hypervisor.exceptions import VMNotFoundException
 from adare.backend.vm import database as vm_database
 from adare.backend.vm.exceptions import VMError
 from adarelib.constants import VMStatus
@@ -228,38 +231,26 @@ class SnapshotManager:
         Returns:
             Snapshot name if created successfully, None otherwise
         """
-        if not vm_instance.vbox_uuid:
-            log.error(f"VM instance '{vm_instance.instance_name}' has no VirtualBox UUID")
-            return None
-
         # Generate snapshot name
         snapshot_name = f"adare_exp_{experiment_id[:8]}"
 
         if not description:
             description = f"Adare experiment snapshot for {experiment_id}"
 
-        # Get VirtualBox VM instance using the instance UUID
-        vm_name = self._get_vm_name_by_uuid(vm_instance.vbox_uuid)
-        if not vm_name:
-            log.error(f"VM instance with UUID {vm_instance.vbox_uuid} not found in VirtualBox")
+        # Get hypervisor-appropriate VM object
+        try:
+            vm_obj = self._get_vm_object(vm_instance)
+        except (VMError, VMNotFoundException) as e:
+            log.error(f"Failed to get VM object: {e}")
             return None
 
-        # Get OS platform for credentials from source VM
-        from adare.config import get_vm_credentials
-        platform = getattr(vm_instance.vm.osinfo, 'platform', 'linux') if hasattr(vm_instance.vm, 'osinfo') and vm_instance.vm.osinfo else 'linux'
-        username, password = get_vm_credentials(platform)
-
-        vbox_vm = VirtualBoxVM(
-            vm_name=vm_name,
-            guest_os=platform,
-            manager=self.vbox_manager,
-            username=username,
-            password=password
-        )
+        # Ensure QEMU VMs are stopped
+        if not self._ensure_vm_stopped_for_qemu(vm_obj, vm_instance, "experiment snapshot creation"):
+            return None
 
         try:
             # Create experiment snapshot
-            result = vbox_vm.create_snapshot(
+            result = vm_obj.create_snapshot(
                 snapshot_name=snapshot_name,
                 description=description,
                 silent=silent
@@ -281,8 +272,11 @@ class SnapshotManager:
                 log.error(f"Failed to create experiment snapshot '{snapshot_name}' for VM instance '{vm_instance.instance_name}'")
                 return None
 
-        except Exception as e:
-            log.error(f"Error creating experiment snapshot for VM instance '{vm_instance.instance_name}': {e}")
+        except VMNotFoundException as e:
+            log.error(f"VM not found: {e}")
+            return None
+        except OSError as e:
+            log.error(f"File system error during snapshot creation: {e}")
             return None
     
     def check_base_snapshot_exists(self, vm_record) -> bool:
@@ -399,6 +393,90 @@ class SnapshotManager:
 
     # Instance-specific snapshot methods
 
+    def _get_vm_object(self, vm_instance):
+        """
+        Get appropriate VM object (VirtualBoxVM or QEMUVM) based on hypervisor type.
+
+        Args:
+            vm_instance: VmInstance database record with vm relationship
+
+        Returns:
+            VirtualBoxVM or QEMUVM instance configured for the VM
+
+        Raises:
+            VMError: If hypervisor unsupported or VM not found
+            VMNotFoundException: If VM doesn't exist in hypervisor
+        """
+        from adare.config import get_vm_credentials
+
+        # Get hypervisor type from source VM
+        hypervisor = vm_instance.vm.hypervisor
+
+        if hypervisor == 'virtualbox':
+            # VirtualBox: use vbox_uuid to get VM
+            if not vm_instance.vbox_uuid:
+                raise VMError(log, f"VirtualBox VM instance '{vm_instance.instance_name}' has no vbox_uuid")
+
+            vm_name = self._get_vm_name_by_uuid(vm_instance.vbox_uuid)
+            if not vm_name:
+                raise VMError(log, f"VirtualBox VM with UUID {vm_instance.vbox_uuid} not found")
+
+            platform = getattr(vm_instance.vm.osinfo, 'platform', 'linux') if hasattr(vm_instance.vm, 'osinfo') and vm_instance.vm.osinfo else 'linux'
+            username, password = get_vm_credentials(platform)
+
+            return VirtualBoxVM(
+                vm_name=vm_name,
+                guest_os=platform,
+                manager=self.vbox_manager,
+                username=username,
+                password=password
+            )
+
+        elif hypervisor == 'qemu':
+            # QEMU: use instance_name to load VM config
+            try:
+                qemu_vm = QEMUVM.get_vm_by_name(
+                    vm_name=vm_instance.instance_name,
+                    manager=QEMUManager()
+                )
+                return qemu_vm
+            except VMNotFoundException as e:
+                raise VMError(log, f"QEMU VM instance '{vm_instance.instance_name}' not found: {e}")
+
+        else:
+            raise VMError(log, f"Unsupported hypervisor: {hypervisor}")
+
+    def _ensure_vm_stopped_for_qemu(self, vm_obj, vm_instance, operation_name: str) -> bool:
+        """
+        Ensure QEMU VM is stopped before snapshot operation.
+        VirtualBox VMs can snapshot while running, so this only affects QEMU.
+
+        Args:
+            vm_obj: QEMUVM or VirtualBoxVM instance
+            vm_instance: VmInstance database record
+            operation_name: Name of operation for error messages
+
+        Returns:
+            True if VM is in correct state, False if operation should abort
+        """
+        hypervisor = vm_instance.vm.hypervisor
+
+        if hypervisor != 'qemu':
+            return True  # VirtualBox: no state check needed
+
+        try:
+            state = vm_obj.get_state()
+            if state != 'poweroff':
+                log.error(
+                    f"QEMU VM must be stopped for {operation_name}. "
+                    f"Current state: {state}. Stop the VM first with: adare vm stop {vm_instance.instance_name}"
+                )
+                return False
+            return True
+        except OSError as e:
+            log.error(f"Error checking VM state for {operation_name}: {e}")
+            return False
+
     def create_base_snapshot_for_instance(self, vm_instance, snapshot_name: str = None,
                                         description: str = None, silent: bool = False) -> bool:
         """
@@ -413,10 +491,6 @@ class SnapshotManager:
         Returns:
             True if snapshot created successfully
         """
-        if not vm_instance.vbox_uuid:
-            log.error(f"VM instance '{vm_instance.instance_name}' has no VirtualBox UUID")
-            return False
-
         # Generate snapshot name if not provided
         if not snapshot_name:
             snapshot_name = f"{vm_instance.instance_name}_base"
@@ -424,28 +498,20 @@ class SnapshotManager:
         if not description:
             description = f"Adare base snapshot for instance {vm_instance.instance_name}"
 
-        # Get VirtualBox VM instance using the instance UUID
-        vm_name = self._get_vm_name_by_uuid(vm_instance.vbox_uuid)
-        if not vm_name:
-            log.error(f"VM instance with UUID {vm_instance.vbox_uuid} not found in VirtualBox")
+        # Get hypervisor-appropriate VM object
+        try:
+            vm_obj = self._get_vm_object(vm_instance)
+        except (VMError, VMNotFoundException) as e:
+            log.error(f"Failed to get VM object: {e}")
             return False
 
-        # Get OS platform for credentials from source VM
-        from adare.config import get_vm_credentials
-        platform = getattr(vm_instance.vm.osinfo, 'platform', 'linux') if hasattr(vm_instance.vm, 'osinfo') and vm_instance.vm.osinfo else 'linux'
-        username, password = get_vm_credentials(platform)
-
-        vbox_vm = VirtualBoxVM(
-            vm_name=vm_name,
-            guest_os=platform,
-            manager=self.vbox_manager,
-            username=username,
-            password=password
-        )
+        # Ensure QEMU VMs are stopped
+        if not self._ensure_vm_stopped_for_qemu(vm_obj, vm_instance, "snapshot creation"):
+            return False
 
         try:
             # Create the snapshot
-            result = vbox_vm.create_snapshot(
+            result = vm_obj.create_snapshot(
                 snapshot_name=snapshot_name,
                 description=description,
                 silent=silent
@@ -476,8 +542,11 @@ class SnapshotManager:
                 log.error(f"Failed to create base snapshot '{snapshot_name}' for VM instance '{vm_instance.instance_name}'")
                 return False
 
-        except Exception as e:
-            log.error(f"Error creating base snapshot for VM instance '{vm_instance.instance_name}': {e}")
+        except VMNotFoundException as e:
+            log.error(f"VM not found: {e}")
+            return False
+        except OSError as e:
+            log.error(f"File system error during snapshot creation: {e}")
             return False
 
     def restore_instance_to_base_snapshot(self, vm_instance, silent: bool = False,
@@ -501,40 +570,28 @@ class SnapshotManager:
             log.error(f"VM instance '{vm_instance.instance_name}' has no base snapshot configured")
             return False
 
-        if not vm_instance.vbox_uuid:
-            log.error(f"VM instance '{vm_instance.instance_name}' has no VirtualBox UUID")
-            return False
-
         # Check for interruption before starting
         if interrupt_event and interrupt_event.is_set():
             log.info(f"CLAUDE: Snapshot restore cancelled before starting for VM instance '{vm_instance.instance_name}'")
             return False
 
-        # Get VirtualBox VM instance
-        vm_name = self._get_vm_name_by_uuid(vm_instance.vbox_uuid)
-        if not vm_name:
-            log.error(f"VM instance with UUID {vm_instance.vbox_uuid} not found in VirtualBox")
+        # Get hypervisor-appropriate VM object
+        try:
+            vm_obj = self._get_vm_object(vm_instance)
+        except (VMError, VMNotFoundException) as e:
+            log.error(f"Failed to get VM object: {e}")
             return False
 
-        # Get OS platform for credentials from source VM
-        from adare.config import get_vm_credentials
-        platform = getattr(vm_instance.vm.osinfo, 'platform', 'linux') if hasattr(vm_instance.vm, 'osinfo') and vm_instance.vm.osinfo else 'linux'
-        username, password = get_vm_credentials(platform)
-
-        vbox_vm = VirtualBoxVM(
-            vm_name=vm_name,
-            guest_os=platform,
-            manager=self.vbox_manager,
-            username=username,
-            password=password
-        )
+        # Ensure QEMU VMs are stopped
+        if not self._ensure_vm_stopped_for_qemu(vm_obj, vm_instance, "snapshot restore"):
+            return False
 
         try:
             # Add detailed logging for debugging hanging issues
             log.info(f"CLAUDE: Starting snapshot restore for VM instance '{vm_instance.instance_name}' to '{vm_instance.base_snapshot_name}' (timeout: {timeout}s)")
 
             # Restore to base snapshot with interrupt support
-            result = vbox_vm.restore_snapshot(
+            result = vm_obj.restore_snapshot(
                 snapshot_name=vm_instance.base_snapshot_name,
                 silent=silent,
                 stop_event=interrupt_event
@@ -555,12 +612,11 @@ class SnapshotManager:
         except InterruptedError:
             log.info(f"CLAUDE: Snapshot restore operation interrupted for VM instance '{vm_instance.instance_name}'")
             return False
-        except Exception as e:
-            # Provide more specific error information
-            if "timeout" in str(e).lower():
-                log.error(f"CLAUDE: Snapshot restore timed out after {timeout}s for VM instance '{vm_instance.instance_name}': {e}")
-            else:
-                log.error(f"CLAUDE: Error restoring base snapshot for VM instance '{vm_instance.instance_name}': {e}")
+        except VMNotFoundException as e:
+            log.error(f"VM or snapshot not found: {e}")
+            return False
+        except OSError as e:
+            log.error(f"File system error during restore: {e}")
             return False
 
     def check_instance_base_snapshot_exists(self, vm_instance) -> bool:
@@ -573,31 +629,14 @@ class SnapshotManager:
         Returns:
             True if base snapshot exists and is accessible
         """
-        if not vm_instance.base_snapshot_name or not vm_instance.vbox_uuid:
+        if not vm_instance.base_snapshot_name:
             return False
-
-        # Get VirtualBox VM instance
-        vm_name = self._get_vm_name_by_uuid(vm_instance.vbox_uuid)
-        if not vm_name:
-            return False
-
-        # Get OS platform for credentials from source VM
-        from adare.config import get_vm_credentials
-        platform = getattr(vm_instance.vm.osinfo, 'platform', 'linux') if hasattr(vm_instance.vm, 'osinfo') and vm_instance.vm.osinfo else 'linux'
-        username, password = get_vm_credentials(platform)
-
-        vbox_vm = VirtualBoxVM(
-            vm_name=vm_name,
-            guest_os=platform,
-            manager=self.vbox_manager,
-            username=username,
-            password=password
-        )
 
         try:
-            return vbox_vm.snapshot_exists(vm_instance.base_snapshot_name)
-        except Exception as e:
-            log.debug(f"Error checking base snapshot for VM instance '{vm_instance.instance_name}': {e}")
+            vm_obj = self._get_vm_object(vm_instance)
+            return vm_obj.snapshot_exists(vm_instance.base_snapshot_name)
+        except (VMError, VMNotFoundException) as e:
+            log.debug(f"Error checking base snapshot: {e}")
             return False
 
     def _track_instance_snapshot_in_db(self, vm_instance_id: str, snapshot_name: str, snapshot_type: str,
@@ -628,36 +667,24 @@ class SnapshotManager:
         Raises:
             VMError: If attempting to delete a base snapshot
         """
-        if not vm_instance.vbox_uuid:
-            log.error(f"VM instance '{vm_instance.instance_name}' has no VirtualBox UUID")
-            return False
-
         # Protect base snapshots from deletion
         if vm_instance.base_snapshot_name and snapshot_name == vm_instance.base_snapshot_name:
             raise VMError(log, f"Cannot delete base snapshot '{snapshot_name}' - base snapshots are protected from deletion")
 
-        # Get VirtualBox VM instance using the instance UUID
-        vm_name = self._get_vm_name_by_uuid(vm_instance.vbox_uuid)
-        if not vm_name:
-            log.error(f"VM instance with UUID {vm_instance.vbox_uuid} not found in VirtualBox")
+        # Get hypervisor-appropriate VM object
+        try:
+            vm_obj = self._get_vm_object(vm_instance)
+        except (VMError, VMNotFoundException) as e:
+            log.error(f"Failed to get VM object: {e}")
             return False
 
-        # Get OS platform for credentials from source VM
-        from adare.config import get_vm_credentials
-        platform = getattr(vm_instance.vm.osinfo, 'platform', 'linux') if hasattr(vm_instance.vm, 'osinfo') and vm_instance.vm.osinfo else 'linux'
-        username, password = get_vm_credentials(platform)
-
-        vbox_vm = VirtualBoxVM(
-            vm_name=vm_name,
-            guest_os=platform,
-            manager=self.vbox_manager,
-            username=username,
-            password=password
-        )
+        # Ensure QEMU VMs are stopped
+        if not self._ensure_vm_stopped_for_qemu(vm_obj, vm_instance, "snapshot deletion"):
+            return False
 
         try:
-            # Delete the snapshot from VirtualBox
-            result = vbox_vm.delete_snapshot(
+            # Delete the snapshot
+            result = vm_obj.delete_snapshot(
                 snapshot_name=snapshot_name,
                 silent=silent
             )
@@ -679,8 +706,11 @@ class SnapshotManager:
 
         except VMError:
             raise
-        except Exception as e:
-            log.error(f"Error deleting snapshot from VM instance '{vm_instance.instance_name}': {e}")
+        except VMNotFoundException as e:
+            log.error(f"VM or snapshot not found: {e}")
+            return False
+        except OSError as e:
+            log.error(f"File system error during deletion: {e}")
             return False
 
 
