@@ -35,6 +35,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
         manager: 'VirtualBoxManager',
         username: str,
         password: str,
+        executables: 'ExecutableManager',
         cpus: int = 1,
         ram: int = 1024,
         network: str = "nat"
@@ -47,7 +48,8 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
         self.ram = ram
         self.network = network
         self.host_os = platform.system().lower()
-        self.vboxmanage_exe = 'VBoxManage.exe' if self.host_os == 'windows' else 'VBoxManage'
+        self.executables = executables  # Store executable manager
+        self.vboxmanage_exe = executables.vboxmanage  # Use resolved executable path
         self.manager = manager
         self._background_pids = []
         self._command_queue = []
@@ -412,39 +414,47 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
     @classmethod
     def get_vm_by_name(cls, vm_name: str, manager: Optional[VirtualBoxManager] = None):
         """Get VM information by name and create a VirtualBoxVM instance."""
+        # Ensure manager exists first to access executables
+        if manager is None:
+            manager = VirtualBoxManager()
+
         def _get_vm_info():
             try:
-                vboxmanage_exe = 'VBoxManage.exe' if platform.system().lower() == 'windows' else 'VBoxManage'
+                vboxmanage_exe = manager.executables.vboxmanage
                 result = run_subprocess(
                     [vboxmanage_exe, "showvminfo", vm_name, "--machinereadable"],
                     log_prefix=f"get_vm_by_name({vm_name}): ",
                     check=False
                 )
-                
+
                 if result.returncode != 0:
                     log.warning(f"VM '{vm_name}' not found")
                     return None
-                
+
                 # Parse VM information
                 vm_info = {}
                 for line in result.stdout.split('\n'):
                     if '=' in line:
                         key, value = line.split('=', 1)
                         vm_info[key] = value.strip('"')
-                
+
                 # Extract relevant information
                 guest_os = vm_info.get('ostype', 'Other')
                 cpus = int(vm_info.get('cpus', '1'))
                 ram = int(vm_info.get('memory', '1024'))
-                
+
+                # Get default credentials (these are placeholders - should be configured)
+                from adare.config import get_vm_credentials
+                username, password = get_vm_credentials(guest_os)
+
                 # Create VirtualBoxVM instance
-                if manager is None:
-                    manager = VirtualBoxManager()
-                
                 vm = cls(
                     vm_name=vm_name,
                     guest_os=guest_os,
                     manager=manager,
+                    username=username,
+                    password=password,
+                    executables=manager.executables,
                     cpus=cpus,
                     ram=ram
                 )
@@ -462,10 +472,15 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
         return manager.run(_get_vm_info)
 
     @staticmethod
-    def get_vm_uuid_by_name(vm_name: str) -> Optional[str]:
-        """Get VM UUID by name."""
+    def get_vm_uuid_by_name(vm_name: str, vboxmanage_exe: str = 'VBoxManage') -> Optional[str]:
+        """
+        Get VM UUID by name.
+
+        Args:
+            vm_name: Name of the VM
+            vboxmanage_exe: Path to VBoxManage executable (defaults to 'VBoxManage')
+        """
         try:
-            vboxmanage_exe = 'VBoxManage.exe' if platform.system().lower() == 'windows' else 'VBoxManage'
             result = run_subprocess(
                 [vboxmanage_exe, "showvminfo", vm_name, "--machinereadable"],
                 log_prefix=f"get_vm_uuid_by_name({vm_name}): ",
@@ -488,13 +503,18 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
 
     def get_vm_uuid(self) -> Optional[str]:
         """Get VM UUID for this instance (convenience method)."""
-        return self.get_vm_uuid_by_name(self.vm_name)
+        return self.get_vm_uuid_by_name(self.vm_name, self.vboxmanage_exe)
 
     @staticmethod
-    def get_vm_info_by_uuid(vbox_uuid: str) -> Optional[dict]:
-        """Get VM information by UUID."""
+    def get_vm_info_by_uuid(vbox_uuid: str, vboxmanage_exe: str = 'VBoxManage') -> Optional[dict]:
+        """
+        Get VM information by UUID.
+
+        Args:
+            vbox_uuid: UUID of the VM
+            vboxmanage_exe: Path to VBoxManage executable (defaults to 'VBoxManage')
+        """
         try:
-            vboxmanage_exe = 'VBoxManage.exe' if platform.system().lower() == 'windows' else 'VBoxManage'
             result = run_subprocess(
                 [vboxmanage_exe, "showvminfo", vbox_uuid, "--machinereadable"],
                 log_prefix=f"get_vm_info_by_uuid({vbox_uuid}): ",
@@ -516,10 +536,15 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
             return None
 
     @staticmethod
-    def verify_vm_exists_by_uuid(vbox_uuid: str) -> bool:
-        """Verify if a VM exists by its UUID."""
+    def verify_vm_exists_by_uuid(vbox_uuid: str, vboxmanage_exe: str = 'VBoxManage') -> bool:
+        """
+        Verify if a VM exists by its UUID.
+
+        Args:
+            vbox_uuid: UUID of the VM
+            vboxmanage_exe: Path to VBoxManage executable (defaults to 'VBoxManage')
+        """
         try:
-            vboxmanage_exe = 'VBoxManage.exe' if platform.system().lower() == 'windows' else 'VBoxManage'
             result = run_subprocess(
                 [vboxmanage_exe, "showvminfo", vbox_uuid, "--machinereadable"],
                 log_prefix=f"verify_vm_exists_by_uuid({vbox_uuid}): ",

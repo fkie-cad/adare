@@ -50,11 +50,13 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         manager: 'QEMUManager',
         username: str,
         password: str,
+        executables: 'ExecutableManager',
         cpus: int = 2,
         ram: int = 2048,
         machine: str = 'pc',
         accel: str = 'kvm',
-        drive_format: str = 'qcow2'
+        drive_format: str = 'qcow2',
+        disk_path: Optional[str] = None
     ):
         self.vm_name = vm_name
         self.guest_os = guest_os
@@ -67,14 +69,96 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         self.drive_format = drive_format
         self.host_os = platform.system().lower()
         self.manager = manager
+        self.executables = executables  # Store executable manager
         self._background_pids = []
         self._command_queue = []
         self._qemu_process = None  # Running QEMU process
+        self._external_disk_path = disk_path  # Optional external disk path for --no-copy mode
+
+        # libvirt integration
+        self._libvirt_conn = None  # Lazy initialization - will use manager's connection
+        self._libvirt_domain = None  # libvirt domain object
+
+        # PATH discovery cache
+        self._cached_guest_path = None  # Cached PATH from guest discovery
+        self._path_discovery_attempted = False  # Track if we've tried discovery to prevent retries
 
         # Load or create VM config
         self.config = self._load_or_create_vm_config()
 
         log.info(f"CLAUDE: Initialized QEMUVM for '{self.vm_name}' ({self.guest_os})")
+
+    @staticmethod
+    def _detect_disk_format_static(file_path: Path, qemu_img_exe: str = 'qemu-img') -> str:
+        """
+        Detect disk image format using qemu-img info (static version).
+
+        Args:
+            file_path: Path to disk image file
+            qemu_img_exe: Path to qemu-img executable
+
+        Returns:
+            Format string (e.g., 'qcow2', 'vmdk', 'vdi', 'raw', 'vpc')
+            Returns 'ova' for OVA files (special marker indicating extraction needed)
+
+        Raises:
+            HypervisorException: If format detection fails
+        """
+        # For OVA files, need to extract first to detect disk format
+        if str(file_path).endswith('.ova'):
+            log.debug(f"CLAUDE: OVA file detected, will need extraction: {file_path}")
+            return 'ova'
+
+        # Use qemu-img info with JSON output
+        args = [qemu_img_exe, 'info', '--output=json', str(file_path)]
+
+        try:
+            result = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                check=False
+            )
+
+            if result.returncode != 0:
+                raise HypervisorException(
+                    f"Failed to detect disk format for {file_path}: {result.stderr}"
+                )
+
+            info = json.loads(result.stdout)
+            disk_format = info.get('format', 'unknown')
+
+            log.debug(f"CLAUDE: Detected disk format: {disk_format} for {file_path}")
+            return disk_format
+
+        except json.JSONDecodeError as e:
+            raise HypervisorException(
+                f"Failed to parse qemu-img info output: {e}"
+            )
+        except FileNotFoundError:
+            raise HypervisorException(
+                f"qemu-img executable not found. Please install QEMU tools."
+            )
+        except Exception as e:
+            raise HypervisorException(
+                f"Error detecting disk format: {e}"
+            )
+
+    def _detect_disk_format(self, file_path: Path) -> str:
+        """
+        Detect disk image format using qemu-img info (instance method wrapper).
+
+        Args:
+            file_path: Path to disk image file
+
+        Returns:
+            Format string (e.g., 'qcow2', 'vmdk', 'vdi', 'raw', 'vpc')
+            Returns 'ova' for OVA files (special marker indicating extraction needed)
+
+        Raises:
+            HypervisorException: If format detection fails
+        """
+        return self._detect_disk_format_static(file_path, self.executables.qemu_img)
 
     def _get_vm_config_path(self) -> Path:
         """Get path to VM configuration JSON file."""
@@ -96,9 +180,16 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             log.debug(f"CLAUDE: Creating new VM config for '{self.vm_name}'")
             # Create new config
             vm_uuid = str(uuid.uuid4())
-            disk_dir = Path.home() / '.adare' / 'qemu' / 'disks'
-            disk_dir.mkdir(parents=True, exist_ok=True)
-            disk_path = str(disk_dir / f"{self.vm_name}.qcow2")
+
+            # Determine disk path: use external path if provided, otherwise use managed storage
+            if self._external_disk_path:
+                disk_path = self._external_disk_path
+                log.info(f"CLAUDE: Using external disk path for --no-copy mode: {disk_path}")
+            else:
+                disk_dir = Path.home() / '.adare' / 'qemu' / 'disks'
+                disk_dir.mkdir(parents=True, exist_ok=True)
+                disk_path = str(disk_dir / f"{self.vm_name}.qcow2")
+                log.debug(f"CLAUDE: Using managed disk path: {disk_path}")
 
             # Socket paths
             runtime_dir = Path.home() / '.adare' / 'qemu' / 'run'
@@ -106,6 +197,11 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             qmp_socket = str(runtime_dir / f"{self.vm_name}.qmp")
             qga_socket = str(runtime_dir / f"{self.vm_name}.qga")
             pid_file = str(runtime_dir / f"{self.vm_name}.pid")
+
+            # Validate socket path lengths (Unix sockets have ~108 character limit)
+            for name, path in [("QMP", qmp_socket), ("Guest Agent", qga_socket)]:
+                if len(path) > 107:
+                    raise ValueError(f"{name} socket path too long ({len(path)} > 107 chars): {path}")
 
             config = QEMUVMConfig(
                 vm_name=self.vm_name,
@@ -137,6 +233,126 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         with open(config_path, 'w') as f:
             json.dump(config.to_dict(), f, indent=2)
 
+    def get_base_disk_path(self) -> str:
+        """
+        Get path for immutable base disk.
+
+        The base disk is never modified after creation. It serves as the
+        backing file for experiment-specific overlays.
+
+        Returns:
+            Path with -base suffix: /path/to/disk-base.qcow2
+        """
+        current_disk = Path(self.config.disk_path)
+        return str(current_disk.parent / f"{current_disk.stem}-base{current_disk.suffix}")
+
+    def get_overlay_disk_path(self, experiment_id: str) -> str:
+        """
+        Get path for experiment-specific overlay disk.
+
+        Args:
+            experiment_id: Unique experiment ID
+
+        Returns:
+            Path like: /path/to/disk-overlay-{exp_id}.qcow2
+        """
+        current_disk = Path(self.config.disk_path)
+        return str(current_disk.parent / f"{current_disk.stem}-overlay-{experiment_id}{current_disk.suffix}")
+
+    async def create_overlay_disk(self, experiment_id: str) -> str:
+        """
+        Create qcow2 overlay backed by immutable base disk.
+
+        This creates a new overlay that captures all modifications while
+        leaving the base disk untouched. The overlay is deleted after
+        experiment completion.
+
+        Args:
+            experiment_id: Unique ID for this experiment
+
+        Returns:
+            Path to created overlay disk
+
+        Raises:
+            HypervisorException: If overlay creation fails
+        """
+        # Determine base disk path
+        # Priority:
+        # 1. If config.disk_path exists and is qcow2, use it (external qcow2 case)
+        # 2. Otherwise, look for -base suffix (managed/converted case)
+        current_disk = Path(self.config.disk_path)
+
+        if current_disk.exists() and current_disk.suffix == '.qcow2':
+            # Existing qcow2 file - use as base directly (external qcow2 case)
+            base_disk = str(current_disk)
+            log.debug(f"CLAUDE: Using existing disk as base: {base_disk}")
+        else:
+            # Look for -base suffix (managed/converted case)
+            base_disk = self.get_base_disk_path()
+            log.debug(f"CLAUDE: Looking for base disk with -base suffix: {base_disk}")
+
+        # Verify base disk exists
+        if not Path(base_disk).exists():
+            raise HypervisorException(
+                f"Base disk not found: {base_disk}. "
+                "Run create_from_ovf_or_ova first or ensure source disk exists."
+            )
+
+        # Create overlay path with experiment ID
+        overlay_path = self.get_overlay_disk_path(experiment_id)
+
+        # Build qemu-img command to create backing file
+        qemu_img = self.executables.qemu_img
+        args = [
+            qemu_img,
+            'create',
+            '-f', 'qcow2',
+            '-F', 'qcow2',  # Backing file format
+            '-b', base_disk,  # Backing file (base disk)
+            overlay_path      # New overlay
+        ]
+
+        log.info(f"CLAUDE: Creating overlay disk backed by {base_disk}")
+        log.debug(f"CLAUDE: Command: {' '.join(args)}")
+
+        # Execute qemu-img create
+        process = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            raise HypervisorException(
+                f"Failed to create overlay disk: {stderr.decode()}"
+            )
+
+        log.info(f"CLAUDE: Successfully created overlay: {overlay_path}")
+        return overlay_path
+
+    async def cleanup_overlay_disk(self, experiment_id: str) -> None:
+        """
+        Delete experiment overlay disk.
+
+        This removes the overlay file, leaving the base disk intact.
+        The next experiment will create a fresh overlay from the base.
+
+        Args:
+            experiment_id: Unique ID for this experiment
+        """
+        overlay_path = self.get_overlay_disk_path(experiment_id)
+
+        if Path(overlay_path).exists():
+            try:
+                os.remove(overlay_path)
+                log.info(f"CLAUDE: Deleted overlay disk: {overlay_path}")
+            except OSError as e:
+                log.warning(f"CLAUDE: Failed to delete overlay {overlay_path}: {e}")
+        else:
+            log.debug(f"CLAUDE: Overlay already deleted: {overlay_path}")
+
     async def create(
         self,
         ctx_manager=None,
@@ -161,8 +377,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                 log.info(f"CLAUDE: Creating QEMU VM '{self.vm_name}' with "
                         f"{self.cpus} CPUs, {self.ram}MB RAM")
 
-            from adare.config import HYPERVISOR_CONFIGS
-            qemu_img_exe = HYPERVISOR_CONFIGS.get('qemu', {}).get('qemu_img_exe', 'qemu-img')
+            qemu_img_exe = self.executables.qemu_img
 
             # Create qcow2 disk (default 50GB)
             disk_path = self.config.disk_path
@@ -189,6 +404,78 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
 
         return await self.manager.run_async(_create_async)
 
+    def _get_libvirt_connection(self):
+        """Get libvirt connection from manager (lazy initialization)."""
+        if not self._libvirt_conn:
+            self._libvirt_conn = self.manager.libvirt_conn
+        return self._libvirt_conn
+
+    def _define_libvirt_domain(self):
+        """
+        Define libvirt domain from XML configuration.
+
+        Creates a libvirt domain definition that makes the VM visible in
+        virsh and virt-manager while preserving all ADARE functionality.
+
+        Returns:
+            libvirt.virDomain: Domain object
+
+        Raises:
+            HypervisorException: If domain definition fails
+        """
+        from adare.hypervisor.qemu.libvirt_xml import generate_domain_xml
+        import libvirt
+
+        log.debug(f"CLAUDE: Defining libvirt domain for VM: {self.vm_name}")
+
+        # Generate XML domain definition
+        xml = generate_domain_xml(
+            self.config,
+            display_enabled=self.config.display_enabled,
+            vnc_port=self.config.vnc_port
+        )
+
+        log.debug(f"CLAUDE: Generated libvirt XML for {self.vm_name}")
+
+        # Get libvirt connection
+        conn = self._get_libvirt_connection()
+
+        if not conn:
+            raise HypervisorException(
+                "libvirt connection not available. Ensure libvirtd is running and "
+                "libvirt integration is enabled in config."
+            )
+
+        # Check if domain already exists
+        try:
+            existing_domain = conn.lookupByName(self.vm_name)
+            log.debug(f"CLAUDE: Domain '{self.vm_name}' already exists, undefining...")
+            # Undefine existing domain (will redefine with new XML)
+            if existing_domain.isActive():
+                log.warning(f"CLAUDE: Domain '{self.vm_name}' is running, destroying first...")
+                existing_domain.destroy()
+            existing_domain.undefine()
+        except libvirt.libvirtError as e:
+            # Domain doesn't exist, which is fine
+            if 'Domain not found' not in str(e):
+                log.warning(f"CLAUDE: Error checking for existing domain: {e}")
+
+        # Define the domain
+        try:
+            domain = conn.defineXML(xml)
+            log.info(f"CLAUDE: Defined libvirt domain '{self.vm_name}' (visible in virsh/virt-manager)")
+
+            # Update config with libvirt domain name
+            self.config.libvirt_domain_name = self.vm_name
+            self._save_vm_config()
+
+            return domain
+
+        except libvirt.libvirtError as e:
+            raise HypervisorException(
+                f"Failed to define libvirt domain '{self.vm_name}': {e}"
+            )
+
     def _build_qemu_command(self) -> List[str]:
         """
         Build QEMU command line for starting VM.
@@ -196,8 +483,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         Returns:
             List of command arguments
         """
-        from adare.config import HYPERVISOR_CONFIGS
-        qemu_system_exe = HYPERVISOR_CONFIGS.get('qemu', {}).get('qemu_system_exe', 'qemu-system-x86_64')
+        qemu_system_exe = self.executables.qemu_system
 
         cmd = [
             qemu_system_exe,
@@ -207,7 +493,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             '-smp', str(self.cpus),
             '-m', str(self.ram),
             '-drive', f"file={self.config.disk_path},format={self.drive_format},if=virtio",
-            '-display', 'none',  # Headless
+            # '-display', 'none',  # Headless
             '-daemonize',  # Run as daemon
             '-pidfile', self.config.pid_file_path
         ]
@@ -253,7 +539,10 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         silent: bool = False
     ) -> int:
         """
-        Start the QEMU VM.
+        Start the QEMU VM via libvirt.
+
+        Creates libvirt domain definition and starts the VM, making it
+        visible in virsh and virt-manager.
 
         Args:
             ctx_manager: Optional context manager for status updates
@@ -266,47 +555,69 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             Return code (0 for success, non-zero for failure)
         """
         async def _start_async():
-            current_state = self.get_state()
-
-            if current_state == "running":
-                message = f"VM '{self.vm_name}' is already running."
-                if raise_if_running:
-                    raise VMAlreadyRunningException(message)
-                if not silent:
-                    log.info(f"CLAUDE: {message}")
-                return 0
-
-            if not silent:
-                log.info(f"CLAUDE: Starting QEMU VM '{self.vm_name}'")
+            import libvirt
 
             # Check if disk exists
             if not os.path.exists(self.config.disk_path):
                 log.error(f"CLAUDE: VM disk not found at {self.config.disk_path}")
                 return 1
 
-            # Build QEMU command
-            cmd = self._build_qemu_command()
+            # Clean up any stale socket files before starting
+            for socket_path in [self.config.qmp_socket_path, self.config.guest_agent_socket_path]:
+                if os.path.exists(socket_path):
+                    try:
+                        os.remove(socket_path)
+                        log.debug(f"CLAUDE: Removed stale socket: {socket_path}")
+                    except OSError as e:
+                        log.warning(f"CLAUDE: Could not remove stale socket {socket_path}: {e}")
 
-            # Execute QEMU command
+            # Define libvirt domain if not already defined
+            if not self._libvirt_domain:
+                try:
+                    self._libvirt_domain = self._define_libvirt_domain()
+                except Exception as e:
+                    log.error(f"CLAUDE: Failed to define libvirt domain: {e}")
+                    return 1
+
+            # Check current state
             try:
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-
-                if result.returncode == 0:
-                    # Give it a moment to start
-                    await asyncio.sleep(1)
-
+                state, _ = self._libvirt_domain.state()
+                if state == libvirt.VIR_DOMAIN_RUNNING:
+                    message = f"VM '{self.vm_name}' is already running."
+                    if raise_if_running:
+                        raise VMAlreadyRunningException(message)
                     if not silent:
-                        log.info(f"CLAUDE: VM '{self.vm_name}' started successfully")
+                        log.info(f"CLAUDE: {message}")
+                    return 0
+            except libvirt.libvirtError as e:
+                log.warning(f"CLAUDE: Could not check domain state: {e}")
+
+            if not silent:
+                log.info(f"CLAUDE: Starting QEMU VM '{self.vm_name}' via libvirt")
+
+            # Start the domain (equivalent to virsh start)
+            try:
+                self._libvirt_domain.create()
+
+                # Give it a moment to start
+                await asyncio.sleep(1)
+
+                if not silent:
+                    log.info(f"CLAUDE: VM '{self.vm_name}' started successfully")
+                    log.info(f"CLAUDE: VM visible in virt-manager (connect via 'Open' button for display)")
+                return 0
+
+            except libvirt.libvirtError as e:
+                if "already running" in str(e).lower():
+                    message = f"VM '{self.vm_name}' is already running."
+                    if raise_if_running:
+                        raise VMAlreadyRunningException(message)
+                    if not silent:
+                        log.info(f"CLAUDE: {message}")
                     return 0
                 else:
-                    log.error(f"CLAUDE: Failed to start VM: {result.stderr}")
-                    return result.returncode
-
+                    log.error(f"CLAUDE: Failed to start VM via libvirt: {e}")
+                    return 1
             except Exception as e:
                 log.error(f"CLAUDE: Error starting VM: {e}")
                 return 1
@@ -317,76 +628,94 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         self,
         ctx_manager=None,
         log_file: Optional[Path] = None,
-        silent: bool = False
+        silent: bool = False,
+        force: bool = False,
+        timeout: int = 60
     ) -> int:
         """
-        Stop the QEMU VM gracefully.
+        Stop the QEMU VM gracefully via libvirt.
 
         Args:
             ctx_manager: Optional context manager for status updates
             log_file: Optional path to log file
             silent: If True, suppress log output
+            force: If True, force immediate shutdown (equivalent to pulling power)
+            timeout: Timeout in seconds for graceful shutdown
 
         Returns:
             Return code (0 for success, non-zero for failure)
         """
         async def _stop_async():
-            if not silent:
-                log.info(f"CLAUDE: Stopping QEMU VM '{self.vm_name}'")
+            import libvirt
 
-            state = self.get_state()
-            if state == "poweroff":
+            if not silent:
+                log.info(f"CLAUDE: Stopping QEMU VM '{self.vm_name}' via libvirt")
+
+            # Check if domain exists
+            if not self._libvirt_domain:
+                try:
+                    conn = self._get_libvirt_connection()
+                    self._libvirt_domain = conn.lookupByName(self.vm_name)
+                except libvirt.libvirtError:
+                    if not silent:
+                        log.info(f"CLAUDE: VM '{self.vm_name}' is not defined in libvirt")
+                    return 0
+
+            # Check current state
+            try:
+                state, _ = self._libvirt_domain.state()
+                if state == libvirt.VIR_DOMAIN_SHUTOFF:
+                    if not silent:
+                        log.info(f"CLAUDE: VM '{self.vm_name}' is already stopped")
+                    return 0
+            except libvirt.libvirtError as e:
+                log.warning(f"CLAUDE: Could not check domain state: {e}")
+
+            # Stop the domain
+            try:
+                if force:
+                    # Force stop (equivalent to virsh destroy)
+                    if not silent:
+                        log.info(f"CLAUDE: Force stopping VM '{self.vm_name}'")
+                    self._libvirt_domain.destroy()
+                else:
+                    # Graceful shutdown (equivalent to virsh shutdown)
+                    if not silent:
+                        log.info(f"CLAUDE: Gracefully shutting down VM '{self.vm_name}'")
+                    self._libvirt_domain.shutdown()
+
+                    # Wait for VM to stop with timeout
+                    for _ in range(timeout):
+                        await asyncio.sleep(1)
+                        try:
+                            state, _ = self._libvirt_domain.state()
+                            if state == libvirt.VIR_DOMAIN_SHUTOFF:
+                                if not silent:
+                                    log.info(f"CLAUDE: VM '{self.vm_name}' stopped gracefully")
+                                return 0
+                        except libvirt.libvirtError:
+                            # Domain might have been destroyed
+                            break
+
+                    # Timeout - force stop
+                    log.warning("CLAUDE: Graceful shutdown timed out, forcing stop")
+                    self._libvirt_domain.destroy()
+
                 if not silent:
-                    log.info(f"CLAUDE: VM '{self.vm_name}' is already stopped")
+                    log.info(f"CLAUDE: VM '{self.vm_name}' stopped")
                 return 0
 
-            # Try graceful shutdown via guest agent
-            try:
-                if os.path.exists(self.config.guest_agent_socket_path):
-                    shutdown_cmd = {"execute": "guest-shutdown"}
-                    await self._send_qga_command(self.config.guest_agent_socket_path, shutdown_cmd)
-
-                    # Wait for VM to stop (timeout 30 seconds)
-                    for _ in range(30):
-                        await asyncio.sleep(1)
-                        if self.get_state() == "poweroff":
-                            if not silent:
-                                log.info(f"CLAUDE: VM '{self.vm_name}' stopped gracefully")
-                            return 0
-
-                    log.warning("CLAUDE: Graceful shutdown timed out, forcing stop")
-
-            except Exception as e:
-                log.warning(f"CLAUDE: Graceful shutdown failed: {e}, forcing stop")
-
-            # Force stop by killing process
-            if os.path.exists(self.config.pid_file_path):
-                try:
-                    with open(self.config.pid_file_path, 'r') as f:
-                        pid = int(f.read().strip())
-
-                    os.kill(pid, 15)  # SIGTERM
-                    await asyncio.sleep(2)
-
-                    # Check if still running
-                    try:
-                        os.kill(pid, 0)  # Check if process exists
-                        # Still running, force kill
-                        os.kill(pid, 9)  # SIGKILL
-                    except ProcessLookupError:
-                        pass  # Process already dead
-
+            except libvirt.libvirtError as e:
+                if "not running" in str(e).lower() or "not active" in str(e).lower():
                     if not silent:
-                        log.info(f"CLAUDE: VM '{self.vm_name}' stopped")
-
-                    # Clean up PID file
-                    os.remove(self.config.pid_file_path)
-
-                except Exception as e:
-                    log.error(f"CLAUDE: Error stopping VM: {e}")
+                        log.info(f"CLAUDE: VM '{self.vm_name}' is already stopped")
+                    return 0
+                else:
+                    log.error(f"CLAUDE: Failed to stop VM via libvirt: {e}")
                     return 1
-
-            return 0
+            except Exception as e:
+                log.error(f"CLAUDE: Error stopping VM: {e}")
+                return 1
 
         return await self.manager.run_async(_stop_async)
 
@@ -398,7 +727,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         silent: bool = False
     ) -> int:
         """
-        Destroy the QEMU VM (delete disk and config).
+        Destroy the QEMU VM (undefine libvirt domain, delete disk and config).
 
         Args:
             ctx_manager: Optional context manager for status updates
@@ -410,12 +739,34 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             Return code (0 for success, non-zero for failure)
         """
         async def _destroy_async():
+            import libvirt
+
             if not silent:
                 log.info(f"CLAUDE: Destroying QEMU VM '{self.vm_name}'")
 
             # Stop VM if running
             if self.get_state() == "running":
-                await self.stop(silent=silent)
+                await self.stop(silent=silent, force=True)
+
+            # Undefine libvirt domain (removes from virsh list)
+            if self._libvirt_domain:
+                try:
+                    self._libvirt_domain.undefine()
+                    if not silent:
+                        log.info(f"CLAUDE: Undefined libvirt domain '{self.vm_name}'")
+                except libvirt.libvirtError as e:
+                    log.warning(f"CLAUDE: Could not undefine libvirt domain: {e}")
+                self._libvirt_domain = None
+            else:
+                # Try to lookup and undefine if it exists
+                try:
+                    conn = self._get_libvirt_connection()
+                    domain = conn.lookupByName(self.vm_name)
+                    domain.undefine()
+                    if not silent:
+                        log.info(f"CLAUDE: Undefined libvirt domain '{self.vm_name}'")
+                except libvirt.libvirtError:
+                    pass  # Domain doesn't exist, which is fine
 
             # Delete disk
             if os.path.exists(self.config.disk_path):
@@ -453,26 +804,49 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
 
     def get_state(self) -> str:
         """
-        Get the current state of the VM.
+        Get the current state of the VM via libvirt.
 
         Returns:
-            "running", "poweroff", or "unknown"
+            "running", "poweroff", "paused", or "unknown"
         """
-        # Check if PID file exists and process is running
-        if os.path.exists(self.config.pid_file_path):
-            try:
-                with open(self.config.pid_file_path, 'r') as f:
-                    pid = int(f.read().strip())
+        import libvirt
 
-                # Check if process exists
-                os.kill(pid, 0)
-                return "running"
+        try:
+            # Try to get domain state from libvirt
+            if not self._libvirt_domain:
+                conn = self._get_libvirt_connection()
+                if conn:
+                    try:
+                        self._libvirt_domain = conn.lookupByName(self.vm_name)
+                    except libvirt.libvirtError:
+                        # Domain not defined in libvirt
+                        return "poweroff"
+                else:
+                    # No libvirt connection
+                    return "unknown"
 
-            except (ProcessLookupError, ValueError):
-                # Process not found or invalid PID
-                return "poweroff"
-        else:
-            return "poweroff"
+            # Get domain state
+            state, _ = self._libvirt_domain.state()
+
+            # Map libvirt states to ADARE states
+            state_map = {
+                libvirt.VIR_DOMAIN_RUNNING: 'running',
+                libvirt.VIR_DOMAIN_BLOCKED: 'running',
+                libvirt.VIR_DOMAIN_PAUSED: 'paused',
+                libvirt.VIR_DOMAIN_SHUTDOWN: 'poweroff',
+                libvirt.VIR_DOMAIN_SHUTOFF: 'poweroff',
+                libvirt.VIR_DOMAIN_CRASHED: 'poweroff',
+                libvirt.VIR_DOMAIN_PMSUSPENDED: 'paused'
+            }
+
+            return state_map.get(state, 'unknown')
+
+        except libvirt.libvirtError as e:
+            log.debug(f"CLAUDE: Could not get VM state from libvirt: {e}")
+            return "unknown"
+        except Exception as e:
+            log.warning(f"CLAUDE: Error getting VM state: {e}")
+            return "unknown"
 
     def vm_exists(self) -> bool:
         """
@@ -524,6 +898,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             manager=manager,
             username=username,
             password=password,
+            executables=manager.executables,
             cpus=data.get('cpus', 2),
             ram=data.get('ram', 2048),
             machine=data.get('machine', 'pc'),
@@ -550,6 +925,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         silent: bool = False,
         stop_event: Optional[threading.Event] = None,
         cwd: Optional[str] = None,
+        admin: bool = False,
         **kwargs
     ) -> CommandResult:
         """
@@ -561,6 +937,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             silent: If True, suppress log output
             stop_event: Optional event to signal cancellation
             cwd: Optional working directory
+            admin: If True, run with elevated privileges (sudo on Linux, RunAs on Windows)
             **kwargs: Additional arguments
 
         Returns:
@@ -572,7 +949,8 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         returncode, stdout, stderr = await self._execute_guest_command_via_agent(
             command,
             background=background,
-            stop_event=stop_event
+            stop_event=stop_event,
+            admin=admin
         )
 
         return CommandResult(
@@ -590,39 +968,192 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         """
         Wait until VM is fully booted and guest agent is responsive.
 
+        Tests both guest-ping (connectivity) and guest-exec (command execution)
+        to ensure VM is truly ready for setup commands.
+
         Args:
             timeout: Timeout in seconds
             ctx_manager: Optional context manager for status updates
             stop_event: Optional event to signal cancellation
 
         Returns:
-            True if VM is booted, False if timeout
+            True if VM is booted and ready, False if timeout
         """
         log.info(f"CLAUDE: Waiting for VM '{self.vm_name}' to boot (timeout: {timeout}s)")
 
         start_time = time.time()
+        ping_successful = False
+        retry_delay = 0.5  # Start with short delay for quick boots
+        max_retry_delay = 5.0  # Max delay between retries
+
         while time.time() - start_time < timeout:
             if stop_event and stop_event.is_set():
                 log.info("CLAUDE: Stop event detected")
                 return False
 
-            # Check if guest agent is responsive
-            if os.path.exists(self.config.guest_agent_socket_path):
-                try:
+            # Check if guest agent socket exists
+            if not os.path.exists(self.config.guest_agent_socket_path):
+                log.debug(f"CLAUDE: Guest agent socket not found yet: {self.config.guest_agent_socket_path}")
+                await asyncio.sleep(retry_delay)
+                # Increase delay for next iteration (exponential backoff)
+                retry_delay = min(retry_delay * 1.5, max_retry_delay)
+                continue
+
+            try:
+                # Phase 1: Test basic connectivity with guest-ping
+                if not ping_successful:
                     ping_cmd = {"execute": "guest-ping"}
-                    response = await self._send_qga_command(self.config.guest_agent_socket_path, ping_cmd)
+                    response = await self._send_qga_command_via_libvirt(ping_cmd)
 
                     if 'return' in response:
-                        log.info(f"CLAUDE: VM '{self.vm_name}' is fully booted")
-                        return True
+                        log.info(f"CLAUDE: Guest agent is responsive (guest-ping successful)")
+                        ping_successful = True
+                        retry_delay = 0.5  # Reset delay after success
+                    elif 'error' in response:
+                        # Check if error is retriable (socket not ready, connection issues)
+                        error_desc = response.get('error', {}).get('desc', '')
+                        if 'OS error' in error_desc or 'Connection' in error_desc or 'Socket not found' in error_desc:
+                            log.debug(f"CLAUDE: guest-ping failed (retriable): {error_desc}")
+                            await asyncio.sleep(retry_delay)
+                            retry_delay = min(retry_delay * 1.5, max_retry_delay)
+                            continue
+                        else:
+                            log.debug(f"CLAUDE: guest-ping failed: {response}")
+                            await asyncio.sleep(retry_delay)
+                            retry_delay = min(retry_delay * 1.5, max_retry_delay)
+                            continue
+                    else:
+                        log.debug(f"CLAUDE: guest-ping returned unexpected response: {response}")
+                        await asyncio.sleep(retry_delay)
+                        retry_delay = min(retry_delay * 1.5, max_retry_delay)
+                        continue
 
-                except Exception:
-                    pass  # Guest agent not ready yet
+                # Phase 2: Test actual command execution with guest-exec
+                # This validates that the guest-exec subsystem is ready
+                log.debug("CLAUDE: Testing guest-exec capability")
+
+                # Determine test command based on guest OS
+                if 'windows' in self.guest_os.lower():
+                    test_path = 'cmd.exe'
+                    test_args = ['/c', 'echo', 'Ready']
+                else:
+                    test_path = '/bin/echo'
+                    test_args = ['Ready']
+
+                exec_cmd = {
+                    "execute": "guest-exec",
+                    "arguments": {
+                        "path": test_path,
+                        "arg": test_args,
+                        "capture-output": True
+                    }
+                }
+
+                exec_response = await self._send_qga_command_via_libvirt(exec_cmd)
+
+                if 'error' in exec_response:
+                    error_desc = exec_response.get('error', {}).get('desc', '')
+                    log.debug(f"CLAUDE: guest-exec test failed: {error_desc}")
+                    # Treat as retriable - socket might not be fully ready
+                    await asyncio.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 1.5, max_retry_delay)
+                    continue
+
+                # Get PID from exec response
+                pid = exec_response.get('return', {}).get('pid')
+                if not pid:
+                    log.debug("CLAUDE: guest-exec returned no PID")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 1.5, max_retry_delay)
+                    continue
+
+                # Wait for test command to complete (max 10s)
+                test_timeout = 10
+                test_start = time.time()
+
+                while time.time() - test_start < test_timeout:
+                    status_cmd = {
+                        "execute": "guest-exec-status",
+                        "arguments": {"pid": pid}
+                    }
+
+                    status_response = await self._send_qga_command_via_libvirt(status_cmd)
+
+                    if 'error' in status_response:
+                        log.debug(f"CLAUDE: guest-exec-status failed: {status_response['error']}")
+                        break
+
+                    status_data = status_response.get('return', {})
+                    if status_data.get('exited', False):
+                        returncode = status_data.get('exitcode', -1)
+
+                        if returncode == 0:
+                            log.info(f"CLAUDE: VM '{self.vm_name}' is fully booted and guest-exec is functional")
+
+                            # Phase 3: Discover and cache guest PATH environment
+                            log.info("CLAUDE: Discovering guest PATH environment")
+                            await self._discover_and_cache_guest_path()
+
+                            # Phase 4: Discover and cache X11 authorization for GUI automation (Linux only)
+                            if 'windows' not in self.guest_os.lower():
+                                log.info("CLAUDE: Discovering X11 authorization for GUI automation")
+                                xauthority = await self._discover_and_cache_xauthority()
+                                if not xauthority:
+                                    raise RuntimeError(
+                                        "XAUTHORITY not found - X11 environment required for GUI automation. "
+                                        "Ensure the VM has an active X11 session (not headless). "
+                                    )
+                                log.info(f"CLAUDE: X11 authorization configured with XAUTHORITY={xauthority}")
+                            else:
+                                log.debug("CLAUDE: Skipping X11 detection for Windows guest")
+
+                            return True
+                        else:
+                            log.warning(f"CLAUDE: guest-exec test returned non-zero: {returncode}")
+                            break
+
+                    await asyncio.sleep(0.5)
+
+                # Test command didn't complete in time, try again
+                log.debug("CLAUDE: guest-exec test timed out, retrying")
+
+            except asyncio.TimeoutError:
+                log.debug("CLAUDE: Timeout during boot check")
+            except OSError as e:
+                log.debug(f"CLAUDE: OS error during boot check: {e}")
+            except ConnectionError as e:
+                log.debug(f"CLAUDE: Connection error during boot check: {e}")
 
             await asyncio.sleep(2)
 
         log.warning(f"CLAUDE: Timeout waiting for VM '{self.vm_name}' to boot")
         return False
+
+    async def _discover_and_cache_guest_path(self):
+        """
+        Discover guest PATH environment and cache it for future command execution.
+
+        Called once after VM is fully booted and guest agent is responsive.
+        Failures are non-fatal - the system will fall back to hardcoded PATH.
+
+        This method:
+        1. Checks if discovery was already attempted (prevents retry on failure)
+        2. Calls _discover_guest_path() to query PATH from guest OS
+        3. Caches successful result in _cached_guest_path instance variable
+        4. Logs warning on failure but doesn't raise exceptions
+        """
+        if self._path_discovery_attempted:
+            return  # Already tried, don't retry
+
+        self._path_discovery_attempted = True
+
+        discovered_path = await self._discover_guest_path()
+
+        if discovered_path:
+            self._cached_guest_path = discovered_path
+            log.info(f"CLAUDE: Cached guest PATH: {discovered_path[:100]}...")
+        else:
+            log.warning("CLAUDE: PATH discovery failed, will use hardcoded fallback")
 
     async def create_from_ovf_or_ova(
         self,
@@ -633,8 +1164,11 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         """
         Create VM from OVF/OVA file by converting disk to qcow2.
 
+        For --no-copy mode with qcow2 source: skips conversion entirely.
+        For --no-copy mode with non-qcow2 source: converts in-place next to original file.
+
         Args:
-            file_path: Path to OVF/OVA file
+            file_path: Path to OVF/OVA file or disk image
             silent: If True, suppress log output
             try_extract: If True, try to extract OVA
 
@@ -643,8 +1177,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         """
         log.info(f"CLAUDE: Importing QEMU VM from {file_path}")
 
-        from adare.config import HYPERVISOR_CONFIGS
-        qemu_img_exe = HYPERVISOR_CONFIGS.get('qemu', {}).get('qemu_img_exe', 'qemu-img')
+        qemu_img_exe = self.executables.qemu_img
 
         # For OVA, extract first
         if str(file_path).endswith('.ova') and try_extract:
@@ -666,8 +1199,52 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             # Assume it's already a disk file
             source_disk = file_path
 
+        # Use base disk path (immutable) instead of regular disk path
+        # This ensures the converted disk becomes the base for overlays
+        dest_disk = self.get_base_disk_path()
+        log.debug(f"CLAUDE: Conversion target is base disk: {dest_disk}")
+
+        # Detect source disk format for --no-copy optimization
+        try:
+            source_format = self._detect_disk_format(source_disk)
+            log.debug(f"CLAUDE: Detected source disk format: {source_format}")
+        except HypervisorException as e:
+            log.warning(f"CLAUDE: Could not detect source format, will attempt conversion: {e}")
+            source_format = 'unknown'
+
+        # Check if conversion can be skipped (--no-copy mode with qcow2 source)
+        if source_format == 'qcow2' and self._external_disk_path:
+            # Check if source and dest are the same file (--no-copy with existing qcow2)
+            if Path(source_disk).resolve() == Path(dest_disk).resolve():
+                log.info(f"CLAUDE: Source is already qcow2 at target location, skipping conversion")
+                self._save_vm_config()
+                return 0, "VM imported successfully (no conversion needed)"
+
+        # Validate write permissions for external disk path before conversion
+        if self._external_disk_path:
+            dest_path = Path(dest_disk)
+            if dest_path.exists():
+                # Check if file is writable
+                if not os.access(dest_disk, os.W_OK):
+                    return 1, (
+                        f"External disk is not writable: {dest_disk}\n"
+                        f"QEMU requires write access for snapshot operations.\n"
+                        f"Please ensure the file has write permissions."
+                    )
+            else:
+                # Check if parent directory is writable
+                parent_dir = dest_path.parent
+                if not parent_dir.exists():
+                    return 1, f"Parent directory does not exist: {parent_dir}"
+                if not os.access(parent_dir, os.W_OK):
+                    return 1, (
+                        f"Parent directory is not writable: {parent_dir}\n"
+                        f"Cannot create converted qcow2 file for external VM.\n"
+                        f"Please ensure directory has write permissions."
+                    )
+
         # Convert to qcow2
-        dest_disk = self.config.disk_path
+        log.info(f"CLAUDE: Converting {source_format} disk to qcow2 at {dest_disk}")
         args = [qemu_img_exe, 'convert', '-O', 'qcow2', str(source_disk), dest_disk]
 
         try:
@@ -678,10 +1255,16 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                 self._save_vm_config()
                 return 0, f"VM imported successfully"
             else:
-                return result.returncode, result.stderr
+                error_msg = f"Failed to convert {source_format} to qcow2: {result.stderr}"
+                if self._external_disk_path:
+                    error_msg += "\nConsider loading without --no-copy to use managed storage."
+                return result.returncode, error_msg
 
         except Exception as e:
-            return 1, str(e)
+            error_msg = f"Conversion error: {str(e)}"
+            if self._external_disk_path:
+                error_msg += "\nConsider loading without --no-copy to use managed storage."
+            return 1, error_msg
 
     def queue_command(self, command: str, description: str = None):
         """Queue a command for later execution."""
@@ -706,3 +1289,148 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
     def cleanup_background_processes(self):
         """Clean up background processes (no-op for QEMU, processes managed by guest agent)."""
         self._background_pids.clear()
+
+    @staticmethod
+    def get_vm_info_by_uuid(uuid: str) -> Optional[Dict[str, Any]]:
+        """
+        Get VM information by UUID/identifier.
+        
+        For QEMU, we search through all VM config files to find one with matching UUID.
+        
+        Args:
+            uuid: VM UUID/identifier
+            
+        Returns:
+            Dictionary of VM information if found, None otherwise
+        """
+        from adare.config import get_vm_credentials
+        import glob
+        
+        # Search for all VM config files
+        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+        if not config_dir.exists():
+            return None
+            
+        config_files = glob.glob(str(config_dir / "*.json"))
+        for config_file in config_files:
+            try:
+                with open(config_file, 'r') as f:
+                    data = json.load(f)
+                    
+                # Check if UUID matches
+                if data.get('uuid') == uuid:
+                    vm_name = data.get('vm_name')
+                    guest_os = data.get('guest_os', 'linux')
+                    username, password = get_vm_credentials(guest_os)
+                    
+                    return {
+                        'name': vm_name,
+                        'uuid': uuid,
+                        'guest_os': guest_os,
+                        'username': username,
+                        'password': password,
+                        'cpus': data.get('cpus', 2),
+                        'ram': data.get('ram', 2048),
+                        'disk_path': data.get('disk_path'),
+                        'config_path': config_file
+                    }
+            except (json.JSONDecodeError, KeyError, IOError):
+                # Skip invalid config files
+                continue
+                
+        return None
+
+    @staticmethod
+    def get_vm_name_by_uuid(uuid: str) -> Optional[str]:
+        """
+        Get VM name by UUID/identifier.
+        
+        For QEMU, we search through all VM config files to find one with matching UUID.
+        
+        Args:
+            uuid: VM UUID/identifier
+            
+        Returns:
+            VM name if found, None otherwise
+        """
+        # Search for all VM config files
+        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+        if not config_dir.exists():
+            return None
+            
+        import glob
+        config_files = glob.glob(str(config_dir / "*.json"))
+        for config_file in config_files:
+            try:
+                with open(config_file, 'r') as f:
+                    data = json.load(f)
+                    
+                # Check if UUID matches
+                if data.get('uuid') == uuid:
+                    return data.get('vm_name')
+            except (json.JSONDecodeError, KeyError, IOError):
+                # Skip invalid config files
+                continue
+                
+        return None
+
+    @staticmethod
+    def get_vm_uuid_by_name(vm_name: str) -> Optional[str]:
+        """
+        Get VM UUID/identifier by name.
+        
+        For QEMU, the UUID is stored in the VM config file.
+        
+        Args:
+            vm_name: Name of the VM
+            
+        Returns:
+            VM UUID/identifier if found, None otherwise
+        """
+        # Check if config exists
+        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+        config_path = config_dir / f"{vm_name}.json"
+        
+        if not config_path.exists():
+            return None
+            
+        try:
+            with open(config_path, 'r') as f:
+                data = json.load(f)
+            return data.get('uuid')
+        except (json.JSONDecodeError, KeyError, IOError):
+            return None
+
+    @staticmethod
+    def verify_vm_exists_by_uuid(uuid: str) -> bool:
+        """
+        Verify if a VM exists by its UUID/identifier.
+        
+        For QEMU, we search through all VM config files to find one with matching UUID.
+        
+        Args:
+            uuid: VM UUID/identifier
+            
+        Returns:
+            True if VM exists, False otherwise
+        """
+        # Search for all VM config files
+        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
+        if not config_dir.exists():
+            return False
+            
+        import glob
+        config_files = glob.glob(str(config_dir / "*.json"))
+        for config_file in config_files:
+            try:
+                with open(config_file, 'r') as f:
+                    data = json.load(f)
+                    
+                # Check if UUID matches
+                if data.get('uuid') == uuid:
+                    return True
+            except (json.JSONDecodeError, KeyError, IOError):
+                # Skip invalid config files
+                continue
+                
+        return False

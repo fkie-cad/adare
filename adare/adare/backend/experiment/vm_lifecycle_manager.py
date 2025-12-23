@@ -279,8 +279,13 @@ class VMLifecycleManager:
         # Delegate VM instance creation to hypervisor-specific strategy
         await self.strategy.prepare_vm_for_experiment(context)
 
-        # VM instance is already prepared with snapshots - verify it exists and cleanup if missing
-        with StageCtxManager(VMCreateStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
+        # NOTE: setup_file_transfer() removed from here - now called explicitly in run.py
+        # This makes file transfer operations visible as a dedicated stage in the UI
+
+        # VirtualBox-specific: VM instance is already prepared with snapshots - verify it exists and cleanup if missing
+        # For QEMU, the prepare_vm_for_experiment already handles all VM creation
+        # NOTE: VMCreateStage wrapper removed - will be added in run.py to wrap entire create_and_prepare_vm()
+        if self.hypervisor_type == 'virtualbox':
             # Import the VM instance verification function
             from adare.backend.vm.commands import verify_and_cleanup_vm_instance_for_experiment
             from adare.database.api.vm import VmApi
@@ -391,11 +396,6 @@ class VMLifecycleManager:
                 raise LoggedException(log, f"VM instance '{context.vm_name}' was not properly prepared - missing from VirtualBox")
             log.info(f"Using prepared VM instance '{context.vm_name}' with snapshots (UUID: {vm_instance.vbox_uuid})")
 
-        # Delegate file transfer setup to hypervisor-specific strategy
-        # (VirtualBox: shared folders + port forwarding, QEMU: libguestfs file copy)
-        if not context.stop_event.is_set():
-            await self.strategy.setup_file_transfer(context)
-
         # Update experiment run with VM-specific data
         if not context.stop_event.is_set():
             context.experiment_run_ulid = experiment_database.update_experiment_run(
@@ -404,6 +404,21 @@ class VMLifecycleManager:
             )
 
         context.timestamp_before_vm_start = datetime.now(timezone.utc)
+
+    async def setup_file_transfer(self, context: ExperimentRunCtx):
+        """
+        Setup file transfer mechanism with proper stage visibility.
+
+        Delegates to hypervisor-specific strategy:
+        - VirtualBox: Configure shared folders and port forwarding
+        - QEMU: Stop VM if needed, copy files via libguestfs
+        """
+        with StageCtxManager(
+            VMMountSharedDirectoriesStage(),
+            context.experiment_run_ulid,
+            event=context.user_interrupt_event
+        ):
+            await self.strategy.setup_file_transfer(context)
 
     async def start_vm(self, context: ExperimentRunCtx):
         """
@@ -444,6 +459,23 @@ class VMLifecycleManager:
             if context.vm:
                 await context.vm.stop()
 
+    async def retrieve_artifacts(self, context: ExperimentRunCtx):
+        """
+        Retrieve artifacts from VM with proper stage visibility.
+
+        Delegates to hypervisor-specific strategy:
+        - VirtualBox: No-op (artifacts already on host via shared folders)
+        - QEMU: Stop VM, copy artifacts via libguestfs
+        """
+        from adare.types.stages import VMFileTransferRetrievalStage
+
+        with StageCtxManager(
+            VMFileTransferRetrievalStage(),
+            context.experiment_run_ulid,
+            event=context.user_interrupt_event
+        ):
+            await self.strategy.retrieve_artifacts(context)
+
     async def cleanup_vm(self, context: ExperimentRunCtx, post_interrupt: bool = False):
         """
         Cleanup VM resources and handle experiment snapshots.
@@ -454,9 +486,10 @@ class VMLifecycleManager:
         """
         event = None if post_interrupt else context.user_interrupt_event
         with StageCtxManager(VMDestroyStage(), context.experiment_run_ulid, event=event):
-            # Retrieve artifacts (hypervisor-specific)
+            # Retrieve artifacts FIRST (before snapshot creation)
+            # This ensures artifacts are captured before VM state is snapshotted
             if context.vm:
-                await self.strategy.retrieve_artifacts(context)
+                await self.retrieve_artifacts(context)
 
             # Create experiment snapshot if requested
             if context.config.preserve_snapshot:
@@ -465,6 +498,16 @@ class VMLifecycleManager:
 
             # Hypervisor-specific cleanup (port forwarding, etc.)
             await self.strategy.cleanup_vm(context, post_interrupt)
+
+            # QEMU-specific: Cleanup experiment overlay disk
+            # This deletes the overlay, leaving the immutable base disk intact
+            if context.vm and hasattr(context.vm, 'cleanup_overlay_disk'):
+                experiment_id = context.experiment_run_ulid or 'default'
+                try:
+                    await context.vm.cleanup_overlay_disk(experiment_id)
+                    log.info(f"CLAUDE: Cleaned up QEMU overlay for experiment {experiment_id}")
+                except Exception as e:
+                    log.warning(f"CLAUDE: Failed to cleanup overlay disk: {e}")
 
             # Release VM instance for reuse by other experiments
             log.info('Releasing VM instance for reuse by future experiments')

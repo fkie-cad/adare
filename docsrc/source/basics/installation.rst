@@ -102,7 +102,33 @@ Required Software
       - Uncheck "Hyper-V"
       - Restart your computer
 
-4. **Make** (build tool)
+4. **QEMU** (optional - for QEMU hypervisor support)
+
+   If you plan to use the QEMU hypervisor instead of VirtualBox, you need to install QEMU and libguestfs:
+
+   **Ubuntu/Debian:**
+
+   .. code-block:: bash
+
+      sudo apt update
+      sudo apt install qemu-system-x86 qemu-utils python3-guestfs libguestfs-tools
+
+   **Fedora/RHEL/CentOS:**
+
+   .. code-block:: bash
+
+      sudo dnf install qemu-kvm qemu-img python3-libguestfs libguestfs-tools
+
+   **Arch Linux:**
+
+   .. code-block:: bash
+
+      sudo pacman -S qemu python-guestfs libguestfs
+
+   .. note::
+      The libguestfs tools are required for file operations with stopped QEMU VMs.
+
+5. **Make** (build tool)
 
    Make sure to have `make` installed.
 

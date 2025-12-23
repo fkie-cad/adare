@@ -255,6 +255,9 @@ class Vm(SerializerMixin, GlobalBase):
     hash = Column(String, nullable=False)
     description = Column(String, nullable=True)
 
+    # Hypervisor configuration
+    hypervisor = Column(String, nullable=False, default='virtualbox', server_default='virtualbox')
+
     # Snapshot configuration
     use_snapshots = Column(Boolean, default=True)
 

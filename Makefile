@@ -21,6 +21,11 @@ else
 	@./adare/install/install.sh
 endif
 
+install-qemu:
+	chmod +x ./adare/install/install.sh
+	@echo "Running Adare installer script with QEMU support..."
+	@./adare/install/install.sh qemu
+
 adare-clean:
 	adare manage reset
 

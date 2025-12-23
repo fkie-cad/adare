@@ -15,22 +15,18 @@ from adare.hypervisor.virtualbox.utils import run_subprocess
 log = logging.getLogger(__name__)
 
 
-def list_snapshots(vm_name: str) -> List[Dict[str, str]]:
+def list_snapshots(vm_name: str, vboxmanage_exe: str = 'VBoxManage') -> List[Dict[str, str]]:
     """
     List all snapshots for a given VM.
 
     Args:
         vm_name: Name of the VM
+        vboxmanage_exe: Path to VBoxManage executable (defaults to 'VBoxManage')
 
     Returns:
         List of dictionaries with snapshot information (name, uuid, description)
     """
     try:
-        # Determine VBoxManage executable based on platform
-        import platform
-        host_os = platform.system().lower()
-        vboxmanage_exe = 'VBoxManage.exe' if host_os == 'windows' else 'VBoxManage'
-
         result = run_subprocess(
             [vboxmanage_exe, "snapshot", vm_name, "list", "--machinereadable"],
             log_prefix=f"list_snapshots({vm_name}): ",

@@ -125,6 +125,7 @@ HYPERVISOR_CONFIGS = {
         'default_vram': 128
     },
     'qemu': {
+        'architecture': 'x86_64',         # CPU architecture: x86_64, arm64, riscv64, etc.
         'qemu_system_exe': 'qemu-system-x86_64',
         'qemu_img_exe': 'qemu-img',
         'default_machine': 'pc',
@@ -134,7 +135,12 @@ HYPERVISOR_CONFIGS = {
         'monitor_socket': True,           # Use QMP socket for control
         'guest_agent': True,              # Require QEMU Guest Agent
         'guest_agent_socket': True,       # Use Unix socket for guest agent
-        'use_libguestfs': True            # Use libguestfs for file ops when stopped
+        'use_libguestfs': True,           # Use libguestfs for file ops when stopped
+        # libvirt integration
+        'use_libvirt': True,              # Use libvirt for VM management (makes VMs visible in virsh/virt-manager)
+        'libvirt_uri': 'qemu:///session', # libvirt connection URI (user-session, no root required)
+        'default_display_enabled': False, # Headless by default (virt-manager can still connect)
+        'default_vnc_port': None          # Auto-assign VNC port (None = autoport)
     }
 }
 

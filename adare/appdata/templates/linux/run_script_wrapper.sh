@@ -1,4 +1,4 @@
 statusfile="{{ log_directory }}/status.csv"
 
-source "{{ script }}"
+. "{{ script }}"
 echo "RUN_{{ name }},$?" >> $statusfile

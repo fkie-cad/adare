@@ -487,7 +487,9 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     escaped_cmd = cmd_to_run.replace("'", "'\"'\"'")
                     linux_command = f'sudo env "PATH=$PATH" "DISPLAY=$DISPLAY" "XAUTHORITY=$XAUTHORITY" bash -c \'{escaped_cmd}\''
                 else:
-                    linux_command = cmd_to_run
+                    # Wrap in bash -c for glob expansion and shell features
+                    escaped_cmd = cmd_to_run.replace("'", "'\"'\"'")
+                    linux_command = f'bash -c \'{escaped_cmd}\''
 
         # Build the full VBoxManage guestcontrol command
         if 'windows' in self.guest_os.lower():

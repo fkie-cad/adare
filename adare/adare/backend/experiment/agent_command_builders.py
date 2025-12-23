@@ -151,7 +151,7 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             # PowerShell array expansion: @(Get-ChildItem ...) forces wildcard expansion
             # before pip sees the arguments. PowerShell doesn't expand wildcards in
             # base64-encoded commands, so we must explicitly use Get-ChildItem.
-            return r'%USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem \\vboxsvr\adare\wheels\*.whl | Select-Object -ExpandProperty FullName)'
+            return r'%USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install --ignore-installed @(Get-ChildItem \\vboxsvr\adare\wheels\*.whl | Select-Object -ExpandProperty FullName)'
         else:
             # Editable install from shared folder source
             return r'cd \\vboxsvr\adare\adarelib; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
@@ -159,7 +159,7 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
     def _build_poetry_install_command(self) -> str:
         """Build Poetry installation command."""
         if self.wheels_available:
-            return r'pip install --force-reinstall @(Get-ChildItem \\vboxsvr\adare\wheels\*.whl | Select-Object -ExpandProperty FullName)'
+            return r'pip3 install --ignore-installed @(Get-ChildItem \\vboxsvr\adare\wheels\*.whl | Select-Object -ExpandProperty FullName)'
         else:
             # Editable install via Poetry
             return r'cd \\vboxsvr\adare\adarevm; poetry install'
@@ -190,12 +190,12 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         return [
             # Add project-wide tools to PATH (user bashrc, no admin needed)
             SetupCommand(
-                command="grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc && source ~/.bashrc",
+                command="grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc; . ~/.bashrc",
                 requires_admin=False
             ),
             # Add experiment-specific tools to PATH (user bashrc, no admin needed)
             SetupCommand(
-                command="grep -qxF 'export PATH=$PATH:/adare/experiment/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/experiment/shared/tools' >> ~/.bashrc && source ~/.bashrc",
+                command="grep -qxF 'export PATH=$PATH:/adare/experiment/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/experiment/shared/tools' >> ~/.bashrc; . ~/.bashrc",
                 requires_admin=False
             )
         ]
@@ -211,7 +211,7 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         """Build Conda installation command."""
         if self.wheels_available:
             # Wheel install + X11 permission for GUI automation
-            return '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --force-reinstall /adare/app/wheels/*.whl && xhost +SI:localuser:root'
+            return '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --ignore-installed /adare/wheels/*.whl && xhost +SI:localuser:root'
         else:
             # Editable install from mounted source
             return 'cd /adare/app/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && xhost +SI:localuser:root'
@@ -219,8 +219,9 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
     def _build_poetry_install_command(self) -> str:
         """Build Poetry installation command."""
         if self.wheels_available:
-            # Wheel install + X11 permission
-            return 'pip install --force-reinstall /adare/app/wheels/*.whl && xhost +SI:localuser:root'
+            # Use find for reliable wheel discovery (works with QEMU guest agent)
+            # --no-cache-dir avoids cache permission issues
+            return 'find /adare/wheels -name "*.whl" -exec pip3 install --break-system-packages --no-cache-dir --ignore-installed {} + && xhost +SI:localuser:root'
         else:
             # Editable install via Poetry
             return 'cd /adare/app/adarevm && poetry install && xhost +SI:localuser:root'

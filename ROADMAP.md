@@ -42,6 +42,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] rethink environments; why not let an experiment run in any environment and just provide an warning if not in the environments; update environments in database from file every time we do any experiment run oder env load command!
 - [ ] check if we need to place building wheel into a single stage showing? I think yes!
 - [ ] adjust our tool be Model View Controller for frontend and terminal support later
+- [ ] change stage message for qemu; maybe even stages
  
 ---
 
@@ -54,6 +55,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] Current limitation: SVG icons not supported  
   - [ ] Installation guide → add `eval "$(_ADARE_COMPLETE=zsh_source adare)"` and autocomplete tutorial 
   - [ ] add info that we can only run one experiment inside a specific vm/env if not in a separate project 
+  - [ ] add info for qemu install. We also need (sudo apt install python3-guestfs (Ubuntu/Debian) or sudo dnf install python3-libguestfs (Fedora/RHEL)) on host
 - [ ] Simplify and clarify logging:  
   - [ ] Define logging levels more clearly  
   - [ ] Replace excessive debug logging with structured log levels  

@@ -22,35 +22,74 @@ class QEMUManager(AbstractHypervisorManager):
 
     def __init__(self):
         super().__init__()
-        self._check_qemu_availability()
-        log.debug("QEMUManager initialized and worker thread started.")
-
-    def _check_qemu_availability(self):
-        """Check if required QEMU binaries are available."""
         from adare.config import HYPERVISOR_CONFIGS
+        from adare.hypervisor.executable_manager import ExecutableManager
 
         qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
-        qemu_system_exe = qemu_config.get('qemu_system_exe', 'qemu-system-x86_64')
-        qemu_img_exe = qemu_config.get('qemu_img_exe', 'qemu-img')
 
-        # Check for QEMU system executable
-        if not shutil.which(qemu_system_exe):
-            log.warning(f"CLAUDE: QEMU system executable '{qemu_system_exe}' not found in PATH. "
-                       f"QEMU VMs may fail to start.")
+        # Initialize executable manager (validates executables exist)
+        self.executables = ExecutableManager('qemu', qemu_config)
 
-        # Check for qemu-img
-        if not shutil.which(qemu_img_exe):
-            log.warning(f"CLAUDE: qemu-img executable '{qemu_img_exe}' not found in PATH. "
-                       f"VM import and snapshot operations may fail.")
+        # Store defaults from config
+        self.default_machine = qemu_config.get('default_machine', 'pc')
+        self.default_accel = qemu_config.get('default_accel', 'kvm')
+        self.default_drive_format = qemu_config.get('default_drive_format', 'qcow2')
 
-        # Check for libguestfs (python bindings)
-        try:
-            import guestfs
-            log.debug("CLAUDE: libguestfs Python bindings available.")
-        except ImportError:
-            log.warning("CLAUDE: libguestfs Python bindings not available. "
+        # Check for guestfish CLI tool
+        if shutil.which('guestfish'):
+            log.debug("CLAUDE: guestfish CLI tool available.")
+        else:
+            log.warning("CLAUDE: guestfish command not found. "
                        "File operations when VM is stopped will not work. "
-                       "Install python3-guestfs or python-guestfs package.")
+                       "Install with: sudo apt install libguestfs-tools")
+
+        # Initialize libvirt connection
+        self.libvirt_conn = None
+        use_libvirt = qemu_config.get('use_libvirt', True)
+
+        if use_libvirt:
+            try:
+                import libvirt
+                libvirt_uri = qemu_config.get('libvirt_uri', 'qemu:///session')
+                self.libvirt_conn = libvirt.open(libvirt_uri)
+
+                if not self.libvirt_conn:
+                    from adare.hypervisor.exceptions import HypervisorException
+                    raise HypervisorException(f"Failed to connect to libvirt at {libvirt_uri}")
+
+                log.info(f"CLAUDE: Connected to libvirt ({libvirt_uri})")
+
+                # Validate virsh executable availability
+                if shutil.which('virsh'):
+                    log.debug("CLAUDE: virsh command available")
+                else:
+                    log.warning("CLAUDE: virsh command not found. Install libvirt-clients package.")
+
+            except ImportError:
+                from adare.hypervisor.exceptions import HypervisorException
+                raise HypervisorException(
+                    "libvirt Python bindings not found. "
+                    "Install with: pip install libvirt-python"
+                )
+            except Exception as e:
+                from adare.hypervisor.exceptions import HypervisorException
+                raise HypervisorException(
+                    f"Failed to connect to libvirt daemon: {e}. "
+                    f"Ensure libvirtd is running: sudo systemctl start libvirtd"
+                )
+        else:
+            log.info("CLAUDE: libvirt integration disabled in config (use_libvirt=False)")
+
+        log.info("CLAUDE: Initialized QEMUManager")
+
+    def __del__(self):
+        """Cleanup: close libvirt connection on manager destruction."""
+        if hasattr(self, 'libvirt_conn') and self.libvirt_conn:
+            try:
+                self.libvirt_conn.close()
+                log.debug("CLAUDE: Closed libvirt connection")
+            except Exception as e:
+                log.warning(f"CLAUDE: Error closing libvirt connection: {e}")
 
     def _worker_loop(self):
         """Main worker loop for executing queued functions."""
@@ -124,7 +163,8 @@ class QEMUManager(AbstractHypervisorManager):
             guest_os=guest_os,
             manager=self,
             username=username,
-            password=password
+            password=password,
+            executables=self.executables
         )
 
         try:

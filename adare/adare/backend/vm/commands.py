@@ -72,6 +72,22 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
     
     async def verify_in_stage():
         log.info(f"Verifying integrity of VM: {vm_record.name}")
+
+        # Safety check: Ensure we're checking the base disk, not an overlay
+        # Overlay disks should never be stored in the database
+        if '-overlay-' in str(vm_file_path):
+            from adare.backend.experiment.exceptions import ExperimentIntegrityError
+            raise ExperimentIntegrityError(
+                log,
+                f"Cannot verify integrity of overlay disk: {vm_file_path}. "
+                "Database should store base disk path, not overlay.",
+                possible_solutions=[
+                    "Check database VM record for correct base disk path",
+                    "Re-import VM to fix database entry",
+                    "Ensure VM import creates base disk with -base suffix"
+                ]
+            )
+
         try:
             current_hash = await vm_manager.calculate_file_hash_async(vm_file_path, silent=True, interrupt_event=interrupt_event)
         except InterruptedError:
@@ -100,7 +116,7 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
         await verify_in_stage()
 
 
-def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_metadata, no_copy: bool = False) -> dict:
+def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_metadata, no_copy: bool = False, force: bool = False) -> dict:
     """
     Load VM file during environment load - only hash calculation and file copying.
     No VirtualBox import happens here!
@@ -110,11 +126,16 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
         vm_path: Path to VM file
         environment_metadata: Environment configuration
         no_copy: If True, reference file at original location instead of copying
+        force: If True, overwrite existing VM with same name but different hash
 
     Returns:
         Dict with 'vm_id' and 'was_existing' keys
     """
     vm_manager = VMFileManager()
+
+    # Extract hypervisor from environment metadata
+    hypervisor = getattr(environment_metadata, 'hypervisor', 'virtualbox')
+    log.info(f"CLAUDE: Using hypervisor: {hypervisor}")
 
     # Calculate hash FIRST (heavy operation done during environment load)
     log.info(f"Calculating VM file hash during environment load...")
@@ -162,7 +183,9 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
         os_language=environment_metadata.os.language,
         os_architecture=environment_metadata.os.architecture,
         silent=False,
-        no_copy=no_copy  # Pass the flag
+        no_copy=no_copy,  # Pass the flag
+        hypervisor=hypervisor,  # NEW: Pass hypervisor type
+        force=force  # Pass force flag for VM overwriting
     )
 
     log.info(f"VM file loaded into database: {vm.name} (ID: {vm.id})")
@@ -566,12 +589,12 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
             log.info("VM integrity verification was interrupted")
             return None
 
-        # Import VM instance to VirtualBox with unique name
+        # Import VM instance with unique name
         if experiment_run_ulid:
             with StageCtxManager(VMImportStage(), experiment_run_ulid, interrupt_event):
-                vm_instance = await _import_vm_instance_to_virtualbox(vm_instance, source_vm, environment_ulid)
+                vm_instance = await _import_vm_instance(vm_instance, source_vm, environment_ulid)
         else:
-            vm_instance = await _import_vm_instance_to_virtualbox(vm_instance, source_vm, environment_ulid)
+            vm_instance = await _import_vm_instance(vm_instance, source_vm, environment_ulid)
 
         if interrupt_event and interrupt_event.is_set():
             log.info("VM instance import was interrupted")
@@ -607,9 +630,9 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     return vm_instance.id  # Return instance ID, not source VM ID
 
 
-async def _import_vm_instance_to_virtualbox(vm_instance, source_vm, environment_ulid: str = None):
+async def _import_vm_instance(vm_instance, source_vm, environment_ulid: str = None):
     """
-    Import a VM instance to VirtualBox with unique naming.
+    Import a VM instance using the appropriate hypervisor manager.
 
     Args:
         vm_instance: VmInstance database record
@@ -617,34 +640,43 @@ async def _import_vm_instance_to_virtualbox(vm_instance, source_vm, environment_
         environment_ulid: Environment identifier for context
 
     Returns:
-        Updated VmInstance with VirtualBox UUID
+        Updated VmInstance with hypervisor-specific identifiers
     """
-    from adare.hypervisor.virtualbox.manager import VirtualBoxManager
+    from adare.hypervisor import get_hypervisor_manager
     from adare.database.api.vm import VmApi
 
-    log.info(f"Importing VM instance '{vm_instance.instance_name}' to VirtualBox...")
+    # Get hypervisor type from source VM (default to virtualbox for backwards compatibility)
+    hypervisor = getattr(source_vm, 'hypervisor', 'virtualbox')
 
-    # Create VirtualBox manager and import VM with instance name
-    manager = VirtualBoxManager()
+    log.info(f"Importing VM instance '{vm_instance.instance_name}' using {hypervisor} hypervisor...")
+
+    # Get appropriate hypervisor manager using factory pattern
+    manager = get_hypervisor_manager(hypervisor)
     vm_file_path = Path(source_vm.file)
 
     # Import VM with unique instance name
-    vbox_vm = await manager.import_vm_async(
+    vm_obj = await manager.import_vm_async(
         vm_file_path,
-        vm_instance.instance_name,  # Use instance name instead of source name
+        vm_instance.instance_name,
         environment_ulid=environment_ulid
     )
 
-    # Update instance with VirtualBox UUID
-    vbox_uuid = vbox_vm.get_vm_uuid()
-    with VmApi() as api:
-        api.update_vm_instance(
-            vm_instance.id,
-            vbox_uuid=vbox_uuid,
-            base_snapshot_name=f"{vm_instance.instance_name}_base"
-        )
+    # Update instance with hypervisor-specific identifiers
+    update_fields = {
+        'base_snapshot_name': f"{vm_instance.instance_name}_base"
+    }
 
-    log.info(f"Successfully imported VM instance '{vm_instance.instance_name}' with UUID: {vbox_uuid}")
+    # VirtualBox-specific: store vbox_uuid
+    if hypervisor == 'virtualbox':
+        vbox_uuid = vm_obj.get_vm_uuid()
+        update_fields['vbox_uuid'] = vbox_uuid
+        log.info(f"Successfully imported VirtualBox VM instance '{vm_instance.instance_name}' with UUID: {vbox_uuid}")
+    elif hypervisor == 'qemu':
+        # QEMU VMs don't use vbox_uuid field (remains None)
+        log.info(f"Successfully imported QEMU VM instance '{vm_instance.instance_name}'")
+
+    with VmApi() as api:
+        api.update_vm_instance(vm_instance.id, **update_fields)
 
     # Return updated instance
     with VmApi() as api:

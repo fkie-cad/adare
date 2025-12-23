@@ -34,7 +34,7 @@ redis = "^6.2.0"
 pandas = "^2.3.1"
 fastmcp = "^2.9.2"
 websockets = "^15.0"
-
+libvirt-python = { version = "^11.0.0", optional = true }
 
 [tool.poetry.group.test.dependencies]
 pytest = "^7.4.0"
@@ -48,7 +48,7 @@ adareexp = "adare.example:main"
 
 [tool.poetry.extras]
 docs = ["Sphinx", "sphinx-rtd-theme"]
-
+qemu = ["libvirt-python"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -228,7 +228,7 @@ Install using pip in the ``pyadare`` conda environment:
 
 .. code-block:: bash
 
-   /home/adare/.miniforge3/bin/conda run -n pyadare pip install /adare/app/wheels/*.whl
+   /home/adare/.miniforge3/bin/conda run -n pyadare pip install --break-system-packages /adare/app/wheels/*.whl
 
 Linux with Poetry
 -----------------
@@ -237,7 +237,12 @@ Install using system pip:
 
 .. code-block:: bash
 
-   pip install /adare/app/wheels/*.whl
+   pip install --break-system-packages /adare/app/wheels/*.whl
+
+.. note::
+
+   Ubuntu 24.04+ requires the ``--break-system-packages`` flag due to PEP 668.
+   This is safe in ADARE's isolated VM environment.
 
 Verification
 ============
