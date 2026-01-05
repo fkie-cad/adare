@@ -275,6 +275,84 @@ def __experiment_integrity_check(project_path: Path, experiment_name: str, envir
             possible_solutions=solutions
         )
 
+async def _verify_guest_agent_readiness(
+    vm,
+    stop_event: threading.Event,
+    max_retries: int = 5,
+    initial_delay: float = 1.0
+) -> bool:
+    """
+    Verify guest agent is responsive before executing commands.
+
+    Performs lightweight connectivity test with exponential backoff retry.
+    This supplements the boot check by catching transient agent disconnections
+    that occur shortly after boot completion.
+
+    Args:
+        vm: VM instance with guest agent support
+        stop_event: Event to signal cancellation
+        max_retries: Maximum number of verification attempts (default: 5)
+        initial_delay: Initial retry delay in seconds (default: 1.0)
+
+    Returns:
+        True if agent is responsive, False if all retries exhausted or cancelled
+    """
+    retry_delay = initial_delay
+
+    for attempt in range(max_retries):
+        # Check for cancellation
+        if stop_event.is_set():
+            log.warning("CLAUDE: Guest agent readiness check cancelled by stop event")
+            return False
+
+        log.debug(f"CLAUDE: Guest agent readiness check attempt {attempt + 1}/{max_retries}...")
+
+        try:
+            # Execute lightweight echo command to test guest agent connectivity
+            result = await vm.run_command(
+                'echo "ready"',
+                stop_event=stop_event,
+                admin=False
+            )
+
+            if result.returncode == 0:
+                log.info(f"CLAUDE: Guest agent readiness verified on attempt {attempt + 1}")
+                return True
+
+            # Check if it's a guest agent error (returncode -1) vs other error
+            if result.returncode == -1:
+                if attempt < max_retries - 1:
+                    log.warning(
+                        f"CLAUDE: Guest agent not responding (attempt {attempt + 1}/{max_retries}), "
+                        f"retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    log.error("CLAUDE: Guest agent not responsive after all retry attempts")
+                    return False
+            else:
+                # Unexpected error - echo command should never fail
+                log.error(
+                    f"CLAUDE: Unexpected error during readiness check "
+                    f"(returncode {result.returncode}): {result.stderr}"
+                )
+                return False
+
+        except asyncio.TimeoutError:
+            if attempt < max_retries - 1:
+                log.warning(
+                    f"CLAUDE: Guest agent readiness check timed out (attempt {attempt + 1}/{max_retries}), "
+                    f"retrying in {retry_delay}s..."
+                )
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 2
+            else:
+                log.error("CLAUDE: Guest agent readiness check timed out after all retry attempts")
+                return False
+
+    return False
+
 async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: threading.Event):
     """Install and run adarevm agent in the VM using appropriate environment.
 
@@ -294,32 +372,61 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     # Step 1: Detect Python environment in the VM
     env_info = await detect_environment(vm, context.guest_platform, stop_event)
 
+    # Step 1.5: Determine GUI mode and skip_xhost flag
+    from .execution.gui_executor_factory import resolve_gui_execution_mode
+    from .execution.base import GUIExecutionMode
+
+    # Get playbook settings (may have GUI mode preference)
+    playbook_settings = context.playbook.settings if hasattr(context, 'playbook') and context.playbook else None
+
+    # Get CLI override from config
+    cli_override = context.config.gui_mode_override if hasattr(context.config, 'gui_mode_override') else None
+
+    # Resolve GUI execution mode
+    gui_mode = resolve_gui_execution_mode(vm, playbook_settings, cli_override=cli_override)
+    skip_xhost = (gui_mode == GUIExecutionMode.HOST)
+
+    # Store gui_mode in VM instance for environment building
+    vm.adare_gui_mode = gui_mode
+
+    if skip_xhost:
+        log.info("CLAUDE: Skipping xhost setup - using host-based GUI automation")
+
     # Step 2: Create platform-specific command builder
     if context.guest_platform == 'windows':
         builder = WindowsAgentCommandBuilder(
             wheels_dir=wheels_dir,
             shared_folders=context.config.shared_directories,
-            websocket_port=context.config.websocket_port
+            websocket_port=context.config.websocket_port,
+            skip_xhost=skip_xhost
         )
     else:
         builder = LinuxAgentCommandBuilder(
             wheels_dir=wheels_dir,
             shared_folders=context.config.shared_directories,
-            websocket_port=context.config.websocket_port
+            websocket_port=context.config.websocket_port,
+            skip_xhost=skip_xhost
         )
 
     # Step 3: Build all commands (setup, install, run)
     commands = await builder.build_commands(env_info, vm, stop_event)
 
     # Step 4: Execute setup commands (PATH, firewall, etc.)
-    # Add brief stabilization delay after boot check completes
-    log.debug("CLAUDE: Waiting 2s for guest agent to stabilize after boot")
-    await asyncio.sleep(2)
+    # Verify guest agent readiness before executing commands
+    log.info("Verifying guest agent readiness...")
+    if not await _verify_guest_agent_readiness(vm, stop_event):
+        raise VMSetupError(
+            log, vm.vm_name, "pre-flight guest agent check",
+            -1, "", "Guest agent not responsive after boot validation"
+        )
+    log.info("Guest agent verification successful")
 
     for idx, setup_cmd in enumerate(commands.setup_commands):
-        # Add retry logic for first command (most likely to fail due to transient issues)
-        max_retries = 3 if idx == 0 else 1
+        # Apply retry logic to ALL commands (not just first)
+        max_retries = 3
         retry_delay = 1.0
+
+        log.info(f"Executing setup command [{idx+1}/{len(commands.setup_commands)}]")
 
         for attempt in range(max_retries):
             try:
@@ -332,16 +439,27 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
                 if result.returncode == 0:
                     break  # Success
 
-                # Command failed
-                if attempt < max_retries - 1:
-                    log.warning(
-                        f"CLAUDE: Setup command attempt {attempt + 1}/{max_retries} failed "
-                        f"(exit code {result.returncode}), retrying in {retry_delay}s..."
-                    )
-                    await asyncio.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
+                # Command failed - distinguish guest agent errors from command errors
+                if result.returncode == -1:
+                    # Guest agent not responding (transient)
+                    if attempt < max_retries - 1:
+                        log.warning(
+                            f"CLAUDE: Setup command [{idx+1}] attempt {attempt + 1}/{max_retries} failed "
+                            f"(guest agent not responding), retrying in {retry_delay}s..."
+                        )
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        # Final attempt failed
+                        log.error(f"CLAUDE: Guest agent connectivity error (returncode -1): {result.stderr}")
+                        raise VMSetupError(
+                            log, vm.vm_name, setup_cmd.command,
+                            result.returncode, result.stdout, result.stderr
+                        )
                 else:
-                    # Final attempt failed
+                    # Command executed but returned non-zero (real failure)
+                    # Don't retry - fail fast for legitimate command errors
+                    log.error(f"CLAUDE: Command failed with exit code {result.returncode}: {result.stderr}")
                     raise VMSetupError(
                         log, vm.vm_name, setup_cmd.command,
                         result.returncode, result.stdout, result.stderr
@@ -350,7 +468,7 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
             except asyncio.TimeoutError as e:
                 if attempt < max_retries - 1:
                     log.warning(
-                        f"CLAUDE: Setup command attempt {attempt + 1}/{max_retries} timed out, "
+                        f"CLAUDE: Setup command [{idx+1}] attempt {attempt + 1}/{max_retries} timed out, "
                         f"retrying in {retry_delay}s..."
                     )
                     await asyncio.sleep(retry_delay)
@@ -384,23 +502,67 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         # Windows uses user site-packages and doesn't need admin
         needs_admin = context.guest_platform == 'linux'
 
-        result = await vm.run_command(
-            commands.install_command,
-            stop_event=stop_event,
-            admin=needs_admin
-        )
-        if result.returncode != 0:
-            raise VMSetupError(
-                log, vm.vm_name, commands.install_command,
-                result.returncode, result.stdout, result.stderr
-            )
+        # Installation can fail if guest agent is temporarily unresponsive
+        max_retries = 3
+        retry_delay = 1.0
+
+        for attempt in range(max_retries):
+            try:
+                result = await vm.run_command(
+                    commands.install_command,
+                    stop_event=stop_event,
+                    admin=needs_admin
+                )
+
+                if result.returncode == 0:
+                    break  # Success
+
+                # Installation failed - check if it's a guest agent issue
+                if result.returncode == -1:
+                    # Guest agent not responding (transient)
+                    if attempt < max_retries - 1:
+                        log.warning(
+                            f"CLAUDE: Installation command attempt {attempt + 1}/{max_retries} failed "
+                            f"(guest agent not responding), retrying in {retry_delay}s..."
+                        )
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 2
+                    else:
+                        # Final attempt failed
+                        log.error(f"CLAUDE: Guest agent connectivity error during installation (returncode -1): {result.stderr}")
+                        raise VMSetupError(
+                            log, vm.vm_name, commands.install_command,
+                            result.returncode, result.stdout, result.stderr
+                        )
+                else:
+                    # Installation command executed but failed (e.g., pip error)
+                    # Don't retry - fail fast for real installation errors
+                    log.error(f"CLAUDE: Installation failed with exit code {result.returncode}: {result.stderr}")
+                    raise VMSetupError(
+                        log, vm.vm_name, commands.install_command,
+                        result.returncode, result.stdout, result.stderr
+                    )
+
+            except asyncio.TimeoutError as e:
+                if attempt < max_retries - 1:
+                    log.warning(
+                        f"CLAUDE: Installation command attempt {attempt + 1}/{max_retries} timed out, "
+                        f"retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2
+                else:
+                    raise VMSetupError(
+                        log, vm.vm_name, commands.install_command,
+                        -1, "", f"Timeout after {max_retries} attempts: {e}"
+                    )
     else:
         log.info("Installation skipped - using preinstalled agent")
 
     # Step 7: Run adarevm as background process
     # TODO: figure out a way to run poetry as sudo in linux
     if context.guest_platform == 'linux':
-        await vm.run_command(
+        result = await vm.run_command(
             commands.run_command,
             background=True,
             stop_event=stop_event,
@@ -408,13 +570,30 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
             cwd=commands.run_cwd
         )
     else:
-        await vm.run_command(
+        result = await vm.run_command(
             commands.run_command,
             background=True,
             stop_event=stop_event,
             admin=True,
             cwd=commands.run_cwd
         )
+
+    # Store PID for QEMU process monitoring
+    if context.hypervisor_type == 'qemu' and result.returncode == 0:
+        # For QEMU background processes, extract PID from stdout
+        # Format: "Started with PID {pid}" (see qemu/mixins/commands.py:656)
+        try:
+            import re
+            match = re.search(r'PID (\d+)', result.stdout)
+            if match:
+                context.adarevm_pid = int(match.group(1))
+                log.debug(f"CLAUDE: Stored adarevm process PID: {context.adarevm_pid}")
+            else:
+                log.warning("CLAUDE: Could not extract PID from background process start")
+                context.adarevm_pid = None
+        except (AttributeError, ValueError) as e:
+            log.warning(f"CLAUDE: Failed to parse adarevm PID: {e}")
+            context.adarevm_pid = None
 
 
 def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool, external_stop_event: threading.Event = None):
@@ -613,7 +792,36 @@ async def step_connect_websocket(context: ExperimentRunCtx):
         from adare.backend.experiment.websocket_client import AdareVMClient
         import asyncio
         from websockets.exceptions import ConnectionClosed, WebSocketException
-        
+
+        # QEMU-specific: Check if adarevm process is still alive before attempting connection
+        if context.hypervisor_type == 'qemu' and hasattr(context, 'adarevm_pid') and context.adarevm_pid:
+            log.debug(f"CLAUDE: Checking if adarevm process (PID {context.adarevm_pid}) is still running...")
+
+            try:
+                is_running, exit_code, error_msg = await context.vm._check_process_status_via_agent(
+                    context.adarevm_pid,
+                    timeout=5
+                )
+
+                if not is_running:
+                    # Process has already died - fail fast
+                    if exit_code is not None:
+                        error = f"adarevm process (PID {context.adarevm_pid}) has already exited with code {exit_code}. Check logs for startup errors."
+                    else:
+                        error = f"adarevm process (PID {context.adarevm_pid}) is not running. {error_msg}"
+
+                    log.error(f"CLAUDE: {error}")
+                    raise LoggedException(log, error)
+                else:
+                    log.debug(f"CLAUDE: adarevm process is alive, proceeding with connection attempts")
+            except LoggedException:
+                # Re-raise LoggedException (process died)
+                raise
+            except Exception as e:
+                # If process check fails, log warning but don't block connection attempts
+                # This maintains backward compatibility if the check mechanism has issues
+                log.warning(f"CLAUDE: Could not verify adarevm process status: {e}")
+
         # Create websocket client with host port forwarding
         context.client = AdareVMClient(host='localhost', port=context.config.websocket_port)
         
@@ -689,7 +897,6 @@ async def step_connect_websocket(context: ExperimentRunCtx):
         # All attempts failed
         stage_ctx.stage.sub_msg = f"All {max_attempts} connection attempts failed"
         stage_ctx.set_status(stage_ctx.stage.status)
-        from adare.exceptions import LoggedException
         log.error(last_error, exc_info=True)
         raise LoggedException(log, f"Failed to connect to AdareVM server after {max_attempts} attempts: {last_error}") from last_error
 
@@ -822,7 +1029,8 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             vm_os=vm_os,  # Pass VM OS for automatic variables
             vm_user=vm_user,  # Pass VM user for automatic variables
             flow_console=flow_console,  # Pass flow console for interactive actions
-            test_mode=context.test_mode  # Pass test mode flag
+            test_mode=context.test_mode,  # Pass test mode flag
+            config=context.config  # Pass config for GUI mode override
         )
         
         # Execute complete experiment (playbook + tests)
@@ -946,14 +1154,21 @@ def __start_event_listeners(experiment_run_ulid: str):
     return cli_thread, db_thread
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None):
     import signal
     import asyncio
 
     log.info(f"Starting experiment run {experiment_name} in project {project_path}")
 
     # Create the experiment context and initialize it.
-    config = ExperimentConfig(project_path, experiment_name, environment_name, preserve_snapshot=preserve_snapshot, runlog=runlog)
+    config = ExperimentConfig(
+        project_path,
+        experiment_name,
+        environment_name,
+        preserve_snapshot=preserve_snapshot,
+        runlog=runlog,
+        test_mode=test
+    )
     
     # Determine guest platform early to set platform-specific defaults
     # We need to get the environment info to determine the platform
@@ -998,7 +1213,12 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     if vm_cpus is not None:
         config.vm_cpus = vm_cpus
         log.info(f"Using custom VM CPUs: {vm_cpus}")
-    
+
+    # Override GUI mode if provided via CLI
+    if gui_mode is not None:
+        config.gui_mode_override = gui_mode
+        log.info(f"Using custom GUI mode: {gui_mode}")
+
     experiment_run_context = ExperimentRunCtx(config)
     # Respect the --debug-screenshots CLI flag (default: False unless flag is provided)
     experiment_run_context.debug_screenshots = debug_screenshots
@@ -1067,7 +1287,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         # (Must be created after step_setup_experiment_environment sets hypervisor_type)
         hypervisor = experiment_run_context.hypervisor_type or 'virtualbox'
         vm_manager = VMLifecycleManager(hypervisor_type=hypervisor)
-        log.info(f'Using hypervisor: {hypervisor}')
+        log.debug(f'Using hypervisor: {hypervisor}')
 
         # Virtual Machine Setup Phase
         if not stop_event.is_set():
@@ -1078,9 +1298,14 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 # Note: Instance allocation and wheel building also happen here but have no separate stages
                 await step_runner.run_async_step(vm_manager.create_and_prepare_vm, experiment_run_context)
 
-                # File transfer now explicit with its own stage
+                # File transfer now explicift with its own stage
                 # (VirtualBox: shared folders, QEMU: libguestfs copy to disk)
                 await step_runner.run_async_step(vm_manager.setup_file_transfer, experiment_run_context)
+
+                # Setup networking (port forwarding for agent communication)
+                # QEMU: Adds port forwarding rules to config (applied when libvirt domain is defined)
+                # VirtualBox: Configures port forwarding via VBoxManage
+                await step_runner.run_async_step(vm_manager.setup_networking, experiment_run_context)
 
                 # Start VM
                 await step_runner.run_async_step(vm_manager.start_vm, experiment_run_context)
@@ -1088,9 +1313,12 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         # Software Installation Phase
         if not stop_event.is_set():
             with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
+                #input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
                 await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
+                #input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
                 await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
                 await step_runner.run_async_step(step_execute_installations, experiment_run_context)
+                #input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
 
         # Experiment Execution Phase
         if not stop_event.is_set():

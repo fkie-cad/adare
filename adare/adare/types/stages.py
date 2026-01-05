@@ -154,6 +154,14 @@ class VMImportStage(Stage):
 
 @register_stage
 @attrs.define
+class VMNetworkingStage(Stage):
+    name: ClassVar[str] = 'vm_networking_setup'
+    msg: ClassVar[str] = 'Configuring VM networking'
+    description: ClassVar[str] = 'Setting up port forwarding for WebSocket communication'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
 class VMMountSharedDirectoriesStage(Stage):
     name: ClassVar[str] = 'vm_mount_shared_directories'
     msg: ClassVar[str] = 'Setting up file transfer'

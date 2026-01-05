@@ -167,7 +167,8 @@ class NetworkingMixin(AbstractNetworkingMixin):
             return 1
 
         if name not in self.config.port_forwarding_rules:
-            log.warning(f"CLAUDE: Port forwarding rule '{name}' does not exist")
+            if not silent:
+                log.warning(f"CLAUDE: Port forwarding rule '{name}' does not exist")
             return 0  # Consider success if already gone
 
         # Remove from config

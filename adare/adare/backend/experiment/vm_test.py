@@ -176,9 +176,14 @@ async def test_poetry_availability(context):
 
 
 async def test_adarevm_server_start(context):
-    """Test starting the adarevm WebSocket server."""
+    """Test starting the adarevm WebSocket server.
+
+    NOTE: This test requires Poetry-based VMs (does not support wheel-only installations).
+    The test uses 'poetry run' to start the adarevm server from source.
+    """
     try:
         # Start adarevm server in background
+        # NOTE: This requires Poetry - does not work with wheel-only installations
         start_command = f"cd /adare/app && python3 -m poetry run python -m adarevm.server --port {context.config.websocket_port} &"
 
         start_result = await context.vm.run_command(start_command, stop_event=context.user_interrupt_event)

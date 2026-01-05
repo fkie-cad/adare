@@ -1,6 +1,5 @@
 import subprocess
 import dataclasses
-import pyautogui
 import re
 from PIL import ImageDraw
 

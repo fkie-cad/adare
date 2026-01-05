@@ -126,6 +126,7 @@ def get_environment_vm_file(environment_ulid: str) -> Path:
 def get_environment_os(environment_ulid: str) -> str:
     """
     Get the OS type for a given environment ULID.
+    Falls back to parsing environment file if osinfo is not set.
 
     Args:
         environment_ulid: Environment ULID
@@ -135,7 +136,23 @@ def get_environment_os(environment_ulid: str) -> str:
     """
     with EnvironmentDbApi() as db:
         env = db._session.query(Environment).filter_by(id=environment_ulid).first()
-        return env.vm.osinfo.platform if env and env.vm and env.vm.osinfo else None
+
+        # Try osinfo first (fast path for VirtualBox and properly configured QEMU VMs)
+        if env and env.vm and env.vm.osinfo:
+            return env.vm.osinfo.platform
+
+        # Fallback: Parse environment file for OS info (QEMU VMs without osinfo)
+        if env and env.file:
+            try:
+                from adare.types.environment import parse_environment_file
+                log.info(f"CLAUDE: osinfo not available for environment {environment_ulid}, parsing environment file")
+                env_metadata = parse_environment_file(Path(env.file))
+                return env_metadata.os.platform
+            except Exception as e:
+                log.warning(f"CLAUDE: Failed to parse environment file for OS info: {e}")
+
+        log.warning(f"CLAUDE: Could not determine OS for environment {environment_ulid}")
+        return None
 
 def get_environment_hypervisor(environment_ulid: str) -> str:
     """

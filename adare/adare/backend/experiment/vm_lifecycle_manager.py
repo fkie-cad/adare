@@ -6,7 +6,8 @@ import logging
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.types.stages import (
     VMCreateStage, VMRunStage, VMWaitTillReadyStage, VMMountSharedDirectoriesStage,
-    VMStopStage, VMDestroyStage, VMExperimentSnapshotStage, VMImportStage, VMSnapshotCreateStage
+    VMStopStage, VMDestroyStage, VMExperimentSnapshotStage, VMImportStage, VMSnapshotCreateStage,
+    VMNetworkingStage
 )
 from adare.backend.experiment.runctx import ExperimentRunCtx
 from adare.exceptions import LoggedException
@@ -405,6 +406,21 @@ class VMLifecycleManager:
 
         context.timestamp_before_vm_start = datetime.now(timezone.utc)
 
+    async def setup_networking(self, context: ExperimentRunCtx):
+        """
+        Setup network configuration with proper stage visibility.
+
+        Delegates to hypervisor-specific strategy:
+        - VirtualBox: Configure port forwarding via VBoxManage
+        - QEMU: Save port forwarding rules to config (applied on VM start)
+        """
+        with StageCtxManager(
+            VMNetworkingStage(),
+            context.experiment_run_ulid,
+            event=context.user_interrupt_event
+        ):
+            await self.strategy.setup_networking(context)
+
     async def setup_file_transfer(self, context: ExperimentRunCtx):
         """
         Setup file transfer mechanism with proper stage visibility.
@@ -459,20 +475,27 @@ class VMLifecycleManager:
             if context.vm:
                 await context.vm.stop()
 
-    async def retrieve_artifacts(self, context: ExperimentRunCtx):
+    async def retrieve_artifacts(self, context: ExperimentRunCtx, post_interrupt: bool = False):
         """
         Retrieve artifacts from VM with proper stage visibility.
 
         Delegates to hypervisor-specific strategy:
         - VirtualBox: No-op (artifacts already on host via shared folders)
         - QEMU: Stop VM, copy artifacts via libguestfs
+
+        Args:
+            context: ExperimentRunCtx
+            post_interrupt: If True, don't check interrupt event (for cleanup after interrupt)
         """
         from adare.types.stages import VMFileTransferRetrievalStage
+
+        # Don't check interrupt event when retrieving artifacts during post-interrupt cleanup
+        event = None if post_interrupt else context.user_interrupt_event
 
         with StageCtxManager(
             VMFileTransferRetrievalStage(),
             context.experiment_run_ulid,
-            event=context.user_interrupt_event
+            event=event
         ):
             await self.strategy.retrieve_artifacts(context)
 
@@ -488,8 +511,8 @@ class VMLifecycleManager:
         with StageCtxManager(VMDestroyStage(), context.experiment_run_ulid, event=event):
             # Retrieve artifacts FIRST (before snapshot creation)
             # This ensures artifacts are captured before VM state is snapshotted
-            if context.vm:
-                await self.retrieve_artifacts(context)
+            # Always attempt retrieval - let strategy handle gracefully if VM not available
+            await self.retrieve_artifacts(context, post_interrupt=post_interrupt)
 
             # Create experiment snapshot if requested
             if context.config.preserve_snapshot:
@@ -508,6 +531,34 @@ class VMLifecycleManager:
                     log.info(f"CLAUDE: Cleaned up QEMU overlay for experiment {experiment_id}")
                 except Exception as e:
                     log.warning(f"CLAUDE: Failed to cleanup overlay disk: {e}")
+
+            # QEMU-specific: Undefine libvirt domain to prevent stale disk path references
+            # This ensures the domain doesn't persist with references to deleted overlay
+            if context.vm and hasattr(context.vm, '_libvirt_domain'):
+                try:
+                    import libvirt
+
+                    if context.vm._libvirt_domain:
+                        try:
+                            # Only undefine if domain is not running
+                            state, _ = context.vm._libvirt_domain.state()
+                            if state == libvirt.VIR_DOMAIN_SHUTOFF:
+                                context.vm._libvirt_domain.undefine()
+                                log.info(f"CLAUDE: Undefined libvirt domain '{context.vm.vm_name}'")
+                            else:
+                                log.warning(
+                                    f"CLAUDE: Cannot undefine domain '{context.vm.vm_name}' - "
+                                    f"still running (state: {state}). Domain will be undefined on next start."
+                                )
+                        except libvirt.libvirtError as e:
+                            # Domain might already be undefined or in invalid state
+                            log.debug(f"CLAUDE: Could not undefine domain: {e}")
+                        finally:
+                            # Always clear cached domain object to force redefinition
+                            context.vm._libvirt_domain = None
+                            log.debug(f"CLAUDE: Cleared libvirt domain cache for '{context.vm.vm_name}'")
+                except Exception as e:
+                    log.warning(f"CLAUDE: Failed to cleanup libvirt domain: {e}")
 
             # Release VM instance for reuse by other experiments
             log.info('Releasing VM instance for reuse by future experiments')

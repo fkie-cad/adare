@@ -615,6 +615,18 @@ class VariableRegistry:
         # Track metadata created during this specific call
         current_call_metadata = {}
 
+        # Build minimal resolution context for nested template resolution
+        # Include variables without nested templates (typically automatic variables)
+        resolution_context = {}
+        for name in referenced_variables:
+            if name in self.variables:
+                var = self.variables[name]
+                var_str = var.get_string_value()
+                # For automatic variables (no nested templates), add them to context
+                if '{{' not in var_str:
+                    resolution_context[name] = var_str
+        log.debug(f"Built resolution context with {len(resolution_context)} variables: {list(resolution_context.keys())}")
+
         # Only process variables that are actually referenced
         for name in referenced_variables:
             if name not in self.variables:
@@ -666,8 +678,8 @@ class VariableRegistry:
                         current_call_metadata[placeholder_name] = metadata
                         log.debug(f"Created tolerance placeholder '{placeholder_name}' for variable '{name}'")
                 else:
-                    # For regular variables: full resolution
-                    resolved_value = self._get_variable_resolved_value(var)
+                    # For regular variables: full resolution with resolution context
+                    resolved_value = self._get_variable_resolved_value(var, resolution_context)
 
             context[name] = resolved_value
             log.debug(f"Lazy resolved variable '{name}' to '{resolved_value}' (for_tests={for_tests})")
@@ -684,12 +696,13 @@ class VariableRegistry:
 
         This scans through the data structure looking for Jinja2 template references
         like {{variable_name}} to determine which variables are actually used.
+        Also recursively resolves dependencies when variable values contain other variables.
 
         Args:
             data: The data structure to scan for variable references
 
         Returns:
-            Set of variable names that are referenced in the data
+            Set of variable names including all nested dependencies
         """
         referenced_vars = set()
 
@@ -709,8 +722,54 @@ class VariableRegistry:
                     _scan_for_variables(item)
 
         _scan_for_variables(data)
-        log.debug(f"Extracted referenced variables: {referenced_vars}")
-        return referenced_vars
+
+        # Recursively resolve variable dependencies
+        all_vars = set(referenced_vars)
+        to_process = list(referenced_vars)
+        visited = set()
+        max_depth = 20  # Safety limit for circular references
+        depth = 0
+
+        while to_process and depth < max_depth:
+            var_name = to_process.pop(0)
+            if var_name in visited:
+                continue
+            visited.add(var_name)
+            depth += 1
+
+            # Get variable from registry
+            var = self.variables.get(var_name)
+            if not var:
+                continue
+
+            # Extract nested template references from variable value
+            var_value_str = var.get_string_value()
+            if '{{' in var_value_str:
+                nested_vars = self._extract_template_variables(var_value_str)
+                for nested_var in nested_vars:
+                    if nested_var not in all_vars:
+                        all_vars.add(nested_var)
+                        to_process.append(nested_var)
+
+        if depth >= max_depth:
+            log.warning(f"Variable dependency resolution hit max depth ({max_depth}), possible circular reference")
+
+        log.debug(f"Extracted {len(all_vars)} variables including dependencies: {all_vars}")
+        return all_vars
+
+    def _extract_template_variables(self, template_str: str) -> set:
+        """Extract variable names from a template string.
+
+        Args:
+            template_str: String that may contain {{variable}} references
+
+        Returns:
+            Set of variable names found in the template
+        """
+        import re
+        variable_pattern = r'\{\{\s*(\w+)(?:\s*\|[^}]*)?\s*\}\}'
+        matches = re.findall(variable_pattern, template_str)
+        return set(matches)
 
     def _create_regex_metadata(self, placeholder_name: str, var: 'Variable', local_only: bool = False):
         """Create placeholder metadata for regex variable."""
@@ -779,8 +838,13 @@ class VariableRegistry:
 
         return metadata
 
-    def _get_variable_resolved_value(self, var: 'Variable') -> Any:
-        """Get fully resolved value for variable (apply timezone, format, and template resolution)."""
+    def _get_variable_resolved_value(self, var: 'Variable', resolution_context: Dict[str, str] = None) -> Any:
+        """Get fully resolved value for variable (apply timezone, format, and template resolution).
+
+        Args:
+            var: The variable to resolve
+            resolution_context: Optional context dict for resolving nested templates
+        """
 
         # Note: Regex variables are handled by placeholder system in to_execution_context()
 
@@ -884,42 +948,53 @@ class VariableRegistry:
             base_value = var.get_string_value()
 
             # Apply template resolution to resolve nested variables like {{username}}
-            resolved_value = self._resolve_nested_templates(base_value)
+            resolved_value = self._resolve_nested_templates(base_value, resolution_context)
             return resolved_value
     
-    def _resolve_nested_templates(self, text: str) -> str:
-        """Resolve nested template variables in a string value."""
+    def _resolve_nested_templates(self, text: str, context: Dict[str, Any] = None) -> str:
+        """Resolve nested template variables in a string value.
+
+        Args:
+            text: The template string to resolve
+            context: Optional pre-built context dict. If None, builds from self.variables
+        """
         if not text or '{{' not in text:
             return text
-            
+
         try:
             import jinja2
-            
+
             result = text
             max_iterations = 10  # Prevent infinite loops
             previous_results = set()  # Track previous results to detect cycles
-            
+
             for i in range(max_iterations):
                 # If no more variables to replace, we're done
                 if '{{' not in result:
                     break
-                
+
                 # Check for cycles (same result appearing again)
                 if result in previous_results:
                     log.warning(f"Circular variable reference detected in nested template: {text}")
                     break
-                
+
                 previous_results.add(result)
-                
-                # Create a simple context with just the variable names and values (no metadata)
-                simple_context = {}
-                for name, var in self.variables.items():
-                    if var.type == VariableType.TIMESTAMP and isinstance(var.value, datetime.datetime):
-                        simple_context[name] = var.value.isoformat()
-                    else:
-                        # Use basic string value to avoid infinite recursion
-                        simple_context[name] = var.get_string_value()
-                
+
+                # Use provided context or build from registry
+                if context is not None:
+                    # Use provided context (already resolved)
+                    simple_context = context
+                    log.debug(f"Using provided context with {len(context)} variables: {list(context.keys())}")
+                else:
+                    # Create a simple context with just the variable names and values (no metadata)
+                    simple_context = {}
+                    for name, var in self.variables.items():
+                        if var.type == VariableType.TIMESTAMP and isinstance(var.value, datetime.datetime):
+                            simple_context[name] = var.value.isoformat()
+                        else:
+                            # Use basic string value to avoid infinite recursion
+                            simple_context[name] = var.get_string_value()
+
                 # Apply template resolution
                 template = jinja2.Template(result)
                 new_result = template.render(simple_context)

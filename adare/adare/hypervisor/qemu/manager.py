@@ -51,6 +51,9 @@ class QEMUManager(AbstractHypervisorManager):
             try:
                 import libvirt
                 libvirt_uri = qemu_config.get('libvirt_uri', 'qemu:///session')
+                # NOTE: No stderr redirect here - connection errors should be visible during initialization.
+                # LibvirtStderrRedirect requires an experiment log file, which doesn't exist during manager init.
+                # If libvirtd is not running, we want the error to fail loudly.
                 self.libvirt_conn = libvirt.open(libvirt_uri)
 
                 if not self.libvirt_conn:

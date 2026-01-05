@@ -438,21 +438,27 @@ class CommandExecutionMixin(AbstractCommandMixin):
             if background:
                 if use_cmd:
                     # For background commands with cmd, use cmd.exe directly in Start-Process
+                    # Redirect stderr to startup log for debugging
                     noprofile_inner = "'-NoProfile'," if win_noprofile else ""
                     # Remove the cmd /c wrapper since we'll use cmd.exe directly
                     original_cmd = cmd_to_run.replace("cmd /c '", "").rstrip("'")
+                    # Add stderr redirection to the command
+                    original_cmd_with_redirect = f"{original_cmd} 2>>C:\\adare\\run\\logs\\adarevmstartup.log"
                     verb_arg = "-Verb RunAs " if admin else ""
                     ps_cmd = (
                         f"$p=Start-Process -WindowStyle Hidden -PassThru {verb_arg}-FilePath cmd.exe "
-                        f"-ArgumentList @('/c','{original_cmd}');"
+                        f"-ArgumentList @('/c','{original_cmd_with_redirect}');"
                         f"$p.Id"
                     )
                 else:
+                    # For PowerShell commands, redirect stderr to startup log
                     noprofile_inner = "'-NoProfile'," if win_noprofile else ""
                     verb_arg = "-Verb RunAs " if admin else ""
+                    # Wrap command to redirect stderr
+                    cmd_with_redirect = f"{cmd_to_run} 2>>C:\\adare\\run\\logs\\adarevmstartup.log"
                     ps_cmd = (
                         f"$p=Start-Process -WindowStyle Hidden -PassThru {verb_arg}-FilePath powershell.exe "
-                        f"-ArgumentList @({noprofile_inner}'-ExecutionPolicy','Bypass','-Command','{cmd_to_run}');"
+                        f"-ArgumentList @({noprofile_inner}'-ExecutionPolicy','Bypass','-Command','{cmd_with_redirect}');"
                         f"$p.Id"
                     )
                 command_bytes = ps_cmd.encode('utf-16le')
@@ -474,12 +480,12 @@ class CommandExecutionMixin(AbstractCommandMixin):
             if background:
                 # Use nohup with bash -c to handle shell builtins and complex commands
                 # This ensures the background process survives when the parent shell exits
-                # Log errors to startup log file for debugging and background the nohup process
+                # Log stdout and stderr to startup log file for debugging and background the nohup process
                 # Escape single quotes for bash -c
                 escaped_cmd = cmd_to_run.replace("'", "'\"'\"'")
                 # Apply sudo before nohup if admin privileges requested
                 sudo_prefix = 'sudo env "PATH=$PATH" "DISPLAY=$DISPLAY" "XAUTHORITY=$XAUTHORITY" ' if admin else ""
-                linux_command = f"nohup {sudo_prefix}bash -c '{escaped_cmd}' >/dev/null 2>>/adare/run/logs/adarevmstartup.log & echo $!"
+                linux_command = f"nohup {sudo_prefix}bash -c '{escaped_cmd}' >>/adare/run/logs/adarevmstartup.log 2>&1 & echo $!"
             else:
                 # Apply sudo if admin privileges requested (foreground commands)
                 if admin:

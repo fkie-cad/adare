@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import platform
+import re
 import subprocess
 import threading
 import time
@@ -26,13 +27,18 @@ from adare.hypervisor.exceptions import (
     VMImportException,
     VMAlreadyRunningException,
     VMNotFoundException,
-    HypervisorException
+    HypervisorException,
+    VMStartException
 )
 from adare.hypervisor.qemu.manager import QEMUManager
 from adare.hypervisor.qemu.mixins.commands import CommandExecutionMixin
 from adare.hypervisor.qemu.mixins.snapshots import SnapshotMixin
 from adare.hypervisor.qemu.mixins.networking import NetworkingMixin
 from adare.hypervisor.qemu.models import QEMUVMConfig, CommandResult
+from adare.hypervisor.qemu.libvirt_stderr_redirect import (
+    LibvirtStderrRedirect,
+    get_experiment_log_file
+)
 
 log = logging.getLogger(__name__)
 
@@ -83,10 +89,15 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         self._cached_guest_path = None  # Cached PATH from guest discovery
         self._path_discovery_attempted = False  # Track if we've tried discovery to prevent retries
 
+        # Screen resolution tracking for coordinate normalization (USB tablet uses 0-32767 range)
+        self._screen_width = None   # Current screen width in pixels
+        self._screen_height = None  # Current screen height in pixels
+        self._resolution_last_updated = None  # Timestamp of last resolution update
+
         # Load or create VM config
         self.config = self._load_or_create_vm_config()
 
-        log.info(f"CLAUDE: Initialized QEMUVM for '{self.vm_name}' ({self.guest_os})")
+        log.debug(f"CLAUDE: Initialized QEMUVM for '{self.vm_name}' ({self.guest_os})")
 
     @staticmethod
     def _detect_disk_format_static(file_path: Path, qemu_img_exe: str = 'qemu-img') -> str:
@@ -184,7 +195,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             # Determine disk path: use external path if provided, otherwise use managed storage
             if self._external_disk_path:
                 disk_path = self._external_disk_path
-                log.info(f"CLAUDE: Using external disk path for --no-copy mode: {disk_path}")
+                log.debug(f"CLAUDE: Using external disk path for --no-copy mode: {disk_path}")
             else:
                 disk_dir = Path.home() / '.adare' / 'qemu' / 'disks'
                 disk_dir.mkdir(parents=True, exist_ok=True)
@@ -227,11 +238,41 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         self._save_vm_config_obj(self.config)
 
     def _save_vm_config_obj(self, config: QEMUVMConfig):
-        """Save VM config object to JSON file."""
+        """
+        Save VM config object to JSON file.
+
+        IMPORTANT: This method ensures that overlay paths are NEVER persisted to the
+        config file. If the current disk_path is an overlay, we substitute it with
+        the original disk path to prevent overlay chaining on subsequent runs.
+        """
         config_path = self._get_vm_config_path()
+
+        # Create a copy of config dict to avoid modifying the in-memory config
+        config_dict = config.to_dict()
+
+        # CRITICAL: Don't persist overlay paths - they cause chaining bugs
+        # If disk_path contains '-overlay-', substitute with the original path
+        disk_path = config_dict.get('disk_path', '')
+        if '-overlay-' in disk_path:
+            # Determine the original disk path to persist instead
+            if self._external_disk_path:
+                # External qcow2: use the original path
+                original_path = self._external_disk_path
+                log.debug(f"CLAUDE: Config save: replacing overlay path with external: {original_path}")
+            else:
+                # Managed VM: use the base disk path (without -base suffix for config)
+                # The original config disk_path format is: /path/to/VM-name.qcow2
+                # Strip overlay suffix and -base to get back to original format
+                stripped = self._strip_overlay_suffixes(Path(disk_path).stem)
+                stripped = stripped.replace('-base', '')
+                original_path = str(Path(disk_path).parent / f"{stripped}{Path(disk_path).suffix}")
+                log.debug(f"CLAUDE: Config save: replacing overlay path with original: {original_path}")
+
+            config_dict['disk_path'] = original_path
+
         log.debug(f"CLAUDE: Saving VM config to {config_path}")
         with open(config_path, 'w') as f:
-            json.dump(config.to_dict(), f, indent=2)
+            json.dump(config_dict, f, indent=2)
 
     def get_base_disk_path(self) -> str:
         """
@@ -246,18 +287,197 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         current_disk = Path(self.config.disk_path)
         return str(current_disk.parent / f"{current_disk.stem}-base{current_disk.suffix}")
 
+    def _get_true_base_disk(self) -> str:
+        """
+        Get the TRUE base disk path, ignoring any overlay paths in config.
+
+        This method ensures we ALWAYS use the original base disk (never an overlay)
+        when creating new overlays. This prevents overlay chaining which causes
+        logs/data from previous runs to accumulate.
+
+        Priority:
+        1. For external qcow2 (--no-copy mode): Use the original external path
+        2. For managed VMs: Use the -base.qcow2 file
+
+        Returns:
+            Absolute path to the true base disk
+
+        Raises:
+            HypervisorException: If no valid base disk can be found
+        """
+        # Priority 1: External qcow2 (--no-copy mode)
+        # self._external_disk_path is set at init and NEVER changes
+        if self._external_disk_path:
+            external_path = Path(self._external_disk_path)
+            if external_path.exists():
+                log.debug(f"CLAUDE: True base disk (external): {external_path}")
+                return str(external_path)
+            else:
+                raise HypervisorException(
+                    f"External disk not found: {external_path}\n"
+                    f"The original qcow2 file may have been moved or deleted."
+                )
+
+        # Priority 2: Managed VM with -base suffix
+        # Look for the base disk that was created during import/conversion
+        base_disk_path = self.get_base_disk_path()
+        if Path(base_disk_path).exists():
+            log.debug(f"CLAUDE: True base disk (managed): {base_disk_path}")
+            return base_disk_path
+
+        # Fallback: Try to find base by stripping overlay suffixes from config path
+        # This handles edge cases where config.disk_path might be an overlay
+        current_disk = Path(self.config.disk_path)
+        stripped_stem = self._strip_overlay_suffixes(current_disk.stem)
+        stripped_stem = stripped_stem.replace('-base', '')  # Also strip -base if present
+
+        # Look for base disk with stripped name
+        potential_base = current_disk.parent / f"{stripped_stem}-base{current_disk.suffix}"
+        if potential_base.exists():
+            log.debug(f"CLAUDE: True base disk (fallback): {potential_base}")
+            return str(potential_base)
+
+        # Last resort: check if stripped path exists as standalone qcow2
+        potential_standalone = current_disk.parent / f"{stripped_stem}{current_disk.suffix}"
+        if potential_standalone.exists() and '-overlay-' not in str(potential_standalone):
+            log.debug(f"CLAUDE: True base disk (standalone): {potential_standalone}")
+            return str(potential_standalone)
+
+        raise HypervisorException(
+            f"Cannot find base disk for VM '{self.vm_name}'.\n"
+            f"Checked:\n"
+            f"  - External path: {self._external_disk_path}\n"
+            f"  - Base disk path: {base_disk_path}\n"
+            f"  - Fallback base: {potential_base}\n"
+            f"Please ensure the VM has been properly imported."
+        )
+
+    @staticmethod
+    def _strip_overlay_suffixes(filename_stem: str) -> str:
+        """
+        Strip all -overlay-{ULID} patterns from a filename stem.
+
+        This prevents filename length explosion when overlays are chained.
+        Each ULID is 26 uppercase alphanumeric characters.
+
+        Args:
+            filename_stem: Filename without extension (e.g., "VM-name-overlay-01ABC...")
+
+        Returns:
+            Cleaned filename stem with all overlay suffixes removed
+
+        Examples:
+            >>> _strip_overlay_suffixes("VM-name-overlay-01KDK1XEYYBCSSS33BFD72Q3VV")
+            "VM-name"
+            >>> _strip_overlay_suffixes("VM-name-overlay-01ABC...-overlay-01DEF...")
+            "VM-name"
+        """
+        # Strip all -overlay-{ULID} patterns (ULID = 26 uppercase alphanumeric chars)
+        cleaned = re.sub(r'-overlay-[0-9A-Z]{26}', '', filename_stem)
+        log.debug(f"CLAUDE: Stripped overlay suffixes: '{filename_stem}' => '{cleaned}'")
+        return cleaned
+
     def get_overlay_disk_path(self, experiment_id: str) -> str:
         """
         Get path for experiment-specific overlay disk.
 
+        Always derives overlay name from the base VM name by stripping ALL
+        -overlay-{ULID} suffixes to prevent filename length explosion from
+        chaining overlay names.
+
+        This ensures overlays remain under the ext4 255-character filename limit
+        by using a regex pattern to strip all overlay suffixes: -overlay-[0-9A-Z]{26}
+
         Args:
-            experiment_id: Unique experiment ID
+            experiment_id: Unique experiment ID (ULID - 26 alphanumeric characters)
 
         Returns:
-            Path like: /path/to/disk-overlay-{exp_id}.qcow2
+            Path like: /path/to/VM-name-overlay-{exp_id}.qcow2
+
+        Raises:
+            HypervisorException: If generated filename exceeds 255 characters
+
+        Examples:
+            Base: ADARE-Ubuntu-24.04_exp_01KDK1XE-base.qcow2
+            Overlay: ADARE-Ubuntu-24.04_exp_01KDK1XE-overlay-01KDKGR211GPRRSC0NGX8GWZMH.qcow2
+            (72 characters - well within 255 limit)
         """
+        # First, try to get the base disk path (normal case)
+        base_disk_path = self.get_base_disk_path()
+        base_disk = Path(base_disk_path)
+
+        # Check if base disk exists (managed/converted case)
+        if base_disk.exists():
+            # Base disk format: VM-name-base.qcow2
+            # Extract VM name by removing -base suffix
+            vm_name_part = base_disk.stem.replace('-base', '')
+
+            # Strip any overlay suffixes that may have leaked into base name
+            # This handles edge cases where base disk was created from overlay
+            vm_name_part = self._strip_overlay_suffixes(vm_name_part)
+
+            overlay_name = f"{vm_name_part}-overlay-{experiment_id}{base_disk.suffix}"
+
+            # Validate filename length (ext4 limit: 255 characters)
+            if len(overlay_name) > 255:
+                raise HypervisorException(
+                    f"Overlay filename exceeds 255 character limit: {len(overlay_name)} chars\n"
+                    f"Filename: {overlay_name}\n"
+                    f"This should not happen with ULID-based naming. Please report this bug."
+                )
+
+            log.debug(f"CLAUDE: Generated overlay name (managed case): {overlay_name}")
+            return str(base_disk.parent / overlay_name)
+
+        # External qcow2 case: base disk doesn't exist, use config.disk_path directly
+        # This handles --no-copy mode where source qcow2 is used without conversion
         current_disk = Path(self.config.disk_path)
-        return str(current_disk.parent / f"{current_disk.stem}-overlay-{experiment_id}{current_disk.suffix}")
+        if current_disk.exists() and current_disk.suffix == '.qcow2':
+            # Use the original disk name (without -overlay or -base suffix)
+            # Strip ALL -overlay-{ULID} patterns to get clean VM name
+            vm_name_part = current_disk.stem
+
+            # First strip all overlay suffixes (handles chained overlays)
+            vm_name_part = self._strip_overlay_suffixes(vm_name_part)
+
+            # Then strip -base suffix if present
+            if '-base' in vm_name_part:
+                vm_name_part = vm_name_part.replace('-base', '')
+
+            overlay_name = f"{vm_name_part}-overlay-{experiment_id}{current_disk.suffix}"
+
+            # Validate filename length (ext4 limit: 255 characters)
+            if len(overlay_name) > 255:
+                raise HypervisorException(
+                    f"Overlay filename exceeds 255 character limit: {len(overlay_name)} chars\n"
+                    f"Filename: {overlay_name}\n"
+                    f"Base VM name may be too long. Consider using a shorter VM name."
+                )
+
+            log.debug(f"CLAUDE: Generated overlay name (external case): {overlay_name}")
+            return str(current_disk.parent / overlay_name)
+
+        # Fallback: should not reach here, but use safe overlay generation
+        # This maintains backward compatibility if we missed an edge case
+        vm_name_part = self._strip_overlay_suffixes(current_disk.stem)
+        vm_name_part = vm_name_part.replace('-base', '')  # Also strip base if present
+        overlay_name = f"{vm_name_part}-overlay-{experiment_id}{current_disk.suffix}"
+
+        # Validate filename length (ext4 limit: 255 characters)
+        if len(overlay_name) > 255:
+            log.warning(
+                f"CLAUDE: Fallback overlay name exceeds 255 chars ({len(overlay_name)}): {overlay_name}"
+            )
+            # Truncate base name to fit within limit
+            # 255 - len("-overlay-{26-char-ULID}.qcow2") = 255 - 36 = 219
+            max_base_length = 219  # 255 - 36
+            if len(vm_name_part) > max_base_length:
+                vm_name_part = vm_name_part[:max_base_length]
+                overlay_name = f"{vm_name_part}-overlay-{experiment_id}{current_disk.suffix}"
+                log.warning(f"CLAUDE: Truncated base name to: {vm_name_part}")
+
+        log.debug(f"CLAUDE: Generated overlay name (fallback case): {overlay_name}")
+        return str(current_disk.parent / overlay_name)
 
     async def create_overlay_disk(self, experiment_id: str) -> str:
         """
@@ -266,6 +486,10 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         This creates a new overlay that captures all modifications while
         leaving the base disk untouched. The overlay is deleted after
         experiment completion.
+
+        IMPORTANT: This method always uses the TRUE base disk (via _get_true_base_disk()),
+        never an existing overlay. This prevents overlay chaining where logs/data from
+        previous runs accumulate.
 
         Args:
             experiment_id: Unique ID for this experiment
@@ -276,30 +500,32 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         Raises:
             HypervisorException: If overlay creation fails
         """
-        # Determine base disk path
-        # Priority:
-        # 1. If config.disk_path exists and is qcow2, use it (external qcow2 case)
-        # 2. Otherwise, look for -base suffix (managed/converted case)
-        current_disk = Path(self.config.disk_path)
+        # CRITICAL: Always use the TRUE base disk, never an overlay
+        # This prevents overlay chaining which causes logs to accumulate
+        base_disk = self._get_true_base_disk()
+        log.debug(f"CLAUDE: Using true base disk for overlay: {base_disk}")
 
-        if current_disk.exists() and current_disk.suffix == '.qcow2':
-            # Existing qcow2 file - use as base directly (external qcow2 case)
-            base_disk = str(current_disk)
-            log.debug(f"CLAUDE: Using existing disk as base: {base_disk}")
-        else:
-            # Look for -base suffix (managed/converted case)
-            base_disk = self.get_base_disk_path()
-            log.debug(f"CLAUDE: Looking for base disk with -base suffix: {base_disk}")
-
-        # Verify base disk exists
-        if not Path(base_disk).exists():
-            raise HypervisorException(
-                f"Base disk not found: {base_disk}. "
-                "Run create_from_ovf_or_ova first or ensure source disk exists."
-            )
+        # Clean up orphaned overlays from previous crashed runs BEFORE creating new one
+        # This ensures we don't leave stale overlays that could confuse the system
+        await self._cleanup_orphaned_overlays(experiment_id)
 
         # Create overlay path with experiment ID
         overlay_path = self.get_overlay_disk_path(experiment_id)
+
+        # Calculate relative path from overlay to base disk for libguestfs compatibility
+        # Libguestfs may mount the disk in a different context, so relative paths work better
+        overlay_dir = Path(overlay_path).parent
+        base_path = Path(base_disk)
+
+        if overlay_dir == base_path.parent:
+            # Same directory - use just filename (most common case)
+            backing_file = base_path.name
+        else:
+            # Different directories - use relative path
+            backing_file = os.path.relpath(base_disk, overlay_dir)
+
+        log.debug(f"CLAUDE: Base disk absolute path: {base_disk}")
+        log.debug(f"CLAUDE: Backing file relative path: {backing_file}")
 
         # Build qemu-img command to create backing file
         qemu_img = self.executables.qemu_img
@@ -308,11 +534,11 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             'create',
             '-f', 'qcow2',
             '-F', 'qcow2',  # Backing file format
-            '-b', base_disk,  # Backing file (base disk)
+            '-b', backing_file,  # Backing file (relative path for libguestfs compatibility)
             overlay_path      # New overlay
         ]
 
-        log.info(f"CLAUDE: Creating overlay disk backed by {base_disk}")
+        log.debug(f"CLAUDE: Creating overlay disk backed by {backing_file}")
         log.debug(f"CLAUDE: Command: {' '.join(args)}")
 
         # Execute qemu-img create
@@ -329,8 +555,73 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                 f"Failed to create overlay disk: {stderr.decode()}"
             )
 
-        log.info(f"CLAUDE: Successfully created overlay: {overlay_path}")
+        log.debug(f"CLAUDE: Successfully created overlay: {overlay_path}")
         return overlay_path
+
+    async def _cleanup_orphaned_overlays(self, current_experiment_id: str) -> None:
+        """
+        Clean up orphaned overlay disks from previous crashed runs.
+
+        This method finds and deletes overlay files that were left behind when
+        previous experiment runs crashed before cleanup could occur.
+
+        Only deletes overlays that:
+        1. Match this VM's naming pattern (VM-name-overlay-*.qcow2)
+        2. Are NOT the current experiment's overlay
+        3. Are NOT the base disk
+
+        Args:
+            current_experiment_id: ID of current experiment (will NOT be deleted)
+        """
+        try:
+            # Get the base disk to determine the overlay directory and naming pattern
+            base_disk = self._get_true_base_disk()
+            base_path = Path(base_disk)
+            overlay_dir = base_path.parent
+
+            # Determine the VM name part for matching overlays
+            if self._external_disk_path:
+                # External qcow2: use the original filename stem
+                vm_name_stem = Path(self._external_disk_path).stem
+            else:
+                # Managed VM: strip -base suffix
+                vm_name_stem = base_path.stem.replace('-base', '')
+
+            # Strip any overlay suffixes that might have leaked into the stem
+            vm_name_stem = self._strip_overlay_suffixes(vm_name_stem)
+
+            # Find all overlays matching this VM's pattern
+            overlay_pattern = f"{vm_name_stem}-overlay-*.qcow2"
+            orphan_overlays = list(overlay_dir.glob(overlay_pattern))
+
+            # Get the path for current experiment's overlay (should NOT be deleted)
+            current_overlay_path = Path(self.get_overlay_disk_path(current_experiment_id))
+
+            # Delete orphaned overlays
+            deleted_count = 0
+            for overlay in orphan_overlays:
+                # Skip current experiment's overlay
+                if overlay == current_overlay_path:
+                    continue
+
+                # Skip the base disk (shouldn't match pattern, but be safe)
+                if overlay == base_path:
+                    continue
+
+                # Delete orphaned overlay
+                try:
+                    overlay.unlink()
+                    deleted_count += 1
+                    log.info(f"CLAUDE: Deleted orphaned overlay: {overlay.name}")
+                except OSError as e:
+                    log.warning(f"CLAUDE: Failed to delete orphaned overlay {overlay}: {e}")
+
+            if deleted_count > 0:
+                log.info(f"CLAUDE: Cleaned up {deleted_count} orphaned overlay(s)")
+
+        except HypervisorException as e:
+            # If we can't determine base disk, log warning but don't fail
+            log.warning(f"CLAUDE: Could not clean orphaned overlays: {e}")
 
     async def cleanup_overlay_disk(self, experiment_id: str) -> None:
         """
@@ -347,7 +638,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         if Path(overlay_path).exists():
             try:
                 os.remove(overlay_path)
-                log.info(f"CLAUDE: Deleted overlay disk: {overlay_path}")
+                log.debug(f"CLAUDE: Deleted overlay disk: {overlay_path}")
             except OSError as e:
                 log.warning(f"CLAUDE: Failed to delete overlay {overlay_path}: {e}")
         else:
@@ -374,7 +665,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         """
         async def _create_async():
             if not silent:
-                log.info(f"CLAUDE: Creating QEMU VM '{self.vm_name}' with "
+                log.debug(f"CLAUDE: Creating QEMU VM '{self.vm_name}' with "
                         f"{self.cpus} CPUs, {self.ram}MB RAM")
 
             qemu_img_exe = self.executables.qemu_img
@@ -394,7 +685,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
 
             if returncode == 0:
                 if not silent:
-                    log.info(f"CLAUDE: VM '{self.vm_name}' disk created at {disk_path}")
+                    log.debug(f"CLAUDE: VM '{self.vm_name}' disk created at {disk_path}")
                 # Save config
                 self._save_vm_config()
             else:
@@ -447,14 +738,16 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             )
 
         # Check if domain already exists
+        log_file = get_experiment_log_file()
         try:
-            existing_domain = conn.lookupByName(self.vm_name)
-            log.debug(f"CLAUDE: Domain '{self.vm_name}' already exists, undefining...")
-            # Undefine existing domain (will redefine with new XML)
-            if existing_domain.isActive():
-                log.warning(f"CLAUDE: Domain '{self.vm_name}' is running, destroying first...")
-                existing_domain.destroy()
-            existing_domain.undefine()
+            with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                existing_domain = conn.lookupByName(self.vm_name)
+                log.debug(f"CLAUDE: Domain '{self.vm_name}' already exists, undefining...")
+                # Undefine existing domain (will redefine with new XML)
+                if existing_domain.isActive():
+                    log.warning(f"CLAUDE: Domain '{self.vm_name}' is running, destroying first...")
+                    existing_domain.destroy()
+                existing_domain.undefine()
         except libvirt.libvirtError as e:
             # Domain doesn't exist, which is fine
             if 'Domain not found' not in str(e):
@@ -462,8 +755,9 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
 
         # Define the domain
         try:
-            domain = conn.defineXML(xml)
-            log.info(f"CLAUDE: Defined libvirt domain '{self.vm_name}' (visible in virsh/virt-manager)")
+            with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                domain = conn.defineXML(xml)
+            log.debug(f"CLAUDE: Defined libvirt domain '{self.vm_name}' (visible in virsh/virt-manager)")
 
             # Update config with libvirt domain name
             self.config.libvirt_domain_name = self.vm_name
@@ -552,15 +846,19 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             silent: If True, suppress log output
 
         Returns:
-            Return code (0 for success, non-zero for failure)
+            Return code (0 for success)
+
+        Raises:
+            VMStartException: If VM fails to start or state cannot be verified
+            VMAlreadyRunningException: If VM is already running and raise_if_running=True
+            HypervisorException: If libvirt domain definition fails
         """
         async def _start_async():
             import libvirt
 
             # Check if disk exists
             if not os.path.exists(self.config.disk_path):
-                log.error(f"CLAUDE: VM disk not found at {self.config.disk_path}")
-                return 1
+                raise VMStartException(f"VM disk not found at {self.config.disk_path}")
 
             # Clean up any stale socket files before starting
             for socket_path in [self.config.qmp_socket_path, self.config.guest_agent_socket_path]:
@@ -571,13 +869,18 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                     except OSError as e:
                         log.warning(f"CLAUDE: Could not remove stale socket {socket_path}: {e}")
 
-            # Define libvirt domain if not already defined
-            if not self._libvirt_domain:
-                try:
-                    self._libvirt_domain = self._define_libvirt_domain()
-                except Exception as e:
-                    log.error(f"CLAUDE: Failed to define libvirt domain: {e}")
-                    return 1
+            # CRITICAL: Always redefine libvirt domain on each start
+            # This ensures the domain XML contains the current overlay disk path,
+            # preventing "Cannot access storage file" errors on subsequent runs
+            # where the previous overlay was deleted during cleanup.
+            try:
+                self._libvirt_domain = self._define_libvirt_domain()
+            except HypervisorException:
+                raise  # Re-raise specific hypervisor exceptions
+            except libvirt.libvirtError as e:
+                raise VMStartException(f"Failed to define libvirt domain: {e}")
+            except OSError as e:
+                raise VMStartException(f"OS error defining libvirt domain: {e}")
 
             # Check current state
             try:
@@ -587,40 +890,62 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                     if raise_if_running:
                         raise VMAlreadyRunningException(message)
                     if not silent:
-                        log.info(f"CLAUDE: {message}")
+                        log.debug(f"CLAUDE: {message}")
                     return 0
             except libvirt.libvirtError as e:
                 log.warning(f"CLAUDE: Could not check domain state: {e}")
 
             if not silent:
-                log.info(f"CLAUDE: Starting QEMU VM '{self.vm_name}' via libvirt")
+                log.debug(f"CLAUDE: Starting QEMU VM '{self.vm_name}' via libvirt")
 
-            # Start the domain (equivalent to virsh start)
+            # Get experiment log file for stderr capture
+            log_file = get_experiment_log_file()
+
+            # Start the domain with stderr redirection to capture C library errors
             try:
-                self._libvirt_domain.create()
+                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                    self._libvirt_domain.create()
 
-                # Give it a moment to start
+                # Give libvirt a moment to transition state
                 await asyncio.sleep(1)
 
+                # CRITICAL: Validate VM actually started
+                # libvirt may fail silently and print to stderr instead of raising exception
+                try:
+                    is_active = self._libvirt_domain.isActive()
+                    state, _ = self._libvirt_domain.state()
+
+                    if not is_active or state != libvirt.VIR_DOMAIN_RUNNING:
+                        raise VMStartException(
+                            f"VM '{self.vm_name}' failed to start. "
+                            f"Domain state: {state}, Active: {is_active}. "
+                            f"Check experiment log for libvirt errors."
+                        )
+                except libvirt.libvirtError as e:
+                    raise VMStartException(
+                        f"Cannot verify VM state after start attempt: {e}"
+                    )
+
                 if not silent:
-                    log.info(f"CLAUDE: VM '{self.vm_name}' started successfully")
-                    log.info(f"CLAUDE: VM visible in virt-manager (connect via 'Open' button for display)")
+                    log.debug(f"CLAUDE: VM '{self.vm_name}' started successfully")
                 return 0
 
+            except VMStartException:
+                raise  # Re-raise our own exception
+            except VMAlreadyRunningException:
+                raise  # Re-raise already running exception
             except libvirt.libvirtError as e:
                 if "already running" in str(e).lower():
                     message = f"VM '{self.vm_name}' is already running."
                     if raise_if_running:
                         raise VMAlreadyRunningException(message)
                     if not silent:
-                        log.info(f"CLAUDE: {message}")
+                        log.debug(f"CLAUDE: {message}")
                     return 0
                 else:
-                    log.error(f"CLAUDE: Failed to start VM via libvirt: {e}")
-                    return 1
-            except Exception as e:
-                log.error(f"CLAUDE: Error starting VM: {e}")
-                return 1
+                    raise VMStartException(f"Failed to start VM via libvirt: {e}")
+            except OSError as e:
+                raise VMStartException(f"OS error during VM start: {e}")
 
         return await self.manager.run_async(_start_async)
 
@@ -649,66 +974,71 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             import libvirt
 
             if not silent:
-                log.info(f"CLAUDE: Stopping QEMU VM '{self.vm_name}' via libvirt")
+                log.debug(f"CLAUDE: Stopping QEMU VM '{self.vm_name}' via libvirt")
+
+            log_file_path = get_experiment_log_file()
 
             # Check if domain exists
             if not self._libvirt_domain:
                 try:
-                    conn = self._get_libvirt_connection()
-                    self._libvirt_domain = conn.lookupByName(self.vm_name)
+                    with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
+                        conn = self._get_libvirt_connection()
+                        self._libvirt_domain = conn.lookupByName(self.vm_name)
                 except libvirt.libvirtError:
                     if not silent:
-                        log.info(f"CLAUDE: VM '{self.vm_name}' is not defined in libvirt")
+                        log.debug(f"CLAUDE: VM '{self.vm_name}' is not defined in libvirt")
                     return 0
 
             # Check current state
             try:
-                state, _ = self._libvirt_domain.state()
+                with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
+                    state, _ = self._libvirt_domain.state()
                 if state == libvirt.VIR_DOMAIN_SHUTOFF:
                     if not silent:
-                        log.info(f"CLAUDE: VM '{self.vm_name}' is already stopped")
+                        log.debug(f"CLAUDE: VM '{self.vm_name}' is already stopped")
                     return 0
             except libvirt.libvirtError as e:
                 log.warning(f"CLAUDE: Could not check domain state: {e}")
 
             # Stop the domain
             try:
-                if force:
-                    # Force stop (equivalent to virsh destroy)
-                    if not silent:
-                        log.info(f"CLAUDE: Force stopping VM '{self.vm_name}'")
-                    self._libvirt_domain.destroy()
-                else:
-                    # Graceful shutdown (equivalent to virsh shutdown)
-                    if not silent:
-                        log.info(f"CLAUDE: Gracefully shutting down VM '{self.vm_name}'")
-                    self._libvirt_domain.shutdown()
+                with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
+                    if force:
+                        # Force stop (equivalent to virsh destroy)
+                        if not silent:
+                            log.debug(f"CLAUDE: Force stopping VM '{self.vm_name}'")
+                        self._libvirt_domain.destroy()
+                    else:
+                        # Graceful shutdown (equivalent to virsh shutdown)
+                        if not silent:
+                            log.debug(f"CLAUDE: Gracefully shutting down VM '{self.vm_name}'")
+                        self._libvirt_domain.shutdown()
 
-                    # Wait for VM to stop with timeout
-                    for _ in range(timeout):
-                        await asyncio.sleep(1)
-                        try:
-                            state, _ = self._libvirt_domain.state()
-                            if state == libvirt.VIR_DOMAIN_SHUTOFF:
-                                if not silent:
-                                    log.info(f"CLAUDE: VM '{self.vm_name}' stopped gracefully")
-                                return 0
-                        except libvirt.libvirtError:
-                            # Domain might have been destroyed
-                            break
+                        # Wait for VM to stop with timeout
+                        for _ in range(timeout):
+                            await asyncio.sleep(1)
+                            try:
+                                state, _ = self._libvirt_domain.state()
+                                if state == libvirt.VIR_DOMAIN_SHUTOFF:
+                                    if not silent:
+                                        log.debug(f"CLAUDE: VM '{self.vm_name}' stopped gracefully")
+                                    return 0
+                            except libvirt.libvirtError:
+                                # Domain might have been destroyed
+                                break
 
-                    # Timeout - force stop
-                    log.warning("CLAUDE: Graceful shutdown timed out, forcing stop")
-                    self._libvirt_domain.destroy()
+                        # Timeout - force stop
+                        log.warning("CLAUDE: Graceful shutdown timed out, forcing stop")
+                        self._libvirt_domain.destroy()
 
                 if not silent:
-                    log.info(f"CLAUDE: VM '{self.vm_name}' stopped")
+                    log.debug(f"CLAUDE: VM '{self.vm_name}' stopped")
                 return 0
 
             except libvirt.libvirtError as e:
                 if "not running" in str(e).lower() or "not active" in str(e).lower():
                     if not silent:
-                        log.info(f"CLAUDE: VM '{self.vm_name}' is already stopped")
+                        log.debug(f"CLAUDE: VM '{self.vm_name}' is already stopped")
                     return 0
                 else:
                     log.error(f"CLAUDE: Failed to stop VM via libvirt: {e}")
@@ -742,29 +1072,33 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             import libvirt
 
             if not silent:
-                log.info(f"CLAUDE: Destroying QEMU VM '{self.vm_name}'")
+                log.debug(f"CLAUDE: Destroying QEMU VM '{self.vm_name}'")
 
             # Stop VM if running
             if self.get_state() == "running":
                 await self.stop(silent=silent, force=True)
 
+            log_file_path = get_experiment_log_file()
+
             # Undefine libvirt domain (removes from virsh list)
             if self._libvirt_domain:
                 try:
-                    self._libvirt_domain.undefine()
+                    with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
+                        self._libvirt_domain.undefine()
                     if not silent:
-                        log.info(f"CLAUDE: Undefined libvirt domain '{self.vm_name}'")
+                        log.debug(f"CLAUDE: Undefined libvirt domain '{self.vm_name}'")
                 except libvirt.libvirtError as e:
                     log.warning(f"CLAUDE: Could not undefine libvirt domain: {e}")
                 self._libvirt_domain = None
             else:
                 # Try to lookup and undefine if it exists
                 try:
-                    conn = self._get_libvirt_connection()
-                    domain = conn.lookupByName(self.vm_name)
-                    domain.undefine()
+                    with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
+                        conn = self._get_libvirt_connection()
+                        domain = conn.lookupByName(self.vm_name)
+                        domain.undefine()
                     if not silent:
-                        log.info(f"CLAUDE: Undefined libvirt domain '{self.vm_name}'")
+                        log.debug(f"CLAUDE: Undefined libvirt domain '{self.vm_name}'")
                 except libvirt.libvirtError:
                     pass  # Domain doesn't exist, which is fine
 
@@ -773,7 +1107,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                 try:
                     os.remove(self.config.disk_path)
                     if not silent:
-                        log.info(f"CLAUDE: Deleted VM disk: {self.config.disk_path}")
+                        log.debug(f"CLAUDE: Deleted VM disk: {self.config.disk_path}")
                 except Exception as e:
                     log.error(f"CLAUDE: Error deleting disk: {e}")
 
@@ -783,7 +1117,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                 try:
                     os.remove(config_path)
                     if not silent:
-                        log.info(f"CLAUDE: Deleted VM config: {config_path}")
+                        log.debug(f"CLAUDE: Deleted VM config: {config_path}")
                 except Exception as e:
                     log.error(f"CLAUDE: Error deleting config: {e}")
 
@@ -796,7 +1130,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                         pass
 
             if not silent:
-                log.info(f"CLAUDE: VM '{self.vm_name}' destroyed")
+                log.debug(f"CLAUDE: VM '{self.vm_name}' destroyed")
 
             return 0
 
@@ -812,12 +1146,15 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         import libvirt
 
         try:
+            log_file = get_experiment_log_file()
+
             # Try to get domain state from libvirt
             if not self._libvirt_domain:
                 conn = self._get_libvirt_connection()
                 if conn:
                     try:
-                        self._libvirt_domain = conn.lookupByName(self.vm_name)
+                        with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                            self._libvirt_domain = conn.lookupByName(self.vm_name)
                     except libvirt.libvirtError:
                         # Domain not defined in libvirt
                         return "poweroff"
@@ -826,7 +1163,8 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                     return "unknown"
 
             # Get domain state
-            state, _ = self._libvirt_domain.state()
+            with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                state, _ = self._libvirt_domain.state()
 
             # Map libvirt states to ADARE states
             state_map = {
@@ -944,7 +1282,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             CommandResult with returncode, stdout, stderr
         """
         if not silent:
-            log.info(f"CLAUDE: Executing command in VM '{self.vm_name}': {command}")
+            log.debug(f"CLAUDE: Executing command in VM '{self.vm_name}': {command}")
 
         returncode, stdout, stderr = await self._execute_guest_command_via_agent(
             command,
@@ -963,7 +1301,8 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         self,
         timeout: int = 300,
         ctx_manager=None,
-        stop_event=None
+        stop_event=None,
+        skip_x11_discovery: bool = False
     ) -> bool:
         """
         Wait until VM is fully booted and guest agent is responsive.
@@ -975,11 +1314,12 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             timeout: Timeout in seconds
             ctx_manager: Optional context manager for status updates
             stop_event: Optional event to signal cancellation
+            skip_x11_discovery: If True, skip X11 environment discovery (for host-based GUI mode)
 
         Returns:
             True if VM is booted and ready, False if timeout
         """
-        log.info(f"CLAUDE: Waiting for VM '{self.vm_name}' to boot (timeout: {timeout}s)")
+        log.debug(f"CLAUDE: Waiting for VM '{self.vm_name}' to boot (timeout: {timeout}s)")
 
         start_time = time.time()
         ping_successful = False
@@ -988,7 +1328,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
 
         while time.time() - start_time < timeout:
             if stop_event and stop_event.is_set():
-                log.info("CLAUDE: Stop event detected")
+                log.debug("CLAUDE: Stop event detected")
                 return False
 
             # Check if guest agent socket exists
@@ -1006,7 +1346,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                     response = await self._send_qga_command_via_libvirt(ping_cmd)
 
                     if 'return' in response:
-                        log.info(f"CLAUDE: Guest agent is responsive (guest-ping successful)")
+                        log.debug(f"CLAUDE: Guest agent is responsive (guest-ping successful)")
                         ping_successful = True
                         retry_delay = 0.5  # Reset delay after success
                     elif 'error' in response:
@@ -1088,22 +1428,24 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                         returncode = status_data.get('exitcode', -1)
 
                         if returncode == 0:
-                            log.info(f"CLAUDE: VM '{self.vm_name}' is fully booted and guest-exec is functional")
+                            log.debug(f"CLAUDE: VM '{self.vm_name}' is fully booted and guest-exec is functional")
 
                             # Phase 3: Discover and cache guest PATH environment
-                            log.info("CLAUDE: Discovering guest PATH environment")
+                            log.debug("CLAUDE: Discovering guest PATH environment")
                             await self._discover_and_cache_guest_path()
 
                             # Phase 4: Discover and cache X11 authorization for GUI automation (Linux only)
-                            if 'windows' not in self.guest_os.lower():
-                                log.info("CLAUDE: Discovering X11 authorization for GUI automation")
+                            if skip_x11_discovery:
+                                log.debug("CLAUDE: Skipping X11 discovery - using host-based GUI automation")
+                            elif 'windows' not in self.guest_os.lower():
+                                log.debug("CLAUDE: Discovering X11 authorization for GUI automation")
                                 xauthority = await self._discover_and_cache_xauthority()
                                 if not xauthority:
                                     raise RuntimeError(
                                         "XAUTHORITY not found - X11 environment required for GUI automation. "
                                         "Ensure the VM has an active X11 session (not headless). "
                                     )
-                                log.info(f"CLAUDE: X11 authorization configured with XAUTHORITY={xauthority}")
+                                log.debug(f"CLAUDE: X11 authorization configured with XAUTHORITY={xauthority}")
                             else:
                                 log.debug("CLAUDE: Skipping X11 detection for Windows guest")
 
@@ -1151,7 +1493,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
 
         if discovered_path:
             self._cached_guest_path = discovered_path
-            log.info(f"CLAUDE: Cached guest PATH: {discovered_path[:100]}...")
+            log.debug(f"CLAUDE: Cached guest PATH: {discovered_path[:100]}...")
         else:
             log.warning("CLAUDE: PATH discovery failed, will use hardcoded fallback")
 
@@ -1175,7 +1517,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         Returns:
             Tuple of (return_code, output_message)
         """
-        log.info(f"CLAUDE: Importing QEMU VM from {file_path}")
+        log.debug(f"CLAUDE: Importing QEMU VM from {file_path}")
 
         qemu_img_exe = self.executables.qemu_img
 
@@ -1216,7 +1558,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         if source_format == 'qcow2' and self._external_disk_path:
             # Check if source and dest are the same file (--no-copy with existing qcow2)
             if Path(source_disk).resolve() == Path(dest_disk).resolve():
-                log.info(f"CLAUDE: Source is already qcow2 at target location, skipping conversion")
+                log.debug(f"CLAUDE: Source is already qcow2 at target location, skipping conversion")
                 self._save_vm_config()
                 return 0, "VM imported successfully (no conversion needed)"
 
@@ -1244,14 +1586,14 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                     )
 
         # Convert to qcow2
-        log.info(f"CLAUDE: Converting {source_format} disk to qcow2 at {dest_disk}")
+        log.debug(f"CLAUDE: Converting {source_format} disk to qcow2 at {dest_disk}")
         args = [qemu_img_exe, 'convert', '-O', 'qcow2', str(source_disk), dest_disk]
 
         try:
             result = subprocess.run(args, capture_output=True, text=True, check=False)
 
             if result.returncode == 0:
-                log.info(f"CLAUDE: Successfully converted disk to {dest_disk}")
+                log.debug(f"CLAUDE: Successfully converted disk to {dest_disk}")
                 self._save_vm_config()
                 return 0, f"VM imported successfully"
             else:
@@ -1289,6 +1631,338 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
     def cleanup_background_processes(self):
         """Clean up background processes (no-op for QEMU, processes managed by guest agent)."""
         self._background_pids.clear()
+
+    # QMP Methods for Host-Based GUI Automation
+
+    async def _send_qmp_command(self, command: dict) -> dict:
+        """
+        Send command to QEMU Monitor Protocol (QMP) via libvirt API.
+
+        Args:
+            command: QMP command dictionary
+
+        Returns:
+            Response dictionary
+        """
+        async def _qmp_async():
+            import libvirt
+            import libvirt_qemu
+            try:
+                if not self._libvirt_domain:
+                    return {"error": {"desc": "Domain not defined"}}
+
+                cmd_json = json.dumps(command)
+                log.debug(f"CLAUDE: Sending QMP command: {command.get('execute', 'unknown')}")
+
+                log_file = get_experiment_log_file()
+                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                    result = libvirt_qemu.qemuMonitorCommand(
+                        self._libvirt_domain,
+                        cmd_json,
+                        0  # flags (0 = default QMP mode)
+                    )
+
+                response = json.loads(result)
+
+                # Log detailed response for debugging
+                if 'error' in response:
+                    log.error(f"CLAUDE: QMP command failed - Command: {command.get('execute')}, Error: {response['error']}")
+                elif 'return' not in response:
+                    log.warning(f"CLAUDE: QMP response missing 'return' key: {response}")
+                else:
+                    log.debug(f"CLAUDE: QMP response: {response}")
+
+                return response
+
+            except libvirt.libvirtError as e:
+                log.error(f"CLAUDE: Libvirt error sending QMP command: {e}")
+                return {"error": {"desc": f"Libvirt error: {e}"}}
+            except json.JSONDecodeError as e:
+                log.error(f"CLAUDE: Failed to parse QMP response: {e}, Raw: {result if 'result' in locals() else 'N/A'}")
+                return {"error": {"desc": f"Invalid JSON: {e}"}}
+            except Exception as e:
+                log.error(f"CLAUDE: Unexpected QMP error: {e}", exc_info=True)
+                return {"error": {"desc": f"Error: {e}"}}
+
+        return await self.manager.run_async(_qmp_async)
+
+    async def send_qmp_screenshot(self, output_path: str) -> bool:
+        """
+        Capture screenshot via QMP screendump command.
+
+        Args:
+            output_path: Path where screenshot will be saved (PPM format)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        command = {
+            "execute": "screendump",
+            "arguments": {"filename": output_path}
+        }
+        response = await self._send_qmp_command(command)
+        return 'return' in response
+
+    async def send_qmp_mouse_click(self, x: int, y: int, button: str = 'left') -> bool:
+        """
+        Execute mouse click via QMP input-send-event command.
+
+        Sends position, press, and release as separate commands for reliable execution.
+        Automatically normalizes pixel coordinates to QEMU USB tablet range (0-32767).
+
+        Args:
+            x: X coordinate in pixels
+            y: Y coordinate in pixels
+            button: Button type ('left', 'right', 'middle')
+
+        Returns:
+            True if successful, False otherwise
+
+        Raises:
+            RuntimeError: If screen resolution is not yet known
+        """
+        # Normalize coordinates for USB tablet device
+        norm_x, norm_y = self._normalize_coordinates(x, y)
+
+        # Map button names to QMP button strings
+        button_map = {'left': 'left', 'right': 'right', 'middle': 'middle', 'double': 'left'}
+        qmp_button = button_map.get(button, 'left')
+
+        # Step 1: Move mouse to position
+        move_command = {
+            "execute": "input-send-event",
+            "arguments": {
+                "events": [
+                    {"type": "abs", "data": {"axis": "x", "value": norm_x}},
+                    {"type": "abs", "data": {"axis": "y", "value": norm_y}}
+                ]
+            }
+        }
+        move_response = await self._send_qmp_command(move_command)
+
+        if 'error' in move_response:
+            log.error(f"CLAUDE: QMP mouse move failed: {move_response.get('error')}")
+            return False
+
+        await asyncio.sleep(0.01)
+
+        # Step 2: Press button
+        press_command = {
+            "execute": "input-send-event",
+            "arguments": {
+                "events": [
+                    {"type": "btn", "data": {"button": qmp_button, "down": True}}
+                ]
+            }
+        }
+        press_response = await self._send_qmp_command(press_command)
+
+        if 'error' in press_response:
+            log.error(f"CLAUDE: QMP button press failed: {press_response.get('error')}")
+            return False
+
+        await asyncio.sleep(0.05)  # Hold button down briefly
+
+        # Step 3: Release button
+        release_command = {
+            "execute": "input-send-event",
+            "arguments": {
+                "events": [
+                    {"type": "btn", "data": {"button": qmp_button, "down": False}}
+                ]
+            }
+        }
+        release_response = await self._send_qmp_command(release_command)
+
+        if 'error' in release_response:
+            log.error(f"CLAUDE: QMP button release failed: {release_response.get('error')}")
+            return False
+
+        return all('return' in r for r in [move_response, press_response, release_response])
+
+    async def send_qmp_mouse_drag(self, x1: int, y1: int, x2: int, y2: int) -> bool:
+        """
+        Execute drag operation via QMP input-send-event command.
+
+        Sends position and button events separately for reliable execution.
+        Automatically normalizes pixel coordinates to QEMU USB tablet range (0-32767).
+
+        Args:
+            x1: Start X coordinate in pixels
+            y1: Start Y coordinate in pixels
+            x2: End X coordinate in pixels
+            y2: End Y coordinate in pixels
+
+        Returns:
+            True if successful, False otherwise
+
+        Raises:
+            RuntimeError: If screen resolution is not yet known
+        """
+        # Normalize both start and end coordinates
+        norm_x1, norm_y1 = self._normalize_coordinates(x1, y1)
+        norm_x2, norm_y2 = self._normalize_coordinates(x2, y2)
+
+        # Step 1: Move to start position
+        move_start_command = {
+            "execute": "input-send-event",
+            "arguments": {
+                "events": [
+                    {"type": "abs", "data": {"axis": "x", "value": norm_x1}},
+                    {"type": "abs", "data": {"axis": "y", "value": norm_y1}}
+                ]
+            }
+        }
+        response1 = await self._send_qmp_command(move_start_command)
+        if 'error' in response1:
+            log.error(f"CLAUDE: QMP drag move to start failed: {response1.get('error')}")
+            return False
+
+        await asyncio.sleep(0.01)
+
+        # Step 2: Press left button
+        press_command = {
+            "execute": "input-send-event",
+            "arguments": {
+                "events": [
+                    {"type": "btn", "data": {"button": "left", "down": True}}
+                ]
+            }
+        }
+        response2 = await self._send_qmp_command(press_command)
+        if 'error' in response2:
+            log.error(f"CLAUDE: QMP drag button press failed: {response2.get('error')}")
+            return False
+
+        await asyncio.sleep(0.01)
+
+        # Step 3: Move to end position (while holding button)
+        move_end_command = {
+            "execute": "input-send-event",
+            "arguments": {
+                "events": [
+                    {"type": "abs", "data": {"axis": "x", "value": norm_x2}},
+                    {"type": "abs", "data": {"axis": "y", "value": norm_y2}}
+                ]
+            }
+        }
+        response3 = await self._send_qmp_command(move_end_command)
+        if 'error' in response3:
+            log.error(f"CLAUDE: QMP drag move to end failed: {response3.get('error')}")
+            return False
+
+        await asyncio.sleep(0.01)
+
+        # Step 4: Release button
+        release_command = {
+            "execute": "input-send-event",
+            "arguments": {
+                "events": [
+                    {"type": "btn", "data": {"button": "left", "down": False}}
+                ]
+            }
+        }
+        response4 = await self._send_qmp_command(release_command)
+        if 'error' in response4:
+            log.error(f"CLAUDE: QMP drag button release failed: {response4.get('error')}")
+            return False
+
+        return all('return' in r for r in [response1, response2, response3, response4])
+
+    async def send_qmp_keyboard(self, events: List[dict]) -> bool:
+        """
+        Send keyboard events via QMP input-send-event command.
+
+        Args:
+            events: List of QMP keyboard event dictionaries
+
+        Returns:
+            True if successful, False otherwise
+        """
+        command = {
+            "execute": "input-send-event",
+            "arguments": {"events": events}
+        }
+        response = await self._send_qmp_command(command)
+        return 'return' in response
+
+    async def send_qmp_scroll(self, amount: int) -> bool:
+        """
+        Send scroll event via QMP input-send-event command.
+
+        Args:
+            amount: Scroll amount (positive = up, negative = down)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        command = {
+            "execute": "input-send-event",
+            "arguments": {
+                "events": [
+                    {"type": "rel", "data": {"axis": "wheel", "value": amount}}
+                ]
+            }
+        }
+        response = await self._send_qmp_command(command)
+        return 'return' in response
+
+    def update_screen_resolution(self, width: int, height: int) -> None:
+        """
+        Update cached screen resolution for coordinate normalization.
+
+        Called automatically when screenshots are captured to track current display size.
+        Required because QEMU's USB tablet device expects normalized coordinates (0-32767),
+        not raw pixel coordinates.
+
+        Args:
+            width: Screen width in pixels
+            height: Screen height in pixels
+        """
+        if self._screen_width != width or self._screen_height != height:
+            log.debug(f"CLAUDE: Screen resolution updated: {width}x{height}")
+            self._screen_width = width
+            self._screen_height = height
+            self._resolution_last_updated = time.time()
+
+    def _normalize_coordinates(self, x: int, y: int) -> tuple[int, int]:
+        """
+        Normalize pixel coordinates to QEMU USB tablet range (0-32767).
+
+        QEMU's USB tablet device uses absolute positioning with a normalized coordinate
+        system where 0-32767 maps to the full screen width/height, regardless of actual
+        pixel resolution.
+
+        Args:
+            x: X coordinate in pixels
+            y: Y coordinate in pixels
+
+        Returns:
+            Tuple of (normalized_x, normalized_y) in range 0-32767
+
+        Raises:
+            RuntimeError: If screen resolution is not yet known
+        """
+        if self._screen_width is None or self._screen_height is None:
+            raise RuntimeError(
+                "Screen resolution unknown - cannot normalize coordinates. "
+                "Ensure a screenshot is captured before mouse operations. "
+                "This updates the cached resolution automatically."
+            )
+
+        # Normalize to 0-32767 range (0x7fff = 32767)
+        # Formula: normalized = int((pixel / screen_dimension) * 32767)
+        normalized_x = int((x / self._screen_width) * 32767)
+        normalized_y = int((y / self._screen_height) * 32767)
+
+        # Clamp to valid range (handle edge cases where coordinates might be at/beyond screen edge)
+        normalized_x = max(0, min(32767, normalized_x))
+        normalized_y = max(0, min(32767, normalized_y))
+
+        log.debug(f"CLAUDE: Normalized coordinates: ({x}, {y}) -> ({normalized_x}, {normalized_y}) "
+                  f"for resolution {self._screen_width}x{self._screen_height}")
+
+        return normalized_x, normalized_y
 
     @staticmethod
     def get_vm_info_by_uuid(uuid: str) -> Optional[Dict[str, Any]]:

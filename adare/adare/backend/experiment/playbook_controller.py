@@ -73,10 +73,10 @@ class PlaybookController:
                  experiment_id: Optional[str] = None, experiment_run_id: Optional[str] = None,
                  vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Optional[Path] = None,
                  vm_os: Optional[str] = None, vm_user: Optional[str] = None, flow_console = None,
-                 test_mode: bool = False):
+                 test_mode: bool = False, config = None):
         """
         Initialize the playbook controller.
-        
+
         Args:
             websocket_client: Connected WebSocket client to adarevm
             experiment_dir: Path to experiment directory (for images/)
@@ -89,11 +89,12 @@ class PlaybookController:
             experiment_run_id: Experiment run ID for execution tracking
             flow_console: Flow console for interactive display and input
             test_mode: Whether running in test mode (affects test action execution)
+            config: ExperimentConfig for accessing CLI overrides
         """
         self.client = websocket_client
         self.experiment_dir = experiment_dir
         self.project_dir = project_dir
-        self.execution_context = {}
+        self.execution_context = {'config': config} if config else {}
         self.action_results: List[ActionResult] = []
         self.debug_screenshots = debug_screenshots
         self.screenshots_dir = screenshots_dir
@@ -140,10 +141,15 @@ class PlaybookController:
             automatic_vars = AutomaticVariables.get_automatic_variables(self.vm_os, self.vm_user)
             # Merge automatic variables with existing user variables
             variable_registry = AutomaticVariables.merge_with_user_variables(automatic_vars, variable_registry)
+            # Update playbook's variable registry with the merged one
+            self.playbook.variables = variable_registry
         elif self.vm_os and self.vm_user:
             # No user variables, create registry with just automatic variables
             from adarelib.common.automatic_variables import AutomaticVariables
             variable_registry = AutomaticVariables.get_automatic_variables(self.vm_os, self.vm_user)
+            # Update playbook's variable registry
+            if self.playbook:
+                self.playbook.variables = variable_registry
 
         # Variable resolver for template processing
         self.variable_resolver = VariableResolver(
