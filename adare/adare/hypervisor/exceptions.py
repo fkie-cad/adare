@@ -38,3 +38,8 @@ class SnapshotNotFoundException(HypervisorException):
 class UnsupportedFeatureException(HypervisorException):
     """Raised when a hypervisor doesn't support a specific feature."""
     pass
+
+
+class VMStartException(HypervisorException):
+    """Raised when VM fails to start via libvirt."""
+    pass

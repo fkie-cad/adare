@@ -37,6 +37,8 @@ class ExperimentRunDirectory(Directory):
         self.adarevm_log_file = self.log_directory / 'adarevm.log'
         self.mcp_gui_log_file = self.log_directory / 'mcp_gui.log'
         self.experiment_debug_log_file = self.log_directory / 'experiment_debug.log'
+        self.serial_console_log_file = self.log_directory / 'serial_console.log'
+        self.qemu_debug_log_file = self.log_directory / 'qemu_debug.log'
         self.system_info_file = self.path / 'system-info.yml'
         self.reporting_directory = self.path / 'reporting'
         self.screenshots_directory = self.reporting_directory / 'screenshots'

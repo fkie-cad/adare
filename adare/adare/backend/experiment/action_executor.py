@@ -94,6 +94,9 @@ class ActionExecutor:
             experiment_run_directory=experiment_run_directory
         )
 
+        # Wire GUI executor to target resolution for mode-aware screenshots
+        self.target_resolution.gui_executor = self.simple_actions.gui_executor
+
         self.flow_control = FlowControlExecutor(
             websocket_client=websocket_client,
             target_resolution_executor=self.target_resolution,

@@ -124,6 +124,10 @@ class QEMUVMConfig:
     vnc_port: Optional[int] = None  # None = autoport, or specify explicit port
     libvirt_domain_name: Optional[str] = None  # Track libvirt domain name
 
+    # VM logging configuration (for experiment runs)
+    serial_console_log_path: Optional[str] = None  # Path to serial console log
+    qemu_debug_log_path: Optional[str] = None      # Path to QEMU debug log
+
     def __post_init__(self):
         """Initialize empty dict for port forwarding rules if None."""
         if self.port_forwarding_rules is None:
@@ -149,7 +153,9 @@ class QEMUVMConfig:
             'is_external': self.is_external,
             'display_enabled': self.display_enabled,
             'vnc_port': self.vnc_port,
-            'libvirt_domain_name': self.libvirt_domain_name
+            'libvirt_domain_name': self.libvirt_domain_name,
+            'serial_console_log_path': self.serial_console_log_path,
+            'qemu_debug_log_path': self.qemu_debug_log_path
         }
 
     @classmethod
@@ -162,4 +168,6 @@ class QEMUVMConfig:
         data.setdefault('display_enabled', False)
         data.setdefault('vnc_port', None)
         data.setdefault('libvirt_domain_name', None)
+        data.setdefault('serial_console_log_path', None)
+        data.setdefault('qemu_debug_log_path', None)
         return cls(**data)

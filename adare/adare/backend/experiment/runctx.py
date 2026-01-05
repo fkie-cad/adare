@@ -24,6 +24,7 @@ class ExperimentConfig:
     vm_resolution: Tuple[int, int] = (1920, 1080)
     websocket_port: Optional[int] = None  # Allocated dynamically from database
     shared_directories: Dict[str, Dict[str, Path]] = field(default_factory=dict)
+    gui_mode_override: Optional[str] = None  # CLI override for GUI execution mode
 
 @dataclass
 class ExperimentRunCtx:
@@ -50,3 +51,4 @@ class ExperimentRunCtx:
     debug_screenshots: bool = False
     playbook: Optional[Playbook] = None
     test_mode: bool = False
+    adarevm_pid: Optional[int] = None  # PID for process monitoring

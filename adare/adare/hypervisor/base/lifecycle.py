@@ -45,6 +45,25 @@ class AbstractVMLifecycleStrategy(ABC):
         pass
 
     @abstractmethod
+    async def setup_networking(self, context):
+        """
+        Setup networking configuration (port forwarding, network interfaces).
+
+        This method handles hypervisor-specific networking setup:
+        - VirtualBox: Port forwarding via VBoxManage
+        - QEMU: Port forwarding via config + libvirt XML
+
+        Called after VM creation but before file transfer.
+
+        Args:
+            context: ExperimentRunCtx containing configuration
+
+        Raises:
+            VMSetupError: If networking setup fails
+        """
+        pass
+
+    @abstractmethod
     async def setup_file_transfer(self, context):
         """
         Setup mechanism for transferring files to/from VM.
@@ -82,7 +101,7 @@ class AbstractVMLifecycleStrategy(ABC):
         pass
 
     @abstractmethod
-    async def retrieve_artifacts(self, context):
+    async def retrieve_artifacts(self, context, post_interrupt: bool = False):
         """
         Retrieve experiment artifacts from VM.
 
@@ -92,6 +111,7 @@ class AbstractVMLifecycleStrategy(ABC):
 
         Args:
             context: ExperimentRunCtx containing VM and output directories
+            post_interrupt: If True, we're in post-interrupt cleanup (may affect behavior)
 
         Raises:
             VMSetupError: If artifact retrieval fails

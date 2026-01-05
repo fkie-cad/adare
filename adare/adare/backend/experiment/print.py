@@ -792,7 +792,11 @@ class ExperimentFlowConsole:
             return user_input or 'timeout'
 
     def print_debug_flow_messages(self):
-        """Print all flow messages for debugging purposes."""
+        """Print all flow messages for debugging purposes.
+
+        NOTE: This method intentionally uses print() to bypass flow console suppression.
+        Only call this manually for debugging - it's not invoked during normal execution.
+        """
         with self._lock:
             if not self.messages:
                 print("\n=== EXPERIMENT FLOW DEBUG: No messages to display ===")

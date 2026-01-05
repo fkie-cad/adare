@@ -112,10 +112,12 @@ def generate_domain_xml(
     ET.SubElement(disk, 'address', type='pci', domain='0x0000', bus='0x00', slot='0x04', function='0x0')
 
     # Network interface (user-mode networking)
-    # Note: Port forwarding will be added via qemu:commandline for full control
-    interface = ET.SubElement(devices, 'interface', type='user')
-    ET.SubElement(interface, 'model', type='virtio')
-    ET.SubElement(interface, 'address', type='pci', domain='0x0000', bus='0x00', slot='0x03', function='0x0')
+    # When port forwarding exists, network is fully configured via qemu:commandline
+    # to avoid conflicts. Otherwise, use libvirt-managed interface for simplicity.
+    if not vm_config.port_forwarding_rules:
+        interface = ET.SubElement(devices, 'interface', type='user')
+        ET.SubElement(interface, 'model', type='virtio')
+        ET.SubElement(interface, 'address', type='pci', domain='0x0000', bus='0x00', slot='0x03', function='0x0')
 
     # Guest Agent channel (virtio-serial)
     channel = ET.SubElement(devices, 'channel', type='unix')
@@ -161,8 +163,11 @@ def generate_domain_xml(
         ET.SubElement(video, 'model', type='qxl', ram='65536', vram='65536', vgamem='16384', heads='1', primary='yes')
         ET.SubElement(video, 'address', type='pci', domain='0x0000', bus='0x00', slot='0x02', function='0x0')
 
-    # Console (serial console)
+    # Console (serial console) - redirect to file if configured
     console = ET.SubElement(devices, 'console', type='pty')
+    if vm_config.serial_console_log_path:
+        console.set('type', 'file')
+        ET.SubElement(console, 'source', path=vm_config.serial_console_log_path)
     ET.SubElement(console, 'target', type='serial', port='0')
 
     # Input devices
@@ -177,6 +182,11 @@ def generate_domain_xml(
     # QEMU commandline arguments (for QMP socket and port forwarding)
     # This preserves ADARE's control mechanisms
     qemu_commandline = ET.SubElement(domain, f'{{{QEMU_NAMESPACE}}}commandline')
+
+    # Add QEMU debug log if configured
+    if vm_config.qemu_debug_log_path:
+        _add_qemu_arg(qemu_commandline, '-D')
+        _add_qemu_arg(qemu_commandline, vm_config.qemu_debug_log_path)
 
     # Add QMP monitor socket
     _add_qemu_arg(qemu_commandline, '-qmp')
@@ -200,9 +210,14 @@ def generate_domain_xml(
 
             netdev_args += f",hostfwd={hostfwd}"
 
-        # Override default network with our user-mode networking + port forwarding
+        # Add network backend with port forwarding
         _add_qemu_arg(qemu_commandline, '-netdev')
         _add_qemu_arg(qemu_commandline, netdev_args)
+
+        # Add network device connected to the netdev
+        # This is critical - without it, the netdev exists but no device uses it
+        _add_qemu_arg(qemu_commandline, '-device')
+        _add_qemu_arg(qemu_commandline, 'virtio-net-pci,netdev=net0')
 
     # Convert to formatted XML string
     xml_str = _prettify_xml(domain)

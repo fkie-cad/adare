@@ -18,6 +18,10 @@ from typing import List, Optional, Tuple
 
 from adare.hypervisor.base.mixins.commands import AbstractCommandMixin
 from adare.hypervisor.exceptions import HypervisorException
+from adare.hypervisor.qemu.libvirt_stderr_redirect import (
+    LibvirtStderrRedirect,
+    get_experiment_log_file
+)
 
 log = logging.getLogger(__name__)
 
@@ -202,6 +206,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
         """
         # For guest agent, we need to determine shell based on guest OS
         if 'windows' in self.guest_os.lower():
+            # Add stderr redirection for background commands (Windows)
+            if background:
+                stderr_redirect = " 2>>C:\\adare\\run\\logs\\adarevmstartup.log"
+                command = f"{command}{stderr_redirect}"
+
             # Windows admin elevation
             if admin:
                 if use_cmd:
@@ -216,6 +225,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 else:
                     shell = ['powershell.exe', '-Command']
         else:
+            # Add stderr redirection for background commands (Linux)
+            if background:
+                stderr_redirect = " 2>>/adare/run/logs/adarevmstartup.log"
+                command = f"{command}{stderr_redirect}"
+
             # Use bash instead of sh for proper glob expansion (Ubuntu uses dash as /bin/sh)
             shell = ['/bin/bash', '-c']
 
@@ -279,6 +293,13 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 log.debug(f"CLAUDE: Using DISPLAY=:0 with XAUTHORITY={self._cached_xauthority}")
             else:
                 log.debug("CLAUDE: Using DISPLAY=:0 without XAUTHORITY (X11 will try default locations)")
+
+            # Add ADARE_GUI_MODE environment variable if host-based GUI
+            if hasattr(self, 'adare_gui_mode'):
+                from adare.backend.experiment.execution.base import GUIExecutionMode
+                if self.adare_gui_mode == GUIExecutionMode.HOST:
+                    env_vars.append("ADARE_GUI_MODE=host")
+                    log.info("CLAUDE: Setting ADARE_GUI_MODE=host - PyAutoGUI will be skipped in guest")
 
         log.debug(f"CLAUDE: Built guest environment: {env_vars}")
         return env_vars
@@ -812,12 +833,17 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 cmd_json = json.dumps(command)
                 log.debug(f"CLAUDE: Sending QGA command via libvirt: {command.get('execute', 'unknown')}")
 
-                result = libvirt_qemu.qemuAgentCommand(
-                    self._libvirt_domain,
-                    cmd_json,
-                    5,  # timeout in seconds
-                    0   # flags
-                )
+                # Get experiment log file for stderr capture
+                log_file = get_experiment_log_file()
+
+                # Suppress libvirt warnings from console, capture to log
+                with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                    result = libvirt_qemu.qemuAgentCommand(
+                        self._libvirt_domain,
+                        cmd_json,
+                        5,  # timeout in seconds
+                        0   # flags
+                    )
 
                 response = json.loads(result)
                 log.debug(f"CLAUDE: QGA response: {response}")
@@ -835,3 +861,65 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         # Run via manager's async executor
         return await self.manager.run_async(_qga_async)
+
+    async def _check_process_status_via_agent(
+        self,
+        pid: int,
+        timeout: int = 5
+    ) -> Tuple[bool, Optional[int], str]:
+        """
+        Check if a process is still running via QEMU Guest Agent.
+
+        Uses guest-exec-status to determine if a background process is alive.
+
+        Args:
+            pid: Process ID returned from guest-exec
+            timeout: Maximum time to wait for status check
+
+        Returns:
+            Tuple of (is_running, exit_code, error_msg)
+            - is_running: True if process still running, False if exited
+            - exit_code: Exit code if process exited, None if still running
+            - error_msg: Error message if check failed, empty string otherwise
+
+        Example:
+            >>> is_running, exit_code, error = await vm._check_process_status_via_agent(1234)
+            >>> if not is_running and exit_code != 0:
+            >>>     print(f"Process died with exit code {exit_code}")
+        """
+        try:
+            status_cmd = {
+                "execute": "guest-exec-status",
+                "arguments": {"pid": pid}
+            }
+
+            status_response = await self._send_qga_command_via_libvirt(status_cmd)
+
+            if 'error' in status_response:
+                error_msg = status_response['error'].get('desc', 'Unknown error')
+                log.warning(f"CLAUDE: Failed to check process {pid} status: {error_msg}")
+                return False, None, error_msg
+
+            status_data = status_response.get('return', {})
+            exited = status_data.get('exited', False)
+
+            if exited:
+                exit_code = status_data.get('exitcode', -1)
+                log.debug(f"CLAUDE: Process {pid} has exited with code {exit_code}")
+                return False, exit_code, ""
+            else:
+                log.debug(f"CLAUDE: Process {pid} is still running")
+                return True, None, ""
+
+        except asyncio.TimeoutError:
+            error_msg = "Timeout checking process status"
+            log.warning(f"CLAUDE: {error_msg} for PID {pid}")
+            return False, None, error_msg
+        except (OSError, ConnectionError) as e:
+            error_msg = f"Connection error: {e}"
+            log.warning(f"CLAUDE: {error_msg} while checking PID {pid}")
+            return False, None, error_msg
+        except (json.JSONDecodeError, KeyError) as e:
+            error_msg = f"Parsing error: {e}"
+            log.warning(f"CLAUDE: {error_msg} while checking PID {pid}")
+            return False, None, error_msg

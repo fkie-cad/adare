@@ -21,7 +21,8 @@ class TargetResolutionExecutor:
     """Handles target resolution and screenshot management."""
 
     def __init__(self, websocket_client, target_resolver, experiment_run_id: Optional[str] = None,
-                 debug_screenshots: bool = False, screenshots_dir: Optional[Path] = None):
+                 debug_screenshots: bool = False, screenshots_dir: Optional[Path] = None,
+                 gui_executor = None):
         """
         Initialize target resolution executor.
 
@@ -31,12 +32,14 @@ class TargetResolutionExecutor:
             experiment_run_id: Experiment run ID for event emission
             debug_screenshots: Whether to save screenshots for debugging
             screenshots_dir: Directory to save debug screenshots
+            gui_executor: GUI executor for mode-aware screenshot operations
         """
         self.client = websocket_client
         self.target_resolver = target_resolver
         self.experiment_run_id = experiment_run_id
         self.debug_screenshots = debug_screenshots
         self.screenshots_dir = screenshots_dir
+        self.gui_executor = gui_executor
         self.screenshot_counter = 0
 
     async def resolve_target_with_steps(self, target, parent_action_id: str = None,
@@ -93,6 +96,9 @@ class TargetResolutionExecutor:
 
                 return None
 
+            # Log analysis step
+            log.info(f"Analyzing screenshot for target: {target_desc}")
+
             # Resolve using MCP target resolver
             match = await self.target_resolver.resolve_target(target, screenshot_base64)
             execution_time = time.time() - start_time
@@ -101,6 +107,12 @@ class TargetResolutionExecutor:
             if self.experiment_run_id and event_emitter:
                 success = match is not None
                 coords = match.coordinates if match else None
+
+                # Log target found status
+                if success:
+                    log.info(f"Target found at ({coords[0]}, {coords[1]})")
+                else:
+                    log.error("Target not found")
 
                 # Include screenshot path in result data
                 data = {}
@@ -165,6 +177,12 @@ class TargetResolutionExecutor:
             execution_time = time.time() - start_time
             execution_success = result.get('status') == 'success'
 
+            # Log execution result
+            if execution_success:
+                log.info(f"Action executed successfully")
+            else:
+                log.error(f"Action execution failed: {result.get('message', 'Unknown error')}")
+
             # Emit execution complete event
             if self.experiment_run_id and event_emitter:
                 execute_result = ActionResult(
@@ -210,8 +228,11 @@ class TargetResolutionExecutor:
             Either can be None if failed
         """
         try:
-            # Take new screenshot via WebSocket
-            result = await self.client.screenshot()
+            # Take new screenshot (use GUI executor if available for mode-aware screenshots)
+            if self.gui_executor:
+                result = await self.gui_executor.screenshot()
+            else:
+                result = await self.client.screenshot()
             if result and 'image' in result:
                 # Extract base64 data from result
                 if 'data' in result['image']:

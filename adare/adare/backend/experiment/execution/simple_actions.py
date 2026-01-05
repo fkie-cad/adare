@@ -65,7 +65,7 @@ class SimpleActionsExecutor:
             experiment_run_id: Experiment run ID for event emission
             playbook: Playbook reference for variable access
             execution_context: Execution context for variable resolution
-            vm: VirtualBox VM instance for file operations
+            vm: VM instance for file operations and GUI execution mode
             experiment_run_directory: Run directory for artifacts
         """
         self.client = websocket_client
@@ -78,14 +78,32 @@ class SimpleActionsExecutor:
         self.explicit_screenshot_counter = 0  # Counter for explicit screenshot actions
         self.custom_screenshot_counters = {}  # Track counters for custom screenshot names
 
+        # Initialize GUI executor based on VM type and playbook settings
+        from .gui_executor_factory import resolve_gui_execution_mode, create_gui_executor
+        playbook_settings = playbook.settings if playbook and hasattr(playbook, 'settings') else None
+        # Get CLI override from config if available
+        cli_override = None
+        if execution_context and 'config' in execution_context:
+            config = execution_context['config']
+            if config and hasattr(config, 'gui_mode_override'):
+                cli_override = config.gui_mode_override
+        gui_mode = resolve_gui_execution_mode(vm, playbook_settings, cli_override=cli_override)
+        self.gui_executor = create_gui_executor(
+            mode=gui_mode,
+            websocket_client=websocket_client,
+            vm=vm,
+            target_resolution_executor=target_resolution_executor,
+            experiment_run_id=experiment_run_id,
+            playbook=playbook,
+            execution_context=execution_context,
+            experiment_run_directory=experiment_run_directory
+        )
+        log.info(f"CLAUDE: SimpleActionsExecutor initialized with GUI mode: {gui_mode.value}")
+
     def get_click_handler(self, click_type: str):
         """Get the appropriate click handler based on click type."""
-        if click_type == 'right':
-            return lambda x, y: self.client.right_click(x, y)
-        elif click_type == 'double':
-            return lambda x, y: self.client.double_click(x, y)
-        else:  # 'left' or default
-            return lambda x, y: self.client.click(x, y)
+        # Delegate to GUI executor
+        return lambda x, y: self.gui_executor.click(x, y, click_type)
 
     def _process_capture(self, capture_spec, command_result):
         """
@@ -216,9 +234,9 @@ class SimpleActionsExecutor:
                 start_event = event_emitter.create_action_start_event(execute_step, -1, execute_action_id, parent_event_id)
                 emit_action(self.experiment_run_id, start_event, execute_action_id)
 
-            # Execute the drag
+            # Execute the drag via GUI executor
             start_time = time.time()
-            result = await self.client.drag(src_coords[0], src_coords[1], dst_coords[0], dst_coords[1])
+            result = await self.gui_executor.drag(src_coords[0], src_coords[1], dst_coords[0], dst_coords[1])
             execution_time = time.time() - start_time
             success = result.get('status') == 'success'
 
@@ -247,18 +265,18 @@ class SimpleActionsExecutor:
 
     async def execute_keyboard(self, action: KeyboardAction, parent_event_id: str = None,
                               event_emitter = None) -> ActionResult:
-        """Execute keyboard action."""
+        """Execute keyboard action via GUI executor."""
         try:
             if action.key:
                 # Single key press -> pyautogui.press()
-                result = await self.client.keyboard("press", action.key)
+                result = await self.gui_executor.keyboard("press", action.key)
             elif action.text:
                 # Text typing -> pyautogui.typewrite()
-                result = await self.client.keyboard("type", action.text)
+                result = await self.gui_executor.keyboard("type", action.text)
             elif action.combination:
                 # Key combinations -> pyautogui.hotkey()
                 combo = "+".join(action.combination)
-                result = await self.client.keyboard("hotkey", combo)
+                result = await self.gui_executor.keyboard("hotkey", combo)
             else:
                 return ActionResult(
                     success=False,
@@ -294,8 +312,8 @@ class SimpleActionsExecutor:
 
     async def execute_scroll(self, action: ScrollAction, parent_event_id: str = None,
                             event_emitter = None) -> ActionResult:
-        """Execute scroll action."""
-        result = await self.client.scroll(action.direction, action.amount or 3)
+        """Execute scroll action via GUI executor."""
+        result = await self.gui_executor.scroll(action.direction, action.amount or 3)
         return ActionResult(success=result.get('status') == 'success')
 
     async def execute_goto(self, action: GotoAction, parent_event_id: str = None,
@@ -309,15 +327,18 @@ class SimpleActionsExecutor:
     async def execute_screenshot(self, action: ScreenshotAction, parent_event_id: str = None,
                                 event_emitter = None) -> ActionResult:
         """
-        Execute screenshot action.
+        Execute screenshot action via GUI executor.
 
         Explicit screenshots are always saved (regardless of --debug-screenshots flag).
         If action.name is provided, uses custom name; otherwise uses sequential numbering.
         """
         try:
-            result = await self.client.screenshot(
-                action.x, action.y, action.width, action.height
-            )
+            # Build region dict if coordinates specified
+            region = None
+            if action.x is not None and action.y is not None and action.width is not None and action.height is not None:
+                region = {'x': action.x, 'y': action.y, 'width': action.width, 'height': action.height}
+
+            result = await self.gui_executor.screenshot(region)
 
             screenshot_path = None
             # Save explicit screenshot (always, not just in debug mode)

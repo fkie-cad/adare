@@ -2,7 +2,6 @@
 GUI automation tools using pyautogui and platform-specific helpers.
 """
 
-import pyautogui
 from io import BytesIO
 import platform
 import base64
@@ -50,6 +49,14 @@ def _take_screenshot_maim(x: int = None, y: int = None, width: int = None, heigh
 
 def _take_screenshot_pyautogui(x: int = None, y: int = None, width: int = None, height: int = None) -> bytes:
     """Take screenshot using pyautogui."""
+    try:
+        import pyautogui
+    except ImportError:
+        raise RuntimeError(
+            "pyautogui is not available. This is required for agent-based GUI execution. "
+            "Either install pyautogui or use host-based execution mode."
+        )
+
     if x is not None and y is not None and width is not None and height is not None:
         log.info(f"Taking screenshot with pyautogui: x={x}, y={y}, width={width}, height={height}")
         img = pyautogui.screenshot(region=(x, y, width, height))
@@ -134,6 +141,14 @@ def click(x: int, y: int) -> Dict[str, str]:
     """
     Simulate a mouse click at the specified coordinates.
     """
+    try:
+        import pyautogui
+    except ImportError:
+        raise RuntimeError(
+            "pyautogui is not available. This is required for agent-based GUI execution. "
+            "Either install pyautogui or use host-based execution mode."
+        )
+
     log.info(f"GUI click called with x={x}, y={y}")
     pyautogui.click(x, y)
     return {"status": "success", "message": f"Clicked at ({x}, {y})"}
@@ -143,6 +158,14 @@ def right_click(x: int, y: int) -> Dict[str, str]:
     """
     Simulate a right mouse click at the specified coordinates.
     """
+    try:
+        import pyautogui
+    except ImportError:
+        raise RuntimeError(
+            "pyautogui is not available. This is required for agent-based GUI execution. "
+            "Either install pyautogui or use host-based execution mode."
+        )
+
     log.info(f"GUI right_click called with x={x}, y={y}")
     pyautogui.rightClick(x, y)
     return {"status": "success", "message": f"Right clicked at ({x}, {y})"}
@@ -152,6 +175,14 @@ def double_click(x: int, y: int) -> Dict[str, str]:
     """
     Simulate a double mouse click at the specified coordinates.
     """
+    try:
+        import pyautogui
+    except ImportError:
+        raise RuntimeError(
+            "pyautogui is not available. This is required for agent-based GUI execution. "
+            "Either install pyautogui or use host-based execution mode."
+        )
+
     log.info(f"GUI double_click called with x={x}, y={y}")
     pyautogui.doubleClick(x, y)
     return {"status": "success", "message": f"Double clicked at ({x}, {y})"}
@@ -161,6 +192,14 @@ def drag(x1: int, y1: int, x2: int, y2: int) -> Dict[str, str]:
     """
     Simulate a mouse drag from (x1, y1) to (x2, y2).
     """
+    try:
+        import pyautogui
+    except ImportError:
+        raise RuntimeError(
+            "pyautogui is not available. This is required for agent-based GUI execution. "
+            "Either install pyautogui or use host-based execution mode."
+        )
+
     log.info(f"GUI drag called from ({x1}, {y1}) to ({x2}, {y2})")
     pyautogui.dragTo(x2, y2, duration=0.5)
     return {"status": "success", "message": f"Dragged from ({x1}, {y1}) to ({x2}, {y2})"}
@@ -170,6 +209,14 @@ def keyboard_action(action_type: str, key: str) -> Dict[str, str]:
     """
     Simulate a keyboard action.
     """
+    try:
+        import pyautogui
+    except ImportError:
+        raise RuntimeError(
+            "pyautogui is not available. This is required for agent-based GUI execution. "
+            "Either install pyautogui or use host-based execution mode."
+        )
+
     if action_type == "press":
         log.info(f"GUI keyboard press called with key={key}")
         pyautogui.press(key)
@@ -186,6 +233,14 @@ def scroll(direction: str, amount: int) -> Dict[str, str]:
     """
     Simulate a scroll action.
     """
+    try:
+        import pyautogui
+    except ImportError:
+        raise RuntimeError(
+            "pyautogui is not available. This is required for agent-based GUI execution. "
+            "Either install pyautogui or use host-based execution mode."
+        )
+
     if direction == "up":
         log.info(f"GUI scroll up called with amount={amount}")
         pyautogui.scroll(amount)
@@ -199,6 +254,14 @@ def move_mouse(x: int, y: int) -> Dict[str, str]:
     """
     Move the mouse to the specified coordinates.
     """
+    try:
+        import pyautogui
+    except ImportError:
+        raise RuntimeError(
+            "pyautogui is not available. This is required for agent-based GUI execution. "
+            "Either install pyautogui or use host-based execution mode."
+        )
+
     log.info(f"GUI move_mouse called with x={x}, y={y}")
     pyautogui.moveTo(x, y)
     return {"status": "success", "message": f"Moved to ({x}, {y})"}

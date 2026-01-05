@@ -78,23 +78,42 @@ class AdareVMServer:
     async def start_server(self):
         """Start the WebSocket server."""
         log.info(f"Starting AdareVM WebSocket server on {self.host}:{self.port}")
-        
-        # Log screen size and initialize mouse position
-        import pyautogui
-        screen_width, screen_height = pyautogui.size()
-        log.info(f"Screen size: {screen_width}x{screen_height}")
-        
-        # Initialize mouse to center to avoid fail-safe issues
-        center_x = screen_width // 2
-        center_y = screen_height // 2
-        
-        # Temporarily disable fail-safe for initialization
-        original_failsafe = pyautogui.FAILSAFE
-        pyautogui.FAILSAFE = False
-        pyautogui.moveTo(center_x, center_y)
-        pyautogui.FAILSAFE = original_failsafe
-        log.info(f"Initialized mouse position to center: ({center_x}, {center_y})")
-        
+
+        # Check if we should skip PyAutoGUI (host-based GUI mode)
+        import os
+        gui_mode = os.environ.get('ADARE_GUI_MODE', 'agent')
+        skip_pyautogui = (gui_mode == 'host')
+
+        if skip_pyautogui:
+            log.info(
+                "Host-based GUI automation detected (ADARE_GUI_MODE=host). "
+                "Skipping PyAutoGUI initialization - GUI automation will be performed by host."
+            )
+        else:
+            # Log screen size and initialize mouse position
+            try:
+                import pyautogui
+                screen_width, screen_height = pyautogui.size()
+                log.info(f"Screen size: {screen_width}x{screen_height}")
+
+                # Initialize mouse to center to avoid fail-safe issues
+                center_x = screen_width // 2
+                center_y = screen_height // 2
+
+                # Temporarily disable fail-safe for initialization
+                original_failsafe = pyautogui.FAILSAFE
+                pyautogui.FAILSAFE = False
+                pyautogui.moveTo(center_x, center_y)
+                pyautogui.FAILSAFE = original_failsafe
+                log.info(f"Initialized mouse position to center: ({center_x}, {center_y})")
+            except Exception as e:
+                # Catch ALL exceptions (ImportError, X11 errors, etc.)
+                log.warning(
+                    f"pyautogui initialization failed ({type(e).__name__}: {e}). "
+                    "GUI automation via agent mode will not be available. "
+                    "This is normal when using host-based GUI automation."
+                )
+
         server = await websockets.serve(self.handle_client, self.host, self.port)
         log.info(f"Server started successfully")
         return server

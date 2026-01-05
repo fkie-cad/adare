@@ -4,6 +4,13 @@ Base classes and utilities for action execution.
 
 from dataclasses import dataclass
 from typing import Dict, Tuple, Optional, Any
+from enum import Enum
+
+
+class GUIExecutionMode(Enum):
+    """GUI automation execution modes."""
+    AGENT = "agent"  # WebSocket to adarevm agent (pyautogui)
+    HOST = "host"    # Direct hypervisor commands (QMP for QEMU)
 
 
 @dataclass

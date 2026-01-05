@@ -297,17 +297,17 @@ def __experiment_update(project_path: Path, experiment_ulid, experiment_name, ex
     )
     log.info(f'experiment {experiment_ulid} created')
 
-    # Print user-friendly message about environment changes
+    # Log user-friendly message about environment changes
     if env_changes_detected:
-        print(f'Experiment {experiment_name} (ulid: {ulid}) was loaded successfully')
+        log.info(f'Experiment {experiment_name} (ulid: {ulid}) was loaded successfully')
         if added_envs or removed_envs:
-            print(f'  Environment changes detected:')
+            log.info(f'  Environment changes detected:')
             if added_envs:
-                print(f'    + Added: {", ".join(added_envs)}')
+                log.info(f'    + Added: {", ".join(added_envs)}')
             if removed_envs:
-                print(f'    - Removed: {", ".join(removed_envs)}')
+                log.info(f'    - Removed: {", ".join(removed_envs)}')
     else:
-        print(f'Experiment {experiment_name} (ulid: {ulid}) was loaded successfully')
+        log.info(f'Experiment {experiment_name} (ulid: {ulid}) was loaded successfully')
 
 
 def __validate_testset_compatibility(experiment_directory: ExperimentDirectory):
@@ -465,7 +465,7 @@ def experiment_download(project: Path, experiment_ulid: str):
     project = ProjectDirectory(project)
     experiment_name = download_experiment(experiment_ulid, project.experiments)
     log.info(f'experiment {experiment_ulid} downloaded')
-    print(f'experiment {experiment_name} ({experiment_ulid}) downloaded successfully')
+    log.info(f'experiment {experiment_name} ({experiment_ulid}) downloaded successfully')
 
 
 
@@ -500,7 +500,7 @@ def experiment_clean(project_path: Path, experiment_name: str):
                 )
             else:
                 log.info(f'No fake runs found for experiment "{experiment_name}"')
-                print(f'No fake runs found for experiment "{experiment_name}" - nothing to clean')
+                log.info(f'No fake runs found for experiment "{experiment_name}" - nothing to clean')
 
     except ValueError as e:
         from adare.exceptions import LoggedException
@@ -711,11 +711,11 @@ def experiment_remove_environments(project_path: Path, experiment_pattern: str, 
     # Extract experiment names from paths
     experiment_names = [Path(p).name for p in matching_paths]
 
-    print(f"Found {len(experiment_names)} experiment(s) matching pattern '{experiment_pattern}':")
+    log.info(f"Found {len(experiment_names)} experiment(s) matching pattern '{experiment_pattern}':")
     for exp_name in experiment_names:
-        print(f"  - {exp_name}")
-    print(f"Removing environment(s): {', '.join(environment_names)}")
-    print()
+        log.info(f"  - {exp_name}")
+    log.info(f"Removing environment(s): {', '.join(environment_names)}")
+    log.info("")
 
     # Process each experiment
     updated_experiments = []
@@ -833,11 +833,11 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
             ]
         )
 
-    print(f"Found {len(experiment_names)} experiment(s) matching pattern '{experiment_pattern}':")
+    log.info(f"Found {len(experiment_names)} experiment(s) matching pattern '{experiment_pattern}':")
     for exp_name in experiment_names:
-        print(f"  - {exp_name}")
-    print(f"Adding environment(s): {', '.join(environment_names)}")
-    print()
+        log.info(f"  - {exp_name}")
+    log.info(f"Adding environment(s): {', '.join(environment_names)}")
+    log.info("")
 
     # Process each experiment
     updated_experiments = []
@@ -901,7 +901,7 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
         )
 
     if skipped_experiments:
-        print(f"\n✓ {len(skipped_experiments)} experiment(s) already had the specified environment(s): {', '.join(skipped_experiments)}")
+        log.info(f"\n✓ {len(skipped_experiments)} experiment(s) already had the specified environment(s): {', '.join(skipped_experiments)}")
 
     if environment_missing_experiments:
         from adare.console import print_error_message
@@ -930,11 +930,11 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
 
     # Final status summary
     if total_processed == 0:
-        print("\nNo experiments were processed.")
+        log.info("\nNo experiments were processed.")
     elif updated_experiments or skipped_experiments:
-        print(f"\nSummary: {len(updated_experiments)} updated, {len(skipped_experiments)} already had environments, {len(environment_missing_experiments)} missing environments, {len(failed_experiments)} failed.")
+        log.info(f"\nSummary: {len(updated_experiments)} updated, {len(skipped_experiments)} already had environments, {len(environment_missing_experiments)} missing environments, {len(failed_experiments)} failed.")
     else:
-        print(f"\nNo experiments were successfully updated. See error details above.")
+        log.info(f"\nNo experiments were successfully updated. See error details above.")
 
 
 def publish_run_command(project_directory: Path, run_ulid: str):

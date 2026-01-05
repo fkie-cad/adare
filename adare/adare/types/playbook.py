@@ -122,6 +122,7 @@ class Settings:
     collect_system_info: bool = True
     forensic_logging: bool = True  # Generate forensic audit logs (YAML) after experiment completion
     enable_filesystem_diff: bool = True  # Enable automatic snapshots at experiment start/end
+    gui_execution_mode: str = 'auto'  # GUI automation mode: 'auto', 'agent', 'host' (QEMU only)
 
 @attrs.define
 class Target:

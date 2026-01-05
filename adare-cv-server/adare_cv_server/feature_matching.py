@@ -36,6 +36,9 @@ class SIFTMatcher:
         screenshot_img, icon_img = decoded
         screenshot_gray, icon_gray = ImageDecoder.convert_to_grayscale(screenshot_img, icon_img)
 
+        # Extract screenshot shape for bounds checking
+        screenshot_shape = screenshot_gray.shape  # (height, width)
+
         # Initialize SIFT detector
         sift = cv2.SIFT_create()
 
@@ -68,7 +71,7 @@ class SIFTMatcher:
             # Calculate center using homography
             try:
                 center = HomographyCalculator.calculate_center_from_homography(
-                    src_pts, dst_pts, icon_gray.shape
+                    src_pts, dst_pts, icon_gray.shape, screenshot_shape=screenshot_shape
                 )
                 log.info(f"CLAUDE: SIFT match found at center: {center}")
                 return FeatureMatchingResult([center], [float(len(good_matches))], "sift")
@@ -113,6 +116,9 @@ class ORBMatcher:
         screenshot_img, icon_img = decoded
         screenshot_gray, icon_gray = ImageDecoder.convert_to_grayscale(screenshot_img, icon_img)
 
+        # Extract screenshot shape for bounds checking
+        screenshot_shape = screenshot_gray.shape  # (height, width)
+
         # Initialize ORB detector
         orb = ORBMatcher._create_orb_detector()
 
@@ -141,7 +147,7 @@ class ORBMatcher:
 
         # Find multiple instances using clustering
         locations, similarities = ORBMatcher._find_multiple_instances(
-            src_pts, dst_pts, good_matches, icon_gray.shape, min_matches, max_matches
+            src_pts, dst_pts, good_matches, icon_gray.shape, min_matches, max_matches, screenshot_shape
         )
 
         log.info(f"CLAUDE: ORB found {len(locations)} valid matches")
@@ -175,7 +181,8 @@ class ORBMatcher:
         good_matches: List,
         icon_shape: Tuple[int, int],
         min_matches: int,
-        max_matches: int
+        max_matches: int,
+        screenshot_shape: Tuple[int, int]
     ) -> Tuple[List[Tuple[int, int]], List[float]]:
         """Find multiple icon instances using clustering."""
         try:
@@ -203,7 +210,7 @@ class ORBMatcher:
                 cluster_matches = [good_matches[i] for i, mask in enumerate(cluster_mask) if mask]
 
                 center, similarity = ORBMatcher._process_cluster(
-                    cluster_src, cluster_dst, cluster_matches, icon_shape
+                    cluster_src, cluster_dst, cluster_matches, icon_shape, screenshot_shape
                 )
 
                 if center is not None:
@@ -231,7 +238,8 @@ class ORBMatcher:
         cluster_src: np.ndarray,
         cluster_dst: np.ndarray,
         cluster_matches: List,
-        icon_shape: Tuple[int, int]
+        icon_shape: Tuple[int, int],
+        screenshot_shape: Tuple[int, int]
     ) -> Tuple[Optional[Tuple[int, int]], float]:
         """Process a single cluster to find icon center and similarity."""
         if len(cluster_src) >= CVConstants.MIN_HOMOGRAPHY_POINTS:
@@ -240,7 +248,8 @@ class ORBMatcher:
                 cluster_src.reshape(-1, 1, 2),
                 cluster_dst.reshape(-1, 1, 2),
                 icon_shape,
-                CVConstants.ORB_HOMOGRAPHY_THRESHOLD
+                CVConstants.ORB_HOMOGRAPHY_THRESHOLD,
+                screenshot_shape
             )
 
             if center is not None:
@@ -252,6 +261,13 @@ class ORBMatcher:
         elif len(cluster_src) >= 2:
             # Use centroid for small clusters
             center = HomographyCalculator.calculate_centroid(cluster_dst)
+
+            # Validate centroid is within bounds
+            screenshot_h, screenshot_w = screenshot_shape
+            if not (0 <= center[0] < screenshot_w and 0 <= center[1] < screenshot_h):
+                log.warning(f"CLAUDE: Rejecting centroid at {center} - outside bounds (0-{screenshot_w}, 0-{screenshot_h})")
+                return None, 0.0
+
             avg_distance = float(np.mean([m.distance for m in cluster_matches]))
             similarity = max(0.0, 1.0 - (avg_distance / CVConstants.ORB_MAX_DISTANCE_NORMALIZE))
             log.info(f"CLAUDE: ORB centroid match at {center} with {len(cluster_src)} features, similarity: {similarity:.3f}")

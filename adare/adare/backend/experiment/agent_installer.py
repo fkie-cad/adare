@@ -56,7 +56,8 @@ async def check_installed_version(
     vm,  # VirtualBoxVM instance
     use_conda: bool,
     platform: str,
-    stop_event: threading.Event
+    stop_event: threading.Event,
+    wheels_available: bool = False
 ) -> Optional[str]:
     """Check if package is installed in VM and return its version.
 
@@ -69,26 +70,37 @@ async def check_installed_version(
         use_conda: True if using Conda environment, False for Poetry/pip
         platform: Guest OS platform ("windows" or "linux")
         stop_event: Threading event for cancellation
+        wheels_available: True if wheels were installed, False for editable install
 
     Returns:
         Version string if package is installed (e.g., "0.1.0")
         None if package not installed or check fails
 
     Example:
-        >>> await check_installed_version("adarevm", vm, True, "linux", stop_event)
+        >>> await check_installed_version("adarevm", vm, True, "linux", stop_event, wheels_available=True)
         "0.1.0"
     """
     # Build platform-specific command
     if platform == 'windows':
         if use_conda:
             cmd = f'%USERPROFILE%\\.miniforge3\\Scripts\\conda.exe run -n pyadare pip show {package_name}'
-        else:  # poetry environment
-            cmd = f'poetry run pip show {package_name}'
+        else:
+            if wheels_available:
+                # Wheels: pip is in PATH
+                cmd = f'pip show {package_name}'
+            else:
+                # Editable: needs poetry context
+                cmd = f'poetry run pip show {package_name}'
     else:  # linux
         if use_conda:
             cmd = f'/home/adare/.miniforge3/bin/conda run -n pyadare pip show {package_name}'
-        else:  # poetry environment
-            cmd = f'poetry run pip show {package_name}'
+        else:
+            if wheels_available:
+                # Wheels: pip3 is in PATH
+                cmd = f'pip3 show {package_name}'
+            else:
+                # Editable: needs poetry context
+                cmd = f'poetry run pip show {package_name}'
 
     try:
         # Execute command silently (avoid cluttering logs with routine checks)
@@ -165,8 +177,9 @@ async def should_skip_installation(
     log.info(f"Checking for preinstalled agent (expected version: {expected_version})...")
 
     # Check installed versions of both packages
-    adarevm_version = await check_installed_version('adarevm', vm, use_conda, platform, stop_event)
-    adarelib_version = await check_installed_version('adarelib', vm, use_conda, platform, stop_event)
+    # Pass wheels_available=True since this function already verified wheels exist (line 155)
+    adarevm_version = await check_installed_version('adarevm', vm, use_conda, platform, stop_event, wheels_available=True)
+    adarelib_version = await check_installed_version('adarelib', vm, use_conda, platform, stop_event, wheels_available=True)
 
     # Log findings for debugging
     log.debug(f"Installed versions - adarevm: {adarevm_version}, adarelib: {adarelib_version}")

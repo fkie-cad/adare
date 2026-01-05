@@ -50,10 +50,11 @@ class CommandSet:
 class AgentCommandBuilder(ABC):
     """Abstract base for building platform-specific agent installation commands."""
 
-    def __init__(self, wheels_dir: Path, shared_folders: dict, websocket_port: int):
+    def __init__(self, wheels_dir: Path, shared_folders: dict, websocket_port: int, skip_xhost: bool = False):
         self.wheels_dir = wheels_dir
         self.shared_folders = shared_folders
         self.websocket_port = websocket_port
+        self.skip_xhost = skip_xhost
         self.wheels_available = wheels_dir.exists() and bool(list(wheels_dir.glob('*.whl')))
 
     @abstractmethod
@@ -210,30 +211,47 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
     def _build_conda_install_command(self) -> str:
         """Build Conda installation command."""
         if self.wheels_available:
-            # Wheel install + X11 permission for GUI automation
-            return '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --ignore-installed /adare/wheels/*.whl && xhost +SI:localuser:root'
+            # Wheel install + X11 permission for GUI automation (if needed)
+            cmd = '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --ignore-installed /adare/wheels/*.whl'
+            if not self.skip_xhost:
+                cmd += ' && xhost +SI:localuser:root'
+            return cmd
         else:
             # Editable install from mounted source
-            return 'cd /adare/app/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && xhost +SI:localuser:root'
+            cmd = 'cd /adare/app/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install .'
+            if not self.skip_xhost:
+                cmd += ' && xhost +SI:localuser:root'
+            return cmd
 
     def _build_poetry_install_command(self) -> str:
         """Build Poetry installation command."""
         if self.wheels_available:
             # Use find for reliable wheel discovery (works with QEMU guest agent)
             # --no-cache-dir avoids cache permission issues
-            return 'find /adare/wheels -name "*.whl" -exec pip3 install --break-system-packages --no-cache-dir --ignore-installed {} + && xhost +SI:localuser:root'
+            cmd = 'find /adare/wheels -name "*.whl" -exec pip3 install --break-system-packages --no-cache-dir --ignore-installed {} +'
+            if not self.skip_xhost:
+                cmd += ' && xhost +SI:localuser:root'
+            return cmd
         else:
             # Editable install via Poetry
-            return 'cd /adare/app/adarevm && poetry install && xhost +SI:localuser:root'
+            cmd = 'cd /adare/app/adarevm && poetry install'
+            if not self.skip_xhost:
+                cmd += ' && xhost +SI:localuser:root'
+            return cmd
 
     def build_run_command(self, env_info: EnvironmentInfo) -> tuple[str, Optional[str]]:
         """Build Linux run command."""
         if env_info.use_conda:
-            # Conda: run with log file argument
+            # Conda: wrapper handles both wheels and editable
             return ('/home/adare/.miniforge3/bin/conda run -n pyadare adarevm /adare/run/logs/adarevm.log', None)
         else:
-            # Poetry: run from source directory with log file
-            return ('poetry run adarevm /adare/run/logs/adarevm.log', '/adare/app/adarevm')
+            # Non-conda: check installation method
+            if self.wheels_available:
+                # Wheels: installed in PATH via pip3, run directly
+                return ('adarevm /adare/run/logs/adarevm.log', None)
+            else:
+                # Editable: poetry run from source directory
+                return ('poetry run adarevm /adare/run/logs/adarevm.log', '/adare/app/adarevm')
 
 
 # Environment Detection Helpers
@@ -266,10 +284,10 @@ async def _detect_windows_environment(vm, stop_event: threading.Event) -> Enviro
                 platform='windows'
             )
         else:
-            log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to Poetry")
+            log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to system Python")
 
-    # Fallback to Poetry
-    log.info(f"Using Poetry for VM '{vm.vm_name}'")
+    # Fallback to system Python (non-conda)
+    log.info(f"Using system Python (non-conda) for VM '{vm.vm_name}'")
     return EnvironmentInfo(
         use_conda=False,
         conda_env_exists=False,
@@ -298,10 +316,10 @@ async def _detect_linux_environment(vm, stop_event: threading.Event) -> Environm
                 platform='linux'
             )
         else:
-            log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to Poetry")
+            log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to system Python")
 
-    # Fallback to Poetry
-    log.info(f"Using Poetry for VM '{vm.vm_name}'")
+    # Fallback to system Python (non-conda)
+    log.info(f"Using system Python (non-conda) for VM '{vm.vm_name}'")
     return EnvironmentInfo(
         use_conda=False,
         conda_env_exists=False,

@@ -382,9 +382,10 @@ def load(experiment, environment, force, project):
 @click.option('--no-runlog', is_flag=True, help='Do not save adare log to the run/logs directory')
 @click.option('--vm-memory', type=int, help='VM RAM in MB (default: 4096 for Linux, 8192 for Windows)')
 @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
+@click.option('--gui-mode', type=click.Choice(['auto', 'agent', 'host']), help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU only)')
 @click.option('--project', help='Name of the project')
 @click.pass_context
-def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, project):
+def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, project):
     """Run an experiment in a given environment or all environments if none specified.
 
     By default, runs in TEST mode (creates fake runs, skips integrity checks, allows modifications).
@@ -409,6 +410,7 @@ def run(ctx, experiment, environment, production, debug_screenshots, preserve_sn
         runlog=not no_runlog,
         vm_memory=vm_memory,
         vm_cpus=vm_cpus,
+        gui_mode=gui_mode,
         project=project,
         verbose=ctx.obj.verbose,
         very_verbose=ctx.obj.very_verbose

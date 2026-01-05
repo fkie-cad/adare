@@ -230,17 +230,25 @@ class VmInstanceManager:
 
         log.info(f"Reusing VM instance: {instance.instance_name} for experiment {experiment_run_id}")
 
-        # Validate that base snapshot exists before reusing
+        # Validate that base snapshot exists before reusing (VirtualBox only)
         if instance.base_snapshot_name and instance.vbox_uuid:
-            snapshot_exists = verify_instance_base_snapshot_exists(instance)
-            if not snapshot_exists:
-                log.warning(f"Base snapshot '{instance.base_snapshot_name}' not found for instance {instance.instance_name} - will need recreation")
-                # Reset snapshot info to trigger recreation
-                with VmApi() as api:
-                    api.update_vm_instance(
-                        instance.id,
-                        base_snapshot_name=None
-                    )
+            # Only validate snapshots for VirtualBox instances
+            with VmApi() as api:
+                source_vm = api.get_vm_by_id(instance.vm_id)
+                is_virtualbox = (source_vm and source_vm.hypervisor == 'virtualbox')
+
+            if is_virtualbox:
+                snapshot_exists = verify_instance_base_snapshot_exists(instance)
+                if not snapshot_exists:
+                    log.warning(f"Base snapshot '{instance.base_snapshot_name}' not found for instance {instance.instance_name} - will need recreation")
+                    # Reset snapshot info to trigger recreation
+                    with VmApi() as api:
+                        api.update_vm_instance(
+                            instance.id,
+                            base_snapshot_name=None
+                        )
+            else:
+                log.debug(f"CLAUDE: Skipping snapshot validation for non-VirtualBox instance")
 
         # Allocate fresh websocket port for reused instance atomically
         from adare.backend.vm.port_manager import PORT_RANGE_START, PORT_RANGE_END

@@ -529,13 +529,17 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     if not source_vm:
         raise VMError(log, f"Source VM with ID {vm_id} not found in database")
 
+    # Detect hypervisor type to skip VirtualBox-specific snapshot operations for QEMU
+    is_qemu = (source_vm.hypervisor == 'qemu')
+    log.debug(f"CLAUDE: Source VM hypervisor: {source_vm.hypervisor} (is_qemu={is_qemu})")
+
     # Check if this is a reused instance or new instance
     if vm_instance.vbox_uuid:
         # Reused instance - VM already exists in VirtualBox
         log.info(f"Reusing existing VM instance: {vm_instance.instance_name}")
 
-        # Check if instance has a base snapshot, create if missing
-        if not vm_instance.base_snapshot_name:
+        # Check if instance has a base snapshot, create if missing (VirtualBox only)
+        if not is_qemu and not vm_instance.base_snapshot_name:
             log.info(f"VM instance '{vm_instance.instance_name}' missing base snapshot - creating it now")
             if experiment_run_ulid:
                 with StageCtxManager(VMSnapshotCreateStage(), experiment_run_ulid, interrupt_event):
@@ -550,9 +554,11 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
                 from adare.database.api.vm import VmApi
                 with VmApi() as api:
                     vm_instance = api.get_vm_instance_by_id(vm_instance.id)
+        elif is_qemu:
+            log.debug(f"CLAUDE: QEMU instance - skipping snapshot creation (uses overlay disks)")
 
-        # Restore instance to clean state (only if base snapshot exists)
-        if vm_instance.base_snapshot_name:
+        # Restore instance to clean state (only if base snapshot exists, VirtualBox only)
+        if not is_qemu and vm_instance.base_snapshot_name:
             if experiment_run_ulid:
                 with StageCtxManager(VMSnapshotRestoreStage(), experiment_run_ulid, interrupt_event):
                     restore_success = restore_instance_to_base_snapshot(
@@ -575,8 +581,10 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
 
             if not restore_success:
                 log.warning(f"Failed to restore VM instance '{vm_instance.instance_name}' to clean state - will continue anyway")
-        else:
+        elif not is_qemu and not vm_instance.base_snapshot_name:
             log.warning(f"VM instance '{vm_instance.instance_name}' has no base snapshot available - cannot restore to clean state")
+        elif is_qemu:
+            log.debug(f"CLAUDE: QEMU instance - skipping snapshot restoration (uses overlay disks)")
 
     else:
         # New instance - need to import from source VM
@@ -600,15 +608,18 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
             log.info("VM instance import was interrupted")
             return None
 
-        # Create base snapshot for this instance
-        if experiment_run_ulid:
-            with StageCtxManager(VMSnapshotCreateStage(), experiment_run_ulid, interrupt_event):
+        # Create base snapshot for this instance (VirtualBox only)
+        if not is_qemu:
+            if experiment_run_ulid:
+                with StageCtxManager(VMSnapshotCreateStage(), experiment_run_ulid, interrupt_event):
+                    success = create_base_snapshot_for_instance(vm_instance, silent=False)
+            else:
                 success = create_base_snapshot_for_instance(vm_instance, silent=False)
-        else:
-            success = create_base_snapshot_for_instance(vm_instance, silent=False)
 
-        if not success:
-            log.warning(f"Failed to create base snapshot for instance {vm_instance.instance_name}")
+            if not success:
+                log.warning(f"Failed to create base snapshot for instance {vm_instance.instance_name}")
+        else:
+            log.info(f"CLAUDE: QEMU VM - skipping VirtualBox-style snapshot creation (uses overlay disks instead)")
 
     total_time = time.time() - start_time
     log.info(f"CLAUDE: VM instance preparation completed in {total_time:.1f} seconds!")

@@ -57,6 +57,36 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
         )
         log.info(f"Created VirtualBox VM instance: {context.vm_name}")
 
+    async def setup_networking(self, context):
+        """
+        Setup port forwarding for WebSocket communication.
+
+        Configures port forwarding from host to guest VM for adarevm WebSocket server.
+        The guest always uses port 18765, while the host uses a dynamically allocated port.
+
+        Args:
+            context: ExperimentRunCtx containing configuration
+        """
+        # Clean up any existing 'adarevm' port forwarding rule first
+        await context.vm.remove_port_forwarding(
+            name='adarevm',
+            stop_event=context.user_interrupt_event,
+            silent=True
+        )
+
+        # Add port forwarding: host uses allocated unique port, guest always uses 18765
+        if context.config.websocket_port is None:
+            raise LoggedException(log, "Cannot set up port forwarding: no websocket port allocated")
+
+        await context.vm.add_port_forwarding(
+            name='adarevm',
+            protocol='tcp',
+            host_port=context.config.websocket_port,
+            guest_port=18765,
+            stop_event=context.user_interrupt_event
+        )
+        log.info(f'Added port forwarding for websocket server: host:{context.config.websocket_port} -> guest:18765')
+
     async def setup_file_transfer(self, context):
         """
         Configure VirtualBox shared folders for file transfer.
@@ -115,27 +145,6 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
 
         log.info("All shared folders added to VirtualBox successfully")
 
-        # Add port forwarding for the websocket server
-        # Clean up any existing 'adarevm' port forwarding rule first
-        await context.vm.remove_port_forwarding(
-            name='adarevm',
-            stop_event=context.user_interrupt_event,
-            silent=True
-        )
-
-        # Add port forwarding: host uses allocated unique port, guest always uses 18765
-        if context.config.websocket_port is None:
-            raise LoggedException(log, "Cannot set up port forwarding: no websocket port allocated")
-
-        await context.vm.add_port_forwarding(
-            name='adarevm',
-            protocol='tcp',
-            host_port=context.config.websocket_port,
-            guest_port=18765,
-            stop_event=context.user_interrupt_event
-        )
-        log.info(f'Added port forwarding for websocket server: host:{context.config.websocket_port} -> guest:18765')
-
     async def start_and_initialize_vm(self, context):
         """
         Start VirtualBox VM and mount shared folders.
@@ -187,20 +196,21 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
             stop_event=context.user_interrupt_event
         )
 
-    async def retrieve_artifacts(self, context):
+    async def retrieve_artifacts(self, context, post_interrupt: bool = False):
         """
-        Retrieve artifacts from VirtualBox VM.
+        Retrieve artifacts and logs from VirtualBox VM.
 
-        For VirtualBox, this is a no-op because artifacts are already on
-        the host via shared folders. The experiment run directory is mounted
-        as a shared folder, so artifacts written there are immediately
-        accessible from the host.
+        For VirtualBox, this is a no-op because artifacts and logs are already on
+        the host via shared folders. The experiment run directory (including the
+        logs subdirectory) is mounted as a shared folder, so all files written
+        there are immediately accessible from the host.
 
         Args:
             context: ExperimentRunCtx
+            post_interrupt: If True, we're in post-interrupt cleanup (ignored for VirtualBox)
         """
-        # No-op: artifacts already on host via shared folders
-        log.debug("VirtualBox: Artifacts already on host via shared folders, no retrieval needed")
+        # No-op: artifacts and logs already on host via shared folders
+        log.debug("VirtualBox: Artifacts and logs already on host via shared folders, no retrieval needed")
 
     async def cleanup_vm(self, context, post_interrupt: bool = False):
         """

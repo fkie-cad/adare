@@ -81,7 +81,8 @@ class HomographyCalculator:
         src_pts: np.ndarray,
         dst_pts: np.ndarray,
         icon_shape: Tuple[int, int],
-        ransac_threshold: float = CVConstants.SIFT_RANSAC_THRESHOLD
+        ransac_threshold: float = CVConstants.SIFT_RANSAC_THRESHOLD,
+        screenshot_shape: Optional[Tuple[int, int]] = None
     ) -> Optional[Tuple[int, int]]:
         """Calculate icon center using homography transformation."""
         try:
@@ -98,6 +99,17 @@ class HomographyCalculator:
 
                 center_x = int(np.mean(transformed_corners[:, 0, 0]))
                 center_y = int(np.mean(transformed_corners[:, 0, 1]))
+
+                # Validate bounds if screenshot_shape provided
+                if screenshot_shape is not None:
+                    screenshot_h, screenshot_w = screenshot_shape
+                    # Check if center is within bounds
+                    if not (0 <= center_x < screenshot_w and 0 <= center_y < screenshot_h):
+                        log.warning(
+                            f"CLAUDE: Rejecting match at ({center_x}, {center_y}) - "
+                            f"outside screenshot bounds (0-{screenshot_w}, 0-{screenshot_h})"
+                        )
+                        return None
 
                 return center_x, center_y
 
