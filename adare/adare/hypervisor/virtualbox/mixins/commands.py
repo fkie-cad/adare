@@ -401,7 +401,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             args.insert(4, "--password")
             args.insert(5, self.password)
 
-        from .utils import run_subprocess
+        from adare.hypervisor.virtualbox.utils import run_subprocess
         result = run_subprocess([self.vboxmanage_exe] + args, check=False)
 
         if result.returncode == 0 and result.stdout.strip():

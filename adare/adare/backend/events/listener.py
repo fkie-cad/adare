@@ -27,7 +27,7 @@ _db_batch_lock = threading.Lock()
 # UI spinner debouncing to prevent flash effects
 _spinner_timers = {}  # stage_id -> timer
 _spinner_lock = threading.Lock()
-_MIN_SPINNER_DISPLAY_TIME = 0.1  # Minimum 100ms spinner display
+_MIN_SPINNER_DISPLAY_TIME = 0.05  # Minimum 50ms spinner display (reduced from 100ms for better responsiveness)
 
 # Simplified spinner management
 _stage_tracking_lock = threading.Lock()
@@ -357,12 +357,12 @@ def _handle_stage_event(event, console, ulid):
 
         min_display_time_needed = max(0, _MIN_SPINNER_DISPLAY_TIME - spinner_visible_time)
 
-        # Apply debouncing for very short stages
-        if min_display_time_needed > 0.01 and console.exists(stage_id):
+        # Apply debouncing ONLY if spinner hasn't been visible long enough
+        if min_display_time_needed > 0.001 and console.exists(stage_id):  # 1ms threshold (reduced from 10ms)
             log.debug(f"[EventListener CLI] Delaying completion of {stage.name} by {min_display_time_needed*1000:.1f}ms for better UX")
             _schedule_delayed_completion(stage_id, console, complete_stage, min_display_time_needed * 1000)
         else:
-            complete_stage()
+            complete_stage()  # Complete immediately if already visible long enough
     elif in_progress:
         # Only add the stage if it doesn't already exist
         if not console.exists(stage_id):

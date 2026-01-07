@@ -22,7 +22,7 @@ class ExperimentFlowConsole:
     external_stop_event: threading.Event | None
 
     messages: dict
-    ticks_per_second: int = 12
+    ticks_per_second: int = 15  # 15 FPS for smoother animations (increased from 12 FPS)
     _lock: threading.Lock
     _original_log_level: int | None  # Store original console log level
     
@@ -83,7 +83,7 @@ class ExperimentFlowConsole:
                     except:
                         pass  # If even this fails, just continue the loop
 
-                time.sleep(0.1)
+                time.sleep(0.067)  # ~67ms sleep for 15 FPS (reduced from 100ms for better responsiveness)
         log.debug('rich live thread stopped')
 
     def start(self):

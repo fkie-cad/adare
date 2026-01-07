@@ -414,7 +414,7 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     # Step 4: Execute setup commands (PATH, firewall, etc.)
     # Verify guest agent readiness before executing commands
     log.info("Verifying guest agent readiness...")
-    if not await _verify_guest_agent_readiness(vm, stop_event):
+    if not await _verify_guest_agent_readiness(vm, stop_event, max_retries=8):
         raise VMSetupError(
             log, vm.vm_name, "pre-flight guest agent check",
             -1, "", "Guest agent not responsive after boot validation"
@@ -1146,9 +1146,11 @@ def __start_event_listeners(experiment_run_ulid: str):
     cli_thread.start()
     db_thread.start()
     
-    # Wait for both listeners to be ready before returning
-    cli_ready_event.wait()
-    db_ready_event.wait()
+    # Wait for both listeners to be ready before returning (with timeout to prevent hangs)
+    if not cli_ready_event.wait(timeout=10.0):
+        raise RuntimeError("CLI event listener failed to start within 10 seconds")
+    if not db_ready_event.wait(timeout=10.0):
+        raise RuntimeError("DB event listener failed to start within 10 seconds")
     log.info("Event listeners are ready")
 
     return cli_thread, db_thread

@@ -594,7 +594,7 @@ class VmInstanceManager:
             # Create temporary VirtualBox VM instance to check state
             from adare.hypervisor.virtualbox.manager import VirtualBoxManager
             manager = VirtualBoxManager()
-            vbox_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy")
+            vbox_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy", manager.executables)
 
             # Get current state
             state = vbox_vm._get_state(raise_on_missing=False)
@@ -707,7 +707,7 @@ class VmInstanceManager:
 
         # Create VirtualBox VM instance and remove it
         manager = VirtualBoxManager()
-        vbox_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy")
+        vbox_vm = VirtualBoxVM(vm_name, "", manager, "dummy", "dummy", manager.executables)
         await vbox_vm.remove()
 
         log.info(f"Cleaned up VirtualBox VM: {vm_name}")

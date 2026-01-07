@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 def __setup_python_paths():
     """Setup Python paths for adarelib when in VM runtime structure."""
     # Check if adarelib is in VM runtime structure
-    adarelib_path = Path("/adare/app/adarelib")
+    adarelib_path = Path("/adare/vm/adarelib")
     if adarelib_path.exists() and str(adarelib_path) not in sys.path:
         sys.path.insert(0, str(adarelib_path))
         log.info(f"Added adarelib path to Python path: {adarelib_path}")

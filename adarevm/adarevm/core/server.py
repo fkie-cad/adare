@@ -541,8 +541,8 @@ class AdareVMServer:
 
         # Common deployment paths to check
         possible_paths = [
-            "/adare/app/adarevm",  # VM runtime deployment path (adarevm in runtime directory)
-            "/adare/app",  # Legacy deployment path (whole adare directory)
+            "/adare/vm/adarevm",  # VM runtime deployment path (adarevm in runtime directory)
+            "/adare/vm",  # VM runtime base path (whole vm directory)
             "/adare",      # Alternative deployment path
             Path(__file__).parent.parent.parent,  # Development path (../../../)
             Path.cwd(),    # Current working directory

@@ -212,13 +212,13 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         """Build Conda installation command."""
         if self.wheels_available:
             # Wheel install + X11 permission for GUI automation (if needed)
-            cmd = '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --ignore-installed /adare/wheels/*.whl'
+            cmd = '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --ignore-installed /adare/vm/wheels/*.whl'
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
         else:
             # Editable install from mounted source
-            cmd = 'cd /adare/app/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/app/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install .'
+            cmd = 'cd /adare/vm/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/vm/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install .'
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
@@ -228,13 +228,13 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         if self.wheels_available:
             # Use find for reliable wheel discovery (works with QEMU guest agent)
             # --no-cache-dir avoids cache permission issues
-            cmd = 'find /adare/wheels -name "*.whl" -exec pip3 install --break-system-packages --no-cache-dir --ignore-installed {} +'
+            cmd = 'find /adare/vm/wheels -name "*.whl" -exec pip3 install --break-system-packages --no-cache-dir --ignore-installed {} +'
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
         else:
             # Editable install via Poetry
-            cmd = 'cd /adare/app/adarevm && poetry install'
+            cmd = 'cd /adare/vm/adarevm && poetry install'
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
@@ -251,7 +251,7 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
                 return ('adarevm /adare/run/logs/adarevm.log', None)
             else:
                 # Editable: poetry run from source directory
-                return ('poetry run adarevm /adare/run/logs/adarevm.log', '/adare/app/adarevm')
+                return ('poetry run adarevm /adare/run/logs/adarevm.log', '/adare/vm/adarevm')
 
 
 # Environment Detection Helpers

@@ -855,7 +855,7 @@ class VariableRegistry:
             # Handle both Unix timestamps (float) and datetime objects
             if isinstance(var.value, (int, float)):
                 # Unix timestamp - convert to UTC datetime for processing
-                result = datetime.datetime.utcfromtimestamp(var.value).replace(tzinfo=datetime.timezone.utc)
+                result = datetime.datetime.fromtimestamp(var.value, datetime.UTC).replace(tzinfo=datetime.timezone.utc)
                 log.debug(f"Converted Unix timestamp {var.value} to UTC datetime: {result}")
             elif isinstance(var.value, datetime.datetime):
                 result = var.value

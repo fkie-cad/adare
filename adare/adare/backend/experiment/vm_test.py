@@ -144,7 +144,8 @@ async def test_vm_response(context):
 
 async def test_shared_folders(context):
     """Test shared folder accessibility."""
-    ls_result = await context.vm.run_command("test -d /adare/app", stop_event=context.user_interrupt_event)
+    # Check if vm runtime directory is accessible
+    ls_result = await context.vm.run_command("test -d /adare/vm", stop_event=context.user_interrupt_event)
     if ls_result.returncode == 0:
         log.info("CLAUDE: Shared folders are accessible")
         return True
@@ -184,7 +185,7 @@ async def test_adarevm_server_start(context):
     try:
         # Start adarevm server in background
         # NOTE: This requires Poetry - does not work with wheel-only installations
-        start_command = f"cd /adare/app && python3 -m poetry run python -m adarevm.server --port {context.config.websocket_port} &"
+        start_command = f"cd /adare/vm && python3 -m poetry run python -m adarevm.server --port {context.config.websocket_port} &"
 
         start_result = await context.vm.run_command(start_command, stop_event=context.user_interrupt_event)
 

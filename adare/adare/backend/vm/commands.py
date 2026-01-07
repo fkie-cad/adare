@@ -21,7 +21,7 @@ from adare.backend.experiment.stagectxmanager import StageCtxManager
 log = logging.getLogger(__name__)
 
 
-async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, interrupt_event: Optional[threading.Event] = None) -> None:
+async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, interrupt_event: Optional[threading.Event] = None, test_mode: bool = False) -> None:
     """
     Verify VM file integrity before import/use.
     This ensures the VM file hasn't been tampered with since loading.
@@ -30,13 +30,25 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
         vm_id: Database ID of the VM to verify
         experiment_run_ulid: Optional experiment run ID for stage tracking
         interrupt_event: Optional event to check for user interruption
+        test_mode: Skip verification in test/development mode
     """
+    # Skip verification in test mode (follows same pattern as experiment integrity checks)
+    if test_mode:
+        log.info(f"Skipping VM integrity verification - running in test/development mode")
+        if experiment_run_ulid:
+            from adare.backend.experiment.stagectxmanager import StageCtxManager
+            from adare.types.stages import VMIntegrityVerificationStage
+            with StageCtxManager(VMIntegrityVerificationStage(), experiment_run_ulid, interrupt_event) as stage_ctx:
+                stage_ctx.stage.sub_msg = "SKIPPED - Development/Test Mode"
+                stage_ctx.set_status(stage_ctx.stage.status)
+        return
+
     # Get VM record from database
     vm_record = vm_database.get_vm_by_id(vm_id)
     if not vm_record:
         from adare.exceptions import LoggedException
         raise LoggedException(log, f"VM with ID {vm_id} not found in database")
-    
+
     # Get VM file path
     vm_file_path = Path(vm_record.file)
 
@@ -452,7 +464,7 @@ def verify_and_cleanup_vm_instance_for_experiment(vm_instance_id: str, experimen
 # PHASE 4: OPTIMIZED EXPERIMENT WORKFLOW
 # ==========================================
 
-async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environment_ulid: str = None, experiment_run_ulid: Optional[str] = None, preserve_experiment_snapshot: bool = False, interrupt_event: Optional[threading.Event] = None) -> str:
+async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environment_ulid: str = None, experiment_run_ulid: Optional[str] = None, preserve_experiment_snapshot: bool = False, interrupt_event: Optional[threading.Event] = None, test_mode: bool = False) -> str:
     """
     OPTIMIZED VM preparation using instance management for concurrent experiments!
 
@@ -466,6 +478,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         experiment_run_ulid: Experiment run ID for stage tracking and instance assignment
         preserve_experiment_snapshot: Whether to create experiment-specific snapshot
         interrupt_event: Optional event to check for user interruption
+        test_mode: Skip VM integrity verification in test/development mode
 
     Returns:
         VM instance ID ready for experiment (not the source VM ID!)
@@ -590,19 +603,16 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         # New instance - need to import from source VM
         log.info(f"Creating new VM instance: {vm_instance.instance_name}")
 
-        # Verify source VM integrity
-        await verify_vm_integrity(vm_id, experiment_run_ulid, interrupt_event)
+        # Verify source VM integrity (skip in test mode)
+        await verify_vm_integrity(vm_id, experiment_run_ulid, interrupt_event, test_mode=test_mode)
 
         if interrupt_event and interrupt_event.is_set():
             log.info("VM integrity verification was interrupted")
             return None
 
         # Import VM instance with unique name
-        if experiment_run_ulid:
-            with StageCtxManager(VMImportStage(), experiment_run_ulid, interrupt_event):
-                vm_instance = await _import_vm_instance(vm_instance, source_vm, environment_ulid)
-        else:
-            vm_instance = await _import_vm_instance(vm_instance, source_vm, environment_ulid)
+        # Stage management handled by hypervisor-specific prepare_vm_for_experiment()
+        vm_instance = await _import_vm_instance(vm_instance, source_vm, environment_ulid)
 
         if interrupt_event and interrupt_event.is_set():
             log.info("VM instance import was interrupted")
@@ -823,11 +833,11 @@ def clear_vms_by_environment(environment_ulid: str, force: bool = False) -> dict
 def list_all_vms() -> List[dict]:
     """
     List all VMs in the system.
-    
+
     Returns:
         List of VM information dictionaries
     """
-    return vm_database.get_all_vms(fields=['id', 'name', 'description', 'hash'])
+    return vm_database.get_all_vms(fields=['id', 'name', 'description', 'hash', 'hypervisor'])
 
 
 def get_vm_info(vm_id: str) -> dict:
