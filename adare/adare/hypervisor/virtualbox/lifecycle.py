@@ -6,6 +6,7 @@ for file transfer. Files are accessible to the guest while the VM is running.
 """
 from pathlib import Path
 import logging
+import asyncio
 
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
 from adare.hypervisor.virtualbox import VirtualBoxVM, VirtualBoxManager
@@ -105,7 +106,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
         shared_root = Path(SHARE_POINT_VM[context.guest_platform])
         context.config.shared_directories = {
             'run': {'host': context.experiment_run_directory.path, 'vm': shared_root / 'run'},
-            'adare': {'host': context.project_directory.vm_runtime, 'vm': shared_root / 'app'},
+            'adare': {'host': context.project_directory.vm_runtime, 'vm': shared_root / 'vm'},
             'experiment': {'host': context.experiment_directory.path, 'vm': shared_root / 'experiment'},
         }
 
@@ -154,47 +155,73 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
         Args:
             context: ExperimentRunCtx containing VM
         """
-        # Start the VM
-        await context.vm.start(stop_event=context.user_interrupt_event)
+        from adare.types.stages import VMStartStage, VMGuestAgentWaitStage, VMMountSharedDirectoriesStage
+        from adare.backend.experiment.stagectxmanager import StageCtxManager
 
-        # Set video mode hint to default resolution after VM starts
-        if not context.stop_event.is_set():
-            width, height = context.config.vm_resolution
-            await context.vm.set_video_mode_hint(
-                width=width,
-                height=height,
+        # Stage 1: Start VM
+        with StageCtxManager(
+            VMStartStage(),
+            context.experiment_run_ulid,
+            context.user_interrupt_event
+        ):
+            # Start the VM
+            await context.vm.start(stop_event=context.user_interrupt_event)
+
+            # Set video mode hint to default resolution after VM starts
+            if not context.stop_event.is_set():
+                width, height = context.config.vm_resolution
+                await context.vm.set_video_mode_hint(
+                    width=width,
+                    height=height,
+                    stop_event=context.user_interrupt_event
+                )
+
+        # Stage 2: Wait for guest agent
+        with StageCtxManager(
+            VMGuestAgentWaitStage(),
+            context.experiment_run_ulid,
+            context.user_interrupt_event
+        ):
+            # Wait until VM is fully booted and ready
+            log.info('Waiting until VM is ready')
+            if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.user_interrupt_event):
+                raise LoggedException(log, 'VM did not become ready in time')
+            log.info('VM is ready')
+
+            # Allow grace period for guest agent to fully stabilize
+            grace_period = 3  # seconds
+            log.debug(f"Allowing {grace_period}s grace period for guest agent to fully stabilize")
+            await asyncio.sleep(grace_period)
+
+        # Stage 3: Mount shared directories (VirtualBox-specific)
+        with StageCtxManager(
+            VMMountSharedDirectoriesStage(),
+            context.experiment_run_ulid,
+            context.user_interrupt_event
+        ):
+            # Mount shared directories in the VM
+            log.info("Verifying shared folders exist in VirtualBox config before mounting")
+            existing_folders = await context.vm.list_shared_folders(stop_event=context.user_interrupt_event, silent=True)
+            log.debug(f"Found {len(existing_folders)} shared folders in VirtualBox config: {list(existing_folders.keys())}")
+
+            folders = {
+                name: paths['vm'] for name, paths in context.config.shared_directories.items()
+            }
+
+            # Check that all required folders exist
+            missing_folders = [name for name in folders.keys() if name not in existing_folders]
+            if missing_folders:
+                raise LoggedException(
+                    log,
+                    f"Cannot mount shared folders - the following folders are not configured in VirtualBox: {missing_folders}. "
+                    f"Expected folders: {list(folders.keys())}, Found: {list(existing_folders.keys())}"
+                )
+
+            log.info(f"All {len(folders)} required shared folders exist in VirtualBox, proceeding with mount")
+            await context.vm.mount_multiple_shared_folders(
+                folders=folders,
                 stop_event=context.user_interrupt_event
             )
-
-        # Wait until VM is fully booted and ready
-        log.info('Waiting until VM is ready')
-        if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.user_interrupt_event):
-            raise LoggedException(log, 'VM did not become ready in time')
-        log.info('VM is ready')
-
-        # Mount shared directories in the VM
-        log.info("Verifying shared folders exist in VirtualBox config before mounting")
-        existing_folders = await context.vm.list_shared_folders(stop_event=context.user_interrupt_event, silent=True)
-        log.debug(f"Found {len(existing_folders)} shared folders in VirtualBox config: {list(existing_folders.keys())}")
-
-        folders = {
-            name: paths['vm'] for name, paths in context.config.shared_directories.items()
-        }
-
-        # Check that all required folders exist
-        missing_folders = [name for name in folders.keys() if name not in existing_folders]
-        if missing_folders:
-            raise LoggedException(
-                log,
-                f"Cannot mount shared folders - the following folders are not configured in VirtualBox: {missing_folders}. "
-                f"Expected folders: {list(folders.keys())}, Found: {list(existing_folders.keys())}"
-            )
-
-        log.info(f"All {len(folders)} required shared folders exist in VirtualBox, proceeding with mount")
-        await context.vm.mount_multiple_shared_folders(
-            folders=folders,
-            stop_event=context.user_interrupt_event
-        )
 
     async def retrieve_artifacts(self, context, post_interrupt: bool = False):
         """

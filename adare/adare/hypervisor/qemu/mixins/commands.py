@@ -411,12 +411,15 @@ class CommandExecutionMixin(AbstractCommandMixin):
         try:
             log.debug("CLAUDE: Attempting to detect XAUTHORITY file in guest")
 
+            # Optimized detection: check most common locations first (fast path)
             detect_cmd = (
+                # Fast path: Check most common locations first
+                '[ -f "/run/user/$(id -u)/gdm/Xauthority" ] && echo "/run/user/$(id -u)/gdm/Xauthority" && exit 0; '
+                '[ -f "/home/adare/.Xauthority" ] && echo "/home/adare/.Xauthority" && exit 0; '
+                # Fallback: Full search if common locations fail
                 'shopt -s nullglob; '
                 'for p in '
-                '"/run/user/$(id -u)/gdm/Xauthority" '
                 '"/run/user/$(id -u)/X11-display" '
-                '"/home/adare/.Xauthority" '
                 '/tmp/xauth_* '
                 '/tmp/serverauth.* '
                 '/run/sddm/xauth_* '

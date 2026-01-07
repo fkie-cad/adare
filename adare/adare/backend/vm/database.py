@@ -329,7 +329,7 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
         from adare.backend.vm.exceptions import VMImportError
         manager = VirtualBoxManager()
         username, password = get_vm_credentials(guest_os)
-        vbox_vm = VirtualBoxVM(vbox_vm_name, guest_os, manager, username, password)
+        vbox_vm = VirtualBoxVM(vbox_vm_name, guest_os, manager, username, password, manager.executables)
 
         # Import VM and capture detailed error output
         try:
@@ -433,6 +433,8 @@ def get_all_vms(fields: list[str] = None) -> list:
                     result['hash'] = vm.hash
                 elif field == 'description':
                     result['description'] = vm.description
+                elif field == 'hypervisor':
+                    result['hypervisor'] = vm.hypervisor
                 elif field == 'osinfo':
                     result['osinfo'] = vm.osinfo
                 else:

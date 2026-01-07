@@ -2,9 +2,10 @@
 from pathlib import Path
 from threading import Lock
 import ulid
+from sqlalchemy.orm import joinedload
 
 # internal imports
-from adare.database.models.project_models import Event as ModelEvent, ExperimentRun, Result as ModelResult, EventFactory
+from adare.database.models.project_models import Event as ModelEvent, ExperimentRun, Result as ModelResult, EventFactory, Experiment
 from adare.database.api.experiment import ExperimentApi
 from adare.config import database as config_database
 from adarelib.constants import StatusEnum
@@ -150,7 +151,7 @@ class EventDbApi(ExperimentApi):
     def add_test_event(self, action_data: dict, action_id: str, experiment_run_ulid: str, parent_event_id: str = None):
         """
         Add a test event to the database as a TestEvent (now stores both start and complete events).
-        
+
         Args:
             action_data: Dictionary containing test event data
             action_id: Unique identifier for this action
@@ -160,11 +161,18 @@ class EventDbApi(ExperimentApi):
         import json
         from datetime import datetime, timezone
         from adare.types.event_types import event_type_resolver
-        
+
         with lock:
             try:
                 # Check if experiment run exists
-                experiment_run = self._session.query(ExperimentRun).filter_by(id=experiment_run_ulid).first()
+                experiment_run = (
+                    self._session.query(ExperimentRun)
+                    .filter_by(id=experiment_run_ulid)
+                    .options(
+                        joinedload(ExperimentRun.experiment).joinedload(Experiment.abstract_tests)
+                    )
+                    .first()
+                )
                 if not experiment_run:
                     log.error(f'No experiment run found for ULID {experiment_run_ulid}')
                     return

@@ -37,10 +37,10 @@ class StageCtxManager(contextlib.AbstractContextManager):
             if current_parent != self.stage.parent:
                 raise ValueError(f"Child stage '{self.stage.name}' expects parent '{self.stage.parent}' but active parent is '{current_parent}'")
 
-        # Set this stage as active parent if it's a parent stage (has no parent itself)
-        is_parent_stage = not (hasattr(self.stage, 'parent') and self.stage.parent)
-        if is_parent_stage:
-            self._parent_token = _active_parent_stage.set(self.stage.name)
+        # Always set this stage as the active parent (for multi-level nesting)
+        # This allows stages with parents to also be parents of other stages
+        # The contextvars token mechanism automatically handles the stack
+        self._parent_token = _active_parent_stage.set(self.stage.name)
 
         self.stage.start()
         if not self.stage_id:
@@ -84,6 +84,10 @@ class StageCtxManager(contextlib.AbstractContextManager):
 
             emit_stage(self.experimentrun_ulid, stage=self.stage, stage_id=self.stage_id)
 
+        # Reset parent context (must be outside experimentrun_ulid check to always run)
+        if hasattr(self, '_parent_token'):
+            _active_parent_stage.reset(self._parent_token)
+
     def _wait_for_event_queue_drain(self):
         """Wait for the event processing queue to drain before completing parent stage."""
         try:
@@ -91,14 +95,11 @@ class StageCtxManager(contextlib.AbstractContextManager):
             coordinator = get_stage_coordinator()
             if coordinator:
                 # Use the proper public method to wait for queue drain
-                drained = coordinator.wait_for_queue_drain(timeout=0.1)
+                # Reduced timeout from 100ms to 50ms to reduce batching effect
+                drained = coordinator.wait_for_queue_drain(timeout=0.05)
                 if not drained:
                     log.debug(f"Event queue did not drain within timeout for parent stage: {self.stage.name}")
         except Exception as e:
             # If we can't check the queue, just continue
             log.debug(f"Could not wait for event queue drain: {e}")
             pass
-
-        # Reset parent context if this was a parent stage
-        if hasattr(self, '_parent_token'):
-            _active_parent_stage.reset(self._parent_token)

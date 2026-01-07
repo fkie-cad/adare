@@ -88,7 +88,8 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
                 structured_vms.append({
                     'name': vm['name'],
                     'id': vm['id'],
-                    'description': vm.get('description', '')
+                    'description': vm.get('description', ''),
+                    'hypervisor': vm.get('hypervisor', '')
                 })
 
             structured_instances = []
@@ -98,6 +99,7 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
                     'id': instance.id,
                     'vm_id': instance.vm_id,
                     'vm_name': instance.vm.name if instance.vm else None,
+                    'hypervisor': instance.vm.hypervisor if instance.vm else None,
                     'status': instance.status,
                     'websocket_port': instance.websocket_port,
                     'last_used_at': instance.last_used_at.isoformat() if instance.last_used_at else None
@@ -120,6 +122,7 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
             vm_table = Table(expand=True)
             vm_table.add_column("Name", style="cyan", no_wrap=True)
             vm_table.add_column("ID", style="dim", no_wrap=True)
+            vm_table.add_column("Hypervisor", style="cyan", no_wrap=True)
             vm_table.add_column("Description", style="dim")
 
             for vm in vms:
@@ -130,6 +133,7 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
                 vm_table.add_row(
                     vm['name'],
                     vm['id'],
+                    vm.get('hypervisor', 'unknown'),
                     description or "No description"
                 )
 
@@ -144,6 +148,7 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
             instance_table.add_column("Instance Name", style="cyan", no_wrap=True)
             instance_table.add_column("ID", style="dim", no_wrap=True)
             instance_table.add_column("Parent VM", style="cyan", no_wrap=True)
+            instance_table.add_column("Hypervisor", style="cyan", no_wrap=True)
             instance_table.add_column("Status", style="cyan", no_wrap=True)
             instance_table.add_column("Port", style="cyan", no_wrap=True)
             instance_table.add_column("Last Used", style="dim", no_wrap=False)
@@ -153,10 +158,12 @@ def print_vm_and_instances_list(formatter=None, output_file=None, dual_output=Fa
                 port = str(instance.websocket_port) if instance.websocket_port else "N/A"
                 status_color = "green" if instance.status == "running" else "dim"
                 parent_vm_name = instance.vm.name if instance.vm else "Unknown"
+                hypervisor = instance.vm.hypervisor if instance.vm else "unknown"
                 instance_table.add_row(
                     instance.instance_name,
                     instance.id,
                     parent_vm_name,
+                    hypervisor,
                     Text(instance.status, style=status_color),
                     port,
                     last_used

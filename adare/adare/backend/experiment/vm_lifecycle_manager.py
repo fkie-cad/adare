@@ -5,9 +5,9 @@ import logging
 
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.types.stages import (
-    VMCreateStage, VMRunStage, VMWaitTillReadyStage, VMMountSharedDirectoriesStage,
+    VMCreateStage, VMWaitTillReadyStage,
     VMStopStage, VMDestroyStage, VMExperimentSnapshotStage, VMImportStage, VMSnapshotCreateStage,
-    VMNetworkingStage
+    VMNetworkingStage, VMFileTransferSetupStage
 )
 from adare.backend.experiment.runctx import ExperimentRunCtx
 from adare.exceptions import LoggedException
@@ -221,7 +221,8 @@ class VMLifecycleManager:
                 environment_ulid=context.environment_ulid,
                 experiment_run_ulid=context.experiment_run_ulid,
                 preserve_experiment_snapshot=context.config.preserve_snapshot,
-                interrupt_event=context.user_interrupt_event
+                interrupt_event=context.user_interrupt_event,
+                test_mode=context.test_mode  # NEW: Pass test mode from context
             ),
             timeout=300  # 5 minute timeout for VM import operations
         )
@@ -347,36 +348,38 @@ class VMLifecycleManager:
                         await verify_vm_integrity(vm_id, context.experiment_run_ulid, context.user_interrupt_event)
 
                         # Import VM instance to VirtualBox with proper stage management
-                        with StageCtxManager(VMImportStage(), context.experiment_run_ulid, context.user_interrupt_event):
-                            log.info(f"Importing new VM instance '{vm_instance.instance_name}' to VirtualBox...")
+                        from adare.types.stages import VMDiskPreparationStage
+                        with StageCtxManager(VMDiskPreparationStage(), context.experiment_run_ulid, context.user_interrupt_event):
+                            with StageCtxManager(VMImportStage(), context.experiment_run_ulid, context.user_interrupt_event):
+                                log.info(f"Importing new VM instance '{vm_instance.instance_name}' to VirtualBox...")
 
-                            # Import using VirtualBox manager directly (inline implementation)
-                            from adare.hypervisor.virtualbox.manager import VirtualBoxManager
+                                # Import using VirtualBox manager directly (inline implementation)
+                                from adare.hypervisor.virtualbox.manager import VirtualBoxManager
 
-                            manager = VirtualBoxManager()
-                            vm_file_path = Path(source_vm.file)
+                                manager = VirtualBoxManager()
+                                vm_file_path = Path(source_vm.file)
 
-                            # Import VM with unique instance name
-                            vbox_vm = await manager.import_vm_async(
-                                vm_file_path,
-                                vm_instance.instance_name,
-                                environment_ulid=context.environment_ulid
-                            )
-
-                            # Update instance with VirtualBox UUID
-                            vbox_uuid = vbox_vm.get_vm_uuid()
-                            with VmApi() as api:
-                                api.update_vm_instance(
-                                    vm_instance.id,
-                                    vbox_uuid=vbox_uuid,
-                                    base_snapshot_name=f"{vm_instance.instance_name}_base"
+                                # Import VM with unique instance name
+                                vbox_vm = await manager.import_vm_async(
+                                    vm_file_path,
+                                    vm_instance.instance_name,
+                                    environment_ulid=context.environment_ulid
                                 )
 
-                            log.info(f"Successfully imported VM instance '{vm_instance.instance_name}' with UUID: {vbox_uuid}")
+                                # Update instance with VirtualBox UUID
+                                vbox_uuid = vbox_vm.get_vm_uuid()
+                                with VmApi() as api:
+                                    api.update_vm_instance(
+                                        vm_instance.id,
+                                        vbox_uuid=vbox_uuid,
+                                        base_snapshot_name=f"{vm_instance.instance_name}_base"
+                                    )
 
-                            # Return updated instance
-                            with VmApi() as api:
-                                vm_instance = api.get_vm_instance_by_id(vm_instance.id)
+                                log.info(f"Successfully imported VM instance '{vm_instance.instance_name}' with UUID: {vbox_uuid}")
+
+                                # Return updated instance
+                                with VmApi() as api:
+                                    vm_instance = api.get_vm_instance_by_id(vm_instance.id)
 
                         # Create base snapshot for the new instance
                         with StageCtxManager(VMSnapshotCreateStage(), context.experiment_run_ulid, context.user_interrupt_event):
@@ -430,7 +433,7 @@ class VMLifecycleManager:
         - QEMU: Stop VM if needed, copy files via libguestfs
         """
         with StageCtxManager(
-            VMMountSharedDirectoriesStage(),
+            VMFileTransferSetupStage(),
             context.experiment_run_ulid,
             event=context.user_interrupt_event
         ):
@@ -443,9 +446,11 @@ class VMLifecycleManager:
         Delegates to hypervisor-specific strategy which handles:
         - VirtualBox: start -> set video mode -> wait for boot -> mount shared folders
         - QEMU: start -> wait for guest agent ready
+
+        Note: Stages are now created inside strategy.start_and_initialize_vm()
+        for better granularity (VMStartStage, VMGuestAgentWaitStage, etc.)
         """
-        with StageCtxManager(VMRunStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-            await self.strategy.start_and_initialize_vm(context)
+        await self.strategy.start_and_initialize_vm(context)
 
     async def wait_until_ready(self, context: ExperimentRunCtx):
         """

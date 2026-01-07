@@ -842,7 +842,8 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         raise_if_running: bool = False,
         stop_event=None,
         log_file: Optional[Path] = None,
-        silent: bool = False
+        silent: bool = False,
+        stage_ctx=None
     ) -> int:
         """
         Start the QEMU VM via libvirt.
@@ -856,6 +857,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             stop_event: Optional threading event to signal cancellation
             log_file: Optional path to log file
             silent: If True, suppress log output
+            stage_ctx: Optional stage context for progress updates via sub_msg
 
         Returns:
             Return code (0 for success)
@@ -885,6 +887,12 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             # This ensures the domain XML contains the current overlay disk path,
             # preventing "Cannot access storage file" errors on subsequent runs
             # where the previous overlay was deleted during cleanup.
+
+            # Update stage progress: domain definition (slow libvirt operation)
+            if stage_ctx:
+                stage_ctx.stage.sub_msg = "Defining libvirt domain XML configuration"
+                stage_ctx.set_status(stage_ctx.stage.status)
+
             try:
                 self._libvirt_domain = self._define_libvirt_domain()
             except HypervisorException:
@@ -913,6 +921,11 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             # Get experiment log file for stderr capture
             log_file = get_experiment_log_file()
 
+            # Update stage progress: starting QEMU process (slow operation)
+            if stage_ctx:
+                stage_ctx.stage.sub_msg = "Launching QEMU process via libvirt"
+                stage_ctx.set_status(stage_ctx.stage.status)
+
             # Start the domain with stderr redirection to capture C library errors
             try:
                 with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
@@ -940,6 +953,12 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
 
                 if not silent:
                     log.debug(f"CLAUDE: VM '{self.vm_name}' started successfully")
+
+                # Update stage progress: VM started successfully
+                if stage_ctx:
+                    stage_ctx.stage.sub_msg = ""  # Clear sub_msg on success
+                    stage_ctx.set_status(stage_ctx.stage.status)
+
                 return 0
 
             except VMStartException:
@@ -1334,55 +1353,18 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         log.debug(f"CLAUDE: Waiting for VM '{self.vm_name}' to boot (timeout: {timeout}s)")
 
         start_time = time.time()
-        ping_successful = False
         retry_delay = 0.5  # Start with short delay for quick boots
-        max_retry_delay = 5.0  # Max delay between retries
+        max_retry_delay = 2.0  # Reduced from 5s for faster response
 
         while time.time() - start_time < timeout:
             if stop_event and stop_event.is_set():
                 log.debug("CLAUDE: Stop event detected")
                 return False
 
-            # Check if guest agent socket exists
-            if not os.path.exists(self.config.guest_agent_socket_path):
-                log.debug(f"CLAUDE: Guest agent socket not found yet: {self.config.guest_agent_socket_path}")
-                await asyncio.sleep(retry_delay)
-                # Increase delay for next iteration (exponential backoff)
-                retry_delay = min(retry_delay * 1.5, max_retry_delay)
-                continue
-
             try:
-                # Phase 1: Test basic connectivity with guest-ping
-                if not ping_successful:
-                    ping_cmd = {"execute": "guest-ping"}
-                    response = await self._send_qga_command_via_libvirt(ping_cmd)
-
-                    if 'return' in response:
-                        log.debug(f"CLAUDE: Guest agent is responsive (guest-ping successful)")
-                        ping_successful = True
-                        retry_delay = 0.5  # Reset delay after success
-                    elif 'error' in response:
-                        # Check if error is retriable (socket not ready, connection issues)
-                        error_desc = response.get('error', {}).get('desc', '')
-                        if 'OS error' in error_desc or 'Connection' in error_desc or 'Socket not found' in error_desc:
-                            log.debug(f"CLAUDE: guest-ping failed (retriable): {error_desc}")
-                            await asyncio.sleep(retry_delay)
-                            retry_delay = min(retry_delay * 1.5, max_retry_delay)
-                            continue
-                        else:
-                            log.debug(f"CLAUDE: guest-ping failed: {response}")
-                            await asyncio.sleep(retry_delay)
-                            retry_delay = min(retry_delay * 1.5, max_retry_delay)
-                            continue
-                    else:
-                        log.debug(f"CLAUDE: guest-ping returned unexpected response: {response}")
-                        await asyncio.sleep(retry_delay)
-                        retry_delay = min(retry_delay * 1.5, max_retry_delay)
-                        continue
-
-                # Phase 2: Test actual command execution with guest-exec
-                # This validates that the guest-exec subsystem is ready
-                log.debug("CLAUDE: Testing guest-exec capability")
+                # Test command execution with guest-exec
+                # This validates: socket exists, agent is responsive, and commands can execute
+                log.debug("CLAUDE: Testing guest-exec capability (validates socket + agent + execution)")
 
                 # Determine test command based on guest OS
                 if 'windows' in self.guest_os.lower():
@@ -1442,24 +1424,39 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                         if returncode == 0:
                             log.debug(f"CLAUDE: VM '{self.vm_name}' is fully booted and guest-exec is functional")
 
-                            # Phase 3: Discover and cache guest PATH environment
-                            log.debug("CLAUDE: Discovering guest PATH environment")
-                            await self._discover_and_cache_guest_path()
+                            # Phase 3+4: Discover PATH and X11 in parallel for faster boot
+                            discovery_tasks = []
 
-                            # Phase 4: Discover and cache X11 authorization for GUI automation (Linux only)
+                            # Always discover PATH
+                            log.debug("CLAUDE: Discovering guest PATH environment")
+                            discovery_tasks.append(self._discover_and_cache_guest_path())
+
+                            # Conditionally discover X11 (Linux only, unless skipped)
+                            should_discover_x11 = False
                             if skip_x11_discovery:
                                 log.debug("CLAUDE: Skipping X11 discovery - using host-based GUI automation")
-                            elif 'windows' not in self.guest_os.lower():
+                            elif 'windows' in self.guest_os.lower():
+                                log.debug("CLAUDE: Skipping X11 detection for Windows guest")
+                            else:
                                 log.debug("CLAUDE: Discovering X11 authorization for GUI automation")
-                                xauthority = await self._discover_and_cache_xauthority()
-                                if not xauthority:
+                                discovery_tasks.append(self._discover_and_cache_xauthority())
+                                should_discover_x11 = True
+
+                            # Run discoveries concurrently
+                            results = await asyncio.gather(*discovery_tasks, return_exceptions=True)
+
+                            # Check X11 discovery result if it was requested
+                            if should_discover_x11:
+                                x11_result = results[1] if len(results) > 1 else None
+                                if isinstance(x11_result, Exception):
+                                    log.warning(f"CLAUDE: X11 discovery failed: {x11_result}")
+                                elif x11_result:
+                                    log.debug(f"CLAUDE: X11 authorization configured with XAUTHORITY={x11_result}")
+                                else:
                                     raise RuntimeError(
                                         "XAUTHORITY not found - X11 environment required for GUI automation. "
                                         "Ensure the VM has an active X11 session (not headless). "
                                     )
-                                log.debug(f"CLAUDE: X11 authorization configured with XAUTHORITY={xauthority}")
-                            else:
-                                log.debug("CLAUDE: Skipping X11 detection for Windows guest")
 
                             return True
                         else:

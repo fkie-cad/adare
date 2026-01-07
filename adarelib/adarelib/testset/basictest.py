@@ -344,7 +344,7 @@ class BasicTest:
             if timestamp_str.replace('.', '').replace('-', '').isdigit():
                 unix_timestamp = float(timestamp_str)
                 # Convert from Unix timestamp to datetime
-                dt = datetime.datetime.utcfromtimestamp(unix_timestamp)
+                dt = datetime.datetime.fromtimestamp(unix_timestamp, datetime.UTC)
 
                 # Apply localtime conversion if needed for expected timestamps
                 localtime_flag = metadata.get('localtime', False)

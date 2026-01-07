@@ -135,8 +135,8 @@ class StageEventCoordinator:
         while not self._stop_event.is_set():
             try:
                 # Get event with timeout to allow checking stop event
-                # Reduced timeout from 0.1s to 0.01s for better UI responsiveness
-                event = self._event_queue.get(timeout=0.01)
+                # Reduced timeout from 0.1s to 0.005s (5ms) for even better UI responsiveness
+                event = self._event_queue.get(timeout=0.005)
                 
                 if event['type'] == 'stage':
                     if self._should_process_event(event):

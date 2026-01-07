@@ -133,9 +133,33 @@ class VMWaitTillReadyStage(Stage):
 
 @register_stage
 @attrs.define
+class VMStartStage(Stage):
+    name: ClassVar[str] = 'vm_start'
+    msg: ClassVar[str] = 'Starting virtual machine'
+    description: ClassVar[str] = 'Booting the VM via hypervisor'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
+class VMGuestAgentWaitStage(Stage):
+    name: ClassVar[str] = 'vm_guest_agent_wait'
+    msg: ClassVar[str] = 'Waiting for guest system to be ready'
+    description: ClassVar[str] = 'Waiting for guest agent and display server'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
 class VMCreateStage(Stage):
     name: ClassVar[str] = 'vm_create'
     msg: ClassVar[str] = 'Creating Virtual Machine'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
+class VMDiskPreparationStage(Stage):
+    name: ClassVar[str] = 'vm_disk_preparation'
+    msg: ClassVar[str] = 'Preparing VM disk image'
+    description: ClassVar[str] = 'Converting disk format and creating experiment environment'
     parent: ClassVar[str] = 'vm_setup'
 
 @register_stage
@@ -149,8 +173,32 @@ class VMIntegrityVerificationStage(Stage):
 @attrs.define
 class VMImportStage(Stage):
     name: ClassVar[str] = 'vm_import'
-    msg: ClassVar[str] = 'Importing VM to VirtualBox'
-    parent: ClassVar[str] = 'vm_setup'
+    msg: ClassVar[str] = 'Importing VM'
+    parent: ClassVar[str] = 'vm_disk_preparation'
+
+@register_stage
+@attrs.define
+class VMDiskOverlayCreationStage(Stage):
+    name: ClassVar[str] = 'vm_disk_overlay_creation'
+    msg: ClassVar[str] = 'Creating experiment overlay disk'
+    description: ClassVar[str] = 'Creating copy-on-write overlay for experiment isolation'
+    parent: ClassVar[str] = 'vm_disk_preparation'
+
+@register_stage
+@attrs.define
+class VMDiskFormatDetectionStage(Stage):
+    name: ClassVar[str] = 'vm_disk_format_detection'
+    msg: ClassVar[str] = 'Detecting disk format'
+    description: ClassVar[str] = 'Determining source disk format (qcow2, vmdk, ova, etc.)'
+    parent: ClassVar[str] = 'vm_disk_preparation'
+
+@register_stage
+@attrs.define
+class VMDiskConversionStage(Stage):
+    name: ClassVar[str] = 'vm_disk_conversion'
+    msg: ClassVar[str] = 'Converting disk format to qcow2'
+    description: ClassVar[str] = 'Converting source disk to QEMU-compatible qcow2 format'
+    parent: ClassVar[str] = 'vm_disk_preparation'
 
 @register_stage
 @attrs.define
@@ -162,10 +210,18 @@ class VMNetworkingStage(Stage):
 
 @register_stage
 @attrs.define
+class VMFileTransferSetupStage(Stage):
+    name: ClassVar[str] = 'vm_file_transfer_setup'
+    msg: ClassVar[str] = 'Setting up file transfer to VM'
+    description: ClassVar[str] = 'Transferring files to VM (shared folders for VirtualBox, disk copy for QEMU)'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
 class VMMountSharedDirectoriesStage(Stage):
     name: ClassVar[str] = 'vm_mount_shared_directories'
-    msg: ClassVar[str] = 'Setting up file transfer'
-    description: ClassVar[str] = 'Setting up file transfer mechanism (shared folders for VirtualBox, disk copy for QEMU)'
+    msg: ClassVar[str] = 'Mounting shared directories in guest'
+    description: ClassVar[str] = 'Mounting VirtualBox shared folders inside the VM (VirtualBox-specific, post-boot)'
     parent: ClassVar[str] = 'vm_setup'
 
 @register_stage
@@ -517,4 +573,4 @@ class VMFileTransferRetrievalStage(Stage):
     name: ClassVar[str] = 'vm_file_transfer_retrieval'
     msg: ClassVar[str] = 'Retrieving artifacts from VM'
     description: ClassVar[str] = 'Copying experiment artifacts from VM to host'
-    parent: ClassVar[str] = 'cleanup_shutdown'
+    parent: ClassVar[str] = 'vm_destroy'

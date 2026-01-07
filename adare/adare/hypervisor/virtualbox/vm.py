@@ -567,13 +567,21 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
             log.error(f"Error getting VM name by UUID '{vbox_uuid}': {e}")
             return None
 
-    async def wait_until_fully_booted(self, timeout: int = 300, ctx_manager=None, stop_event: Optional[threading.Event] = None):
-        """Wait until VM is fully booted and accessible."""
+    async def wait_until_fully_booted(self, timeout: int = 300, ctx_manager=None, stop_event: Optional[threading.Event] = None, consecutive_successes: int = 3):
+        """Wait until VM is fully booted and accessible.
+
+        Args:
+            timeout: Maximum time to wait for VM to boot (seconds)
+            ctx_manager: Optional context manager for status updates
+            stop_event: Optional event to signal cancellation
+            consecutive_successes: Number of consecutive successful checks required (default: 3)
+        """
         async def _wait_async():
             with ctx_manager if ctx_manager else contextlib.nullcontext():
                 import time
                 start_time = time.time()
                 last_vm_check = 0
+                success_count = 0  # Track consecutive successful checks
                 while time.time() - start_time < timeout:
                     # Check stop_event every 0.2s
                     if stop_event and stop_event.is_set():
@@ -603,17 +611,30 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
                                 stdout_str = stdout.decode('utf-8', errors='replace')
                                 stderr_str = stderr.decode('utf-8', errors='replace')
-                                
+
                                 if proc.returncode == 0 and "Ready" in stdout_str:
-                                    log.info(f"VM '{self.vm_name}' is fully booted and responsive")
-                                    return True
+                                    success_count += 1
+                                    log.debug(f"VM '{self.vm_name}' boot check succeeded ({success_count}/{consecutive_successes} consecutive)")
+
+                                    if success_count >= consecutive_successes:
+                                        log.info(f"VM '{self.vm_name}' is fully booted and responsive (verified with {consecutive_successes} consecutive successful checks)")
+                                        return True
                                 else:
+                                    if success_count > 0:
+                                        log.debug(f"VM boot check failed after {success_count} successes, resetting counter. Output: {stdout_str.strip()}, Error: {stderr_str.strip()}")
+                                    success_count = 0
                                     log.debug(f"VM not ready yet. Output: {stdout_str.strip()}, Error: {stderr_str.strip()}")
                             except asyncio.TimeoutError:
+                                if success_count > 0:
+                                    log.debug(f"VM boot check timed out after {success_count} successes, resetting counter")
+                                success_count = 0
                                 log.debug(f"VM '{self.vm_name}' boot check timed out")
                                 proc.kill()
                                 await proc.wait()
                         except Exception as e:
+                            if success_count > 0:
+                                log.debug(f"VM boot check error after {success_count} successes, resetting counter: {e}")
+                            success_count = 0
                             log.debug(f"Error checking VM '{self.vm_name}' boot status: {e}")
                     
                     await asyncio.sleep(0.2)

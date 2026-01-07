@@ -128,6 +128,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         commands.extend(['mkdir-p', target_base_dir, ':'])
         commands.extend(['mkdir-p', f'{target_base_dir}/run/logs', ':'])
         commands.extend(['mkdir-p', f'{target_base_dir}/run/artifacts', ':'])
+        commands.extend(['mkdir-p', f'{target_base_dir}/vm', ':'])
 
         # Collect and create all parent directories
         parent_dirs = set()
@@ -567,70 +568,111 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             context.vm._save_vm_config()  # Persist for domain XML generation
             log.debug(f"CLAUDE: Configured VM logging to {run_dir}")
 
-        # If external VM with non-qcow2 source, ensure conversion happens
-        # This creates the base disk (with -base suffix) from the source
-        if is_external and detected_format != 'qcow2':
-            base_disk_path = context.vm.get_base_disk_path()
-            if not Path(base_disk_path).exists():
-                log.debug(f"CLAUDE: Converting {detected_format} to qcow2 base disk...")
-                return_code, message = await context.vm.create_from_ovf_or_ova(
-                    source_vm_path,
-                    silent=False,
-                    try_extract=True
-                )
-                if return_code != 0:
-                    raise HypervisorException(f"Failed to convert VM disk: {message}")
-                log.debug(f"CLAUDE: Conversion to base disk completed successfully")
-
         # Create experiment overlay backed by immutable base disk
         # This ensures libguestfs operations don't modify the base disk,
         # preserving hash integrity for forensic validation
+        from adare.types.stages import (
+            VMDiskPreparationStage,
+            VMDiskFormatDetectionStage,
+            VMDiskConversionStage,
+            VMDiskOverlayCreationStage
+        )
+        from adare.backend.experiment.stagectxmanager import StageCtxManager
+
         experiment_id = context.experiment_run_ulid or 'default'
-        log.debug(f"CLAUDE: Creating overlay disk for experiment {experiment_id}...")
 
-        try:
-            overlay_path = await context.vm.create_overlay_disk(experiment_id)
+        # Wrap entire disk preparation with parent stage
+        with StageCtxManager(
+            VMDiskPreparationStage(),
+            context.experiment_run_ulid,
+            context.user_interrupt_event
+        ):
 
-            # Update VM config to use overlay (not base)
-            # This ensures all disk operations (especially libguestfs) write to overlay
-            context.vm.config.disk_path = overlay_path
-            log.debug(f"CLAUDE: Using overlay disk for experiment: {overlay_path}")
+            # Step 1: Format detection (for external VMs only)
+            if is_external:
+                with StageCtxManager(
+                    VMDiskFormatDetectionStage(),
+                    context.experiment_run_ulid,
+                    context.user_interrupt_event
+                ) as detect_stage:
+                    # Detection already happened at lines 518-526, just update stage message
+                    detect_stage.stage.sub_msg = f"Detected: {detected_format}"
+                    detect_stage.set_status(detect_stage.stage.status)
+                    log.debug(f"CLAUDE: Format detection stage: {detected_format}")
 
-            # Validate overlay was created successfully
-            if not Path(overlay_path).exists():
-                raise HypervisorException(
-                    f"Overlay disk creation reported success but file not found: {overlay_path}\n"
-                    f"This indicates a race condition or filesystem issue."
-                )
-            log.debug(f"CLAUDE: Verified overlay exists: {overlay_path}")
+            # Step 2: Conversion (only if needed)
+            if is_external and detected_format != 'qcow2':
+                base_disk_path = context.vm.get_base_disk_path()
+                if not Path(base_disk_path).exists():
+                    with StageCtxManager(
+                        VMDiskConversionStage(),
+                        context.experiment_run_ulid,
+                        context.user_interrupt_event
+                    ) as conv_stage:
+                        conv_stage.stage.sub_msg = f"Converting {detected_format} → qcow2"
+                        conv_stage.set_status(conv_stage.stage.status)
 
-            # Log base disk location for reference
-            if Path(context.vm.config.disk_path).exists():
-                base_info = "external qcow2"
-            else:
-                base_info = context.vm.get_base_disk_path()
-            log.debug(f"CLAUDE: Base disk preserved for integrity checks: {base_info}")
+                        log.debug(f"CLAUDE: Converting {detected_format} to qcow2 base disk...")
+                        return_code, message = await context.vm.create_from_ovf_or_ova(
+                            source_vm_path,
+                            silent=False,
+                            try_extract=True
+                        )
 
-            # Cleanup orphaned overlays from old naming scheme
-            # Old overlays have chained names like: VM-name-overlay-{ULID1}-overlay-{ULID2}.qcow2
-            try:
-                disk_dir = Path(overlay_path).parent
-                base_disk_path = Path(context.vm.get_base_disk_path())
+                        if return_code != 0:
+                            raise HypervisorException(f"Failed to convert VM disk: {message}")
 
-                for orphan in disk_dir.glob('*-overlay-*-overlay-*.qcow2'):
-                    # Only delete if it's not the current overlay or base disk
-                    if orphan != Path(overlay_path) and orphan != base_disk_path:
-                        log.debug(f"CLAUDE: Cleaning up orphaned overlay: {orphan.name}")
-                        orphan.unlink()
-            except Exception as e:
-                log.warning(f"CLAUDE: Failed to cleanup orphaned overlays: {e}")
+                        log.debug(f"CLAUDE: Conversion to base disk completed successfully")
 
-        except Exception as e:
-            raise HypervisorException(
-                f"Failed to create overlay disk: {e}\n"
-                f"Overlay creation failed. Ensure base disk exists and is accessible.\n"
-                f"VM: {context.vm_name}, External: {is_external}"
-            )
+            # Step 3: Create overlay disk (always happens)
+            with StageCtxManager(
+                VMDiskOverlayCreationStage(),
+                context.experiment_run_ulid,
+                context.user_interrupt_event
+            ):
+                try:
+                    overlay_path = await context.vm.create_overlay_disk(experiment_id)
+
+                    # Update VM config to use overlay (not base)
+                    # This ensures all disk operations (especially libguestfs) write to overlay
+                    context.vm.config.disk_path = overlay_path
+                    log.debug(f"CLAUDE: Using overlay disk for experiment: {overlay_path}")
+
+                    # Validate overlay was created successfully
+                    if not Path(overlay_path).exists():
+                        raise HypervisorException(
+                            f"Overlay disk creation reported success but file not found: {overlay_path}\n"
+                            f"This indicates a race condition or filesystem issue."
+                        )
+                    log.debug(f"CLAUDE: Verified overlay exists: {overlay_path}")
+
+                    # Log base disk location for reference
+                    if Path(context.vm.config.disk_path).exists():
+                        base_info = "external qcow2"
+                    else:
+                        base_info = context.vm.get_base_disk_path()
+                    log.debug(f"CLAUDE: Base disk preserved for integrity checks: {base_info}")
+
+                    # Cleanup orphaned overlays from old naming scheme
+                    # Old overlays have chained names like: VM-name-overlay-{ULID1}-overlay-{ULID2}.qcow2
+                    try:
+                        disk_dir = Path(overlay_path).parent
+                        base_disk_path = Path(context.vm.get_base_disk_path())
+
+                        for orphan in disk_dir.glob('*-overlay-*-overlay-*.qcow2'):
+                            # Only delete if it's not the current overlay or base disk
+                            if orphan != Path(overlay_path) and orphan != base_disk_path:
+                                log.debug(f"CLAUDE: Cleaning up orphaned overlay: {orphan.name}")
+                                orphan.unlink()
+                    except Exception as e:
+                        log.warning(f"CLAUDE: Failed to cleanup orphaned overlays: {e}")
+
+                except Exception as e:
+                    raise HypervisorException(
+                        f"Failed to create overlay disk: {e}\n"
+                        f"Overlay creation failed. Ensure base disk exists and is accessible.\n"
+                        f"VM: {context.vm_name}, External: {is_external}"
+                    )
 
     async def setup_file_transfer(self, context):
         """
@@ -739,29 +781,72 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         except subprocess.SubprocessError as e:
             log.warning(f"CLAUDE: Failed to inspect disk image: {e}")
 
-        # Find wheel files
+        # Check if wheels are available (wheel mode) or use editable mode
         wheels_dir = context.project_directory.vm_runtime / 'wheels'
         adarelib_wheels = list(wheels_dir.glob('adarelib-*.whl'))
         adarevm_wheels = list(wheels_dir.glob('adarevm-*.whl'))
 
-        if not adarelib_wheels:
-            raise HypervisorException(
-                f"adarelib wheel not found in {wheels_dir}. Run 'adare experiment load' first."
-            )
-        if not adarevm_wheels:
-            raise HypervisorException(
-                f"adarevm wheel not found in {wheels_dir}. Run 'adare experiment load' first."
-            )
+        wheels_available = bool(adarelib_wheels and adarevm_wheels)
 
-        adarelib_wheel = adarelib_wheels[0]
-        adarevm_wheel = adarevm_wheels[0]
+        # NEW: Check if wheels already installed in guest VM
+        wheels_already_installed = False
+        if wheels_available:
+            # Quick check: Are wheels already in the VM at /adare/vm/wheels/?
+            # User may have pre-installed them manually
+            try:
+                check_cmd = [
+                    'guestfish', '--ro', '-a', str(disk_path), '-i',
+                    'sh', 'ls /adare/vm/wheels/ 2>/dev/null | grep -E "adarevm-|adarelib-" || echo MISSING'
+                ]
+                result = subprocess.run(check_cmd, capture_output=True, text=True, timeout=10)
+
+                if 'adarevm-' in result.stdout and 'adarelib-' in result.stdout and 'MISSING' not in result.stdout:
+                    wheels_already_installed = True
+                    log.info("✓ Detected wheels already installed in VM - skipping wheel copy")
+                    log.info("  PERFORMANCE: Saved ~20-40s by skipping wheel copy")
+            except Exception as e:
+                log.debug(f"Could not check for pre-installed wheels: {e}")
+                # Fall back to copying wheels
 
         # Build file manifest
         files_to_copy = [
-            {'source': str(context.experiment_directory.playbookfile), 'dest': 'playbook.yml'},
-            {'source': str(adarevm_wheel), 'dest': f'wheels/{adarevm_wheel.name}'},
-            {'source': str(adarelib_wheel), 'dest': f'wheels/{adarelib_wheel.name}'}
+            {'source': str(context.experiment_directory.playbookfile), 'dest': 'playbook.yml'}
         ]
+
+        if wheels_available and not wheels_already_installed:
+            # Wheel mode: copy wheels (not yet installed in VM)
+            log.info("Using wheel installation mode for QEMU - copying wheels")
+            adarelib_wheel = adarelib_wheels[0]
+            adarevm_wheel = adarevm_wheels[0]
+            files_to_copy.extend([
+                {'source': str(adarevm_wheel), 'dest': f'vm/wheels/{adarevm_wheel.name}'},
+                {'source': str(adarelib_wheel), 'dest': f'vm/wheels/{adarelib_wheel.name}'}
+            ])
+        elif wheels_available and wheels_already_installed:
+            # Wheels already in VM - skip copy
+            log.info("Using wheel installation mode for QEMU - wheels already present in VM")
+        else:
+            # Editable mode: copy source directories to /adare/vm/
+            log.info("Using editable installation mode for QEMU (no wheels found)")
+            adarelib_src = context.project_directory.vm_runtime / 'adarelib'
+            adarevm_src = context.project_directory.vm_runtime / 'adarevm'
+
+            if not adarelib_src.exists():
+                raise HypervisorException(
+                    f"adarelib source not found at {adarelib_src}. "
+                    f"Run 'adare experiment load' first."
+                )
+            if not adarevm_src.exists():
+                raise HypervisorException(
+                    f"adarevm source not found at {adarevm_src}. "
+                    f"Run 'adare experiment load' first."
+                )
+
+            files_to_copy.extend([
+                {'source': str(adarevm_src), 'dest': 'vm/adarevm'},
+                {'source': str(adarelib_src), 'dest': 'vm/adarelib'}
+            ])
+
 
         log.info(f"Transferring {len(files_to_copy)} files to VM disk via libguestfs")
 
@@ -817,28 +902,43 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         Args:
             context: ExperimentRunCtx containing VM
         """
-        # Start the VM (via libvirt)
-        log.debug(f"CLAUDE: Starting VM '{context.vm.vm_name}' via libvirt")
-        await context.vm.start(stop_event=context.user_interrupt_event)
-        log.debug(f"CLAUDE: VM visible in virt-manager (use 'Open' button to access display)")
+        from adare.types.stages import VMStartStage, VMGuestAgentWaitStage
+        from adare.backend.experiment.stagectxmanager import StageCtxManager
 
-        # Wait until VM is fully booted and guest agent is ready
-        # Determine if we should skip X11 discovery based on GUI execution mode
-        from adare.backend.experiment.execution.gui_executor_factory import resolve_gui_execution_mode
-        from adare.backend.experiment.execution.base import GUIExecutionMode
-        playbook_settings = context.playbook.settings if context.playbook and hasattr(context.playbook, 'settings') else None
-        gui_mode = resolve_gui_execution_mode(context.vm, playbook_settings)
-        skip_x11 = (gui_mode == GUIExecutionMode.HOST)
+        # Stage 1: Start VM
+        with StageCtxManager(
+            VMStartStage(),
+            context.experiment_run_ulid,
+            context.user_interrupt_event
+        ) as start_stage:
+            # Start the VM (via libvirt) with stage context for progress updates
+            log.debug(f"CLAUDE: Starting VM '{context.vm.vm_name}' via libvirt")
+            await context.vm.start(stop_event=context.user_interrupt_event, stage_ctx=start_stage)
+            log.debug(f"CLAUDE: VM visible in virt-manager (use 'Open' button to access display)")
 
-        # Skip validation in test mode for faster iteration
-        if context.config.test_mode:
-            log.warning('SKIPPING VM validation (test mode) - VM must be pre-configured correctly')
-            log.info('VM assumed ready (test mode)')
-        else:
-            log.info('Waiting until VM is ready (QEMU Guest Agent)')
-            if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.user_interrupt_event, skip_x11_discovery=skip_x11):
-                raise LoggedException(log, 'VM did not become ready in time')
-            log.info('VM is ready')
+        # Stage 2: Wait for guest agent
+        with StageCtxManager(
+            VMGuestAgentWaitStage(),
+            context.experiment_run_ulid,
+            context.user_interrupt_event
+        ):
+            # Wait until VM is fully booted and guest agent is ready
+            # Determine if we should skip X11 discovery based on GUI execution mode
+            from adare.backend.experiment.execution.gui_executor_factory import resolve_gui_execution_mode
+            from adare.backend.experiment.execution.base import GUIExecutionMode
+            playbook_settings = context.playbook.settings if context.playbook and hasattr(context.playbook, 'settings') else None
+            gui_mode = resolve_gui_execution_mode(context.vm, playbook_settings)
+            skip_x11 = (gui_mode == GUIExecutionMode.HOST)
+
+            # Skip validation in test mode for faster iteration
+            if context.config.test_mode:
+                log.warning('SKIPPING VM validation (test mode) - VM must be pre-configured correctly')
+                log.info('VM assumed ready (test mode)')
+            else:
+                log.info('Waiting until VM is ready (QEMU Guest Agent)')
+                if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.user_interrupt_event, skip_x11_discovery=skip_x11):
+                    raise LoggedException(log, 'VM did not become ready in time')
+                log.info('VM is ready')
 
     async def retrieve_artifacts(self, context, post_interrupt: bool = False):
         """

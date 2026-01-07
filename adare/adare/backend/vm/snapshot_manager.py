@@ -94,15 +94,16 @@ class SnapshotManager:
         from adare.config import get_vm_credentials
         platform = getattr(vm_record.osinfo, 'platform', 'linux') if hasattr(vm_record, 'osinfo') and vm_record.osinfo else 'linux'
         username, password = get_vm_credentials(platform)
-        
+
         vbox_vm = VirtualBoxVM(
             vm_name=vm_name,
             guest_os=platform,
             manager=self.vbox_manager,
             username=username,
-            password=password
+            password=password,
+            executables=self.vbox_manager.executables
         )
-        
+
         try:
             # Create the snapshot
             result = vbox_vm.create_snapshot(
@@ -180,7 +181,8 @@ class SnapshotManager:
             guest_os=platform,
             manager=self.vbox_manager,
             username=username,
-            password=password
+            password=password,
+            executables=self.vbox_manager.executables
         )
 
         try:
@@ -305,15 +307,16 @@ class SnapshotManager:
         from adare.config import get_vm_credentials
         platform = getattr(vm_record.osinfo, 'platform', 'linux') if hasattr(vm_record, 'osinfo') and vm_record.osinfo else 'linux'
         username, password = get_vm_credentials(platform)
-        
+
         vbox_vm = VirtualBoxVM(
             vm_name=vm_name,
             guest_os=platform,
             manager=self.vbox_manager,
             username=username,
-            password=password
+            password=password,
+            executables=self.vbox_manager.executables
         )
-        
+
         try:
             return vbox_vm.snapshot_exists(vm_record.base_snapshot_name)
         except Exception as e:
@@ -429,7 +432,8 @@ class SnapshotManager:
                 guest_os=platform,
                 manager=self.vbox_manager,
                 username=username,
-                password=password
+                password=password,
+                executables=self.vbox_manager.executables
             )
 
         elif hypervisor == 'qemu':
@@ -784,14 +788,16 @@ def check_snapshot_exists_by_uuid(vbox_uuid: str, snapshot_name: str) -> bool:
         return False
     
     # Create VirtualBox VM instance and check snapshot (no credentials needed for snapshot check)
+    manager = VirtualBoxManager()
     vbox_vm = VirtualBoxVM(
         vm_name=vm_name,
         guest_os="",
-        manager=VirtualBoxManager(),
+        manager=manager,
         username="dummy",
-        password="dummy"
+        password="dummy",
+        executables=manager.executables
     )
-    
+
     try:
         return vbox_vm.snapshot_exists(snapshot_name)
     except Exception as e:
