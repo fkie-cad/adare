@@ -8,6 +8,8 @@ project databases and global resources (VMs, environments, test functions).
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 import logging
+from datetime import datetime, timedelta
+import threading
 
 from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
 from adare.database.models.global_models import Vm, Environment, TestFunction, Project
@@ -33,11 +35,85 @@ class ReferenceManager:
 
     This class provides validation, resolution, and tracking of references
     from project-specific data to globally shared resources.
+
+    Features:
+    - LRU cache with TTL (time-to-live) for performance
+    - Thread-safe cache operations
+    - Automatic cache eviction when size limit exceeded
     """
 
-    def __init__(self):
+    def __init__(self, cache_ttl_seconds: int = 300, max_cache_size: int = 1000):
+        """
+        Initialize reference manager with caching.
+
+        Args:
+            cache_ttl_seconds: Cache time-to-live in seconds (default: 300 = 5 minutes)
+            max_cache_size: Maximum number of cached items (default: 1000)
+        """
         self._global_api = None
         self._cache = {}
+        self._cache_timestamps = {}
+        self._cache_lock = threading.Lock()
+        self._cache_ttl = timedelta(seconds=cache_ttl_seconds)
+        self._max_cache_size = max_cache_size
+
+    def _is_cache_valid(self, cache_key: str) -> bool:
+        """Check if cached value is still valid (not expired)."""
+        if cache_key not in self._cache_timestamps:
+            return False
+
+        age = datetime.utcnow() - self._cache_timestamps[cache_key]
+        return age < self._cache_ttl
+
+    def _cache_get(self, cache_key: str):
+        """Get from cache if valid, else None."""
+        with self._cache_lock:
+            if cache_key in self._cache and self._is_cache_valid(cache_key):
+                return self._cache[cache_key]
+            # Remove expired entry
+            if cache_key in self._cache:
+                del self._cache[cache_key]
+                del self._cache_timestamps[cache_key]
+            return None
+
+    def _cache_set(self, cache_key: str, value):
+        """Set cache with timestamp and evict old entries if needed."""
+        with self._cache_lock:
+            self._cache[cache_key] = value
+            self._cache_timestamps[cache_key] = datetime.utcnow()
+
+            # Evict oldest 20% of entries if cache too large
+            if len(self._cache) > self._max_cache_size:
+                num_to_evict = int(self._max_cache_size * 0.2)
+                sorted_keys = sorted(
+                    self._cache_timestamps.keys(),
+                    key=lambda k: self._cache_timestamps[k]
+                )
+                for key in sorted_keys[:num_to_evict]:
+                    del self._cache[key]
+                    del self._cache_timestamps[key]
+                log.debug(f"Evicted {num_to_evict} old cache entries")
+
+    def invalidate_cache(self, pattern: str = None):
+        """
+        Invalidate cache entries.
+
+        Args:
+            pattern: Optional pattern to match. If None, clears all cache.
+        """
+        with self._cache_lock:
+            if pattern is None:
+                # Clear all
+                self._cache.clear()
+                self._cache_timestamps.clear()
+                log.debug("Cleared all cache entries")
+            else:
+                # Clear matching pattern
+                keys_to_remove = [k for k in self._cache.keys() if pattern in k]
+                for key in keys_to_remove:
+                    del self._cache[key]
+                    del self._cache_timestamps[key]
+                log.debug(f"Cleared {len(keys_to_remove)} cache entries matching '{pattern}'")
 
     def _get_global_api(self) -> GlobalDatabaseApi:
         """Get or create global database API connection."""
@@ -190,15 +266,16 @@ class ReferenceManager:
             Environment object or None if not found
         """
         cache_key = f"env_obj_{environment_id}"
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
 
         try:
             with self._get_global_api() as api:
                 environment = api.get_by_ulid(Environment, environment_id)
                 if environment:
                     api.expunge(environment)  # Detach from session
-                    self._cache[cache_key] = environment
+                    self._cache_set(cache_key, environment)
                     return environment
                 return None
         except Exception as e:
@@ -216,8 +293,9 @@ class ReferenceManager:
             TestFunction object or None if not found
         """
         cache_key = f"tf_obj_{testfunction_id}"
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
 
         try:
             with self._get_global_api() as api:
@@ -230,7 +308,7 @@ class ReferenceManager:
                     # Access the file relationship to ensure it's loaded
                     _ = testfunction.file
                     api.expunge(testfunction)  # Detach from session
-                    self._cache[cache_key] = testfunction
+                    self._cache_set(cache_key, testfunction)
                     return testfunction
                 return None
         except Exception as e:
@@ -248,8 +326,9 @@ class ReferenceManager:
             TestParameter object or None if not found
         """
         cache_key = f"tp_obj_{parameter_id}"
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
 
         try:
             with self._get_global_api() as api:
@@ -257,7 +336,7 @@ class ReferenceManager:
                 parameter = api.get_by_ulid(TestParameter, parameter_id)
                 if parameter:
                     api.expunge(parameter)  # Detach from session
-                    self._cache[cache_key] = parameter
+                    self._cache_set(cache_key, parameter)
                     return parameter
                 return None
         except Exception as e:
@@ -275,15 +354,16 @@ class ReferenceManager:
             VM object or None if not found
         """
         cache_key = f"vm_obj_{vm_id}"
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
 
         try:
             with self._get_global_api() as api:
                 vm = api.get_by_ulid(Vm, vm_id)
                 if vm:
                     api.expunge(vm)  # Detach from session
-                    self._cache[cache_key] = vm
+                    self._cache_set(cache_key, vm)
                     return vm
                 return None
         except Exception as e:
@@ -487,8 +567,9 @@ class ReferenceManager:
             VmInstance object or None if not found
         """
         cache_key = f"vmi_obj_{vm_instance_id}"
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
 
         try:
             from adare.database.models.global_models import VmInstance
@@ -499,7 +580,7 @@ class ReferenceManager:
 
                 if vm_instance:
                     api.expunge(vm_instance)  # Detach from session
-                    self._cache[cache_key] = vm_instance
+                    self._cache_set(cache_key, vm_instance)
                     return vm_instance
                 return None
         except Exception as e:

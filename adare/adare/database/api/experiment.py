@@ -87,16 +87,21 @@ class ExperimentApi(ProjectDatabaseApi):
         """
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
+        from sqlalchemy.exc import SQLAlchemyError
 
         environment_ids = []
         try:
             with GlobalDatabaseApi() as global_api:
-                for name in names:
-                    environment = global_api._session.query(Environment).filter_by(name=name).first()
-                    if environment:
-                        environment_ids.append(environment.id)
-        except Exception as e:
-            log.error(f"Error querying global environments: {e}")
+                # Fix N+1 query: Use single query with IN clause
+                environments = global_api._session.query(Environment).filter(
+                    Environment.name.in_(names)
+                ).all()
+
+                # Preserve order from input names
+                env_map = {env.name: env.id for env in environments}
+                environment_ids = [env_map[name] for name in names if name in env_map]
+        except SQLAlchemyError as e:
+            log.error(f"Database error querying global environments: {e}")
 
         return environment_ids
 
@@ -107,13 +112,14 @@ class ExperimentApi(ProjectDatabaseApi):
         """
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
+        from sqlalchemy.exc import SQLAlchemyError
 
         try:
             with GlobalDatabaseApi() as global_api:
                 environment = global_api._session.query(Environment).filter_by(name=environment_name).first()
                 return environment
-        except Exception as e:
-            log.error(f"Error querying global environment '{environment_name}': {e}")
+        except SQLAlchemyError as e:
+            log.error(f"Database error querying global environment '{environment_name}': {e}")
             return None
 
     def create_experiment(self, name: str, experiment_directory: ExperimentDirectory, auto_commit: bool = True) -> Experiment:
@@ -167,7 +173,7 @@ class ExperimentApi(ProjectDatabaseApi):
             try:
                 playbook_api.populate_playbook_from_file(experiment, experiment_directory.playbookfile)
                 log.debug(f'populated playbook models for experiment {experiment.id}')
-            except Exception as e:
+            except (SQLAlchemyError, OSError, IOError) as e:
                 log.error(f'failed to populate playbook models for experiment {experiment.id}: {e}')
                 raise
 
@@ -191,6 +197,7 @@ class ExperimentApi(ProjectDatabaseApi):
         """Get current environment names from experiment's environment_ids."""
         from adare.database.api.base import GlobalDatabaseApi
         from adare.database.models.global_models import Environment
+        from sqlalchemy.exc import SQLAlchemyError
 
         experiment = self.get_experiment_by_ulid(experiment_ulid)
         if not experiment or not experiment.environment_ids:
@@ -199,12 +206,16 @@ class ExperimentApi(ProjectDatabaseApi):
         environment_names = []
         try:
             with GlobalDatabaseApi() as global_api:
-                for env_id in experiment.environment_ids:
-                    environment = global_api._session.query(Environment).filter_by(id=env_id).first()
-                    if environment:
-                        environment_names.append(environment.name)
-        except Exception as e:
-            log.error(f"Error querying environment names for experiment {experiment_ulid}: {e}")
+                # Fix N+1 query: Use single query with IN clause instead of loop
+                environments = global_api._session.query(Environment).filter(
+                    Environment.id.in_(experiment.environment_ids)
+                ).all()
+
+                # Preserve original order from environment_ids
+                env_map = {env.id: env.name for env in environments}
+                environment_names = [env_map[env_id] for env_id in experiment.environment_ids if env_id in env_map]
+        except SQLAlchemyError as e:
+            log.error(f"Database error querying environment names for experiment {experiment_ulid}: {e}")
 
         return environment_names
 
@@ -356,31 +367,41 @@ class ExperimentApi(ProjectDatabaseApi):
             )
 
         # Create parameter entries for this test (project-specific)
+        # Fix N+1 query: Batch load all parameters at once
         parameter_entries = []
-        for p_key, p_val in test.parameter.items():
-            # Look up the global test parameter by name to get its ID
-            global_parameter = None
-            with GlobalDatabaseApi() as global_api:
-                from adare.database.models.global_models import TestParameter
-                global_parameter = global_api._session.query(TestParameter).filter_by(name=p_key).first()
+        parameter_names = list(test.parameter.keys())
 
-            if not global_parameter:
+        with GlobalDatabaseApi() as global_api:
+            from adare.database.models.global_models import TestParameter
+
+            # Single query for all parameters
+            global_parameters = global_api._session.query(TestParameter).filter(
+                TestParameter.name.in_(parameter_names)
+            ).all()
+
+            # Create lookup map
+            param_map = {p.name: p.id for p in global_parameters}
+
+            # Validate all parameters exist
+            missing_params = set(parameter_names) - set(param_map.keys())
+            if missing_params:
                 raise TestSetFormatError(
                     log,
-                    message=f'Test parameter [b]{p_key}[/b] used in test [b]{test.name}[/b] does not exist in the global database.',
+                    message=f'Test parameters {missing_params} used in test [b]{test.name}[/b] do not exist in the global database.',
                     possible_solutions=[
-                        f'Ensure the parameter name is correct, or add the parameter to the global database',
+                        f'Ensure parameter names are correct',
                         f'Check available parameters with: adare testfunction info {test.function}',
                     ]
                 )
 
-            # Create project-specific parameter entry with the global parameter ID
-            test_parameter_entry_obj = TestParameterEntry(
-                parameter_id=global_parameter.id,
-                value=str(p_val)
-            )
-            self._session.add(test_parameter_entry_obj)
-            parameter_entries.append(test_parameter_entry_obj)
+            # Create parameter entries using batched lookup
+            for p_key, p_val in test.parameter.items():
+                test_parameter_entry_obj = TestParameterEntry(
+                    parameter_id=param_map[p_key],
+                    value=str(p_val)
+                )
+                self._session.add(test_parameter_entry_obj)
+                parameter_entries.append(test_parameter_entry_obj)
 
         # Check if abstract test already exists
         abstract_test_obj = self._session.query(AbstractTest).filter_by(

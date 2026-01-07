@@ -32,34 +32,15 @@ def get_vm_by_hash(file_hash: str, fields: list[str] = None) -> Optional[Vm] | d
         dict: VM data if fields specified
         None: If VM not found
     """
+    from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
+
     with VmApi() as api:
         vm = api.get_vm_by_hash(file_hash)
         if not vm:
             return None
-        
-        # Return full object for backward compatibility
-        if fields is None:
-            return vm
-        
-        # Extract requested fields
-        result = {}
-        for field in fields:
-            if field == 'id':
-                result['id'] = vm.id
-            elif field == 'name':
-                result['name'] = vm.name
-            elif field == 'file':
-                result['file'] = vm.file
-            elif field == 'hash':
-                result['hash'] = vm.hash
-            elif field == 'description':
-                result['description'] = vm.description
-            elif field == 'osinfo':
-                result['osinfo'] = vm.osinfo
-            else:
-                log.warning(f'Unknown field requested: {field}. Available: id, name, file, hash, description, osinfo')
-        
-        return result
+
+        # Use field extraction utility
+        return extract_fields(vm, fields, VM_FIELD_MAP)
 
 
 def get_vm_by_name(name: str, fields: list[str] = None) -> Optional[Vm] | dict | None:
@@ -75,34 +56,15 @@ def get_vm_by_name(name: str, fields: list[str] = None) -> Optional[Vm] | dict |
         dict: VM data if fields specified
         None: If VM not found
     """
+    from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
+
     with VmApi() as api:
         vm = api.get_vm_by_name(name)
         if not vm:
             return None
-        
-        # Return full object for backward compatibility
-        if fields is None:
-            return vm
-        
-        # Extract requested fields
-        result = {}
-        for field in fields:
-            if field == 'id':
-                result['id'] = vm.id
-            elif field == 'name':
-                result['name'] = vm.name
-            elif field == 'file':
-                result['file'] = vm.file
-            elif field == 'hash':
-                result['hash'] = vm.hash
-            elif field == 'description':
-                result['description'] = vm.description
-            elif field == 'osinfo':
-                result['osinfo'] = vm.osinfo
-            else:
-                log.warning(f'Unknown field requested: {field}. Available: id, name, file, hash, description, osinfo')
-        
-        return result
+
+        # Use field extraction utility
+        return extract_fields(vm, fields, VM_FIELD_MAP)
 
 
 def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '',
@@ -155,30 +117,11 @@ def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, de
             hypervisor=hypervisor,
             force=force
         )
-        
-        # Return full object for backward compatibility
-        if fields is None:
-            return vm
-        
-        # Extract requested fields
-        result = {}
-        for field in fields:
-            if field == 'id':
-                result['id'] = vm.id
-            elif field == 'name':
-                result['name'] = vm.name
-            elif field == 'file':
-                result['file'] = vm.file
-            elif field == 'hash':
-                result['hash'] = vm.hash
-            elif field == 'description':
-                result['description'] = vm.description
-            elif field == 'osinfo':
-                result['osinfo'] = vm.osinfo
-            else:
-                log.warning(f'Unknown field requested: {field}. Available: id, name, file, hash, description, osinfo')
-        
-        return result
+
+
+        # Use field extraction utility
+        from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
+        return extract_fields(vm, fields, VM_FIELD_MAP)
 
 
 
@@ -222,43 +165,26 @@ def create_vm_with_uuid_capture(project_path: Path, name: str, file_path: Path, 
 def get_vm_by_id(vm_id: str, fields: list[str] = None) -> Optional[Vm] | dict | None:
     """
     Get VM by database ID.
-    
+
     Args:
         vm_id: VM database ID
         fields: Optional list of fields to extract. If None, returns full object.
-        
+
     Returns:
         VM: Full object if fields=None
         dict: VM data if fields specified
         None: If VM not found
     """
     from adare.database.api.vm import VmApi
-    
+    from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
+
     with VmApi() as api:
         vm = api.get_vm_by_id(vm_id)
         if not vm:
             return None
-        
-        # Return full object for backward compatibility
-        if fields is None:
-            return vm
-        
-        # Extract requested fields
-        result = {}
-        for field in fields:
-            if field == 'id':
-                result['id'] = vm.id
-            elif field == 'name':
-                result['name'] = vm.name
-            elif field == 'file':
-                result['file'] = vm.file
-            elif field == 'hash':
-                result['hash'] = vm.hash
-            elif field == 'description':
-                result['description'] = vm.description
-            # Add other fields as needed
-        
-        return result
+
+        # Use field extraction utility
+        return extract_fields(vm, fields, VM_FIELD_MAP)
 
 
 def get_vm_data(vm_id: str = None, name: str = None, file_hash: str = None) -> dict | None:
@@ -412,67 +338,60 @@ def get_all_vms(fields: list[str] = None) -> list:
     Returns:
         List of VM objects or dictionaries (if fields specified)
     """
+    from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
+
     with VmApi() as api:
         vms = api.get_all_vms()
-        
+
         if fields is None:
             return vms
-        
-        # Extract requested fields
-        results = []
-        for vm in vms:
-            result = {}
-            for field in fields:
-                if field == 'id':
-                    result['id'] = vm.id
-                elif field == 'name':
-                    result['name'] = vm.name
-                elif field == 'file':
-                    result['file'] = vm.file
-                elif field == 'hash':
-                    result['hash'] = vm.hash
-                elif field == 'description':
-                    result['description'] = vm.description
-                elif field == 'hypervisor':
-                    result['hypervisor'] = vm.hypervisor
-                elif field == 'osinfo':
-                    result['osinfo'] = vm.osinfo
-                else:
-                    log.warning(f'Unknown field requested: {field}')
-            results.append(result)
-        
+
+        # Use field extraction utility for each VM
+        results = [extract_fields(vm, fields, VM_FIELD_MAP) for vm in vms]
         return results
 
 
 def get_vms_by_environment(environment_ulid: str) -> list:
     """
     Get VMs associated with a specific environment.
-    
+
     Args:
         environment_ulid: Environment ULID
-        
+
     Returns:
         List of VM objects associated with the environment
     """
+    from adare.backend.environment import database as env_database
+    from adare.database.models.global_models import Vm
+    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy.orm import joinedload
+
     try:
         # Get VMs used by this environment
-        from adare.backend.environment import database as env_database
         vm_ids = env_database.get_environment_vm_ids(environment_ulid)
-        
+
         if not vm_ids:
             return []
-        
-        vms = []
+
+        # Fix N+1 query: Single query with IN clause and eager loading
         with VmApi() as api:
-            for vm_id in vm_ids:
-                vm = api.get_vm_by_id(vm_id)
-                if vm:
-                    vms.append(vm)
-        
-        return vms
-        
-    except Exception as e:
-        log.error(f"Failed to get VMs for environment {environment_ulid}: {e}", exc_info=True)
+            vms = api._session.query(Vm).options(
+                joinedload(Vm.osinfo)  # Eager load relationships
+            ).filter(
+                Vm.id.in_(vm_ids)
+            ).all()
+
+            # Detach to make them safe for use outside session
+            for vm in vms:
+                api._session.expunge(vm)
+
+            return vms
+
+    except SQLAlchemyError as e:
+        log.error(f"Database error getting VMs for environment {environment_ulid}: {e}", exc_info=True)
+        return []
+    except (OSError, IOError) as e:
+        log.error(f"File system error getting VMs for environment {environment_ulid}: {e}", exc_info=True)
         return []
 
 

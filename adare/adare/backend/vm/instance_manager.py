@@ -320,11 +320,31 @@ class VmInstanceManager:
 
             log.debug(f"CLAUDE: Lock acquired in {time.time() - start_time:.2f}s")
 
-            # Synchronize database instance states with VirtualBox before allocation
+            # Synchronize database instance states with VirtualBox (with stage visibility)
+            from adare.backend.experiment.stagectxmanager import StageCtxManager
+            from adare.types.stages import VMInstanceSyncStage
+
             log.debug(f"CLAUDE: Synchronizing instance states before allocation for vm_id={vm_id}")
-            sync_count = await self.sync_instance_states(vm_id)
-            if sync_count > 0:
-                log.info(f"CLAUDE: Synchronized {sync_count} instance states before allocation")
+            with VmApi() as api:
+                instance_count = len(api.get_vm_instances_for_vm(vm_id))
+
+            with StageCtxManager(
+                VMInstanceSyncStage(),
+                experiment_run_id,
+                event=None  # No interrupt support at this level yet
+            ) as stage_ctx:
+                # Update sub-message to show count
+                stage_ctx.stage.sub_msg = f"Checking {instance_count} instances"
+                stage_ctx.set_status(stage_ctx.stage.status)
+
+                sync_count = await self.sync_instance_states(vm_id)
+
+                # Update message with result
+                stage_ctx.stage.sub_msg = f"Synchronized {sync_count} instances"
+                stage_ctx.set_status(stage_ctx.stage.status)
+
+                if sync_count > 0:
+                    log.info(f"CLAUDE: Synchronized {sync_count} instance states before allocation")
 
             # First try to find available instance for reuse
             log.debug(f"CLAUDE: Searching for available instances for vm_id={vm_id}")

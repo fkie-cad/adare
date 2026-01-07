@@ -6,7 +6,7 @@ such as experiments, runs, and abstract tests. These models are stored in
 individual project databases and reference global resources by ID.
 """
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, Boolean, func, Enum as SAEnum, Text, JSON
+from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, Boolean, func, Enum as SAEnum, Text, JSON, Index
 from sqlalchemy.orm import relationship, backref
 import ulid
 from sqlalchemy_serializer import SerializerMixin
@@ -592,6 +592,13 @@ class ExperimentRun(SerializerMixin, ProjectBase):
 
     # Stages in this run
     stages_in_run = relationship(StageInRun, backref="experiment_run", cascade="all, delete-orphan")
+
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        Index('idx_run_experiment_status', 'experiment_id', 'status'),
+        Index('idx_run_environment', 'environment_id', 'status'),
+        Index('idx_run_vm_instance', 'vm_instance_id', 'status'),
+    )
 
     def __str__(self):
         return f"ExperimentRun({self.experiment.name if self.experiment else 'Unknown'}, {self.id})"

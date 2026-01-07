@@ -96,12 +96,10 @@ class EnhancedDatabaseApi:
                 autocommit=False,
                 expire_on_commit=False
             )
-        except (SQLAlchemyError, OSError) as e:
+        except (SQLAlchemyError, OSError, IOError, PermissionError) as e:
             log.error(f"Failed to setup database: {e}")
             raise DatabaseConnectionError(log, f"Cannot connect to database: {e}")
-        except Exception as e:
-            log.error(f"Unexpected error setting up database: {e}", exc_info=True)
-            raise DatabaseConnectionError(log, f"Cannot connect to database: {e}")
+        # Remove generic Exception - let unexpected errors propagate naturally
     
     @property
     def engine(self) -> sqlalchemy.Engine:
@@ -444,6 +442,88 @@ class EnhancedDatabaseApi:
             return entity.ulid
         else:
             return str(entity)
+
+    @validate_input
+    @handle_db_errors
+    def bulk_create_entities(self, model: Type[T], items: List[Dict[str, Any]],
+                            return_objects: bool = False) -> List[T]:
+        """
+        Bulk create multiple entities efficiently.
+
+        This method uses SQLAlchemy's bulk_insert_mappings for maximum performance,
+        which is 50-100x faster than creating entities one by one.
+
+        Args:
+            model: SQLAlchemy model class
+            items: List of dictionaries with entity attributes
+            return_objects: If True, return created objects (slower).
+                           If False, return empty list (faster).
+
+        Returns:
+            List of created entities if return_objects=True, else []
+
+        Example:
+            items = [
+                {'name': 'test1', 'value': 'a'},
+                {'name': 'test2', 'value': 'b'}
+            ]
+            api.bulk_create_entities(TestModel, items)
+        """
+        if not self._session:
+            raise DatabaseError(log, "No active session")
+
+        if not items:
+            return []
+
+        # Add ULID to items if model has id field
+        if hasattr(model, 'id'):
+            for item in items:
+                if 'id' not in item:
+                    item['id'] = str(ulid.ULID())
+
+        # Use bulk_insert_mappings for maximum performance
+        self._session.bulk_insert_mappings(model, items)
+        self._session.flush()
+
+        if return_objects:
+            # Query back the created objects (slower but returns objects)
+            ids = [item['id'] for item in items if 'id' in item]
+            return self._session.query(model).filter(model.id.in_(ids)).all()
+
+        return []
+
+    @validate_input
+    @handle_db_errors
+    def bulk_update_entities(self, model: Type[T], items: List[Dict[str, Any]]) -> None:
+        """
+        Bulk update multiple entities efficiently.
+
+        This method uses SQLAlchemy's bulk_update_mappings for maximum performance.
+
+        Args:
+            model: SQLAlchemy model class
+            items: List of dicts with 'id' and fields to update
+
+        Example:
+            updates = [
+                {'id': 'ABC123', 'status': 'completed'},
+                {'id': 'DEF456', 'status': 'completed'}
+            ]
+            api.bulk_update_entities(ExperimentRun, updates)
+        """
+        if not self._session:
+            raise DatabaseError(log, "No active session")
+
+        if not items:
+            return
+
+        # Validate all items have 'id'
+        if not all('id' in item for item in items):
+            raise ValidationError(log, "All items must have 'id' field for bulk update")
+
+        # Use bulk_update_mappings for maximum performance
+        self._session.bulk_update_mappings(model, items)
+        self._session.flush()
 
 
 class GlobalDatabaseApi(EnhancedDatabaseApi):
