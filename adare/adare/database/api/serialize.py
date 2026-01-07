@@ -9,7 +9,8 @@ from adare.database.models.global_models import Project, Environment, OsInfo, Te
 from adare.database.models.project_models import Result, Experiment, ExperimentRun,  StageInRun, Stage, Event, Status, AbstractTest
 from adare.database.api.database import DatabaseApi
 import adare.config.database as config_database
-from adare.config import TIMESTAMP_FORMAT, StatusEnum
+from adare.config import TIMESTAMP_FORMAT
+from adarelib.constants import StatusEnum
 from adare.exceptions import EnvironmentNotFoundError, ProjectNotFoundError, ExperimentNotFoundError, TestFunctionNotFoundError, ArgumentsError
 
 # configure logging

@@ -218,6 +218,38 @@ class VMFileTransferSetupStage(Stage):
 
 @register_stage
 @attrs.define
+class VMRuntimePreparationStage(Stage):
+    name: ClassVar[str] = 'vm_runtime_preparation'
+    msg: ClassVar[str] = 'Preparing VM runtime environment'
+    description: ClassVar[str] = 'Copying adarevm/adarelib and building Python wheels for VM installation'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
+class VMInstanceAllocationStage(Stage):
+    name: ClassVar[str] = 'vm_instance_allocation'
+    msg: ClassVar[str] = 'Allocating VM instance for experiment'
+    description: ClassVar[str] = 'Finding or creating VM instance, synchronizing state, managing snapshots'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
+class VMInstanceSyncStage(Stage):
+    name: ClassVar[str] = 'vm_instance_sync'
+    msg: ClassVar[str] = 'Synchronizing VM instance states'
+    description: ClassVar[str] = 'Checking VirtualBox state for all VM instances'
+    parent: ClassVar[str] = 'vm_instance_allocation'
+
+@register_stage
+@attrs.define
+class VMInstanceVerificationStage(Stage):
+    name: ClassVar[str] = 'vm_instance_verification'
+    msg: ClassVar[str] = 'Verifying VM instance availability'
+    description: ClassVar[str] = 'Checking VM exists in VirtualBox and recovering if missing'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
 class VMMountSharedDirectoriesStage(Stage):
     name: ClassVar[str] = 'vm_mount_shared_directories'
     msg: ClassVar[str] = 'Mounting shared directories in guest'
@@ -573,4 +605,4 @@ class VMFileTransferRetrievalStage(Stage):
     name: ClassVar[str] = 'vm_file_transfer_retrieval'
     msg: ClassVar[str] = 'Retrieving artifacts from VM'
     description: ClassVar[str] = 'Copying experiment artifacts from VM to host'
-    parent: ClassVar[str] = 'vm_destroy'
+    parent: ClassVar[str] = 'cleanup_shutdown'

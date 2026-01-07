@@ -88,12 +88,13 @@ class VmApi(GlobalDatabaseApi):
 
         with self:
             self._session.add(osinfo)
-            self._session.commit()
-            self._session.refresh(osinfo)
+            self._session.flush()  # Get ID without committing
             osinfo_id = osinfo.id
             log.info(f"Successfully created OSInfo (ID: {osinfo_id})")
+            # Detach before returning
+            self._session.expunge(osinfo)
             return osinfo
-        # Context manager handles rollback automatically on exception
+        # Context manager commits on successful exit
     
     def create_vm(self, project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '',
                   os_platform: str = '', os_type: str = '', os_distribution: str = '',
@@ -185,39 +186,42 @@ class VmApi(GlobalDatabaseApi):
             # Copy VM file to storage location
             target_file_path = self._copy_vm_file(file_path, project_path, name, silent=silent)
         
-        # Create OsInfo first using the dedicated method
-        osinfo = self.create_osinfo(
-            platform=os_platform,
-            os=os_type,
-            distribution=os_distribution,
-            version=os_version,
-            language=os_language,
-            architecture=os_architecture
-        )
-        
-        # Create VM with OSInfo relationship
-        vm = Vm(
-            name=name,
-            file=str(target_file_path),
-            hash=file_hash,
-            description=description,
-            osinfo_id=osinfo.id,
-            hypervisor=hypervisor
-        )
-        
+        # Create both OsInfo and VM in same transaction to prevent orphaned records
         try:
             with self:
+                # Create OSInfo inline
+                osinfo = OsInfo(
+                    platform=os_platform,
+                    os=os_type,
+                    distribution=os_distribution,
+                    version=os_version,
+                    language=os_language,
+                    architecture=os_architecture
+                )
+                self._session.add(osinfo)
+                self._session.flush()  # Get ID without committing
+
+                # Create VM with OSInfo relationship
+                vm = Vm(
+                    name=name,
+                    file=str(target_file_path),
+                    hash=file_hash,
+                    description=description,
+                    osinfo_id=osinfo.id,
+                    hypervisor=hypervisor
+                )
                 self._session.add(vm)
-                self._session.commit()
-                # Refresh to get the VM with its database-generated values
-                self._session.refresh(vm)
+                # Both commit together on context exit
+                self._session.flush()
                 vm_id = vm.id
                 log.info(f"Successfully created VM '{name}' (ID: {vm_id})")
-                
+
             # Return a new instance by querying it back to avoid session issues
             return self.get_vm_by_name(name)
-        except Exception as e:
-            raise VMLoadError(log, f"Failed to create VM '{name}': {e}")
+        except SQLAlchemyError as e:
+            raise VMLoadError(log, f"Database error creating VM '{name}': {e}")
+        except (OSError, IOError) as e:
+            raise VMLoadError(log, f"File system error creating VM '{name}': {e}")
     
     
     def get_vm_by_name(self, name: str) -> Optional[Vm]:

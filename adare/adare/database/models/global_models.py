@@ -6,7 +6,7 @@ such as VMs, environments, test functions, and project metadata.
 These models are stored in the global database and shared across all projects.
 """
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, Boolean, func, Enum as SAEnum
+from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, CHAR, Boolean, func, Enum as SAEnum, Index
 from sqlalchemy.orm import relationship, backref
 import ulid
 from pathlib import Path
@@ -293,6 +293,13 @@ class VmSnapshot(SerializerMixin, GlobalBase):
     vm_instance_id = Column(CHAR(26), ForeignKey('vm_instance.id', ondelete='CASCADE'), nullable=True)
     vm_instance = relationship("VmInstance", backref=backref("snapshots", cascade="all, delete-orphan"))
 
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        Index('idx_snapshot_instance_type', 'vm_instance_id', 'snapshot_type'),
+        Index('idx_snapshot_instance_name', 'vm_instance_id', 'name'),
+        Index('idx_snapshot_vm_type', 'vm_id', 'snapshot_type'),
+    )
+
     def __str__(self):
         return str(self.name)
 
@@ -332,6 +339,13 @@ class VmInstance(SerializerMixin, GlobalBase):
     # Snapshot configuration for this instance
     base_snapshot_name = Column(String, nullable=True)
     use_snapshots = Column(Boolean, default=True)
+
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        Index('idx_vm_instance_vm_status', 'vm_id', 'status'),
+        Index('idx_vm_instance_experiment', 'current_experiment_run_id', 'status'),
+        Index('idx_vm_instance_port', 'websocket_port', 'status'),
+    )
 
     def __str__(self):
         return str(self.instance_name)
