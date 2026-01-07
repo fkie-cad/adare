@@ -792,6 +792,18 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             '-pidfile', self.config.pid_file_path
         ]
 
+        # Add QEMU debug log if configured
+        if self.config.qemu_debug_log_path:
+            cmd.extend(['-D', self.config.qemu_debug_log_path])
+            cmd.extend(['-d', 'guest_errors,cpu_reset,unimp'])
+
+        # Add serial console redirect if configured
+        if self.config.serial_console_log_path:
+            cmd.extend([
+                '-chardev', f'file,id=serial0,path={self.config.serial_console_log_path}',
+                '-serial', 'chardev:serial0'
+            ])
+
         # Add QMP monitor socket
         cmd.extend([
             '-qmp', f"unix:{self.config.qmp_socket_path},server=on,wait=off"
