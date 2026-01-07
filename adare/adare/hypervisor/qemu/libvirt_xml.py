@@ -164,6 +164,11 @@ def generate_domain_xml(
         ET.SubElement(video, 'address', type='pci', domain='0x0000', bus='0x00', slot='0x02', function='0x0')
 
     # Console (serial console) - redirect to file if configured
+    # NOTE: Empty serial_console.log is EXPECTED for most guest configurations
+    # because modern Linux/Windows use graphical boot and don't output to serial.
+    # To enable serial output in guest OS:
+    #   Linux: Add 'console=ttyS0,115200 console=tty0' to GRUB_CMDLINE_LINUX
+    #   Windows: Configure Emergency Management Services (EMS)
     console = ET.SubElement(devices, 'console', type='pty')
     if vm_config.serial_console_log_path:
         console.set('type', 'file')
@@ -187,6 +192,10 @@ def generate_domain_xml(
     if vm_config.qemu_debug_log_path:
         _add_qemu_arg(qemu_commandline, '-D')
         _add_qemu_arg(qemu_commandline, vm_config.qemu_debug_log_path)
+        # Add debug categories to enable actual logging output
+        # Without -d, QEMU produces no debug output despite -D being set
+        _add_qemu_arg(qemu_commandline, '-d')
+        _add_qemu_arg(qemu_commandline, 'guest_errors,cpu_reset,unimp')
 
     # Add QMP monitor socket
     _add_qemu_arg(qemu_commandline, '-qmp')
