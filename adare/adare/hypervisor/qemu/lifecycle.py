@@ -44,22 +44,49 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         self,
         disk_path: str,
         commands: List[str],
-        readonly: bool = False
+        readonly: bool = False,
+        auto_mount: bool = True
     ) -> tuple[int, str, str]:
         """
-        Execute guestfish commands on a disk image.
+        Execute guestfish commands on a disk image with manual mounting.
 
         Args:
             disk_path: Path to disk image
             commands: List of guestfish command parts (will be joined with ':')
             readonly: If True, mount disk read-only
+            auto_mount: If True, automatically detect and mount root filesystem (default)
 
         Returns:
             Tuple of (returncode, stdout, stderr)
         """
         mode_flag = '--ro' if readonly else '--rw'
-        # Explicitly specify qcow2 format for libguestfs compatibility with overlay disks
-        cmd = ['guestfish', mode_flag, '--format=qcow2', '-a', disk_path, '-i'] + commands
+        # Build base command without -i flag (no longer using auto-inspect)
+        cmd = ['guestfish', mode_flag, '--format=qcow2', '-a', disk_path]
+
+        # Add manual mount logic if requested
+        if auto_mount:
+            # Detect root filesystem
+            try:
+                root_device = self._detect_root_filesystem(disk_path)
+                log.debug(f"CLAUDE: Mounting root filesystem: {root_device}")
+
+                # Check for NTFS hibernation if mounting read-write
+                if not readonly:
+                    is_hibernated, fs_type = self._is_ntfs_hibernated(disk_path, root_device)
+                    if is_hibernated and fs_type == 'ntfs':
+                        log.warning(f"NTFS filesystem {root_device} is in hibernation state, attempting to fix...")
+                        self._remove_ntfs_hibernation(disk_path, root_device)
+                        log.info(f"Successfully removed hibernation metadata from {root_device}")
+
+                # FIXED: Add run as first command (no leading colon), then mount with colon separator
+                cmd.extend(['run', ':', 'mount', root_device, '/'])
+            except HypervisorException:
+                # If detection fails, raise immediately (user-approved error handling)
+                raise
+
+        # Add user commands
+        if commands:
+            cmd.extend([':'] + commands)
 
         # Enhanced logging for diagnostics
         log.debug(f"CLAUDE: Running guestfish on disk: {disk_path}")
@@ -86,6 +113,217 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             log.debug(f"Guestfish stderr: {result.stderr}")
 
         return result.returncode, result.stdout, result.stderr
+
+    def _detect_root_filesystem(self, disk_path: str) -> str:
+        """
+        Detect root filesystem by finding largest OS partition.
+
+        Args:
+            disk_path: Path to VM disk image
+
+        Returns:
+            Device path (e.g., '/dev/sda4' for Windows, '/dev/sda1' for Linux)
+
+        Raises:
+            HypervisorException: If no suitable filesystem found
+
+        Algorithm:
+            1. Run guestfish with: run : list-filesystems
+            2. Parse output format: "/dev/sda1: ext4" or "unknown"
+            3. Filter for OS filesystems: ntfs, ext4, xfs, ext3
+            4. Get size for each device using: blockdev-getsize64
+            5. Select largest partition
+        """
+        # FIXED: NO leading colon before first command! Colon only separates commands.
+        cmd = ['guestfish', '--ro', '--format=qcow2', '-a', disk_path, 'run', ':', 'list-filesystems']
+
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+        if result.returncode != 0:
+            raise HypervisorException(
+                f"Failed to detect filesystems on {disk_path}\n"
+                f"Error: {result.stderr}\n\n"
+                f"Manual troubleshooting:\n"
+                f"  guestfish --ro -a {disk_path}\n"
+                f"  ><fs> run\n"
+                f"  ><fs> list-filesystems"
+            )
+
+        # Parse output: "/dev/sda1: ext4\n/dev/sda2: unknown\n"
+        os_filesystems = []
+        for line in result.stdout.strip().split('\n'):
+            if ':' not in line:
+                continue
+            device, fs_type = line.split(':', 1)
+            device = device.strip()
+            fs_type = fs_type.strip()
+
+            if fs_type in ['ntfs', 'ext4', 'xfs', 'ext3']:
+                os_filesystems.append((device, fs_type))
+
+        if not os_filesystems:
+            raise HypervisorException(
+                f"No suitable OS filesystem found on {disk_path}\n"
+                f"Detected filesystems:\n{result.stdout}\n\n"
+                f"Manual mount required:\n"
+                f"  guestfish --ro -a {disk_path}\n"
+                f"  ><fs> run\n"
+                f"  ><fs> list-filesystems\n"
+                f"  ><fs> mount /dev/sdaX /"
+            )
+
+        # Get sizes and select largest
+        if len(os_filesystems) == 1:
+            return os_filesystems[0][0]
+
+        # Multiple partitions - find largest by size
+        largest_device = None
+        largest_size = 0
+
+        for device, fs_type in os_filesystems:
+            # FIXED: NO leading colon before first command
+            size_cmd = ['guestfish', '--ro', '--format=qcow2', '-a', disk_path, 'run', ':', 'blockdev-getsize64', device]
+
+            size_result = subprocess.run(size_cmd, capture_output=True, text=True, check=False)
+            if size_result.returncode == 0:
+                try:
+                    size = int(size_result.stdout.strip())
+                    if size > largest_size:
+                        largest_size = size
+                        largest_device = device
+                except ValueError:
+                    log.warning(f"Could not parse size for {device}: {size_result.stdout}")
+
+        if not largest_device:
+            # Fallback to first filesystem if size detection fails
+            log.warning("Could not determine partition sizes, using first detected filesystem")
+            return os_filesystems[0][0]
+
+        log.debug(f"CLAUDE: Selected root filesystem: {largest_device} (size: {largest_size} bytes)")
+        return largest_device
+
+    def _is_ntfs_hibernated(self, disk_path: str, device: str) -> tuple[bool, str]:
+        """
+        Check if NTFS filesystem is in hibernation state.
+
+        Windows Fast Startup and hibernation leave NTFS filesystems in a
+        "dirty" state that forces libguestfs to mount them read-only.
+
+        Args:
+            disk_path: Path to disk image
+            device: Device path (e.g., '/dev/sda4')
+
+        Returns:
+            Tuple of (is_hibernated: bool, fs_type: str)
+            - is_hibernated: True if NTFS filesystem has hibernation metadata
+            - fs_type: Filesystem type ('ntfs', 'ext4', etc.)
+        """
+        # First, detect filesystem type
+        cmd = ['guestfish', '--ro', '--format=qcow2', '-a', disk_path, 'run', ':', 'list-filesystems']
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+        if result.returncode != 0:
+            log.warning(f"Failed to detect filesystem type for {device}: {result.stderr}")
+            return False, 'unknown'
+
+        # Parse output to find filesystem type for this device
+        fs_type = 'unknown'
+        for line in result.stdout.strip().split('\n'):
+            if ':' not in line:
+                continue
+            dev, fs = line.split(':', 1)
+            if dev.strip() == device:
+                fs_type = fs.strip()
+                break
+
+        # Only check hibernation for NTFS filesystems
+        if fs_type != 'ntfs':
+            log.debug(f"CLAUDE: Device {device} is {fs_type}, skipping hibernation check")
+            return False, fs_type
+
+        # Try to mount NTFS filesystem read-only to check for hibernation
+        # If it has hibernation metadata, even read-only mount may show warnings
+        log.debug(f"CLAUDE: Checking NTFS hibernation state for {device}")
+
+        # Use guestfish to check if filesystem can be mounted
+        # The presence of hibernation is indicated by mount errors or warnings
+        test_cmd = ['guestfish', '--ro', '--format=qcow2', '-a', disk_path,
+                   'run', ':', 'mount-ro', device, '/', ':', 'is-file', '/hiberfil.sys']
+
+        test_result = subprocess.run(test_cmd, capture_output=True, text=True, check=False)
+
+        # Check stderr for hibernation-related messages
+        stderr_lower = test_result.stderr.lower()
+        if 'hibernat' in stderr_lower or 'hiberfile' in stderr_lower or 'unsafe' in stderr_lower:
+            log.debug(f"CLAUDE: NTFS hibernation detected in stderr: {test_result.stderr[:200]}")
+            return True, fs_type
+
+        # Check if hiberfil.sys exists (indicates hibernation)
+        if test_result.returncode == 0 and 'true' in test_result.stdout.lower():
+            log.debug(f"CLAUDE: Hibernation file (hiberfil.sys) detected on {device}")
+            return True, fs_type
+
+        log.debug(f"CLAUDE: No hibernation detected on {device}")
+        return False, fs_type
+
+    def _remove_ntfs_hibernation(self, disk_path: str, device: str) -> None:
+        """
+        Remove NTFS hibernation metadata to enable read-write mounting.
+
+        Uses ntfsfix utility which safely removes Windows hibernation data.
+        This is safe for QEMU overlay disks as changes only affect the overlay.
+
+        Args:
+            disk_path: Path to disk image (qcow2 overlay)
+            device: Device path (e.g., '/dev/sda4')
+
+        Raises:
+            HypervisorException: If ntfsfix operation fails
+        """
+        log.warning(
+            f"Removing NTFS hibernation metadata from {device}. "
+            f"This is safe for overlay disks and required for read-write access."
+        )
+
+        # Run ntfsfix to clear hibernation metadata
+        # The -d flag removes the dirty bit and hibernation file
+        cmd = ['guestfish', '--rw', '--format=qcow2', '-a', disk_path,
+               'run', ':', 'ntfsfix', device, '-d']
+
+        log.debug(f"CLAUDE: Running ntfsfix command: {' '.join(cmd)}")
+
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+        if result.returncode != 0:
+            # Check if ntfsfix command is not available
+            if 'unknown command' in result.stderr.lower() or 'ntfsfix' in result.stderr.lower():
+                raise HypervisorException(
+                    f"Failed to remove NTFS hibernation: ntfsfix utility not available.\n"
+                    f"Error: {result.stderr}\n\n"
+                    f"To fix this issue:\n"
+                    f"  1. Install ntfs-3g package: sudo apt-get install ntfs-3g (Debian/Ubuntu)\n"
+                    f"  2. Ensure libguestfs has ntfs support: sudo apt-get install libguestfs-tools\n"
+                    f"  3. Alternatively, disable Windows Fast Startup:\n"
+                    f"     - Boot Windows VM\n"
+                    f"     - Run: powercfg /h off\n"
+                    f"     - Shutdown cleanly\n"
+                    f"     - Re-run experiment"
+                )
+            else:
+                raise HypervisorException(
+                    f"Failed to remove NTFS hibernation metadata.\n"
+                    f"Error: {result.stderr}\n"
+                    f"Device: {device}\n"
+                    f"Disk: {disk_path}\n\n"
+                    f"Troubleshooting:\n"
+                    f"  1. Ensure VM was shut down cleanly (not forced off)\n"
+                    f"  2. Disable Windows Fast Startup in the VM\n"
+                    f"  3. Check disk integrity: qemu-img check {disk_path}\n"
+                    f"  4. Try manual ntfsfix: guestfish --rw -a {disk_path} : run : ntfsfix {device}"
+                )
+
+        log.info(f"Successfully removed NTFS hibernation metadata from {device}")
+        log.debug(f"CLAUDE: ntfsfix output: {result.stdout}")
 
     def _copy_files_to_disk_via_libguestfs(
         self,
@@ -167,10 +405,13 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 f"Guestfish error: {stderr}\n"
                 f"Disk: {disk_path}\n\n"
                 f"Troubleshooting:\n"
-                f"  1. Run with verbose logging: export LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1\n"
-                f"  2. Test guestfish manually: guestfish --rw --format=qcow2 -a {disk_path} -i\n"
-                f"  3. Check backing file: qemu-img info {disk_path}\n"
-                f"  4. Verify libguestfs: libguestfs-test-tool"
+                f"  1. For Windows VMs: Disable Fast Startup in Control Panel > Power Options\n"
+                f"  2. Ensure VM was shut down cleanly (not hibernated or forced off)\n"
+                f"  3. Run with verbose logging: export LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1\n"
+                f"  4. Test filesystem detection: guestfish --ro --format=qcow2 -a {disk_path} : run : list-filesystems\n"
+                f"  5. Mount manually: guestfish --rw --format=qcow2 -a {disk_path} : run : mount /dev/sdaX /\n"
+                f"  6. Check backing file: qemu-img info {disk_path}\n"
+                f"  7. Verify libguestfs: libguestfs-test-tool"
             )
 
         log.info(f"Successfully copied {len(files_to_copy)} items to guest disk")
@@ -305,8 +546,19 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             except OSError as e:
                 log.warning(f"Failed to create directory {spec['host_path'].parent}: {e}")
 
-        # Build guestfish script commands
-        script_lines = []
+        # Detect root filesystem once for entire script
+        try:
+            root_device = self._detect_root_filesystem(disk_path)
+            log.debug(f"CLAUDE: Using root filesystem for batch retrieval: {root_device}")
+        except HypervisorException as e:
+            log.error(f"Failed to detect root filesystem: {e}")
+            raise
+
+        # Build guestfish script commands with manual mount
+        script_lines = [
+            'run',  # Launch guestfish backend
+            f'mount {root_device} /',  # Mount root filesystem
+        ]
 
         for spec in retrieval_specs:
             guest_path = spec['guest_path']
@@ -343,13 +595,12 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
             log.debug(f"CLAUDE: Wrote guestfish script to {script_path}")
 
-            # Execute guestfish with script file
+            # Execute guestfish with script file (no -i flag, using manual mount)
             cmd = [
                 'guestfish',
                 '--ro',
                 '--format=qcow2',
                 '-a', disk_path,
-                '-i',  # Automatically inspect and mount filesystems
                 '-f', script_path
             ]
 
@@ -601,7 +852,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                     log.debug(f"CLAUDE: Format detection stage: {detected_format}")
 
             # Step 2: Conversion (only if needed)
-            if is_external and detected_format != 'qcow2':
+            if is_external and detected_format == 'qcow2':
+                # External qcow2 - use directly without conversion
+                log.debug(f"CLAUDE: Skipping conversion - external qcow2 will be used as base")
+                if not source_vm_path.exists():
+                    raise HypervisorException(f"External qcow2 file not found: {source_vm_path}")
+                # _get_true_base_disk() will return external path directly
+            elif is_external and detected_format != 'qcow2':
+                # External non-qcow2 - convert to qcow2
                 base_disk_path = context.vm.get_base_disk_path()
                 if not Path(base_disk_path).exists():
                     with StageCtxManager(

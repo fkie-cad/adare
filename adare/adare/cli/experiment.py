@@ -2,6 +2,15 @@
 from adare.backend.basics import determine_projectdirectory
 from adare.exceptions import NoProjectFoundError
 from adare.helperfunctions.path_resolution import resolve_experiment_path, resolve_environment_path
+from adare.api import AdareAPI
+from adare.core.dto.experiment import (
+    ExperimentCreateRequest,
+    ExperimentCloneRequest,
+    ExperimentRemoveRequest,
+    ExperimentEnvModifyRequest,
+    ExperimentLoadRequest,
+)
+from adare.console import print_success_message, print_error_message
 
 
 # configure logging
@@ -9,99 +18,160 @@ import logging
 log = logging.getLogger(__name__)
 
 
+def _handle_api_error(result) -> None:
+    """
+    Handle an API error result by printing formatted error message and exiting.
+
+    Args:
+        result: Result object with error information
+    """
+    error = result.error
+    print_error_message(
+        title=f'{error.code}: {error.message}',
+        next_steps=error.solutions
+    )
+    exit(1)
+
+
+def _get_project_path(arguments):
+    """Get project path from arguments or current directory."""
+    project = getattr(arguments, 'project', None)
+    project_directory = determine_projectdirectory(project)
+    if not project_directory:
+        raise NoProjectFoundError(log, message='no project directory found')
+    return project_directory
+
+
 def exec_experiment_load(arguments):
-    from adare.backend.experiment.commands import experiment_load
+    """Load an experiment from files into the database using AdareAPI."""
     from adare.backend.project.directory import ProjectDirectory
     import shutil
     from pathlib import Path
 
-    # if not arguments.environment:
-    #     raise ArgumentsError(log, message='no environment given', possible_solutions=['use -e to specify the environment'])
-    if project_directory := determine_projectdirectory(arguments.project):
-        original_input = arguments.experiment
-        project_dir_obj = ProjectDirectory(project_directory)
+    project_directory = _get_project_path(arguments)
+    original_input = arguments.experiment
+    project_dir_obj = ProjectDirectory(project_directory)
 
-        # Determine if this is an external path that needs special handling
-        is_external_path = False
-        external_source_path = None
-        potential_copied_name = None
+    # Determine if this is an external path that needs special handling
+    is_external_path = False
+    external_source_path = None
+    potential_copied_name = None
 
-        if ('/' in original_input or '\\' in original_input):
-            input_path = Path(original_input)
-            if input_path.is_absolute() or not (Path.cwd() / input_path).is_relative_to(project_dir_obj.experiments):
-                # This is an external path
-                if input_path.exists() and input_path.is_dir():
-                    is_external_path = True
-                    external_source_path = input_path.resolve()
-                    potential_copied_name = input_path.name
+    if ('/' in original_input or '\\' in original_input):
+        input_path = Path(original_input)
+        if input_path.is_absolute() or not (Path.cwd() / input_path).is_relative_to(project_dir_obj.experiments):
+            # This is an external path
+            if input_path.exists() and input_path.is_dir():
+                is_external_path = True
+                external_source_path = input_path.resolve()
+                potential_copied_name = input_path.name
 
-        # Track whether a copy was actually performed during path resolution
-        copy_was_performed = False
-        target_existed_before = False
+    # Track whether a copy was actually performed during path resolution
+    copy_was_performed = False
+    target_existed_before = False
 
-        if is_external_path and potential_copied_name:
-            target_path = project_dir_obj.experiments / potential_copied_name
-            target_existed_before = target_path.exists()
+    if is_external_path and potential_copied_name:
+        target_path = project_dir_obj.experiments / potential_copied_name
+        target_existed_before = target_path.exists()
 
-        try:
-            experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+    try:
+        experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
 
-            # If external path and target existed before, check if we should overwrite
-            if is_external_path and target_existed_before and external_source_path:
-                target_path = project_dir_obj.experiments / experiment_name
+        # If external path and target existed before, check if we should overwrite
+        if is_external_path and target_existed_before and external_source_path:
+            target_path = project_dir_obj.experiments / experiment_name
 
-                # Check if experiment has productive runs
-                from adare.backend.experiment import database as experiment_database
-                experiment_ulid = experiment_database.get_experiment_by_project_and_name(
-                    project_directory, experiment_name, trigger_error=False
-                )
+            # Check if experiment has productive runs
+            from adare.backend.experiment import database as experiment_database
+            experiment_ulid = experiment_database.get_experiment_by_project_and_name(
+                project_directory, experiment_name, trigger_error=False
+            )
 
-                has_productive_runs = False
-                if experiment_ulid:
-                    run_count = experiment_database.get_experiment_run_count(project_directory, experiment_ulid, exclude_fake=True)
-                    has_productive_runs = run_count > 0
+            has_productive_runs = False
+            if experiment_ulid:
+                run_count = experiment_database.get_experiment_run_count(experiment_ulid, exclude_fake=True)
+                has_productive_runs = run_count > 0
 
-                if not has_productive_runs:
-                    # No productive runs - safe to overwrite
-                    log.info(f'CLAUDE: Overwriting experiment directory {target_path} with fresh copy from {external_source_path} (no productive runs found)')
-                    shutil.rmtree(target_path)
-                    shutil.copytree(external_source_path, target_path)
-                    copy_was_performed = True
-                else:
-                    log.info(f'CLAUDE: Using existing experiment directory {target_path} (has {run_count} productive runs, not overwriting)')
+            if not has_productive_runs:
+                # No productive runs - safe to overwrite
+                log.info(f'Overwriting experiment directory {target_path} with fresh copy from {external_source_path} (no productive runs found)')
+                shutil.rmtree(target_path)
+                shutil.copytree(external_source_path, target_path)
+                copy_was_performed = True
+            else:
+                log.info(f'Using existing experiment directory {target_path} (has {run_count} productive runs, not overwriting)')
 
-            experiment_load(project_directory, experiment_name, force=arguments.force)
+        # Use API for the actual load
+        api = AdareAPI()
+        result = api.experiment.load(ExperimentLoadRequest(
+            project_path=project_directory,
+            name=experiment_name,
+            force=arguments.force,
+            silent=False
+        ))
 
-        except Exception as e:
-            # Only cleanup if we actually copied during this run
-            if copy_was_performed and potential_copied_name:
-                copied_experiment_path = project_dir_obj.experiments / potential_copied_name
-                if copied_experiment_path.exists():
-                    try:
-                        shutil.rmtree(copied_experiment_path)
-                        log.info(f'CLAUDE: Cleaned up copied experiment {copied_experiment_path} after load failure')
-                    except OSError as cleanup_error:
-                        log.warning(f'CLAUDE: Failed to clean up copied experiment {copied_experiment_path}: {cleanup_error}')
-            raise
-    else:
-        raise NoProjectFoundError(log, message='no project directory found')
+        if result.success:
+            print_success_message(
+                title=f'Experiment "{result.data.name}" loaded successfully!',
+                location=str(result.data.file_path) if result.data.file_path else None,
+                next_steps=result.data.next_steps,
+                tip=result.data.tip
+            )
+        else:
+            _handle_api_error(result)
+
+    except Exception as e:
+        # Only cleanup if we actually copied during this run
+        if copy_was_performed and potential_copied_name:
+            copied_experiment_path = project_dir_obj.experiments / potential_copied_name
+            if copied_experiment_path.exists():
+                try:
+                    shutil.rmtree(copied_experiment_path)
+                    log.info(f'Cleaned up copied experiment {copied_experiment_path} after load failure')
+                except OSError as cleanup_error:
+                    log.warning(f'Failed to clean up copied experiment {copied_experiment_path}: {cleanup_error}')
+        raise
 
 
 def exec_experiment_create(arguments):
-    from adare.backend.experiment.commands import experiment_create
-    if project_directory := determine_projectdirectory(arguments.project):
-        experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
-        experiment_create(project_directory, experiment_name)
+    """Create a new experiment using AdareAPI."""
+    project_directory = _get_project_path(arguments)
+    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+
+    api = AdareAPI()
+    result = api.experiment.create(ExperimentCreateRequest(
+        project_path=project_directory,
+        name=experiment_name
+    ))
+
+    if result.success:
+        print_success_message(
+            title=f'Experiment "{result.data.name}" created successfully!',
+            location=str(result.data.file_path) if result.data.file_path else None,
+            next_steps=result.data.next_steps,
+            tip=result.data.tip
+        )
     else:
-        raise NoProjectFoundError(log, message='no project directory found')
+        _handle_api_error(result)
+
 
 def exec_experiment_example(arguments):
-    from adare.backend.experiment.commands import experiment_example
-    if project_directory := determine_projectdirectory(arguments.project):
-        experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
-        experiment_example(project_directory, experiment_name)
+    """Create an example experiment using AdareAPI."""
+    project_directory = _get_project_path(arguments)
+    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+
+    api = AdareAPI()
+    result = api.experiment.example(project_directory, experiment_name)
+
+    if result.success:
+        print_success_message(
+            title=f'Example experiment "{result.data.name}" created successfully!',
+            location=str(result.data.file_path) if result.data.file_path else None,
+            next_steps=result.data.next_steps,
+            tip=result.data.tip
+        )
     else:
-        raise NoProjectFoundError(log, message='no project directory found')
+        _handle_api_error(result)
 
 
 def _handle_environment_interruption(environments, current_index, results):
@@ -501,153 +571,148 @@ def exec_experiment_run(arguments):
         raise NoProjectFoundError(log, message='no project directory found')
 
 def exec_experiment_test(arguments):
-    from adare.backend.experiment.commands import experiment_test, experiment_load
-    from adare.exceptions import LoggedException, LoggedErrorException
-    import sys
+    """Run experiment tests (dry-run) using AdareAPI."""
+    project_directory = _get_project_path(arguments)
+    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+    environment_name = resolve_environment_path(arguments.environment, project_directory)
 
-    if project_directory := determine_projectdirectory(arguments.project):
-        try:
-            experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
-            environment_name = resolve_environment_path(arguments.environment, project_directory)
-            experiment_load(project_directory, experiment_name, force=False, silent=True)
-            experiment_test(project_directory, experiment_name, environment_name)
-        except LoggedException as e:
-            e.print()
-            if isinstance(e, LoggedErrorException):
-                sys.exit(-1)
-            else:
-                sys.exit(0)
-        except KeyboardInterrupt:
-            log.info("Keyboard interrupt received, shutting down gracefully...")
+    # Load experiment first
+    api = AdareAPI()
+    load_result = api.experiment.load(ExperimentLoadRequest(
+        project_path=project_directory,
+        name=experiment_name,
+        force=False,
+        silent=True
+    ))
+
+    if not load_result.success:
+        _handle_api_error(load_result)
+
+    # Run test
+    result = api.experiment.test(project_directory, experiment_name, environment_name)
+
+    if result.success:
+        print_success_message(
+            title=f'Experiment "{experiment_name}" test completed successfully!'
+        )
     else:
-        raise NoProjectFoundError(log, message='no project directory found')
+        _handle_api_error(result)
 
 
 def exec_experiment_clean(arguments):
-    """Execute experiment clean command to remove fake runs."""
-    from adare.backend.experiment.commands import experiment_clean
-    from adare.exceptions import LoggedException, LoggedErrorException
-    import sys
+    """Execute experiment clean command to remove fake runs using AdareAPI."""
+    project_directory = _get_project_path(arguments)
+    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
 
-    if project_directory := determine_projectdirectory(arguments.project):
-        try:
-            experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
-            experiment_clean(project_directory, experiment_name)
-        except LoggedException as e:
-            e.print()
-            if isinstance(e, LoggedErrorException):
-                sys.exit(-1)
-            else:
-                sys.exit(0)
+    api = AdareAPI()
+    result = api.experiment.clean(project_directory, experiment_name)
+
+    if result.success:
+        if result.data.deleted_count > 0:
+            print_success_message(
+                title=f'Cleaned {result.data.deleted_count} fake run(s) from experiment "{result.data.experiment_name}"'
+            )
+        else:
+            print_success_message(
+                title=f'No fake runs to clean for experiment "{result.data.experiment_name}"'
+            )
     else:
-        raise NoProjectFoundError(log, message='no project directory found')
+        _handle_api_error(result)
 
 
 def exec_experiment_remove(arguments):
-    """Execute experiment remove command to delete an experiment."""
-    from adare.backend.experiment.commands import experiment_remove
-    from adare.exceptions import LoggedException, LoggedErrorException
-    import sys
+    """Execute experiment remove command to delete an experiment using AdareAPI."""
+    project_directory = _get_project_path(arguments)
+    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
 
-    if project_directory := determine_projectdirectory(arguments.project):
-        try:
-            experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
-            experiment_remove(
-                project_directory,
-                experiment_name,
-                force=arguments.force,
-                keep_files=arguments.keep_files
-            )
-        except LoggedException as e:
-            e.print()
-            if isinstance(e, LoggedErrorException):
-                sys.exit(-1)
-            else:
-                sys.exit(0)
+    api = AdareAPI()
+    result = api.experiment.remove(ExperimentRemoveRequest(
+        project_path=project_directory,
+        name=experiment_name,
+        force=arguments.force,
+        keep_files=arguments.keep_files
+    ))
+
+    if result.success:
+        print_success_message(
+            title=f'Experiment "{result.data.experiment_name}" removed successfully!'
+        )
     else:
-        raise NoProjectFoundError(log, message='no project directory found')
+        _handle_api_error(result)
 
 
 def exec_experiment_add_env(arguments):
-    """Execute experiment add-env command to add environments to experiments."""
-    from adare.backend.experiment.commands import experiment_add_environments
-    from adare.exceptions import LoggedException, LoggedErrorException
-    import sys
+    """Execute experiment add-env command to add environments to experiments using AdareAPI."""
+    project_directory = _get_project_path(arguments)
+    experiment_pattern = resolve_experiment_path(arguments.experiment_pattern, project_directory)
+    # Resolve environment names
+    environment_names = [resolve_environment_path(env, project_directory) for env in arguments.environments]
 
-    if project_directory := determine_projectdirectory(arguments.project):
-        try:
-            experiment_pattern = resolve_experiment_path(arguments.experiment_pattern, project_directory)
-            # Resolve environment names
-            environment_names = [resolve_environment_path(env, project_directory) for env in arguments.environments]
-            experiment_add_environments(
-                project_directory,
-                experiment_pattern,
-                environment_names,
-                force=arguments.force
-            )
-        except LoggedException as e:
-            e.print()
-            if isinstance(e, LoggedErrorException):
-                sys.exit(-1)
-            else:
-                sys.exit(0)
+    api = AdareAPI()
+    result = api.experiment.add_environments(ExperimentEnvModifyRequest(
+        project_path=project_directory,
+        experiment_pattern=experiment_pattern,
+        environments=environment_names,
+        force=arguments.force
+    ))
+
+    if result.success:
+        affected = ', '.join(result.data.affected_experiments) if result.data.affected_experiments else 'none'
+        print_success_message(
+            title=f'Environments added to experiments: {affected}'
+        )
     else:
-        raise NoProjectFoundError(log, message='no project directory found')
+        _handle_api_error(result)
 
 
 def exec_experiment_remove_env(arguments):
-    """Execute experiment remove-env command to remove environments from experiments."""
-    from adare.backend.experiment.commands import experiment_remove_environments
-    from adare.exceptions import LoggedException, LoggedErrorException
-    import sys
+    """Execute experiment remove-env command to remove environments from experiments using AdareAPI."""
+    project_directory = _get_project_path(arguments)
+    experiment_pattern = resolve_experiment_path(arguments.experiment_pattern, project_directory)
+    # Resolve environment names
+    environment_names = [resolve_environment_path(env, project_directory) for env in arguments.environments]
 
-    if project_directory := determine_projectdirectory(arguments.project):
-        try:
-            experiment_pattern = resolve_experiment_path(arguments.experiment_pattern, project_directory)
-            # Resolve environment names
-            environment_names = [resolve_environment_path(env, project_directory) for env in arguments.environments]
-            experiment_remove_environments(
-                project_directory,
-                experiment_pattern,
-                environment_names,
-                force=arguments.force
-            )
-        except LoggedException as e:
-            e.print()
-            if isinstance(e, LoggedErrorException):
-                sys.exit(-1)
-            else:
-                sys.exit(0)
+    api = AdareAPI()
+    result = api.experiment.remove_environments(ExperimentEnvModifyRequest(
+        project_path=project_directory,
+        experiment_pattern=experiment_pattern,
+        environments=environment_names,
+        force=arguments.force
+    ))
+
+    if result.success:
+        affected = ', '.join(result.data.affected_experiments) if result.data.affected_experiments else 'none'
+        print_success_message(
+            title=f'Environments removed from experiments: {affected}'
+        )
     else:
-        raise NoProjectFoundError(log, message='no project directory found')
+        _handle_api_error(result)
 
 
 def exec_experiment_clone(arguments):
-    """Execute experiment clone command to create experiment variations."""
-    from adare.backend.experiment.commands import experiment_clone
-    from adare.exceptions import LoggedException, LoggedErrorException
-    import sys
+    """Execute experiment clone command to create experiment variations using AdareAPI."""
+    project_directory = _get_project_path(arguments)
+    source_experiment = resolve_experiment_path(arguments.source_experiment, project_directory)
+    target_experiment = resolve_experiment_path(arguments.target_experiment, project_directory)
 
-    if project_directory := determine_projectdirectory(arguments.project):
-        try:
-            source_experiment = resolve_experiment_path(arguments.source_experiment, project_directory)
-            target_experiment = resolve_experiment_path(arguments.target_experiment, project_directory)
+    environments = None
+    if hasattr(arguments, 'environments') and arguments.environments:
+        environments = [resolve_environment_path(env, project_directory) for env in arguments.environments]
 
-            environments = None
-            if hasattr(arguments, 'environments') and arguments.environments:
-                environments = [resolve_environment_path(env, project_directory) for env in arguments.environments]
+    api = AdareAPI()
+    result = api.experiment.clone(ExperimentCloneRequest(
+        project_path=project_directory,
+        source_experiment=source_experiment,
+        target_experiment=target_experiment,
+        environments=environments
+    ))
 
-            experiment_clone(
-                project_directory,
-                source_experiment,
-                target_experiment,
-                environments=environments
-            )
-        except LoggedException as e:
-            e.print()
-            if isinstance(e, LoggedErrorException):
-                sys.exit(-1)
-            else:
-                sys.exit(0)
+    if result.success:
+        print_success_message(
+            title=f'Experiment "{result.data.name}" cloned successfully!',
+            location=str(result.data.file_path) if result.data.file_path else None,
+            next_steps=result.data.next_steps,
+            tip=result.data.tip
+        )
     else:
-        raise NoProjectFoundError(log, message='no project directory found')
+        _handle_api_error(result)

@@ -1,0 +1,189 @@
+"""
+Experiment Data Transfer Objects for API layer.
+
+These DTOs provide type-safe request/response objects for experiment operations,
+enabling consistent interfaces across CLI, REST API, and Web UI.
+"""
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import List, Optional
+
+
+# =============================================================================
+# Experiment Request DTOs
+# =============================================================================
+
+@dataclass
+class ExperimentCreateRequest:
+    """Request to create a new experiment."""
+    project_path: Path
+    name: str
+
+
+@dataclass
+class ExperimentLoadRequest:
+    """Request to load an experiment."""
+    project_path: Path
+    name: str
+    force: bool = False
+    silent: bool = False
+
+
+@dataclass
+class ExperimentRunRequest:
+    """Request to run an experiment."""
+    project_path: Path
+    experiment_name: str
+    environment_name: str
+    test_mode: bool = True
+    debug_screenshots: bool = False
+    preserve_snapshot: bool = False
+    vm_memory: Optional[int] = None
+    vm_cpus: Optional[int] = None
+    gui_mode: bool = False
+
+
+@dataclass
+class ExperimentCloneRequest:
+    """Request to clone an experiment."""
+    project_path: Path
+    source_experiment: str
+    target_experiment: str
+    environments: Optional[List[str]] = None
+
+
+@dataclass
+class ExperimentRemoveRequest:
+    """Request to remove an experiment."""
+    project_path: Path
+    name: str
+    force: bool = False
+    keep_files: bool = False
+
+
+@dataclass
+class ExperimentEnvModifyRequest:
+    """Request to add or remove environments from experiments."""
+    project_path: Path
+    experiment_pattern: str
+    environments: List[str]
+    force: bool = False
+
+
+# =============================================================================
+# Experiment Response DTOs
+# =============================================================================
+
+@dataclass
+class ExperimentInfo:
+    """Detailed experiment information."""
+    id: str
+    name: str
+    description: str
+    file_path: Path
+    sha256: str
+    environment_names: List[str]
+    run_count: int = 0
+    productive_run_count: int = 0
+    is_loaded: bool = False
+    next_steps: List[str] = field(default_factory=list)
+    tip: Optional[str] = None
+
+
+@dataclass
+class ExperimentListItem:
+    """Experiment item for listing (lighter than ExperimentInfo)."""
+    id: str
+    name: str
+    description: str
+    environment_count: int
+    run_count: int
+
+
+@dataclass
+class ExperimentRunInfo:
+    """Information about an experiment run."""
+    id: str
+    experiment_id: str
+    experiment_name: str
+    environment_id: str
+    environment_name: str
+    status: str  # PENDING, RUNNING, SUCCESS, FAILED, INTERRUPTED
+    is_test: bool
+    start_time: Optional[datetime]
+    end_time: Optional[datetime]
+    duration: Optional[timedelta]
+
+
+@dataclass
+class ExperimentRunResult:
+    """Result of an experiment run."""
+    was_interrupted: bool
+    was_successful: bool
+    run_info: Optional[ExperimentRunInfo] = None
+    error_message: Optional[str] = None
+
+
+@dataclass
+class ExperimentCleanResult:
+    """Result of cleaning experiment runs."""
+    deleted_count: int
+    experiment_name: str
+
+
+@dataclass
+class ExperimentRemoveResult:
+    """Result of removing an experiment."""
+    removed_from_db: bool
+    files_deleted: bool
+    experiment_name: str
+
+
+@dataclass
+class ExperimentEnvModifyResult:
+    """Result of adding/removing environments from experiments."""
+    affected_experiments: List[str]
+    environments_changed: List[str]
+    operation: str  # 'add' or 'remove'
+
+
+# =============================================================================
+# Batch Run DTOs
+# =============================================================================
+
+@dataclass
+class BatchRunRequest:
+    """Request to run experiments in batch."""
+    project_path: Path
+    experiment_pattern: str
+    environment_pattern: str
+    test_mode: bool = True
+    debug_screenshots: bool = False
+    preserve_snapshot: bool = False
+    vm_memory: Optional[int] = None
+    vm_cpus: Optional[int] = None
+    gui_mode: bool = False
+
+
+@dataclass
+class BatchRunResultItem:
+    """Result of a single run in a batch."""
+    environment_name: str
+    experiment_name: str
+    status: str  # SUCCESS, FAILED, INTERRUPTED, SKIPPED
+    duration: timedelta
+    error_message: Optional[str] = None
+    run_id: Optional[str] = None
+
+
+@dataclass
+class BatchRunSummary:
+    """Summary of a batch run."""
+    results: List[BatchRunResultItem]
+    total_combinations: int
+    successful_runs: int
+    failed_runs: int
+    interrupted_runs: int
+    skipped_runs: int
+    total_duration: timedelta

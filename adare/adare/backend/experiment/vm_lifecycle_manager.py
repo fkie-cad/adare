@@ -8,7 +8,7 @@ from adare.types.stages import (
     VMCreateStage, VMWaitTillReadyStage,
     VMStopStage, VMDestroyStage, VMExperimentSnapshotStage, VMImportStage, VMSnapshotCreateStage,
     VMNetworkingStage, VMFileTransferSetupStage, VMRuntimePreparationStage,
-    VMInstanceAllocationStage, VMInstanceSyncStage, VMInstanceVerificationStage
+    VMInstanceSyncStage, VMInstanceVerificationStage
 )
 from adare.backend.experiment.runctx import ExperimentRunCtx
 from adare.exceptions import LoggedException
@@ -212,25 +212,20 @@ class VMLifecycleManager:
         # Use shorter experiment ID for VM instance naming (first 8 chars of ULID)
         short_experiment_id = context.experiment_run_ulid[:8]
 
-        # Wrap entire allocation process with stage for visibility
-        with StageCtxManager(
-            VMInstanceAllocationStage(),
-            context.experiment_run_ulid,
-            event=context.user_interrupt_event
-        ):
-            import asyncio
-            vm_instance_id = await asyncio.wait_for(
-                ensure_vm_ready_for_experiment(
-                    vm_id=vm_id,
-                    experiment_id=short_experiment_id,  # Use shorter ID for naming
-                    environment_ulid=context.environment_ulid,
-                    experiment_run_ulid=context.experiment_run_ulid,
-                    preserve_experiment_snapshot=context.config.preserve_snapshot,
-                    interrupt_event=context.user_interrupt_event,
-                    test_mode=context.test_mode  # NEW: Pass test mode from context
-                ),
-                timeout=300  # 5 minute timeout for VM import operations
-            )
+        # Allocate VM instance (allocation and sync stages managed internally)
+        import asyncio
+        vm_instance_id = await asyncio.wait_for(
+            ensure_vm_ready_for_experiment(
+                vm_id=vm_id,
+                experiment_id=short_experiment_id,  # Use shorter ID for naming
+                environment_ulid=context.environment_ulid,
+                experiment_run_ulid=context.experiment_run_ulid,
+                preserve_experiment_snapshot=context.config.preserve_snapshot,
+                interrupt_event=context.user_interrupt_event,
+                test_mode=context.test_mode  # NEW: Pass test mode from context
+            ),
+            timeout=300  # 5 minute timeout for VM import operations
+        )
 
         log.info(f"CLAUDE: VM instance allocation completed successfully, instance_id={vm_instance_id}")
 
@@ -362,7 +357,7 @@ class VMLifecycleManager:
 
                             # Verify source VM integrity
                             from adare.backend.vm.commands import verify_vm_integrity
-                            await verify_vm_integrity(vm_id, context.experiment_run_ulid, context.user_interrupt_event)
+                            await verify_vm_integrity(vm_id, context.experiment_run_ulid, context.user_interrupt_event, test_mode=context.test_mode)
 
                             # Import VM instance to VirtualBox with proper stage management
                             from adare.types.stages import VMDiskPreparationStage

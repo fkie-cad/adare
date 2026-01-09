@@ -45,21 +45,21 @@ def get_smart_display_name(obj, obj_type: str, current_project_name: str = None)
 
     # Get the full dotnotation (create it for experiments if needed)
     if obj_type == 'experiment':
-        # For experiments, create dotnotation based on first environment
-        full_dotnotation = f'{obj.environments[0].project.name}.{obj.name}' if obj.environments else obj.name
+        # For experiments, create dotnotation using current project context
+        # (experiments are stored per-project, environments are global with no project relationship)
+        full_dotnotation = f'{current_project_name}.{obj.name}' if current_project_name else obj.name
     else:
         full_dotnotation = obj.dotnotation
 
     if obj_type == 'environment':
-        # For environments, check if we're in the same project
-        if current_project_name and hasattr(obj, 'project') and obj.project.name == current_project_name:
-            return obj.name  # Return just the environment name
-        else:
-            return full_dotnotation  # Return full project.name format
+        # Environments are global and don't have project relationships
+        # Return just the environment name (simpler for global resources)
+        return obj.name
 
     elif obj_type == 'experiment':
-        # For experiments, check project via first environment (experiments can span multiple projects)
-        if current_project_name and obj.environments and obj.environments[0].project.name == current_project_name:
+        # For experiments in the current project context, return just the name
+        # Otherwise return the full dotnotation
+        if current_project_name:
             return obj.name  # Return just the experiment name
         else:
             return full_dotnotation  # Return full project.name format

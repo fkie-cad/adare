@@ -100,16 +100,15 @@ class StructuredDataApi(DatabaseApi):
         """Get all experiments as structured ExperimentInfo objects."""
         # Use eager loading to prevent N+1 queries
         experiments = safe_query_all(self._session.query(Experiment).options(
-            selectinload(Experiment.environments).joinedload(Environment.project),
-            selectinload(Experiment.tags),
-            selectinload(Experiment.sync_metadata)
+            selectinload(Experiment.tags)
         ))
         result = []
 
+        # Get current project name from context (experiments are stored per-project)
+        project_name = get_current_project_name() or ""
+
         for exp in experiments:
             # Use utility functions for cleaner, reusable code
-            first_env = exp.environments[0] if exp.environments else None
-            project_name = first_env.project.name if first_env else ""
             dotnotation = f"{project_name}.{exp.name}" if project_name else exp.name
 
             display_name = get_smart_display_name(exp, 'experiment')
@@ -228,23 +227,23 @@ class StructuredDataApi(DatabaseApi):
 
         # Use eager loading to prevent N+1 queries
         query = self._session.query(ExperimentRun).options(
-            joinedload(ExperimentRun.experiment).selectinload(Experiment.environments).joinedload(Environment.project)
+            joinedload(ExperimentRun.experiment)
         )
 
         # Apply filters
-        if experiment_name and environment_name and project_name:
-            query = query.join(Experiment).join(Experiment.environments).join(Environment.project).filter(
-                Experiment.name == experiment_name,
-                Environment.name == environment_name,
-                Project.name == project_name
-            )
-        elif project_name:
-            query = query.join(Experiment).join(Experiment.environments).join(Environment.project).filter(
-                Project.name == project_name
+        # Note: Experiments are stored per-project in separate databases,
+        # so the database context already determines the project.
+        # Filtering by project_name is not needed at the database level.
+        if experiment_name:
+            query = query.join(Experiment).filter(
+                Experiment.name == experiment_name
             )
 
         runs = safe_query_all(query)
         result = []
+
+        # Get current project name from context (experiments are stored per-project)
+        current_project_name = get_current_project_name() or project_name or ""
 
         for run in runs:
             # Experiment and environment info are now eagerly loaded
@@ -258,7 +257,7 @@ class StructuredDataApi(DatabaseApi):
                 duration_seconds = duration.total_seconds()
 
             # Create experiment dotnotation
-            exp_dotnotation = f"{env.project.name}.{experiment.name}" if env else experiment.name
+            exp_dotnotation = f"{current_project_name}.{experiment.name}" if current_project_name else experiment.name
 
             run_info = RunInfo(
                 ulid=run.id,
@@ -266,7 +265,7 @@ class StructuredDataApi(DatabaseApi):
                 experiment_ulid=experiment.id,
                 environment_name=env.name if env else "",
                 environment_ulid=env.id if env else "",
-                project_name=env.project.name if env else "",
+                project_name=current_project_name,
                 start_time=run.start_time,
                 end_time=run.end_time,
                 duration_seconds=duration_seconds,

@@ -650,7 +650,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
             with ctx_manager if ctx_manager else contextlib.nullcontext():
                 if file_path.suffix.lower() not in ('.ovf', '.ova'):
                     log.error("File must be .ovf or .ova")
-                    raise VMImportException(f"File '{file_path}' must be .ovf or .ova")
+                    raise VMImportException(self.vm_name, f"File '{file_path}' must be .ovf or .ova")
 
                 args = [
                     "import", str(file_path),
@@ -679,7 +679,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                     return return_value, stdout
                 except Exception as e:
                     log.error(f"Error importing VM '{self.vm_name}' from '{file_path}': {e}")
-                    raise VMImportException(f"Failed to import VM '{self.vm_name}' from '{file_path}': {e}")
+                    raise VMImportException(self.vm_name, f"Failed to import VM '{self.vm_name}' from '{file_path}': {e}")
 
         return await self.manager.run_async(_import_async)
 

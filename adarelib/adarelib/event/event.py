@@ -2,7 +2,7 @@
 from typing import Literal, Optional
 import attrs
 import cattrs
-from datetime import datetime
+from datetime import datetime, UTC
 import ulid
 import traceback
 
@@ -21,19 +21,6 @@ class Event:
     status: int
     ulid: str
     error: str
-
-
-# @attrs.define
-# class ActionEvent(Event):
-#     name: str
-#     description: str
-#     category: str = 'action'
-#     timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
-#     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
-#     status: int = StatusEnum.RUNNING
-#     error: str = ''
-
-
 
 
 @attrs.define
@@ -80,7 +67,7 @@ class TestEvent(Event):
     test_name: str
     result: Optional[TestResult] = None
     category: str = 'test'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now(UTC).strftime(TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
     status: int = StatusEnum.RUNNING
     error: str = ''
@@ -90,7 +77,7 @@ class TestEvent(Event):
 class ErrorEvent(Event):
     error_name: str
     category: str = 'error'
-    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.utcnow().strftime(TIMESTAMP_FORMAT)))
+    timestamp: str = attrs.field(default=attrs.Factory(lambda: datetime.now(UTC).strftime(TIMESTAMP_FORMAT)))
     ulid: str = attrs.field(default=attrs.Factory(lambda: str(ulid.ULID())))
     status: int = StatusEnum.NONE
     error: str = ''

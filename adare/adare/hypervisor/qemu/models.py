@@ -112,6 +112,7 @@ class QEMUVMConfig:
     machine: str = 'pc'
     accel: str = 'kvm'
     drive_format: str = 'qcow2'
+    boot_mode: str = 'bios'  # 'bios' or 'uefi'
     network: str = 'user'
     port_forwarding_rules: Dict[str, Dict[str, Any]] = None  # Serialized port forwarding rules
     qmp_socket_path: str = ""  # Path to QMP monitor socket
@@ -145,6 +146,7 @@ class QEMUVMConfig:
             'machine': self.machine,
             'accel': self.accel,
             'drive_format': self.drive_format,
+            'boot_mode': self.boot_mode,
             'network': self.network,
             'port_forwarding_rules': self.port_forwarding_rules,
             'qmp_socket_path': self.qmp_socket_path,
@@ -170,4 +172,5 @@ class QEMUVMConfig:
         data.setdefault('libvirt_domain_name', None)
         data.setdefault('serial_console_log_path', None)
         data.setdefault('qemu_debug_log_path', None)
+        data.setdefault('boot_mode', 'bios')
         return cls(**data)
