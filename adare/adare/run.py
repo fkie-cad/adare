@@ -36,45 +36,7 @@ class AliasedGroup(click.Group):
             formatter.write_dl(rows)
 
 
-# Internal imports
-from adare.cli.project import (
-    exec_create_project, exec_remove_project, exec_list_projects
-)
-from adare.cli.environment import (
-    exec_environment_load, exec_environment_create, exec_environment_delete
-)
-from adare.cli.experiment import (
-    exec_experiment_create, exec_experiment_load, exec_experiment_run, exec_experiment_test, exec_experiment_example, exec_experiment_clean, exec_experiment_remove, exec_experiment_add_env, exec_experiment_remove_env, exec_experiment_clone
-)
-from adare.cli.interactive import (
-    exec_experiment_dev
-)
-from adare.cli.manage import exec_manage_reset_db, exec_manage_reset_vm, exec_manage_vm_runtime_refresh, exec_manage_init_db, exec_manage_db_status, exec_manage_repair_db, exec_manage_clean_install_db
-from adare.cli.show import (
-    exec_show_environment, exec_show_environments,
-    exec_show_experiment, exec_show_runs, exec_show_run,
-    exec_show_testfunctions, exec_show_testfunction, exec_show_experiments,
-    exec_remove_run
-)
-from adare.cli.web import (
-    exec_web_login, exec_web_logout, exec_web_status,
-    exec_download_experiment, exec_download_testfunction, exec_download_environment,
-    exec_web_sync, exec_web_upload_experiment_run,
-    exec_web_publish_run, exec_web_check_experiment, exec_web_check_run
-)
-from adare.cli.testfunction import (
-    exec_create_testfunction, exec_remove_testfunction, exec_load_testfunction, exec_list_testfunctions
-)
-from adare.cli.vm import (
-    exec_vm_list, exec_vm_info, exec_vm_list_snapshots, exec_vm_delete_snapshot, exec_vm_clear_all, exec_vm_clear_by_environment, exec_vm_test,
-    exec_vm_instance_remove, exec_vm_instance_usage
-)
-from adare.cli.mcp import (
-    exec_mcp_test_icon, exec_mcp_test_text, exec_mcp_get_all_text
-)
-from adare.cli.ws import (
-    exec_ws_action, create_example_action_file
-)
+# Internal imports - NOW LAZY LOADED inside functions
 from adare.setup_logging import setup_logging
 from adare.exceptions import LoggedException, LoggedErrorException
 from adare.helperfunctions.output_formatter import get_formatter
@@ -166,24 +128,28 @@ def manage():
 @manage.command(name='reset-db')
 def reset_db():
     """Reset the database (use with caution)."""
+    from adare.cli.manage import exec_manage_reset_db
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_reset_db, args)
 
 @manage.command(name='init-db')
 def init_db():
     """Initialize the database system."""
+    from adare.cli.manage import exec_manage_init_db
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_init_db, args)
 
 @manage.command(name='db-status')
 def db_status():
     """Check database system status."""
+    from adare.cli.manage import exec_manage_db_status
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_db_status, args)
 
 @manage.command(name='repair-db')
 def repair_db():
     """Repair the database system."""
+    from adare.cli.manage import exec_manage_repair_db
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_repair_db, args)
 
@@ -191,6 +157,7 @@ def repair_db():
 @click.option('--force', '-f', is_flag=True, help='Force clean installation without confirmation')
 def clean_install_db(force):
     """Perform clean database installation (DANGER: deletes all data)."""
+    from adare.cli.manage import exec_manage_clean_install_db
     args = SimpleNamespace(force=force)
     exec_with_error_printing(exec_manage_clean_install_db, args)
 
@@ -198,6 +165,7 @@ def clean_install_db(force):
 @click.option('--force', '-f', is_flag=True, help='Force deletion of all VMs (required for confirmation)')
 def reset_vm(force):
     """Reset all VMs in the system (use with caution)."""
+    from adare.cli.manage import exec_manage_reset_vm
     args = SimpleNamespace(force=force)
     exec_with_error_printing(exec_manage_reset_vm, args)
 
@@ -209,6 +177,7 @@ def vm_runtime():
 @vm_runtime.command(name='refresh')
 def vm_runtime_refresh():
     """Refresh VM runtime files in current project, ensuring they are up-to-date."""
+    from adare.cli.manage import exec_manage_vm_runtime_refresh
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_vm_runtime_refresh, args)
 
@@ -226,6 +195,7 @@ def project():
 @click.option('--description', '-d', help='Description of the project')
 def create(name, description):
     """Create a new project."""
+    from adare.cli.project import exec_create_project
     args = SimpleNamespace(name=name, description=description)
     exec_with_error_printing(exec_create_project, args)
 
@@ -233,12 +203,14 @@ def create(name, description):
 @click.argument('name')
 def remove(name):
     """Remove a project."""
+    from adare.cli.project import exec_remove_project
     args = SimpleNamespace(name=name)
     exec_with_error_printing(exec_remove_project, args)
 
 @project.command(name='list')
 def list_projects():
     """List all projects."""
+    from adare.cli.project import exec_list_projects
     args = SimpleNamespace()
     exec_with_error_printing(exec_list_projects, args)
 
@@ -272,6 +244,7 @@ def load(environment, project, force, no_copy):
     This is useful for large VMs or when disk space is limited.
     Note: The VM file must remain at the original location for experiments to work.
     """
+    from adare.cli.environment import exec_environment_load
     args = SimpleNamespace(environment=environment, project=project, force=force, no_copy=no_copy)
     exec_with_error_printing(exec_environment_load, args)
 
@@ -286,6 +259,7 @@ def create(name, project, with_vm):
     - Simple name: ubuntu24
     - Relative path: environments/ubuntu24
     """
+    from adare.cli.environment import exec_environment_create
     args = SimpleNamespace(name=name, project=project, with_vm=with_vm)
     exec_with_error_printing(exec_environment_create, args)
 
@@ -302,6 +276,7 @@ def remove(identifier, force):
     WARNING: If this environment is the only one used by experiments,
     those experiments will become orphaned and be deleted when using --force.
     Without --force, deletion will fail to prevent data loss."""
+    from adare.cli.environment import exec_environment_delete
     args = SimpleNamespace(identifier=identifier, force=force)
     exec_with_error_printing(exec_environment_delete, args)
 
@@ -309,6 +284,7 @@ def remove(identifier, force):
 @environment.command(name='list')
 def list_environments():
     """List all environments in a project."""
+    from adare.cli.show import exec_show_environments
     args = SimpleNamespace()
     exec_with_error_printing(exec_show_environments, args)
 
@@ -316,6 +292,7 @@ def list_environments():
 @click.argument('environment_name')
 def info(environment_name):
     """Show detailed information about a specific environment."""
+    from adare.cli.show import exec_show_environment
     args = SimpleNamespace(
         environment_name=environment_name,
     )
@@ -349,6 +326,7 @@ def create(experiment, project):
     - Simple name: test_csv
     - Relative path: experiments/test_csv
     """
+    from adare.cli.experiment import exec_experiment_create
     args = SimpleNamespace(experiment=experiment, project=project)
     exec_with_error_printing(exec_experiment_create, args)
 
@@ -365,6 +343,7 @@ def load(experiment, environment, force, project):
     - Relative path: experiments/test_csv
     - Relative path: ./experiments/test_csv
     """
+    from adare.cli.experiment import exec_experiment_load
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
@@ -401,6 +380,7 @@ def run(ctx, experiment, environment, production, debug_screenshots, preserve_sn
     - Relative path: environments/ubuntu24.yml
     - Relative path: ./environments/ubuntu24.yaml
     """
+    from adare.cli.experiment import exec_experiment_run
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
@@ -423,6 +403,7 @@ def run(ctx, experiment, environment, production, debug_screenshots, preserve_sn
 @click.option('--project', '-p', help='Name of the project')
 def develop(experiment, environment, project):
     """Run an experiment in test mode."""
+    from adare.cli.experiment import exec_experiment_test
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
@@ -435,6 +416,7 @@ def develop(experiment, environment, project):
 @click.option('--project', '-p', help='Name of the project')
 def example(name, project):
     """Create the example experiment."""
+    from adare.cli.experiment import exec_experiment_example
     args = SimpleNamespace(
         experiment=name,
         project=project
@@ -444,6 +426,7 @@ def example(name, project):
 @experiment.command(name='list')
 def list_experiments():
     """List all experiments in an environment."""
+    from adare.cli.show import exec_show_experiments
     args = SimpleNamespace()
     exec_with_error_printing(exec_show_experiments, args)
 
@@ -458,6 +441,7 @@ def dev(experiment, environment, project, port):
     This would start a web-based interface for interactive development and testing
     of experiment playbooks, but is currently not implemented.
     """
+    from adare.cli.interactive import exec_experiment_dev
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
@@ -478,6 +462,7 @@ def info(name, ulid, dotnotation):
     - adare experiment info -u ULID (find experiment by ULID)
     - adare experiment info -d project.env.experiment (find by dotnotation)
     """
+    from adare.cli.show import exec_show_experiment
     args = SimpleNamespace(
         name=name,
         ulid=ulid,
@@ -494,6 +479,7 @@ def clean(experiment, project):
     Fake runs are created during testing and development. This command
     permanently deletes all fake runs associated with the experiment.
     """
+    from adare.cli.experiment import exec_experiment_clean
     args = SimpleNamespace(
         experiment=experiment,
         project=project
@@ -525,6 +511,7 @@ def remove(experiment, project, force, keep_files):
     - adare experiment remove test_csv --force (removes with all runs)
     - adare experiment remove test_csv --force --keep-files (DB only)
     """
+    from adare.cli.experiment import exec_experiment_remove
     args = SimpleNamespace(
         experiment=experiment,
         project=project,
@@ -550,6 +537,7 @@ def add_env(experiment_pattern, environments, force, project):
     - adare experiment add-env "*_linux" ubuntu22 ubuntu24
     - adare experiment add-env specific_experiment ubuntu24
     """
+    from adare.cli.experiment import exec_experiment_add_env
     args = SimpleNamespace(
         experiment_pattern=experiment_pattern,
         environments=list(environments),
@@ -575,6 +563,7 @@ def remove_env(experiment_pattern, environments, force, project):
     - adare experiment remove-env "*_test" old_env
     - adare experiment remove-env specific_experiment ubuntu22
     """
+    from adare.cli.experiment import exec_experiment_remove_env
     args = SimpleNamespace(
         experiment_pattern=experiment_pattern,
         environments=list(environments),
@@ -603,6 +592,7 @@ def clone(source_experiment, target_experiment, environments, project):
     - adare experiment clone prod_exp dev_exp -e ubuntu22 -e debian12
     - adare experiment clone test1 test1_variant --project myproject
     """
+    from adare.cli.experiment import exec_experiment_clone
     args = SimpleNamespace(
         source_experiment=source_experiment,
         target_experiment=target_experiment,
@@ -630,6 +620,7 @@ def create(name, project):
     - Simple name: my_test
     - Relative path: testfunctions/my_test
     """
+    from adare.cli.testfunction import exec_create_testfunction
     args = SimpleNamespace(name=name, project=project)
     exec_with_error_printing(exec_create_testfunction, args)
 
@@ -642,6 +633,7 @@ def remove(name, project):
     NAME is the testfunction file name (e.g., xml, json, csv).
     This will remove the entire testfunction file and all functions within it.
     """
+    from adare.cli.testfunction import exec_remove_testfunction
     args = SimpleNamespace(name=name, project=project)
     exec_with_error_printing(exec_remove_testfunction, args)
 
@@ -659,6 +651,7 @@ def load(name, force):
     By default, loading will skip testfunctions that are currently used in experiment runs.
     Use --force to overwrite and delete associated experiment runs.
     """
+    from adare.cli.testfunction import exec_load_testfunction
     args = SimpleNamespace(name=name, force=force)
     exec_with_error_printing(exec_load_testfunction, args)
 
@@ -666,6 +659,7 @@ def load(name, force):
 @click.option('--set', help='Filter testfunctions by set (e.g., standard)')
 def list_testfunctions(set):
     """List all testfunctions."""
+    from adare.cli.testfunction import exec_list_testfunctions
     args = SimpleNamespace(set=set)
     exec_with_error_printing(exec_list_testfunctions, args)
 
@@ -673,6 +667,7 @@ def list_testfunctions(set):
 @click.option('--file-name', '-f', help='File name')
 def show(file_name):
     """Show testfunctions with optional file filtering."""
+    from adare.cli.show import exec_show_testfunctions
     args = SimpleNamespace(file_name=file_name)
     exec_with_error_printing(exec_show_testfunctions, args)
 
@@ -680,6 +675,7 @@ def show(file_name):
 @click.argument('dotnotation')
 def info(dotnotation):
     """Show detailed information about a specific testfunction."""
+    from adare.cli.show import exec_show_testfunction
     args = SimpleNamespace(dotnotation=dotnotation)
     exec_with_error_printing(exec_show_testfunction, args)
 
@@ -699,6 +695,7 @@ def vm():
 @vm.command(name='list')
 def vm_list():
     """List all VMs in the system."""
+    from adare.cli.vm import exec_vm_list
     args = SimpleNamespace()
     exec_with_error_printing(exec_vm_list, args)
 
@@ -706,6 +703,7 @@ def vm_list():
 @click.argument('vm_id')
 def info(vm_id):
     """Get detailed information about a VM."""
+    from adare.cli.vm import exec_vm_info
     args = SimpleNamespace(vm_id=vm_id)
     exec_with_error_printing(exec_vm_info, args)
 
@@ -715,6 +713,7 @@ def info(vm_id):
 @click.option('--experiment-id', help='Remove instances for specific experiment')
 def remove(instance_id, all, experiment_id):
     """Remove VM instances. Running instances cannot be removed."""
+    from adare.cli.vm import exec_vm_instance_remove
     args = SimpleNamespace(
         instance_id=instance_id,
         all=all,
@@ -725,6 +724,7 @@ def remove(instance_id, all, experiment_id):
 @vm.command()
 def usage():
     """Show VM instance usage statistics."""
+    from adare.cli.vm import exec_vm_instance_usage
     args = SimpleNamespace()
     exec_with_error_printing(exec_vm_instance_usage, args)
 
@@ -761,6 +761,7 @@ def test(ova_file, platform, verbose, keep_vm, remove_vm):
     elif remove_vm:
         vm_cleanup_mode = 'remove'
     
+    from adare.cli.vm import exec_vm_test
     args = SimpleNamespace(
         ova_file=ova_file, 
         platform=platform, 
@@ -779,6 +780,7 @@ def clear():
 @click.option('--force', '-f', is_flag=True, help='Force deletion of all VMs (required for confirmation)')
 def clear_all(force):
     """Clear ALL VMs from the system."""
+    from adare.cli.vm import exec_vm_clear_all
     args = SimpleNamespace(force=force)
     exec_with_error_printing(exec_vm_clear_all, args)
 
@@ -787,6 +789,7 @@ def clear_all(force):
 @click.option('--force', '-f', is_flag=True, help='Force deletion of environment VMs (required for confirmation)')
 def clear_environment(environment_ulid, force):
     """Clear all VMs associated with a specific environment."""
+    from adare.cli.vm import exec_vm_clear_by_environment
     args = SimpleNamespace(environment_ulid=environment_ulid, force=force)
     exec_with_error_printing(exec_vm_clear_by_environment, args)
 
@@ -800,6 +803,7 @@ def snapshot():
 @click.option('--instance', '-i', 'instance_id', help='Filter by specific VM instance ID')
 def snapshot_list(instance_id):
     """List all snapshots. Use --instance to filter by specific VM instance."""
+    from adare.cli.vm import exec_vm_list_snapshots
     args = SimpleNamespace(instance_id=instance_id)
     exec_with_error_printing(exec_vm_list_snapshots, args)
 
@@ -808,6 +812,7 @@ def snapshot_list(instance_id):
 @click.argument('snapshot_name')
 def remove(instance_id, snapshot_name):
     """Delete a single snapshot from a specific VM instance."""
+    from adare.cli.vm import exec_vm_delete_snapshot
     args = SimpleNamespace(instance_id=instance_id, snapshot_name=snapshot_name)
     exec_with_error_printing(exec_vm_delete_snapshot, args)
 
@@ -832,6 +837,7 @@ def run():
 @click.option('--filter', '-f', help='Filter by dotnotation: [project][.environment][.experiment]')
 def list_runs(filter):
     """List all experiment runs. Use --filter with dotnotation for advanced filtering."""
+    from adare.cli.show import exec_show_runs
     args = SimpleNamespace(filter=filter)
     exec_with_error_printing(exec_show_runs, args)
 
@@ -839,6 +845,7 @@ def list_runs(filter):
 @click.argument('ulid', required=False)
 def info(ulid):
     """Show detailed information about a run. Shows latest run if no ULID provided."""
+    from adare.cli.show import exec_show_run
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_show_run, args)
 
@@ -846,6 +853,7 @@ def info(ulid):
 @click.argument('ulid', required=True)
 def remove(ulid):
     """Remove a single experiment run by its ULID."""
+    from adare.cli.show import exec_remove_run
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_remove_run, args)
 
@@ -864,18 +872,21 @@ def web():
 @web.command()
 def login():
     """Login to the web interface."""
+    from adare.cli.web import exec_web_login
     args = SimpleNamespace()
     exec_with_error_printing(exec_web_login, args)
 
 @web.command()
 def logout():
     """Logout from the web interface."""
+    from adare.cli.web import exec_web_logout
     args = SimpleNamespace()
     exec_with_error_printing(exec_web_logout, args)
 
 @web.command()
 def status():
     """Show the web login status."""
+    from adare.cli.web import exec_web_status
     args = SimpleNamespace()
     exec_with_error_printing(exec_web_status, args)
 
@@ -889,6 +900,7 @@ def download():
 @click.argument('ulid')
 def download_experiment(ulid):
     """Download an experiment."""
+    from adare.cli.web import exec_download_experiment
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_download_experiment, args)
 
@@ -896,6 +908,7 @@ def download_experiment(ulid):
 @click.argument('name')
 def download_testfunction(name):
     """Download a testfunction."""
+    from adare.cli.web import exec_download_testfunction
     args = SimpleNamespace(name=name)
     exec_with_error_printing(exec_download_testfunction, args)
 
@@ -903,6 +916,7 @@ def download_testfunction(name):
 @click.argument('name')
 def download_environment(name):
     """Download an environment."""
+    from adare.cli.web import exec_download_environment
     args = SimpleNamespace(name=name)
     exec_with_error_printing(exec_download_environment, args)
 
@@ -910,6 +924,7 @@ def download_environment(name):
 @click.argument('ulid')
 def publish(ulid):
     """Publish an experiment run to the web interface."""
+    from adare.cli.web import exec_web_upload_experiment_run
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_web_upload_experiment_run, args)
 
@@ -918,6 +933,7 @@ def publish(ulid):
 @click.option('--project', '-p', help='Name of the project')
 def publish_run(ulid, project):
     """Publish an experiment run to the server with progress tracking."""
+    from adare.cli.web import exec_web_publish_run
     args = SimpleNamespace(ulid=ulid, project=project)
     exec_with_error_printing(exec_web_publish_run, args)
 
@@ -925,6 +941,7 @@ def publish_run(ulid, project):
 @click.argument('ulid')
 def check_experiment(ulid):
     """Check if an experiment exists on the server."""
+    from adare.cli.web import exec_web_check_experiment
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_web_check_experiment, args)
 
@@ -932,6 +949,7 @@ def check_experiment(ulid):
 @click.argument('ulid')
 def check_run(ulid):
     """Check if an experiment run exists on the server."""
+    from adare.cli.web import exec_web_check_run
     args = SimpleNamespace(ulid=ulid)
     exec_with_error_printing(exec_web_check_run, args)
 
@@ -939,6 +957,7 @@ def check_run(ulid):
 @click.option('--project', '-p', help='Name of the project')
 def sync(project):
     """Sync all environments and experiments with the web interface."""
+    from adare.cli.web import exec_web_sync
     args = SimpleNamespace(project=project)
     exec_with_error_printing(exec_web_sync, args)
 
@@ -974,6 +993,7 @@ def test_icon(icon, screenshot, output, host, port, threshold, mcplog):
     prints coordinates of all matches, and stops the server.
     Optionally saves a marked image showing found locations.
     """
+    from adare.cli.mcp import exec_mcp_test_icon
     args = SimpleNamespace(
         icon_path=icon,
         screenshot_path=screenshot,
@@ -998,6 +1018,7 @@ def test_text(text, screenshot, format, host, port):
     Automatically starts MCP server, finds text matches, 
     prints coordinates, and stops the server.
     """
+    from adare.cli.mcp import exec_mcp_test_text
     args = SimpleNamespace(
         text=text,
         screenshot_path=screenshot,
@@ -1019,6 +1040,7 @@ def get_all_text(screenshot, format, host, port):
     returns all detected text with coordinates and confidence scores,
     then stops the server.
     """
+    from adare.cli.mcp import exec_mcp_get_all_text
     args = SimpleNamespace(
         screenshot_path=screenshot,
         format=format,
@@ -1055,6 +1077,7 @@ def action(action_file, host, port, vm_instance, connect_timeout, default_timeou
         adare ws action test.yml --host 192.168.1.100 --port 18765
         adare ws action test.yml --vm-instance my-vm-instance
     """
+    from adare.cli.ws import exec_ws_action
     args = SimpleNamespace(
         action_file=action_file,
         host=host,
@@ -1071,6 +1094,7 @@ def action(action_file, host, port, vm_instance, connect_timeout, default_timeou
 @click.argument('output_file', type=click.Path())
 def create_example(output_file):
     """Create an example action YAML file."""
+    from adare.cli.ws import create_example_action_file
     from pathlib import Path
     create_example_action_file(Path(output_file))
 

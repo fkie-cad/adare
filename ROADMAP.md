@@ -83,11 +83,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ---
 
 ## 🐞 Known Bugs  
-- [ ] Visual bug: On `Ctrl-C`, duplicate top-line output appears (legacy artifact)  
-- [ ] Visual bug: Flow console occasionally shows three red dots at the bottom → cause unknown  
-- [ ] Visual bug: last stage spinner ("Stopping computer vision server") briefly disappears before finishing  
-- [ ] Visual bug: flow console at some points was stuck and then suddenly completly finished?
-- [ ] adare exp list gives error
+- [ ] adare env rm for qemu vm removes the base image!
+
 
 ---
 

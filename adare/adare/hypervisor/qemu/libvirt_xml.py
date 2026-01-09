@@ -6,9 +6,12 @@ enabling VMs to be managed via virsh and virt-manager while preserving
 ADARE's forensic-focused architecture (QMP, Guest Agent, overlays).
 """
 import logging
+from pathlib import Path
 from typing import Optional, Dict, Any
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
+
+from .firmware import find_ovmf_firmware, get_nvram_path_for_vm, create_nvram_for_vm
 
 log = logging.getLogger(__name__)
 
@@ -66,11 +69,36 @@ def generate_domain_xml(
     vcpu = ET.SubElement(domain, 'vcpu', placement='static')
     vcpu.text = str(vm_config.cpus)
 
-    # OS configuration
+    # OS configuration (BIOS or UEFI)
     os = ET.SubElement(domain, 'os')
-    os_type = ET.SubElement(os, 'type', arch='x86_64', machine=vm_config.machine)
-    os_type.text = 'hvm'
-    ET.SubElement(os, 'boot', dev='hd')
+
+    if vm_config.boot_mode == 'uefi':
+        # UEFI boot configuration with OVMF firmware
+        os.set('firmware', 'efi')
+
+        # Use q35 machine type for better UEFI support
+        machine_type = 'q35' if vm_config.machine == 'pc' else vm_config.machine
+        os_type = ET.SubElement(os, 'type', arch='x86_64', machine=machine_type)
+        os_type.text = 'hvm'
+
+        # Add OVMF firmware loader
+        ovmf_code, ovmf_vars = find_ovmf_firmware()
+        ET.SubElement(os, 'loader', readonly='yes', type='pflash').text = ovmf_code
+
+        # NVRAM for UEFI variables (per-VM copy of OVMF_VARS.fd)
+        # Extract VM config directory from disk path
+        vm_config_dir = Path(vm_config.disk_path).parent
+        nvram_path = create_nvram_for_vm(vm_config.vm_name, vm_config_dir)
+        nvram_elem = ET.SubElement(os, 'nvram')
+        nvram_elem.text = nvram_path
+        nvram_elem.set('template', ovmf_vars)
+
+        ET.SubElement(os, 'boot', dev='hd')
+    else:
+        # Legacy BIOS boot
+        os_type = ET.SubElement(os, 'type', arch='x86_64', machine=vm_config.machine)
+        os_type.text = 'hvm'
+        ET.SubElement(os, 'boot', dev='hd')
 
     # Features (ACPI for proper shutdown)
     features = ET.SubElement(domain, 'features')

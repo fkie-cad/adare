@@ -2,47 +2,103 @@
 from pathlib import Path
 
 # internal imports
-from adare.backend.basics import determine_projectdirectory, determine_projectdirectory_for_removal
+from adare.backend.basics import determine_projectdirectory_for_removal
+from adare.api import AdareAPI
+from adare.core.dto.project import ProjectCreateRequest, ProjectRemoveRequest
+from adare.console import print_success_message, print_error_message
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
 
 
+def _handle_api_error(result) -> None:
+    """
+    Handle an API error result by printing formatted error message and exiting.
+
+    Args:
+        result: Result object with error information
+    """
+    error = result.error
+    print_error_message(
+        title=f'{error.code}: {error.message}',
+        next_steps=error.solutions
+    )
+    exit(1)
+
+
 def exec_create_project(arguments):
     """
-    creates a new project
+    Creates a new project using the AdareAPI.
 
     :param arguments: arguments parsed via input
     """
-    from adare.backend.project.commands import project_create
+    api = AdareAPI()
     path = Path.cwd() / arguments.name
     description = arguments.description or ""
-    project_create(path, path.name, description)
+
+    result = api.project.create(ProjectCreateRequest(
+        name=path.name,
+        path=path,
+        description=description
+    ))
+
+    if result.success:
+        # CLI handles presentation
+        print_success_message(
+            title=f'Project "{result.data.name}" created successfully!',
+            location=str(result.data.path),
+            next_steps=result.data.next_steps,
+            tip=result.data.tip
+        )
+    else:
+        _handle_api_error(result)
 
 
 def exec_remove_project(arguments):
     """
-    removes a project
+    Removes a project using the AdareAPI.
 
     :param arguments: arguments parsed via input
     """
-    from adare.backend.project.commands import project_remove
     path = determine_projectdirectory_for_removal(arguments.name)
     if not path:
         log.error("no valid project found in database")
         exit(1)
-    project_remove(path)
 
+    api = AdareAPI()
+    result = api.project.remove(ProjectRemoveRequest(path=path))
 
+    if result.success:
+        print_success_message(
+            title=f'Project at "{path}" removed successfully!',
+        )
+    else:
+        _handle_api_error(result)
 
 
 def exec_list_projects(arguments):
-    from adare.backend.project.commands import project_list
     """
-    lists all projects
+    Lists all projects.
+
+    Uses the existing print_project_list for backward compatibility
+    with formatter support (Rich, JSON, YAML).
 
     :param arguments: arguments parsed via input
     """
-    project_list()
+    # Check if any projects exist using the API
+    api = AdareAPI()
+    result = api.project.list_all()
 
+    if not result.success:
+        _handle_api_error(result)
+        return
+
+    if not result.data:
+        # No projects found - use existing exception for consistent messaging
+        from adare.backend.project.exceptions import NoProjectsFoundMessage
+        raise NoProjectsFoundMessage(log, message='no projects found')
+
+    # Use existing print_project_list for rich/json/yaml formatting
+    from adare.frontend.terminal.project_list import print_project_list
+    print_project_list()

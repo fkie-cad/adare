@@ -291,7 +291,13 @@ def _handle_stage_event(event, console, ulid):
         log.warning(f"[EventListener CLI] No stage data found in event: {event}")
         return
     stage = Stage.from_dict(stage)
-    
+
+    # Skip hidden stages from console display (still recorded in database)
+    # Uses should_hide() which checks both static hidden flag and dynamic SKIPPED sub_msg
+    if stage.should_hide():
+        log.debug(f"[EventListener CLI] Skipping hidden stage: {stage.name}")
+        return
+
     # Debug logging for duplicate stage investigation
     log.info(f"[EventListener CLI] Stage: {stage.name}, ID: {stage_id}, Start: {stage.start_time}, End: {stage.end_time}, Status: {stage.status}")
 

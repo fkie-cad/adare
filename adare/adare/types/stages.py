@@ -47,6 +47,7 @@ class Stage:
     description: ClassVar[str] = 'stage description'
     parent: ClassVar[typing.Optional[str]] = None
     optional: ClassVar[bool] = False
+    hidden: ClassVar[bool] = False  # Hide from console display (still recorded in database)
 
     # Runtime state (instance fields)
     start_time: typing.Optional[datetime] = None
@@ -69,6 +70,14 @@ class Stage:
     def set_status(self, status: int):
         self.status = status
 
+    def should_hide(self) -> bool:
+        """Check if stage should be hidden from console display."""
+        if self.hidden:
+            return True
+        if self.sub_msg and "SKIPPED" in self.sub_msg:
+            return True
+        return False
+
     def to_dict(self) -> dict:
         data = converter.unstructure(self)
         # Inject class-level metadata into the dict
@@ -78,6 +87,7 @@ class Stage:
             'description': self.description,
             'parent': self.parent,
             'optional': self.optional,
+            'hidden': self.hidden,
         })
         return data
 
@@ -228,7 +238,7 @@ class VMRuntimePreparationStage(Stage):
 @attrs.define
 class VMInstanceAllocationStage(Stage):
     name: ClassVar[str] = 'vm_instance_allocation'
-    msg: ClassVar[str] = 'Allocating VM instance for experiment'
+    msg: ClassVar[str] = 'Synchronizing VM instance states'
     description: ClassVar[str] = 'Finding or creating VM instance, synchronizing state, managing snapshots'
     parent: ClassVar[str] = 'vm_setup'
 
@@ -237,8 +247,8 @@ class VMInstanceAllocationStage(Stage):
 class VMInstanceSyncStage(Stage):
     name: ClassVar[str] = 'vm_instance_sync'
     msg: ClassVar[str] = 'Synchronizing VM instance states'
-    description: ClassVar[str] = 'Checking VirtualBox state for all VM instances'
-    parent: ClassVar[str] = 'vm_instance_allocation'
+    description: ClassVar[str] = 'Checking hypervisor state for all VM instances'
+    parent: ClassVar[str] = 'vm_setup'
 
 @register_stage
 @attrs.define

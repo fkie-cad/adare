@@ -105,3 +105,36 @@ class VMStatus(IntEnum):
     MISSING = 3       # VM should exist but not found in VirtualBox
     SNAPSHOT_MISSING = 4  # VM exists but base snapshot missing
     CORRUPTED = 5     # VM or snapshot corrupted/invalid
+
+
+class VmInstanceStatus(IntEnum):
+    """
+    Lifecycle status for VM instances.
+
+    Uses integer values with string conversion methods for database compatibility.
+    """
+    ACTIVE = 1          # Instance is currently in use by an experiment
+    AVAILABLE = 2       # Instance is ready for reuse
+    CLEANUP_PENDING = 3 # Instance is marked for cleanup
+
+    @property
+    def string_value(self) -> str:
+        """Return string representation for database storage."""
+        return self.name.lower()
+
+    def __str__(self) -> str:
+        """Return string representation."""
+        return self.name.lower()
+
+    @classmethod
+    def from_string(cls, value: str) -> 'VmInstanceStatus':
+        """Convert string value to enum."""
+        value = value.strip().lower()
+        mapping = {
+            'active': cls.ACTIVE,
+            'available': cls.AVAILABLE,
+            'cleanup_pending': cls.CLEANUP_PENDING,
+        }
+        if value not in mapping:
+            raise ValueError(f"Invalid VmInstanceStatus: {value}")
+        return mapping[value]

@@ -202,18 +202,34 @@ class StageEventCoordinator:
     def _publish_stage_event(self, event: dict, publish_func):
         """
         Publish a stage event to the pubsub system.
-        
+
         Args:
             event: Event data dictionary
             publish_func: Publish function to use
         """
         try:
+            stage = event['stage']
+
+            # Filter hidden stages from CLI display (still go to database)
+            if stage.should_hide():
+                log.debug(f"Filtering hidden stage from CLI: {stage.name} ({event['stage_id']})")
+                # Import here to avoid circular dependency
+                from adare.backend.events.pubsub import publish_db
+                # Publish ONLY to database for audit trail
+                publish_db(event['ulid'], {
+                    "type": "stage",
+                    "data": stage.to_dict(),
+                    "stage_id": event['stage_id'],
+                })
+                return
+
+            # Publish to both CLI and database for visible stages
             publish_func(event['ulid'], {
                 "type": "stage",
-                "data": event['stage'].to_dict(),
+                "data": stage.to_dict(),
                 "stage_id": event['stage_id'],
             })
-            log.debug(f"Published stage event: {event['stage'].name} ({event['stage_id']})")
+            log.debug(f"Published stage event: {stage.name} ({event['stage_id']})")
         except Exception as e:
             log.error(f"Failed to publish stage event: {e}", exc_info=True)
 

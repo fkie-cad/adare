@@ -43,6 +43,31 @@ from adare.hypervisor.qemu.libvirt_stderr_redirect import (
 log = logging.getLogger(__name__)
 
 
+def get_boot_mode_for_os(guest_os: str) -> str:
+    """
+    Determine appropriate boot mode based on guest OS.
+
+    Windows VMs work better with UEFI boot when converted from VirtualBox
+    or other hypervisors. Linux VMs typically work fine with either BIOS
+    or UEFI, so we default to BIOS for broader compatibility.
+
+    Args:
+        guest_os: Guest OS string (e.g., 'windows', 'linux', 'Windows_10')
+
+    Returns:
+        'uefi' for Windows, 'bios' for others
+
+    Example:
+        >>> get_boot_mode_for_os('Windows_10')
+        'uefi'
+        >>> get_boot_mode_for_os('Ubuntu_22')
+        'bios'
+    """
+    if 'windows' in guest_os.lower():
+        return 'uefi'
+    return 'bios'
+
+
 class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
     """
     QEMU VM management class with modular operations.
@@ -186,7 +211,15 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             log.debug(f"CLAUDE: Loading VM config from {config_path}")
             with open(config_path, 'r') as f:
                 data = json.load(f)
-            return QEMUVMConfig.from_dict(data)
+            config = QEMUVMConfig.from_dict(data)
+
+            # CRITICAL FIX: Override disk_path if external path provided
+            # This prevents using stale disk_path from saved config
+            if self._external_disk_path:
+                config.disk_path = self._external_disk_path
+                log.debug(f"CLAUDE: Overriding config disk_path with external: {self._external_disk_path}")
+
+            return config
         else:
             log.debug(f"CLAUDE: Creating new VM config for '{self.vm_name}'")
             # Create new config
@@ -214,6 +247,9 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                 if len(path) > 107:
                     raise ValueError(f"{name} socket path too long ({len(path)} > 107 chars): {path}")
 
+            # Determine boot mode based on guest OS
+            boot_mode = get_boot_mode_for_os(self.guest_os)
+
             config = QEMUVMConfig(
                 vm_name=self.vm_name,
                 uuid=vm_uuid,
@@ -224,6 +260,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                 machine=self.machine,
                 accel=self.accel,
                 drive_format=self.drive_format,
+                boot_mode=boot_mode,
                 network='user',
                 qmp_socket_path=qmp_socket,
                 guest_agent_socket_path=qga_socket,
@@ -281,9 +318,17 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         The base disk is never modified after creation. It serves as the
         backing file for experiment-specific overlays.
 
+        For external VMs: Returns the external path directly (original IS the base)
+        For managed VMs: Returns path with -base suffix
+
         Returns:
-            Path with -base suffix: /path/to/disk-base.qcow2
+            Path to base disk
         """
+        # External qcow2: the original file IS the base (no -base suffix needed)
+        if self._external_disk_path:
+            return self._external_disk_path
+
+        # Managed VM: add -base suffix
         current_disk = Path(self.config.disk_path)
         return str(current_disk.parent / f"{current_disk.stem}-base{current_disk.suffix}")
 
@@ -454,8 +499,16 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                     f"Base VM name may be too long. Consider using a shorter VM name."
                 )
 
-            log.debug(f"CLAUDE: Generated overlay name (external case): {overlay_name}")
-            return str(current_disk.parent / overlay_name)
+            # For external VMs, store overlays in managed storage (not next to original file)
+            if self._external_disk_path:
+                overlay_dir = Path.home() / '.adare' / 'qemu' / 'disks'
+                overlay_dir.mkdir(parents=True, exist_ok=True)
+                log.debug(f"CLAUDE: Using managed storage for external VM overlay: {overlay_dir}")
+                return str(overlay_dir / overlay_name)
+            else:
+                # Managed VM - store overlay next to base disk
+                log.debug(f"CLAUDE: Generated overlay name (external case): {overlay_name}")
+                return str(current_disk.parent / overlay_name)
 
         # Fallback: should not reach here, but use safe overlay generation
         # This maintains backward compatibility if we missed an edge case
@@ -512,12 +565,17 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         # Create overlay path with experiment ID
         overlay_path = self.get_overlay_disk_path(experiment_id)
 
-        # Calculate relative path from overlay to base disk for libguestfs compatibility
-        # Libguestfs may mount the disk in a different context, so relative paths work better
+        # Calculate backing file path (absolute for external VMs, relative for managed VMs)
+        # External VMs: Use absolute path since overlay is in different directory than base
+        # Managed VMs: Use relative path for libguestfs compatibility
         overlay_dir = Path(overlay_path).parent
         base_path = Path(base_disk)
 
-        if overlay_dir == base_path.parent:
+        if self._external_disk_path:
+            # External VM - use absolute path (cross-directory backing file)
+            backing_file = str(base_path.resolve())
+            log.debug(f"CLAUDE: Using absolute backing path for external VM: {backing_file}")
+        elif overlay_dir == base_path.parent:
             # Same directory - use just filename (most common case)
             backing_file = base_path.name
         else:
@@ -525,7 +583,21 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             backing_file = os.path.relpath(base_disk, overlay_dir)
 
         log.debug(f"CLAUDE: Base disk absolute path: {base_disk}")
-        log.debug(f"CLAUDE: Backing file relative path: {backing_file}")
+        log.debug(f"CLAUDE: Backing file path: {backing_file}")
+
+        # Check available disk space before creating overlay
+        import shutil
+        stat = shutil.disk_usage(overlay_dir)
+        min_required_space = 10 * 1024 * 1024 * 1024  # 10GB minimum
+        if stat.free < min_required_space:
+            raise HypervisorException(
+                f"Insufficient disk space for overlay creation.\n"
+                f"Location: {overlay_dir}\n"
+                f"Available: {stat.free / (1024**3):.2f} GB\n"
+                f"Required: ~10 GB minimum\n"
+                f"Please free up disk space and try again."
+            )
+        log.debug(f"CLAUDE: Disk space check passed: {stat.free / (1024**3):.2f} GB available")
 
         # Build qemu-img command to create backing file
         qemu_img = self.executables.qemu_img
@@ -577,13 +649,17 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             # Get the base disk to determine the overlay directory and naming pattern
             base_disk = self._get_true_base_disk()
             base_path = Path(base_disk)
-            overlay_dir = base_path.parent
 
-            # Determine the VM name part for matching overlays
+            # Determine overlay directory based on VM type
             if self._external_disk_path:
+                # External VM: overlays are in managed storage, not next to base
+                overlay_dir = Path.home() / '.adare' / 'qemu' / 'disks'
                 # External qcow2: use the original filename stem
                 vm_name_stem = Path(self._external_disk_path).stem
+                log.debug(f"CLAUDE: Cleaning external VM overlays from managed storage: {overlay_dir}")
             else:
+                # Managed VM: overlays are next to base disk
+                overlay_dir = base_path.parent
                 # Managed VM: strip -base suffix
                 vm_name_stem = base_path.stem.replace('-base', '')
 
@@ -696,9 +772,30 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         return await self.manager.run_async(_create_async)
 
     def _get_libvirt_connection(self):
-        """Get libvirt connection from manager (lazy initialization)."""
+        """
+        Get thread-safe libvirt connection (creates new connection per instance).
+
+        Instead of using the manager's shared connection, creates a new connection
+        for this QEMUVM instance. This ensures thread-safety when parallel tasks
+        check instance states concurrently - each thread gets its own QEMUVM instance
+        with an isolated libvirt connection.
+        """
         if not self._libvirt_conn:
-            self._libvirt_conn = self.manager.libvirt_conn
+            try:
+                import libvirt
+                from adare.config import HYPERVISOR_CONFIGS
+
+                qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
+                libvirt_uri = qemu_config.get('libvirt_uri', 'qemu:///session')
+
+                # Create new connection for this QEMUVM instance (thread-safe)
+                # Don't use self.manager.libvirt_conn to avoid shared connection issues
+                self._libvirt_conn = libvirt.open(libvirt_uri)
+                log.debug(f"CLAUDE: Created thread-local libvirt connection for {self.vm_name}")
+            except Exception as e:
+                log.warning(f"CLAUDE: Failed to create libvirt connection: {e}")
+                return None
+
         return self._libvirt_conn
 
     def _define_libvirt_domain(self):
@@ -774,23 +871,50 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         """
         Build QEMU command line for starting VM.
 
+        Supports both BIOS and UEFI boot modes. For UEFI, uses OVMF firmware
+        and q35 machine type for better compatibility with modern Windows VMs.
+
         Returns:
             List of command arguments
         """
         qemu_system_exe = self.executables.qemu_system
 
+        # Determine machine type (use q35 for UEFI if currently pc)
+        machine_type = self.machine
+        if self.config.boot_mode == 'uefi' and self.machine == 'pc':
+            machine_type = 'q35'
+
         cmd = [
             qemu_system_exe,
             '-name', self.vm_name,
-            '-machine', f"{self.machine},accel={self.accel}",
+            '-machine', f"{machine_type},accel={self.accel}",
             '-cpu', 'host',
             '-smp', str(self.cpus),
             '-m', str(self.ram),
+        ]
+
+        # Add UEFI firmware if boot mode is uefi
+        if self.config.boot_mode == 'uefi':
+            from adare.hypervisor.qemu.firmware import find_ovmf_firmware, create_nvram_for_vm
+            ovmf_code, _ = find_ovmf_firmware()
+
+            # Create/get NVRAM for this VM
+            vm_config_dir = Path(self.config.disk_path).parent
+            nvram_path = create_nvram_for_vm(self.vm_name, vm_config_dir)
+
+            # Add OVMF firmware drives
+            cmd.extend([
+                '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
+                '-drive', f'if=pflash,format=raw,file={nvram_path}'
+            ])
+
+        # Add main disk
+        cmd.extend([
             '-drive', f"file={self.config.disk_path},format={self.drive_format},if=virtio",
             # '-display', 'none',  # Headless
             '-daemonize',  # Run as daemon
             '-pidfile', self.config.pid_file_path
-        ]
+        ])
 
         # Add QEMU debug log if configured
         if self.config.qemu_debug_log_path:

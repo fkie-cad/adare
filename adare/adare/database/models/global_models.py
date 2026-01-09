@@ -12,7 +12,7 @@ import ulid
 from pathlib import Path
 from sqlalchemy_serializer import SerializerMixin
 from sqlalchemy.ext.hybrid import hybrid_property
-from adarelib.constants import StatusEnum
+from adarelib.constants import StatusEnum, VmInstanceStatus
 from sqlalchemy.orm import declarative_base
 
 # Create separate base for global models
@@ -21,6 +21,7 @@ GlobalBase = declarative_base()
 StatusEnumType = SAEnum(StatusEnum, name="statusenum")
 SyncStatusEnum = SAEnum('pending', 'synced', 'failed', 'local_only', name="syncstatusenum")
 SyncDirectionEnum = SAEnum('push', 'pull', 'bidirectional', name="syncdirectionenum")
+VmInstanceStatusType = SAEnum('active', 'available', 'cleanup_pending', name="vminstancestatusenum")
 
 # Global mapping tables
 mapping_environment_tag = Table(
@@ -311,8 +312,9 @@ class VmInstance(SerializerMixin, GlobalBase):
     """
     VM instance tracking for concurrent experiment support.
 
-    Tracks individual VirtualBox VM instances created from base VMs,
+    Tracks individual VM instances created from base VMs,
     enabling multiple experiments to run concurrently with the same environment.
+    Supports both VirtualBox and QEMU hypervisors.
     """
     __tablename__ = 'vm_instance'
     RELATIONSHIPS_TO_DICT = True
@@ -323,7 +325,8 @@ class VmInstance(SerializerMixin, GlobalBase):
     vm_id = Column(CHAR(26), ForeignKey('vm.id', ondelete='CASCADE'), nullable=False)
     vm = relationship(Vm, backref=backref("instances", cascade="all, delete-orphan"))
 
-    # VirtualBox specific identifiers
+    # Hypervisor-specific identifiers
+    # VirtualBox uses vbox_uuid, QEMU uses instance_name as identifier
     vbox_uuid = Column(String, nullable=True, unique=True, index=True)
     instance_name = Column(String, nullable=False, unique=True, index=True)
 
@@ -331,8 +334,8 @@ class VmInstance(SerializerMixin, GlobalBase):
     current_experiment_run_id = Column(String, nullable=True, index=True)
     websocket_port = Column(Integer, nullable=True, index=True)
 
-    # Instance lifecycle
-    status = Column(String, nullable=False, default='active', index=True)  # active/available/cleanup_pending
+    # Instance lifecycle - uses enum for database-level constraint
+    status = Column(VmInstanceStatusType, nullable=False, default='active', index=True)
     created_at = Column(DateTime, nullable=False, default=func.now())
     last_used_at = Column(DateTime, nullable=False, default=func.now())
 
@@ -354,12 +357,28 @@ class VmInstance(SerializerMixin, GlobalBase):
         return f"<VmInstance(name='{self.instance_name}', vm='{self.vm.name if self.vm else None}', status='{self.status}')>"
 
     @hybrid_property
-    def is_available(self):
+    def hypervisor_identifier(self) -> str:
+        """
+        Returns the appropriate identifier for the hypervisor type.
+
+        VirtualBox uses vbox_uuid, QEMU uses instance_name.
+        This provides a polymorphic way to identify instances across hypervisors.
+        """
+        if self.vbox_uuid:
+            return self.vbox_uuid
+        return self.instance_name
+
+    @hybrid_property
+    def is_available(self) -> bool:
         return self.status == 'available'
 
     @hybrid_property
-    def is_active(self):
+    def is_active(self) -> bool:
         return self.status == 'active'
+
+    @hybrid_property
+    def is_cleanup_pending(self) -> bool:
+        return self.status == 'cleanup_pending'
 
     def mark_available(self):
         """Mark instance as available for reuse."""
@@ -376,6 +395,10 @@ class VmInstance(SerializerMixin, GlobalBase):
     def mark_cleanup_pending(self):
         """Mark instance for cleanup."""
         self.status = 'cleanup_pending'
+
+    def get_status_enum(self) -> VmInstanceStatus:
+        """Return the status as a VmInstanceStatus enum value."""
+        return VmInstanceStatus.from_string(self.status)
 
 
 class Environment(SerializerMixin, GlobalBase):

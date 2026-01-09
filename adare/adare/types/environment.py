@@ -43,6 +43,24 @@ class EnvironmentMetadata:
     Consolidated class to store the configuration of an environment.
 
     Supports both modern VM-based environments (with OVA files) and legacy Vagrant-based environments.
+
+    Hypervisor Configuration:
+        The hypervisor_config field allows hypervisor-specific settings:
+
+        QEMU hypervisor supports:
+        - boot_mode: 'bios' or 'uefi' (default: auto-detected based on OS)
+            - Windows VMs automatically use 'uefi'
+            - Linux VMs automatically use 'bios'
+            - Override with explicit boot_mode setting
+
+        Example environment YAML:
+            vm: windows-10
+            os:
+              platform: windows
+              os: Windows 10
+            hypervisor: qemu
+            hypervisor_config:
+              boot_mode: uefi  # Optional: override auto-detection
     """
     vm: str
     os: OsInfo

@@ -160,6 +160,30 @@ class QEMUManager(AbstractHypervisorManager):
         # Get credentials based on guest OS
         username, password = get_vm_credentials(guest_os)
 
+        # Determine if this is an external VM and set disk_path accordingly
+        from adare.backend.vm.commands import _is_vm_managed
+
+        is_external = not _is_vm_managed(vm_file_path)
+        disk_path = None
+        detected_format = None
+
+        if is_external:
+            # Detect format for external VMs
+            detected_format = QEMUVM._detect_disk_format_static(
+                vm_file_path,
+                self.executables.qemu_img
+            )
+            log.debug(f"CLAUDE: External VM detected, format: {detected_format}")
+
+            if detected_format == 'qcow2':
+                # Use original file directly
+                disk_path = str(vm_file_path.resolve())
+                log.debug(f"CLAUDE: External qcow2 VM - using original: {disk_path}")
+            else:
+                # Will convert next to original
+                disk_path = str(vm_file_path.parent / f"{vm_file_path.stem}_adare_converted.qcow2")
+                log.debug(f"CLAUDE: External non-qcow2 VM - will convert to: {disk_path}")
+
         # Create QEMUVM instance
         vm = QEMUVM(
             vm_name=vm_name,
@@ -167,10 +191,17 @@ class QEMUManager(AbstractHypervisorManager):
             manager=self,
             username=username,
             password=password,
-            executables=self.executables
+            executables=self.executables,
+            disk_path=disk_path  # Pass disk_path for external VMs
         )
 
         try:
+            # Skip conversion for external qcow2 files
+            if is_external and detected_format == 'qcow2':
+                log.info(f"CLAUDE: Skipping conversion for external qcow2: {vm_file_path}")
+                vm._save_vm_config()
+                return vm
+
             # Import the VM from OVF/OVA file (converts to qcow2)
             return_code, stdout = await vm.create_from_ovf_or_ova(
                 file_path=vm_file_path,
@@ -182,11 +213,11 @@ class QEMUManager(AbstractHypervisorManager):
                 if stdout:
                     error_msg += f": {stdout}"
                 log.error(f"CLAUDE: {error_msg}")
-                raise VMImportException(error_msg)
+                raise VMImportException(vm_name, error_msg)
 
             log.info(f"CLAUDE: Successfully imported QEMU VM '{vm_name}' from '{vm_file_path}'")
             return vm
 
         except Exception as e:
             log.error(f"CLAUDE: Failed to import QEMU VM '{vm_name}' from '{vm_file_path}': {e}")
-            raise VMImportException(f"QEMU VM import failed: {e}")
+            raise VMImportException(vm_name, f"QEMU VM import failed: {e}")

@@ -100,12 +100,10 @@ def _get_environment_or_raise(db, ulid: str, log, not_found_msg: str, fields: li
             result['file'] = environment.file
         elif field == 'vm_id':
             result['vm_id'] = environment.vm_id
-        elif field == 'project_id':
-            result['project_id'] = environment.project_id
         elif field == 'installations':
             result['installations'] = environment.installations
         else:
-            log.warning(f'Unknown field requested: {field}. Available: id, name, description, sha256hash, file, vm_id, project_id, installations')
+            log.warning(f'Unknown field requested: {field}. Available: id, name, description, sha256hash, file, vm_id, installations')
     
     return result
 
@@ -463,8 +461,8 @@ def get_environment_by_ulid(ulid: str, fields: list[str] = None) -> Environment 
     Args:
         ulid: Environment ULID
         fields: Optional list of fields to extract. If None, returns full object.
-                Available fields: 'id', 'name', 'description', 'sha256hash', 'file', 'vm_id', 'project_id', 'installations'
-                Relationship fields: 'vm_name', 'vm_os_type', 'vm_file_path', 'project_name', 'project_path', 'tags'
+                Available fields: 'id', 'name', 'description', 'sha256hash', 'file', 'vm_id', 'installations'
+                Relationship fields: 'vm_name', 'vm_os_type', 'vm_file_path', 'tags'
     
     Returns:
         Environment: Full object if fields=None
@@ -481,9 +479,6 @@ def get_environment_by_ulid(ulid: str, fields: list[str] = None) -> Environment 
         'vm_file_path': 'vm',
         'vm_description': 'vm',
         'vm_architecture': 'vm',
-        'project_name': 'project',
-        'project_path': 'project',
-        'project_description': 'project',
         'tags': 'tags',
         'runs_count': 'runs'
     }
@@ -505,8 +500,6 @@ def get_environment_by_ulid(ulid: str, fields: list[str] = None) -> Environment 
             # Apply eager loading selectively
             if 'vm' in needed_relationships:
                 environment = environment.options(joinedload(Environment.vm))
-            if 'project' in needed_relationships:
-                environment = environment.options(joinedload(Environment.project))
             if 'tags' in needed_relationships:
                 environment = environment.options(selectinload(Environment.tags))
             if 'runs' in needed_relationships:
@@ -540,8 +533,6 @@ def get_environment_by_ulid(ulid: str, fields: list[str] = None) -> Environment 
                     result['file'] = environment.file
                 elif field == 'vm_id':
                     result['vm_id'] = environment.vm_id
-                elif field == 'project_id':
-                    result['project_id'] = environment.project_id
                 elif field == 'installations':
                     result['installations'] = environment.installations
                 # Foreign key fields - safely loaded with eager loading
@@ -555,18 +546,12 @@ def get_environment_by_ulid(ulid: str, fields: list[str] = None) -> Environment 
                     result['vm_description'] = environment.vm.description if environment.vm else None
                 elif field == 'vm_architecture':
                     result['vm_architecture'] = environment.vm.osinfo.architecture if environment.vm and environment.vm.osinfo else None
-                elif field == 'project_name':
-                    result['project_name'] = environment.project.name if environment.project else None
-                elif field == 'project_path':
-                    result['project_path'] = str(environment.project.path) if environment.project else None
-                elif field == 'project_description':
-                    result['project_description'] = environment.project.description if environment.project else None
                 elif field == 'tags':
                     result['tags'] = [tag.name for tag in environment.tags] if hasattr(environment, 'tags') else []
                 elif field == 'runs_count':
                     result['runs_count'] = len(environment.runs) if hasattr(environment, 'runs') else 0
                 else:
-                    log.warning(f'Unknown field requested: {field}. Available: id, name, description, sha256hash, file, vm_id, project_id, installations, vm_name, vm_os_type, project_name, project_path, tags, runs_count')
+                    log.warning(f'Unknown field requested: {field}. Available: id, name, description, sha256hash, file, vm_id, installations, vm_name, vm_os_type, tags, runs_count')
             except AttributeError as e:
                 log.warning(f"Could not access field '{field}': {e}")
                 result[field] = None
@@ -616,12 +601,10 @@ def get_environment_by_hash(sha256hash: str, trigger_exception: bool = True, fie
                 result['file'] = environment.file
             elif field == 'vm_id':
                 result['vm_id'] = environment.vm_id
-            elif field == 'project_id':
-                result['project_id'] = environment.project_id
             elif field == 'installations':
                 result['installations'] = environment.installations
             else:
-                log.warning(f'Unknown field requested: {field}. Available: id, name, description, sha256hash, file, vm_id, project_id, installations')
+                log.warning(f'Unknown field requested: {field}. Available: id, name, description, sha256hash, file, vm_id, installations')
         
         return result
 
@@ -654,12 +637,12 @@ def sync_environment(ulid: str, remote_ulid: str, remote_url: str, is_published:
 
 def get_environment_data(ulid: str) -> dict | None:
     """Get full environment data with relationships - convenience function for common case."""
-    return get_environment_by_ulid(ulid, fields=['id', 'name', 'description', 'sha256hash', 'file', 'vm_id', 'vm_name', 'vm_os_type', 'project_id', 'project_name', 'project_path'])
+    return get_environment_by_ulid(ulid, fields=['id', 'name', 'description', 'sha256hash', 'file', 'vm_id', 'vm_name', 'vm_os_type'])
 
 
 def get_environment_summary(ulid: str) -> dict | None:
     """Get basic environment info with key relationships - lighter version."""
-    return get_environment_by_ulid(ulid, fields=['id', 'name', 'description', 'vm_name', 'project_name'])
+    return get_environment_by_ulid(ulid, fields=['id', 'name', 'description', 'vm_name'])
 
 
 def get_environment_with_vm_details(ulid: str) -> dict | None:
@@ -669,7 +652,7 @@ def get_environment_with_vm_details(ulid: str) -> dict | None:
 
 def get_environment_with_relationships(ulid: str) -> dict | None:
     """Get environment with all relationships loaded."""
-    return get_environment_by_ulid(ulid, fields=['id', 'name', 'description', 'vm_name', 'vm_os_type', 'project_name', 'project_path', 'tags', 'runs_count'])
+    return get_environment_by_ulid(ulid, fields=['id', 'name', 'description', 'vm_name', 'vm_os_type', 'tags', 'runs_count'])
 
 
 def sync_environments_all(project: str = None):

@@ -3,10 +3,15 @@ Simple database-driven port allocation for VM instances.
 
 Eliminates in-memory state synchronization issues by using the database
 as the single source of truth for port allocations.
+
+Uses Unit of Work pattern for atomic port reservation within database transactions.
 """
 
 import logging
 from typing import Optional
+from sqlalchemy.exc import IntegrityError, OperationalError
+
+from adare.hypervisor.exceptions import PortAllocationException
 
 log = logging.getLogger(__name__)
 
@@ -21,34 +26,32 @@ def find_available_port() -> Optional[int]:
 
     Returns:
         Available port number, or None if no ports available
+
+    Raises:
+        PortAllocationException: If database query fails
     """
-    try:
-        # Import here to avoid circular imports
-        from adare.database.api.vm import VmApi
+    # Import here to avoid circular imports
+    from adare.database.api.vm import VmApi
 
-        with VmApi() as api:
-            # Get all active VM instances with allocated ports
-            active_instances = api.get_all_vm_instances()
-            used_ports = set()
+    with VmApi() as api:
+        # Get all active VM instances with allocated ports
+        active_instances = api.get_all_vm_instances()
+        used_ports = set()
 
-            for instance in active_instances:
-                # Only consider active instances with allocated ports in our range
-                if (instance.status == 'active' and
-                    instance.websocket_port is not None and
-                    PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
-                    used_ports.add(instance.websocket_port)
+        for instance in active_instances:
+            # Only consider active instances with allocated ports in our range
+            if (instance.status == 'active' and
+                instance.websocket_port is not None and
+                PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
+                used_ports.add(instance.websocket_port)
 
-            # Find first available port
-            for port in range(PORT_RANGE_START, PORT_RANGE_END + 1):
-                if port not in used_ports:
-                    log.info(f"Found available websocket port: {port}")
-                    return port
+        # Find first available port
+        for port in range(PORT_RANGE_START, PORT_RANGE_END + 1):
+            if port not in used_ports:
+                log.info(f"Found available websocket port: {port}")
+                return port
 
-            log.error(f"No available ports in range {PORT_RANGE_START}-{PORT_RANGE_END}")
-            return None
-
-    except Exception as e:
-        log.error(f"Error finding available port: {e}")
+        log.error(f"No available ports in range {PORT_RANGE_START}-{PORT_RANGE_END}")
         return None
 
 
@@ -56,9 +59,9 @@ def reserve_port_atomically(api_session, vm_id: str, instance_name: str, experim
     """
     Atomically reserve a websocket port within an existing database transaction.
 
-    This function must be called within an active VmApi session/transaction to ensure
-    atomicity. It finds an available port and immediately creates a VmInstance record
-    to reserve it, preventing race conditions.
+    This function implements the Unit of Work pattern: it finds an available port
+    and immediately creates a VmInstance record to reserve it, all within the same
+    database transaction to prevent race conditions.
 
     Args:
         api_session: Active VmApi session with transaction
@@ -70,106 +73,51 @@ def reserve_port_atomically(api_session, vm_id: str, instance_name: str, experim
         Reserved port number, or None if no ports available
 
     Raises:
-        ValueError: If port conflicts are detected during reservation
+        PortAllocationException: If port reservation fails due to database errors
     """
-    try:
-        # Get all currently allocated ports within this transaction
-        active_instances = api_session.get_all_vm_instances()
-        used_ports = set()
+    # Get all currently allocated ports within this transaction
+    active_instances = api_session.get_all_vm_instances()
+    used_ports = set()
 
-        for instance in active_instances:
-            if (instance.status == 'active' and
-                instance.websocket_port is not None and
-                PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
-                used_ports.add(instance.websocket_port)
+    for instance in active_instances:
+        if (instance.status == 'active' and
+            instance.websocket_port is not None and
+            PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
+            used_ports.add(instance.websocket_port)
 
-        # Find first available port
-        for port in range(PORT_RANGE_START, PORT_RANGE_END + 1):
-            if port not in used_ports:
-                log.debug(f"Attempting to reserve port {port} for instance {instance_name}")
+    # Find first available port
+    for port in range(PORT_RANGE_START, PORT_RANGE_END + 1):
+        if port not in used_ports:
+            log.debug(f"Attempting to reserve port {port} for instance {instance_name}")
 
-                # Immediately create VmInstance record to reserve the port atomically
-                try:
-                    instance = api_session.create_vm_instance(
-                        vm_id=vm_id,
-                        instance_name=instance_name,
-                        experiment_run_id=experiment_run_id,
-                        websocket_port=port,
-                        status='active'
-                    )
-
-                    log.info(f"Successfully reserved port {port} for instance {instance_name}")
-                    return port
-
-                except Exception as db_error:
-                    # If database constraint fails (e.g., duplicate port), try next port
-                    log.debug(f"Port {port} reservation failed, trying next port: {db_error}")
-                    continue
-
-        log.error(f"No available ports in range {PORT_RANGE_START}-{PORT_RANGE_END}")
-        return None
-
-    except Exception as e:
-        log.error(f"Error during atomic port reservation: {e}")
-        # If there was an error, clean up any orphaned allocations and retry once
-        log.info("Attempting to clean up orphaned ports and retry allocation...")
-        cleaned = cleanup_orphaned_ports()
-        if cleaned > 0:
-            log.info(f"Cleaned up {cleaned} orphaned ports, retrying allocation...")
-            # Retry once after cleanup
+            # Immediately create VmInstance record to reserve the port atomically
             try:
-                return _retry_port_reservation(api_session, vm_id, instance_name, experiment_run_id)
-            except Exception as retry_error:
-                log.error(f"Retry after cleanup also failed: {retry_error}")
-        return None
+                instance = api_session.create_vm_instance(
+                    vm_id=vm_id,
+                    instance_name=instance_name,
+                    experiment_run_id=experiment_run_id,
+                    websocket_port=port,
+                    status='active'
+                )
 
+                log.info(f"Successfully reserved port {port} for instance {instance_name}")
+                return port
 
-def _retry_port_reservation(api_session, vm_id: str, instance_name: str, experiment_run_id: str) -> Optional[int]:
-    """
-    Helper function to retry port reservation after cleanup.
+            except IntegrityError as db_error:
+                # If database constraint fails (e.g., duplicate port or instance name), try next port
+                log.debug(f"Port {port} reservation failed due to constraint violation, trying next port: {db_error}")
+                api_session.session.rollback()  # Rollback the failed insert
+                continue
+            except OperationalError as db_error:
+                # Database operational error (connection, timeout, etc.)
+                log.error(f"Database operational error during port reservation: {db_error}")
+                raise PortAllocationException(
+                    f"Database error during port reservation: {db_error}",
+                    port_range=(PORT_RANGE_START, PORT_RANGE_END)
+                )
 
-    This is separated to avoid infinite recursion.
-    """
-    try:
-        # Get all currently allocated ports within this transaction
-        active_instances = api_session.get_all_vm_instances()
-        used_ports = set()
-
-        for instance in active_instances:
-            if (instance.status == 'active' and
-                instance.websocket_port is not None and
-                PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
-                used_ports.add(instance.websocket_port)
-
-        # Find first available port
-        for port in range(PORT_RANGE_START, PORT_RANGE_END + 1):
-            if port not in used_ports:
-                log.debug(f"Retry: Attempting to reserve port {port} for instance {instance_name}")
-
-                # Create VmInstance record to reserve the port atomically
-                try:
-                    instance = api_session.create_vm_instance(
-                        vm_id=vm_id,
-                        instance_name=instance_name,
-                        experiment_run_id=experiment_run_id,
-                        websocket_port=port,
-                        status='active'
-                    )
-
-                    log.info(f"Retry successful: Reserved port {port} for instance {instance_name}")
-                    return port
-
-                except Exception as db_error:
-                    # If still failing, give up
-                    log.debug(f"Retry: Port {port} reservation still failed: {db_error}")
-                    continue
-
-        log.error("Retry: Still no available ports after cleanup")
-        return None
-
-    except Exception as e:
-        log.error(f"Error during port reservation retry: {e}")
-        return None
+    log.error(f"No available ports in range {PORT_RANGE_START}-{PORT_RANGE_END}")
+    return None
 
 
 def is_port_available(port: int) -> bool:
@@ -180,27 +128,25 @@ def is_port_available(port: int) -> bool:
         port: Port number to check
 
     Returns:
-        True if port is available, False if in use or on error
+        True if port is available, False if in use
+
+    Raises:
+        PortAllocationException: If database query fails
     """
     if not (PORT_RANGE_START <= port <= PORT_RANGE_END):
         return False
 
-    try:
-        from adare.database.api.vm import VmApi
+    from adare.database.api.vm import VmApi
 
-        with VmApi() as api:
-            active_instances = api.get_all_vm_instances()
+    with VmApi() as api:
+        active_instances = api.get_all_vm_instances()
 
-            for instance in active_instances:
-                if (instance.status == 'active' and
-                    instance.websocket_port == port):
-                    return False
+        for instance in active_instances:
+            if (instance.status == 'active' and
+                instance.websocket_port == port):
+                return False
 
-            return True
-
-    except Exception as e:
-        log.error(f"Error checking port availability: {e}")
-        return False
+        return True
 
 
 def get_port_usage_stats() -> dict:
@@ -209,40 +155,31 @@ def get_port_usage_stats() -> dict:
 
     Returns:
         Dictionary with port usage information
+
+    Raises:
+        OperationalError: If database connection fails
     """
-    try:
-        from adare.database.api.vm import VmApi
+    from adare.database.api.vm import VmApi
 
-        with VmApi() as api:
-            active_instances = api.get_all_vm_instances()
-            allocated_ports = []
+    with VmApi() as api:
+        active_instances = api.get_all_vm_instances()
+        allocated_ports = []
 
-            for instance in active_instances:
-                if (instance.status == 'active' and
-                    instance.websocket_port is not None and
-                    PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
-                    allocated_ports.append(instance.websocket_port)
+        for instance in active_instances:
+            if (instance.status == 'active' and
+                instance.websocket_port is not None and
+                PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
+                allocated_ports.append(instance.websocket_port)
 
-            total_ports = PORT_RANGE_END - PORT_RANGE_START + 1
-            allocated_count = len(allocated_ports)
+        total_ports = PORT_RANGE_END - PORT_RANGE_START + 1
+        allocated_count = len(allocated_ports)
 
-            return {
-                'total_ports': total_ports,
-                'allocated_ports': sorted(allocated_ports),
-                'allocated_count': allocated_count,
-                'available_count': total_ports - allocated_count,
-                'port_range': f"{PORT_RANGE_START}-{PORT_RANGE_END}"
-            }
-
-    except Exception as e:
-        log.error(f"Error getting port usage stats: {e}")
         return {
-            'total_ports': 0,
-            'allocated_ports': [],
-            'allocated_count': 0,
-            'available_count': 0,
-            'port_range': f"{PORT_RANGE_START}-{PORT_RANGE_END}",
-            'error': str(e)
+            'total_ports': total_ports,
+            'allocated_ports': sorted(allocated_ports),
+            'allocated_count': allocated_count,
+            'available_count': total_ports - allocated_count,
+            'port_range': f"{PORT_RANGE_START}-{PORT_RANGE_END}"
         }
 
 
@@ -299,37 +236,35 @@ def cleanup_orphaned_ports() -> int:
 
     Returns:
         Number of orphaned ports cleaned up
+
+    Raises:
+        OperationalError: If database operation fails
     """
-    try:
-        from adare.database.api.vm import VmApi
+    from adare.database.api.vm import VmApi
 
-        cleaned_count = 0
-        with VmApi() as api:
-            all_instances = api.get_all_vm_instances()
+    cleaned_count = 0
+    with VmApi() as api:
+        all_instances = api.get_all_vm_instances()
 
-            for instance in all_instances:
-                # Clean up instances that have ports but are not active
-                if (instance.websocket_port is not None and
-                    instance.status != 'active' and
-                    PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
+        for instance in all_instances:
+            # Clean up instances that have ports but are not active
+            if (instance.websocket_port is not None and
+                instance.status != 'active' and
+                PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
 
-                    log.info(f"Cleaning up orphaned port {instance.websocket_port} from instance {instance.instance_name} (status: {instance.status})")
+                log.info(f"Cleaning up orphaned port {instance.websocket_port} from instance {instance.instance_name} (status: {instance.status})")
 
-                    # Clear the port from non-active instances
-                    instance.websocket_port = None
-                    api.session.commit()
-                    cleaned_count += 1
+                # Clear the port from non-active instances
+                instance.websocket_port = None
+                api.session.commit()
+                cleaned_count += 1
 
-            if cleaned_count > 0:
-                log.info(f"Cleaned up {cleaned_count} orphaned port allocations")
-            else:
-                log.debug("No orphaned port allocations found")
+        if cleaned_count > 0:
+            log.info(f"Cleaned up {cleaned_count} orphaned port allocations")
+        else:
+            log.debug("No orphaned port allocations found")
 
-            return cleaned_count
-
-    except Exception as e:
-        log.error(f"Error cleaning up orphaned ports: {e}")
-        return 0
+        return cleaned_count
 
 
 def detect_port_conflicts() -> dict:
@@ -339,51 +274,49 @@ def detect_port_conflicts() -> dict:
 
     Returns:
         Dictionary with conflict information
+
+    Raises:
+        OperationalError: If database query fails
     """
-    try:
-        from adare.database.api.vm import VmApi
-        from collections import defaultdict
+    from adare.database.api.vm import VmApi
+    from collections import defaultdict
 
-        conflicts = defaultdict(list)
-        with VmApi() as api:
-            active_instances = api.get_all_vm_instances()
+    conflicts = defaultdict(list)
+    with VmApi() as api:
+        active_instances = api.get_all_vm_instances()
 
-            # Group by port for active instances
-            port_instances = defaultdict(list)
-            for instance in active_instances:
-                if (instance.status == 'active' and
-                    instance.websocket_port is not None and
-                    PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
-                    port_instances[instance.websocket_port].append(instance)
+        # Group by port for active instances
+        port_instances = defaultdict(list)
+        for instance in active_instances:
+            if (instance.status == 'active' and
+                instance.websocket_port is not None and
+                PORT_RANGE_START <= instance.websocket_port <= PORT_RANGE_END):
+                port_instances[instance.websocket_port].append(instance)
 
-            # Find conflicts (ports used by multiple active instances)
-            for port, instances in port_instances.items():
-                if len(instances) > 1:
-                    conflicts[port] = [{
-                        'id': inst.id,
-                        'name': inst.instance_name,
-                        'experiment_id': inst.current_experiment_run_id,
-                        'created_at': inst.created_at.isoformat() if inst.created_at else None
-                    } for inst in instances]
+        # Find conflicts (ports used by multiple active instances)
+        for port, instances in port_instances.items():
+            if len(instances) > 1:
+                conflicts[port] = [{
+                    'id': inst.id,
+                    'name': inst.instance_name,
+                    'experiment_id': inst.current_experiment_run_id,
+                    'created_at': inst.created_at.isoformat() if inst.created_at else None
+                } for inst in instances]
 
-            result = {
-                'conflicts_found': len(conflicts) > 0,
-                'conflict_count': len(conflicts),
-                'conflicted_ports': dict(conflicts)
-            }
+        result = {
+            'conflicts_found': len(conflicts) > 0,
+            'conflict_count': len(conflicts),
+            'conflicted_ports': dict(conflicts)
+        }
 
-            if conflicts:
-                log.warning(f"Found {len(conflicts)} port conflicts involving {sum(len(instances) for instances in conflicts.values())} instances")
-                for port, instances in conflicts.items():
-                    log.warning(f"Port {port} is used by {len(instances)} active instances: {[i['name'] for i in instances]}")
-            else:
-                log.debug("No port conflicts detected")
+        if conflicts:
+            log.warning(f"Found {len(conflicts)} port conflicts involving {sum(len(instances) for instances in conflicts.values())} instances")
+            for port, instances in conflicts.items():
+                log.warning(f"Port {port} is used by {len(instances)} active instances: {[i['name'] for i in instances]}")
+        else:
+            log.debug("No port conflicts detected")
 
-            return result
-
-    except Exception as e:
-        log.error(f"Error detecting port conflicts: {e}")
-        return {'conflicts_found': False, 'error': str(e)}
+        return result
 
 
 def reset_all_port_allocations():

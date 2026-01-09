@@ -1,39 +1,97 @@
-from adare.backend.basics import determine_projectdirectory
-from adare.exceptions import NoProjectFoundError
-from adare.helperfunctions.path_resolution import resolve_environment_path, resolve_testfunction_path
+# internal imports
+from adare.api import AdareAPI
+from adare.console import print_error_message
+from adare.core.dto.web import (
+    DownloadEnvironmentRequest,
+    DownloadExperimentRequest,
+    DownloadTestfunctionRequest,
+    SyncRequest,
+    UploadRunRequest,
+    PublishRunRequest,
+    CheckExperimentRequest,
+    CheckRunRequest,
+)
 
 # configure logging
 import logging
 log = logging.getLogger(__name__)
 
 
+def _handle_api_error(result) -> None:
+    """
+    Handle an API error result by printing formatted error message and exiting.
+
+    Args:
+        result: Result object with error information
+    """
+    error = result.error
+    print_error_message(
+        title=f'{error.code}: {error.message}',
+        next_steps=error.solutions
+    )
+    exit(1)
+
+
+def _get_project_path(arguments):
+    """
+    Get project path from arguments or current directory.
+
+    Args:
+        arguments: CLI arguments
+
+    Returns:
+        Path to project directory
+    """
+    from adare.backend.basics import determine_projectdirectory
+    from adare.exceptions import NoProjectFoundError
+
+    project = getattr(arguments, 'project', None)
+    project_directory = determine_projectdirectory(project)
+    if not project_directory:
+        raise NoProjectFoundError(log, message='project directory not found')
+    return project_directory
+
+
 def exec_web_login(arguments):
-    from adare.web.login import login
-    login()
+    """Login to web app using AdareAPI."""
+    api = AdareAPI()
+    result = api.web.login()
+
+    if not result.success:
+        _handle_api_error(result)
 
 
 def exec_web_logout(arguments):
-    from adare.web.login import logout
-    logout()
+    """Logout from web app using AdareAPI."""
+    api = AdareAPI()
+    result = api.web.logout()
+
+    if not result.success:
+        _handle_api_error(result)
 
 
 def exec_web_status(arguments):
-    """Get web login status."""
-    from adare.web.login import is_logged_in
-    from adare.database.api.usersession import UserSessionApi
+    """Get web login status using AdareAPI."""
     from adare.run import get_formatter_from_context
+    from adare.web.login import is_logged_in
 
+    api = AdareAPI()
     formatter, output_file, dual_output = get_formatter_from_context()
+
+    result = api.web.get_status()
+
+    if not result.success:
+        _handle_api_error(result)
+        return
+
+    status = result.data
 
     if dual_output or formatter.format_type.value != 'rich':
         # Structured output
-        with UserSessionApi() as db:
-            db.remove_expired_user_sessions()
-            user_session = db.get_first_user_session()
-            status_data = {
-                'logged_in': bool(user_session),
-                'username': user_session.username if user_session else None,
-            }
+        status_data = {
+            'logged_in': status.logged_in,
+            'username': status.username,
+        }
         formatter.print_or_save(status_data, output_file, dual_output)
     else:
         # Rich console output (existing behavior)
@@ -41,100 +99,143 @@ def exec_web_status(arguments):
 
 
 def exec_download_environment(arguments):
-    from adare.backend.environment.commands import environment_download
-    project_directory = determine_projectdirectory(arguments.project)
-    if not project_directory:
-        raise NoProjectFoundError(log, message='project directory not found')
+    """Download environment from web using AdareAPI."""
+    from adare.helperfunctions.path_resolution import resolve_environment_path
+
+    project_directory = _get_project_path(arguments)
     environment_name = resolve_environment_path(arguments.name, project_directory)
-    environment_download(project_directory, environment_name)
+
+    api = AdareAPI()
+    result = api.web.download_environment(DownloadEnvironmentRequest(
+        project_path=project_directory,
+        environment_name=environment_name
+    ))
+
+    if not result.success:
+        _handle_api_error(result)
 
 
 def exec_download_experiment(arguments):
-    from adare.backend.experiment.commands import experiment_download
-    project_directory = determine_projectdirectory(arguments.project)
-    if not project_directory:
-        raise NoProjectFoundError(log, message='project directory not found')
-    experiment_download(project_directory, arguments.ulid)
+    """Download experiment from web using AdareAPI."""
+    project_directory = _get_project_path(arguments)
+
+    api = AdareAPI()
+    result = api.web.download_experiment(DownloadExperimentRequest(
+        project_path=project_directory,
+        ulid=arguments.ulid
+    ))
+
+    if not result.success:
+        _handle_api_error(result)
 
 
 def exec_download_testfunction(arguments):
-    from adare.backend.testfunction.commands import testfunction_download
-    project_directory = determine_projectdirectory(arguments.project)
-    if not project_directory:
-        raise NoProjectFoundError(log, message='project directory not found')
+    """Download testfunction from web using AdareAPI."""
+    from adare.helperfunctions.path_resolution import resolve_testfunction_path
+
+    project_directory = _get_project_path(arguments)
     testfunction_name = resolve_testfunction_path(arguments.name, project_directory)
-    testfunction_download(project_directory, testfunction_name)
+
+    api = AdareAPI()
+    result = api.web.download_testfunction(DownloadTestfunctionRequest(
+        project_path=project_directory,
+        testfunction_name=testfunction_name
+    ))
+
+    if not result.success:
+        _handle_api_error(result)
 
 
 def exec_web_sync(arguments):
-    from adare.backend.sync import sync
-    project_directory = determine_projectdirectory(arguments.project)
-    sync(project_directory)
+    """Sync project with web app using AdareAPI."""
+    from adare.backend.basics import determine_projectdirectory
+
+    project = getattr(arguments, 'project', None)
+    project_directory = determine_projectdirectory(project)
+
+    api = AdareAPI()
+    result = api.web.sync(SyncRequest(project_path=project_directory))
+
+    if not result.success:
+        _handle_api_error(result)
 
 
 def exec_web_upload_experiment_run(arguments):
-    from adare.webappaccess.upload import publish_experiment_run
-    publish_experiment_run(arguments.ulid)
+    """Upload experiment run to server using AdareAPI."""
+    api = AdareAPI()
+    result = api.web.upload_run(UploadRunRequest(ulid=arguments.ulid))
+
+    if not result.success:
+        _handle_api_error(result)
 
 
 def exec_web_publish_run(arguments):
-    """Publish an experiment run to the server."""
-    from adare.backend.experiment.commands import publish_run_command
-    project_directory = determine_projectdirectory(arguments.project)
-    if not project_directory:
-        raise NoProjectFoundError(log, message='project directory not found')
-    publish_run_command(project_directory, arguments.ulid)
+    """Publish an experiment run to the server using AdareAPI."""
+    project_directory = _get_project_path(arguments)
+
+    api = AdareAPI()
+    result = api.web.publish_run(PublishRunRequest(
+        project_path=project_directory,
+        ulid=arguments.ulid
+    ))
+
+    if not result.success:
+        _handle_api_error(result)
 
 
 def exec_web_check_experiment(arguments):
-    """Check if an experiment exists on the server."""
-    from adare.webappaccess.api_client import check_experiment_exists
+    """Check if an experiment exists on the server using AdareAPI."""
     from adare.run import get_formatter_from_context
 
+    api = AdareAPI()
     formatter, output_file, dual_output = get_formatter_from_context()
 
-    try:
-        exists = check_experiment_exists(arguments.ulid)
-        result_data = {
-            'experiment_ulid': arguments.ulid,
-            'exists': exists,
-            'status': 'published' if exists else 'not_found'
-        }
+    result = api.web.check_experiment(CheckExperimentRequest(ulid=arguments.ulid))
 
-        if dual_output or formatter.format_type.value != 'rich':
-            formatter.print_or_save(result_data, output_file, dual_output)
+    if not result.success:
+        _handle_api_error(result)
+        return
+
+    check_result = result.data
+    result_data = {
+        'experiment_ulid': check_result.experiment_ulid,
+        'exists': check_result.exists,
+        'status': check_result.status
+    }
+
+    if dual_output or formatter.format_type.value != 'rich':
+        formatter.print_or_save(result_data, output_file, dual_output)
+    else:
+        if check_result.exists:
+            print(f'Experiment {check_result.experiment_ulid} exists on server and is published.')
         else:
-            if exists:
-                print(f'Experiment {arguments.ulid} exists on server and is published.')
-            else:
-                print(f'Experiment {arguments.ulid} not found on server.')
-    except Exception as e:
-        log.error(f'Error checking experiment: {e}')
-        raise
+            print(f'Experiment {check_result.experiment_ulid} not found on server.')
 
 
 def exec_web_check_run(arguments):
-    """Check if an experiment run exists on the server."""
-    from adare.webappaccess.api_client import check_run_exists
+    """Check if an experiment run exists on the server using AdareAPI."""
     from adare.run import get_formatter_from_context
 
+    api = AdareAPI()
     formatter, output_file, dual_output = get_formatter_from_context()
 
-    try:
-        exists = check_run_exists(arguments.ulid)
-        result_data = {
-            'run_ulid': arguments.ulid,
-            'exists': exists,
-            'status': 'published' if exists else 'not_found'
-        }
+    result = api.web.check_run(CheckRunRequest(ulid=arguments.ulid))
 
-        if dual_output or formatter.format_type.value != 'rich':
-            formatter.print_or_save(result_data, output_file, dual_output)
+    if not result.success:
+        _handle_api_error(result)
+        return
+
+    check_result = result.data
+    result_data = {
+        'run_ulid': check_result.run_ulid,
+        'exists': check_result.exists,
+        'status': check_result.status
+    }
+
+    if dual_output or formatter.format_type.value != 'rich':
+        formatter.print_or_save(result_data, output_file, dual_output)
+    else:
+        if check_result.exists:
+            print(f'Experiment run {check_result.run_ulid} exists on server.')
         else:
-            if exists:
-                print(f'Experiment run {arguments.ulid} exists on server.')
-            else:
-                print(f'Experiment run {arguments.ulid} not found on server.')
-    except Exception as e:
-        log.error(f'Error checking run: {e}')
-        raise
+            print(f'Experiment run {check_result.run_ulid} not found on server.')
