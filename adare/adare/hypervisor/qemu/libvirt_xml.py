@@ -266,9 +266,16 @@ def generate_domain_xml(
         if is_windows:
             # SPICE for Windows VMs - eliminates graphics timeout
             log.info(f"CLAUDE: Using SPICE graphics for Windows VM {vm_config.vm_name}")
+            
+            # EGL Headless for OpenGL support without local display context issues
+            # This fixes black screen issues on some setups by offloading rendering
+            ET.SubElement(devices, 'graphics', type='egl-headless')
+            
+            # SPICE without GL (handled by egl-headless)
             graphics = ET.SubElement(devices, 'graphics', type='spice', autoport='no')
             graphics.set('listen', 'none')
-            ET.SubElement(graphics, 'gl', enable='yes')
+            # Note: <gl enable='yes'/> removed from SPICE as it conflicts with egl-headless in some versions
+            # or causes black screens. egl-headless handles the GL context.
         else:
             # VNC for Linux VMs
             if vnc_port:
@@ -300,9 +307,10 @@ def generate_domain_xml(
         if is_windows:
             # Use SPICE for Windows even in headless mode - much better graphics initialization
             log.info(f"CLAUDE: Using SPICE graphics for Windows VM {vm_config.vm_name} (headless mode)")
+            ET.SubElement(devices, 'graphics', type='egl-headless')
             graphics = ET.SubElement(devices, 'graphics', type='spice', autoport='no')
             graphics.set('listen', 'none')
-            ET.SubElement(graphics, 'gl', enable='yes')
+            # gl removed here as well
         else:
             # VNC for Linux headless mode
             if vnc_port:

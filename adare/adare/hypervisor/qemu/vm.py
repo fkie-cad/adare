@@ -1490,7 +1490,8 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             command,
             background=background,
             stop_event=stop_event,
-            admin=admin
+            admin=admin,
+            run_as_user=kwargs.get('run_as_user', False)
         )
 
         return CommandResult(
