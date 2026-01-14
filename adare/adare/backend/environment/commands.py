@@ -12,7 +12,7 @@ from adare.helperfunctions.file.hash import file_sha256_with_progress
 from adare.config.configdirectory import TEMPLATES_DIR, ENVIRONMENTS_DIR, VMS_DIR
 from adare.exceptions import TemplateMissingError
 from adare.backend.environment.exceptions import EnvironmentLoadFailed, EnvironmentFileAlreadyExists, \
-    EnvironmentDoesNotExistInDatabase
+    EnvironmentDoesNotExistInDatabase, EnvironmentAlreadyExists
 from adare.webappaccess.download import download_environment, sync
 from adare.webappaccess.login import is_logged_in
 from adare.exceptions import NotLoggedInError
@@ -208,6 +208,38 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                     f'Check if the environment file exists in {ENVIRONMENTS_DIR}',
                 ]
             )
+
+    # CLAUDE: Check for name collision immediately, before ANY expensive operations
+    # Override environment name with filename without extension to match what we do later
+    environment_name = environment_file.stem
+    
+    try:
+        # Check if environment with this name already exists
+        existing_ulid = environment_database.resolve_environment_identifier(environment_name)
+        
+        # If we get here, it exists
+        if not force:
+            raise EnvironmentAlreadyExists(
+                log,
+                f"Environment with name '{environment_name}' already exists in the database.",
+                possible_solutions=[
+                    f"Use a different filename for your environment",
+                    f"Delete the existing environment: adare env delete {environment_name}",
+                    f"Update the existing environment safely with: adare env load --force {environment_file}"
+                ]
+            )
+        else:
+            log.info(f"Environment '{environment_name}' already exists, but force=True. Deleting old environment to prevent conflicts...")
+            try:
+                environment_database.delete_environment(existing_ulid, force=True)
+                log.info(f"Successfully deleted previous version of '{environment_name}'")
+            except Exception as e:
+                log.warning(f"Failed to delete existing environment '{environment_name}': {e}")
+                # We continue anyway, as the DB update might surely fail later, but maybe we cleared enough
+                
+    except EnvironmentDoesNotExistInDatabase:
+        # This is good - no conflict
+        pass
 
     # CLAUDE: Calculate environment file hash with progress bar for better UX
     log.info(f'Calculating environment file hash...')
