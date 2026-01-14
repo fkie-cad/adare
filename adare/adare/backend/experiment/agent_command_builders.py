@@ -120,7 +120,7 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         # Firewall rule for adarevm WebSocket server (REQUIRES ADMIN)
         # Use single quotes to avoid conflict with outer double quotes in commands.py wrapper
         firewall_cmd = f"New-NetFirewallRule -DisplayName 'adarevm' -Direction Inbound -Action Allow -Protocol TCP -LocalPort {self.websocket_port}"
-        commands.append(SetupCommand(command=firewall_cmd, requires_admin=False))
+        commands.append(SetupCommand(command=firewall_cmd, requires_admin=True))
 
         # PATH setup for project-wide tools (User-level, no admin needed)
         # Use single quotes and string concatenation to avoid double quotes (which conflict with commands.py wrapper)

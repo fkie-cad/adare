@@ -612,7 +612,15 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
 
         # Import VM instance with unique name
         # Stage management handled by hypervisor-specific prepare_vm_for_experiment()
-        vm_instance = await _import_vm_instance(vm_instance, source_vm, environment_ulid)
+        if experiment_run_ulid:
+            from adare.types.stages import VMDiskPreparationStage
+            # Wrap in disk prep stage as parent
+            with StageCtxManager(VMDiskPreparationStage(), experiment_run_ulid, interrupt_event):
+                # Wrap in import stage
+                with StageCtxManager(VMImportStage(), experiment_run_ulid, interrupt_event):
+                    vm_instance = await _import_vm_instance(vm_instance, source_vm, environment_ulid)
+        else:
+            vm_instance = await _import_vm_instance(vm_instance, source_vm, environment_ulid)
 
         if interrupt_event and interrupt_event.is_set():
             log.info("VM instance import was interrupted")

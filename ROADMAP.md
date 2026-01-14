@@ -88,6 +88,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] check if verify_guest_agent_readiness is duplicate? 
 - [ ] is it correct I see twice should the check not only happen once?: guestfish CLI tool available.
 - [ ] do we really need qemu detect os since this is already with environment provided data or? 
+- [ ] long step after installing AdareVM which is not part of any Stage
+- [ ] improve stages in general!
 
 ---
 

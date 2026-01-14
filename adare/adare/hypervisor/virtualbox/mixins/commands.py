@@ -415,6 +415,16 @@ class CommandExecutionMixin(AbstractCommandMixin):
         )
         return None   # better than returning a hardcoded, possibly wrong path
 
+    async def _discover_guest_path(self) -> Optional[str]:
+        """
+        Stub for guest PATH discovery.
+
+        VirtualBox guestcontrol executes commands with the user's full
+        environment, so explicit PATH discovery is not needed.
+        For Windows, the command builder falls back to 'python' which
+        works if Python is in the system PATH.
+        """
+        return None
 
     def _build_guest_command_args(self, command: str, background: bool = False, cwd: Optional[str] = None, win_noprofile: bool = True, use_cmd: bool = False, admin: bool = False) -> List[str]:
         """Build VBoxManage guestcontrol command arguments for running guest commands."""
@@ -467,8 +477,10 @@ class CommandExecutionMixin(AbstractCommandMixin):
             else:
                 # Foreground command - handle admin elevation
                 if admin:
+                    # Escape single quotes for PowerShell ArgumentList
+                    escaped_cmd = cmd_to_run.replace("'", "''")
                     # Use Start-Process with -Verb RunAs and -Wait for synchronous admin execution
-                    cmd_to_run = f"Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-Command','{cmd_to_run}') -Wait"
+                    cmd_to_run = f"Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-Command','{escaped_cmd}') -Wait"
 
                 command_bytes = cmd_to_run.encode('utf-16le')
                 encoded_command = base64.b64encode(command_bytes).decode('ascii')
