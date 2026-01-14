@@ -185,7 +185,8 @@ class CommandExecutionMixin(AbstractCommandMixin):
         cwd: Optional[str] = None,
         win_noprofile: bool = True,
         use_cmd: bool = False,
-        admin: bool = False
+        admin: bool = False,
+        run_as_user: bool = False
     ) -> List[str]:
         """
         Build QEMU Guest Agent command arguments.
@@ -207,27 +208,52 @@ class CommandExecutionMixin(AbstractCommandMixin):
         # For guest agent, we need to determine shell based on guest OS
         if 'windows' in self.guest_os.lower():
             # Add stderr redirection for background commands (Windows)
+            # Add stderr redirection for background commands (Windows)
             if background:
                 stderr_redirect = " 2>>C:\\adare\\run\\logs\\adarevmstartup.log"
                 command = f"{command}{stderr_redirect}"
 
-            # CRITICAL FIX: Wrap command in script block with user PATH injection
-            # QEMU Guest Agent runs as NT AUTHORITY\SYSTEM which has no PATH by default.
-            # We inject the specific user's PATH from their registry hive (HKEY_USERS\{SID}\Environment).
-            # The & { ... } script block ensures PowerShell parses it correctly via guest-exec.
-            path_inject_prefix = (
-                f"& {{ "
-                f"$sid = (New-Object System.Security.Principal.NTAccount('{self.username}')).Translate([System.Security.Principal.SecurityIdentifier]).Value; "
-                f"$regPath = 'Registry::HKEY_USERS\\' + $sid + '\\Environment'; "
-                f"$UserPath = (Get-ItemProperty $regPath -ErrorAction SilentlyContinue).Path; "
-                f"if ($UserPath) {{ $Env:Path = $UserPath + ';' + $Env:Path }}; "
-            )
-            path_inject_suffix = " }"
-            
-            command = f"{path_inject_prefix}{command}{path_inject_suffix}"
+            # CRITICAL FIX: Use Scheduled Tasks to escape Session 0 (Services)
+            # QEMU Guest Agent runs as SYSTEM in Session 0. Directly running GUI apps or 
+            # dropping privileges via Start-Process fails with "Access is denied" or is invisible.
+            # We use 'schtasks' with /IT (Interactive) to launch the agent in the user's active session.
+            # This is triggered explicitly via run_as_user=True (e.g. for adarevm startup).
+            if run_as_user:
+                task_name = "AdareVMStartup"
+                user = self.username
+                # CommandExecutionMixin doesn't declare password, but QEMUVM has it. Fallback safely via getattr.
+                pwd = getattr(self, 'password', 'adare')
+                
+                # Escape inputs for PowerShell single-quoted strings
+                user_safe = user.replace("'", "''")
+                pwd_safe = pwd.replace("'", "''")
+                
+                # The inner command (adarevm ...) needs its single quotes escaped because it will be inside 
+                # the single-quoted string passed to the -Command argument of the powershell launched by schtasks.
+                inner_cmd_escaped = command.replace("'", "''")
+                
+                # Construct the Scheduled Task automation script
+                # 1. Create task running as User, Interactive (/IT), Highest Privs (/RL HIGHEST)
+                # 2. Action is to run PowerShell with Hidden window executing our command
+                # 3. Run task immediately
+                # 4. Cleanup
+                path_inject_prefix = (
+                    f"& {{ "
+                    f"$u = '{user_safe}'; "
+                    f"$p = '{pwd_safe}'; "
+                    f"$t = '{task_name}'; "
+                    f"$c = \"powershell.exe -NoProfile -WindowStyle Hidden -Command '{inner_cmd_escaped}'\"; "
+                    f"schtasks /Create /TN $t /TR $c /SC ONCE /ST 00:00 /RU $u /RP $p /IT /RL HIGHEST /F; "
+                    f"schtasks /Run /TN $t; "
+                    f"Start-Sleep -Seconds 5; "
+                    f"schtasks /Delete /TN $t /F; "
+                )
+                path_inject_suffix = " }"
+                
+                command = f"{path_inject_prefix}{path_inject_suffix}"
 
-            # CLAUDE DEBUG: Log the FULL constructed command including adarevm call
-            log.debug(f"CLAUDE DEBUG: Full Windows guest command: {command}")
+                # CLAUDE DEBUG: Log the FULL constructed command including adarevm call
+                log.debug(f"CLAUDE DEBUG: Full Windows guest command (Scheduled Task): {command}")
 
             # Windows admin elevation
             if admin:
@@ -780,7 +806,8 @@ class CommandExecutionMixin(AbstractCommandMixin):
         background: bool = False,
         stop_event: Optional[threading.Event] = None,
         timeout: int = 300,
-        admin: bool = False
+        admin: bool = False,
+        run_as_user: bool = False
     ) -> Tuple[int, str, str]:
         """
         Execute command in guest via QEMU Guest Agent.
@@ -814,7 +841,8 @@ class CommandExecutionMixin(AbstractCommandMixin):
             cmd_args = self._build_guest_command_args(
                 command,
                 background=background,
-                admin=admin
+                admin=admin,
+                run_as_user=run_as_user
             )
 
             # Build environment variables for guest execution
