@@ -309,8 +309,10 @@ async def _verify_guest_agent_readiness(
 
         try:
             # Execute lightweight echo command to test guest agent connectivity
+            # Use 'echo ready' without quotes to avoid PowerShell parsing issues on Windows
+            # when wrapped in outer quotes/commands by the command builder
             result = await vm.run_command(
-                'echo "ready"',
+                'echo ready',
                 stop_event=stop_event,
                 admin=False
             )
@@ -333,11 +335,13 @@ async def _verify_guest_agent_readiness(
                     return False
             else:
                 # Unexpected error - echo command should never fail
-                log.error(
-                    f"CLAUDE: Unexpected error during readiness check "
-                    f"(returncode {result.returncode}): {result.stderr}"
+                # Raise immediately so the user sees the actual error (e.g. syntax error)
+                error_msg = f"Unexpected error during readiness check (returncode {result.returncode}): {result.stderr}"
+                log.error(f"CLAUDE: {error_msg}")
+                raise VMSetupError(
+                    log, vm.vm_name, "guest agent readiness check",
+                    result.returncode, result.stdout, result.stderr
                 )
-                return False
 
         except asyncio.TimeoutError:
             if attempt < max_retries - 1:
@@ -398,17 +402,22 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
             wheels_dir=wheels_dir,
             shared_folders=context.config.shared_directories,
             websocket_port=context.config.websocket_port,
-            skip_xhost=skip_xhost
+            skip_xhost=skip_xhost,
+            hypervisor_type=context.hypervisor_type or 'virtualbox'
         )
     else:
         builder = LinuxAgentCommandBuilder(
             wheels_dir=wheels_dir,
             shared_folders=context.config.shared_directories,
             websocket_port=context.config.websocket_port,
-            skip_xhost=skip_xhost
+            skip_xhost=skip_xhost,
+            hypervisor_type=context.hypervisor_type or 'virtualbox'
         )
 
-    # Step 3: Build all commands (setup, install, run)
+    # Step 3: Discover guest PATH to ensure correct environment
+    await vm._discover_guest_path()
+
+    # Step 4: Build all commands (setup, install, run)
     commands = await builder.build_commands(env_info, vm, stop_event)
 
     # Step 4: Execute setup commands (PATH, firewall, etc.)
@@ -1317,7 +1326,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 #input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
                 await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
-                #input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
+                input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
                 await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
                 await step_runner.run_async_step(step_execute_installations, experiment_run_context)
                 #input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")

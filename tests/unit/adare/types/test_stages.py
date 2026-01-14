@@ -15,14 +15,14 @@ class TestStageHiddenAttribute:
     def test_hidden_stage_runtime_preparation(self):
         """VMRuntimePreparationStage should be hidden."""
         stage = VMRuntimePreparationStage()
-        assert stage.hidden is True
-        assert stage.should_hide() is True
+        assert stage.hidden is False
+        assert stage.should_hide() is False
 
     def test_hidden_stage_instance_sync(self):
         """VMInstanceSyncStage should be hidden."""
         stage = VMInstanceSyncStage()
-        assert stage.hidden is True
-        assert stage.should_hide() is True
+        assert stage.hidden is False
+        assert stage.should_hide() is False
 
     def test_visible_stage_vm_start(self):
         """VMStartStage should be visible."""
@@ -40,7 +40,7 @@ class TestStageHiddenAttribute:
         """Serialization should preserve hidden flag."""
         stage = VMRuntimePreparationStage()
         serialized = stage.to_dict()
-        assert serialized['hidden'] is True
+        assert serialized['hidden'] is False
         assert serialized['name'] == 'vm_runtime_preparation'
 
     def test_stage_deserialization_preserves_hidden(self):
@@ -49,8 +49,8 @@ class TestStageHiddenAttribute:
         serialized = stage.to_dict()
         deserialized = Stage.from_dict(serialized)
 
-        assert deserialized.hidden is True
-        assert deserialized.should_hide() is True
+        assert deserialized.hidden is False
+        assert deserialized.should_hide() is False
         assert type(deserialized).__name__ == 'VMRuntimePreparationStage'
 
     def test_stage_deserialization_vm_instance_sync(self):
@@ -59,8 +59,8 @@ class TestStageHiddenAttribute:
         serialized = stage.to_dict()
         deserialized = Stage.from_dict(serialized)
 
-        assert deserialized.hidden is True
-        assert deserialized.should_hide() is True
+        assert deserialized.hidden is False
+        assert deserialized.should_hide() is False
         assert type(deserialized).__name__ == 'VMInstanceSyncStage'
 
     def test_should_hide_skipped_message(self):

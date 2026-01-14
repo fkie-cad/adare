@@ -297,7 +297,7 @@ class TestQEMUVMConfigToDict:
         # Verify all expected keys are present
         expected_keys = {
             "vm_name", "uuid", "guest_os", "disk_path",
-            "cpus", "ram", "machine", "accel", "drive_format", "network",
+            "cpus", "ram", "machine", "accel", "drive_format", "boot_mode", "network",
             "port_forwarding_rules", "qmp_socket_path", "guest_agent_socket_path",
             "pid_file_path", "is_external", "display_enabled", "vnc_port",
             "libvirt_domain_name", "serial_console_log_path", "qemu_debug_log_path"
@@ -558,8 +558,8 @@ class TestQEMUVMConfigFieldCount:
             disk_path="/disk.qcow2"
         )
         data = config.to_dict()
-        # 4 required + 16 optional = 20 total fields
-        assert len(data) == 20
+        # 4 required + 17 optional = 21 total fields
+        assert len(data) == 21
 
     def test_all_dataclass_fields_in_to_dict(self):
         """Verify all dataclass fields are included in to_dict()."""

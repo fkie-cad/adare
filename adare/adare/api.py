@@ -38,6 +38,7 @@ from adare.services.testfunction_service import TestfunctionService
 from adare.services.manage_service import ManageService
 from adare.services.show_service import ShowService
 from adare.services.web_service import WebService
+from adare.services.devmode_service import DevModeService
 
 
 class AdareAPI:
@@ -56,6 +57,7 @@ class AdareAPI:
         manage: ManageService for database and system management operations
         show: ShowService for data display operations
         web: WebService for web-related operations
+        devmode: DevModeService for development mode operations
     """
 
     def __init__(self):
@@ -68,6 +70,7 @@ class AdareAPI:
         self._manage = ManageService()
         self._show = ShowService()
         self._web = WebService()
+        self._devmode = DevModeService()
 
     @property
     def project(self) -> ProjectService:
@@ -108,3 +111,8 @@ class AdareAPI:
     def web(self) -> WebService:
         """Access web-related operations."""
         return self._web
+
+    @property
+    def devmode(self) -> DevModeService:
+        """Access development mode operations."""
+        return self._devmode

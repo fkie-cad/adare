@@ -62,6 +62,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] Make errors more readable and actionable
   - [ ] Remove Claude: log messages
 - [ ] Improve the possible solutions on Exceptions to be correct and provide only working options!
+- [ ] Describe VirtualBoxVM to Qemu VM: 1) Bitlocker deaktivieren 2) qemu guest agent installieren 3) virtio installieren und mit dummy disk in qemu "aktivieren" 
 
 ---
 
@@ -84,7 +85,9 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 
 ## 🐞 Known Bugs  
 - [ ] adare env rm for qemu vm removes the base image!
-
+- [ ] check if verify_guest_agent_readiness is duplicate? 
+- [ ] is it correct I see twice should the check not only happen once?: guestfish CLI tool available.
+- [ ] do we really need qemu detect os since this is already with environment provided data or? 
 
 ---
 

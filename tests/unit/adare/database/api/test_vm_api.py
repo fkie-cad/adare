@@ -39,7 +39,10 @@ def create_vm_api():
 @pytest.fixture
 def vm_api():
     """Create a VmApi instance with mocked database connection."""
-    return create_vm_api()
+    # Patch __exit__ on the base class to prevent session clearing
+    # Instance-level mocking (api.__exit__) is ignored by the 'with' statement
+    with patch('adare.database.api.base.EnhancedDatabaseApi.__exit__', return_value=None):
+        yield create_vm_api()
 
 
 # === Mock Model Factories ===

@@ -15,6 +15,9 @@ from .global_models import (
     TestFunction, OsInfo, Project, Vm, VmSnapshot, Environment
 )
 
+# Import dev mode models
+from .devsession import DevSession
+
 # Import all project models
 from .project_models import (
     Tag as ProjectTag, Status, Result, TestParameterEntry, Tool, AbstractTest, LogFile, USBDrive,

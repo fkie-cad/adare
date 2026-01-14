@@ -219,6 +219,39 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                 config.disk_path = self._external_disk_path
                 log.debug(f"CLAUDE: Overriding config disk_path with external: {self._external_disk_path}")
 
+            # Validate and sync guest_os and boot_mode from current environment
+            # This fixes stale configs that may have incorrect values
+            expected_boot_mode = get_boot_mode_for_os(self.guest_os)
+            config_updated = False
+
+            if config.guest_os != self.guest_os:
+                log.info(f"CLAUDE: Updating guest_os in VM config: {config.guest_os} → {self.guest_os}")
+                config.guest_os = self.guest_os
+                config_updated = True
+
+            if config.boot_mode != expected_boot_mode:
+                log.info(f"CLAUDE: Updating boot_mode in VM config: {config.boot_mode} → {expected_boot_mode}")
+                config.boot_mode = expected_boot_mode
+                config_updated = True
+
+            # Sync Windows resource defaults
+            # Windows VMs need more resources (4 vCPU, 8GB RAM) for proper operation
+            if 'windows' in self.guest_os.lower():
+                # Upgrade to Windows defaults if currently at standard defaults
+                if config.cpus == 2:
+                    log.info(f"CLAUDE: Upgrading Windows VM to 4 vCPUs (was: 2)")
+                    config.cpus = 4
+                    config_updated = True
+
+                if config.ram == 2048:
+                    log.info(f"CLAUDE: Upgrading Windows VM to 8192 MB RAM (was: 2048)")
+                    config.ram = 8192
+                    config_updated = True
+
+            if config_updated:
+                log.info(f"CLAUDE: Saving updated VM config to {config_path}")
+                self._save_vm_config_obj(config)
+
             return config
         else:
             log.debug(f"CLAUDE: Creating new VM config for '{self.vm_name}'")
@@ -250,13 +283,25 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             # Determine boot mode based on guest OS
             boot_mode = get_boot_mode_for_os(self.guest_os)
 
+            # Windows VMs need more resources for proper operation
+            # Use higher defaults if the current values are the standard defaults
+            if 'windows' in self.guest_os.lower():
+                # If using default values (2 vCPU, 2048 MB), upgrade to Windows defaults
+                config_cpus = self.cpus if self.cpus != 2 else 4
+                config_ram = self.ram if self.ram != 2048 else 8192  # 8GB for Windows 11
+                if config_cpus != self.cpus or config_ram != self.ram:
+                    log.info(f"CLAUDE: Using Windows VM defaults: {config_cpus} vCPU, {config_ram} MB RAM")
+            else:
+                config_cpus = self.cpus
+                config_ram = self.ram
+
             config = QEMUVMConfig(
                 vm_name=self.vm_name,
                 uuid=vm_uuid,
                 guest_os=self.guest_os,
                 disk_path=disk_path,
-                cpus=self.cpus,
-                ram=self.ram,
+                cpus=config_cpus,
+                ram=config_ram,
                 machine=self.machine,
                 accel=self.accel,
                 drive_format=self.drive_format,
@@ -996,7 +1041,7 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
 
             # Check if disk exists
             if not os.path.exists(self.config.disk_path):
-                raise VMStartException(f"VM disk not found at {self.config.disk_path}")
+                raise VMStartException(self.vm_name, f"VM disk not found at {self.config.disk_path}")
 
             # Clean up any stale socket files before starting
             for socket_path in [self.config.qmp_socket_path, self.config.guest_agent_socket_path]:
@@ -1022,9 +1067,9 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             except HypervisorException:
                 raise  # Re-raise specific hypervisor exceptions
             except libvirt.libvirtError as e:
-                raise VMStartException(f"Failed to define libvirt domain: {e}")
+                raise VMStartException(self.vm_name, f"Failed to define libvirt domain: {e}")
             except OSError as e:
-                raise VMStartException(f"OS error defining libvirt domain: {e}")
+                raise VMStartException(self.vm_name, f"OS error defining libvirt domain: {e}")
 
             # Check current state
             try:
@@ -1066,12 +1111,14 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
 
                     if not is_active or state != libvirt.VIR_DOMAIN_RUNNING:
                         raise VMStartException(
+                            self.vm_name,
                             f"VM '{self.vm_name}' failed to start. "
                             f"Domain state: {state}, Active: {is_active}. "
                             f"Check experiment log for libvirt errors."
                         )
                 except libvirt.libvirtError as e:
                     raise VMStartException(
+                        self.vm_name,
                         f"Cannot verify VM state after start attempt: {e}"
                     )
 
@@ -1098,9 +1145,9 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                         log.debug(f"CLAUDE: {message}")
                     return 0
                 else:
-                    raise VMStartException(f"Failed to start VM via libvirt: {e}")
+                    raise VMStartException(self.vm_name, f"Failed to start VM via libvirt: {e}")
             except OSError as e:
-                raise VMStartException(f"OS error during VM start: {e}")
+                raise VMStartException(self.vm_name, f"OS error during VM start: {e}")
 
         return await self.manager.run_async(_start_async)
 
@@ -1568,6 +1615,12 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
 
                             # Run discoveries concurrently
                             results = await asyncio.gather(*discovery_tasks, return_exceptions=True)
+
+                            # Check PATH discovery result (first result, always present)
+                            if results:
+                                path_result = results[0]
+                                if isinstance(path_result, Exception):
+                                    log.warning(f"CLAUDE: PATH discovery failed with exception: {path_result}")
 
                             # Check X11 discovery result if it was requested
                             if should_discover_x11:

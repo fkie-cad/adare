@@ -15,7 +15,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Tuple, Optional, Any
 import threading
 
 log = logging.getLogger(__name__)
@@ -28,6 +28,7 @@ class EnvironmentInfo:
     conda_env_exists: bool
     miniforge_path: Optional[str]
     platform: str  # 'windows' or 'linux'
+    python_exe_path: Optional[str] = None  # Full path to python.exe (Windows non-conda)
 
 
 @dataclass
@@ -50,11 +51,12 @@ class CommandSet:
 class AgentCommandBuilder(ABC):
     """Abstract base for building platform-specific agent installation commands."""
 
-    def __init__(self, wheels_dir: Path, shared_folders: dict, websocket_port: int, skip_xhost: bool = False):
+    def __init__(self, wheels_dir: Path, shared_folders: dict, websocket_port: int, skip_xhost: bool = False, hypervisor_type: str = 'virtualbox'):
         self.wheels_dir = wheels_dir
         self.shared_folders = shared_folders
         self.websocket_port = websocket_port
         self.skip_xhost = skip_xhost
+        self.hypervisor_type = hypervisor_type
         self.wheels_available = wheels_dir.exists() and bool(list(wheels_dir.glob('*.whl')))
 
     @abstractmethod
@@ -63,20 +65,20 @@ class AgentCommandBuilder(ABC):
         pass
 
     @abstractmethod
-    def build_install_command(self, env_info: EnvironmentInfo) -> str:
-        """Build installation command based on environment."""
+    def build_install_command(self, env_info: EnvironmentInfo, vm: Any = None) -> str:
+        """Build installation command string."""
         pass
 
     @abstractmethod
-    def build_run_command(self, env_info: EnvironmentInfo) -> tuple[str, Optional[str]]:
+    def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> Tuple[str, Optional[str]]:
         """Build run command and optional cwd. Returns (command, cwd)."""
         pass
 
     async def build_commands(self, env_info: EnvironmentInfo, vm, stop_event: threading.Event) -> CommandSet:
         """Main entry point: build complete command set."""
         setup_commands = await self.build_setup_commands(env_info)
-        install_command = self.build_install_command(env_info)
-        run_command, run_cwd = self.build_run_command(env_info)
+        install_command = self.build_install_command(env_info, vm)
+        run_command, run_cwd = self.build_run_command(env_info, vm)
 
         # Check if we can skip installation
         skip_installation = await self._check_skip_installation(env_info, vm, stop_event)
@@ -116,71 +118,127 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         commands = []
 
         # Firewall rule for adarevm WebSocket server (REQUIRES ADMIN)
-        firewall_cmd = f'New-NetFirewallRule -DisplayName "adarevm" -Direction Inbound -Action Allow -Protocol TCP -LocalPort {self.websocket_port}'
-        commands.append(SetupCommand(command=firewall_cmd, requires_admin=True))
+        # Use single quotes to avoid conflict with outer double quotes in commands.py wrapper
+        firewall_cmd = f"New-NetFirewallRule -DisplayName 'adarevm' -Direction Inbound -Action Allow -Protocol TCP -LocalPort {self.websocket_port}"
+        commands.append(SetupCommand(command=firewall_cmd, requires_admin=False))
 
         # PATH setup for project-wide tools (User-level, no admin needed)
+        # Use single quotes and string concatenation to avoid double quotes (which conflict with commands.py wrapper)
         commands.append(SetupCommand(
-            command=r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\shared\tools", "User")',
+            command=r"[Environment]::SetEnvironmentVariable('Path', $env:Path + ';C:\adare\shared\tools', 'User')",
             requires_admin=False
         ))
 
         # PATH setup for experiment-specific tools (User-level, no admin needed)
         commands.append(SetupCommand(
-            command=r'[Environment]::SetEnvironmentVariable("Path", "$env:Path;C:\adare\experiment\shared\tools", "User")',
+            command=r"[Environment]::SetEnvironmentVariable('Path', $env:Path + ';C:\adare\experiment\shared\tools', 'User')",
             requires_admin=False
         ))
 
         # Mount VirtualBox shared folders temporarily (no admin needed)
-        commands.append(SetupCommand(
-            command=r'net use Z: \\vboxsvr\adare; net use Z: /delete',
-            requires_admin=False
-        ))
+        # Skip for QEMU - uses file transfer instead of shared folders
+        if self.hypervisor_type == 'virtualbox':
+            commands.append(SetupCommand(
+                command=r'net use Z: \\vboxsvr\adare; net use Z: /delete',
+                requires_admin=False
+            ))
 
         return commands
 
-    def build_install_command(self, env_info: EnvironmentInfo) -> str:
-        """Build Windows install command."""
-        if env_info.use_conda:
+    def build_install_command(self, env_info: EnvironmentInfo, vm: Any = None) -> str:
+        """Build Windows installation command."""
+        if env_info.use_conda and env_info.conda_env_exists:
             return self._build_conda_install_command()
         else:
-            return self._build_poetry_install_command()
+            return self._build_poetry_install_command(env_info, vm)
+            
+    def _resolve_python_path(self, vm: Any) -> str:
+        """Resolve absolute path to python executable from discovered guest PATH."""
+        default_python = "python" # Fallback to python as requested by user
+        
+        if not vm or not hasattr(vm, '_cached_guest_path') or not vm._cached_guest_path:
+            return default_python
+            
+        # Parse PATH entries
+        path_entries = vm._cached_guest_path.split(';')
+        
+        # Look for Python entry (prefer user installation)
+        # Typical pattern: ...\AppData\Local\Programs\Python\Python312\
+        for entry in path_entries:
+            if 'Programs\\Python\\Python' in entry and 'Scripts' not in entry:
+                # Found python root dir
+                python_exe = f"{entry.rstrip('\\')}\\python.exe"
+                return f'& "{python_exe}"'
+                
+        return default_python
 
     def _build_conda_install_command(self) -> str:
         """Build Conda installation command."""
+        # Use different paths for QEMU (file transfer) vs VirtualBox (shared folders)
+        if self.hypervisor_type == 'qemu':
+            wheels_path = r'C:\adare\vm\wheels\*.whl'
+            adarelib_path = r'C:\adare\vm\adarelib'
+            adarevm_path = r'C:\adare\vm\adarevm'
+        else:
+            wheels_path = r'\\vboxsvr\adare\wheels\*.whl'
+            adarelib_path = r'\\vboxsvr\adare\adarelib'
+            adarevm_path = r'\\vboxsvr\adare\adarevm'
+
         if self.wheels_available:
             # PowerShell array expansion: @(Get-ChildItem ...) forces wildcard expansion
             # before pip sees the arguments. PowerShell doesn't expand wildcards in
             # base64-encoded commands, so we must explicitly use Get-ChildItem.
-            return r'%USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install --ignore-installed @(Get-ChildItem \\vboxsvr\adare\wheels\*.whl | Select-Object -ExpandProperty FullName)'
+            return rf'%USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install --ignore-installed @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
         else:
             # Editable install from shared folder source
-            return r'cd \\vboxsvr\adare\adarelib; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
+            return rf'cd {adarelib_path}; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd {adarevm_path}; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
 
-    def _build_poetry_install_command(self) -> str:
-        """Build Poetry installation command."""
+    def _build_poetry_install_command(self, env_info: EnvironmentInfo, vm: Any = None) -> str:
+        """Build pip installation command (pip is in PATH via user's PATH discovery)."""
+        # Use different paths for QEMU (file transfer) vs VirtualBox (shared folders)
+        if self.hypervisor_type == 'qemu':
+            wheels_path = r'C:\adare\vm\wheels\*.whl'
+            adarevm_path = r'C:\adare\vm\adarevm'
+        else:
+            wheels_path = r'\\vboxsvr\adare\wheels\*.whl'
+            adarevm_path = r'\\vboxsvr\adare\adarevm'
+
         if self.wheels_available:
-            return r'pip3 install --ignore-installed @(Get-ChildItem \\vboxsvr\adare\wheels\*.whl | Select-Object -ExpandProperty FullName)'
+            # Resolve absolute path to python to avoid PATH issues
+            python_cmd = self._resolve_python_path(vm)
+            log.info(f"Using executed python command: {python_cmd}")
+            
+            return rf'{python_cmd} -m pip install --ignore-installed @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
         else:
             # Editable install via Poetry
-            return r'cd \\vboxsvr\adare\adarevm; poetry install'
+            return rf'cd {adarevm_path}; poetry install'
 
-    def build_run_command(self, env_info: EnvironmentInfo) -> tuple[str, Optional[str]]:
+    def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> tuple[str, Optional[str]]:
         """Build Windows run command."""
+        # Use different paths for QEMU (file transfer) vs VirtualBox (shared folders)
+        if self.hypervisor_type == 'qemu':
+            adarevm_path = r'C:\adare\vm\adarevm'
+        else:
+            adarevm_path = r'\\vboxsvr\adare\adarevm'
+            
+        # Log path is standard across all Windows environments
+        log_path = r'C:\adare\run\logs\adarevm.log'
+
         if env_info.use_conda:
             if self.wheels_available:
                 # Wheel: call directly from conda env (no UNC path navigation)
-                return (r'%USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare adarevm', None)
+                return (rf'%USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare adarevm {log_path}', None)
             else:
                 # Editable: cd to source directory for Poetry context
-                return (r'cd \\vboxsvr\adare\adarevm; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare adarevm', None)
+                return (rf'cd {adarevm_path}; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare adarevm {log_path}', None)
         else:
             if self.wheels_available:
-                # Wheel: installed in PATH via pip
-                return ('adarevm', None)
+                # Wheel: run via python absolute path (reliable)
+                python_cmd = self._resolve_python_path(vm)
+                return (rf'adarevm {log_path}', None)
             else:
                 # Editable: poetry run from source directory
-                return (r'cd \\vboxsvr\adare\adarevm; poetry run adarevm', None)
+                return (rf'cd {adarevm_path}; poetry run adarevm {log_path}', None)
 
 
 class LinuxAgentCommandBuilder(AgentCommandBuilder):
@@ -256,6 +314,34 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
 
 # Environment Detection Helpers
 
+def _extract_python_path_from_cached_path(cached_path: Optional[str]) -> Optional[str]:
+    """Extract Python executable path from cached guest PATH.
+
+    Parses PATH entries to find Python installation directory
+    (e.g., C:\\Users\\adare\\AppData\\Local\\Programs\\Python\\Python312\\)
+    and returns the full path to python.exe.
+
+    Args:
+        cached_path: The cached PATH string from VM discovery
+
+    Returns:
+        Full path to python.exe if found, None otherwise
+    """
+    if not cached_path:
+        return None
+
+    import re
+    # Split PATH by semicolon and look for Python directory (not Scripts)
+    for entry in cached_path.split(';'):
+        entry = entry.strip().rstrip('\\')
+        # Match patterns like: ...Python\Python312 or ...Python312 (not Scripts)
+        if re.search(r'Python\d+$', entry, re.IGNORECASE):
+            python_exe = f"{entry}\\python.exe"
+            return python_exe
+
+    return None
+
+
 async def detect_environment(vm, platform: str, stop_event: threading.Event) -> EnvironmentInfo:
     """Detect which Python environment is available in the VM."""
     if platform == 'windows':
@@ -286,13 +372,15 @@ async def _detect_windows_environment(vm, stop_event: threading.Event) -> Enviro
         else:
             log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to system Python")
 
-    # Fallback to system Python (non-conda)
+    # Fallback to system Python (non-conda) - pip/py must be in PATH
+    # No pre-check needed - if pip isn't available, install will fail with clear error
     log.info(f"Using system Python (non-conda) for VM '{vm.vm_name}'")
     return EnvironmentInfo(
         use_conda=False,
         conda_env_exists=False,
         miniforge_path=None,
-        platform='windows'
+        platform='windows',
+        python_exe_path=None  # Not needed - pip/py are in PATH
     )
 
 
