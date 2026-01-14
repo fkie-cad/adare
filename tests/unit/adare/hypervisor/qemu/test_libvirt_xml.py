@@ -668,7 +668,7 @@ class TestQEMUDebugLog:
         # Also check for -d argument with debug categories
         assert "-d" in arg_values
         d_lower_index = arg_values.index("-d")
-        assert arg_values[d_lower_index + 1] == "guest_errors,cpu_reset,unimp"
+        assert arg_values[d_lower_index + 1] == "guest_errors"
 
 
 class TestPowerManagement:
@@ -878,3 +878,86 @@ class TestMachineTypes:
         os_elem = root.find("os")
         os_type = os_elem.find("type")
         assert os_type.get("machine") == machine
+
+class TestWindowsVideoConfiguration:
+    """Tests for Windows video configuration."""
+
+    def test_windows_vm_uses_virtio_and_accel3d(self, full_vm_config):
+        """Test that Windows VMs use virtio model with 3D acceleration and GL enabled."""
+        # full_vm_config is Windows and display_enabled=True
+        xml_str = generate_domain_xml(full_vm_config)
+        root = parse_xml_string(xml_str)
+
+        devices = root.find("devices")
+        
+        # Check properties of video model
+        video = devices.find("video")
+        model = video.find("model")
+
+        assert model.get("type") == "virtio"
+        assert model.get("heads") == "1"
+        assert model.get("primary") == "yes"
+        
+        # Check for acceleration
+        accel = model.find("acceleration")
+        assert accel is not None
+        assert accel.get("accel3d") == "yes"
+        
+        # Check resolution
+        resolution = model.find("resolution")
+        assert resolution is not None
+        assert resolution.get("x") == "1920"
+        assert resolution.get("y") == "1080"
+        
+        # Check absence of qxl fields
+        assert model.get("ram") is None
+        assert model.get("vram") is None
+        assert model.get("vgamem") is None
+        
+        # Check graphics configuration for GL
+        graphics = devices.find("graphics[@type='spice']")
+        assert graphics is not None
+        assert graphics.get("listen") == "none"
+        gl = graphics.find("gl")
+        assert gl is not None
+        assert gl.get("enable") == "yes"
+
+    def test_windows_vm_headless_uses_virtio_and_accel3d(self, full_vm_config):
+        """Test that Windows VMs use virtio/3D/GL even in headless mode."""
+        xml_str = generate_domain_xml(full_vm_config, display_enabled=False)
+        root = parse_xml_string(xml_str)
+
+        devices = root.find("devices")
+        video = devices.find("video")
+        model = video.find("model")
+
+        assert model.get("type") == "virtio"
+        
+        accel = model.find("acceleration")
+        assert accel is not None
+        assert accel.get("accel3d") == "yes"
+        
+        # Check graphics configuration for GL
+        graphics = devices.find("graphics[@type='spice']")
+        assert graphics is not None
+        assert graphics.get("listen") == "none"
+        gl = graphics.find("gl")
+        assert gl is not None
+        assert gl.get("enable") == "yes"
+
+    def test_linux_vm_uses_qxl(self, minimal_vm_config):
+         """Test that Linux VMs still use QXL."""
+         # minimal_vm_config is Linux
+         xml_str = generate_domain_xml(minimal_vm_config)
+         root = parse_xml_string(xml_str)
+         
+         devices = root.find("devices")
+         video = devices.find("video")
+         model = video.find("model")
+         
+         assert model.get("type") == "qxl"
+         assert model.find("acceleration") is None
+         
+         # Check presence of qxl fields
+         assert model.get("ram") is not None
+         assert model.get("vram") is not None

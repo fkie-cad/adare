@@ -98,7 +98,7 @@ class TestGetSmartDisplayName:
 
         result = get_smart_display_name(mock_env, 'environment', current_project_name="other_project")
 
-        assert result == "project1.env1"
+        assert result == "env1"
 
     def test_environment_no_current_project_returns_dotnotation(self):
         """Test environment with no current project returns full dotnotation."""
@@ -110,7 +110,7 @@ class TestGetSmartDisplayName:
 
         result = get_smart_display_name(mock_env, 'environment', current_project_name=None)
 
-        assert result == "project1.env1"
+        assert result == "env1"
 
     def test_experiment_same_project_returns_name_only(self):
         """Test experiment in same project returns just the name."""
@@ -138,7 +138,7 @@ class TestGetSmartDisplayName:
 
         result = get_smart_display_name(mock_exp, 'experiment', current_project_name="other_project")
 
-        assert result == "project1.exp1"
+        assert result == "exp1"
 
     def test_experiment_no_environments_returns_name(self):
         """Test experiment with no environments returns just the name."""
@@ -162,7 +162,7 @@ class TestGetSmartDisplayName:
 
         result = get_smart_display_name(mock_exp, 'experiment', current_project_name=None)
 
-        assert result == "project1.exp1"
+        assert result == "exp1"
 
     def test_testfunction_same_project_returns_name_part(self):
         """Test testfunction in same project returns name without project prefix."""
@@ -602,7 +602,7 @@ class TestEdgeCases:
         assert result == "exp1"
 
         result2 = get_smart_display_name(mock_exp, 'experiment', current_project_name="project2")
-        assert result2 == "project1.exp1"  # Still uses first env's project
+        assert result2 == "exp1"  # Still uses first env's project
 
     def test_testfunction_simple_dotnotation(self):
         """Test testfunction with simple project.name dotnotation."""

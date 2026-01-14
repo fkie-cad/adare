@@ -51,3 +51,6 @@ def run():
     logfile = sys.argv[1] if len(sys.argv) > 1 else None
     __setup_logging(logfile=logfile)
     asyncio.run(main())
+
+if __name__ == "__main__":
+    run()

@@ -12,6 +12,7 @@ import subprocess
 import shutil
 import os
 import tempfile
+import time
 from typing import List, Dict, Any
 
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
@@ -67,16 +68,16 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         if auto_mount:
             # Detect root filesystem
             try:
-                root_device = self._detect_root_filesystem(disk_path)
-                log.debug(f"CLAUDE: Mounting root filesystem: {root_device}")
+                root_device, fs_type = self._detect_root_filesystem(disk_path)
+                log.debug(f"CLAUDE: Mounting root filesystem: {root_device} ({fs_type})")
 
                 # Check for NTFS hibernation if mounting read-write
                 if not readonly:
-                    is_hibernated, fs_type = self._is_ntfs_hibernated(disk_path, root_device)
-                    if is_hibernated and fs_type == 'ntfs':
-                        log.warning(f"NTFS filesystem {root_device} is in hibernation state, attempting to fix...")
+                    # Always run ntfsfix for NTFS filesystems in RW mode
+                    # This safely clears dirty bits and hibernation flags that prevent RW mounting
+                    if fs_type == 'ntfs':
+                        log.info(f"Ensuring NTFS filesystem {root_device} is clean (running ntfsfix)...")
                         self._remove_ntfs_hibernation(disk_path, root_device)
-                        log.info(f"Successfully removed hibernation metadata from {root_device}")
 
                 # FIXED: Add run as first command (no leading colon), then mount with colon separator
                 cmd.extend(['run', ':', 'mount', root_device, '/'])
@@ -114,7 +115,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         return result.returncode, result.stdout, result.stderr
 
-    def _detect_root_filesystem(self, disk_path: str) -> str:
+    def _detect_root_filesystem(self, disk_path: str) -> tuple[str, str]:
         """
         Detect root filesystem by finding largest OS partition.
 
@@ -122,7 +123,8 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             disk_path: Path to VM disk image
 
         Returns:
-            Device path (e.g., '/dev/sda4' for Windows, '/dev/sda1' for Linux)
+            Tuple of (device_path, filesystem_type)
+            e.g., ('/dev/sda4', 'ntfs') or ('/dev/sda1', 'ext4')
 
         Raises:
             HypervisorException: If no suitable filesystem found
@@ -174,11 +176,13 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         # Get sizes and select largest
         if len(os_filesystems) == 1:
-            return os_filesystems[0][0]
+            return os_filesystems[0]
 
         # Multiple partitions - find largest by size
         largest_device = None
+        largest_fs_type = None
         largest_size = 0
+        partition_sizes = []  # For debugging
 
         for device, fs_type in os_filesystems:
             # FIXED: NO leading colon before first command
@@ -188,19 +192,41 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             if size_result.returncode == 0:
                 try:
                     size = int(size_result.stdout.strip())
+                    partition_sizes.append((device, fs_type, size))
                     if size > largest_size:
                         largest_size = size
                         largest_device = device
+                        largest_fs_type = fs_type
                 except ValueError:
                     log.warning(f"Could not parse size for {device}: {size_result.stdout}")
+            else:
+                log.warning(f"CLAUDE: Size query failed for {device}: {size_result.stderr}")
+
+        # Log all detected partitions for debugging
+        if partition_sizes:
+            log.debug(f"CLAUDE: Detected partitions with sizes:")
+            for dev, fs, sz in sorted(partition_sizes, key=lambda x: x[2], reverse=True):
+                size_gb = sz / (1024 * 1024 * 1024)
+                log.debug(f"CLAUDE:   {dev}: {fs}, {size_gb:.2f} GB")
 
         if not largest_device:
             # Fallback to first filesystem if size detection fails
             log.warning("Could not determine partition sizes, using first detected filesystem")
-            return os_filesystems[0][0]
+            return os_filesystems[0]
 
-        log.debug(f"CLAUDE: Selected root filesystem: {largest_device} (size: {largest_size} bytes)")
-        return largest_device
+        # Warn if selected partition is suspiciously small for an OS partition
+        # Windows root should be at least 10 GB, Linux at least 5 GB
+        min_size_gb = 10 if largest_fs_type == 'ntfs' else 5
+        min_size_bytes = min_size_gb * 1024 * 1024 * 1024
+        if largest_size < min_size_bytes:
+            log.warning(
+                f"CLAUDE: Selected partition {largest_device} is only {largest_size / (1024*1024*1024):.2f} GB. "
+                f"This may be a recovery partition, not the main OS partition. "
+                f"Expected at least {min_size_gb} GB for {largest_fs_type}."
+            )
+
+        log.debug(f"CLAUDE: Selected root filesystem: {largest_device} ({largest_fs_type}, size: {largest_size} bytes)")
+        return largest_device, largest_fs_type
 
     def _is_ntfs_hibernated(self, disk_path: str, device: str) -> tuple[bool, str]:
         """
@@ -287,8 +313,9 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         # Run ntfsfix to clear hibernation metadata
         # The -d flag removes the dirty bit and hibernation file
-        cmd = ['guestfish', '--rw', '--format=qcow2', '-a', disk_path,
-               'run', ':', 'ntfsfix', device, '-d']
+        # Use 'debug sh' to invoke ntfsfix binary directly, bypassing 'sh' mount check
+        cmd = ['guestfish', '--rw', '--format=qcow2', '-a', disk_path, '--',
+               'run', ':', 'debug', 'sh', f'ntfsfix -d {device}']
 
         log.debug(f"CLAUDE: Running ntfsfix command: {' '.join(cmd)}")
 
@@ -548,7 +575,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         # Detect root filesystem once for entire script
         try:
-            root_device = self._detect_root_filesystem(disk_path)
+            root_device, _ = self._detect_root_filesystem(disk_path)
             log.debug(f"CLAUDE: Using root filesystem for batch retrieval: {root_device}")
         except HypervisorException as e:
             log.error(f"Failed to detect root filesystem: {e}")
@@ -1188,15 +1215,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             gui_mode = resolve_gui_execution_mode(context.vm, playbook_settings)
             skip_x11 = (gui_mode == GUIExecutionMode.HOST)
 
-            # Skip validation in test mode for faster iteration
-            if context.config.test_mode:
-                log.warning('SKIPPING VM validation (test mode) - VM must be pre-configured correctly')
-                log.info('VM assumed ready (test mode)')
-            else:
-                log.info('Waiting until VM is ready (QEMU Guest Agent)')
-                if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.user_interrupt_event, skip_x11_discovery=skip_x11):
-                    raise LoggedException(log, 'VM did not become ready in time')
-                log.info('VM is ready')
+            # Guest agent check is ALWAYS required (even in test mode)
+            # because we need the agent to install adarevm and execute commands
+            log.info('Waiting until VM is ready (QEMU Guest Agent)')
+            start_wait = time.time()
+            if not await context.vm.wait_until_fully_booted(timeout=360, stop_event=context.user_interrupt_event, skip_x11_discovery=skip_x11):
+                raise LoggedException(log, 'VM did not become ready in time')
+            elapsed = time.time() - start_wait
+            log.info(f'VM is ready (waited {elapsed:.1f}s)')
 
     async def retrieve_artifacts(self, context, post_interrupt: bool = False):
         """

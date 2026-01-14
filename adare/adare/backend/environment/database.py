@@ -137,7 +137,9 @@ def get_environment_os(environment_ulid: str) -> str:
 
         # Try osinfo first (fast path for VirtualBox and properly configured QEMU VMs)
         if env and env.vm and env.vm.osinfo:
-            return env.vm.osinfo.platform
+            platform = env.vm.osinfo.platform
+            log.info(f"CLAUDE: Retrieved OS platform from database: {platform} (env={env.name}, vm={env.vm.name})")
+            return platform
 
         # Fallback: Parse environment file for OS info (QEMU VMs without osinfo)
         if env and env.file:
@@ -145,7 +147,9 @@ def get_environment_os(environment_ulid: str) -> str:
                 from adare.types.environment import parse_environment_file
                 log.info(f"CLAUDE: osinfo not available for environment {environment_ulid}, parsing environment file")
                 env_metadata = parse_environment_file(Path(env.file))
-                return env_metadata.os.platform
+                platform = env_metadata.os.platform
+                log.info(f"CLAUDE: Retrieved OS platform from environment file: {platform} (env={env.name})")
+                return platform
             except Exception as e:
                 log.warning(f"CLAUDE: Failed to parse environment file for OS info: {e}")
 
@@ -433,13 +437,27 @@ def delete_environment(environment_ulid: str, force: bool = False):
                 vm_database.delete_vm(vm_id)
                 log.info(f'Deleted VM database record: {vm_id}')
 
-                # Delete VM file from disk
+                # Delete VM file from disk - ONLY if it's in managed storage
                 if vm_file_path and vm_file_path.exists():
                     try:
-                        vm_file_path.unlink()
-                        log.info(f'Deleted VM file: {vm_file_path}')
+                        from adare.config.configdirectory import VMS_DIR
+                        
+                        # Resolve paths to handle symlinks and relative paths
+                        vm_file_resolved = vm_file_path.resolve()
+                        vms_dir_resolved = VMS_DIR.resolve()
+                        
+                        # Check if file is within managed VMs directory
+                        if vm_file_resolved.is_relative_to(vms_dir_resolved):
+                            vm_file_path.unlink()
+                            log.info(f'Deleted managed VM file: {vm_file_path}')
+                        else:
+                            log.info(f'Skipping deletion of external VM file: {vm_file_path}')
+                            
                     except (OSError, PermissionError) as e:
                         log.warning(f'Failed to delete VM file {vm_file_path}: {e}')
+                    except ValueError:
+                         # Handle cases where paths are on different drives/mounts (Windows)
+                         log.info(f'Skipping deletion of external VM file (path error): {vm_file_path}')
             else:
                 log.info(f'VM {vm_id} is still used by other environments, skipping cleanup')
         except Exception as e:

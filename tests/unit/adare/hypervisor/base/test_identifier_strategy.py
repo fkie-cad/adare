@@ -170,7 +170,7 @@ class TestVirtualBoxIdentifierStrategy:
         """Test verify_exists returns False when identifier is empty."""
         assert virtualbox_strategy.verify_exists("") is False
 
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM')
+    @patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM')
     def test_verify_exists_returns_true_when_vm_found(self, mock_vbox_vm_class, virtualbox_strategy):
         """Test verify_exists returns True when VirtualBox VM is found."""
         mock_vbox_vm_class.get_vm_name_by_uuid.return_value = "test-vm"
@@ -178,7 +178,7 @@ class TestVirtualBoxIdentifierStrategy:
         assert result is True
         mock_vbox_vm_class.get_vm_name_by_uuid.assert_called_once_with("valid-uuid")
 
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM')
+    @patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM')
     def test_verify_exists_returns_false_when_vm_not_found(self, mock_vbox_vm_class, virtualbox_strategy):
         """Test verify_exists returns False when VirtualBox VM is not found."""
         mock_vbox_vm_class.get_vm_name_by_uuid.return_value = None
@@ -188,7 +188,7 @@ class TestVirtualBoxIdentifierStrategy:
     def test_verify_exists_handles_import_error(self, virtualbox_strategy):
         """Test verify_exists returns False when VirtualBox module not available."""
         with patch.dict('sys.modules', {'adare.hypervisor.virtualbox.vm': None}):
-            with patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM', side_effect=ImportError):
+            with patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM', side_effect=ImportError):
                 # The import happens inside the method, we need to patch at that level
                 pass
         # Since the import is inside the method, we test with a direct patch
@@ -221,8 +221,8 @@ class TestVirtualBoxIdentifierStrategy:
         result = virtualbox_strategy.get_vm_state("")
         assert result == "not_found"
 
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxManager')
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM')
+    @patch('adare.hypervisor.virtualbox.manager.VirtualBoxManager')
+    @patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM')
     def test_get_vm_state_returns_vm_state(self, mock_vbox_vm_class, mock_manager_class, virtualbox_strategy):
         """Test get_vm_state returns the actual VM state."""
         mock_vbox_vm_class.get_vm_name_by_uuid.return_value = "test-vm"
@@ -236,7 +236,7 @@ class TestVirtualBoxIdentifierStrategy:
         result = virtualbox_strategy.get_vm_state("valid-uuid")
         assert result == "running"
 
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM')
+    @patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM')
     def test_get_vm_state_returns_not_found_when_vm_missing(self, mock_vbox_vm_class, virtualbox_strategy):
         """Test get_vm_state returns 'not_found' when VM not in VirtualBox."""
         mock_vbox_vm_class.get_vm_name_by_uuid.return_value = None
@@ -254,7 +254,7 @@ class TestVirtualBoxIdentifierStrategy:
         result = virtualbox_strategy.get_vm_name("")
         assert result is None
 
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM')
+    @patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM')
     def test_get_vm_name_returns_vm_name(self, mock_vbox_vm_class, virtualbox_strategy):
         """Test get_vm_name returns the VM name from VirtualBox."""
         mock_vbox_vm_class.get_vm_name_by_uuid.return_value = "my-test-vm"
@@ -262,7 +262,7 @@ class TestVirtualBoxIdentifierStrategy:
         assert result == "my-test-vm"
         mock_vbox_vm_class.get_vm_name_by_uuid.assert_called_once_with("valid-uuid")
 
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM')
+    @patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM')
     def test_get_vm_name_returns_none_when_vm_not_found(self, mock_vbox_vm_class, virtualbox_strategy):
         """Test get_vm_name returns None when VM not found."""
         mock_vbox_vm_class.get_vm_name_by_uuid.return_value = None
@@ -311,7 +311,7 @@ class TestQEMUIdentifierStrategy:
         """Test verify_exists returns False when identifier is empty."""
         assert qemu_strategy.verify_exists("") is False
 
-    @patch('adare.hypervisor.base.identifier_strategy.QEMUVM')
+    @patch('adare.hypervisor.qemu.vm.QEMUVM')
     def test_verify_exists_returns_true_when_vm_found(self, mock_qemu_vm_class, qemu_strategy):
         """Test verify_exists returns True when QEMU VM is found."""
         mock_qemu_vm_class.get_vm_by_name.return_value = Mock()
@@ -319,7 +319,7 @@ class TestQEMUIdentifierStrategy:
         assert result is True
         mock_qemu_vm_class.get_vm_by_name.assert_called_once_with("valid-domain")
 
-    @patch('adare.hypervisor.base.identifier_strategy.QEMUVM')
+    @patch('adare.hypervisor.qemu.vm.QEMUVM')
     def test_verify_exists_returns_false_when_vm_not_found(self, mock_qemu_vm_class, qemu_strategy):
         """Test verify_exists returns False when QEMU VM is not found."""
         mock_qemu_vm_class.get_vm_by_name.return_value = None
@@ -337,7 +337,7 @@ class TestQEMUIdentifierStrategy:
         result = qemu_strategy.get_vm_state("")
         assert result == "not_found"
 
-    @patch('adare.hypervisor.base.identifier_strategy.QEMUVM')
+    @patch('adare.hypervisor.qemu.vm.QEMUVM')
     def test_get_vm_state_returns_vm_state(self, mock_qemu_vm_class, qemu_strategy):
         """Test get_vm_state returns the actual VM state."""
         mock_vm = Mock()
@@ -348,7 +348,7 @@ class TestQEMUIdentifierStrategy:
         assert result == "running"
         mock_vm.get_state.assert_called_once()
 
-    @patch('adare.hypervisor.base.identifier_strategy.QEMUVM')
+    @patch('adare.hypervisor.qemu.vm.QEMUVM')
     def test_get_vm_state_returns_not_found_when_vm_missing(self, mock_qemu_vm_class, qemu_strategy):
         """Test get_vm_state returns 'not_found' when VM not in QEMU/libvirt."""
         mock_qemu_vm_class.get_vm_by_name.return_value = None
@@ -554,7 +554,7 @@ class TestVerifyVmExists:
         result = verify_vm_exists(mock_vm_instance)
         assert result is False
 
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM')
+    @patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM')
     def test_uses_correct_strategy_for_virtualbox(self, mock_vbox_vm_class, mock_vbox_vm_instance):
         """Test uses VirtualBoxIdentifierStrategy for VirtualBox VMs."""
         mock_vbox_vm_class.get_vm_name_by_uuid.return_value = "test-vm"
@@ -563,7 +563,7 @@ class TestVerifyVmExists:
         assert result is True
         mock_vbox_vm_class.get_vm_name_by_uuid.assert_called_once()
 
-    @patch('adare.hypervisor.base.identifier_strategy.QEMUVM')
+    @patch('adare.hypervisor.qemu.vm.QEMUVM')
     def test_uses_correct_strategy_for_qemu(self, mock_qemu_vm_class, mock_qemu_vm_instance):
         """Test uses QEMUIdentifierStrategy for QEMU VMs."""
         mock_qemu_vm_class.get_vm_by_name.return_value = Mock()
@@ -572,7 +572,7 @@ class TestVerifyVmExists:
         assert result is True
         mock_qemu_vm_class.get_vm_by_name.assert_called_once()
 
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM')
+    @patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM')
     def test_returns_false_when_identifier_is_none(self, mock_vbox_vm_class, mock_vm_instance):
         """Test returns False when identifier is None."""
         mock_vm_instance.vbox_uuid = None
@@ -594,8 +594,8 @@ class TestGetVmState:
         result = get_vm_state(mock_vm_instance)
         assert result == "error"
 
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxManager')
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM')
+    @patch('adare.hypervisor.virtualbox.manager.VirtualBoxManager')
+    @patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM')
     def test_returns_vm_state_for_virtualbox(self, mock_vbox_vm_class, mock_manager_class, mock_vbox_vm_instance):
         """Test returns correct state for VirtualBox VMs."""
         mock_vbox_vm_class.get_vm_name_by_uuid.return_value = "test-vm"
@@ -609,7 +609,7 @@ class TestGetVmState:
         result = get_vm_state(mock_vbox_vm_instance)
         assert result == "poweroff"
 
-    @patch('adare.hypervisor.base.identifier_strategy.QEMUVM')
+    @patch('adare.hypervisor.qemu.vm.QEMUVM')
     def test_returns_vm_state_for_qemu(self, mock_qemu_vm_class, mock_qemu_vm_instance):
         """Test returns correct state for QEMU VMs."""
         mock_vm = Mock()
@@ -619,7 +619,7 @@ class TestGetVmState:
         result = get_vm_state(mock_qemu_vm_instance)
         assert result == "shutoff"
 
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM')
+    @patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM')
     def test_returns_not_found_when_identifier_is_none(self, mock_vbox_vm_class, mock_vm_instance):
         """Test returns 'not_found' when identifier is None."""
         mock_vm_instance.vbox_uuid = None
@@ -697,7 +697,7 @@ class TestParametrizedStrategyBehavior:
 class TestStrategyUsagePatterns:
     """Tests for common strategy usage patterns."""
 
-    @patch('adare.hypervisor.base.identifier_strategy.VirtualBoxVM')
+    @patch('adare.hypervisor.virtualbox.vm.VirtualBoxVM')
     def test_full_workflow_virtualbox(self, mock_vbox_vm_class, mock_vbox_vm_instance):
         """Test full workflow: get strategy, get identifier, verify exists."""
         # Setup
@@ -719,7 +719,7 @@ class TestStrategyUsagePatterns:
         vm_name = strategy.get_vm_name(identifier)
         assert vm_name == "found-vm"
 
-    @patch('adare.hypervisor.base.identifier_strategy.QEMUVM')
+    @patch('adare.hypervisor.qemu.vm.QEMUVM')
     def test_full_workflow_qemu(self, mock_qemu_vm_class, mock_qemu_vm_instance):
         """Test full workflow for QEMU: get strategy, get identifier, verify exists."""
         # Setup

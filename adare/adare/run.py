@@ -603,6 +603,140 @@ def clone(source_experiment, target_experiment, environments, project):
 
 
 # ------------------------------
+# Development mode commands
+# ------------------------------
+@cli.group(name='dev', cls=AliasedGroup)
+def dev():
+    """Development mode commands for interactive playbook development."""
+    pass
+
+@dev.command()
+@click.argument('experiment')
+@click.option('-e', '--environment', required=True, help='Environment name')
+@click.option('--project', '-p', help='Project name/path')
+def start(experiment, environment, project):
+    """Start a new dev mode session."""
+    from adare.cli.dev import exec_dev_start
+    args = SimpleNamespace(experiment=experiment, environment=environment, project=project)
+    exec_with_error_printing(exec_dev_start, args)
+
+@dev.command()
+@click.argument('session_id')
+def stop(session_id):
+    """Stop a dev mode session."""
+    from adare.cli.dev import exec_dev_stop
+    args = SimpleNamespace(session_id=session_id)
+    exec_with_error_printing(exec_dev_stop, args)
+
+@dev.command()
+@click.option('--project', '-p', help='Filter by project')
+def list(project):
+    """List active dev mode sessions."""
+    from adare.cli.dev import exec_dev_list
+    args = SimpleNamespace(project=project)
+    exec_with_error_printing(exec_dev_list, args)
+
+@dev.command()
+@click.argument('session_id')
+@click.option('-f', '--file', 'action_file', help='Action YAML file')
+@click.option('-y', '--yaml', 'action_yaml', help='Inline YAML string')
+@click.option('--stdin', is_flag=True, help='Read from stdin')
+def action(session_id, action_file, action_yaml, stdin):
+    """Execute a single action."""
+    from adare.cli.dev import exec_dev_action
+    args = SimpleNamespace(
+        session_id=session_id,
+        action_file=action_file,
+        action_yaml=action_yaml,
+        stdin=stdin
+    )
+    exec_with_error_printing(exec_dev_action, args)
+
+@dev.command()
+@click.argument('session_id')
+@click.option('-f', '--file', 'playbook_file', help='Playbook YAML file')
+@click.option('-u', '--url', help='Playbook URL')
+@click.option('--stdin', is_flag=True, help='Read from stdin')
+def playbook(session_id, playbook_file, url, stdin):
+    """Execute a playbook."""
+    from adare.cli.dev import exec_dev_playbook
+    args = SimpleNamespace(
+        session_id=session_id,
+        playbook_file=playbook_file,
+        url=url,
+        stdin=stdin
+    )
+    exec_with_error_printing(exec_dev_playbook, args)
+
+@dev.command(name='reset-soft')
+@click.argument('session_id')
+def reset_soft(session_id):
+    """Soft reset: Reset variables only (<1 second)."""
+    from adare.cli.dev import exec_dev_reset_soft
+    args = SimpleNamespace(session_id=session_id)
+    exec_with_error_printing(exec_dev_reset_soft, args)
+
+@dev.command(name='reset-hard')
+@click.argument('session_id')
+def reset_hard(session_id):
+    """Hard reset: Full VM restore (10-30 seconds)."""
+    from adare.cli.dev import exec_dev_reset_hard
+    args = SimpleNamespace(session_id=session_id)
+    exec_with_error_printing(exec_dev_reset_hard, args)
+
+@dev.command(name='checkpoint-create')
+@click.argument('session_id')
+@click.argument('name')
+@click.option('-d', '--description', default='', help='Checkpoint description')
+def checkpoint_create(session_id, name, description):
+    """Create a named checkpoint (live snapshot)."""
+    from adare.cli.dev import exec_dev_checkpoint_create
+    args = SimpleNamespace(session_id=session_id, name=name, description=description)
+    exec_with_error_printing(exec_dev_checkpoint_create, args)
+
+@dev.command(name='checkpoint-restore')
+@click.argument('session_id')
+@click.argument('name')
+def checkpoint_restore(session_id, name):
+    """Restore to a named checkpoint."""
+    from adare.cli.dev import exec_dev_checkpoint_restore
+    args = SimpleNamespace(session_id=session_id, name=name)
+    exec_with_error_printing(exec_dev_checkpoint_restore, args)
+
+@dev.command(name='checkpoint-list')
+@click.argument('session_id')
+def checkpoint_list(session_id):
+    """List available checkpoints."""
+    from adare.cli.dev import exec_dev_checkpoint_list
+    args = SimpleNamespace(session_id=session_id)
+    exec_with_error_printing(exec_dev_checkpoint_list, args)
+
+@dev.command()
+@click.argument('session_id')
+def state(session_id):
+    """Show session state (variables, stats, snapshots)."""
+    from adare.cli.dev import exec_dev_state
+    args = SimpleNamespace(session_id=session_id)
+    exec_with_error_printing(exec_dev_state, args)
+
+@dev.command()
+@click.option('--project', '-p', help='Filter by project')
+def cleanup(project):
+    """Cleanup stale sessions."""
+    from adare.cli.dev import exec_dev_cleanup
+    args = SimpleNamespace(project=project)
+    exec_with_error_printing(exec_dev_cleanup, args)
+
+# Add dev command aliases
+dev.add_alias('l', 'list')
+dev.add_alias('rs', 'reset-soft')
+dev.add_alias('rh', 'reset-hard')
+dev.add_alias('cc', 'checkpoint-create')
+dev.add_alias('cr', 'checkpoint-restore')
+dev.add_alias('cl', 'checkpoint-list')
+
+
+# ------------------------------
 # Testfunction commands
 # ------------------------------
 @cli.group(cls=AliasedGroup)

@@ -211,19 +211,41 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 stderr_redirect = " 2>>C:\\adare\\run\\logs\\adarevmstartup.log"
                 command = f"{command}{stderr_redirect}"
 
+            # Inject discovered PATH into command if available
+            # This ensures tools like pip are found regardless of how QGA sets environment
+            # or if PowerShell startup profile overrides it
+
+
             # Windows admin elevation
             if admin:
-                if use_cmd:
-                    shell = ['powershell.exe', '-Command']
-                    command = f"Start-Process -Verb RunAs -FilePath cmd.exe -ArgumentList '/c','{command}' -Wait"
+                # Escape single quotes for the outer PowerShell command
+                # The command is passed inside single quotes: '-Command','...'
+                inner_cmd_escaped = command.replace("'", "''")
+                shell = ['powershell.exe', '-Command']
+
+                if background:
+                    # Background: start detached process, no UAC needed (QGA runs as SYSTEM)
+                    # -WindowStyle Hidden keeps it running without visible window
+                    # No -Wait so outer PowerShell returns immediately
+                    if use_cmd:
+                        command = f'"Start-Process -WindowStyle Hidden -FilePath cmd.exe -ArgumentList \'/c\',\'{inner_cmd_escaped}\'"'
+                    else:
+                        command = f'"Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList \'-NoProfile\',\'-Command\',\'{inner_cmd_escaped}\'"'
                 else:
-                    shell = ['powershell.exe', '-Command']
-                    command = f"Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList '-NoProfile','-Command','{command}' -Wait"
+                    # Foreground with UAC elevation (interactive scenarios)
+                    if use_cmd:
+                        command = f'"Start-Process -Verb RunAs -FilePath cmd.exe -ArgumentList \'/c\',\'{inner_cmd_escaped}\' -Wait"'
+                    else:
+                        command = f'"Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList \'-NoProfile\',\'-Command\',\'{inner_cmd_escaped}\' -Wait"'
             else:
                 if use_cmd:
                     shell = ['cmd.exe', '/c']
                 else:
                     shell = ['powershell.exe', '-Command']
+                    # CRITICAL: Do NOT wrap command in double quotes here.
+                    # QGA passes arguments as an array. Passing literal quotes makes PowerShell treat it as a string literal.
+                    # The single list item ensures the semicolon-separated command is treated as one session.
+                    command = f"{command}"
         else:
             # Add stderr redirection for background commands (Linux)
             if background:
@@ -268,8 +290,12 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         # Set PATH - use discovered PATH from guest if available, otherwise fallback to hardcoded
         if hasattr(self, '_cached_guest_path') and self._cached_guest_path:
-            # Use discovered PATH from guest
-            path_value = self._cached_guest_path
+            # Combine discovered PATH with essential system paths
+            if 'windows' in self.guest_os.lower():
+                system_essentials = "C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0"
+                path_value = f"{self._cached_guest_path};{system_essentials}"
+            else:
+                path_value = self._cached_guest_path
             log.debug("CLAUDE: Using discovered guest PATH")
         else:
             # Fallback to hardcoded minimal PATH for compatibility
@@ -304,6 +330,65 @@ class CommandExecutionMixin(AbstractCommandMixin):
         log.debug(f"CLAUDE: Built guest environment: {env_vars}")
         return env_vars
 
+    async def _wait_for_user_session(self, timeout: int = 90) -> bool:
+        """
+        Wait for user session to be fully initialized (Windows only).
+        
+        Checks for:
+        1. explorer.exe running as the target user (indicates login)
+        2. User's registry hive (HKEY_USERS\\<SID>\\Environment) is loaded
+        
+        Args:
+            timeout: Maximum seconds to wait (default 90s)
+            
+        Returns:
+            True if session is ready, False if timed out or check failed
+        """
+        if 'windows' not in self.guest_os.lower():
+            return True
+            
+        try:
+            log.debug(f"CLAUDE: Waiting for user '{self.username}' session and registry hive...")
+            
+            # PowerShell command to check for explorer.exe AND registry hive
+            # We need the SID to check the registry key
+            check_cmd = (
+                f'try {{ '
+                f'$sid = (New-Object System.Security.Principal.NTAccount("{self.username}")).Translate([System.Security.Principal.SecurityIdentifier]).Value; '
+                f'$regPath = "Registry::HKEY_USERS\\$sid\\Environment"; '
+                f'$proc = Get-WmiObject Win32_Process -Filter "Name=\'explorer.exe\'" | '
+                f'Where-Object {{ $_.GetOwner().User -eq \'{self.username}\' }}; '
+                f'$hiveLoaded = Test-Path $regPath; '
+                f'if ($proc -and $hiveLoaded) {{ "ready" }} else {{ "waiting: proc=" + [bool]$proc + ", hive=" + $hiveLoaded }} '
+                f'}} catch {{ "error: " + $_ }}'
+            )
+            
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                # Use short timeout for the check itself
+                returncode, stdout, _ = await self._execute_guest_command_via_agent(
+                    check_cmd, 
+                    timeout=10
+                )
+                
+                stdout_str = stdout.strip().lower()
+                if returncode == 0 and 'ready' in stdout_str:
+                    log.info(f"CLAUDE: User session and registry hive for '{self.username}' are ready")
+                    return True
+                
+                # Log status every few seconds (throttled by the sleep)
+                if 'waiting' in stdout_str or 'error' in stdout_str:
+                    log.debug(f"CLAUDE: Session wait status: {stdout.strip()}")
+
+                await asyncio.sleep(2)
+                
+            log.warning(f"CLAUDE: Timed out waiting for user session after {timeout}s")
+            return False
+            
+        except Exception as e:
+            log.warning(f"CLAUDE: Error waiting for user session: {e}")
+            return False
+
     async def _discover_guest_path(self) -> Optional[str]:
         """
         Discover actual PATH environment variable from guest OS.
@@ -324,16 +409,28 @@ class CommandExecutionMixin(AbstractCommandMixin):
         Raises:
             Does not raise - all exceptions are caught and logged as warnings.
         """
+        if hasattr(self, '_cached_guest_path') and self._cached_guest_path:
+            return self._cached_guest_path
+
         try:
             log.debug("CLAUDE: Attempting to discover guest PATH environment")
 
-            # Build discovery command based on guest OS
+            # Wait for user session on Windows to ensure registry is loaded
             if 'windows' in self.guest_os.lower():
-                # Windows: Get combined User + Machine PATH from environment
+                await self._wait_for_user_session()
+
+            # Build discovery command based on guest OS
+                # Windows: Get PATH from registry only (more robust than file search)
+                # We prioritize user PATH over machine PATH
                 discovery_cmd = (
-                    "powershell.exe -Command "
-                    "\"[Environment]::GetEnvironmentVariable('PATH', 'User') + ';' + "
-                    "[Environment]::GetEnvironmentVariable('PATH', 'Machine')\""
+                    f'$env:Path = [Environment]::GetEnvironmentVariable("PATH", "Machine"); '
+                    f'try {{ '
+                    f'$sid = (New-Object System.Security.Principal.NTAccount("{self.username}")).Translate([System.Security.Principal.SecurityIdentifier]).Value; '
+                    f'$regPath = "Registry::HKEY_USERS\\" + $sid + "\\Environment"; '
+                    f'$userPath = (Get-ItemProperty $regPath -ErrorAction SilentlyContinue).Path; '
+                    f'if ($userPath) {{ $env:Path = $userPath + ";" + $env:Path }} '
+                    f'}} catch {{}}; '
+                    f'Write-Output $env:Path'
                 )
             else:
                 # Linux: Use login shell to source all profile files
@@ -342,9 +439,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             # Execute discovery command with timeout
             # Using low-level guest-exec to avoid circular dependency
+            # Windows PowerShell startup can be slow, especially on first run
+            discovery_timeout = 120 if 'windows' in self.guest_os.lower() else 10
             returncode, stdout, stderr = await self._execute_guest_command_via_agent(
                 command=discovery_cmd,
-                timeout=10
+                timeout=discovery_timeout
             )
 
             stdout = stdout.strip()
@@ -362,11 +461,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             # Validate discovered PATH
             if 'windows' in self.guest_os.lower():
-                # Windows: PATH should contain C:\Windows\System32
-                if 'C:\\Windows\\System32' not in stdout and 'c:\\windows\\system32' not in stdout:
+                # Windows: PATH should contain at least one drive path (e.g., C:\)
+                if ':\\' not in stdout:
                     log.warning(
                         f"CLAUDE: Discovered Windows PATH appears invalid "
-                        f"(missing System32): {stdout[:100]}"
+                        f"(no drive paths found): {stdout[:100]}"
                     )
                     return None
             else:
@@ -379,6 +478,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     return None
 
             log.info(f"CLAUDE: Successfully discovered guest PATH: {stdout[:150]}...")
+            self._cached_guest_path = stdout
             return stdout
 
         except asyncio.TimeoutError:
@@ -834,7 +934,15 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
                 # Send command via libvirt API
                 cmd_json = json.dumps(command)
-                log.debug(f"CLAUDE: Sending QGA command via libvirt: {command.get('execute', 'unknown')}")
+                execute_name = command.get('execute', 'unknown')
+                if execute_name == 'guest-exec':
+                    args = command.get('arguments', {})
+                    path = args.get('path', '')
+                    cmd_args = args.get('arg', [])
+                    full_cmd = " ".join([path] + cmd_args)
+                    log.debug(f"CLAUDE: Sending QGA command via libvirt: guest-exec ({full_cmd})")
+                else:
+                    log.debug(f"CLAUDE: Sending QGA command via libvirt: {execute_name}")
 
                 # Get experiment log file for stderr capture
                 log_file = get_experiment_log_file()
@@ -849,7 +957,25 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     )
 
                 response = json.loads(result)
-                log.debug(f"CLAUDE: QGA response: {response}")
+                
+                # Check if it's a status check response and if nothing has exited
+                # We want to reduce log verbosity for polling
+                try:
+                    is_running = (
+                        'return' in response and 
+                        isinstance(response['return'], dict) and 
+                        'exited' in response['return'] and 
+                        response['return']['exited'] is False
+                    )
+                    
+                    if is_running:
+                        log.debug("CLAUDE: QGA command still running")
+                    else:
+                        log.debug(f"CLAUDE: QGA response: {response}")
+                except Exception:
+                    # Fallback to full logging if check fails
+                    log.debug(f"CLAUDE: QGA response: {response}")
+                
                 return response
 
             except libvirt.libvirtError as e:
