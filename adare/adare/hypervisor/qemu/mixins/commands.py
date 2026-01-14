@@ -211,10 +211,23 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 stderr_redirect = " 2>>C:\\adare\\run\\logs\\adarevmstartup.log"
                 command = f"{command}{stderr_redirect}"
 
-            # Inject discovered PATH into command if available
-            # This ensures tools like pip are found regardless of how QGA sets environment
-            # or if PowerShell startup profile overrides it
+            # CRITICAL FIX: Wrap command in script block with user PATH injection
+            # QEMU Guest Agent runs as NT AUTHORITY\SYSTEM which has no PATH by default.
+            # We inject the specific user's PATH from their registry hive (HKEY_USERS\{SID}\Environment).
+            # The & { ... } script block ensures PowerShell parses it correctly via guest-exec.
+            path_inject_prefix = (
+                f"& {{ "
+                f"$sid = (New-Object System.Security.Principal.NTAccount('{self.username}')).Translate([System.Security.Principal.SecurityIdentifier]).Value; "
+                f"$regPath = 'Registry::HKEY_USERS\\' + $sid + '\\Environment'; "
+                f"$UserPath = (Get-ItemProperty $regPath -ErrorAction SilentlyContinue).Path; "
+                f"if ($UserPath) {{ $Env:Path = $UserPath + ';' + $Env:Path }}; "
+            )
+            path_inject_suffix = " }"
+            
+            command = f"{path_inject_prefix}{command}{path_inject_suffix}"
 
+            # CLAUDE DEBUG: Log the FULL constructed command including adarevm call
+            log.debug(f"CLAUDE DEBUG: Full Windows guest command: {command}")
 
             # Windows admin elevation
             if admin:
@@ -224,13 +237,13 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 shell = ['powershell.exe', '-Command']
 
                 if background:
-                    # Background: start detached process, no UAC needed (QGA runs as SYSTEM)
-                    # -WindowStyle Hidden keeps it running without visible window
-                    # No -Wait so outer PowerShell returns immediately
-                    if use_cmd:
-                        command = f'"Start-Process -WindowStyle Hidden -FilePath cmd.exe -ArgumentList \'/c\',\'{inner_cmd_escaped}\'"'
-                    else:
-                        command = f'"Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList \'-NoProfile\',\'-Command\',\'{inner_cmd_escaped}\'"'
+                    # Background: run directly in background (QGA runs as SYSTEM)
+                    # -WindowStyle Hidden to avoid popping up windows
+                    # Simplify command structure to avoid double-nesting quoting issues
+                    shell = ['powershell.exe', '-NoProfile', '-WindowStyle', 'Hidden', '-Command']
+
+                    # No need to escape for inner shell since we are running directly
+                    command = f"{command}"
                 else:
                     # Foreground with UAC elevation (interactive scenarios)
                     if use_cmd:
@@ -239,12 +252,10 @@ class CommandExecutionMixin(AbstractCommandMixin):
                         command = f'"Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList \'-NoProfile\',\'-Command\',\'{inner_cmd_escaped}\' -Wait"'
             else:
                 if use_cmd:
+                    
                     shell = ['cmd.exe', '/c']
                 else:
                     shell = ['powershell.exe', '-Command']
-                    # CRITICAL: Do NOT wrap command in double quotes here.
-                    # QGA passes arguments as an array. Passing literal quotes makes PowerShell treat it as a string literal.
-                    # The single list item ensures the semicolon-separated command is treated as one session.
                     command = f"{command}"
         else:
             # Add stderr redirection for background commands (Linux)
@@ -494,6 +505,75 @@ class CommandExecutionMixin(AbstractCommandMixin):
             log.warning(f"CLAUDE: PATH discovery failed due to missing expected key: {e}")
             return None
 
+    async def _discover_python_scripts_path(self) -> Optional[str]:
+        """
+        Discover the Scripts directory for the Python installation in the guest.
+        This is where tools like adarevm, pip, poetry are located.
+        """
+        if hasattr(self, '_cached_python_scripts_path') and self._cached_python_scripts_path:
+            return self._cached_python_scripts_path
+
+        try:
+            log.debug("CLAUDE: Attempting to discover Python Scripts path")
+            
+            # Wait for user session on Windows
+            if 'windows' in self.guest_os.lower():
+                await self._wait_for_user_session()
+                
+                # Check for Python in standard AppData location
+                # We prioritize the User installation
+                check_cmd = (
+                    f'Get-ChildItem -Path "C:\\Users\\{self.username}\\AppData\\Local\\Programs\\Python" '
+                    f'-Filter "Python*" -Directory -ErrorAction SilentlyContinue | '
+                    f'Select-Object -First 1 -ExpandProperty FullName'
+                )
+                
+                returncode, stdout, _ = await self._execute_guest_command_via_agent(
+                    command=check_cmd,
+                    timeout=30
+                )
+                
+                if returncode == 0 and stdout.strip():
+                    python_base = stdout.strip()
+                    scripts_path = f"{python_base}\\Scripts"
+                    log.info(f"CLAUDE: Found Python Scripts path: {scripts_path}")
+                    self._cached_python_scripts_path = scripts_path
+                    return scripts_path
+                    
+            return None
+            
+        except Exception as e:
+            log.warning(f"CLAUDE: Error discovering Python scripts path: {e}")
+            return None
+
+    async def _resolve_guest_executable_path(self, executable: str) -> Optional[str]:
+        """
+        Resolve the absolute path for a guest executable (like adarevm).
+        """
+        # Cache key for this specific executable
+        cache_attr = f'_cached_path_{executable}'
+        if hasattr(self, cache_attr):
+            return getattr(self, cache_attr)
+            
+        scripts_path = await self._discover_python_scripts_path()
+        if scripts_path:
+            # Construct candidate path
+            candidate = f"{scripts_path}\\{executable}.exe"
+            
+            # Verify it exists
+            check_cmd = f'Test-Path "{candidate}"'
+            returncode, stdout, _ = await self._execute_guest_command_via_agent(
+                command=check_cmd,
+                timeout=10
+            )
+            
+            if returncode == 0 and 'True' in stdout:
+                log.info(f"CLAUDE: Resolved {executable} to {candidate}")
+                setattr(self, cache_attr, candidate)
+                return candidate
+                
+        return None
+
     async def _detect_xauthority(self) -> Optional[str]:
         """
         Detect XAUTHORITY file location in Linux guest VM.
@@ -729,7 +809,8 @@ class CommandExecutionMixin(AbstractCommandMixin):
             return -1, "", "Guest agent socket not found"
 
         try:
-            # Build command args with admin support
+            # Build command args - PATH injection in _build_guest_command_args() handles
+            # making tools like adarevm, pip, python accessible (no need for path resolution)
             cmd_args = self._build_guest_command_args(
                 command,
                 background=background,
@@ -741,15 +822,28 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             # Execute via QMP using guest-exec with environment variables
             # Format: {"execute": "guest-exec", "arguments": {"path": "/bin/sh", "arg": ["-c", "command"], "env": ["HOME=/home/user"]}}
+            qga_args = {
+                "path": cmd_args[0],
+                "arg": cmd_args[1:] if len(cmd_args) > 1 else [],
+                "capture-output": True
+            }
+
+            # Only provide 'env' for non-Windows guests.
+            # On Windows, providing 'env' replaces the entire environment block, stripping critical
+            # variables like SystemRoot, ComSpec, and machine PATH, causing PowerShell to fail.
+            # By omitting 'env', QGA inherits the default system environment (NT AUTHORITY\SYSTEM),
+            # which we then augment with our user PATH injection script.
+            if 'windows' not in self.guest_os.lower() and env_vars:
+                qga_args["env"] = env_vars
+
             qga_cmd = {
                 "execute": "guest-exec",
-                "arguments": {
-                    "path": cmd_args[0],
-                    "arg": cmd_args[1:] if len(cmd_args) > 1 else [],
-                    "env": env_vars,
-                    "capture-output": True
-                }
+                "arguments": qga_args
             }
+
+            # CLAUDE DEBUG: Log the EXACT JSON payload being sent to libvirt to verify 'env' is missing
+            import json
+            log.debug(f"CLAUDE DEBUG: QGA JSON payload: {json.dumps(qga_cmd)}")
 
             # Send command via libvirt API (not direct socket access)
             qga_response = await self._send_qga_command_via_libvirt(qga_cmd)

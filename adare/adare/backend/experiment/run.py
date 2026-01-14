@@ -1326,7 +1326,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 #input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
                 await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
-                # input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
+                input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
                 await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
                 await step_runner.run_async_step(step_execute_installations, experiment_run_context)
                 #input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")

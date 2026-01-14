@@ -74,7 +74,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
             # Use sudo on Linux
             command_str = f"sudo {command_str}"
             log.info(f"Running command with elevated privileges (sudo)")
-    elif is_running_elevated:
+    elif is_running_elevated and not is_windows:
         # Drop privileges when running with elevated privileges
         target_user = run_as_user if run_as_user else DEFAULT_RUN_AS_USER
 

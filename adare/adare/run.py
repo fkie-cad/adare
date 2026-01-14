@@ -228,7 +228,7 @@ def environment():
     pass
 
 @environment.command()
-@click.argument('environment')
+@click.argument('environment', type=click.Path(exists=False))
 @click.option('--project', '-p', help='Name of the project')
 @click.option('--force', '-f', is_flag=True, help='Force update of the environment')
 @click.option('--no-copy', is_flag=True, help='Keep VM file at original location instead of copying to managed storage (local files only). WARNING: Do not move or delete the original file!')
@@ -249,7 +249,7 @@ def load(environment, project, force, no_copy):
     exec_with_error_printing(exec_environment_load, args)
 
 @environment.command()
-@click.argument('name')
+@click.argument('name', type=click.Path(exists=False))
 @click.option('--project', '-p', help='Name of the project')
 @click.option('--with-vm', type=click.Path(exists=True), help='VM file path (OVA) to load automatically during environment creation')
 def create(name, project, with_vm):
@@ -317,7 +317,7 @@ experiment.add_alias('rm', 'remove')
 experiment.add_alias('rm-env', 'remove-env')
 
 @experiment.command()
-@click.argument('experiment')
+@click.argument('experiment', type=click.Path(exists=False))
 @click.option('--project', '-p', help='Name of the project')
 def create(experiment, project):
     """Create a new experiment skeleton.
@@ -331,8 +331,8 @@ def create(experiment, project):
     exec_with_error_printing(exec_experiment_create, args)
 
 @experiment.command()
-@click.argument('experiment')
-@click.option('-e', '--environment', help='Name of the environment')
+@click.argument('experiment', type=click.Path(exists=False))
+@click.option('-e', '--environment', type=click.Path(exists=False), help='Name of the environment')
 @click.option('--force', '-f', is_flag=True, help='Force update of the experiment')
 @click.option('--project', '-p', help='Name of the project')
 def load(experiment, environment, force, project):
@@ -353,8 +353,8 @@ def load(experiment, environment, force, project):
     exec_with_error_printing(exec_experiment_load, args)
 
 @experiment.command()
-@click.argument('experiment')
-@click.option('-e', '--environment', help='Name of the environment (if not specified, runs on all environments in project)')
+@click.argument('experiment', type=click.Path(exists=False))
+@click.option('-e', '--environment', type=click.Path(exists=False), help='Name of the environment (if not specified, runs on all environments in project)')
 @click.option('--production', '-p', is_flag=True, help='Run the experiment in production mode - creates real runs with integrity checks (default: test mode)')
 @click.option('--debug-screenshots', is_flag=True, help='Save screenshots to experiment run directory for debugging')
 @click.option('--preserve-snapshot', '-s', is_flag=True, help='Create experiment snapshot for preservation (default: only reset to base snapshot)')
@@ -398,8 +398,8 @@ def run(ctx, experiment, environment, production, debug_screenshots, preserve_sn
     exec_with_error_printing(exec_experiment_run, args)
 
 @experiment.command()
-@click.argument('experiment')
-@click.option('-e', '--environment', required=True, help='Name of the environment')
+@click.argument('experiment', type=click.Path(exists=False))
+@click.option('-e', '--environment', type=click.Path(exists=False), required=True, help='Name of the environment')
 @click.option('--project', '-p', help='Name of the project')
 def develop(experiment, environment, project):
     """Run an experiment in test mode."""
@@ -431,8 +431,8 @@ def list_experiments():
     exec_with_error_printing(exec_show_experiments, args)
 
 @experiment.command()
-@click.argument('experiment')
-@click.option('-e', '--environment', required=True, help='Name of the environment')
+@click.argument('experiment', type=click.Path(exists=False))
+@click.option('-e', '--environment', type=click.Path(exists=False), required=True, help='Name of the environment')
 @click.option('--project', '-p', help='Name of the project')
 @click.option('--port', type=int, default=8080, help='Port for the web interface (default: 8080)')
 def dev(experiment, environment, project, port):
@@ -488,7 +488,7 @@ def clean(experiment, project):
 
 
 @experiment.command()
-@click.argument('experiment')
+@click.argument('experiment', type=click.Path(exists=False))
 @click.option('--project', '-p', help='Name of the project')
 @click.option('--force', '-f', is_flag=True, help='Force removal even if experiment has productive runs')
 @click.option('--keep-files', is_flag=True, help='Keep experiment directory on filesystem (only remove from database)')
@@ -745,7 +745,7 @@ def testfunction():
     pass
 
 @testfunction.command()
-@click.argument('name')
+@click.argument('name', type=click.Path(exists=False))
 @click.option('--project', '-p', help='Name of the project')
 def create(name, project):
     """Create a new testfunction.
@@ -772,7 +772,7 @@ def remove(name, project):
     exec_with_error_printing(exec_remove_testfunction, args)
 
 @testfunction.command()
-@click.argument('name')
+@click.argument('name', type=click.Path(exists=False))
 @click.option('--force', '-f', is_flag=True, help='Force overwrite if testfunction is used in experiments (will delete associated runs)')
 def load(name, force):
     """Load a testfunction.

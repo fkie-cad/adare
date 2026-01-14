@@ -1,0 +1,12 @@
+{
+    "execute": "guest-exec",
+    "arguments": {
+        "path": "powershell.exe",
+        "arg": [
+            "-NoProfile",
+            "-Command",
+            "Get-Content C:\\adare\\run\\logs\\adarevmstartup.log"
+        ],
+        "capture-output": true
+    }
+}
