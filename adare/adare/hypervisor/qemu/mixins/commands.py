@@ -15,6 +15,7 @@ import threading
 import time
 from pathlib import Path
 from typing import List, Optional, Tuple
+import base64
 
 from adare.hypervisor.base.mixins.commands import AbstractCommandMixin
 from adare.hypervisor.exceptions import HypervisorException
@@ -178,116 +179,113 @@ class CommandExecutionMixin(AbstractCommandMixin):
             log.error(f"CLAUDE: Error executing {operation_name}: {e}")
             raise HypervisorException(f"Command execution failed: {e}")
 
+
     def _build_guest_command_args(
         self,
         command: str,
         background: bool = False,
         cwd: Optional[str] = None,
+        admin: bool = False,
+        run_as_user: bool = False,
+        # VirtualBox-specific (limited support)
         win_noprofile: bool = True,
         use_cmd: bool = False,
-        admin: bool = False,
-        run_as_user: bool = False
+        # QEMU-specific (implemented)
+        binary_is_filepath: bool = False,
+        redirect_stderr: str = "",
+        redirect_stdout: str = "",
+        hidden_window: bool = True,
     ) -> List[str]:
         """
-        Build QEMU Guest Agent command arguments.
-
-        For QEMU, we'll execute commands via Guest Agent, so this method
-        returns the command formatted for guest-exec.
+        Build guest command arguments for QEMU guest agent execution.
 
         Args:
             command: Command to execute in guest
-            background: If True, don't wait for command to complete
-            cwd: Optional working directory
-            win_noprofile: Windows-specific: ignored for QEMU
-            use_cmd: Windows-specific: use cmd.exe instead of sh
-            admin: If True, run with elevated privileges
+            background: If True, run command in background
+            cwd: Optional working directory for command execution
+            admin: If True, run with elevated privileges (sudo on Linux)
+            win_noprofile: VirtualBox-specific, silently ignored (different PowerShell invocation)
+            use_cmd: VirtualBox-specific, not supported in QEMU
+            run_as_user: VirtualBox-specific, not supported in QEMU (QGA handles session differently)
+            binary_is_filepath: QEMU-specific, treat command as filepath in Start-Process
+            redirect_stderr: Path to redirect stderr output
+            redirect_stdout: Path to redirect stdout output
+            hidden_window: Use hidden window style (Windows)
 
         Returns:
-            List of command arguments formatted for guest agent
+            List of command arguments for guest agent execution
+
+        Raises:
+            NotImplementedError: If VirtualBox-specific parameters are used
         """
-        # For guest agent, we need to determine shell based on guest OS
-        if 'windows' in self.guest_os.lower():
-            # Add stderr redirection for background commands (Windows)
-            # Add stderr redirection for background commands (Windows)
-            if background:
-                stderr_redirect = " 2>>C:\\adare\\run\\logs\\adarevmstartup.log"
-                command = f"{command}{stderr_redirect}"
+        # Guard for unsupported VBox params
+        if use_cmd:
+            raise NotImplementedError("use_cmd not supported in QEMU")
+        # win_noprofile - silently ignore (different PowerShell invocation)
 
-            # CRITICAL FIX: Use Scheduled Tasks to escape Session 0 (Services)
-            # QEMU Guest Agent runs as SYSTEM in Session 0. Directly running GUI apps or 
-            # dropping privileges via Start-Process fails with "Access is denied" or is invisible.
-            # We use 'schtasks' with /IT (Interactive) to launch the agent in the user's active session.
-            # This is triggered explicitly via run_as_user=True (e.g. for adarevm startup).
-            if run_as_user:
-                task_name = "AdareVMStartup"
-                user = self.username
-                # CommandExecutionMixin doesn't declare password, but QEMUVM has it. Fallback safely via getattr.
-                pwd = getattr(self, 'password', 'adare')
-                
-                # Escape inputs for PowerShell single-quoted strings
-                user_safe = user.replace("'", "''")
-                pwd_safe = pwd.replace("'", "''")
-                
-                # The inner command (adarevm ...) needs its single quotes escaped because it will be inside 
-                # the single-quoted string passed to the -Command argument of the powershell launched by schtasks.
-                inner_cmd_escaped = command.replace("'", "''")
-                
-                # Construct the Scheduled Task automation script
-                # 1. Create task running as User, Interactive (/IT), Highest Privs (/RL HIGHEST)
-                # 2. Action is to run PowerShell with Hidden window executing our command
-                # 3. Run task immediately
-                # 4. Cleanup
-                path_inject_prefix = (
-                    f"& {{ "
-                    f"$u = '{user_safe}'; "
-                    f"$p = '{pwd_safe}'; "
-                    f"$t = '{task_name}'; "
-                    f"$c = \"powershell.exe -NoProfile -WindowStyle Hidden -Command '{inner_cmd_escaped}'\"; "
-                    f"schtasks /Create /TN $t /TR $c /SC ONCE /ST 00:00 /RU $u /RP $p /IT /RL HIGHEST /F; "
-                    f"schtasks /Run /TN $t; "
-                    f"Start-Sleep -Seconds 5; "
-                    f"schtasks /Delete /TN $t /F; "
-                )
-                path_inject_suffix = " }"
-                
-                command = f"{path_inject_prefix}{path_inject_suffix}"
-
-                # CLAUDE DEBUG: Log the FULL constructed command including adarevm call
-                log.debug(f"CLAUDE DEBUG: Full Windows guest command (Scheduled Task): {command}")
-
-            # Windows admin elevation
-            if admin:
-                # Escape single quotes for the outer PowerShell command
-                # The command is passed inside single quotes: '-Command','...'
-                inner_cmd_escaped = command.replace("'", "''")
-                shell = ['powershell.exe', '-Command']
-
-                if background:
-                    # Background: run directly in background (QGA runs as SYSTEM)
-                    # -WindowStyle Hidden to avoid popping up windows
-                    # Simplify command structure to avoid double-nesting quoting issues
-                    shell = ['powershell.exe', '-NoProfile', '-WindowStyle', 'Hidden', '-Command']
-
-                    # No need to escape for inner shell since we are running directly
-                    command = f"{command}"
-                else:
-                    # Foreground with UAC elevation (interactive scenarios)
-                    if use_cmd:
-                        command = f'"Start-Process -Verb RunAs -FilePath cmd.exe -ArgumentList \'/c\',\'{inner_cmd_escaped}\' -Wait"'
-                    else:
-                        command = f'"Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList \'-NoProfile\',\'-Command\',\'{inner_cmd_escaped}\' -Wait"'
+        # Add cwd support
+        if cwd:
+            if 'windows' in self.guest_os.lower():
+                command = f'cd {cwd}; {command}'
             else:
-                if use_cmd:
-                    
-                    shell = ['cmd.exe', '/c']
-                else:
-                    shell = ['powershell.exe', '-Command']
-                    command = f"{command}"
-        else:
-            # Add stderr redirection for background commands (Linux)
+                command = f'cd {cwd} && {command}'
+
+        if 'windows' in self.guest_os.lower():
+            if run_as_user:
+                rl = "LIMITED" if not admin else "HIGHEST"
+                delay = 5
+                task_name = f"adare"
+                user = self.username
+                pw = self.password
+                script_path = f"C:\\Windows\\Temp\\adare.ps1"
+                command = (                                                                                                                                 
+                    f"& {{ "                                                                                                                                       
+                    f"$u = '{user}'; $p = '{pw}'; $t = '{task_name}'; "                                                                                 
+                    f"$script = '{script_path}'; "                                                                                                                 
+                    f"$st = (Get-Date).AddMinutes(2).ToString('HH:mm'); "                                                                                                                                                                                                 
+                    f"'{command}' | Out-File -FilePath $script -Encoding ascii; "                                                                                  
+                    f"$c = \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script\"; "                                                                  
+                    f"schtasks /Create /TN $t /TR \"$c\" /SC ONCE /ST $st /RU $u /RP $p /RL {rl} /F; "                                                          
+                    f"schtasks /Run /TN $t; "                                                                                                                      
+                    f"Start-Sleep -Seconds {delay}; "                                                                                                                    
+                    f"$info = schtasks /Query /TN $t /V /FO CSV | ConvertFrom-Csv; "                                                                               
+                    f"$msg = \"Task_Status: $($info.Status) | Exit_Code: $($info.'Last Run Result')\"; "                                                           
+                    f"[Console]::Error.WriteLine($msg); "                                                                                                          
+                    f"schtasks /Delete /TN $t /F; "                                                                                                                
+                    f"if (Test-Path $script) {{ Remove-Item $script -Force }}; "                                                                                   
+                    f"}} "                                                                                                                                         
+                )
+                log.debug(f"CLAUDE DEBUG: Full Windows guest command (Scheduled Task): {command}")  
             if background:
-                stderr_redirect = " 2>>/adare/run/logs/adarevmstartup.log"
+                import shlex
+                command_components = shlex.split(command, posix=False)
+                log.info(f"XXX: {command}")
+                log.info(f"XXX: {command_components}")
+                command = ["Start-Process"]
+                if binary_is_filepath:
+                    binary_path = command_components[0]
+                    command += [f' -FilePath {binary_path}']
+                else:
+                    command += [f" {command_components[0]}"]
+                arguments_string = " ".join(command_components[1:])
+                command += [f' -ArgumentList "{arguments_string}"']
+                if redirect_stderr:
+                    command += [f" -RedirectStandardError {redirect_stderr}"]
+                if redirect_stdout:
+                    command += [f" -RedirectStandardOutput {redirect_stdout}"]
+                if hidden_window:
+                    command += [f" -WindowStyle Hidden"]
+                command = " ".join(command)
+
+            command_base64 = base64.b64encode(command.encode('utf-16le')).decode('utf-8')
+            return ["powershell.exe", "-EncodedCommand", command_base64]
+        else:
+            if redirect_stderr:
+                stderr_redirect = f" 2>>{redirect_stderr}"
                 command = f"{command}{stderr_redirect}"
+            if redirect_stdout:
+                stdout_redirect = f" 1>>{redirect_stdout}"
+                command = f"{command}{stdout_redirect}"
 
             # Use bash instead of sh for proper glob expansion (Ubuntu uses dash as /bin/sh)
             shell = ['/bin/bash', '-c']
@@ -299,8 +297,8 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 escaped_cmd = command.replace("'", "'\"'\"'")
                 command = f'sudo env "PATH=$PATH" "DISPLAY=$DISPLAY" "XAUTHORITY=$XAUTHORITY" bash -c \'{escaped_cmd}\''
 
-        # Return shell command that guest agent will execute
-        return shell + [command]
+            # Return shell command that guest agent will execute
+            return shell + [command]
 
     def _build_guest_environment(self) -> List[str]:
         """
@@ -807,7 +805,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
         stop_event: Optional[threading.Event] = None,
         timeout: int = 300,
         admin: bool = False,
-        run_as_user: bool = False
+        cwd: Optional[str] = None,
+        redirect_stderr: str = "",
+        redirect_stdout: str = "",
+        binary_is_filepath: bool = False,
+        run_as_user: bool = False,
     ) -> Tuple[int, str, str]:
         """
         Execute command in guest via QEMU Guest Agent.
@@ -818,6 +820,9 @@ class CommandExecutionMixin(AbstractCommandMixin):
             stop_event: Optional event to signal cancellation
             timeout: Timeout in seconds
             admin: If True, run with elevated privileges
+            cwd: Optional working directory for command execution
+            redirect_stderr: Path to redirect stderr output (QEMU-specific)
+            redirect_stdout: Path to redirect stdout output (QEMU-specific)
 
         Returns:
             Tuple of (returncode, stdout, stderr)
@@ -842,7 +847,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 command,
                 background=background,
                 admin=admin,
-                run_as_user=run_as_user
+                cwd=cwd,
+                redirect_stderr=redirect_stderr,
+                redirect_stdout=redirect_stdout,
+                binary_is_filepath=binary_is_filepath,
+                run_as_user=run_as_user,
             )
 
             # Build environment variables for guest execution

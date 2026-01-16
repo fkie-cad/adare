@@ -215,3 +215,22 @@ def exec_manage_vm_runtime_refresh(arguments):
         print("VM runtime files are now up-to-date")
     else:
         _handle_api_error(result)
+
+
+def exec_manage_vm_runtime_build(arguments):
+    """Build VM runtime wheels in current project using AdareAPI."""
+    api = AdareAPI()
+    print("Building VM runtime wheels...")
+    result = api.manage.build_vm_runtime_wheels()
+
+    if result.success:
+        print_success_message(
+            title='VM runtime wheels built successfully!',
+            location=str(result.data.wheels_dir) if result.data.wheels_dir else None
+        )
+        if result.data.adarelib_wheel:
+            print(f"  - {result.data.adarelib_wheel}")
+        if result.data.adarevm_wheel:
+            print(f"  - {result.data.adarevm_wheel}")
+    else:
+        _handle_api_error(result)

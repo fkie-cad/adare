@@ -581,11 +581,19 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     else:
         result = await vm.run_command(
             commands.run_command,
-            background=True,
+            background=False,
             stop_event=stop_event,
             admin=True,
             cwd=commands.run_cwd,
-            run_as_user=True # Trigger Session 0 escape via Scheduled Tasks (Windows)
+            run_as_user=True
+        )
+
+    # Check if command failed
+    if result.returncode != 0:
+        log.error(f"CLAUDE: Failed to start adarevm: {result.stderr}")
+        raise VMSetupError(
+            log, vm.vm_name, commands.run_command,
+            result.returncode, result.stdout, result.stderr
         )
 
     # Store PID for QEMU process monitoring

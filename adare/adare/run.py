@@ -182,6 +182,14 @@ def vm_runtime_refresh():
     exec_with_error_printing(exec_manage_vm_runtime_refresh, args)
 
 
+@vm_runtime.command(name='build')
+def vm_runtime_build():
+    """Build fresh VM runtime wheels (adarelib, adarevm) for current project."""
+    from adare.cli.manage import exec_manage_vm_runtime_build
+    args = SimpleNamespace()
+    exec_with_error_printing(exec_manage_vm_runtime_build, args)
+
+
 # ------------------------------
 # Project commands
 # ------------------------------

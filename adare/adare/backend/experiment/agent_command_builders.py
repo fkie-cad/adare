@@ -3,22 +3,40 @@ Command builders for installing and running adarevm agent in VMs.
 
 This module provides a clean separation of concerns for building platform-specific
 commands to install and run the adarevm agent. It uses the Builder pattern to
-handle the complexity of 8 different execution paths:
-- Windows/Linux × Conda/Poetry × Wheels/Editable
+handle the complexity of different execution paths:
+- Windows/Linux × Conda/Poetry × Wheels/Editable × virtio-fs/libguestfs
 
-The refactoring reduces the main install_and_run_adare_vm function from 191 lines
-with deep nesting to ~50 lines of clear orchestration.
+For QEMU hypervisor:
+- virtio-fs mode (default): Windows uses Z:\\ paths, Linux uses /adare
+- libguestfs mode (fallback): Both platforms use /adare or C:\\adare paths
 """
 
 # external imports
 import logging
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple, Optional, Any
 import threading
+import json
 
 log = logging.getLogger(__name__)
+
+
+def _use_shared_folder_mode() -> bool:
+    """Check if shared folder mode (virtio-fs) should be used.
+    
+    Returns:
+        True: Use shared folders (default for all modes)
+        False: Use libguestfs (fallback mode if env var set)
+    """
+    libguestfs_env = os.environ.get('QEMU_LIBGUESTFS', '').lower()
+    if libguestfs_env in ('true', '1', 'yes'):
+        return False
+
+    # always use shared folders by default
+    return True
 
 
 @dataclass
@@ -51,7 +69,14 @@ class CommandSet:
 class AgentCommandBuilder(ABC):
     """Abstract base for building platform-specific agent installation commands."""
 
-    def __init__(self, wheels_dir: Path, shared_folders: dict, websocket_port: int, skip_xhost: bool = False, hypervisor_type: str = 'virtualbox'):
+    def __init__(
+        self,
+        wheels_dir: Path,
+        shared_folders: dict,
+        websocket_port: int,
+        skip_xhost: bool = False,
+        hypervisor_type: str = 'virtualbox'
+    ):
         self.wheels_dir = wheels_dir
         self.shared_folders = shared_folders
         self.websocket_port = websocket_port
@@ -60,7 +85,7 @@ class AgentCommandBuilder(ABC):
         self.wheels_available = wheels_dir.exists() and bool(list(wheels_dir.glob('*.whl')))
 
     @abstractmethod
-    async def build_setup_commands(self, env_info: EnvironmentInfo) -> List[SetupCommand]:
+    async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> List[SetupCommand]:
         """Build platform-specific setup commands with admin requirements."""
         pass
 
@@ -73,10 +98,52 @@ class AgentCommandBuilder(ABC):
     def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> Tuple[str, Optional[str]]:
         """Build run command and optional cwd. Returns (command, cwd)."""
         pass
+        
+    def _build_config_file_payload(self) -> str:
+        """Build JSON content for config.json.
+
+        Path selection for QEMU:
+        - virtio-fs mode (default): Windows uses Z:\\ (virtio-fs mount point)
+        - libguestfs mode: Windows uses C:\\adare (files copied to disk)
+        - VirtualBox: Uses C:\\adare (shared folder mount point)
+        - Linux: Always uses /adare
+        """
+        if isinstance(self, WindowsAgentCommandBuilder):
+            # QEMU: Always uses C:\adare (mounted via virtiofs.exe or copied via guestfish)
+            if self.hypervisor_type == 'qemu':
+                project_tools = r'C:/adare/project_shared/tools'
+                experiment_tools = r'C:/adare/shared/tools'
+                project_data = r'C:/adare/project_shared/data'
+                experiment_data = r'C:/adare/shared/data'
+                log_path = r'C:/adare/run/logs/adarevm.log'
+            else:
+                # VirtualBox - use C:\adare (via Z: mount) or similar logic if needed, 
+                # but for simplicity we keep it consistent where possible.
+                # Note: VirtualBox usually mounts to Z: then we might want C:\adare mapped?
+                # Actually legacy logic for VBox used C:\adare as well in config.
+                project_tools = r'C:/adare/project_shared/tools'
+                experiment_tools = r'C:/adare/shared/tools'
+                project_data = r'C:/adare/project_shared/data'
+                experiment_data = r'C:/adare/shared/data'
+                log_path = r'C:/adare/run/logs/adarevm.log'
+        else:
+            # Linux always uses /adare
+            project_tools = '/adare/project_shared/tools'
+            experiment_tools = '/adare/shared/tools'
+            project_data = '/adare/project_shared/data'
+            experiment_data = '/adare/shared/data'
+            log_path = '/adare/run/logs/adarevm.log'
+
+        config = {
+            "tools_paths": [project_tools, experiment_tools],
+            "data_paths": [project_data, experiment_data],
+            "logfile": log_path
+        }
+        return json.dumps(config)
 
     async def build_commands(self, env_info: EnvironmentInfo, vm, stop_event: threading.Event) -> CommandSet:
         """Main entry point: build complete command set."""
-        setup_commands = await self.build_setup_commands(env_info)
+        setup_commands = await self.build_setup_commands(env_info, vm)
         install_command = self.build_install_command(env_info, vm)
         run_command, run_cwd = self.build_run_command(env_info, vm)
 
@@ -113,9 +180,42 @@ class AgentCommandBuilder(ABC):
 class WindowsAgentCommandBuilder(AgentCommandBuilder):
     """Windows-specific command builder."""
 
-    async def build_setup_commands(self, env_info: EnvironmentInfo) -> List[SetupCommand]:
+    def _build_adarevm_run_command(self, env_info: EnvironmentInfo) -> str:
+        """Build the core adarevm run command string."""
+        cmd_parts = []
+        
+        if env_info.use_conda:
+            # Conda run
+            # Note: We rely on "conda run" to handle activation
+            # Use Miniforge path directly if available from environment detection, or fallback
+            conda_exe = r'$env:USERPROFILE\.miniforge3\Scripts\conda.exe'
+            # Quote arguments to handle spaces in paths
+            cmd_parts.append(f'& "{conda_exe}" run -n pyadare --no-capture-output adarevm start')
+        else:
+            # Standard python
+            # Use resolved Python path or just 'python' if not resolved
+            python_exe = 'python' # Default
+            # Ideally we'd pass the resolved python path here, but for now lets rely on PATH
+            # or if we have it in env_info (we don't easily access vm._cached here without passing it)
+            # But the startup script runs in a fresh powershell process, PATH should be ok if set globally
+            cmd_parts.append(f'python -m adarevm start')
+
+        # Add common flags
+        cmd_parts.append(f'--port {self.websocket_port}')
+        
+        if self.skip_xhost:
+            cmd_parts.append('--gui-mode host')
+            
+        # Join parts
+        base_cmd = " ".join(cmd_parts)
+        
+        # Add error logging for the command execution itself
+        return f"{base_cmd} 2>>C:\\adare\\run\\logs\\adarevm_error.log"
+
+    async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> List[SetupCommand]:
         """Build Windows setup commands with per-command admin requirements."""
         commands = []
+        base_path = r'C:\adare'
 
         # Firewall rule for adarevm WebSocket server (REQUIRES ADMIN)
         # Use single quotes to avoid conflict with outer double quotes in commands.py wrapper
@@ -125,23 +225,37 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         # PATH setup for project-wide tools (User-level, no admin needed)
         # Use single quotes and string concatenation to avoid double quotes (which conflict with commands.py wrapper)
         commands.append(SetupCommand(
-            command=r"[Environment]::SetEnvironmentVariable('Path', $env:Path + ';C:\adare\shared\tools', 'User')",
+            command=f"[Environment]::SetEnvironmentVariable('Path', $env:Path + ';{base_path}\\project_shared\\tools', 'User')",
             requires_admin=False
         ))
 
         # PATH setup for experiment-specific tools (User-level, no admin needed)
         commands.append(SetupCommand(
-            command=r"[Environment]::SetEnvironmentVariable('Path', $env:Path + ';C:\adare\experiment\shared\tools', 'User')",
+            command=f"[Environment]::SetEnvironmentVariable('Path', $env:Path + ';{base_path}\\shared\\tools', 'User')",
             requires_admin=False
         ))
 
         # Mount VirtualBox shared folders temporarily (no admin needed)
-        # Skip for QEMU - uses file transfer instead of shared folders
+        # Note: QEMU virtio-fs mounting is handled in lifecycle.py:_mount_virtiofs_windows()
         if self.hypervisor_type == 'virtualbox':
             commands.append(SetupCommand(
                 command=r'net use Z: \\vboxsvr\adare; net use Z: /delete',
                 requires_admin=False
             ))
+
+        # Write config.json to run directory (User-level, no admin needed)
+        # We use a single-quoted string for content to avoid shell expansion issues
+        # JSON content itself uses double quotes
+        config_content = self._build_config_file_payload()
+        # Escape single quotes in JSON (though json.dumps usually doesn't produce them)
+        config_content_safe = config_content.replace("'", "''")
+
+        # Ensure directory exists and write file
+        # Using PowerShell to write file with UTF8 encoding
+        commands.append(SetupCommand(
+            command=f"New-Item -ItemType Directory -Force -Path '{base_path}\\run' | Out-Null; Set-Content -Path '{base_path}\\run\\config.json' -Value '{config_content_safe}' -Encoding UTF8",
+            requires_admin=False
+        ))
 
         return commands
 
@@ -172,10 +286,40 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
                 
         return default_python
 
+    def _resolve_adarevm_path(self, vm: Any) -> str:
+        """Resolve absolute path to adarevm executable from discovered guest PATH."""
+        default_adarevm = "adarevm" # Fallback
+        
+        if not vm or not hasattr(vm, '_cached_guest_path') or not vm._cached_guest_path:
+            return default_adarevm
+            
+        # Parse PATH entries
+        path_entries = vm._cached_guest_path.split(';')
+        
+        # Look for Python Scripts entry
+        # Typical pattern: ...\AppData\Local\Programs\Python\Python312\Scripts\
+        for entry in path_entries:
+            if 'Programs\\Python\\Python' in entry and 'Scripts' in entry:
+                # Found python Scripts dir
+                adarevm_exe = f"{entry.rstrip('\\')}\\adarevm.exe"
+                return f'& "{adarevm_exe}"'
+        
+        # Fallback: try to derive from python path if scripts not explicitly in PATH
+        for entry in path_entries:
+            if 'Programs\\Python\\Python' in entry and 'Scripts' not in entry:
+                 # Found python root, try appending Scripts
+                adarevm_exe = f"{entry.rstrip('\\')}\\Scripts\\adarevm.exe"
+                return f'& "{adarevm_exe}"'
+
+        return default_adarevm
+
     def _build_conda_install_command(self) -> str:
         """Build Conda installation command."""
-        # Use different paths for QEMU (file transfer) vs VirtualBox (shared folders)
+        # Use different paths based on hypervisor and mode:
+        # - QEMU (both modes): C:\adare\vm\wheels
+        # - VirtualBox: \\vboxsvr\adare\wheels
         if self.hypervisor_type == 'qemu':
+            # Unified path for QEMU (virtiofs mounts to C:\adare, libguestfs copies to C:\adare)
             wheels_path = r'C:\adare\vm\wheels\*.whl'
             adarelib_path = r'C:\adare\vm\adarelib'
             adarevm_path = r'C:\adare\vm\adarevm'
@@ -188,15 +332,16 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             # PowerShell array expansion: @(Get-ChildItem ...) forces wildcard expansion
             # before pip sees the arguments. PowerShell doesn't expand wildcards in
             # base64-encoded commands, so we must explicitly use Get-ChildItem.
-            return rf'%USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install --ignore-installed @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            return rf'$env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install --ignore-installed @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
         else:
             # Editable install from shared folder source
-            return rf'cd {adarelib_path}; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd {adarevm_path}; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
+            return rf'cd {adarelib_path}; $env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd {adarevm_path}; $env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
 
     def _build_poetry_install_command(self, env_info: EnvironmentInfo, vm: Any = None) -> str:
         """Build pip installation command (pip is in PATH via user's PATH discovery)."""
-        # Use different paths for QEMU (file transfer) vs VirtualBox (shared folders)
+        # Use different paths based on hypervisor and mode
         if self.hypervisor_type == 'qemu':
+            # Unified path for QEMU (virtiofs mounts to C:\adare, libguestfs copies to C:\adare)
             wheels_path = r'C:\adare\vm\wheels\*.whl'
             adarevm_path = r'C:\adare\vm\adarevm'
         else:
@@ -207,7 +352,7 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             # Resolve absolute path to python to avoid PATH issues
             python_cmd = self._resolve_python_path(vm)
             log.info(f"Using executed python command: {python_cmd}")
-            
+
             return rf'{python_cmd} -m pip install --ignore-installed @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
         else:
             # Editable install via Poetry
@@ -215,46 +360,64 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
 
     def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> tuple[str, Optional[str]]:
         """Build Windows run command."""
-        # Use different paths for QEMU (file transfer) vs VirtualBox (shared folders)
+        base_path = r'C:\adare'
+        
+        # Determine base path based on hypervisor and mode
+        # QEMU always uses C:\adare (virtiofs mounts there, or files copied there)
+        # Tools/data paths use the base path
+        project_tools = f'{base_path}\\project_shared\\tools'
+        experiment_tools = f'{base_path}\\shared\\tools'
+        project_data = f'{base_path}\\project_shared\\data'
+        experiment_data = f'{base_path}\\shared\\data'
+
+        # adarevm source path differs between hypervisors
         if self.hypervisor_type == 'qemu':
+             # Unified path for QEMU
             adarevm_path = r'C:\adare\vm\adarevm'
         else:
+            # VirtualBox uses UNC path for source code access
             adarevm_path = r'\\vboxsvr\adare\adarevm'
-            
-        # Log path is standard across all Windows environments
-        log_path = r'C:\adare\run\logs\adarevm.log'
+
+        # Minimal CLI args - we rely on default run dir and config.json
+        cli_args = "" 
 
         if env_info.use_conda:
             if self.wheels_available:
                 # Wheel: call directly from conda env (no UNC path navigation)
-                return (rf'%USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare adarevm {log_path}', None)
+                return (rf'$env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare adarevm {cli_args}', None)
             else:
                 # Editable: cd to source directory for Poetry context
-                return (rf'cd {adarevm_path}; %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare adarevm {log_path}', None)
+                return (rf'cd {adarevm_path}; $env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare adarevm {cli_args}', None)
         else:
             if self.wheels_available:
                 # Wheel: run via python absolute path (reliable)
-                python_cmd = self._resolve_python_path(vm)
-                return (rf'adarevm {log_path}', None)
+                # python_cmd = self._resolve_python_path(vm) # Using resolved path
+                # Just use 'adarevm' if in path, or python -m adarevm
+                return (rf'adarevm {cli_args}', None)
             else:
                 # Editable: poetry run from source directory
-                return (rf'cd {adarevm_path}; poetry run adarevm {log_path}', None)
+                return (rf'cd {adarevm_path}; poetry run adarevm {cli_args}', None)
 
 
 class LinuxAgentCommandBuilder(AgentCommandBuilder):
     """Linux-specific command builder."""
 
-    async def build_setup_commands(self, env_info: EnvironmentInfo) -> List[SetupCommand]:
+    async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> List[SetupCommand]:
         """Build Linux setup commands with per-command admin requirements."""
         return [
             # Add project-wide tools to PATH (user bashrc, no admin needed)
             SetupCommand(
-                command="grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc; . ~/.bashrc",
+                command="grep -qxF 'export PATH=$PATH:/adare/project_shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/project_shared/tools' >> ~/.bashrc; . ~/.bashrc",
                 requires_admin=False
             ),
             # Add experiment-specific tools to PATH (user bashrc, no admin needed)
             SetupCommand(
-                command="grep -qxF 'export PATH=$PATH:/adare/experiment/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/experiment/shared/tools' >> ~/.bashrc; . ~/.bashrc",
+                command="grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc; . ~/.bashrc",
+                requires_admin=False
+            ),
+             # Write config.json to run directory
+            SetupCommand(
+                command=f"mkdir -p /adare/run && echo '{self._build_config_file_payload()}' > /adare/run/config.json",
                 requires_admin=False
             )
         ]
@@ -299,17 +462,20 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
 
     def build_run_command(self, env_info: EnvironmentInfo) -> tuple[str, Optional[str]]:
         """Build Linux run command."""
+        # Minimal CLI args - relying on default /adare/run and config.json
+        cli_args = ""
+
         if env_info.use_conda:
             # Conda: wrapper handles both wheels and editable
-            return ('/home/adare/.miniforge3/bin/conda run -n pyadare adarevm /adare/run/logs/adarevm.log', None)
+            return (f'/home/adare/.miniforge3/bin/conda run -n pyadare adarevm {cli_args}', None)
         else:
             # Non-conda: check installation method
             if self.wheels_available:
                 # Wheels: installed in PATH via pip3, run directly
-                return ('adarevm /adare/run/logs/adarevm.log', None)
+                return (f'adarevm {cli_args}', None)
             else:
                 # Editable: poetry run from source directory
-                return ('poetry run adarevm /adare/run/logs/adarevm.log', '/adare/vm/adarevm')
+                return (f'poetry run adarevm {cli_args}', '/adare/vm/adarevm')
 
 
 # Environment Detection Helpers
@@ -366,7 +532,7 @@ async def _detect_windows_environment(vm, stop_event: threading.Event) -> Enviro
             return EnvironmentInfo(
                 use_conda=True,
                 conda_env_exists=True,
-                miniforge_path=r'%USERPROFILE%\.miniforge3',
+                miniforge_path=r'$env:USERPROFILE\.miniforge3',
                 platform='windows'
             )
         else:

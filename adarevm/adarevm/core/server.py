@@ -38,10 +38,15 @@ import base64
 class AdareVMServer:
     """WebSocket server for adarevm GUI automation and test execution."""
 
-    def __init__(self, host="0.0.0.0", port=18765):
+    def __init__(self, host="0.0.0.0", port=18765, data_paths: List[str] = None):
         self.host = host
         self.port = port
         self.clients: Set[websockets.WebSocketServerProtocol] = set()
+
+        # Shared data paths (project and experiment data directories)
+        self.data_paths = data_paths or []
+        if self.data_paths:
+            log.info(f"AdareVMServer initialized with data_paths: {self.data_paths}")
 
         # Test management state
         self.testfunctions_dir: Optional[Path] = None

@@ -6,8 +6,9 @@ enabling VMs to be managed via virsh and virt-manager while preserving
 ADARE's forensic-focused architecture (QMP, Guest Agent, overlays).
 """
 import logging
+import os
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
@@ -19,27 +20,58 @@ log = logging.getLogger(__name__)
 QEMU_NAMESPACE = 'http://libvirt.org/schemas/domain/qemu/1.0'
 
 
-def _add_q35_pcie_topology(devices: ET.Element) -> None:
+def _add_q35_pcie_topology(devices: ET.Element, num_virtiofs_devices: int = 0) -> None:
     """Add proper PCIe topology for q35 machines.
 
     q35 machines require devices to connect through pcie-root-port
     controllers, not directly to the root bus. This mirrors what
     virt-install creates with --machine q35.
+
+    Bus allocation:
+    - Bus 1: Network (virtio-net)
+    - Bus 2: USB controller
+    - Bus 3: Virtio-serial
+    - Bus 4: Disk (virtio-block)
+    - Bus 5: Memory balloon
+    - Buses 6-10: virtio-fs filesystem devices (up to 5)
+    - Buses 11+: Reserved for future use
+
+    Args:
+        devices: The devices XML element
+        num_virtiofs_devices: Number of virtiofs devices to allocate buses for
     """
     # Root controller (bus 0)
     ET.SubElement(devices, 'controller', type='pci', index='0', model='pcie-root')
 
-    # Add pcie-root-port controllers (buses 1-8)
+    # Calculate total buses needed: base (6) + virtiofs devices (up to 5)
+    # Minimum 9 buses for backward compatibility, max 14 for 5 virtiofs devices
+    total_buses = max(9, 6 + num_virtiofs_devices)
+
+    # Add pcie-root-port controllers (buses 1 to total_buses)
     # Each root port provides a bus for one device
-    for i in range(1, 9):
+    for i in range(1, total_buses + 1):
         port = ET.SubElement(devices, 'controller', type='pci', index=str(i), model='pcie-root-port')
         ET.SubElement(port, 'model', name='pcie-root-port')
         ET.SubElement(port, 'target', chassis=str(i), port=hex(0x10 + i - 1))
-        # Root ports go on bus 0, slot 2, with multifunction for first one
-        func = '0x0' if i == 1 else hex(i - 1)
-        addr_attrs = {'type': 'pci', 'domain': '0x0000', 'bus': '0x00', 'slot': '0x02', 'function': func}
-        if i == 1:
+
+        # Root ports go on bus 0, starting from slot 2
+        # Distribute across multiple slots if we have more than 8 ports (max 8 functions per slot)
+        idx = i - 1
+        slot_idx = 2 + (idx // 8)
+        func_idx = idx % 8
+
+        addr_attrs = {
+            'type': 'pci',
+            'domain': '0x0000',
+            'bus': '0x00',
+            'slot': hex(slot_idx),
+            'function': hex(func_idx)
+        }
+
+        # Enable multifunction on function 0 (assumes we might use other functions on this slot)
+        if func_idx == 0:
             addr_attrs['multifunction'] = 'on'
+
         ET.SubElement(port, 'address', **addr_attrs)
 
     # SATA controller (required for q35 chipset)
@@ -50,7 +82,8 @@ def _add_q35_pcie_topology(devices: ET.Element) -> None:
 def generate_domain_xml(
     vm_config,  # QEMUVMConfig instance
     display_enabled: bool = False,
-    vnc_port: Optional[int] = None
+    vnc_port: Optional[int] = None,
+    virtiofs_shares: Optional[List[Dict[str, Any]]] = None
 ) -> str:
     """
     Generate libvirt XML domain definition from QEMU VM config.
@@ -67,6 +100,7 @@ def generate_domain_xml(
         vm_config: QEMUVMConfig instance with VM settings
         display_enabled: If True, shows display by default (False = headless)
         vnc_port: Optional explicit VNC port (None = autoport)
+        virtiofs_shares: Optional list of virtiofs share configurations for shared directories
 
     Returns:
         str: Formatted libvirt XML domain definition
@@ -97,6 +131,18 @@ def generate_domain_xml(
     memory.text = str(vm_config.ram)
     current_memory = ET.SubElement(domain, 'currentMemory', unit='MiB')
     current_memory.text = str(vm_config.ram)
+
+    # Memory backing for virtio-fs (required for shared memory between host and guest)
+    if virtiofs_shares:
+        memory_backing = ET.SubElement(domain, 'memoryBacking')
+        ET.SubElement(memory_backing, 'source', type='memfd')
+        ET.SubElement(memory_backing, 'access', mode='shared')
+        log.debug(f"CLAUDE: Added memoryBacking for {len(virtiofs_shares)} virtio-fs shares")
+
+    # IOThreads for disk performance
+    # Allocating a dedicated IOThread improves disk I/O latency and throughput
+    # We use 1 iothread for the main disk
+    ET.SubElement(domain, 'iothreads').text = '1'
 
     # CPU configuration
     vcpu = ET.SubElement(domain, 'vcpu', placement='static')
@@ -155,13 +201,31 @@ def generate_domain_xml(
         ET.SubElement(hyperv, 'relaxed', state='on')
         ET.SubElement(hyperv, 'vapic', state='on')
         ET.SubElement(hyperv, 'spinlocks', state='on', retries='8191')
-        log.info(f"CLAUDE: Enabled Hyper-V enlightenments for Windows VM {vm_config.vm_name}")
+        # Additional performance optimizations
+        ET.SubElement(hyperv, 'vpindex', state='on')
+        ET.SubElement(hyperv, 'synic', state='on')
+        ET.SubElement(hyperv, 'stimer', state='on')
+        ET.SubElement(hyperv, 'reset', state='on')
+        ET.SubElement(hyperv, 'frequencies', state='on')
+        # tlbflush helps with memory management performance
+        ET.SubElement(hyperv, 'tlbflush', state='on')
+        # ipi improves inter-processor interrupt performance
+        ET.SubElement(hyperv, 'ipi', state='on')
+        ET.SubElement(hyperv, 'reenlightenment', state='on')
+        ET.SubElement(hyperv, 'vendor_id', state='on', value='GenuineIntel')
+        
+        log.info(f"CLAUDE: Enabled extensive Hyper-V enlightenments for Windows VM {vm_config.vm_name}")
+
+        # KVM-accelerated IOAPIC for lower interrupt overhead
+        ET.SubElement(features, 'ioapic', driver='kvm')
 
         # Disable VMware backdoor port (conflicts with Hyper-V)
         ET.SubElement(features, 'vmport', state='off')
 
     # CPU mode (host-passthrough for KVM acceleration)
     cpu = ET.SubElement(domain, 'cpu', mode='host-passthrough', check='none')
+    # Use 1 socket with multiple cores to avoid Windows OS license limits and improve scheduling
+    ET.SubElement(cpu, 'topology', sockets='1', dies='1', cores=str(vm_config.cpus), threads='1')
 
     # Clock configuration
     clock = ET.SubElement(domain, 'clock', offset='utc')
@@ -176,6 +240,11 @@ def generate_domain_xml(
     ET.SubElement(domain, 'on_poweroff').text = 'destroy'
     ET.SubElement(domain, 'on_reboot').text = 'restart'
     ET.SubElement(domain, 'on_crash').text = 'destroy'
+
+    # Disable Security Drivers (AppArmor/SELinux) for this VM
+    # This is critical for System Mode usage where we access user-home directories
+    # (sockets, disks) which are usually blocked by default AppArmor profiles.
+    ET.SubElement(domain, 'seclabel', type='none')
 
     # Devices section
     devices = ET.SubElement(domain, 'devices')
@@ -192,7 +261,9 @@ def generate_domain_xml(
 
     # Disk configuration (virtio driver, overlay disk)
     disk = ET.SubElement(devices, 'disk', type='file', device='disk')
-    ET.SubElement(disk, 'driver', name='qemu', type=vm_config.drive_format, cache='none')
+    # Use iothread for disk I/O to avoid blocking the vCPU
+    # aio='native' for direct IO performance, discard='unmap' for SSD trim
+    ET.SubElement(disk, 'driver', name='qemu', type=vm_config.drive_format, cache='none', iothread='1', aio='native', discard='unmap')
     ET.SubElement(disk, 'source', file=vm_config.disk_path)
     ET.SubElement(disk, 'target', dev='vda', bus='virtio')
     # For q35, disk goes on bus 4 (via pcie-root-port), for pc it stays on bus 0
@@ -248,7 +319,8 @@ def generate_domain_xml(
     # For q35 machine (used with UEFI), use proper PCIe topology with root ports
     # For pc machine (BIOS), use simple pci-root
     if is_q35:
-        _add_q35_pcie_topology(devices)
+        num_virtiofs = len(virtiofs_shares) if virtiofs_shares else 0
+        _add_q35_pcie_topology(devices, num_virtiofs)
     else:
         ET.SubElement(devices, 'controller', type='pci', index='0', model='pci-root')
 
@@ -267,13 +339,16 @@ def generate_domain_xml(
             # SPICE for Windows VMs - eliminates graphics timeout
             log.info(f"CLAUDE: Using SPICE graphics for Windows VM {vm_config.vm_name}")
             
+            # SPICE without GL (handled by egl-headless)
+            # Enable listening on localhost to allow virt-manager to connect
+            # NOTE: Must be defined BEFORE egl-headless for virt-manager to pick it up as the primary console
+            graphics = ET.SubElement(devices, 'graphics', type='spice', autoport='yes')
+            graphics.set('listen', '127.0.0.1')
+            ET.SubElement(graphics, 'listen', type='address', address='127.0.0.1')
+
             # EGL Headless for OpenGL support without local display context issues
             # This fixes black screen issues on some setups by offloading rendering
             ET.SubElement(devices, 'graphics', type='egl-headless')
-            
-            # SPICE without GL (handled by egl-headless)
-            graphics = ET.SubElement(devices, 'graphics', type='spice', autoport='no')
-            graphics.set('listen', 'none')
             # Note: <gl enable='yes'/> removed from SPICE as it conflicts with egl-headless in some versions
             # or causes black screens. egl-headless handles the GL context.
         else:
@@ -289,7 +364,8 @@ def generate_domain_xml(
         video = ET.SubElement(devices, 'video')
         if is_windows:
             # Use virtio-gpu with 3D acceleration for Windows
-            model = ET.SubElement(video, 'model', type='virtio', heads='1', primary='yes')
+            # VRAM increased to 256MB (262144 KB) to reduce GUI lag
+            model = ET.SubElement(video, 'model', type='virtio', heads='1', primary='yes', vram='262144')
             ET.SubElement(model, 'acceleration', accel3d='yes')
         else:
             # Use QXL for Linux (better compatibility with standard drivers)
@@ -307,9 +383,14 @@ def generate_domain_xml(
         if is_windows:
             # Use SPICE for Windows even in headless mode - much better graphics initialization
             log.info(f"CLAUDE: Using SPICE graphics for Windows VM {vm_config.vm_name} (headless mode)")
+            
+            # Enable listening on localhost to allow virt-manager to connect
+            # NOTE: Must be defined BEFORE egl-headless for virt-manager to pick it up as the primary console
+            graphics = ET.SubElement(devices, 'graphics', type='spice', autoport='yes')
+            graphics.set('listen', '127.0.0.1')
+            ET.SubElement(graphics, 'listen', type='address', address='127.0.0.1')
+
             ET.SubElement(devices, 'graphics', type='egl-headless')
-            graphics = ET.SubElement(devices, 'graphics', type='spice', autoport='no')
-            graphics.set('listen', 'none')
             # gl removed here as well
         else:
             # VNC for Linux headless mode
@@ -324,7 +405,8 @@ def generate_domain_xml(
         video = ET.SubElement(devices, 'video')
         if is_windows:
             # Use virtio-gpu with 3D acceleration for Windows
-            model = ET.SubElement(video, 'model', type='virtio', heads='1', primary='yes')
+            # VRAM increased to 256MB (262144 KB) to reduce GUI lag
+            model = ET.SubElement(video, 'model', type='virtio', heads='1', primary='yes', vram='262144')
             ET.SubElement(model, 'acceleration', accel3d='yes')
         else:
             # Use QXL for Linux
@@ -352,9 +434,10 @@ def generate_domain_xml(
     #   Linux: Add 'console=ttyS0,115200 console=tty0' to GRUB_CMDLINE_LINUX
     #   Windows: Configure Emergency Management Services (EMS)
     console = ET.SubElement(devices, 'console', type='pty')
-    if vm_config.serial_console_log_path:
-        console.set('type', 'file')
-        ET.SubElement(console, 'source', path=vm_config.serial_console_log_path)
+    # DISABLED: Serial redirection causes permission errors in System Mode
+    # if vm_config.serial_console_log_path:
+    #    console.set('type', 'file')
+    #    ET.SubElement(console, 'source', path=vm_config.serial_console_log_path)
     ET.SubElement(console, 'target', type='serial', port='0')
 
     # Input devices
@@ -370,23 +453,25 @@ def generate_domain_xml(
     else:
         ET.SubElement(memballoon, 'address', type='pci', domain='0x0000', bus='0x00', slot='0x06', function='0x0')
 
+    # virtio-fs filesystem devices for shared directories
+    if virtiofs_shares:
+        _add_virtiofs_filesystems(devices, virtiofs_shares, is_q35)
+        log.info(f"CLAUDE: Added {len(virtiofs_shares)} virtio-fs filesystem devices")
+
     # QEMU commandline arguments (for QMP socket and port forwarding)
     # This preserves ADARE's control mechanisms
     qemu_commandline = ET.SubElement(domain, f'{{{QEMU_NAMESPACE}}}commandline')
 
     # Add QEMU debug log if configured
-    if vm_config.qemu_debug_log_path:
-        _add_qemu_arg(qemu_commandline, '-D')
-        _add_qemu_arg(qemu_commandline, vm_config.qemu_debug_log_path)
-        # Add debug categories to enable actual logging output
-        # Without -d, QEMU produces no debug output despite -D being set
-        # For Windows, reduce debug categories to avoid interfering with UEFI firmware
-        # The 'unimp' and 'cpu_reset' flags can trap UEFI operations and cause crashes
-        debug_categories = 'guest_errors' if is_windows else 'guest_errors,cpu_reset,unimp'
-        _add_qemu_arg(qemu_commandline, '-d')
-        _add_qemu_arg(qemu_commandline, debug_categories)
-        if is_windows:
-            log.info(f"CLAUDE: Using reduced debug logging for Windows VM (guest_errors only)")
+    # DISABLED for System Mode: QEMU cannot write to user files, and /tmp fixes failed.
+    # if vm_config.qemu_debug_log_path:
+    #    _add_qemu_arg(qemu_commandline, '-D')
+    #    _add_qemu_arg(qemu_commandline, vm_config.qemu_debug_log_path)
+    #    # Add debug categories...
+    #    debug_categories = 'guest_errors' if is_windows else 'guest_errors,cpu_reset,unimp'
+    #    _add_qemu_arg(qemu_commandline, debug_categories)
+    #    if is_windows:
+    #        log.info(f"CLAUDE: Using reduced debug logging for Windows VM (guest_errors only)")
 
     # Add QMP monitor socket
     _add_qemu_arg(qemu_commandline, '-qmp')
@@ -451,3 +536,69 @@ def _prettify_xml(elem: ET.Element) -> str:
     rough_string = ET.tostring(elem, encoding='unicode')
     reparsed = minidom.parseString(rough_string)
     return reparsed.toprettyxml(indent='  ')
+
+
+def _add_virtiofs_filesystems(
+    devices: ET.Element,
+    virtiofs_shares: List[Dict[str, Any]],
+    is_q35: bool
+) -> None:
+    """
+    Add multiple virtio-fs filesystem devices for shared directories.
+
+    Creates a libvirt filesystem element for each share. Each share gets:
+    - Unique tag name for guest mounting
+    - Unique PCI address (buses 6-10 for q35, slots 7-11 for pc)
+    - Separate virtiofsd daemon managed by libvirt
+
+    Args:
+        devices: The devices XML element
+        virtiofs_shares: List of share configurations, each containing:
+            - tag: Unique tag name (e.g., 'run', 'vm', 'experiment')
+            - host_path: Absolute path to host directory
+            - guest_mount: Mount path in guest (for reference, not used in XML)
+            - readonly: Read-only flag (optional)
+        is_q35: True if using q35 machine type (affects PCI addressing)
+
+    Note:
+        - Requires memoryBacking with shared access mode in domain XML
+        - Linux guest mounts with: mount -t virtiofs {tag} {mount_point}
+        - Windows guest mounts with: virtiofs.exe -t {tag} -m {mount_point}
+    """
+    # Base bus/slot for virtiofs devices
+    # q35: buses 6, 7, 8, 9, 10...
+    # pc: slots 7, 8, 9, 10, 11... on bus 0
+    base_bus = 6  # For q35
+    base_slot = 7  # For pc
+
+    for idx, share in enumerate(virtiofs_shares):
+        tag = share['tag']
+        host_path = share['host_path']
+
+        filesystem = ET.SubElement(devices, 'filesystem', type='mount', accessmode='passthrough')
+        ET.SubElement(filesystem, 'driver', type='virtiofs')
+        ET.SubElement(filesystem, 'source', dir=host_path)
+        # Tag name used when mounting in guest: mount -t virtiofs {tag} {mount_point}
+        ET.SubElement(filesystem, 'target', dir=tag)
+
+        # Add idmap for uid/gid mapping (host user -> guest root)
+        # This allows the guest to access files owned by the host user
+        idmap = ET.SubElement(filesystem, 'idmap')
+        host_uid = os.getuid()
+        host_gid = os.getgid()
+        ET.SubElement(idmap, 'uid', target='0', source=str(host_uid), count='1')
+        ET.SubElement(idmap, 'gid', target='0', source=str(host_gid), count='1')
+
+        # PCI addressing - each device gets unique address
+        if is_q35:
+            # Each device gets its own bus (6, 7, 8, 9, 10...)
+            bus = base_bus + idx
+            ET.SubElement(filesystem, 'address', type='pci', domain='0x0000',
+                          bus=f'0x{bus:02x}', slot='0x00', function='0x0')
+        else:
+            # For pc machine, use slots on bus 0 (7, 8, 9, 10, 11...)
+            slot = base_slot + idx
+            ET.SubElement(filesystem, 'address', type='pci', domain='0x0000',
+                          bus='0x00', slot=f'0x{slot:02x}', function='0x0')
+
+        log.debug(f"CLAUDE: Added virtio-fs device '{tag}' -> {host_path}")
