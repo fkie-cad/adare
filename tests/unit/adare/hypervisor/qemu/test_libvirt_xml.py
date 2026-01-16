@@ -637,6 +637,73 @@ class TestDiskConfiguration:
         assert target.get("bus") == "virtio"
         assert target.get("dev") == "vda"
 
+    def test_disk_iothread_configuration(self, minimal_vm_config):
+        """Test that disk is configured with a dedicated IOThread."""
+        xml_str = generate_domain_xml(minimal_vm_config)
+        root = parse_xml_string(xml_str)
+
+        devices = root.find("devices")
+        disk = devices.find("disk[@type='file']")
+        driver = disk.find("driver")
+
+        assert driver.get("iothread") == "1"
+
+
+class TestIOThreadsConfiguration:
+    """Tests for global IOThreads configuration."""
+
+    def test_iothreads_element_present(self, minimal_vm_config):
+        """Test that iothreads element is present and set to 1."""
+        xml_str = generate_domain_xml(minimal_vm_config)
+        root = parse_xml_string(xml_str)
+
+        iothreads = root.find("iothreads")
+        assert iothreads is not None
+        assert iothreads.text == "1"
+
+
+class TestHyperVConfiguration:
+    """Tests for Hyper-V enlightenments."""
+
+    def test_hyperv_features_present_for_windows(self, full_vm_config):
+        """Test that extensive Hyper-V features are present for Windows VMs."""
+        # Ensure the config is for Windows
+        assert full_vm_config.guest_os == "windows"
+        
+        xml_str = generate_domain_xml(full_vm_config)
+        root = parse_xml_string(xml_str)
+
+        features = root.find("features")
+        hyperv = features.find("hyperv")
+        assert hyperv is not None
+
+        # Check standard features
+        assert hyperv.find("relaxed").get("state") == "on"
+        assert hyperv.find("vapic").get("state") == "on"
+        assert hyperv.find("spinlocks").get("state") == "on"
+        assert hyperv.find("spinlocks").get("retries") == "8191"
+
+        # Check new performance optimizations
+        assert hyperv.find("vpindex").get("state") == "on"
+        assert hyperv.find("synic").get("state") == "on"
+        assert hyperv.find("stimer").get("state") == "on"
+        assert hyperv.find("reset").get("state") == "on"
+        assert hyperv.find("frequencies").get("state") == "on"
+        assert hyperv.find("tlbflush").get("state") == "on"
+        assert hyperv.find("ipi").get("state") == "on"
+
+    def test_no_hyperv_for_linux(self, minimal_vm_config):
+        """Test that Hyper-V features are NOT present for Linux VMs."""
+        assert minimal_vm_config.guest_os == "linux"
+
+        xml_str = generate_domain_xml(minimal_vm_config)
+        root = parse_xml_string(xml_str)
+
+        features = root.find("features")
+        hyperv = features.find("hyperv")
+        assert hyperv is None
+
+
 
 class TestQEMUDebugLog:
     """Tests for QEMU debug log configuration."""
@@ -911,16 +978,17 @@ class TestWindowsVideoConfiguration:
         
         # Check absence of qxl fields
         assert model.get("ram") is None
-        assert model.get("vram") is None
+        # valid for virtio now
+        assert model.get("vram") == "65536"
         assert model.get("vgamem") is None
         
         # Check graphics configuration for GL
         graphics = devices.find("graphics[@type='spice']")
         assert graphics is not None
-        assert graphics.get("listen") == "none"
+        assert graphics.get("listen") == "127.0.0.1"
+        # gl removed from spice as it conflicts with egl-headless
         gl = graphics.find("gl")
-        assert gl is not None
-        assert gl.get("enable") == "yes"
+        assert gl is None
 
     def test_windows_vm_headless_uses_virtio_and_accel3d(self, full_vm_config):
         """Test that Windows VMs use virtio/3D/GL even in headless mode."""
@@ -940,10 +1008,10 @@ class TestWindowsVideoConfiguration:
         # Check graphics configuration for GL
         graphics = devices.find("graphics[@type='spice']")
         assert graphics is not None
-        assert graphics.get("listen") == "none"
+        assert graphics.get("listen") == "127.0.0.1"
+        # gl removed from spice as it conflicts with egl-headless
         gl = graphics.find("gl")
-        assert gl is not None
-        assert gl.get("enable") == "yes"
+        assert gl is None
 
     def test_linux_vm_uses_qxl(self, minimal_vm_config):
          """Test that Linux VMs still use QXL."""

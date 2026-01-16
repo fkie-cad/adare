@@ -1,9 +1,20 @@
 """
 QEMU-specific VM lifecycle strategy.
 
-This module implements the QEMU lifecycle strategy using guestfish CLI for file
-transfer. Files must be copied to the disk image before boot and retrieved
-after shutdown, as QEMU doesn't support live shared folders like VirtualBox.
+This module implements the QEMU lifecycle strategy with two modes for file transfer:
+
+1. virtio-fs mode (default):
+   - Uses multiple virtio-fs shared directories for high-performance file sharing
+   - Shares: run, vm, experiment, project_shared, shared
+   - Linux: mounted via `mount -t virtiofs {tag} /adare/{name}`
+   - Windows: mounted via `virtiofs.exe -t {tag} -m C:\\adare\\{name}`
+
+2. libguestfs mode (fallback, set QEMU_LIBGUESTFS=true):
+   - Uses guestfish CLI for file transfer to stopped VM disk
+   - Files copied before boot, artifacts retrieved after shutdown
+   - Original implementation for backwards compatibility
+
+The mode is determined by the QEMU_LIBGUESTFS environment variable.
 """
 from pathlib import Path
 import logging
@@ -13,6 +24,8 @@ import shutil
 import os
 import tempfile
 import time
+import json
+
 from typing import List, Dict, Any
 
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
@@ -28,11 +41,33 @@ from adare.config import get_vm_credentials
 log = logging.getLogger(__name__)
 
 
+def _use_shared_folder_mode() -> bool:
+    """Check if shared folder mode (virtio-fs) should be used.
+
+    Returns:
+        True for virtio-fs mode (default for ALL modes, including session)
+        False for libguestfs mode (only when QEMU_LIBGUESTFS=true/1/yes)
+    """
+    libguestfs_env = os.environ.get('QEMU_LIBGUESTFS', '').lower()
+    if libguestfs_env in ('true', '1', 'yes'):
+        return False
+        
+    # Always use shared folders (virtio-fs) by default
+    # This applies to both system and session mode for Windows and Linux
+    return True
+
+
 class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
     """
-    QEMU-specific lifecycle strategy using guestfish CLI.
+    QEMU-specific lifecycle strategy with virtio-fs and libguestfs support.
 
-    QEMU uses guestfish to transfer files to/from the VM. This requires:
+    Default mode (virtio-fs):
+    1. Create shared directory on host with all required files
+    2. VM boots with virtio-fs filesystem device
+    3. Guest mounts the shared directory
+    4. Artifacts written directly to shared directory
+
+    Fallback mode (libguestfs, when QEMU_LIBGUESTFS=true):
     1. VM must be stopped to mount disk with guestfish
     2. Files are copied to disk before boot
     3. Artifacts are retrieved after shutdown
@@ -961,7 +996,25 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
     async def setup_file_transfer(self, context):
         """
-        Use libguestfs to place files on stopped VM disk.
+        Setup file transfer mechanism for the experiment.
+
+        This method chooses between virtio-fs and libguestfs modes:
+        - virtio-fs (default): Creates shared directory on host, no disk modification needed
+        - libguestfs (fallback): Copies files to stopped VM disk
+
+        Args:
+            context: ExperimentRunCtx containing directories and VM
+        """
+        if _use_shared_folder_mode():
+            log.info("Using virtio-fs mode for file transfer (multiple shares)")
+            await self._setup_virtiofs_shared_directories(context)
+        else:
+            log.info("Using libguestfs mode for file transfer (QEMU_LIBGUESTFS=true)")
+            await self._setup_file_transfer_via_libguestfs(context)
+
+    async def _setup_file_transfer_via_libguestfs(self, context):
+        """
+        Use libguestfs to place files on stopped VM disk (fallback mode).
 
         This method:
         1. Ensures VM is stopped
@@ -1132,6 +1185,22 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 {'source': str(adarelib_src), 'dest': 'vm/adarelib'}
             ])
 
+        # Add shared project and experiment directories if they exist
+        # These correspond to what VirtualBox mounts as 'project_shared' and 'shared'
+        if context.project_directory.shared.exists():
+            log.info(f"Adding shared project directory to transfer: {context.project_directory.shared}")
+            files_to_copy.append({
+                'source': str(context.project_directory.shared),
+                'dest': 'project_shared'
+            })
+
+        if context.experiment_directory.shared.exists():
+            log.info(f"Adding shared experiment directory to transfer: {context.experiment_directory.shared}")
+            files_to_copy.append({
+                'source': str(context.experiment_directory.shared),
+                'dest': 'shared'
+            })
+
 
         log.info(f"Transferring {len(files_to_copy)} files to VM disk via libguestfs")
 
@@ -1143,6 +1212,133 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         )
 
         log.info("File transfer to VM completed successfully")
+
+    async def _setup_virtiofs_shared_directories(self, context):
+        """
+        Set up multiple virtio-fs shared directories matching VirtualBox pattern.
+
+        Creates separate host directories for each share (no file copying):
+        - run: experiment run directory (logs, artifacts)
+        - vm: adarevm/adarelib runtime
+        - experiment: experiment configuration
+        - project_shared: project-level shared files (optional)
+        - shared: experiment-level shared files (optional)
+
+        Each directory is shared with the guest via a separate virtio-fs filesystem,
+        mounted at /adare/{name} (Linux) or C:\\adare\\{name} (Windows).
+
+        Args:
+            context: ExperimentRunCtx containing directories and VM
+        """
+        is_windows = 'windows' in context.guest_platform.lower()
+
+        # Define mount base based on platform
+        if is_windows:
+            base_mount = 'C:\\adare'
+        else:
+            base_mount = '/adare'
+
+        log.info("Setting up multiple virtio-fs shared directories")
+
+        # Build list of virtiofs shares
+        virtiofs_shares = []
+
+        # 1. Run directory - experiment run artifacts and logs
+        run_dir = context.experiment_run_directory.path
+        (run_dir / 'logs').mkdir(parents=True, exist_ok=True)
+        (run_dir / 'artifacts').mkdir(parents=True, exist_ok=True)
+
+        # Copy playbook.yml to run directory for easy guest access
+        shutil.copy2(context.experiment_directory.playbookfile, run_dir / 'playbook.yml')
+        log.debug(f"Copied playbook to {run_dir / 'playbook.yml'}")
+
+        virtiofs_shares.append({
+            'tag': 'run',
+            'host_path': str(run_dir),
+            'guest_mount': f'{base_mount}\\run' if is_windows else f'{base_mount}/run',
+            'readonly': False
+        })
+
+        # 2. VM runtime - adarevm/adarelib wheels or source
+        vm_runtime_dir = context.project_directory.vm_runtime
+        if not vm_runtime_dir.exists():
+            raise HypervisorException(
+                f"VM runtime directory not found at {vm_runtime_dir}. "
+                f"Run 'adare experiment load' first."
+            )
+        virtiofs_shares.append({
+            'tag': 'vm',
+            'host_path': str(vm_runtime_dir),
+            'guest_mount': f'{base_mount}\\vm' if is_windows else f'{base_mount}/vm',
+            'readonly': True  # VM runtime shouldn't be modified by guest
+        })
+
+        # 3. Experiment directory
+        experiment_dir = context.experiment_directory.path
+        virtiofs_shares.append({
+            'tag': 'experiment',
+            'host_path': str(experiment_dir),
+            'guest_mount': f'{base_mount}\\experiment' if is_windows else f'{base_mount}/experiment',
+            'readonly': True
+        })
+
+        # 4. Project shared directory (optional)
+        if context.project_directory.shared.exists():
+            virtiofs_shares.append({
+                'tag': 'project_shared',
+                'host_path': str(context.project_directory.shared),
+                'guest_mount': f'{base_mount}\\project_shared' if is_windows else f'{base_mount}/project_shared',
+                'readonly': True
+            })
+
+        # 5. Experiment shared directory (optional)
+        if context.experiment_directory.shared.exists():
+            virtiofs_shares.append({
+                'tag': 'shared',
+                'host_path': str(context.experiment_directory.shared),
+                'guest_mount': f'{base_mount}\\shared' if is_windows else f'{base_mount}/shared',
+                'readonly': True
+            })
+
+        # Write config.json to run directory with new paths
+        config_data = self._build_config_json(is_windows)
+        with open(run_dir / 'config.json', 'w') as f:
+            json.dump(config_data, f, indent=2)
+        log.debug(f"Wrote config.json to {run_dir / 'config.json'}")
+
+        # Store shares in VM config for libvirt XML generation
+        context.vm.config.virtiofs_enabled = True
+        context.vm.config.virtiofs_shares = virtiofs_shares
+        context.vm._save_vm_config()
+
+        # Store in context for later use (mounting, artifact retrieval)
+        context.virtiofs_shares = virtiofs_shares
+
+        log.info(f"Configured {len(virtiofs_shares)} virtio-fs shares:")
+        for share in virtiofs_shares:
+            log.debug(f"  {share['tag']}: {share['host_path']} -> {share['guest_mount']}")
+
+    def _build_config_json(self, is_windows: bool) -> Dict[str, Any]:
+        """Build config.json content for adarevm with new mount paths.
+
+        Args:
+            is_windows: True if guest is Windows
+
+        Returns:
+            Dictionary with config.json contents
+        """
+        if is_windows:
+            return {
+                "tools_paths": ["C:\\adare\\project_shared\\tools", "C:\\adare\\shared\\tools"],
+                "data_paths": ["C:\\adare\\project_shared\\data", "C:\\adare\\shared\\data"],
+                "logfile": "C:\\adare\\run\\logs\\adarevm.log"
+            }
+        else:
+            return {
+                "tools_paths": ["/adare/project_shared/tools", "/adare/shared/tools"],
+                "data_paths": ["/adare/project_shared/data", "/adare/shared/data"],
+                "logfile": "/adare/run/logs/adarevm.log"
+            }
 
     async def setup_networking(self, context):
         """
@@ -1224,18 +1420,152 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             elapsed = time.time() - start_wait
             log.info(f'VM is ready (waited {elapsed:.1f}s)')
 
+        # Stage 3: Mount virtio-fs shared directories (if using virtio-fs mode)
+        if _use_shared_folder_mode():
+            from adare.types.stages import VMMountVirtioFSStage
+
+            is_windows = 'windows' in context.guest_platform.lower()
+
+            with StageCtxManager(
+                VMMountVirtioFSStage(),
+                context.experiment_run_ulid,
+                context.user_interrupt_event
+            ):
+                if is_windows:
+                    # Windows: Use virtiofs.exe to mount each share to C:\adare\{name}
+                    log.info("Mounting virtio-fs shares on Windows guest using virtiofs.exe")
+                    await self._mount_virtiofs_windows(context)
+                else:
+                    # Linux: Mount each virtiofs share to /adare/{name}
+                    await self._mount_virtiofs_linux(context)
+
+    async def _mount_virtiofs_linux(self, context):
+        """
+        Mount multiple virtio-fs filesystems on Linux guest.
+
+        Mounts each configured virtiofs share to its designated mount point.
+
+        Args:
+            context: ExperimentRunCtx containing VM
+        """
+        shares = getattr(context, 'virtiofs_shares', None) or context.vm.config.virtiofs_shares
+
+        if not shares:
+            log.warning("No virtiofs shares configured, skipping mount")
+            return
+
+        log.info(f"Mounting {len(shares)} virtio-fs filesystems on Linux guest")
+
+        # Create parent directory
+        await context.vm.run_command(
+            'sudo mkdir -p /adare && sudo chmod 755 /adare',
+            stop_event=context.user_interrupt_event
+        )
+
+        # Mount each share
+        for share in shares:
+            tag = share['tag']
+            mount_point = share['guest_mount']
+
+            mount_cmd = (
+                f'sudo mkdir -p {mount_point} && '
+                f'sudo mount -t virtiofs {tag} {mount_point} && '
+                f'sudo chmod 777 {mount_point}'
+            )
+
+            result = await context.vm.run_command(
+                mount_cmd,
+                stop_event=context.user_interrupt_event
+            )
+
+            if result.returncode != 0:
+                log.warning(f"Failed to mount virtiofs '{tag}': {result.stderr}")
+            else:
+                log.debug(f"Mounted virtiofs '{tag}' to {mount_point}")
+
+        # Verify mounts
+        verify_result = await context.vm.run_command(
+            'mount | grep virtiofs',
+            stop_event=context.user_interrupt_event
+        )
+
+        mounted_count = verify_result.stdout.count('virtiofs')
+        if mounted_count >= len(shares):
+            log.info(f"All {len(shares)} virtio-fs shares mounted successfully")
+        else:
+            log.warning(f"Only {mounted_count} of {len(shares)} virtio-fs shares mounted")
+
+    async def _mount_virtiofs_windows(self, context):
+        """
+        Mount multiple virtio-fs shares on Windows guest using virtiofs.exe.
+
+        Unlike Linux which uses the kernel's virtiofs driver, Windows requires
+        running virtiofs.exe from WinFsp for each share. The viofs service
+        auto-mounts to a single drive (Z:), but we need specific directories.
+
+        Uses Windows Scheduled Tasks to escape Session 0 isolation. The QEMU Guest
+        Agent runs as SYSTEM in Session 0, so processes launched directly cannot
+        access the user's interactive session. We use schtasks with explicit user
+        credentials to run virtiofs.exe in the user's session.
+
+        Approach:
+        1. Stop viofs service (if running) to prevent Z: auto-mount
+        2. For each share, create a scheduled task that runs virtiofs.exe as the user
+        3. Run and cleanup the scheduled task immediately
+
+        Args:
+            context: ExperimentRunCtx containing VM
+        """
+        shares = getattr(context, 'virtiofs_shares', None) or context.vm.config.virtiofs_shares
+
+        if not shares:
+            log.warning("No virtiofs shares configured, skipping Windows mount")
+            return
+            
+        # Create base directory
+        await context.vm.run_command(
+            'New-Item -ItemType Directory -Path "C:\\adare" -Force | Out-Null',
+            stop_event=context.user_interrupt_event
+        )
+
+        for share in shares:
+            tag = share['tag']
+            mount_point = str(share['guest_mount']).replace('/', '\\')
+            task_name = f"mount_{tag}"
+
+            # NOTE: Do NOT pre-create the mount point directory - virtiofs.exe creates it automatically
+            # Pre-creating causes the mount to fail
+            virtiofs_exe = r"C:\Program Files\VirtIO-Win\VioFS\virtiofs.exe"
+            mount_cmd = f'"{virtiofs_exe}" -t {tag} -m {mount_point}'
+
+            log.debug(f"Mounting virtio-fs share '{tag}' using run_as_user strategy")
+
+            result = await context.vm.run_command(
+                mount_cmd,
+                background=True,
+                stop_event=context.user_interrupt_event,
+                binary_is_filepath=True
+            )
+
+            if result.returncode != 0:
+                raise HypervisorException(f"Failed to mount virtio-fs share '{tag}': {result.stderr}")
+            log.debug(f"Mounted virtio-fs share '{tag}' -> {mount_point}")
+
+
     async def retrieve_artifacts(self, context, post_interrupt: bool = False):
         """
-        Stop VM and use libguestfs to retrieve artifacts and logs.
+        Retrieve artifacts and logs from the VM.
 
-        For QEMU, artifacts and logs must be explicitly copied from the disk after
-        the experiment completes, as there are no shared folders.
+        For virtio-fs mode (default):
+            Artifacts are already on the host in the shared directory.
+            Just copy them to the final destination.
 
-        Handles case where VM was never fully initialized by returning early.
+        For libguestfs mode (fallback):
+            Stop VM and use libguestfs to retrieve artifacts from disk.
 
         Args:
             context: ExperimentRunCtx
-            post_interrupt: If True, we're in post-interrupt cleanup (ignored for QEMU)
+            post_interrupt: If True, we're in post-interrupt cleanup
         """
         # Early return if VM not initialized (experiment failed before VM creation)
         if not context.vm or not hasattr(context.vm, 'config'):
@@ -1245,7 +1575,15 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             )
             return
 
-        # Stop VM first (required for libguestfs)
+        if _use_shared_folder_mode():
+            log.info("Retrieving artifacts from virtio-fs shared directory")
+            await self._retrieve_artifacts_from_virtiofs(context)
+            # Still need to stop VM after retrieval
+            log.info("Stopping VM after artifact retrieval")
+            await context.vm.stop()
+            return
+
+        # libguestfs mode: Stop VM first (required for libguestfs)
         log.info("Stopping VM to retrieve artifacts and logs via libguestfs")
         await context.vm.stop()
 
@@ -1305,6 +1643,13 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 'type': 'file',
                 'optional': True,  # May not exist if startup script failed early
                 'name': 'adarevmstartup.log'
+            },
+            {
+                'guest_path': '/adare/run/logs/scheduled_task_error.log',
+                'host_path': context.experiment_run_directory.log_directory / 'scheduled_task_error.log',
+                'type': 'file',
+                'optional': True,  # Only exists if scheduled task failed
+                'name': 'scheduled_task_error.log'
             }
         ]
 
@@ -1320,6 +1665,55 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             log.info(f"Not found in guest (skipped): {', '.join(results['missing'])}")
 
         log.info("Artifact and log retrieval completed")
+
+    async def _retrieve_artifacts_from_virtiofs(self, context):
+        """
+        Verify artifacts are accessible from virtio-fs shared directories.
+
+        With multi-share virtio-fs, the 'run' share points directly to
+        context.experiment_run_directory.path, so artifacts are already
+        in the correct location. This method just verifies and logs what was found.
+
+        Args:
+            context: ExperimentRunCtx
+        """
+        # With multi-share setup, 'run' share = experiment_run_directory
+        # Artifacts are already in the right place, no copying needed
+        run_dir = context.experiment_run_directory.path
+
+        retrieved = []
+        missing = []
+
+        # Check artifacts directory
+        artifacts_dir = run_dir / 'artifacts'
+        if artifacts_dir.exists() and any(artifacts_dir.iterdir()):
+            artifact_count = len(list(artifacts_dir.iterdir()))
+            retrieved.append(f'artifacts ({artifact_count} items)')
+            log.debug(f"Found artifacts at {artifacts_dir}")
+        else:
+            missing.append('artifacts')
+
+        # Check log files
+        logs_dir = run_dir / 'logs'
+        log_files = ['adarevm.log', 'adarevmstartup.log', 'scheduled_task_error.log']
+
+        for log_file in log_files:
+            log_path = logs_dir / log_file
+            if log_path.exists():
+                # Copy to log_directory if different from logs subdirectory
+                log_dest = context.experiment_run_directory.log_directory
+                if log_dest != logs_dir:
+                    shutil.copy2(log_path, log_dest / log_file)
+                    log.debug(f"Copied {log_file} to {log_dest}")
+                retrieved.append(log_file)
+            else:
+                missing.append(log_file)
+
+        # Log results summary
+        if retrieved:
+            log.info(f"Found in virtio-fs run share: {', '.join(retrieved)}")
+        if missing:
+            log.debug(f"Not found in virtio-fs run share (skipped): {', '.join(missing)}")
 
     async def cleanup_vm(self, context, post_interrupt: bool = False):
         """

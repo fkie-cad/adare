@@ -73,3 +73,14 @@ class VmRuntimeRefreshResult:
     refreshed: bool
     project_path: Optional[Path] = None
     error_message: Optional[str] = None
+
+
+@dataclass
+class VmRuntimeBuildResult:
+    """Result of VM runtime wheel build."""
+    built: bool
+    project_path: Optional[Path] = None
+    wheels_dir: Optional[Path] = None
+    adarelib_wheel: Optional[str] = None
+    adarevm_wheel: Optional[str] = None
+    error_message: Optional[str] = None

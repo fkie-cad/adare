@@ -862,10 +862,30 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         log.debug(f"CLAUDE: Defining libvirt domain for VM: {self.vm_name}")
 
         # Generate XML domain definition
+        # Include virtiofs shares if configured AND supported (avoid session mode)
+        virtiofs_shares = None
+        
+        # Check if virtiofs is supported (requires system mode, not session)
+        from adare.config import HYPERVISOR_CONFIGS
+        qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
+        libvirt_uri = qemu_config.get('libvirt_uri', 'qemu:///session')
+        is_session_mode = 'session' in libvirt_uri
+        
+        if self.config.virtiofs_enabled and self.config.virtiofs_shares:
+            if is_session_mode:
+                log.warning(f"CLAUDE: Disabling virtiofs shares for {self.vm_name} "
+                           f"(not supported in session mode: {libvirt_uri}). "
+                           f"Falling back to libguestfs file transfer.")
+                virtiofs_shares = None
+            else:
+                virtiofs_shares = self.config.virtiofs_shares
+                log.debug(f"CLAUDE: Including {len(virtiofs_shares)} virtio-fs shares in domain")
+
         xml = generate_domain_xml(
             self.config,
             display_enabled=self.config.display_enabled,
-            vnc_port=self.config.vnc_port
+            vnc_port=self.config.vnc_port,
+            virtiofs_shares=virtiofs_shares
         )
 
         log.debug(f"CLAUDE: Generated libvirt XML for {self.vm_name}")
@@ -961,15 +981,21 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             '-pidfile', self.config.pid_file_path
         ])
 
-        # Add QEMU debug log if configured
+        from adare.config import HYPERVISOR_CONFIGS
+        
+        # Always redirect QEMU debug/serial logs to /tmp to avoid permission issues
+        # (QEMU process user vs Experiment runner user)
+        # This is safer than relying on config checks or permission inheritance
         if self.config.qemu_debug_log_path:
-            cmd.extend(['-D', self.config.qemu_debug_log_path])
-            cmd.extend(['-d', 'guest_errors,cpu_reset,unimp'])
+             log_path = f"/tmp/adare_qemu_debug_{self.vm_name}.log"
+             cmd.extend(['-D', log_path])
+             cmd.extend(['-d', 'guest_errors,cpu_reset,unimp'])
 
         # Add serial console redirect if configured
         if self.config.serial_console_log_path:
+            serial_path = f"/tmp/adare_serial_{self.vm_name}.log"
             cmd.extend([
-                '-chardev', f'file,id=serial0,path={self.config.serial_console_log_path}',
+                '-chardev', f'file,id=serial0,path={serial_path}',
                 '-serial', 'chardev:serial0'
             ])
 
@@ -1466,6 +1492,8 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         stop_event: Optional[threading.Event] = None,
         cwd: Optional[str] = None,
         admin: bool = False,
+        binary_is_filepath: bool = False,
+        run_as_user: bool = False,
         **kwargs
     ) -> CommandResult:
         """
@@ -1491,7 +1519,9 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             background=background,
             stop_event=stop_event,
             admin=admin,
-            run_as_user=kwargs.get('run_as_user', False)
+            cwd=cwd,
+            binary_is_filepath=binary_is_filepath,
+            run_as_user=run_as_user,
         )
 
         return CommandResult(

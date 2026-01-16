@@ -268,6 +268,14 @@ class VMMountSharedDirectoriesStage(Stage):
 
 @register_stage
 @attrs.define
+class VMMountVirtioFSStage(Stage):
+    name: ClassVar[str] = 'vm_mount_virtiofs'
+    msg: ClassVar[str] = 'Mounting virtio-fs shared directory'
+    description: ClassVar[str] = 'Mounting virtio-fs filesystem in the guest VM (QEMU-specific, post-boot)'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
 class ExperimentIntegrityCheckStage(Stage):
     name: ClassVar[str] = 'integrity_check_experiment'
     msg: ClassVar[str] = 'Checking experiment integrity'

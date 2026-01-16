@@ -4,8 +4,8 @@ QEMU-specific data models.
 Extends base hypervisor models with QEMU-specific format conversion.
 """
 import logging
-from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from dataclasses import dataclass, field
+from typing import Dict, Any, Optional, List
 
 from adare.hypervisor.base.models import (
     PortForwardingRule as BasePortForwardingRule,
@@ -129,10 +129,17 @@ class QEMUVMConfig:
     serial_console_log_path: Optional[str] = None  # Path to serial console log
     qemu_debug_log_path: Optional[str] = None      # Path to QEMU debug log
 
+    # virtio-fs shared directory configuration
+    # When enabled, uses virtio-fs instead of libguestfs for file transfer
+    virtiofs_enabled: bool = True  # Default to virtio-fs mode
+    virtiofs_shares: Optional[List[Dict[str, Any]]] = None  # List of share configs
+
     def __post_init__(self):
-        """Initialize empty dict for port forwarding rules if None."""
+        """Initialize empty collections if None."""
         if self.port_forwarding_rules is None:
             self.port_forwarding_rules = {}
+        if self.virtiofs_shares is None:
+            self.virtiofs_shares = []
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary for JSON serialization."""
@@ -157,14 +164,17 @@ class QEMUVMConfig:
             'vnc_port': self.vnc_port,
             'libvirt_domain_name': self.libvirt_domain_name,
             'serial_console_log_path': self.serial_console_log_path,
-            'qemu_debug_log_path': self.qemu_debug_log_path
+            'qemu_debug_log_path': self.qemu_debug_log_path,
+            'virtiofs_enabled': self.virtiofs_enabled,
+            'virtiofs_shares': self.virtiofs_shares
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'QEMUVMConfig':
         """Create config from dictionary (JSON deserialization).
 
-        Provides backward compatibility for VMs created before libvirt integration.
+        Provides backward compatibility for VMs created before libvirt integration
+        and for migration from single virtiofs_shared_dir to multiple shares.
         """
         # Provide defaults for new fields if missing (backward compatibility)
         data.setdefault('display_enabled', False)
@@ -173,4 +183,22 @@ class QEMUVMConfig:
         data.setdefault('serial_console_log_path', None)
         data.setdefault('qemu_debug_log_path', None)
         data.setdefault('boot_mode', 'bios')
+
+        # virtio-fs defaults and backward compatibility
+        data.setdefault('virtiofs_enabled', True)
+
+        # Migrate old single-directory format to new multi-share format
+        if 'virtiofs_shared_dir' in data:
+            old_path = data.pop('virtiofs_shared_dir')
+            if old_path and 'virtiofs_shares' not in data:
+                # Convert old single-share to new list format
+                data['virtiofs_shares'] = [{
+                    'tag': 'adare',
+                    'host_path': old_path,
+                    'guest_mount': '/adare',
+                    'readonly': False
+                }]
+                log.debug(f"Migrated old virtiofs_shared_dir to virtiofs_shares list")
+
+        data.setdefault('virtiofs_shares', [])
         return cls(**data)

@@ -86,9 +86,16 @@ class AbstractCommandMixin(ABC):
         command: str,
         background: bool = False,
         cwd: Optional[str] = None,
+        admin: bool = False,
+        # VirtualBox-specific
         win_noprofile: bool = True,
         use_cmd: bool = False,
-        admin: bool = False
+        run_as_user: bool = False,
+        # QEMU-specific
+        binary_is_filepath: bool = False,
+        redirect_stderr: str = "",
+        redirect_stdout: str = "",
+        hidden_window: bool = True,
     ) -> List[str]:
         """
         Build hypervisor-specific command arguments for guest execution.
@@ -96,16 +103,31 @@ class AbstractCommandMixin(ABC):
         This method constructs the command-line arguments needed to execute
         a command inside the guest VM using the hypervisor's guest control mechanism.
 
+        Unified interface for both VirtualBox and QEMU hypervisors. Each implementation
+        should raise NotImplementedError for parameters it doesn't support.
+
         Args:
             command: Command to execute in guest
             background: If True, run command in background
             cwd: Optional working directory for command execution
+            admin: If True, run with elevated privileges
+
+            VirtualBox-specific:
             win_noprofile: Windows-specific: use -NoProfile for PowerShell
             use_cmd: Windows-specific: use cmd.exe instead of PowerShell
-            admin: If True, run with elevated privileges
+            run_as_user: Run as the authenticated user (VBox Session 0 escape)
+
+            QEMU-specific:
+            binary_is_filepath: Treat command as filepath in Start-Process
+            redirect_stderr: Path to redirect stderr output
+            redirect_stdout: Path to redirect stdout output
+            hidden_window: Use hidden window style (Windows)
 
         Returns:
             List of command arguments
+
+        Raises:
+            NotImplementedError: If hypervisor doesn't support a specific parameter
         """
         pass
 

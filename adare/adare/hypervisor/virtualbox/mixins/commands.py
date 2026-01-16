@@ -426,8 +426,51 @@ class CommandExecutionMixin(AbstractCommandMixin):
         """
         return None
 
-    def _build_guest_command_args(self, command: str, background: bool = False, cwd: Optional[str] = None, win_noprofile: bool = True, use_cmd: bool = False, admin: bool = False) -> List[str]:
-        """Build VBoxManage guestcontrol command arguments for running guest commands."""
+    def _build_guest_command_args(
+        self,
+        command: str,
+        background: bool = False,
+        cwd: Optional[str] = None,
+        admin: bool = False,
+        # VirtualBox-specific (implemented)
+        win_noprofile: bool = True,
+        use_cmd: bool = False,
+        run_as_user: bool = False,
+        # QEMU-specific (not supported)
+        binary_is_filepath: bool = False,
+        redirect_stderr: str = "",
+        redirect_stdout: str = "",
+        hidden_window: bool = True,
+    ) -> List[str]:
+        """
+        Build VBoxManage guestcontrol command arguments for running guest commands.
+
+        Args:
+            command: The command to run
+            background: Whether to run in background
+            cwd: Current working directory
+            admin: Run with admin privileges
+            win_noprofile: PowerShell -NoProfile flag (VirtualBox-specific)
+            use_cmd: Wrap in cmd /c (VirtualBox-specific)
+            run_as_user: Included for API compatibility. VirtualBox execution via guestcontrol
+                         is always performed as the authenticated user (Session 0 escape is handled naturally).
+            binary_is_filepath: QEMU-specific, not supported in VirtualBox
+            redirect_stderr: QEMU-specific, not supported in VirtualBox (uses hardcoded path)
+            redirect_stdout: QEMU-specific, not supported in VirtualBox
+            hidden_window: QEMU-specific, silently ignored (Windows always uses Hidden)
+
+        Raises:
+            NotImplementedError: If QEMU-specific parameters are used
+        """
+        # Guard for unsupported QEMU params
+        if binary_is_filepath:
+            raise NotImplementedError("binary_is_filepath not supported in VirtualBox")
+        if redirect_stderr:
+            raise NotImplementedError("redirect_stderr not supported in VirtualBox (uses hardcoded path)")
+        if redirect_stdout:
+            raise NotImplementedError("redirect_stdout not supported in VirtualBox")
+        # hidden_window has no effect - silently ignore (Windows always uses Hidden)
+
         cmd_to_run = command
 
         # Handle working directory change

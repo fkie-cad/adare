@@ -138,7 +138,7 @@ HYPERVISOR_CONFIGS = {
         'use_libguestfs': True,           # Use libguestfs for file ops when stopped
         # libvirt integration
         'use_libvirt': True,              # Use libvirt for VM management (makes VMs visible in virsh/virt-manager)
-        'libvirt_uri': 'qemu:///session', # libvirt connection URI (user-session, no root required)
+        'libvirt_uri': 'qemu:///system',  # libvirt connection URI (system mode required for virtiofs)
         'default_display_enabled': False, # Headless by default (virt-manager can still connect)
         'default_vnc_port': None          # Auto-assign VNC port (None = autoport)
     }

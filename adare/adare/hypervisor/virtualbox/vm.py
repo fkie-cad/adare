@@ -159,7 +159,8 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
         cwd: Optional[str] = None,
         win_noprofile: bool = True,
         use_cmd: bool = False,
-        admin: bool = False
+        admin: bool = False,
+        run_as_user: bool = False
     ):
         """Run a command inside the VM guest."""
         from collections import namedtuple
@@ -169,7 +170,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
             try:
                 log.info(f"Running command in VM '{self.vm_name}': {command}")
 
-                args = self._build_guest_command_args(command, background, cwd, win_noprofile, use_cmd, admin)
+                args = self._build_guest_command_args(command=command, background=background, cwd=cwd, win_noprofile=win_noprofile, use_cmd=use_cmd, admin=admin, run_as_user=run_as_user)
                 return_value, stdout, stderr = await self._execute_streaming_command_async(
                     args,
                     stop_event=stop_event,

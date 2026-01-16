@@ -25,6 +25,7 @@ from adare.core.dto.manage import (
     DbResetResult,
     VmResetResult,
     VmRuntimeRefreshResult,
+    VmRuntimeBuildResult,
 )
 
 log = logging.getLogger(__name__)
@@ -279,4 +280,132 @@ class ManageService:
                 code="VmRuntimeRefreshError",
                 message=f"Failed to refresh VM runtime: {e}",
                 solutions=['Check project directory permissions']
+            )
+
+    def build_vm_runtime_wheels(self, project_path: Optional[Path] = None) -> Result[VmRuntimeBuildResult]:
+        """
+        Build fresh wheels for VM runtime in a project.
+
+        This will:
+        1. Ensure vm_runtime directory exists with source files
+        2. Clean any existing wheels
+        3. Build fresh adarelib and adarevm wheels
+
+        Args:
+            project_path: Optional project path. If None, uses current project.
+
+        Returns:
+            Result[VmRuntimeBuildResult] with build results.
+        """
+        import subprocess
+        import re
+        from adare.backend.basics import determine_projectdirectory
+        from adare.backend.project.directory import ProjectDirectory
+        from adare.exceptions import NoProjectFoundError
+
+        try:
+            # Resolve project path
+            if project_path is None:
+                project_path = determine_projectdirectory(project_name=None)
+                if not project_path:
+                    return Result.fail(
+                        code="NoProjectFoundError",
+                        message="No project directory found",
+                        solutions=[
+                            'Run this command from within a project directory',
+                            'Specify a project path explicitly'
+                        ]
+                    )
+
+            project_vm_runtime = project_path / 'vm_runtime'
+            wheels_dir = project_vm_runtime / 'wheels'
+            adarelib_target = project_vm_runtime / 'adarelib'
+            adarevm_target = project_vm_runtime / 'adarevm'
+
+            # Ensure vm_runtime exists with source files
+            if not project_vm_runtime.exists() or not adarelib_target.exists() or not adarevm_target.exists():
+                log.info("VM runtime source files not found, copying fresh files...")
+                project_dir = ProjectDirectory(project_path)
+                project_dir.copy_vm_runtime_files()
+
+            # Create wheels directory
+            wheels_dir.mkdir(exist_ok=True)
+
+            # Clean old wheels
+            for old_wheel in wheels_dir.glob('*.whl'):
+                old_wheel.unlink()
+                log.info(f"Removed old wheel: {old_wheel.name}")
+
+            # Build adarelib wheel first (it has no path dependencies)
+            log.info("Building adarelib wheel...")
+            result = subprocess.run(
+                ["poetry", "build", "-f", "wheel", "--output", str(wheels_dir)],
+                cwd=adarelib_target,
+                check=True,
+                capture_output=True
+            )
+
+            # Build adarevm wheel without path dependency
+            log.info("Building adarevm wheel...")
+
+            # Temporarily modify pyproject.toml to use version dependency instead of path
+            adarevm_pyproject = adarevm_target / 'pyproject.toml'
+            original_content = adarevm_pyproject.read_text()
+
+            # Replace path dependency with version dependency
+            modified_content = re.sub(
+                r'adarelib\s*=\s*\{path\s*=\s*"[^"]+?"(?:,\s*develop\s*=\s*true)?\}',
+                'adarelib = "^0.1.0"',
+                original_content
+            )
+            adarevm_pyproject.write_text(modified_content)
+
+            try:
+                subprocess.run(
+                    ["poetry", "build", "-f", "wheel", "--output", str(wheels_dir)],
+                    cwd=adarevm_target,
+                    check=True,
+                    capture_output=True
+                )
+            finally:
+                # Restore original pyproject.toml
+                adarevm_pyproject.write_text(original_content)
+
+            # Find built wheels
+            adarelib_wheels = list(wheels_dir.glob('adarelib-*.whl'))
+            adarevm_wheels = list(wheels_dir.glob('adarevm-*.whl'))
+
+            log.info(f"Wheels built successfully in {wheels_dir}")
+
+            return Result.ok(VmRuntimeBuildResult(
+                built=True,
+                project_path=project_path,
+                wheels_dir=wheels_dir,
+                adarelib_wheel=adarelib_wheels[0].name if adarelib_wheels else None,
+                adarevm_wheel=adarevm_wheels[0].name if adarevm_wheels else None,
+            ))
+
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.decode() if e.stderr else str(e)
+            log.error(f"Failed to build wheels: {error_msg}")
+            return Result.fail(
+                code="VmRuntimeBuildError",
+                message=f"Failed to build wheels: {error_msg}",
+                solutions=[
+                    'Ensure poetry is installed',
+                    'Check that adarelib and adarevm have valid pyproject.toml files',
+                    'Run "adare manage vm-runtime refresh" first to get fresh source files'
+                ]
+            )
+        except NoProjectFoundError as e:
+            return Result.from_exception(e)
+        except FileNotFoundError as e:
+            log.error(f"Failed to build wheels - file not found: {e}")
+            return Result.fail(
+                code="VmRuntimeBuildError",
+                message=f"Required file not found: {e}",
+                solutions=[
+                    'Run "adare manage vm-runtime refresh" first to copy source files',
+                    'Ensure poetry is installed and in PATH'
+                ]
             )

@@ -90,6 +90,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] do we really need qemu detect os since this is already with environment provided data or? 
 - [ ] long step after installing AdareVM which is not part of any Stage
 - [ ] improve stages in general!
+- [ ] ctrl-c during waiting for vm does not work?!
+- [ ] qemu vm stop -> force shutoff
 
 ---
 

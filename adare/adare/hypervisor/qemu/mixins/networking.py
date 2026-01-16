@@ -3,9 +3,25 @@ QEMU VM networking operations mixin.
 
 Implements AbstractNetworkingMixin for QEMU with:
 - Port forwarding via user-mode networking (hostfwd)
-- No shared folder support (uses libguestfs + WebSocket instead)
+- Shared folders via virtio-fs (default) or libguestfs fallback
+
+File transfer modes:
+1. virtio-fs (default): Uses multiple virtio-fs shared directories, configured in libvirt XML
+   - Fast, real-time file sharing between host and guest
+   - Multiple shares: run, vm, experiment, project_shared, shared
+   - Managed by lifecycle.py via _setup_virtiofs_shared_directories()
+
+2. libguestfs (fallback, when QEMU_LIBGUESTFS=true):
+   - Files copied to disk before boot, retrieved after shutdown
+   - Managed by lifecycle.py via _setup_file_transfer_via_libguestfs()
+
+Note: The actual file transfer setup is handled by lifecycle.py.
+The shared folder methods here are mostly no-ops since virtio-fs
+configuration is done through the libvirt XML, not VirtualBox-style
+shared folders.
 """
 import logging
+import os
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -14,6 +30,12 @@ from adare.hypervisor.exceptions import UnsupportedFeatureException
 from adare.hypervisor.qemu.models import PortForwardingRule, SharedFolderConfig
 
 log = logging.getLogger(__name__)
+
+
+def _use_shared_folder_mode() -> bool:
+    """Check if shared folder mode (virtio-fs) should be used (default) or libguestfs fallback."""
+    libguestfs_env = os.environ.get('QEMU_LIBGUESTFS', '').lower()
+    return libguestfs_env not in ('true', '1', 'yes')
 
 
 class NetworkingMixin(AbstractNetworkingMixin):
@@ -185,31 +207,83 @@ class NetworkingMixin(AbstractNetworkingMixin):
         return 0
 
     # ==================== Shared Folders ====================
-    # Shared folders are not supported for QEMU - use libguestfs + WebSocket instead
+    # QEMU uses virtio-fs (default) or libguestfs (fallback) for file sharing
+    # The actual setup is handled by lifecycle.py - these methods are compatibility stubs
 
     async def add_shared_folder(
         self,
         name: str,
         host_path: Path,
         readonly: bool = False,
+        guest_mount: Optional[str] = None,
         ctx_manager=None,
         stop_event=None,
         log_file: Optional[Path] = None,
         silent: bool = False
     ) -> int:
         """
-        Shared folders are not supported for QEMU.
+        Add a virtio-fs shared folder configuration.
 
-        QEMU uses libguestfs for before/after VM lifecycle file operations,
-        and WebSocket for runtime file operations.
+        For QEMU with virtio-fs mode, this adds a shared folder to the list
+        which will be used when generating the libvirt domain XML.
+
+        Note: In practice, virtio-fs setup is handled by lifecycle.py's
+        _setup_virtiofs_shared_directories() method. This method is provided
+        for API compatibility and manual configuration.
+
+        Args:
+            name: Tag name for the shared folder (e.g., 'run', 'vm')
+            host_path: Path on host to share
+            readonly: Whether to mount read-only
+            guest_mount: Mount path in guest (e.g., '/adare/run')
+            ctx_manager: Optional context manager for status updates
+            stop_event: Optional threading event to signal cancellation
+            log_file: Optional path to log file
+            silent: If True, suppress log output
+
+        Returns:
+            0 for success
 
         Raises:
-            UnsupportedFeatureException: Always raised for QEMU
+            UnsupportedFeatureException: If libguestfs mode is active (no virtio-fs)
         """
-        raise UnsupportedFeatureException(
-            "Shared folders are not supported for QEMU hypervisor. "
-            "Use libguestfs (before/after VM lifecycle) or WebSocket (runtime) for file operations."
-        )
+        if not _use_shared_folder_mode():
+            raise UnsupportedFeatureException(
+                "Shared folders require virtio-fs mode. "
+                "Unset QEMU_LIBGUESTFS environment variable to enable virtio-fs."
+            )
+
+        if not silent:
+            log.info(f"CLAUDE: Configuring virtio-fs shared folder: {name} -> {host_path}")
+
+        # Store configuration in VM config
+        if hasattr(self, 'config'):
+            self.config.virtiofs_enabled = True
+            if self.config.virtiofs_shares is None:
+                self.config.virtiofs_shares = []
+
+            # Check if share with this tag already exists
+            existing_idx = None
+            for idx, share in enumerate(self.config.virtiofs_shares):
+                if share['tag'] == name:
+                    existing_idx = idx
+                    break
+
+            new_share = {
+                'tag': name,
+                'host_path': str(host_path),
+                'guest_mount': guest_mount or f'/adare/{name}',
+                'readonly': readonly
+            }
+
+            if existing_idx is not None:
+                self.config.virtiofs_shares[existing_idx] = new_share
+            else:
+                self.config.virtiofs_shares.append(new_share)
+
+            self._save_vm_config()
+
+        return 0
 
     async def mount_shared_folder(
         self,
@@ -221,15 +295,19 @@ class NetworkingMixin(AbstractNetworkingMixin):
         silent: bool = False
     ) -> bool:
         """
-        Shared folders are not supported for QEMU.
+        Mount shared folder in guest (handled by lifecycle.py for QEMU).
 
-        Raises:
-            UnsupportedFeatureException: Always raised for QEMU
+        For QEMU, virtio-fs mounting is handled by lifecycle.py's
+        _mount_virtiofs_linux() or _verify_windows_virtiofs_mount() methods.
+
+        This method is a no-op since mounting is done during VM initialization.
+
+        Returns:
+            True (mounting is handled elsewhere)
         """
-        raise UnsupportedFeatureException(
-            "Shared folders are not supported for QEMU hypervisor. "
-            "Use libguestfs (before/after VM lifecycle) or WebSocket (runtime) for file operations."
-        )
+        if not silent:
+            log.debug(f"CLAUDE: mount_shared_folder called for '{name}' - handled by lifecycle.py")
+        return True
 
     async def list_shared_folders(
         self,
@@ -239,11 +317,22 @@ class NetworkingMixin(AbstractNetworkingMixin):
         silent: bool = False
     ) -> Dict[str, SharedFolderConfig]:
         """
-        List shared folders (always returns empty dict for QEMU).
+        List shared folders configured for the VM.
+
+        Returns all virtio-fs shares if configured.
 
         Returns:
-            Empty dictionary (shared folders not supported)
+            Dict mapping tag names to SharedFolderConfig objects
         """
+        if hasattr(self, 'config') and self.config.virtiofs_enabled and self.config.virtiofs_shares:
+            shares = {}
+            for share in self.config.virtiofs_shares:
+                shares[share['tag']] = SharedFolderConfig(
+                    name=share['tag'],
+                    host_path=Path(share['host_path']),
+                    readonly=share.get('readonly', False)
+                )
+            return shares
         return {}
 
     async def remove_shared_folder(
@@ -256,13 +345,26 @@ class NetworkingMixin(AbstractNetworkingMixin):
         silent: bool = False
     ) -> int:
         """
-        Remove shared folder (no-op for QEMU).
+        Remove a specific shared folder configuration by tag name.
+
+        For QEMU, this removes the share with the given tag from the list.
 
         Returns:
-            0 (success, nothing to do)
+            0 (success)
         """
-        if not silent:
-            log.debug(f"CLAUDE: Ignoring remove_shared_folder for '{name}' (not supported on QEMU)")
+        if hasattr(self, 'config') and self.config.virtiofs_shares:
+            original_len = len(self.config.virtiofs_shares)
+            self.config.virtiofs_shares = [
+                s for s in self.config.virtiofs_shares if s['tag'] != name
+            ]
+            if len(self.config.virtiofs_shares) < original_len:
+                self._save_vm_config()
+                if not silent:
+                    log.debug(f"CLAUDE: Removed virtio-fs share '{name}'")
+            # Disable virtiofs if no shares left
+            if not self.config.virtiofs_shares:
+                self.config.virtiofs_enabled = False
+                self._save_vm_config()
         return 0
 
     async def remove_all_shared_folders(
@@ -273,22 +375,29 @@ class NetworkingMixin(AbstractNetworkingMixin):
         silent: bool = False
     ) -> int:
         """
-        Remove all shared folders (no-op for QEMU).
+        Remove all shared folder configurations (clears all virtio-fs shares).
+
+        For QEMU, this clears all virtio-fs share configurations from the VM config.
 
         Returns:
-            0 (success, nothing to do)
+            0 (success)
         """
-        if not silent:
-            log.debug("CLAUDE: Ignoring remove_all_shared_folders (not supported on QEMU)")
+        if hasattr(self, 'config') and self.config.virtiofs_enabled:
+            self.config.virtiofs_enabled = False
+            self.config.virtiofs_shares = []
+            self._save_vm_config()
+            if not silent:
+                log.debug("CLAUDE: Cleared all virtio-fs share configurations")
         return 0
 
     def queue_mount_shared_folder(self, name: str, mountpoint: Path):
         """
-        Queue a shared folder for mounting (not supported for QEMU).
+        Queue a shared folder for mounting (no-op for QEMU).
 
-        This is a no-op for QEMU.
+        For QEMU, virtio-fs mounting is handled by lifecycle.py during
+        VM initialization. This method exists for API compatibility.
         """
-        log.debug(f"CLAUDE: Ignoring queue_mount_shared_folder for '{name}' (not supported on QEMU)")
+        log.debug(f"CLAUDE: queue_mount_shared_folder for '{name}' - handled by lifecycle.py")
 
     async def mount_multiple_shared_folders(
         self,
@@ -299,11 +408,15 @@ class NetworkingMixin(AbstractNetworkingMixin):
         silent: bool = False
     ) -> int:
         """
-        Mount multiple shared folders (not supported for QEMU).
+        Mount multiple shared folders (handled by lifecycle.py for QEMU).
+
+        For QEMU, virtio-fs uses multiple shared directories, each with its own
+        filesystem device in libvirt XML. The mounting is handled by lifecycle.py
+        during VM initialization (_mount_virtiofs_linux or _mount_virtiofs_windows).
 
         Returns:
-            0 (success, nothing to do)
+            0 (success, mounting handled elsewhere)
         """
         if not silent:
-            log.debug("CLAUDE: Ignoring mount_multiple_shared_folders (not supported on QEMU)")
+            log.debug("CLAUDE: mount_multiple_shared_folders - handled by lifecycle.py")
         return 0
