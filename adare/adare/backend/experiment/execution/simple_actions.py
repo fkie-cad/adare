@@ -505,9 +505,12 @@ class SimpleActionsExecutor:
 
     async def execute_save_timestamp(self, action: SaveTimestampAction, parent_event_id: str = None,
                                     event_emitter = None) -> ActionResult:
-        """Save current timestamp to execution context and variable registry."""
+        """Save current VM timestamp with timezone metadata to execution context and variable registry."""
         try:
-            current_timestamp = time.time()
+            # Get timestamp from VM (not host) with timezone detection
+            result = await self.client.get_timestamp(use_local=True)
+            current_timestamp = result["timestamp"]  # Unix timestamp in UTC
+            vm_timezone = result["timezone"]  # e.g., "+01:00" or "UTC"
 
             # Save to execution context for immediate use
             self.execution_context[action.variable] = current_timestamp
@@ -517,9 +520,13 @@ class SimpleActionsExecutor:
                 from adarelib.common.variables import Variable, VariableType
                 import datetime
                 timestamp_dt = datetime.datetime.fromtimestamp(current_timestamp, datetime.UTC)
-                timestamp_var = Variable(timestamp_dt, VariableType.TIMESTAMP)
+                timestamp_var = Variable(
+                    timestamp_dt,
+                    VariableType.TIMESTAMP,
+                    metadata={"timezone": vm_timezone}
+                )
                 self.playbook.variables.add(action.variable, timestamp_var)
-                log.debug(f"Added timestamp variable '{action.variable}' to variable registry")
+                log.debug(f"Added timestamp variable '{action.variable}' with timezone '{vm_timezone}'")
 
             log.info(f"Saved timestamp {current_timestamp} to variable {action.variable}")
 

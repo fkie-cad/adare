@@ -579,15 +579,18 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
             cwd=commands.run_cwd
         )
     else:
+        # Windows execution
+        log_path = r'C:\adare\run\logs'
+
         result = await vm.run_command(
             commands.run_command,
-            background=False,
-            stop_event=stop_event,
-            admin=True,
             cwd=commands.run_cwd,
-            run_as_user=True
+            admin=True,
+            run_as_user=True,
+            stop_event=stop_event,
+            redirect_stdout=rf'{log_path}\adarevm_stdout.log',
+            redirect_stderr=rf'{log_path}\adarevm_stderr.log'
         )
-
     # Check if command failed
     if result.returncode != 0:
         log.error(f"CLAUDE: Failed to start adarevm: {result.stderr}")
@@ -1345,6 +1348,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             with StageCtxManager(ExperimentExecutionStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 await step_runner.run_async_step(step_execute_experiment, experiment_run_context)
 
+                #input("Press Enter to continue after verifying that the experiment execution has completed...")
                 # Collect system information after experiment execution (if enabled in playbook settings)
                 await step_runner.run_async_step(step_collect_system_info, experiment_run_context)
 

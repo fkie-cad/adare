@@ -80,6 +80,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] background commands in vm (as installation); when to check for results (move to separate thread?)
 - [ ] address: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. 
 - [ ] command line seems slow responsive; improve
+- [ ] change from poetry to uv
 
 ---
 

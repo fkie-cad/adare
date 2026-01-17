@@ -444,6 +444,57 @@ class AdareVMClient:
             "timeout": timeout - 60  # Subtract buffer for tool timeout
         }, timeout=timeout)
 
+    async def get_timestamp(self, use_local: bool = False, timeout: float = 10.0) -> Dict[str, Any]:
+        """
+        Get timezone-aware timestamp from the VM.
+
+        Retrieves the current timestamp from the VM instead of using the host's clock.
+        This ensures timestamps are synchronized with the VM's system time for accurate
+        forensic artifact analysis.
+
+        Args:
+            use_local: If True, detect and return VM's local timezone.
+                      If False (default), return UTC timestamp only.
+            timeout: Timeout in seconds (default: 10.0)
+
+        Returns:
+            Dict with timestamp data:
+            {
+                "timestamp": 1234567890.123456,  # Unix timestamp in UTC (float with microseconds)
+                "timezone": "UTC" or "+04:00",    # Timezone string
+                "iso_format": "2026-01-17T14:30:45.123456+00:00",  # ISO 8601 format
+                "local_time": "2026-01-17T18:30:45.123456+04:00"   # Only present if use_local=True
+            }
+
+        Examples:
+            Basic UTC timestamp:
+            >>> result = await client.get_timestamp()
+            >>> timestamp = result["timestamp"]  # 1234567890.123456
+            >>> timezone = result["timezone"]    # "UTC"
+
+            Local timezone timestamp:
+            >>> result = await client.get_timestamp(use_local=True)
+            >>> timestamp = result["timestamp"]      # 1234567890.123456 (still UTC-based)
+            >>> timezone = result["timezone"]        # "+04:00"
+            >>> local_time = result["local_time"]    # "2026-01-17T18:30:45.123456+04:00"
+
+            Store in variable with metadata:
+            >>> from adarelib.common.variables import Variable, VariableType
+            >>> result = await client.get_timestamp(use_local=True)
+            >>> timestamp_var = Variable(
+            ...     value=result["timestamp"],
+            ...     type=VariableType.TIMESTAMP,
+            ...     metadata={"timezone": result["timezone"]}
+            ... )
+
+        Raises:
+            WebSocketTimeoutError: If the call times out
+            RuntimeError: If not connected or call fails
+        """
+        return await self.call_tool(ToolRegistry.GET_TIMESTAMP, {
+            "use_local": use_local
+        }, timeout=timeout)
+
     async def pull_file_chunked(self, guest_path: str, host_path: Path,
                                chunk_size: int = 1048576,
                                progress_callback = None) -> Dict[str, Any]:

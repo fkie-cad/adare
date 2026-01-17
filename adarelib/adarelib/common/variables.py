@@ -822,10 +822,12 @@ class VariableRegistry:
             'tolerance': tolerance
         }
 
-        # If we have a Unix timestamp, it means it was converted from timezone-aware variable to UTC
+        # Use timezone from Variable metadata if available, otherwise default to 'utc'
         if isinstance(var.value, (int, float)):
-            metadata['timezone'] = 'utc'
-            log.debug(f"Added UTC timezone metadata for Unix timestamp variable '{var.name}'")
+            # Check if Variable already has timezone metadata
+            var_timezone = var.metadata.get('timezone', 'utc')
+            metadata['timezone'] = var_timezone
+            log.debug(f"Added timezone '{var_timezone}' metadata for Unix timestamp variable '{var.name}'")
 
         if not local_only:
             # Store globally (original behavior)
