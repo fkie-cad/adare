@@ -210,7 +210,7 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         base_cmd = " ".join(cmd_parts)
         
         # Add error logging for the command execution itself
-        return f"{base_cmd} 2>>C:\\adare\\run\\logs\\adarevm_error.log"
+        return base_cmd
 
     async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> List[SetupCommand]:
         """Build Windows setup commands with per-command admin requirements."""
@@ -224,16 +224,18 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
 
         # PATH setup for project-wide tools (User-level, no admin needed)
         # Use single quotes and string concatenation to avoid double quotes (which conflict with commands.py wrapper)
-        commands.append(SetupCommand(
-            command=f"[Environment]::SetEnvironmentVariable('Path', $env:Path + ';{base_path}\\project_shared\\tools', 'User')",
-            requires_admin=False
-        ))
+        # commands.append(SetupCommand(
+        #     command=f"[Environment]::SetEnvironmentVariable('Path', $env:Path + ';{base_path}\\project_shared\\tools', 'User')",
+        #     requires_admin=False
+        # ))
 
         # PATH setup for experiment-specific tools (User-level, no admin needed)
-        commands.append(SetupCommand(
-            command=f"[Environment]::SetEnvironmentVariable('Path', $env:Path + ';{base_path}\\shared\\tools', 'User')",
-            requires_admin=False
-        ))
+        # commands.append(SetupCommand(
+        #     command=f"[Environment]::SetEnvironmentVariable('Path', $env:Path + ';{base_path}\\shared\\tools', 'User')",
+        #     requires_admin=False
+        # ))
+
+
 
         # Mount VirtualBox shared folders temporarily (no admin needed)
         # Note: QEMU virtio-fs mounting is handled in lifecycle.py:_mount_virtiofs_windows()
@@ -244,18 +246,21 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             ))
 
         # Write config.json to run directory (User-level, no admin needed)
-        # We use a single-quoted string for content to avoid shell expansion issues
-        # JSON content itself uses double quotes
-        config_content = self._build_config_file_payload()
-        # Escape single quotes in JSON (though json.dumps usually doesn't produce them)
-        config_content_safe = config_content.replace("'", "''")
+        # SKIP for QEMU virtio-fs mode: Host already writes this file to the shared directory
+        # We only need to write it for VirtualBox or QEMU libguestfs mode
+        if not (self.hypervisor_type == 'qemu' and _use_shared_folder_mode()):
+            # We use a single-quoted string for content to avoid shell expansion issues
+            # JSON content itself uses double quotes
+            config_content = self._build_config_file_payload()
+            # Escape single quotes in JSON (though json.dumps usually doesn't produce them)
+            config_content_safe = config_content.replace("'", "''")
 
-        # Ensure directory exists and write file
-        # Using PowerShell to write file with UTF8 encoding
-        commands.append(SetupCommand(
-            command=f"New-Item -ItemType Directory -Force -Path '{base_path}\\run' | Out-Null; Set-Content -Path '{base_path}\\run\\config.json' -Value '{config_content_safe}' -Encoding UTF8",
-            requires_admin=False
-        ))
+            # Ensure directory exists and write file
+            # Using PowerShell to write file with UTF8 encoding
+            commands.append(SetupCommand(
+                command=f"New-Item -ItemType Directory -Force -Path '{base_path}\\run' | Out-Null; Set-Content -Path '{base_path}\\run\\config.json' -Value '{config_content_safe}' -Encoding UTF8",
+                requires_admin=False
+            ))
 
         return commands
 
@@ -414,13 +419,18 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
             SetupCommand(
                 command="grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc; . ~/.bashrc",
                 requires_admin=False
-            ),
-             # Write config.json to run directory
-            SetupCommand(
-                command=f"mkdir -p /adare/run && echo '{self._build_config_file_payload()}' > /adare/run/config.json",
-                requires_admin=False
             )
         ]
+
+        # Write config.json to run directory
+        # SKIP for QEMU virtio-fs mode: Host already writes this file to the shared directory
+        if not (self.hypervisor_type == 'qemu' and _use_shared_folder_mode()):
+            commands.append(SetupCommand(
+                command=f"mkdir -p /adare/run && echo '{self._build_config_file_payload()}' > /adare/run/config.json",
+                requires_admin=False
+            ))
+            
+        return commands
 
     def build_install_command(self, env_info: EnvironmentInfo) -> str:
         """Build Linux install command."""

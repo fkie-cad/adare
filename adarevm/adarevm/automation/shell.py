@@ -106,8 +106,55 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
         # Wrap in script block for synchronous execution and proper file I/O flushing
         wrapped_cmd = f"& {{ {command_str} }}"
         command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", wrapped_cmd]
+    elif not shell and is_windows:
+        # Windows CreateProcess does not automatically resolve executable path from 'env' PATH
+        # We must manually resolve it if a custom env is provided
+        import shutil
+        import shlex
+
+        search_path = None
+        if env and 'PATH' in env:
+             search_path = env['PATH']
+        elif inherit_env:
+             search_path = os.environ.get('PATH')
+
+        if isinstance(command, str):
+            # Parse the command string to get the executable
+            # We use shlex to properly handle quoted paths
+            try:
+                parts = shlex.split(command, posix=False)
+                if parts:
+                    exe_name = parts[0]
+                    resolved_exe = shutil.which(exe_name, path=search_path)
+                    if resolved_exe:
+                        # Reconstruct the command with the full path
+                        # We only replace the first token
+                        # Note: This is a bit risky if arguments were part of the string but
+                        # shlex.split should yield the executable as first item.
+                        # Ideally, users should pass list for shell=False
+                        log.debug(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
+                        
+                        # Replace the first part of the original string? 
+                        # Or just switch to list mode? subprocess handles list better for shell=False
+                        parts[0] = resolved_exe
+                        command = parts # Switch to list mode with full path
+                    else:
+                         log.debug(f"Could not resolve executable '{exe_name}' in custom PATH")
+            except Exception as e:
+                log.warning(f"Failed to parse command string for path resolution: {e}")
+                command = command_str
+
+        elif isinstance(command, list) and command:
+             # List mode is easier
+             exe_name = command[0]
+             resolved_exe = shutil.which(exe_name, path=search_path)
+             if resolved_exe:
+                 log.debug(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
+                 command[0] = resolved_exe
+             else:
+                 log.debug(f"Could not resolve executable '{exe_name}' in custom PATH")
     elif isinstance(command, list) and not shell:
-        # Only keep as list if shell=False and no privilege wrapping occurred
+        # Linux / shell=True fallback
         command = command
     else:
         # Use command_str for shell mode or when privilege dropping wrapped the command
@@ -127,6 +174,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
             process_env.update(env)
     elif env:
         process_env = env
+    log.info(f"Environment variables for command: {process_env}")
 
     # Start process with detailed logging
     import time

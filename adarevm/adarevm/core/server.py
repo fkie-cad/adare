@@ -15,6 +15,7 @@ import binascii
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Set, Tuple, Union
 import time
+import platform
 
 # Import automation modules
 from adarevm.automation.gui import (
@@ -38,7 +39,40 @@ import base64
 class AdareVMServer:
     """WebSocket server for adarevm GUI automation and test execution."""
 
-    def __init__(self, host="0.0.0.0", port=18765, data_paths: List[str] = None):
+    def _split_command_line(self, command: str) -> List[str]:
+        """Split a command string into arguments using platform-native parsing."""
+        if platform.system().lower() == "windows":
+            return self._split_windows_command_line(command)
+        
+        import shlex
+        try:
+            return shlex.split(command)
+        except ValueError:
+            # Fallback for unbalanced quotes
+            return command.split(" ")
+
+    def _split_windows_command_line(self, command: str) -> List[str]:
+        """Split a Windows command string using pure Python shlex."""
+        import shlex
+        try:
+            # Use shlex with custom configuration for Windows-like parsing:
+            # 1. posix=True: Enables quote stripping (removing " from "foo bar")
+            # 2. escape='': Disables backslash escaping so C:\Path shouldn't become C:Path
+            # 3. whitespace_split=True: Splits by whitespace
+            lexer = shlex.shlex(command, posix=True)
+            lexer.whitespace_split = True
+            lexer.escape = '' 
+            
+            # Additional safety: handle comment chars if any default (typically #)
+            lexer.commenters = ''
+            
+            return list(lexer)
+        except Exception as e:
+            log.error(f"Error parsing Windows command line with shlex: {e}")
+            # Fallback
+            return command.split(" ")
+
+    def __init__(self, host="0.0.0.0", port=18765, tools_paths: List[str] = None, data_paths: List[str] = None):
         self.host = host
         self.port = port
         self.clients: Set[websockets.WebSocketServerProtocol] = set()
@@ -47,6 +81,9 @@ class AdareVMServer:
         self.data_paths = data_paths or []
         if self.data_paths:
             log.info(f"AdareVMServer initialized with data_paths: {self.data_paths}")
+        self.tools_paths = tools_paths or []
+        if self.tools_paths:
+            log.info(f"AdareVMServer initialized with tools_paths: {self.tools_paths}")
 
         # Test management state
         self.testfunctions_dir: Optional[Path] = None
@@ -78,6 +115,7 @@ class AdareVMServer:
             "set_screenshot_method": self._set_screenshot_method,
             "pull_file_chunk": self._pull_file_chunk,
             "get_filesystem_snapshot": self._get_filesystem_snapshot,
+            "get_timestamp": self._get_timestamp,
         }
     
     async def start_server(self):
@@ -910,10 +948,11 @@ class AdareVMServer:
             return {"status": "error", "message": str(e)}
     
     
-    async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True, admin: bool = False, background: bool = False, run_as_user: str = None):
+    async def _execute_shell(self, websocket, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = None, inherit_env: bool = True, admin: bool = False, background: bool = False, run_as_user: str = None):
         """Execute a raw shell command with advanced options."""
         import time
         import uuid
+        import platform
 
         # Generate unique command ID for tracking
         command_id = str(uuid.uuid4())[:8]
@@ -934,23 +973,70 @@ class AdareVMServer:
             options = {}
             if cwd:
                 options['cwd'] = Path(cwd)
-            if env:
-                options['env'] = env
+
+            # Handle environment variables and tools paths
+            # Start with provided env or empty dict
+            cmd_env = env.copy() if env else {}
+            
+            # If inheriting env, we need to know the base path to append to
+            # But execute_on_shell handles inheritance internally if we don't pass full env.
+            # However, to append to PATH, we need to know the current PATH.
+            # If inherit_env is True, we should probably let execute_on_shell handle the base env,
+            # but we need to inject our tools paths.
+            # The safest way is to construct the full env here if we are modifying it.
+            
+            import os
+            # Determine base environment
+            if inherit_env:
+                base_env = os.environ.copy()
+                base_env.update(cmd_env)
+                cmd_env = base_env
+                options['inherit_env'] = False # We are manually inheriting
+            
+            # Append tools paths to PATH
+            if self.tools_paths:
+                # Find PATH key (case-insensitive)
+                path_key = next((k for k in cmd_env.keys() if k.lower() == 'path'), 'PATH')
+                current_path = cmd_env.get(path_key, '')
+                
+                # Append tool paths using os.pathsep
+                additional_paths = os.pathsep.join(self.tools_paths)
+                if current_path:
+                    cmd_env[path_key] = f"{current_path}{os.pathsep}{additional_paths}"
+                else:
+                    cmd_env[path_key] = additional_paths
+                
+                log.debug(f"[{command_id}] Appended tool paths to PATH: {additional_paths}")
+            
+            log.info(f"command environment: {cmd_env}")
+
+            options['env'] = cmd_env
+
             if timeout:
                 options['timeout'] = timeout
-            if inherit_env is not None:
-                options['inherit_env'] = inherit_env
+            # options['inherit_env'] is already handled above
             if admin is not None:
                 options['admin'] = admin
             if background is not None:
                 options['background'] = background
             if run_as_user is not None:
                 options['run_as_user'] = run_as_user
+            
             if shell is not None:
                 options['shell'] = shell
             else:
                 # Auto-detect if shell mode is needed based on special characters
+                # Note: On Windows, $ is not a special character in cmd.exe (default shell=True backend if powershell=False)
+                # But it IS special in PowerShell. Since execute_on_shell defaults to PowerShell when shell=True,
+                # detecting $ triggers PowerShell which then expands it (breaking paths like C:\$Recycle.Bin).
+                # We should be conservative: only trigger shell if it's clearly a shell operation like redirection.
                 shell_chars = ['>', '<', '>>', '|', '||', '&&', ';', '`', '$', '*', '?', '~']
+                
+                if platform.system().lower() == 'windows':
+                     # Remove chars that are not special in cmd.exe or shouldn't auto-trigger shell
+                     if '$' in shell_chars: shell_chars.remove('$')
+                     if '~' in shell_chars: shell_chars.remove('~')
+
                 if any(char in shell_command for char in shell_chars):
                     options['shell'] = True
                     log.info(f"Auto-enabled shell mode for command with special characters: {shell_command}")
@@ -961,9 +1047,16 @@ class AdareVMServer:
             log.debug(f"[{command_id}] Starting shell execution with options: {options}")
             
             if options.get('shell', False):
-                result = execute_on_shell(shell_command, **options)
+                result = await asyncio.to_thread(execute_on_shell, shell_command, **options)
             else:
-                result = execute_on_shell(shell_command.split(" "), **options)
+                # Use platform-aware splitting for better argument handling
+                split_command = self._split_command_line(shell_command)
+                result = await asyncio.to_thread(execute_on_shell, split_command, **options)
+
+            # Log stdout/stderr at debug level with command context
+            if not result.get('background'):
+                log.info(f"[{command_id}] stdout: {result.get('stdout', '')}")
+                log.info(f"[{command_id}] stderr: {result.get('stderr', '')}")
 
             execution_time = time.time() - start_time
 
@@ -1213,4 +1306,176 @@ class AdareVMServer:
                 "message": error_msg
             })
             return {"status": "error", "message": error_msg}
+
+    def _get_windows_timezone(self, utc_dt):
+        """
+        Get Windows timezone information using PowerShell.
+
+        Args:
+            utc_dt: datetime object in UTC timezone
+
+        Returns:
+            Tuple of (timezone_string, local_datetime) or (None, None) on failure
+        """
+        try:
+            # Use PowerShell to get timezone offset
+            import subprocess
+            ps_command = "[System.TimeZoneInfo]::Local.GetUtcOffset((Get-Date)).ToString()"
+            result = subprocess.run(
+                ["powershell", "-Command", ps_command],
+                capture_output=True,
+                text=True,
+                timeout=5.0
+            )
+
+            if result.returncode == 0:
+                # Parse offset string (format: "HH:MM:SS" or "-HH:MM:SS")
+                offset_str = result.stdout.strip()
+                # Extract hours and minutes
+                parts = offset_str.replace('-', '').split(':')
+                if len(parts) >= 2:
+                    hours = int(parts[0])
+                    minutes = int(parts[1])
+                    is_negative = offset_str.startswith('-')
+
+                    # Create timezone offset
+                    from datetime import timedelta, timezone
+                    if is_negative:
+                        tz_offset = timezone(timedelta(hours=-hours, minutes=-minutes))
+                        tz_string = f"-{hours:02d}:{minutes:02d}"
+                    else:
+                        tz_offset = timezone(timedelta(hours=hours, minutes=minutes))
+                        tz_string = f"+{hours:02d}:{minutes:02d}"
+
+                    # Convert UTC to local time
+                    local_dt = utc_dt.astimezone(tz_offset)
+                    return tz_string, local_dt
+
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired, ValueError, OSError) as e:
+            log.warning(f"Windows timezone detection failed: {e}")
+
+        return None, None
+
+    def _get_linux_timezone(self, utc_dt):
+        """
+        Get Linux timezone information using date command.
+
+        Args:
+            utc_dt: datetime object in UTC timezone
+
+        Returns:
+            Tuple of (timezone_string, local_datetime) or (None, None) on failure
+        """
+        try:
+            # Use date command to get timezone offset
+            import subprocess
+            result = subprocess.run(
+                ["date", "+%z"],
+                capture_output=True,
+                text=True,
+                timeout=5.0
+            )
+
+            if result.returncode == 0:
+                # Parse offset string (format: "+HHMM" or "-HHMM")
+                offset_str = result.stdout.strip()
+                if len(offset_str) == 5 and offset_str[0] in ['+', '-']:
+                    sign = offset_str[0]
+                    hours = int(offset_str[1:3])
+                    minutes = int(offset_str[3:5])
+
+                    # Create timezone offset
+                    from datetime import timedelta, timezone
+                    if sign == '-':
+                        tz_offset = timezone(timedelta(hours=-hours, minutes=-minutes))
+                        tz_string = f"-{hours:02d}:{minutes:02d}"
+                    else:
+                        tz_offset = timezone(timedelta(hours=hours, minutes=minutes))
+                        tz_string = f"+{hours:02d}:{minutes:02d}"
+
+                    # Convert UTC to local time
+                    local_dt = utc_dt.astimezone(tz_offset)
+                    return tz_string, local_dt
+
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired, ValueError, OSError) as e:
+            log.warning(f"Linux timezone detection failed: {e}")
+
+        return None, None
+
+    async def _get_timestamp(self, websocket, use_local: bool = False):
+        """
+        Get timezone-aware timestamp from the VM.
+
+        Args:
+            websocket: WebSocket connection
+            use_local: If True, detect and return VM's local timezone (default: False)
+
+        Returns:
+            Dict with timestamp data:
+            {
+                "timestamp": 1234567890.123456,  # Unix timestamp (UTC)
+                "timezone": "UTC" or "+HH:MM",
+                "iso_format": "2026-01-17T14:30:45.123456+00:00",
+                "local_time": "2026-01-17T18:30:45.123456+04:00"  # only if use_local=True
+            }
+        """
+        from datetime import datetime, timezone
+
+        log.info(f"Getting timestamp (use_local={use_local})")
+
+        try:
+            await self.send_event(websocket, EventType.LOG, {
+                "message": f"Retrieving VM timestamp (use_local={use_local})"
+            })
+
+            # Get current UTC time
+            utc_dt = datetime.now(timezone.utc)
+            unix_timestamp = utc_dt.timestamp()
+
+            # Prepare response with UTC data
+            response = {
+                "timestamp": unix_timestamp,
+                "timezone": "UTC",
+                "iso_format": utc_dt.isoformat()
+            }
+
+            # Detect local timezone if requested
+            if use_local:
+                platform_name = platform.system().lower()
+                tz_string = None
+                local_dt = None
+
+                if platform_name == 'windows':
+                    tz_string, local_dt = self._get_windows_timezone(utc_dt)
+                elif platform_name == 'linux':
+                    tz_string, local_dt = self._get_linux_timezone(utc_dt)
+                else:
+                    log.warning(f"Timezone detection not supported on platform: {platform_name}")
+
+                # Add local timezone data if detection succeeded
+                if tz_string and local_dt:
+                    response["timezone"] = tz_string
+                    response["local_time"] = local_dt.isoformat()
+                    log.info(f"Detected local timezone: {tz_string}")
+                else:
+                    # Fallback to UTC if detection failed
+                    log.warning("Local timezone detection failed, falling back to UTC")
+                    await self.send_event(websocket, EventType.LOG, {
+                        "message": "Local timezone detection failed, using UTC"
+                    })
+
+            log.info(f"Timestamp retrieved: {response}")
+
+            await self.send_event(websocket, EventType.LOG, {
+                "message": f"Timestamp retrieved successfully (timezone: {response['timezone']})"
+            })
+
+            return response
+
+        except Exception as e:
+            log.error(f"Failed to get timestamp: {e}", exc_info=True)
+            await self.send_event(websocket, EventType.ERROR, {
+                "message": f"Timestamp retrieval failed: {e}"
+            })
+            return {"status": "error", "message": str(e)}
 

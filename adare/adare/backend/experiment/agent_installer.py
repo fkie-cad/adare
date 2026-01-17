@@ -57,7 +57,8 @@ async def check_installed_version(
     use_conda: bool,
     platform: str,
     stop_event: threading.Event,
-    wheels_available: bool = False
+    wheels_available: bool = False,
+    inject_user_path: bool = False
 ) -> Optional[str]:
     """Check if package is installed in VM and return its version.
 
@@ -71,6 +72,8 @@ async def check_installed_version(
         platform: Guest OS platform ("windows" or "linux")
         stop_event: Threading event for cancellation
         wheels_available: True if wheels were installed, False for editable install
+        inject_user_path: If True, inject user's PATH into the command execution environment
+                          (Only supported on QEMU Windows VMs)
 
     Returns:
         Version string if package is installed (e.g., "0.1.0")
@@ -103,8 +106,23 @@ async def check_installed_version(
                 cmd = f'poetry run pip show {package_name}'
 
     try:
+        # Prepare run_command kwargs
+        run_kwargs = {}
+        
+        # Safely pass inject_user_path only to QEMU VMs which support it
+        # We use a local import to avoid circular dependencies and proper type checking
+        if inject_user_path and platform == 'windows':
+            try:
+                from adare.hypervisor.qemu.vm import QEMUVM
+                if isinstance(vm, QEMUVM):
+                    run_kwargs['inject_user_path'] = True
+                    log.debug(f"Checking {package_name} version with inject_user_path=True")
+            except ImportError:
+                # If QEMUVM cannot be imported (e.g. not using QEMU), skip this check
+                pass
+
         # Execute command silently (avoid cluttering logs with routine checks)
-        result = await vm.run_command(cmd, stop_event=stop_event)
+        result = await vm.run_command(cmd, stop_event=stop_event, **run_kwargs)
 
         if result.returncode != 0:
             log.debug(f"Package {package_name} not installed (pip show returned {result.returncode})")
@@ -178,8 +196,33 @@ async def should_skip_installation(
 
     # Check installed versions of both packages
     # Pass wheels_available=True since this function already verified wheels exist (line 155)
-    adarevm_version = await check_installed_version('adarevm', vm, use_conda, platform, stop_event, wheels_available=True)
-    adarelib_version = await check_installed_version('adarelib', vm, use_conda, platform, stop_event, wheels_available=True)
+    
+    # Special case for Windows QEMU: Try to check adarevm with inject_user_path
+    # This helps find adarevm when it's in a user-local path not in system PATH
+    vm_is_qemu = False
+    try:
+        from adare.hypervisor.qemu.vm import QEMUVM
+        vm_is_qemu = isinstance(vm, QEMUVM)
+    except ImportError:
+        pass
+    
+    adarevm_version = None
+    if platform == 'windows' and vm_is_qemu:
+        log.debug("Using injected user PATH to check adarevm version on Windows QEMU")
+        adarevm_version = await check_installed_version(
+            'adarevm', vm, use_conda, platform, stop_event, 
+            wheels_available=True, inject_user_path=True
+        )
+        adarelib_version = await check_installed_version(
+            'adarelib', vm, use_conda, platform, stop_event, 
+            wheels_available=True, inject_user_path=True
+        )
+        
+    # Standard check (fallback or non-Windows-QEMU)
+    if adarevm_version is None:
+        adarevm_version = await check_installed_version('adarevm', vm, use_conda, platform, stop_event, wheels_available=True)
+    if adarelib_version is None:
+        adarelib_version = await check_installed_version('adarelib', vm, use_conda, platform, stop_event, wheels_available=True)
 
     # Log findings for debugging
     log.debug(f"Installed versions - adarevm: {adarevm_version}, adarelib: {adarelib_version}")

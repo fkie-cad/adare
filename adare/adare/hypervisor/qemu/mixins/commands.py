@@ -195,6 +195,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         redirect_stderr: str = "",
         redirect_stdout: str = "",
         hidden_window: bool = True,
+        inject_user_path: bool = False,
     ) -> List[str]:
         """
         Build guest command arguments for QEMU guest agent execution.
@@ -233,11 +234,16 @@ class CommandExecutionMixin(AbstractCommandMixin):
         if 'windows' in self.guest_os.lower():
             if run_as_user:
                 rl = "LIMITED" if not admin else "HIGHEST"
-                delay = 5
+                delay = 10
                 task_name = f"adare"
                 user = self.username
                 pw = self.password
                 script_path = f"C:\\Windows\\Temp\\adare.ps1"
+                if redirect_stderr:
+                    command = f"{command} 2>>\"{redirect_stderr}\""
+                if redirect_stdout:
+                    command = f"{command} 1>>\"{redirect_stdout}\""
+
                 command = (                                                                                                                                 
                     f"& {{ "                                                                                                                                       
                     f"$u = '{user}'; $p = '{pw}'; $t = '{task_name}'; "                                                                                 
@@ -256,7 +262,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     f"}} "                                                                                                                                         
                 )
                 log.debug(f"CLAUDE DEBUG: Full Windows guest command (Scheduled Task): {command}")  
-            if background:
+            if background and not run_as_user:
                 import shlex
                 command_components = shlex.split(command, posix=False)
                 log.info(f"XXX: {command}")
@@ -268,7 +274,8 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 else:
                     command += [f" {command_components[0]}"]
                 arguments_string = " ".join(command_components[1:])
-                command += [f' -ArgumentList "{arguments_string}"']
+                if arguments_string:
+                    command += [f' -ArgumentList "{arguments_string}"']
                 if redirect_stderr:
                     command += [f" -RedirectStandardError {redirect_stderr}"]
                 if redirect_stdout:
@@ -277,7 +284,26 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     command += [f" -WindowStyle Hidden"]
                 command = " ".join(command)
 
+            if inject_user_path and not run_as_user:
+                # TODO: This should be set dynamically somehow and not here?! Unsure how to do that while maintaining code quality.
+                base_path = self._cached_guest_path or ""
+
+                custom_path_dirs = [
+                    r'C:\adare\project_shared\tools',
+                    r'C:\adare\shared\tools'
+                ]
+
+                # Join only the items that aren't empty
+                paths = base_path + ";".join(custom_path_dirs)
+                log.debug(f"CLAUDE DEBUG: Injecting user PATH dirs: {paths}")
+                #command = f'$env:Path = "{path_dirs_str};$env:Path"; {command}'
+                if background:
+                    command = f'$env:Path += ";{paths}"; {command}'
+                else:
+                    command = f'$env:Path += ";{paths}"; & {command}'
+
             command_base64 = base64.b64encode(command.encode('utf-16le')).decode('utf-8')
+            log.info(f"CLAUDE DEBUG: Full Windows guest command: {command}")
             return ["powershell.exe", "-EncodedCommand", command_base64]
         else:
             if redirect_stderr:
@@ -810,6 +836,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         redirect_stdout: str = "",
         binary_is_filepath: bool = False,
         run_as_user: bool = False,
+        inject_user_path: bool = False,
     ) -> Tuple[int, str, str]:
         """
         Execute command in guest via QEMU Guest Agent.
@@ -823,6 +850,8 @@ class CommandExecutionMixin(AbstractCommandMixin):
             cwd: Optional working directory for command execution
             redirect_stderr: Path to redirect stderr output (QEMU-specific)
             redirect_stdout: Path to redirect stdout output (QEMU-specific)
+            binary_is_filepath: If True, treat command as filepath in Start-Process (QEMU-specific)
+            run_as_user: If True, use scheduled task for user session execution (QEMU-specific)
 
         Returns:
             Tuple of (returncode, stdout, stderr)
@@ -852,6 +881,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 redirect_stdout=redirect_stdout,
                 binary_is_filepath=binary_is_filepath,
                 run_as_user=run_as_user,
+                inject_user_path=inject_user_path,
             )
 
             # Build environment variables for guest execution

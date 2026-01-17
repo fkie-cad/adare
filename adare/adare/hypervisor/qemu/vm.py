@@ -1494,6 +1494,9 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         admin: bool = False,
         binary_is_filepath: bool = False,
         run_as_user: bool = False,
+        inject_user_path: bool = False,
+        redirect_stdout: str = "",
+        redirect_stderr: str = "",
         **kwargs
     ) -> CommandResult:
         """
@@ -1506,6 +1509,11 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             stop_event: Optional event to signal cancellation
             cwd: Optional working directory
             admin: If True, run with elevated privileges (sudo on Linux, RunAs on Windows)
+            binary_is_filepath: If True, treat command as filepath in Start-Process (Windows)
+            run_as_user: If True, use scheduled task for user session execution (Windows)
+            inject_user_path: If True, inject user's PATH (Windows)
+            redirect_stdout: Path to file for stdout redirection (QEMU-specific)
+            redirect_stderr: Path to file for stderr redirection (QEMU-specific)
             **kwargs: Additional arguments
 
         Returns:
@@ -1522,6 +1530,9 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             cwd=cwd,
             binary_is_filepath=binary_is_filepath,
             run_as_user=run_as_user,
+            inject_user_path=inject_user_path,
+            redirect_stdout=redirect_stdout,
+            redirect_stderr=redirect_stderr
         )
 
         return CommandResult(

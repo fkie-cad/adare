@@ -96,6 +96,7 @@ class AbstractCommandMixin(ABC):
         redirect_stderr: str = "",
         redirect_stdout: str = "",
         hidden_window: bool = True,
+        inject_user_path: bool = False,
     ) -> List[str]:
         """
         Build hypervisor-specific command arguments for guest execution.
