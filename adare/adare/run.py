@@ -1105,14 +1105,6 @@ def sync(project):
 
 
 # ------------------------------
-# Development commands
-# ------------------------------
-@cli.group()
-def dev():
-    """Development commands for testing and debugging."""
-    pass
-
-# ------------------------------
 # MCP test commands (under dev)
 # ------------------------------
 @dev.group()
