@@ -17,6 +17,7 @@ from adare.backend.experiment.runctx import ExperimentRunCtx, ExperimentConfig
 from adare.backend.experiment.playbook_controller import PlaybookController
 from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
 from adare.types.playbook import ActionType, Playbook
+from adare.hypervisor.exceptions import HypervisorException
 
 log = logging.getLogger(__name__)
 
@@ -573,19 +574,20 @@ class DevModeSession:
 
         # Delegate to hypervisor-specific strategy
         if self.experiment_ctx.hypervisor_type == 'virtualbox':
-            # VirtualBox: Use VBoxManage to create snapshot
-            vm_name = self.experiment_ctx.vm_name
-            from adare.hypervisor.virtualbox.manager import VirtualBoxManager
-
-            manager = VirtualBoxManager()
-            await manager.create_snapshot(vm_name, snapshot_name, description)
+            # VirtualBox: Use VM's snapshot mixin directly
+            vm = self.experiment_ctx.vm
+            returncode = vm.create_snapshot(snapshot_name, description)
+            if returncode != 0:
+                raise HypervisorException(f"Failed to create VirtualBox snapshot '{snapshot_name}'")
             log.debug(f"VirtualBox snapshot created: {snapshot_name}")
 
         elif self.experiment_ctx.hypervisor_type == 'qemu':
-            # QEMU: Snapshots handled differently (overlay disks)
-            # For now, log a warning - QEMU snapshots are more complex
-            log.warning("QEMU snapshots not yet implemented for dev mode")
-            # Future: Use virsh snapshot-create or qemu-img snapshot
+            # QEMU: Use VM's snapshot mixin (qemu-img snapshot on stopped VM)
+            vm = self.experiment_ctx.vm
+            returncode = vm.create_snapshot(snapshot_name, description)
+            if returncode != 0:
+                raise HypervisorException(f"Failed to create QEMU snapshot '{snapshot_name}'")
+            log.debug(f"QEMU snapshot created: {snapshot_name}")
 
         else:
             log.warning(f"Unknown hypervisor type: {self.experiment_ctx.hypervisor_type}")
@@ -615,18 +617,20 @@ class DevModeSession:
 
         # Delegate to hypervisor-specific strategy
         if self.experiment_ctx.hypervisor_type == 'virtualbox':
-            # VirtualBox: Use VBoxManage to restore snapshot
-            vm_name = self.experiment_ctx.vm_name
-            from adare.hypervisor.virtualbox.manager import VirtualBoxManager
-
-            manager = VirtualBoxManager()
-            await manager.restore_snapshot(vm_name, snapshot_name)
+            # VirtualBox: Use VM's snapshot mixin directly
+            vm = self.experiment_ctx.vm
+            success = vm.restore_snapshot(snapshot_name)
+            if not success:
+                raise HypervisorException(f"Failed to restore VirtualBox snapshot '{snapshot_name}'")
             log.debug(f"VirtualBox snapshot restored: {snapshot_name}")
 
         elif self.experiment_ctx.hypervisor_type == 'qemu':
-            # QEMU: Snapshot restoration
-            log.warning("QEMU snapshot restoration not yet implemented for dev mode")
-            # Future: Use virsh snapshot-revert or qemu-img snapshot
+            # QEMU: Use VM's snapshot mixin (qemu-img snapshot on stopped VM)
+            vm = self.experiment_ctx.vm
+            success = vm.restore_snapshot(snapshot_name)
+            if not success:
+                raise HypervisorException(f"Failed to restore QEMU snapshot '{snapshot_name}'")
+            log.debug(f"QEMU snapshot restored: {snapshot_name}")
 
         else:
             log.warning(f"Unknown hypervisor type: {self.experiment_ctx.hypervisor_type}")
