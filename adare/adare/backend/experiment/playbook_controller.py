@@ -246,18 +246,26 @@ class PlaybookController:
         log.info(f"Starting experiment execution in {experiment_dir}")
         self.start_time = time.time()
 
-        # Check if automatic filesystem diff is enabled
-        auto_fs_diff = False
-        if hasattr(self.playbook, 'settings') and self.playbook.settings:
-            auto_fs_diff = self.playbook.settings.enable_filesystem_diff
+        # Determine if diff should run (CLI override > playbook setting)
+        auto_fs_diff = self._determine_diff_enabled()
+        diff_mode = self._resolve_diff_mode()
 
-        # Capture initial filesystem snapshot if enabled
-        initial_snapshot = None
+        # Validate diff mode compatibility
+        if auto_fs_diff and diff_mode == 'host':
+            self._validate_host_mode_support()
+
+        # Capture initial snapshot if enabled
+        initial_snapshot_ref = None
         if auto_fs_diff:
-            log.info("Automatic filesystem diff enabled - capturing initial snapshot")
-            initial_snapshot = await self._capture_automatic_snapshot("_fs_snapshot_initial")
-            if not initial_snapshot:
-                log.warning("Failed to capture initial filesystem snapshot - diff will be skipped")
+            if diff_mode == 'host':
+                log.info("Host-side filesystem diff enabled")
+                initial_snapshot_ref = "host_mode"  # Dummy ref for consistency
+            else:
+                log.info("Guest-side filesystem diff enabled - capturing initial snapshot")
+                initial_snapshot_ref = await self._capture_automatic_snapshot("_fs_snapshot_initial")
+
+            if not initial_snapshot_ref:
+                log.warning(f"Failed to prepare diff ({diff_mode} mode) - diff will be skipped")
                 auto_fs_diff = False
 
         # 1. Load testfunctions and testset (dependencies should already be installed)
@@ -270,16 +278,20 @@ class PlaybookController:
             playbook_result = await self.execute_playbook()
             if not playbook_result.success:
                 # Even on failure, try to capture final snapshot for partial diff
-                if auto_fs_diff and initial_snapshot:
-                    await self._capture_and_export_diff(initial_snapshot, "_fs_snapshot_final")
+                if auto_fs_diff and initial_snapshot_ref:
+                    # Host mode: Skip here (handled in cleanup phase)
+                    if diff_mode != 'host':
+                        await self._capture_and_export_diff(initial_snapshot_ref, "_fs_snapshot_final")
                 return playbook_result
         else:
             log.warning("No playbook.yml found, skipping GUI actions")
 
         # Capture final snapshot and calculate diff if enabled
-        if auto_fs_diff and initial_snapshot:
-            log.info("Capturing final filesystem snapshot and calculating diff")
-            await self._capture_and_export_diff(initial_snapshot, "_fs_snapshot_final")
+        if auto_fs_diff and initial_snapshot_ref:
+            # Host mode: Skip here (handled in cleanup phase)
+            if diff_mode != 'host':
+                log.info("Capturing final guest snapshot and calculating diff")
+                await self._capture_and_export_diff(initial_snapshot_ref, "_fs_snapshot_final")
 
         # Tests are now executed inline during playbook execution via 'test:' actions
 
@@ -638,7 +650,10 @@ class PlaybookController:
             artifacts_dir.mkdir(parents=True, exist_ok=True)
 
             # Prepare metadata for JSON export
+            tool_name = 'MFTReader' if initial_snapshot.os_type == 'Windows' else 'LinuxFSSnapshot'
             metadata = {
+                'diff_mode': 'guest',
+                'tool': tool_name,
                 'initial_snapshot_time': initial_snapshot.timestamp,
                 'final_snapshot_time': final_snapshot.timestamp,
                 'os_type': initial_snapshot.os_type,
@@ -657,3 +672,68 @@ class PlaybookController:
 
         except Exception as e:
             log.error(f"Error exporting filesystem diff: {e}", exc_info=True)
+
+    def _determine_diff_enabled(self) -> bool:
+        """Determine if filesystem diff should run (CLI > playbook)."""
+        config = self.execution_context.get('config')
+        if config and hasattr(config, 'enable_diff') and config.enable_diff is not None:
+            return config.enable_diff  # CLI override
+
+        # Fall back to playbook setting
+        if hasattr(self.playbook, 'settings') and self.playbook.settings:
+            return self.playbook.settings.enable_filesystem_diff
+
+        return False
+
+    def _resolve_diff_mode(self) -> str:
+        """Resolve diff mode: auto → guest/host based on capabilities."""
+        config = self.execution_context.get('config')
+        requested_mode = getattr(config, 'diff_mode', 'auto') if config else 'auto'
+
+        if requested_mode == 'auto':
+            # Smart selection based on hypervisor and tool availability
+            if self._is_qemu_vm():
+                if self._is_virt_diff_available():
+                    log.info("CLAUDE: Auto mode: Using host-side diff (QEMU + virt-diff available)")
+                    return 'host'
+                else:
+                    log.warning("CLAUDE: Auto mode: virt-diff not found, falling back to guest-side diff")
+                    log.warning("CLAUDE: For faster diffs, install: sudo apt-get install libguestfs-tools")
+                    return 'guest'
+            else:
+                log.debug("CLAUDE: Auto mode: Using guest-side diff (non-QEMU hypervisor)")
+                return 'guest'
+
+        return requested_mode
+
+    def _is_qemu_vm(self) -> bool:
+        """Check if VM is QEMU."""
+        if not self.vm:
+            return False
+        return self.vm.__class__.__name__ == 'QEMUVM'
+
+    def _is_virt_diff_available(self) -> bool:
+        """Check if libguestfs virt-diff is installed."""
+        import shutil
+        return shutil.which('guestfish') is not None
+
+    def _validate_host_mode_support(self):
+        """Validate that host mode is supported (QEMU + virt-diff)."""
+        if not self._is_qemu_vm():
+            from adare.exceptions import LoggedException
+            raise LoggedException(
+                log,
+                f"Host-side diff (--diff-mode=host) requires QEMU hypervisor. "
+                f"Current hypervisor: {self.vm.__class__.__name__ if self.vm else 'unknown'}. "
+                f"Use --diff-mode=guest or switch to QEMU environment."
+            )
+
+        if not self._is_virt_diff_available():
+            from adare.exceptions import LoggedException
+            raise LoggedException(
+                log,
+                "Host-side diff requires libguestfs-tools but guestfish not found.\n"
+                "Installation: sudo apt-get install libguestfs-tools\n"
+                "Alternative: Use --diff-mode=guest for VM-based diff."
+            )
+

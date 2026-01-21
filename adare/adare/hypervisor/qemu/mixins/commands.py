@@ -235,7 +235,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             if run_as_user:
                 rl = "LIMITED" if not admin else "HIGHEST"
                 delay = 10
-                task_name = f"adare"
+                task_name = f"adare_task_{int(time.time())}"
                 user = self.username
                 pw = self.password
                 script_path = f"C:\\Windows\\Temp\\adare.ps1"
@@ -257,7 +257,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     f"$info = schtasks /Query /TN $t /V /FO CSV | ConvertFrom-Csv; "                                                                               
                     f"$msg = \"Task_Status: $($info.Status) | Exit_Code: $($info.'Last Run Result')\"; "                                                           
                     f"[Console]::Error.WriteLine($msg); "                                                                                                          
-                    f"schtasks /Delete /TN $t /F; "                                                                                                                
+                    #f"schtasks /Delete /TN $t /F; "                                                                                                                
                     f"if (Test-Path $script) {{ Remove-Item $script -Force }}; "                                                                                   
                     f"}} "                                                                                                                                         
                 )

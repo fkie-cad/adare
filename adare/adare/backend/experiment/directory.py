@@ -55,6 +55,43 @@ class ExperimentRunDirectory(Directory):
         self.tmp_directory.mkdir(parents=False, exist_ok=True)
 
 
+class DiffRunDirectory(Directory):
+    """Directory structure for diff mode runs (stored under /diff instead of /run)."""
+    log_directory: Path
+    adare_log_file: Path
+    mcp_gui_log_file: Path
+    reporting_directory: Path
+    screenshots_directory: Path
+    tmp_directory: Path
+    artifacts_directory: Path
+    diff_directory: Path
+
+    def __init__(self, project_directory: ProjectDirectory, experiment: str):
+        # Use 'diff' instead of 'run'
+        diff_dir = project_directory.path / 'diff'
+        super().__init__(diff_dir / experiment / datetime.now(timezone.utc).strftime('%Y-%m-%d_%H-%M-%S'))
+        self.log_directory = self.path / 'logs'
+        self.adare_log_file = self.log_directory / 'adare.log'
+        self.mcp_gui_log_file = self.log_directory / 'mcp_gui.log'
+        self.reporting_directory = self.path / 'reporting'
+        self.screenshots_directory = self.reporting_directory / 'screenshots'
+        self.tmp_directory = self.path / '.tmp'
+        self.artifacts_directory = self.path / 'artifacts'
+        self.diff_directory = self.artifacts_directory / 'diff'
+
+    def create(self):
+        # Create diff parent directory if needed
+        self.path.parent.parent.mkdir(parents=True, exist_ok=True)
+        self.path.parent.mkdir(parents=False, exist_ok=True)
+        self.path.mkdir(parents=False)
+        self.log_directory.mkdir(parents=False)
+        self.reporting_directory.mkdir(parents=False, exist_ok=True)
+        self.screenshots_directory.mkdir(parents=False, exist_ok=True)
+        self.tmp_directory.mkdir(parents=False, exist_ok=True)
+        self.artifacts_directory.mkdir(parents=False, exist_ok=True)
+        self.diff_directory.mkdir(parents=False, exist_ok=True)
+
+
     def clean(self):
         """Clean up temporary files and directories after experiment run."""
         try:

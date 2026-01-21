@@ -555,7 +555,7 @@ class MFTReader:
             return (False, error_msg)
 
     @staticmethod
-    def extract_mft_to_file(volume: str = "C:", output_path: Path) -> Path:
+    def extract_mft_to_file(output_path: Path, volume: str = "C:") -> Path:
         """Extract raw MFT file from volume to disk.
 
         Uses PowerShell command to copy $MFT file.
@@ -570,8 +570,9 @@ class MFTReader:
         log.info(f"CLAUDE: Extracting MFT from volume {volume}...")
 
         # PowerShell command to read raw MFT file
+        # Note: Device path format is \\.\C:$MFT (no backslash before $MFT)
         ps_cmd = f"""
-$bytes = [System.IO.File]::ReadAllBytes("\\\\.\\{volume}\\$MFT")
+$bytes = [System.IO.File]::ReadAllBytes("\\\\.\\{volume}$MFT")
 [System.IO.File]::WriteAllBytes("{output_path}", $bytes)
 """
 
@@ -631,7 +632,7 @@ $bytes = [System.IO.File]::ReadAllBytes("\\\\.\\{volume}\\$MFT")
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mft') as f:
                 temp_mft = Path(f.name)
 
-            MFTReader.extract_mft_to_file(volume, temp_mft)
+            MFTReader.extract_mft_to_file(temp_mft, volume)
 
             # Step 3: Parse MFT file
             result = MFTParser.parse_mft_file(temp_mft, root_path)

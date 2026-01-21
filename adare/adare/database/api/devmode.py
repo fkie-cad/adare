@@ -15,6 +15,7 @@ from datetime import datetime
 
 from adare.database.api.base import EnhancedDatabaseApi
 from adare.database.models.devsession import DevSession
+from adare.database.models.devcheckpoint import DevCheckpoint
 from adare.database.models.global_models import GlobalBase
 from adare.database.exceptions import EntityNotFoundError, ValidationError
 
@@ -40,6 +41,7 @@ class DevModeApi(EnhancedDatabaseApi):
             db_path: Optional path to database file (uses global DB if None)
         """
         super().__init__(db_path)
+        self._start_session()
         GlobalBase.metadata.create_all(self.engine)
 
     def save_session(
@@ -88,6 +90,7 @@ class DevModeApi(EnhancedDatabaseApi):
 
         self._session.add(session)
         self._session.flush()
+        self._session.commit()
 
         log.info(f"Saved dev session {session_id} to database")
         return session
@@ -189,6 +192,7 @@ class DevModeApi(EnhancedDatabaseApi):
         session.status = status
         session.updated_at = datetime.now()
         self._session.flush()
+        self._session.commit()
 
         log.info(f"Updated dev session {session_id} status to '{status}'")
         return session
@@ -210,6 +214,7 @@ class DevModeApi(EnhancedDatabaseApi):
 
         self._session.delete(session)
         self._session.flush()
+        self._session.commit()
 
         log.info(f"Deleted dev session {session_id} from database")
         return True
@@ -277,3 +282,160 @@ class DevModeApi(EnhancedDatabaseApi):
             True if session exists, False otherwise
         """
         return self.get_session(session_id) is not None
+
+    # Checkpoint Management Operations
+
+    def save_checkpoint(self, checkpoint: DevCheckpoint) -> DevCheckpoint:
+        """
+        Persist a checkpoint to the database.
+
+        Args:
+            checkpoint: DevCheckpoint instance to save
+
+        Returns:
+            Saved DevCheckpoint instance
+
+        Raises:
+            ValidationError: If checkpoint with same name already exists for session
+        """
+        # Check if checkpoint with same name exists for this session
+        existing = self._session.query(DevCheckpoint).filter(
+            DevCheckpoint.session_id == checkpoint.session_id,
+            DevCheckpoint.name == checkpoint.name
+        ).first()
+
+        if existing:
+            raise ValidationError(
+                f"Checkpoint '{checkpoint.name}' already exists for session {checkpoint.session_id}"
+            )
+
+        self._session.add(checkpoint)
+        self._session.flush()
+        self._session.commit()
+
+        log.info(f"Saved checkpoint {checkpoint.name} for session {checkpoint.session_id}")
+        return checkpoint
+
+    def get_checkpoint(self, session_id: str, name: str) -> Optional[DevCheckpoint]:
+        """
+        Retrieve a checkpoint by session ID and name.
+
+        Args:
+            session_id: Session ID
+            name: Checkpoint name
+
+        Returns:
+            DevCheckpoint instance or None if not found
+        """
+        return self._session.query(DevCheckpoint).filter(
+            DevCheckpoint.session_id == session_id,
+            DevCheckpoint.name == name
+        ).first()
+
+    def get_checkpoint_by_id(self, checkpoint_id: str) -> Optional[DevCheckpoint]:
+        """
+        Retrieve a checkpoint by ID.
+
+        Args:
+            checkpoint_id: Unique checkpoint identifier
+
+        Returns:
+            DevCheckpoint instance or None if not found
+        """
+        return self._session.query(DevCheckpoint).filter(
+            DevCheckpoint.checkpoint_id == checkpoint_id
+        ).first()
+
+    def get_checkpoint_or_404(self, session_id: str, name: str) -> DevCheckpoint:
+        """
+        Retrieve a checkpoint or raise exception if not found.
+
+        Args:
+            session_id: Session ID
+            name: Checkpoint name
+
+        Returns:
+            DevCheckpoint instance
+
+        Raises:
+            EntityNotFoundError: If checkpoint not found
+        """
+        checkpoint = self.get_checkpoint(session_id, name)
+        if not checkpoint:
+            raise EntityNotFoundError(
+                f"Checkpoint '{name}' not found for session {session_id}"
+            )
+        return checkpoint
+
+    def list_checkpoints(self, session_id: str) -> List[DevCheckpoint]:
+        """
+        List all checkpoints for a session.
+
+        Args:
+            session_id: Session ID to filter by
+
+        Returns:
+            List of DevCheckpoint instances ordered by creation time
+        """
+        return self._session.query(DevCheckpoint).filter(
+            DevCheckpoint.session_id == session_id
+        ).order_by(DevCheckpoint.created_at.asc()).all()
+
+    def delete_checkpoint(self, checkpoint_id: str) -> bool:
+        """
+        Delete a checkpoint from the database.
+
+        Args:
+            checkpoint_id: Checkpoint ID to delete
+
+        Returns:
+            True if checkpoint was deleted, False if not found
+        """
+        checkpoint = self.get_checkpoint_by_id(checkpoint_id)
+        if not checkpoint:
+            log.warning(f"Checkpoint {checkpoint_id} not found for deletion")
+            return False
+
+        self._session.delete(checkpoint)
+        self._session.flush()
+        self._session.commit()
+
+        log.info(f"Deleted checkpoint {checkpoint_id} from database")
+        return True
+
+    def delete_session_checkpoints(self, session_id: str) -> int:
+        """
+        Delete all checkpoints for a session.
+
+        Args:
+            session_id: Session ID to delete checkpoints for
+
+        Returns:
+            Number of checkpoints deleted
+        """
+        checkpoints = self.list_checkpoints(session_id)
+        count = len(checkpoints)
+
+        for checkpoint in checkpoints:
+            self._session.delete(checkpoint)
+
+        self._session.flush()
+        self._session.commit()
+
+        if count > 0:
+            log.info(f"Deleted {count} checkpoints for session {session_id}")
+
+        return count
+
+    def checkpoint_exists(self, session_id: str, name: str) -> bool:
+        """
+        Check if a checkpoint exists.
+
+        Args:
+            session_id: Session ID
+            name: Checkpoint name
+
+        Returns:
+            True if checkpoint exists, False otherwise
+        """
+        return self.get_checkpoint(session_id, name) is not None

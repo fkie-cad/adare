@@ -25,6 +25,8 @@ class ExperimentConfig:
     websocket_port: Optional[int] = None  # Allocated dynamically from database
     shared_directories: Dict[str, Dict[str, Path]] = field(default_factory=dict)
     gui_mode_override: Optional[str] = None  # CLI override for GUI execution mode
+    enable_diff: Optional[bool] = None  # None=use playbook, True/False=override
+    diff_mode: str = 'auto'  # 'auto', 'guest', or 'host'
 
 @dataclass
 class ExperimentRunCtx:
@@ -46,6 +48,7 @@ class ExperimentRunCtx:
     timestamp_before_vm_start: Optional[datetime] = None
     timestamp_end: Optional[datetime] = None
     stop_event: threading.Event = field(default_factory=threading.Event)
+    user_interrupt_event: threading.Event = field(default_factory=threading.Event)
     lock: threading.Lock = field(default_factory=threading.Lock)
     mcp_server: Optional[MCPServerManager] = None
     debug_screenshots: bool = False

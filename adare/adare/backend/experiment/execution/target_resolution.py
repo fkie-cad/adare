@@ -61,16 +61,17 @@ class TargetResolutionExecutor:
         # Create and emit find step events
         find_action_id = f"find_step_{int(time.time()*1000)}"
 
+        # Create target description (used for logging, whether events are emitted or not)
+        target_desc = target.image or target.text or f"position {target.position}" if target else "target"
+
+        # Include strategy in description if available
+        strategy_desc = ""
+        if hasattr(target, 'strategy') and target.strategy:
+            strategy_name = target.strategy.__class__.__name__
+            strategy_desc = f" using {strategy_name}"
+
         if self.experiment_run_id and event_emitter:
             # Create find step action
-            target_desc = target.image or target.text or f"position {target.position}" if target else "target"
-
-            # Include strategy in description if available
-            strategy_desc = ""
-            if hasattr(target, 'strategy') and target.strategy:
-                strategy_name = target.strategy.__class__.__name__
-                strategy_desc = f" using {strategy_name}"
-
             find_step = FindAction(
                 description=f"finding {target_desc}{strategy_desc}",
                 target_info=get_target_info(target)

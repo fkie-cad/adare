@@ -814,6 +814,12 @@ async def step_connect_websocket(context: ExperimentRunCtx):
         import asyncio
         from websockets.exceptions import ConnectionClosed, WebSocketException
 
+        # Validate websocket port is set
+        if not context.config.websocket_port:
+            error_msg = "WebSocket port not configured in context - cannot establish connection"
+            log.error(error_msg)
+            raise LoggedException(log, error_msg)
+
         # QEMU-specific: Check if adarevm process is still alive before attempting connection
         if context.hypervisor_type == 'qemu' and hasattr(context, 'adarevm_pid') and context.adarevm_pid:
             log.debug(f"CLAUDE: Checking if adarevm process (PID {context.adarevm_pid}) is still running...")
@@ -1177,7 +1183,7 @@ def __start_event_listeners(experiment_run_ulid: str):
     return cli_thread, db_thread
 
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, diff: bool = None, diff_mode: str = 'auto'):
     import signal
     import asyncio
 
@@ -1241,6 +1247,14 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     if gui_mode is not None:
         config.gui_mode_override = gui_mode
         log.info(f"Using custom GUI mode: {gui_mode}")
+
+    # Set filesystem diff parameters
+    if diff is not None:
+        config.enable_diff = diff
+        log.info(f"Filesystem diff CLI override: {'enabled' if diff else 'disabled'}")
+    if diff_mode is not None:
+        config.diff_mode = diff_mode
+        log.info(f"Filesystem diff mode: {diff_mode}")
 
     experiment_run_context = ExperimentRunCtx(config)
     # Respect the --debug-screenshots CLI flag (default: False unless flag is provided)
@@ -1422,6 +1436,8 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 await step_runner.run_cleanup_step(vm_manager.stop_vm, experiment_run_context, post_interrupt=True)
                 # Retrieve artifacts BEFORE destroying VM (critical for QEMU)
                 await step_runner.run_cleanup_step(vm_manager.retrieve_artifacts, experiment_run_context, post_interrupt=True)
+                # Perform host-side diff AFTER VM stopped, BEFORE overlay cleanup
+                await step_runner.run_cleanup_step(vm_manager.perform_host_diff, experiment_run_context, post_interrupt=True)
                 await step_runner.run_cleanup_step(vm_manager.cleanup_vm, experiment_run_context, post_interrupt=True)
             # Give time for all events to be processed before stopping
             await asyncio.sleep(2)

@@ -1,6 +1,0 @@
-{
-    "execute": "guest-exec-status",
-    "arguments": {
-        "pid": 7096
-    }
-}

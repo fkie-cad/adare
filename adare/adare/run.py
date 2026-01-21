@@ -370,9 +370,11 @@ def load(experiment, environment, force, project):
 @click.option('--vm-memory', type=int, help='VM RAM in MB (default: 4096 for Linux, 8192 for Windows)')
 @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
 @click.option('--gui-mode', type=click.Choice(['auto', 'agent', 'host']), help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU only)')
+@click.option('--diff/--no-diff', default=None, help='Enable/disable filesystem diff (overrides playbook setting)')
+@click.option('--diff-mode', type=click.Choice(['auto', 'guest', 'host']), default='auto', help='Diff mode: auto (smart selection), guest (VM-based), host (QEMU virt-diff)')
 @click.option('--project', help='Name of the project')
 @click.pass_context
-def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, project):
+def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, diff, diff_mode, project):
     """Run an experiment in a given environment or all environments if none specified.
 
     By default, runs in TEST mode (creates fake runs, skips integrity checks, allows modifications).
@@ -399,6 +401,8 @@ def run(ctx, experiment, environment, production, debug_screenshots, preserve_sn
         vm_memory=vm_memory,
         vm_cpus=vm_cpus,
         gui_mode=gui_mode,
+        diff=diff,
+        diff_mode=diff_mode,
         project=project,
         verbose=ctx.obj.verbose,
         very_verbose=ctx.obj.very_verbose
@@ -610,6 +614,39 @@ def clone(source_experiment, target_experiment, environments, project):
     exec_with_error_printing(exec_experiment_clone, args)
 
 
+@experiment.command()
+@click.argument('experiment', type=click.Path(exists=False))
+@click.option('-e', '--environment', type=click.Path(exists=False), required=True,
+              help='Name of the environment (must be QEMU-based)')
+@click.option('--project', '-p', help='Name of the project')
+def diff(experiment, environment, project):
+    """Run experiment in visual diff mode for manual comparison.
+
+    Diff mode is designed for visual comparison between different OS/software versions.
+    It runs experiments in QEMU with GUI mode without agent installation.
+
+    Features:
+    - QEMU only (no agent installation)
+    - Executes visual actions only (click, keyboard, screenshot)
+    - Skips forensic actions (save_timestamp, pull, tests)
+    - No database records (ephemeral)
+    - For manual visual comparison between OS/software versions
+
+    EXPERIMENT is the experiment name.
+
+    Examples:
+    - adare experiment diff test_csv -e ubuntu24
+    - adare experiment diff firefox_test -e windows11 --project myproject
+    """
+    from adare.cli.diff import exec_experiment_diff
+    args = SimpleNamespace(
+        experiment=experiment,
+        environment=environment,
+        project=project
+    )
+    exec_with_error_printing(exec_experiment_diff, args)
+
+
 # ------------------------------
 # Development mode commands
 # ------------------------------
@@ -622,18 +659,46 @@ def dev():
 @click.argument('experiment')
 @click.option('-e', '--environment', required=True, help='Environment name')
 @click.option('--project', '-p', help='Project name/path')
-def start(experiment, environment, project):
+@click.option('--gui-mode', type=click.Choice(['auto', 'agent', 'host']),
+              help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU)')
+@click.option('--vm-memory', type=int, help='VM RAM in MB (default: 4096 for Linux, 8192 for Windows)')
+@click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
+@click.option('--debug-screenshots', is_flag=True, help='Save screenshots for debugging')
+@click.option('--log', type=click.Path(), help='Save logs to file')
+def start(experiment, environment, project, gui_mode, vm_memory, vm_cpus, debug_screenshots, log):
     """Start a new dev mode session."""
     from adare.cli.dev import exec_dev_start
-    args = SimpleNamespace(experiment=experiment, environment=environment, project=project)
+    args = SimpleNamespace(
+        experiment=experiment,
+        environment=environment,
+        project=project,
+        gui_mode=gui_mode,
+        vm_memory=vm_memory,
+        vm_cpus=vm_cpus,
+        debug_screenshots=debug_screenshots,
+        log=log
+    )
     exec_with_error_printing(exec_dev_start, args)
 
 @dev.command()
 @click.argument('session_id')
-def stop(session_id):
-    """Stop a dev mode session."""
+@click.option('--rm', is_flag=True, help='Remove all resources (VM, snapshots, database entries)')
+def stop(session_id, rm):
+    """Stop a dev mode session.
+
+    Without --rm: Stops the VM but keeps all resources for future restart.
+    With --rm: Completely removes the session and all associated resources.
+    """
     from adare.cli.dev import exec_dev_stop
-    args = SimpleNamespace(session_id=session_id)
+    args = SimpleNamespace(session_id=session_id, remove_resources=rm)
+    exec_with_error_printing(exec_dev_stop, args)
+
+@dev.command()
+@click.argument('session_id')
+def remove(session_id):
+    """Remove a dev mode session and all resources (alias for 'stop --rm')."""
+    from adare.cli.dev import exec_dev_stop
+    args = SimpleNamespace(session_id=session_id, remove_resources=True)
     exec_with_error_printing(exec_dev_stop, args)
 
 @dev.command()
@@ -676,7 +741,12 @@ def playbook(session_id, playbook_file, url, stdin):
     )
     exec_with_error_printing(exec_dev_playbook, args)
 
-@dev.command(name='reset-soft')
+@dev.group()
+def reset():
+    """Reset commands for dev session."""
+    pass
+
+@reset.command(name='soft')
 @click.argument('session_id')
 def reset_soft(session_id):
     """Soft reset: Reset variables only (<1 second)."""
@@ -684,7 +754,7 @@ def reset_soft(session_id):
     args = SimpleNamespace(session_id=session_id)
     exec_with_error_printing(exec_dev_reset_soft, args)
 
-@dev.command(name='reset-hard')
+@reset.command(name='hard')
 @click.argument('session_id')
 def reset_hard(session_id):
     """Hard reset: Full VM restore (10-30 seconds)."""
@@ -692,7 +762,12 @@ def reset_hard(session_id):
     args = SimpleNamespace(session_id=session_id)
     exec_with_error_printing(exec_dev_reset_hard, args)
 
-@dev.command(name='checkpoint-create')
+@dev.group()
+def checkpoint():
+    """Checkpoint management commands."""
+    pass
+
+@checkpoint.command(name='create')
 @click.argument('session_id')
 @click.argument('name')
 @click.option('-d', '--description', default='', help='Checkpoint description')
@@ -702,7 +777,7 @@ def checkpoint_create(session_id, name, description):
     args = SimpleNamespace(session_id=session_id, name=name, description=description)
     exec_with_error_printing(exec_dev_checkpoint_create, args)
 
-@dev.command(name='checkpoint-restore')
+@checkpoint.command(name='restore')
 @click.argument('session_id')
 @click.argument('name')
 def checkpoint_restore(session_id, name):
@@ -711,13 +786,22 @@ def checkpoint_restore(session_id, name):
     args = SimpleNamespace(session_id=session_id, name=name)
     exec_with_error_printing(exec_dev_checkpoint_restore, args)
 
-@dev.command(name='checkpoint-list')
+@checkpoint.command(name='list')
 @click.argument('session_id')
 def checkpoint_list(session_id):
     """List available checkpoints."""
     from adare.cli.dev import exec_dev_checkpoint_list
     args = SimpleNamespace(session_id=session_id)
     exec_with_error_printing(exec_dev_checkpoint_list, args)
+
+@checkpoint.command(name='delete')
+@click.argument('session_id')
+@click.argument('name')
+def checkpoint_delete(session_id, name):
+    """Delete a checkpoint."""
+    from adare.cli.dev import exec_dev_checkpoint_delete
+    args = SimpleNamespace(session_id=session_id, name=name)
+    exec_with_error_printing(exec_dev_checkpoint_delete, args)
 
 @dev.command()
 @click.argument('session_id')
@@ -736,12 +820,10 @@ def cleanup(project):
     exec_with_error_printing(exec_dev_cleanup, args)
 
 # Add dev command aliases
+# Add dev command aliases
 dev.add_alias('l', 'list')
-dev.add_alias('rs', 'reset-soft')
-dev.add_alias('rh', 'reset-hard')
-dev.add_alias('cc', 'checkpoint-create')
-dev.add_alias('cr', 'checkpoint-restore')
-dev.add_alias('cl', 'checkpoint-list')
+dev.add_alias('res', 'reset')
+dev.add_alias('cp', 'checkpoint')
 
 
 # ------------------------------

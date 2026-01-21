@@ -17,6 +17,7 @@ from .global_models import (
 
 # Import dev mode models
 from .devsession import DevSession
+from .devcheckpoint import DevCheckpoint
 
 # Import all project models
 from .project_models import (
