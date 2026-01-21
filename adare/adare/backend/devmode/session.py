@@ -5,7 +5,7 @@ This module provides the core DevModeSession class that wraps the existing
 experiment run infrastructure to enable interactive playbook development.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, is_dataclass, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -18,6 +18,14 @@ from adare.backend.experiment.playbook_controller import PlaybookController
 from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
 from adare.types.playbook import ActionType, Playbook
 from adare.hypervisor.exceptions import HypervisorException
+from adare.types.stages import (
+    Stage,
+    ExperimentPreparationStage,
+    CleanupShutdownStage,
+    SoftwareInstallationStage,
+    VirtualMachineSetupStage
+)
+from adare.backend.experiment.stagectxmanager import StageCtxManager
 
 log = logging.getLogger(__name__)
 
@@ -25,18 +33,24 @@ log = logging.getLogger(__name__)
 @dataclass
 class DevModeSnapshot:
     """
-    Represents a VM snapshot for dev mode reset operations.
+    Represents an external VM snapshot for dev mode reset operations.
 
     Attributes:
-        snapshot_name: Unique name for the snapshot
+        snapshot_name: Unique name for the snapshot (libvirt snapshot name)
         created_at: When the snapshot was created
         variable_state: Dictionary of variables at snapshot time
         description: Human-readable description
+        memory_file_path: Path to external memory save file
+        disk_file_path: Path to external disk overlay file
+        checkpoint_id: Database checkpoint ID (ULID)
     """
     snapshot_name: str
     created_at: datetime
     variable_state: Dict[str, Any]
     description: str = ""
+    memory_file_path: str = ""
+    disk_file_path: str = ""
+    checkpoint_id: str = ""
 
 
 @dataclass
@@ -87,7 +101,12 @@ class DevModeSession:
         session_id: str,
         project_path: Path,
         experiment_name: str,
-        environment_name: str
+        environment_name: str,
+        gui_mode: Optional[str] = None,
+        vm_memory: Optional[int] = None,
+        vm_cpus: Optional[int] = None,
+        debug_screenshots: bool = False,
+        console_ulid: Optional[str] = None
     ):
         """
         Initialize dev mode session (does not start VM).
@@ -97,11 +116,21 @@ class DevModeSession:
             project_path: Path to the ADARE project
             experiment_name: Name of the experiment to develop
             environment_name: Name of the environment (VM) to use
+            gui_mode: GUI execution mode override ('auto', 'agent', 'host')
+            vm_memory: VM RAM in MB (None uses platform defaults)
+            vm_cpus: VM CPU count (None uses default of 4)
+            debug_screenshots: Save debug screenshots during execution
+            console_ulid: Optional flow console ULID for event integration
         """
         self.session_id = session_id
         self.project_path = project_path
         self.experiment_name = experiment_name
         self.environment_name = environment_name
+        self.gui_mode = gui_mode
+        self.vm_memory = vm_memory
+        self.vm_cpus = vm_cpus
+        self.debug_screenshots = debug_screenshots
+        self.console_ulid = console_ulid
 
         # Core components (initialized in start())
         self.experiment_ctx: Optional[ExperimentRunCtx] = None
@@ -117,6 +146,50 @@ class DevModeSession:
         # Store initial variable state for reset operations
         self.initial_variables: Dict[str, Any] = {}
 
+    @staticmethod
+    def _make_json_serializable(obj):
+        """
+        Recursively convert objects to JSON-serializable formats.
+        
+        Handles:
+        - dataclasses -> dict
+        - Path -> str
+        - datetime -> isoformat str
+        - list/tuple -> list
+        - dict -> dict
+        """
+        if isinstance(obj, (str, int, float, bool, type(None))):
+            return obj
+        if isinstance(obj, (list, tuple)):
+            return [DevModeSession._make_json_serializable(x) for x in obj]
+        if isinstance(obj, dict):
+            return {str(k): DevModeSession._make_json_serializable(v) for k, v in obj.items()}
+        if is_dataclass(obj):
+            return DevModeSession._make_json_serializable(asdict(obj))
+        if isinstance(obj, Path):
+            return str(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return str(obj)
+
+    def _create_stage_context(self, stage: Stage):
+        """
+        Create a StageCtxManager configured for dev mode (skips parent validation).
+
+        Args:
+            stage: The stage to wrap
+
+        Returns:
+            StageCtxManager configured for dev mode
+        """
+        # Use console_ulid if provided for flow console integration, otherwise use experiment_run_ulid
+        stage_ulid = self.console_ulid or self.experiment_ctx.experiment_run_ulid
+        return StageCtxManager(
+            stage,
+            stage_ulid,
+            event=self.experiment_ctx.user_interrupt_event
+        )
+
     async def start(self) -> bool:
         """
         Start dev mode session by initializing VM and controllers.
@@ -129,6 +202,14 @@ class DevModeSession:
         """
         try:
             log.info(f"Starting dev mode session {self.session_id}")
+
+            # Force QEMU_LIBGUESTFS=true for dev mode because virtiofs is incompatible with
+            # the live migration/snapshot mechanism used by checkpoints.
+            # This forces file transfer to use libguestfs (copy files to disk before boot)
+            # instead of shared folders.
+            import os
+            os.environ['QEMU_LIBGUESTFS'] = 'true'
+            log.info("CLAUDE: Forced QEMU_LIBGUESTFS=true to enable snapshots (virtiofs incompatible)")
 
             # Import required modules
             from adare.backend.experiment.run import (
@@ -148,55 +229,80 @@ class DevModeSession:
                 test_mode=True,  # Dev mode = test mode (no integrity checks)
                 preserve_snapshot=True,  # Keep snapshots for reset
                 runlog=True,  # Enable logging
-                disable_printing=True  # No CLI output in dev mode
+                disable_printing=True,  # No CLI output in dev mode
+                gui_mode_override=self.gui_mode,  # Pass GUI mode override
+                vm_memory=self.vm_memory or 4096,  # VM RAM (default: 4096)
+                vm_cpus=self.vm_cpus or 4  # VM CPUs (default: 4)
             )
 
             # 2. Initialize ExperimentRunCtx with fake run
             self.experiment_ctx = ExperimentRunCtx(config=config)
             self.experiment_ctx.test_mode = True
+            self.experiment_ctx.debug_screenshots = self.debug_screenshots
             step_initialize(self.experiment_ctx, fake=True)
 
             log.info(f"Initialized fake experiment run: {self.experiment_ctx.experiment_run_ulid}")
 
-            # 3. Setup experiment environment
-            step_setup_experiment_environment(self.experiment_ctx)
-            log.info("Experiment environment setup complete")
+            # Determine ULID for StageCtxManager (use console_ulid if provided for flow console integration)
+            stage_ulid = self.console_ulid or self.experiment_ctx.experiment_run_ulid
 
-            # 4. Prepare run directory
-            step_prepare_run_environment(self.experiment_ctx)
-            log.info("Run directory prepared")
+            # 3-5. Wrap preparation steps in parent stage context
+            with StageCtxManager(
+                ExperimentPreparationStage(),
+                stage_ulid,
+                event=self.experiment_ctx.user_interrupt_event
+            ):
+                # 3. Setup experiment environment
+                step_setup_experiment_environment(self.experiment_ctx)
+                log.info("Experiment environment setup complete")
 
-            # 5. Start MCP server for target detection
-            await step_start_mcp_server(self.experiment_ctx)
-            log.info("MCP server started")
+                # 4. Prepare run directory
+                step_prepare_run_environment(self.experiment_ctx)
+                log.info("Run directory prepared")
+
+                # 5. Start MCP server for target detection
+                await step_start_mcp_server(self.experiment_ctx)
+                log.info("MCP server started")
 
             # 6. Create VM lifecycle manager
             hypervisor = self.experiment_ctx.hypervisor_type or 'virtualbox'
             self.vm_manager = VMLifecycleManager(hypervisor_type=hypervisor)
             log.info(f"Created VM lifecycle manager for {hypervisor}")
 
-            # 7. Create and prepare VM
-            await self.vm_manager.create_and_prepare_vm(self.experiment_ctx)
-            log.info("VM created and prepared")
+            # 7-9. Wrap VM setup in parent stage context
+            with StageCtxManager(
+                VirtualMachineSetupStage(),
+                stage_ulid,
+                event=self.experiment_ctx.user_interrupt_event
+            ):
+                # 7. Create and prepare VM
+                await self.vm_manager.create_and_prepare_vm(self.experiment_ctx)
+                log.info("VM created and prepared")
 
-            # 8. Setup file transfer and networking
-            await self.vm_manager.setup_file_transfer(self.experiment_ctx)
-            log.info("File transfer configured")
+                # 8. Setup file transfer and networking
+                await self.vm_manager.setup_file_transfer(self.experiment_ctx)
+                log.info("File transfer configured")
 
-            await self.vm_manager.setup_networking(self.experiment_ctx)
-            log.info("Networking configured")
+                await self.vm_manager.setup_networking(self.experiment_ctx)
+                log.info("Networking configured")
 
-            # 9. Start VM
-            await self.vm_manager.start_vm(self.experiment_ctx)
-            log.info("VM started")
+                # 9. Start VM
+                await self.vm_manager.start_vm(self.experiment_ctx)
+                log.info("VM started")
 
-            # 10. Install and run WebSocket server in VM
-            await step_install_and_run_websocket_server(self.experiment_ctx)
-            log.info("AdareVM WebSocket server installed")
+            # 10-11. Software installation happens after VM setup completes
+            with StageCtxManager(
+                SoftwareInstallationStage(),
+                stage_ulid,
+                event=self.experiment_ctx.user_interrupt_event
+            ):
+                # 10. Install and run WebSocket server in VM
+                await step_install_and_run_websocket_server(self.experiment_ctx)
+                log.info("AdareVM WebSocket server installed")
 
-            # 11. Connect to WebSocket
-            await step_connect_websocket(self.experiment_ctx)
-            log.info("Connected to WebSocket")
+                # 11. Connect to WebSocket
+                await step_connect_websocket(self.experiment_ctx)
+                log.info("Connected to WebSocket")
 
             # 12. Initialize PlaybookController
             # Get VM credentials for automatic variables
@@ -325,9 +431,10 @@ class DevModeSession:
 
     async def reset_soft(self) -> bool:
         """
-        Soft reset: Reset execution context variables only (no VM restart).
+        Soft reset: Restore VM to initial external snapshot (no full OS reboot).
 
-        This is fast (<1 second) and useful for quick retries without full VM reset.
+        For QEMU: Restores external snapshot (memory + disk, ~2-5 seconds, no OS boot)
+        For VirtualBox: Only resets variables (fast, <1 second)
 
         Returns:
             True if reset successful, False otherwise
@@ -342,8 +449,48 @@ class DevModeSession:
                 return False
 
             initial_snapshot = self.snapshots[0]
+            vm = self.experiment_ctx.vm
 
-            # Reset execution context to initial state
+            # QEMU: Restore external snapshot (memory + disk, no OS boot)
+            if self.experiment_ctx.hypervisor_type == 'qemu':
+                log.info(f"CLAUDE: Soft reset: restoring external snapshot '{initial_snapshot.snapshot_name}'")
+
+                try:
+                    # Disconnect WebSocket before VM state change
+                    if self.experiment_ctx.client:
+                        await self.experiment_ctx.client.disconnect()
+                        log.debug("CLAUDE: WebSocket disconnected")
+
+                    # Restore external snapshot
+                    success = vm.restore_external_snapshot(
+                        memory_path=initial_snapshot.memory_file_path,
+                        disk_path=initial_snapshot.disk_file_path
+                    )
+
+                    if not success:
+                        log.error("CLAUDE: External snapshot restore failed")
+                        # Fall back to variable-only reset
+                        log.info("CLAUDE: Falling back to variable-only reset")
+                    else:
+                        log.info("CLAUDE: External snapshot restored (no OS reboot)")
+
+                        # Reconnect WebSocket
+                        from adare.backend.experiment.run import (
+                            step_connect_websocket,
+                        )
+                        with StageCtxManager(
+                            SoftwareInstallationStage(),
+                            stage_ulid,
+                            event=self.experiment_ctx.user_interrupt_event
+                        ):
+                            await step_connect_websocket(self.experiment_ctx)
+                            log.debug("CLAUDE: WebSocket reconnected")
+
+                except Exception as e:
+                    log.error(f"CLAUDE: External snapshot restore failed: {e}", exc_info=True)
+                    log.info("CLAUDE: Falling back to variable-only reset")
+
+            # Reset playbook variables (always done, for both QEMU and VirtualBox)
             self.playbook_controller.execution_context.clear()
             self.playbook_controller.execution_context.update(
                 initial_snapshot.variable_state.copy()
@@ -383,7 +530,8 @@ class DevModeSession:
                 log.debug("WebSocket disconnected")
 
             # 2. Stop VM (don't destroy)
-            await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
+            with self._create_stage_context(CleanupShutdownStage()):
+                await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
             log.debug("VM stopped")
 
             # 3. Restore snapshot using hypervisor-specific strategy
@@ -399,9 +547,14 @@ class DevModeSession:
                 step_install_and_run_websocket_server,
                 step_connect_websocket,
             )
-            await step_install_and_run_websocket_server(self.experiment_ctx)
-            await step_connect_websocket(self.experiment_ctx)
-            log.debug("WebSocket reconnected")
+            with StageCtxManager(
+                SoftwareInstallationStage(),
+                self.experiment_ctx.experiment_run_ulid,
+                event=self.experiment_ctx.user_interrupt_event
+            ):
+                await step_install_and_run_websocket_server(self.experiment_ctx)
+                await step_connect_websocket(self.experiment_ctx)
+                log.debug("WebSocket reconnected")
 
             # 6. Reset playbook controller state
             self.playbook_controller.execution_context.clear()
@@ -437,9 +590,60 @@ class DevModeSession:
             log.error(f"Failed to create checkpoint: {e}", exc_info=True)
             return False
 
+    async def _wait_for_vm_ready_after_restore(self, context: ExperimentRunCtx, timeout: int = 60):
+        """
+        Wait for VM to be ready after external snapshot restore.
+
+        After virsh restore, the VM is running with restored memory state,
+        but the guest OS needs time to initialize network and services.
+
+        Args:
+            context: Experiment run context
+            timeout: Maximum seconds to wait for readiness
+
+        Raises:
+            LoggedException: If VM doesn't become ready within timeout
+        """
+        import asyncio
+        import time
+        from adare.exceptions import LoggedException
+
+        log.info("Waiting for VM to be ready after snapshot restore...")
+        start_time = time.time()
+
+        # For QEMU, wait for guest agent to be ready
+        if hasattr(context.vm, '_check_guest_agent'):
+            try:
+                # Try to wait for guest agent with timeout
+                elapsed = 0
+                while elapsed < timeout:
+                    try:
+                        # Check if guest agent is responsive
+                        is_ready = context.vm._check_guest_agent()
+                        if is_ready:
+                            log.info(f"VM ready after {elapsed:.1f}s")
+                            return
+                    except Exception:
+                        pass
+
+                    await asyncio.sleep(2)
+                    elapsed = time.time() - start_time
+
+                # Timeout - but don't fail, just warn
+                log.warning(f"Guest agent not ready after {timeout}s, continuing anyway")
+
+            except Exception as e:
+                log.warning(f"Could not check guest agent readiness: {e}")
+        else:
+            # Fallback: simple sleep to give VM time to stabilize
+            await asyncio.sleep(5)
+            log.info("VM stabilization wait completed")
+
     async def restore_checkpoint(self, name: str) -> bool:
         """
-        Restore to a named checkpoint (like hard reset but to specific snapshot).
+        Restore to a named checkpoint using external snapshot.
+
+        Loads checkpoint from database and restores VM to external snapshot state.
 
         Args:
             name: Name of the checkpoint to restore
@@ -448,43 +652,110 @@ class DevModeSession:
             True if restore successful, False otherwise
         """
         try:
-            snapshot = next(
-                (s for s in self.snapshots if name in s.snapshot_name),
-                None
-            )
-            if not snapshot:
-                log.error(f"Checkpoint '{name}' not found")
+            from adare.database.api.devmode import DevModeApi
+
+            # Load checkpoint from database
+            with DevModeApi() as api:
+                checkpoint = api.get_checkpoint(self.session_id, name)
+
+            if not checkpoint:
+                log.error(f"Checkpoint '{name}' not found in database")
                 return False
 
-            log.info(f"Restoring checkpoint: {snapshot.snapshot_name}")
+            log.info(f"Restoring checkpoint: {checkpoint.name}")
 
-            # Similar to hard_reset but with specified snapshot
-            # 1. Disconnect WebSocket
-            if self.experiment_ctx.client:
-                await self.experiment_ctx.client.disconnect()
-
-            # 2. Stop VM
-            await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
-
-            # 3. Restore snapshot
-            await self._restore_snapshot(snapshot.snapshot_name)
-
-            # 4. Start VM
-            await self.vm_manager.start_vm(self.experiment_ctx)
-
-            # 5. Reconnect WebSocket
-            from adare.backend.experiment.run import (
-                step_install_and_run_websocket_server,
-                step_connect_websocket,
+            # Find corresponding snapshot in memory (for variable state)
+            snapshot = next(
+                (s for s in self.snapshots if s.checkpoint_id == checkpoint.checkpoint_id),
+                None
             )
-            await step_install_and_run_websocket_server(self.experiment_ctx)
-            await step_connect_websocket(self.experiment_ctx)
 
-            # 6. Reset playbook controller state
+            # If not in memory, construct from database checkpoint
+            if not snapshot:
+                snapshot = DevModeSnapshot(
+                    snapshot_name=checkpoint.snapshot_name,
+                    created_at=checkpoint.created_at,
+                    variable_state=checkpoint.variable_state or {},
+                    description=checkpoint.description or "",
+                    memory_file_path=checkpoint.memory_file_path,
+                    disk_file_path=checkpoint.disk_file_path,
+                    checkpoint_id=checkpoint.checkpoint_id
+                )
+
+            vm = self.experiment_ctx.vm
+
+            # QEMU: Restore external snapshot
+            if self.experiment_ctx.hypervisor_type == 'qemu':
+                # Disconnect WebSocket before VM state change
+                if self.experiment_ctx.client:
+                    await self.experiment_ctx.client.disconnect()
+
+                # Restore external snapshot (destroys VM, updates disk, restores memory)
+                success = vm.restore_external_snapshot(
+                    memory_path=snapshot.memory_file_path,
+                    disk_path=snapshot.disk_file_path
+                )
+
+                if not success:
+                    log.error(f"Failed to restore external snapshot for checkpoint '{name}'")
+                    return False
+
+                # Wait for VM to be ready after memory restore
+                # The VM is running after virsh restore, but guest OS needs time to initialize
+                log.info("Waiting for VM to be ready after snapshot restore...")
+                await self._wait_for_vm_ready_after_restore(self.experiment_ctx)
+
+                # Verify websocket port is set (should be from session restore)
+                if not self.experiment_ctx.config.websocket_port:
+                    log.error("WebSocket port not set in context - cannot reconnect")
+                    return False
+
+                # Reconnect to WebSocket server (server already running in restored memory)
+                from adare.backend.experiment.run import step_connect_websocket
+                with StageCtxManager(
+                    SoftwareInstallationStage(),
+                    self.experiment_ctx.experiment_run_ulid,
+                    event=self.experiment_ctx.user_interrupt_event
+                ):
+                    await step_connect_websocket(self.experiment_ctx)
+
+            # VirtualBox path (unchanged)
+            elif self.experiment_ctx.hypervisor_type == 'virtualbox':
+                # Disconnect WebSocket
+                if self.experiment_ctx.client:
+                    await self.experiment_ctx.client.disconnect()
+
+                # Stop VM
+                with self._create_stage_context(CleanupShutdownStage()):
+                    await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
+
+                # Restore snapshot
+                await self._restore_snapshot(snapshot.snapshot_name)
+
+                # Start VM
+                await self.vm_manager.start_vm(self.experiment_ctx)
+
+                # Reconnect WebSocket
+                from adare.backend.experiment.run import (
+                    step_install_and_run_websocket_server,
+                    step_connect_websocket,
+                )
+                with StageCtxManager(
+                    SoftwareInstallationStage(),
+                    self.experiment_ctx.experiment_run_ulid,
+                    event=self.experiment_ctx.user_interrupt_event
+                ):
+                    await step_install_and_run_websocket_server(self.experiment_ctx)
+                    await step_connect_websocket(self.experiment_ctx)
+
+            # Reset playbook controller state
             self.playbook_controller.execution_context.clear()
             self.playbook_controller.execution_context.update(
                 snapshot.variable_state.copy()
             )
+
+            # Reset counters
+            self.actions_executed = 0
 
             log.info(f"Checkpoint '{name}' restored successfully")
             return True
@@ -513,94 +784,263 @@ class DevModeSession:
             available_snapshots=self.snapshots.copy()
         )
 
-    async def stop(self) -> None:
+    async def shutdown(self) -> None:
         """
-        Stop dev mode session and cleanup resources.
+        Shutdown dev mode session (VM only, keep all resources).
 
-        Reuses cleanup logic from experiment_run() finally block.
+        This is the new default behavior for 'adare dev stop':
+        - Shuts down WebSocket and MCP server
+        - Stops the VM gracefully
+        - Does NOT delete snapshots, VM disks, or database entries
+        - Session can be restarted later
         """
         try:
-            log.info(f"Stopping dev mode session {self.session_id}")
+            log.info(f"Shutting down session {self.session_id} (keeping resources)")
 
             if self.experiment_ctx:
-                # Reuse step cleanup functions
+                from adare.backend.experiment.run import (
+                    step_shutdown_ws,
+                    step_shutdown_mcp_server,
+                )
+
+                stage_ulid = self.console_ulid or self.experiment_ctx.experiment_run_ulid
+                with StageCtxManager(
+                    CleanupShutdownStage(),
+                    stage_ulid,
+                    event=None
+                ):
+                    # 1. Shutdown WebSocket connection
+                    try:
+                        await step_shutdown_ws(self.experiment_ctx, post_interrupt=True)
+                        log.debug("WebSocket shut down")
+                    except Exception as e:
+                        log.warning(f"Failed to shutdown WebSocket: {e}")
+
+                    # 2. Shutdown MCP server
+                    try:
+                        await step_shutdown_mcp_server(self.experiment_ctx, post_interrupt=True)
+                        log.debug("MCP server shut down")
+                    except Exception as e:
+                        log.warning(f"Failed to shutdown MCP server: {e}")
+
+                    # 3. Stop VM (graceful shutdown, keep disk and snapshots)
+                    if self.vm_manager:
+                        try:
+                            await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
+                            log.debug("VM stopped")
+                        except Exception as e:
+                            log.warning(f"Failed to stop VM: {e}")
+
+            self.is_running = False
+            log.info(f"Session {self.session_id} shut down (resources preserved)")
+
+        except Exception as e:
+            log.error(f"Error during session shutdown: {e}", exc_info=True)
+            self.is_running = False
+
+    async def stop_and_remove(self) -> None:
+        """
+        Stop dev mode session and remove ALL resources.
+
+        This is used by 'adare dev stop --rm' and 'adare dev remove':
+        - Stops the VM
+        - Deletes VM instance and all disks
+        - Deletes all snapshot files (external RAM/disk files)
+        - Removes experiment run directory
+        - Removes fake experiment run from DB
+        - Database session/checkpoint cleanup handled by service layer
+        """
+        try:
+            log.info(f"Stopping and removing session {self.session_id} with full cleanup")
+
+            if self.experiment_ctx:
                 from adare.backend.experiment.run import (
                     step_shutdown_ws,
                     step_shutdown_mcp_server,
                     step_remove_fake_experiment_run,
                 )
 
-                # 1. Shutdown WebSocket connection
-                await step_shutdown_ws(self.experiment_ctx, post_interrupt=True)
-                log.debug("WebSocket shut down")
+                stage_ulid = self.console_ulid or self.experiment_ctx.experiment_run_ulid
+                with StageCtxManager(
+                    CleanupShutdownStage(),
+                    stage_ulid,
+                    event=None
+                ):
+                    # 1. Shutdown WebSocket
+                    try:
+                        await step_shutdown_ws(self.experiment_ctx, post_interrupt=True)
+                        log.debug("WebSocket shut down")
+                    except Exception as e:
+                        log.warning(f"Failed to shutdown WebSocket: {e}")
 
-                # 2. Shutdown MCP server
-                await step_shutdown_mcp_server(self.experiment_ctx, post_interrupt=True)
-                log.debug("MCP server shut down")
+                    # 2. Shutdown MCP server
+                    try:
+                        await step_shutdown_mcp_server(self.experiment_ctx, post_interrupt=True)
+                        log.debug("MCP server shut down")
+                    except Exception as e:
+                        log.warning(f"Failed to shutdown MCP server: {e}")
 
-                # 3. Stop VM
-                if self.vm_manager:
-                    await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
-                    log.debug("VM stopped")
+                    # 3. Delete all snapshots (external files + DB records)
+                    try:
+                        await self._cleanup_snapshots()
+                        log.debug("Snapshots deleted")
+                    except Exception as e:
+                        log.warning(f"Failed to cleanup snapshots: {e}")
 
-                    # 4. Cleanup VM resources
-                    await self.vm_manager.cleanup_vm(self.experiment_ctx, post_interrupt=True)
-                    log.debug("VM cleaned up")
+                    # 4. Stop and DESTROY VM (complete removal)
+                    if self.vm_manager and self.experiment_ctx.vm:
+                        vm = self.experiment_ctx.vm
 
-                # 5. Remove fake experiment run from database
-                step_remove_fake_experiment_run(self.experiment_ctx)
-                log.debug("Fake experiment run removed")
+                        # Stop VM if running
+                        try:
+                            await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
+                            log.debug("VM stopped")
+                        except Exception as e:
+                            log.warning(f"Failed to stop VM: {e}")
+
+                        # Destroy VM (undefine domain + delete disks)
+                        try:
+                            await vm.destroy(silent=False)
+                            log.info(f"VM '{vm.vm_name}' destroyed")
+                        except Exception as e:
+                            log.warning(f"Failed to destroy VM: {e}")
+
+                    # 5. Delete experiment run directory
+                    try:
+                        import shutil
+                        run_dir = self.experiment_ctx.experiment_run_directory.path
+                        if run_dir.exists():
+                            shutil.rmtree(run_dir)
+                            log.info(f"Deleted experiment run directory: {run_dir}")
+                    except Exception as e:
+                        log.warning(f"Failed to delete run directory: {e}")
+
+                    # 6. Remove fake experiment run from database
+                    try:
+                        step_remove_fake_experiment_run(self.experiment_ctx)
+                        log.debug("Fake experiment run removed")
+                    except Exception as e:
+                        log.warning(f"Failed to remove fake experiment run: {e}")
 
             self.is_running = False
-            log.info(f"Dev mode session {self.session_id} stopped successfully")
+            log.info(f"Session {self.session_id} completely removed")
 
         except Exception as e:
-            log.error(f"Error during session stop: {e}", exc_info=True)
+            log.error(f"Error during session removal: {e}", exc_info=True)
             self.is_running = False
+
+    async def stop(self, cleanup: bool = True) -> None:
+        """
+        DEPRECATED: Use shutdown() or stop_and_remove() instead.
+
+        This method is kept for backward compatibility with existing code.
+        """
+        if cleanup:
+            await self.stop_and_remove()
+        else:
+            await self.shutdown()
 
     # Private helper methods
 
     async def _create_dev_snapshot(self, name: str, description: str):
         """
-        Create VM snapshot for dev mode.
+        Create VM external snapshot for dev mode.
+
+        For QEMU, creates external libvirt snapshot with memory and disk files.
+        Saves checkpoint metadata to database.
 
         Args:
             name: Name for the snapshot
             description: Description of the snapshot
         """
-        snapshot_name = f"devmode_{self.session_id}_{name}"
+        from adare.database.api.devmode import DevModeApi
+        from adare.database.models.devcheckpoint import DevCheckpoint
 
-        log.info(f"Creating snapshot: {snapshot_name}")
+        snapshot_name = f"devmode_{self.session_id}_{name}"
+        checkpoint_id = str(ulid.ULID())
+
+        log.info(f"Creating external snapshot: {snapshot_name}")
 
         # Delegate to hypervisor-specific strategy
         if self.experiment_ctx.hypervisor_type == 'virtualbox':
-            # VirtualBox: Use VM's snapshot mixin directly
+            # VirtualBox: Can create snapshots on running VMs
             vm = self.experiment_ctx.vm
             returncode = vm.create_snapshot(snapshot_name, description)
             if returncode != 0:
                 raise HypervisorException(f"Failed to create VirtualBox snapshot '{snapshot_name}'")
             log.debug(f"VirtualBox snapshot created: {snapshot_name}")
 
+            # For VirtualBox, we don't have external files
+            memory_file_path = ""
+            disk_file_path = ""
+
         elif self.experiment_ctx.hypervisor_type == 'qemu':
-            # QEMU: Use VM's snapshot mixin (qemu-img snapshot on stopped VM)
+            # QEMU: Create external libvirt snapshot
             vm = self.experiment_ctx.vm
-            returncode = vm.create_snapshot(snapshot_name, description)
-            if returncode != 0:
-                raise HypervisorException(f"Failed to create QEMU snapshot '{snapshot_name}'")
-            log.debug(f"QEMU snapshot created: {snapshot_name}")
+
+            # Verify VM is running
+            if vm.get_state() != 'running':
+                raise HypervisorException("VM must be running to create live snapshot")
+
+            # Compute snapshot storage directory
+            snapshot_dir = vm._get_snapshot_storage_dir()
+
+            # Generate file paths
+            memory_file_path = str(snapshot_dir / f"{snapshot_name}_RAM.save")
+            disk_file_path = str(snapshot_dir / f"{snapshot_name}_DISK.qcow2")
+
+            # Create external snapshot
+            success = vm.create_external_snapshot(
+                snapshot_name=snapshot_name,
+                memory_path=memory_file_path,
+                disk_path=disk_file_path,
+                use_quiesce=True
+            )
+
+            if not success:
+                raise HypervisorException(f"Failed to create external snapshot '{snapshot_name}'")
+
+            log.info(f"CLAUDE: External snapshot created: {snapshot_name}")
+            log.debug(f"CLAUDE: Memory file: {memory_file_path}")
+            log.debug(f"CLAUDE: Disk file: {disk_file_path}")
 
         else:
             log.warning(f"Unknown hypervisor type: {self.experiment_ctx.hypervisor_type}")
+            memory_file_path = ""
+            disk_file_path = ""
 
-        # Store snapshot metadata
+        # Save checkpoint to database
+        variable_state = (
+            self._make_json_serializable(self.playbook_controller.execution_context)
+            if self.playbook_controller else {}
+        )
+
+        checkpoint = DevCheckpoint(
+            checkpoint_id=checkpoint_id,
+            session_id=self.session_id,
+            name=name,
+            description=description,
+            memory_file_path=memory_file_path,
+            disk_file_path=disk_file_path,
+            snapshot_name=snapshot_name,
+            variable_state=variable_state,
+            created_at=datetime.now()
+        )
+
+        with DevModeApi() as api:
+            api.save_checkpoint(checkpoint)
+
+        log.info(f"Checkpoint saved to database: {checkpoint_id}")
+
+        # Store snapshot metadata in memory
         snapshot = DevModeSnapshot(
             snapshot_name=snapshot_name,
             created_at=datetime.now(),
-            variable_state=(
-                self.playbook_controller.execution_context.copy()
-                if self.playbook_controller else {}
-            ),
-            description=description
+            variable_state=variable_state,
+            description=description,
+            memory_file_path=memory_file_path,
+            disk_file_path=disk_file_path,
+            checkpoint_id=checkpoint_id
         )
         self.snapshots.append(snapshot)
 
@@ -625,14 +1065,100 @@ class DevModeSession:
             log.debug(f"VirtualBox snapshot restored: {snapshot_name}")
 
         elif self.experiment_ctx.hypervisor_type == 'qemu':
-            # QEMU: Use VM's snapshot mixin (qemu-img snapshot on stopped VM)
+            # QEMU Hard Reset: Restore disk snapshot + full OS reboot
             vm = self.experiment_ctx.vm
-            success = vm.restore_snapshot(snapshot_name)
-            if not success:
-                raise HypervisorException(f"Failed to restore QEMU snapshot '{snapshot_name}'")
-            log.debug(f"QEMU snapshot restored: {snapshot_name}")
+
+            log.info(f"CLAUDE: Hard reset: restoring disk snapshot '{snapshot_name}_disk' with full reboot")
+
+            try:
+                # Check if disk snapshot exists
+                disk_snapshot_name = f"{snapshot_name}_disk"
+                if vm.snapshot_exists(disk_snapshot_name):
+                    # Restore disk snapshot (qemu-img)
+                    success = vm.restore_snapshot(disk_snapshot_name, silent=False)
+                    if not success:
+                        raise Exception("Disk snapshot restore failed")
+                    log.info("CLAUDE: Disk snapshot restored")
+                else:
+                    # Fall back to overlay recreation if snapshot doesn't exist
+                    log.warning(f"CLAUDE: Disk snapshot '{disk_snapshot_name}' not found, falling back to overlay recreation")
+
+                    experiment_id = self.experiment_ctx.experiment_run_ulid
+
+                    # Delete old overlay disk
+                    old_overlay = vm.get_overlay_disk_path(experiment_id)
+                    if Path(old_overlay).exists():
+                        log.debug(f"CLAUDE: Deleting old overlay: {old_overlay}")
+                        Path(old_overlay).unlink()
+
+                    # Create fresh overlay from base disk
+                    new_overlay = await vm.create_overlay_disk(experiment_id)
+                    log.debug(f"CLAUDE: Created fresh overlay: {new_overlay}")
+
+                    # Update VM config to use new overlay
+                    vm.config.disk_path = new_overlay
+                    log.info("CLAUDE: QEMU overlay reset complete")
+
+            except Exception as e:
+                log.error(f"CLAUDE: Hard reset disk restoration failed: {e}", exc_info=True)
+                raise
 
         else:
             log.warning(f"Unknown hypervisor type: {self.experiment_ctx.hypervisor_type}")
 
         log.info(f"Snapshot restored successfully: {snapshot_name}")
+
+    async def _cleanup_snapshots(self):
+        """
+        Cleanup all checkpoints and snapshot files for this session.
+
+        Deletes external snapshot files and database checkpoint records.
+        """
+        from adare.database.api.devmode import DevModeApi
+
+        log.info(f"Cleaning up checkpoints for session {self.session_id}")
+
+        # Load all checkpoints from database
+        with DevModeApi() as api:
+            checkpoints = api.list_checkpoints(self.session_id)
+
+        if not checkpoints:
+            log.debug("No checkpoints to clean up")
+            return
+
+        # Delete snapshots based on hypervisor type
+        if self.experiment_ctx.hypervisor_type == 'qemu':
+            vm = self.experiment_ctx.vm
+
+            for checkpoint in checkpoints:
+                try:
+                    # Delete external snapshot
+                    success = vm.delete_external_snapshot(
+                        snapshot_name=checkpoint.snapshot_name,
+                        memory_path=checkpoint.memory_file_path,
+                        disk_path=checkpoint.disk_file_path
+                    )
+                    if success:
+                        log.debug(f"CLAUDE: Deleted external snapshot: {checkpoint.snapshot_name}")
+                    else:
+                        log.warning(f"CLAUDE: Failed to delete external snapshot: {checkpoint.snapshot_name}")
+
+                except Exception as e:
+                    log.warning(f"CLAUDE: Error deleting external snapshot {checkpoint.snapshot_name}: {e}")
+
+        elif self.experiment_ctx.hypervisor_type == 'virtualbox':
+            vm = self.experiment_ctx.vm
+
+            for checkpoint in checkpoints:
+                try:
+                    success = vm.delete_snapshot(checkpoint.snapshot_name, silent=True)
+                    if success:
+                        log.debug(f"Deleted VirtualBox snapshot: {checkpoint.snapshot_name}")
+                except Exception as e:
+                    log.warning(f"Failed to delete VirtualBox snapshot {checkpoint.snapshot_name}: {e}")
+
+        # Delete all checkpoints from database
+        with DevModeApi() as api:
+            deleted_count = api.delete_session_checkpoints(self.session_id)
+
+        log.info(f"CLAUDE: Cleaned up {deleted_count} checkpoints for session {self.session_id}")

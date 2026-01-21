@@ -624,3 +624,19 @@ class VMFileTransferRetrievalStage(Stage):
     msg: ClassVar[str] = 'Retrieving artifacts from VM'
     description: ClassVar[str] = 'Copying experiment artifacts from VM to host'
     parent: ClassVar[str] = 'cleanup_shutdown'
+
+@register_stage
+@attrs.define
+class VMHostDiffStage(Stage):
+    name: ClassVar[str] = 'vm_host_diff'
+    msg: ClassVar[str] = 'Performing host-side filesystem diff'
+    description: ClassVar[str] = 'Comparing base and overlay disk images using virt-diff'
+    parent: ClassVar[str] = 'cleanup_shutdown'
+
+@register_stage
+@attrs.define
+class VMGuestDiffStage(Stage):
+    name: ClassVar[str] = 'vm_guest_diff'
+    msg: ClassVar[str] = 'Performing guest-side filesystem diff'
+    description: ClassVar[str] = 'Comparing filesystem snapshots captured within the guest'
+    parent: ClassVar[str] = 'cleanup_shutdown'

@@ -17,6 +17,7 @@ from adare.backend.devmode.manager import DevModeSessionManager
 from adare.backend.devmode.session import DevModeSnapshot
 from adare.backend.experiment import database as experiment_database
 from adare.backend.environment import database as environment_database
+from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
 from adare.database.api.devmode import DevModeApi
 from adare.types.playbook import parse_playbook, _structure_action
 from adare.core.result import Result
@@ -27,6 +28,7 @@ from adare.core.dto.devmode import (
     DevPlaybookExecuteRequest,
     DevResetRequest,
     DevCheckpointCreateRequest,
+    DevCheckpointDeleteRequest,
     DevCheckpointRestoreRequest,
     DevCheckpointListRequest,
     DevSessionListRequest,
@@ -90,10 +92,11 @@ class DevModeService:
                 )
 
             # Validate environment exists
-            environment_ulid = environment_database.get_environment_ulid_by_name(
-                request.environment_name
-            )
-            if not environment_ulid:
+            try:
+                environment_ulid = environment_database.resolve_environment_identifier(
+                    request.environment_name
+                )
+            except EnvironmentDoesNotExistInDatabase:
                 return Result.fail(
                     "ENVIRONMENT_NOT_FOUND",
                     f"Environment '{request.environment_name}' not found",
@@ -107,7 +110,12 @@ class DevModeService:
             session_id = asyncio.run(self._manager.create_session(
                 request.project_path,
                 request.experiment_name,
-                request.environment_name
+                request.environment_name,
+                gui_mode=request.gui_mode,
+                vm_memory=request.vm_memory,
+                vm_cpus=request.vm_cpus,
+                debug_screenshots=request.debug_screenshots,
+                console_ulid=request.console_ulid
             ))
 
             # Get session to retrieve VM name
@@ -180,7 +188,7 @@ class DevModeService:
         Stop a dev mode session.
 
         Args:
-            request: DevSessionStopRequest with session ID
+            request: DevSessionStopRequest with session ID and cleanup flag
 
         Returns:
             Result[bool] with True on success
@@ -191,24 +199,41 @@ class DevModeService:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
                     f"Dev session '{request.session_id}' not found",
-                    [
-                        "Check active sessions with: adare dev list"
-                    ]
+                    ["Check active sessions with: adare dev list"]
                 )
 
-            # Stop session via manager (async)
-            success = asyncio.run(self._manager.stop_session(request.session_id))
+            # Try to get or restore session for proper VM shutdown
+            session = self._manager.get_or_restore_session(request.session_id)
 
-            if success:
-                # Remove from database
-                self._db_api.delete_session(request.session_id)
+            if session:
+                # Session available (from memory or restored)
+                if request.remove_resources:
+                    # Full cleanup: stop and remove everything
+                    asyncio.run(
+                        self._manager.stop_and_remove_session(request.session_id)
+                    )
+                    # Delete database entry (cascades to checkpoints)
+                    self._db_api.delete_session(request.session_id)
+                else:
+                    # Shutdown only: keep resources for restart
+                    asyncio.run(
+                        self._manager.shutdown_session(request.session_id)
+                    )
+                    # Mark as stopped in database (keep entry)
+                    self._db_api.update_session_status(request.session_id, 'stopped')
+
                 return Result.ok(True)
             else:
-                return Result.fail(
-                    "SESSION_STOP_FAILED",
-                    f"Session '{request.session_id}' not found in manager",
-                    ["Session may have already been stopped"]
-                )
+                # Session not in memory - handle based on mode
+                if request.remove_resources:
+                    # Clean up database entries only (VM already gone)
+                    log.info(f"Session {request.session_id} not running, cleaning up database")
+                    self._db_api.delete_session(request.session_id)
+                else:
+                    # Already stopped, just update status
+                    self._db_api.update_session_status(request.session_id, 'stopped')
+
+                return Result.ok(True)
 
         except Exception as e:
             log.error(f"Error stopping dev session: {e}", exc_info=True)
@@ -287,15 +312,16 @@ class DevModeService:
                     ["Check active sessions with: adare dev list"]
                 )
 
-            # Get session from manager
-            session = self._manager.get_session(request.session_id)
+            # Get or restore session from manager
+            session = self._manager.get_or_restore_session(request.session_id)
             if not session:
                 return Result.fail(
-                    "SESSION_NOT_RUNNING",
-                    f"Session '{request.session_id}' is in database but not running",
+                    "SESSION_RESTORATION_FAILED",
+                    f"Session '{request.session_id}' exists in database but could not be restored",
                     [
-                        "Session may have crashed",
-                        "Try cleaning up with: adare dev cleanup"
+                        "VM may not be running - check with virsh list (QEMU) or VBoxManage list runningvms (VirtualBox)",
+                        "Session may have crashed - try cleaning up with: adare dev cleanup",
+                        f"Or start a new session with: adare dev start {db_session.experiment_name} -e {db_session.environment_name}"
                     ]
                 )
 
@@ -376,13 +402,16 @@ class DevModeService:
             Result[DevActionResult] with execution result
         """
         try:
-            # Get session from manager
-            session = self._manager.get_session(request.session_id)
+            # Get or restore session from manager
+            session = self._manager.get_or_restore_session(request.session_id)
             if not session:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found",
-                    ["Check active sessions with: adare dev list"]
+                    f"Dev session '{request.session_id}' not found or could not be restored",
+                    [
+                        "Check active sessions with: adare dev list",
+                        "VM may not be running - check with hypervisor tools"
+                    ]
                 )
 
             # Parse action based on source
@@ -443,13 +472,16 @@ class DevModeService:
             Result[DevPlaybookResult] with execution statistics
         """
         try:
-            # Get session from manager
-            session = self._manager.get_session(request.session_id)
+            # Get or restore session from manager
+            session = self._manager.get_or_restore_session(request.session_id)
             if not session:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found",
-                    ["Check active sessions with: adare dev list"]
+                    f"Dev session '{request.session_id}' not found or could not be restored",
+                    [
+                        "Check active sessions with: adare dev list",
+                        "VM may not be running - check with hypervisor tools"
+                    ]
                 )
 
             # Parse playbook based on source
@@ -529,13 +561,16 @@ class DevModeService:
             Result[DevResetResult] with reset details
         """
         try:
-            # Get session from manager
-            session = self._manager.get_session(request.session_id)
+            # Get or restore session from manager
+            session = self._manager.get_or_restore_session(request.session_id)
             if not session:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found",
-                    ["Check active sessions with: adare dev list"]
+                    f"Dev session '{request.session_id}' not found or could not be restored",
+                    [
+                        "Check active sessions with: adare dev list",
+                        "VM may not be running - check with hypervisor tools"
+                    ]
                 )
 
             # Perform soft reset (async)
@@ -576,13 +611,16 @@ class DevModeService:
             Result[DevResetResult] with reset details
         """
         try:
-            # Get session from manager
-            session = self._manager.get_session(request.session_id)
+            # Get or restore session from manager
+            session = self._manager.get_or_restore_session(request.session_id)
             if not session:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found",
-                    ["Check active sessions with: adare dev list"]
+                    f"Dev session '{request.session_id}' not found or could not be restored",
+                    [
+                        "Check active sessions with: adare dev list",
+                        "VM may not be running - check with hypervisor tools"
+                    ]
                 )
 
             # Perform hard reset (async)
@@ -627,13 +665,16 @@ class DevModeService:
             Result[bool] with True on success
         """
         try:
-            # Get session from manager
-            session = self._manager.get_session(request.session_id)
+            # Get or restore session from manager
+            session = self._manager.get_or_restore_session(request.session_id)
             if not session:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found",
-                    ["Check active sessions with: adare dev list"]
+                    f"Dev session '{request.session_id}' not found or could not be restored",
+                    [
+                        "Check active sessions with: adare dev list",
+                        "VM may not be running - check with hypervisor tools"
+                    ]
                 )
 
             # Create checkpoint (async)
@@ -667,13 +708,16 @@ class DevModeService:
             Result[bool] with True on success
         """
         try:
-            # Get session from manager
-            session = self._manager.get_session(request.session_id)
+            # Get or restore session from manager
+            session = self._manager.get_or_restore_session(request.session_id)
             if not session:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found",
-                    ["Check active sessions with: adare dev list"]
+                    f"Dev session '{request.session_id}' not found or could not be restored",
+                    [
+                        "Check active sessions with: adare dev list",
+                        "VM may not be running - check with hypervisor tools"
+                    ]
                 )
 
             # Restore checkpoint (async)
@@ -700,7 +744,7 @@ class DevModeService:
 
     def list_checkpoints(self, request: DevCheckpointListRequest) -> Result[List[DevCheckpointInfo]]:
         """
-        List available checkpoints.
+        List available checkpoints (read-only operation).
 
         Args:
             request: DevCheckpointListRequest with session ID
@@ -709,28 +753,40 @@ class DevModeService:
             Result[List[DevCheckpointInfo]] with checkpoint list
         """
         try:
-            # Get session from manager
-            session = self._manager.get_session(request.session_id)
-            if not session:
+            # 1. Validate session exists in database
+            db_session = self._db_api.get_session(request.session_id)
+            if not db_session:
                 return Result.fail(
                     "SESSION_NOT_FOUND",
                     f"Dev session '{request.session_id}' not found",
                     ["Check active sessions with: adare dev list"]
                 )
 
-            # Get state to access snapshots
-            state = session.get_state()
+            # 2. Query checkpoints directly from database (NO session restoration)
+            db_checkpoints = self._db_api.list_checkpoints(request.session_id)
 
-            # Convert to checkpoint info
-            checkpoints = [
-                DevCheckpointInfo(
-                    name=snapshot.snapshot_name.split('_')[-1],  # Extract name from devmode_{session_id}_{name}
-                    description=snapshot.description,
-                    created_at=snapshot.created_at,
-                    variable_count=len(snapshot.variable_state)
-                )
-                for snapshot in state.available_snapshots
-            ]
+            # 3. Convert to DevCheckpointInfo with file size calculation
+            import os
+            checkpoints = []
+            for checkpoint in db_checkpoints:
+                # Calculate file size from checkpoint file paths
+                file_size_mb = 0.0
+                if checkpoint.memory_file_path and os.path.exists(checkpoint.memory_file_path):
+                    file_size_mb += os.path.getsize(checkpoint.memory_file_path) / (1024 * 1024)
+                if checkpoint.disk_file_path and os.path.exists(checkpoint.disk_file_path):
+                    file_size_mb += os.path.getsize(checkpoint.disk_file_path) / (1024 * 1024)
+
+                # Map database fields to DTO
+                checkpoints.append(DevCheckpointInfo(
+                    name=checkpoint.name,  # Use name directly from DB (no parsing needed)
+                    description=checkpoint.description or "",
+                    created_at=checkpoint.created_at,
+                    variable_count=len(checkpoint.variable_state or {}),
+                    checkpoint_id=checkpoint.checkpoint_id,
+                    memory_file_path=checkpoint.memory_file_path or "",
+                    disk_file_path=checkpoint.disk_file_path or "",
+                    file_size_mb=file_size_mb
+                ))
 
             return Result.ok(checkpoints)
 
@@ -739,6 +795,78 @@ class DevModeService:
             return Result.fail(
                 "CHECKPOINT_ERROR",
                 f"Failed to list checkpoints: {str(e)}",
+                ["Check logs for details"]
+            )
+
+    def delete_checkpoint(self, request: DevCheckpointDeleteRequest) -> Result[bool]:
+        """
+        Delete a checkpoint.
+
+        Args:
+            request: DevCheckpointDeleteRequest with session ID and checkpoint name
+
+        Returns:
+            Result[bool] indicating success or failure
+        """
+        try:
+            from adare.database.api.devmode import DevModeApi
+
+            # First check if session exists in database
+            with DevModeApi() as api:
+                db_session = api.get_session(request.session_id)
+                if not db_session:
+                    return Result.fail(
+                        "SESSION_NOT_FOUND",
+                        f"Dev session '{request.session_id}' not found",
+                        ["Check active sessions with: adare dev list"]
+                    )
+
+                # Get checkpoint from database
+                checkpoint = api.get_checkpoint(request.session_id, request.name)
+                if not checkpoint:
+                    return Result.fail(
+                        "CHECKPOINT_NOT_FOUND",
+                        f"Checkpoint '{request.name}' not found",
+                        [f"List available checkpoints with: adare dev checkpoint list --session-id {request.session_id}"]
+                    )
+
+            # Get or restore session from manager
+            session = self._manager.get_or_restore_session(request.session_id)
+            if session and session.experiment_ctx.hypervisor_type == 'qemu':
+                # Delete external snapshot files
+                vm = session.experiment_ctx.vm
+                vm.delete_external_snapshot(
+                    snapshot_name=checkpoint.snapshot_name,
+                    memory_path=checkpoint.memory_file_path,
+                    disk_path=checkpoint.disk_file_path
+                )
+                log.info(f"Deleted external snapshot files for checkpoint '{request.name}'")
+
+            # Delete from database
+            with DevModeApi() as api:
+                success = api.delete_checkpoint(checkpoint.checkpoint_id)
+                if not success:
+                    return Result.fail(
+                        "CHECKPOINT_DELETE_FAILED",
+                        f"Failed to delete checkpoint '{request.name}' from database",
+                        ["Check logs for details"]
+                    )
+
+            # Remove from session's in-memory snapshot list
+            if session:
+                session.snapshots = [
+                    s for s in session.snapshots
+                    if s.checkpoint_id != checkpoint.checkpoint_id
+                ]
+
+            log.info(f"Checkpoint '{request.name}' deleted successfully")
+            return Result.ok(True)
+
+        except Exception as e:
+            log.error(f"Error deleting checkpoint: {e}", exc_info=True)
+            return Result.fail(
+                "CHECKPOINT_DELETE_ERROR",
+                f"Failed to delete checkpoint: {str(e)}",
                 ["Check logs for details"]
             )
 

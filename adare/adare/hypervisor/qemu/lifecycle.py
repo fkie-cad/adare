@@ -26,7 +26,7 @@ import tempfile
 import time
 import json
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 
 from adare.hypervisor.base.lifecycle import AbstractVMLifecycleStrategy
 from adare.hypervisor.qemu.manager import QEMUManager
@@ -1035,6 +1035,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 f"VM in unexpected state '{vm_state}'. Expected 'poweroff' or 'running'."
             )
 
+        # CRITICAL: Explicitly disable virtiofs in config when using libguestfs mode
+        # This ensures that any previous run's virtiofs config is removed,
+        # preventing "migration with virtiofs device is not supported" errors during snapshots.
+        context.vm.config.virtiofs_enabled = False
+        context.vm.config.virtiofs_shares = []
+        context.vm._save_vm_config()
+        log.info("CLAUDE: Disabled virtiofs in VM config (required for snapshots)")
+
         # Get disk path from VM configuration
         disk_path = context.vm.config.disk_path
 
@@ -1734,3 +1742,476 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             )
 
         log.debug("QEMU VM cleanup completed")
+
+    def compare_disk_images_with_virt_diff(
+        self,
+        base_disk_path: str,
+        overlay_disk_path: str,
+        all: bool = False,
+        extract_dir: Optional[Path] = None
+    ) -> Optional[Dict[str, List[Dict]]]:
+        """Compare base and overlay disks using manual virt-ls diff.
+        
+        Args:
+            base_disk_path: Path to immutable base disk (pristine state)
+            overlay_disk_path: Path to overlay disk (modified state)
+            all: Unused (kept for compatibility)
+            extract_dir: Optional path to directory where changed files content should be extracted
+            
+        Returns:
+            Diff dict: {added: [...], removed: [...], modified: [...]}
+            None on failure
+        """
+        try:
+            log.info(f"CLAUDE: Comparing base disk vs overlay using manual virt-ls diff")
+            log.debug(f"CLAUDE: Base: {base_disk_path}")
+            log.debug(f"CLAUDE: Overlay: {overlay_disk_path}")
+
+            # Direct fallback to manual diff to avoid 'no operating system found' errors
+            # virt-diff's auto-detection is unreliable for some disk images
+            return self._compare_disks_manual(base_disk_path, overlay_disk_path, extract_dir)
+
+        except Exception as e:
+            log.error(f"CLAUDE: Error running diff: {e}", exc_info=True)
+            return None
+
+    def _compare_disks_manual(
+        self,
+        base_disk_path: str,
+        overlay_disk_path: str,
+        extract_dir: Optional[Path] = None
+    ) -> Optional[Dict[str, List[Dict]]]:
+        """
+        Manually compare disks using optimized guestfish single-boot scan.
+        """
+        try:
+            log.info("CLAUDE: Starting manual disk comparison using optimized guestfish scan")
+            
+            # Detect root partition on the overlay
+            # We assume the layout is identical on base.
+            # root_device will be something like '/dev/sda4' (as seen by inspection of that single disk)
+            root_device, _ = self._detect_root_filesystem(overlay_disk_path)
+            log.debug(f"CLAUDE: Detected root partition: {root_device}")
+            
+            # Parse partition number to map to sda/sdb in the combined session
+            # We assume simple partitioning (sdaX). If LVM, this optimization might fail
+            # effectively but valid for the Windows usecase seen.
+            import re
+            part_match = re.search(r'(\d+)$', root_device)
+            if not part_match:
+                log.warning(f"CLAUDE: Could not extract partition number from {root_device}. Assuming LVM or complex layout - optimization logic might require adjustment.")
+                # Fallback or risk it? We'll try to map exact string if no number, 
+                # but valid /dev/sda4 -> 4.
+                part_suffix = ""
+            else:
+                part_suffix = part_match.group(1)
+            
+            # Scan both disks in one go
+            base_files, overlay_files = self._scan_disks_via_guestfish(
+                base_disk_path, 
+                overlay_disk_path, 
+                part_suffix
+            )
+            
+            if base_files is None or overlay_files is None:
+                log.error("CLAUDE: Failed to scan disks")
+                return None
+                
+            # Compute diff
+            diff = {
+                'added': [],
+                'removed': [],
+                'modified': []
+            }
+            
+            # Check for additions and modifications
+            for path, meta in overlay_files.items():
+                if path not in base_files:
+                    # Added
+                    diff['added'].append({
+                        'path': path,
+                        'size': meta['size'],
+                        'mtime': meta['mtime'],
+                        'mtime_readable': meta['mtime_readable']
+                    })
+                else:
+                    # Check if modified
+                    base_meta = base_files[path]
+                    if meta['size'] != base_meta['size'] or meta['mtime'] != base_meta['mtime']:
+                        diff['modified'].append({
+                            'path': path,
+                            'size_before': base_meta['size'],
+                            'size_after': meta['size'],
+                            'mtime_before': base_meta['mtime'],
+                            'mtime_after': meta['mtime'],
+                            'mtime_before_readable': base_meta['mtime_readable'],
+                            'mtime_after_readable': meta['mtime_readable']
+                        })
+            
+            # Check for removals
+            for path, meta in base_files.items():
+                if path not in overlay_files:
+                    diff['removed'].append({
+                        'path': path,
+                        'size': meta['size'],
+                        'mtime': meta['mtime'],
+                        'mtime_readable': meta['mtime_readable']
+                    })
+            
+            log.info(
+                f"CLAUDE: Manual Diff complete: {len(diff['added'])} added, "
+                f"{len(diff['removed'])} removed, "
+                f"{len(diff['modified'])} modified"
+            )
+
+            # Extract file content if requested
+            # Note: This will start a NEW guestfish session (2nd boot), which is acceptable for stability.
+            if extract_dir:
+                # We need the full device path for extraction mounts.
+                # _extract_diff_files uses single-disk sessions so /dev/sdaX is always correct 
+                # relative to THAT session.
+                # root_device comes from _detect_root_filesystem which inspected a single disk.
+                # So passing root_device (e.g. /dev/sda4) is correct for _extract_diff_files 
+                # because it processes one disk at a time (or mounts one at a time).
+                self._extract_diff_files(base_disk_path, overlay_disk_path, root_device, diff, extract_dir)
+            
+            return diff
+            
+        except Exception as e:
+            log.error(f"CLAUDE: Error during manual disk comparison: {e}", exc_info=True)
+            return None
+
+    
+    def _extract_diff_files(
+        self,
+        base_disk_path: str,
+        overlay_disk_path: str,
+        partition: str,
+        diff_results: Dict[str, List[Dict]],
+        extract_dir: Path
+    ) -> None:
+        """
+        Extract content of changed files from disks using batched guestfish commands.
+        """
+        log.info(f"CLAUDE: Extracting diff content to {extract_dir}")
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create structure
+        added_dir = extract_dir / 'added'
+        removed_dir = extract_dir / 'removed'
+        mod_base_dir = extract_dir / 'modified' / 'base'
+        mod_overlay_dir = extract_dir / 'modified' / 'overlay'
+        
+        for d in [added_dir, removed_dir, mod_base_dir, mod_overlay_dir]:
+            d.mkdir(parents=True, exist_ok=True)
+            
+        # Prepare batch specs: (disk_path, guest_path, host_path)
+        specs = []
+        
+        # 1. Added files -> from Overlay
+        for item in diff_results['added']:
+            guest_path = item['path']
+            # Remove leading slash for safe join, but keep structure
+            rel_path = guest_path.lstrip('/')
+            host_path = added_dir / rel_path
+            specs.append(('overlay', guest_path, host_path))
+            
+        # 2. Removed files -> from Base
+        for item in diff_results['removed']:
+            guest_path = item['path']
+            rel_path = guest_path.lstrip('/')
+            host_path = removed_dir / rel_path
+            specs.append(('base', guest_path, host_path))
+            
+        # 3. Modified files -> from Both
+        for item in diff_results['modified']:
+            guest_path = item['path']
+            rel_path = guest_path.lstrip('/')
+            specs.append(('base', guest_path, mod_base_dir / rel_path))
+            specs.append(('overlay', guest_path, mod_overlay_dir / rel_path))
+
+        if not specs:
+            log.info("No files to extract.")
+            return
+
+        # Group by disk source to minimize guestfish invocations
+        base_specs = [s for s in specs if s[0] == 'base']
+        overlay_specs = [s for s in specs if s[0] == 'overlay']
+        
+        for name, disk_path, current_specs in [('Base', base_disk_path, base_specs), ('Overlay', overlay_disk_path, overlay_specs)]:
+            if not current_specs:
+                continue
+                
+            log.info(f"CLAUDE: Extracting {len(current_specs)} files from {name} disk")
+            
+            # Create parent directories for all targets
+            for _, _, target_path in current_specs:
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Build guestfish script
+            script_lines = [
+                'run',
+                f'mount {partition} /'
+            ]
+            
+            for _, guest_path, host_path in current_specs:
+                # Use download command
+                script_lines.append(f"download {guest_path} {host_path}")
+                
+            # Execute batch
+            self._run_guestfish_script(disk_path, script_lines)
+
+    def _run_guestfish_script(self, disk_path: str, commands: List[str]) -> bool:
+        """Helper to run a raw guestfish script string."""
+        script_content = '\n'.join(commands)
+        
+        script_fd = None
+        script_path = None
+        try:
+            script_fd, script_path = tempfile.mkstemp(suffix='.guestfish', text=True)
+            with os.fdopen(script_fd, 'w') as f:
+                f.write(script_content)
+                script_fd = None
+            
+            cmd = ['guestfish', '--ro', '--format=qcow2', '-a', disk_path, '-f', script_path]
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if result.returncode != 0:
+                log.warning(f"CLAUDE: Guestfish extraction script had errors (partial success possible): {result.stderr}")
+                return False
+                
+            return True
+            
+        except Exception as e:
+            log.error(f"CLAUDE: Failed to run guestfish script: {e}")
+            return False
+            
+        finally:
+            if script_fd is not None:
+                try:
+                    os.close(script_fd)
+                except: pass
+            if script_path and Path(script_path).exists():
+                try:
+                    Path(script_path).unlink()
+                except: pass
+
+    def _scan_disks_via_guestfish(
+        self, 
+        base_disk: str, 
+        overlay_disk: str, 
+        part_suffix: str
+    ) -> Tuple[Optional[Dict], Optional[Dict]]:
+        """
+        Scan both disks using separate virt-ls calls.
+        Returns (base_files, overlay_files).
+        """
+        
+        def scan_single_disk(disk_path: str) -> Optional[Dict]:
+            # virt-ls -a disk.img -m /dev/sda{suffix} --csv --time-t -l -R /
+            # Note: We always use /dev/sda because we are mounting a single disk image
+            mount_dev = f"/dev/sda{part_suffix}"
+            
+            cmd = [
+                'virt-ls',
+                '-a', disk_path,
+                '-m', mount_dev,
+                '--csv',
+                '--time-t',
+                '-l',
+                '-R',
+                '/'
+            ]
+            
+            try:
+                log.debug(f"CLAUDE: Running virt-ls on {disk_path} (mount: {mount_dev})")
+                
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                
+                if result.returncode != 0:
+                    log.error(f"CLAUDE: virt-ls failed for {disk_path}: {result.stderr}")
+                    return None
+                    
+                files = {}
+                import csv
+                from io import StringIO
+                
+                # virt-ls output has no header
+                # Columns: type, perms, size, atime, mtime, ctime, path
+                
+                reader = csv.reader(StringIO(result.stdout))
+                for row in reader:
+                    if not row or len(row) < 7:
+                        continue
+                        
+                    ftype = row[0]
+                    # perms = row[1]
+                    size = int(row[2])
+                    # atime = float(row[3])
+                    mtime = int(row[4])
+                    # ctime = float(row[5])
+                    path = row[6]
+                    
+                    # virt-ls quote handling? csv module should handle it
+                    
+                    from datetime import datetime
+                    files[path] = {
+                        'size': size,
+                        'mtime': mtime,
+                        'mtime_readable': datetime.fromtimestamp(mtime).isoformat()
+                    }
+                    
+                return files
+                
+            except Exception as e:
+                log.error(f"CLAUDE: Error during virt-ls scan of {disk_path}: {e}")
+                return None
+
+        # Scan Base
+        log.info("CLAUDE: Scanning base disk with virt-ls...")
+        base_files = scan_single_disk(base_disk)
+        
+        # Scan Overlay
+        log.info("CLAUDE: Scanning overlay disk with virt-ls...")
+        overlay_files = scan_single_disk(overlay_disk)
+        
+        if base_files is None or overlay_files is None:
+            return None, None
+            
+        log.info(f"CLAUDE: Scanned {len(base_files)} base files, {len(overlay_files)} overlay files")
+        return base_files, overlay_files
+
+    def _add_scanned_file(self, file_map: Dict, file_data: Dict):
+        """Helper to process and add a file record from filesystem_walk."""
+        # Handle both standard and TSK-style output
+        path = file_data.get('path') or file_data.get('tsk_name')
+        if not path:
+            return
+            
+        # Clean path formatting
+        path = path.strip().replace('"', '')
+            
+        # Skip directories if desired, similar to virt-ls -lR behavior which lists everything
+        # virt-diff often ignores directories for content diff, but keeps them for structure.
+        # We'll include them.
+        
+        # Parse fields
+        try:
+            # Handle size
+            if 'size' in file_data:
+                size = int(file_data['size'])
+            elif 'tsk_size' in file_data:
+                size = int(file_data['tsk_size'])
+            else:
+                size = 0
+
+            # Handle mtime (seconds since epoch)
+            if 'mtime' in file_data:
+                mtime = int(file_data['mtime'])
+            elif 'tsk_mtime_sec' in file_data:
+                mtime = int(file_data['tsk_mtime_sec'])
+            else:
+                mtime = 0
+            
+            from datetime import datetime
+            file_map[path] = {
+                'size': size,
+                'mtime': mtime,
+                'mtime_readable': datetime.fromtimestamp(mtime).isoformat()
+            }
+        except ValueError:
+            pass  # Skip malformed records
+
+    def _parse_virt_diff_output(self, csv_output: str) -> Dict[str, List[Dict]]:
+        """Parse virt-diff CSV output into standard diff format.
+
+        virt-diff CSV columns: Change,Path,Old Size,New Size,Old Time,New Time
+        Change types: added, removed, changed
+
+        Args:
+            csv_output: CSV output from virt-diff
+
+        Returns:
+            Dict with keys: added, removed, modified (each containing list of file dicts)
+        """
+        import csv
+        from io import StringIO
+
+        diff = {
+            'added': [],
+            'removed': [],
+            'modified': []
+        }
+
+        try:
+            reader = csv.DictReader(StringIO(csv_output))
+
+            for row in reader:
+                change_type = row.get('Change', '').strip()
+                path = row.get('Path', '').strip()
+
+                if change_type == 'added':
+                    diff['added'].append({
+                        'path': path,
+                        'size': int(row.get('New Size', 0) or 0),
+                        'mtime': self._parse_virt_diff_time(row.get('New Time', '')),
+                        'mtime_readable': row.get('New Time', '')
+                    })
+
+                elif change_type == 'removed':
+                    diff['removed'].append({
+                        'path': path,
+                        'size': int(row.get('Old Size', 0) or 0),
+                        'mtime': self._parse_virt_diff_time(row.get('Old Time', '')),
+                        'mtime_readable': row.get('Old Time', '')
+                    })
+
+                elif change_type == 'changed':
+                    diff['modified'].append({
+                        'path': path,
+                        'size_before': int(row.get('Old Size', 0) or 0),
+                        'size_after': int(row.get('New Size', 0) or 0),
+                        'mtime_before': self._parse_virt_diff_time(row.get('Old Time', '')),
+                        'mtime_after': self._parse_virt_diff_time(row.get('New Time', '')),
+                        'mtime_before_readable': row.get('Old Time', ''),
+                        'mtime_after_readable': row.get('New Time', '')
+                    })
+
+            return diff
+
+        except Exception as e:
+            log.error(f"CLAUDE: Error parsing virt-diff output: {e}", exc_info=True)
+            return diff  # Return partial results
+
+    def _parse_virt_diff_time(self, time_str: str) -> float:
+        """Parse virt-diff timestamp to Unix epoch.
+
+        virt-diff may output various formats - handle common ones.
+        """
+        if not time_str:
+            return 0.0
+
+        try:
+            # Try parsing ISO format or common timestamp formats
+            # virt-diff typically outputs: "2024-01-15 10:30:45"
+            from datetime import datetime
+            dt = datetime.strptime(time_str.split('.')[0], '%Y-%m-%d %H:%M:%S')
+            return dt.timestamp()
+        except (ValueError, AttributeError):
+            try:
+                # Try Unix timestamp
+                return float(time_str)
+            except (ValueError, TypeError):
+                log.debug(f"CLAUDE: Could not parse timestamp: {time_str}")
+                return 0.0

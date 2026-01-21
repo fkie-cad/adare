@@ -11,6 +11,7 @@ from adare.types.stages import (
     VMInstanceSyncStage, VMInstanceVerificationStage
 )
 from adare.backend.experiment.runctx import ExperimentRunCtx
+from adare.backend.experiment.directory import ExperimentRunDirectory
 from adare.exceptions import LoggedException
 from adare.config import SHARE_POINT_VM
 from adare.hypervisor.virtualbox import VirtualBoxVM, VirtualBoxManager
@@ -412,8 +413,10 @@ class VMLifecycleManager:
                     raise LoggedException(log, f"VM instance '{context.vm_name}' was not properly prepared - missing from VirtualBox")
                 log.info(f"Using prepared VM instance '{context.vm_name}' with snapshots (UUID: {vm_instance.vbox_uuid})")
 
-        # Update experiment run with VM-specific data
-        if not context.stop_event.is_set():
+        # Update experiment run with VM-specific data (skip in diff mode where no database persistence)
+        if (not context.stop_event.is_set() and
+            context.experiment_run_directory is not None and
+            isinstance(context.experiment_run_directory, ExperimentRunDirectory)):
             context.experiment_run_ulid = experiment_database.update_experiment_run(
                 context.experiment_run_ulid,
                 context.experiment_run_directory
@@ -515,6 +518,148 @@ class VMLifecycleManager:
             event=event
         ):
             await self.strategy.retrieve_artifacts(context)
+
+    async def perform_host_diff(self, context: ExperimentRunCtx, post_interrupt: bool = False):
+        """
+        Perform host-side disk diffing using virt-diff on base vs overlay disks.
+
+        This method runs AFTER VM shutdown and BEFORE overlay cleanup to analyze
+        filesystem changes using libguestfs virt-diff tool.
+
+        Args:
+            context: ExperimentRunCtx
+            post_interrupt: If True, don't check interrupt event (for cleanup after interrupt)
+        """
+        # Early return for non-QEMU hypervisors
+        if self.hypervisor_type != 'qemu':
+            log.debug("Host-side diff skipped - requires QEMU hypervisor")
+            return
+
+        # Check if diff is enabled
+        if not self._is_diff_enabled(context):
+            log.debug("Host-side diff skipped - filesystem diff disabled")
+            return
+
+        # Check diff mode (only run for 'host' or 'auto' mode)
+        diff_mode = self._get_diff_mode(context)
+        if diff_mode not in ('host', 'auto'):
+            log.debug(f"Host-side diff skipped - diff mode is '{diff_mode}'")
+            return
+
+        # Import VMHostDiffStage for stage visibility
+        from adare.types.stages import VMHostDiffStage
+
+        # Don't check interrupt event when performing diff during post-interrupt cleanup
+        event = None if post_interrupt else context.user_interrupt_event
+
+        # Wrap execution in StageCtxManager for flow console visibility
+        with StageCtxManager(
+            VMHostDiffStage(),
+            context.experiment_run_ulid,
+            event=event
+        ) as stage_ctx:
+            try:
+                # Get disk paths from QEMU VM
+                from adare.hypervisor.qemu.vm import QEMUVM
+                if not isinstance(context.vm, QEMUVM):
+                    log.warning("VM is not a QEMU instance - cannot perform host diff")
+                    return
+
+                base_disk_path = str(context.vm.get_base_disk_path())
+                overlay_disk_path = str(context.vm.config.disk_path)
+
+                log.debug(f"CLAUDE: Base disk: {base_disk_path}")
+                log.debug(f"CLAUDE: Overlay disk: {overlay_disk_path}")
+
+                # Validate disk paths exist
+                from pathlib import Path
+                if not Path(base_disk_path).exists():
+                    log.error(f"Base disk not found: {base_disk_path}")
+                    return
+                if not Path(overlay_disk_path).exists():
+                    log.error(f"Overlay disk not found: {overlay_disk_path}")
+                    return
+
+                # Call virt-diff through QEMU lifecycle strategy
+                log.info("Performing host-side filesystem diff (virt-diff)")
+                
+                # Prepare diff artifacts directory
+                diff_dir = None
+                extract_content_dir = None
+                
+                if context.experiment_run_directory:
+                    artifacts_dir = context.experiment_run_directory.path / 'artifacts'
+                    diff_dir = artifacts_dir / 'diff'
+                    diff_dir.mkdir(parents=True, exist_ok=True)
+                    extract_content_dir = diff_dir / 'content'
+                
+                diff_results = self.strategy.compare_disk_images_with_virt_diff(
+                    base_disk_path=base_disk_path,
+                    overlay_disk_path=overlay_disk_path,
+                    extract_dir=extract_content_dir
+                )
+
+                # Export results to artifacts directory
+                if diff_results and diff_dir:
+                    # Prepare metadata for JSON export
+                    metadata = {
+                        'diff_mode': 'host',
+                        'tool': 'virt-ls-manual',
+                        'base_disk_path': base_disk_path,
+                        'overlay_disk_path': overlay_disk_path
+                    }
+
+                    # Export to JSON and CSV formats
+                    from adare.backend.experiment.filesystem_snapshot import export_diff_json, export_diff_csv
+                    json_path = diff_dir / 'filesystem_diffs.json'
+                    csv_path = diff_dir / 'filesystem_diffs.csv'
+
+                    export_diff_json(diff_results, json_path, metadata)
+                    export_diff_csv(diff_results, csv_path)
+
+                    log.info(f"Host-side diff exported to {diff_dir}")
+                    log.info(f"Filesystem changes - "
+                            f"Added: {len(diff_results.get('added', []))}, "
+                            f"Removed: {len(diff_results.get('removed', []))}, "
+                            f"Modified: {len(diff_results.get('modified', []))}")
+
+                    # Update stage sub_msg with diff summary for flow console display
+                    stage_ctx.stage.sub_msg = (
+                        f"Added: {len(diff_results.get('added', []))}, "
+                        f"Removed: {len(diff_results.get('removed', []))}, "
+                        f"Modified: {len(diff_results.get('modified', []))}"
+                    )
+                elif not diff_results:
+                    log.warning("No diff results returned from virt-diff")
+
+            except FileNotFoundError as e:
+                log.warning(f"virt-diff tool not found - install libguestfs-tools: {e}")
+            except Exception as e:
+                log.warning(f"Host-side diff failed (continuing cleanup): {e}", exc_info=True)
+
+    def _is_diff_enabled(self, context: ExperimentRunCtx) -> bool:
+        """Check if filesystem diff is enabled from config or playbook settings."""
+        # CLI override takes precedence
+        if hasattr(context.config, 'enable_diff') and context.config.enable_diff is not None:
+            return context.config.enable_diff
+
+        # Fall back to playbook settings
+        if context.playbook and hasattr(context.playbook, 'settings') and context.playbook.settings:
+            return context.playbook.settings.enable_filesystem_diff
+
+        return False
+
+    def _get_diff_mode(self, context: ExperimentRunCtx) -> str:
+        """Get diff mode from config or playbook settings."""
+        # CLI override takes precedence
+        if hasattr(context.config, 'diff_mode') and context.config.diff_mode:
+            return context.config.diff_mode
+
+        # Fall back to playbook settings
+        if context.playbook and hasattr(context.playbook, 'settings') and context.playbook.settings:
+            return getattr(context.playbook.settings, 'diff_mode', 'auto')
+
+        return 'auto'
 
     async def cleanup_vm(self, context: ExperimentRunCtx, post_interrupt: bool = False):
         """

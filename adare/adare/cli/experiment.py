@@ -289,7 +289,9 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                 preserve_snapshot=arguments.preserve_snapshot,
                 runlog=arguments.runlog,
                 vm_memory=arguments.vm_memory,
-                vm_cpus=arguments.vm_cpus
+                vm_cpus=arguments.vm_cpus,
+                diff=getattr(arguments, 'diff', None),
+                diff_mode=getattr(arguments, 'diff_mode', 'auto')
             )
 
             env_end_time = datetime.now(timezone.utc)
@@ -433,7 +435,9 @@ def exec_experiment_run(arguments):
                     runlog=arguments.runlog,
                     vm_memory=arguments.vm_memory,
                     vm_cpus=arguments.vm_cpus,
-                    gui_mode=arguments.gui_mode
+                    gui_mode=arguments.gui_mode,
+                    diff=getattr(arguments, 'diff', None),
+                    diff_mode=getattr(arguments, 'diff_mode', 'auto')
                 ))
 
                 # Print summary using configured output format
@@ -516,7 +520,7 @@ def exec_experiment_run(arguments):
                     log.warning(f'WARNING: environment "{environment_name}" is not listed in {experiment_name}/metadata.yml')
                     log.warning(f'         Running experiment anyway as explicitly requested via -e flag')
 
-            was_interrupted, was_successful = asyncio.run(experiment_run(project_directory, experiment_name, environment_name, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot, runlog=arguments.runlog, vm_memory=arguments.vm_memory, vm_cpus=arguments.vm_cpus, gui_mode=arguments.gui_mode))
+            was_interrupted, was_successful = asyncio.run(experiment_run(project_directory, experiment_name, environment_name, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot, runlog=arguments.runlog, vm_memory=arguments.vm_memory, vm_cpus=arguments.vm_cpus, gui_mode=arguments.gui_mode, diff=getattr(arguments, 'diff', None), diff_mode=getattr(arguments, 'diff_mode', 'auto')))
 
             # Handle output formatting for single runs
             from adare.run import get_formatter_from_context

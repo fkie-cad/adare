@@ -10,7 +10,9 @@ This module provides exec_* functions that implement dev mode commands:
 """
 
 import logging
+import threading
 from pathlib import Path
+from typing import Optional
 
 from adare.backend.basics import determine_projectdirectory
 from adare.exceptions import NoProjectFoundError
@@ -58,47 +60,176 @@ def _get_project_path(arguments):
     return project_directory
 
 
+def _start_event_listeners(console_ulid: str) -> None:
+    """Start event coordinator and CLI listener for flow console integration."""
+    from adare.backend.events.listener import event_listener_cli
+    from adare.backend.events.coordinator import start_stage_coordinator
+
+    # Start coordinator
+    start_stage_coordinator()
+    log.debug("Stage event coordinator started")
+
+    # Start CLI listener in background thread
+    cli_ready_event = threading.Event()
+
+    def cli_wrapper():
+        cli_ready_event.set()
+        event_listener_cli(console_ulid)
+
+    cli_thread = threading.Thread(target=cli_wrapper, daemon=True)
+    cli_thread.start()
+
+    # Wait for listener ready
+    if not cli_ready_event.wait(timeout=5.0):
+        raise RuntimeError("CLI event listener failed to start")
+
+    log.debug("Event listeners started")
+
+
+def _stop_event_listeners() -> None:
+    """Stop event coordinator."""
+    from adare.backend.events.coordinator import stop_stage_coordinator
+    stop_stage_coordinator()
+    log.debug("Event listeners stopped")
+
+
+def _setup_log_file_handler(log_file: Path) -> Optional[logging.Handler]:
+    """Setup file handler for logging to a file."""
+    try:
+        # Create parent directory if needed
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Create file handler
+        file_handler = logging.FileHandler(log_file, mode='w')
+        file_handler.setLevel(logging.DEBUG)
+
+        # Use detailed formatter for file logs
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+
+        # Add to root logger
+        logging.getLogger().addHandler(file_handler)
+        log.info(f"Logging to file: {log_file}")
+
+        return file_handler
+    except OSError as e:
+        log.error(f"Failed to setup log file handler: {e}")
+        return None
+
+
+def _cleanup_log_file_handler(handler: logging.Handler) -> None:
+    """Remove and close log file handler."""
+    if handler:
+        logging.getLogger().removeHandler(handler)
+        handler.close()
+
+
 # =============================================================================
 # Session Management Commands
 # =============================================================================
 
 def exec_dev_start(arguments):
-    """Start a new dev mode session."""
+    """Start dev session with flow console UI."""
+    import ulid
+    from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
+
+    # Setup
     project_directory = _get_project_path(arguments)
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+    log_file = Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
 
-    api = AdareAPI()
-    result = api.devmode.start_session(DevSessionStartRequest(
-        project_path=project_directory,
-        experiment_name=experiment_name,
-        environment_name=arguments.environment
-    ))
+    # Create flow console
+    user_interrupt_event = threading.Event()
+    console_ulid = str(ulid.ULID())
+    flow_console = ExperimentFlowConsole(disable=False, external_stop_event=user_interrupt_event)
+    flowconsolemanager.add_handler(console_ulid, flow_console)
+    flow_console.start()
 
-    if result.success:
-        print_success_message(
-            title=f'Dev session started: {result.data.session_id}',
-            next_steps=result.data.next_steps,
-            tip=result.data.tip
-        )
-        print(f"\nCLAUDE: Session ID: {result.data.session_id}")
-        print(f"CLAUDE: Experiment: {result.data.experiment_name}")
-        print(f"CLAUDE: Environment: {result.data.environment_name}")
-        print(f"CLAUDE: VM Running: {result.data.vm_running}")
-    else:
-        _handle_api_error(result)
+    # Start event system
+    _start_event_listeners(console_ulid)
+
+    # Setup logging
+    log_handler = _setup_log_file_handler(log_file) if log_file else None
+
+    try:
+        # Start session
+        api = AdareAPI()
+        result = api.devmode.start_session(DevSessionStartRequest(
+            project_path=project_directory,
+            experiment_name=experiment_name,
+            environment_name=arguments.environment,
+            gui_mode=getattr(arguments, 'gui_mode', None),
+            vm_memory=getattr(arguments, 'vm_memory', None),
+            vm_cpus=getattr(arguments, 'vm_cpus', None),
+            debug_screenshots=getattr(arguments, 'debug_screenshots', False),
+            log_file=log_file,
+            console_ulid=console_ulid
+        ))
+
+        if result.success:
+            flow_console.log_success('DEV_START_SUCCESS', f'Dev session started: {result.data.session_id}')
+            flow_console.stop()
+            print_success_message(
+                title=f'Dev session started: {result.data.session_id}',
+                next_steps=result.data.next_steps,
+                tip=result.data.tip
+            )
+            if log_file:
+                print(f"\nLogs saved to: {log_file}")
+        else:
+            flow_console.stop()
+            _handle_api_error(result)
+
+    except KeyboardInterrupt:
+        user_interrupt_event.set()
+        flow_console.log_interrupted('DEV_START_INTERRUPTED', 'Interrupted by user')
+        flow_console.stop()
+        print("\n\nDev session start interrupted")
+        exit(1)
+    except Exception as e:
+        flow_console.log_error('DEV_START_ERROR', f'Error: {str(e)}')
+        flow_console.stop()
+        print_error_message(title='Failed to start dev session', next_steps=['Check logs'])
+        exit(1)
+    finally:
+        flowconsolemanager.remove_handler(console_ulid)
+        _stop_event_listeners()
+        if log_handler:
+            _cleanup_log_file_handler(log_handler)
 
 
 def exec_dev_stop(arguments):
     """Stop a dev mode session."""
     api = AdareAPI()
+
+    # Extract remove_resources flag (default to False)
+    remove_resources = getattr(arguments, 'remove_resources', False)
+
     result = api.devmode.stop_session(DevSessionStopRequest(
-        session_id=arguments.session_id
+        session_id=arguments.session_id,
+        remove_resources=remove_resources
     ))
 
     if result.success:
-        print_success_message(
-            title=f'Dev session stopped: {arguments.session_id}'
-        )
+        if remove_resources:
+            print_success_message(
+                title=f'Dev session removed: {arguments.session_id}',
+                next_steps=[
+                    'All resources deleted (VM, snapshots, database)',
+                    'Session cannot be restarted'
+                ]
+            )
+        else:
+            print_success_message(
+                title=f'Dev session stopped: {arguments.session_id}',
+                next_steps=[
+                    'VM shut down, resources preserved',
+                    'Restart with: adare dev start <experiment> -e <env>'
+                ]
+            )
     else:
         _handle_api_error(result)
 
@@ -397,9 +528,33 @@ def exec_dev_checkpoint_list(arguments):
             print(f"CLAUDE: Found {len(result.data)} checkpoint(s):\n")
             for checkpoint in result.data:
                 print(f"  Name: {checkpoint.name}")
-                print(f"  Description: {checkpoint.description}")
-                print(f"  Created: {checkpoint.created_at}")
+                if checkpoint.description:
+                    print(f"  Description: {checkpoint.description}")
+                print(f"  Created: {checkpoint.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"  Variables: {checkpoint.variable_count}")
+                if checkpoint.file_size_mb > 0:
+                    print(f"  File Size: {checkpoint.file_size_mb:.1f} MB")
+                if checkpoint.checkpoint_id:
+                    print(f"  ID: {checkpoint.checkpoint_id}")
                 print()
+    else:
+        _handle_api_error(result)
+
+
+def exec_dev_checkpoint_delete(arguments):
+    """Delete a checkpoint."""
+    from adare.core.dto.devmode import DevCheckpointDeleteRequest
+
+    api = AdareAPI()
+    result = api.devmode.delete_checkpoint(DevCheckpointDeleteRequest(
+        session_id=arguments.session_id,
+        name=arguments.name
+    ))
+
+    if result.success:
+        print_success_message(
+            title=f'Checkpoint "{arguments.name}" deleted'
+        )
+        print("\nCLAUDE: Checkpoint and associated snapshot files have been removed")
     else:
         _handle_api_error(result)

@@ -23,12 +23,19 @@ class DevSessionStartRequest:
     project_path: Path
     experiment_name: str
     environment_name: str
+    gui_mode: Optional[str] = None
+    vm_memory: Optional[int] = None
+    vm_cpus: Optional[int] = None
+    debug_screenshots: bool = False
+    log_file: Optional[Path] = None
+    console_ulid: Optional[str] = None
 
 
 @dataclass
 class DevSessionStopRequest:
     """Request to stop a dev mode session."""
     session_id: str
+    remove_resources: bool = False  # If True, delete all resources (VM, snapshots, database)
 
 
 @dataclass
@@ -73,6 +80,13 @@ class DevCheckpointRestoreRequest:
 class DevCheckpointListRequest:
     """Request to list checkpoints."""
     session_id: str
+
+
+@dataclass
+class DevCheckpointDeleteRequest:
+    """Request to delete a checkpoint."""
+    session_id: str
+    name: str
 
 
 @dataclass
@@ -155,6 +169,10 @@ class DevCheckpointInfo:
     description: str
     created_at: datetime
     variable_count: int = 0
+    checkpoint_id: str = ""
+    memory_file_path: str = ""
+    disk_file_path: str = ""
+    file_size_mb: float = 0.0
 
 
 @dataclass

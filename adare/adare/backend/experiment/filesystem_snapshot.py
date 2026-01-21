@@ -191,12 +191,16 @@ def calculate_diff(before: FilesystemSnapshot, after: FilesystemSnapshot) -> Dic
     # Files modified (in both but mtime changed)
     common_paths = before_paths & after_paths
     modified = []
+    # Timestamp comparison tolerance to avoid floating-point rounding errors
+    # NTFS timestamps (100ns precision) converted to Unix epoch may have precision loss
+    TIMESTAMP_EPSILON = 0.0001  # 0.1ms tolerance
     for path in sorted(common_paths):
         before_mtime = before.files[path]['mtime']
         after_mtime = after.files[path]['mtime']
 
-        # Consider modified if mtime differs (timestamp-based detection)
-        if before_mtime != after_mtime:
+        # Consider modified if mtime differs beyond epsilon threshold
+        # Use epsilon comparison to avoid false positives from float rounding
+        if abs(before_mtime - after_mtime) > TIMESTAMP_EPSILON:
             modified.append({
                 'path': path,
                 'size_before': before.files[path]['size'],

@@ -29,15 +29,7 @@ class StageCtxManager(contextlib.AbstractContextManager):
         self.event = event
 
     def __enter__(self):
-        # Validate parent-child relationship for child stages
-        if hasattr(self.stage, 'parent') and self.stage.parent:
-            current_parent = _active_parent_stage.get()
-            if current_parent is None:
-                raise ValueError(f"Child stage '{self.stage.name}' requires parent '{self.stage.parent}' but no parent stage is active")
-            if current_parent != self.stage.parent:
-                raise ValueError(f"Child stage '{self.stage.name}' expects parent '{self.stage.parent}' but active parent is '{current_parent}'")
-
-        # Always set this stage as the active parent (for multi-level nesting)
+        # Set this stage as the active parent (for multi-level nesting and tracking)
         # This allows stages with parents to also be parents of other stages
         # The contextvars token mechanism automatically handles the stack
         self._parent_token = _active_parent_stage.set(self.stage.name)

@@ -43,6 +43,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] check if we need to place building wheel into a single stage showing? I think yes!
 - [ ] adjust our tool be Model View Controller for frontend and terminal support later
 - [ ] change stage message for qemu; maybe even stages
+- [ ] agentless qemu runs with only certain actions (gui actions) and no tests.
  
 ---
 
@@ -93,6 +94,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] improve stages in general!
 - [ ] ctrl-c during waiting for vm does not work?!
 - [ ] qemu vm stop -> force shutoff
+- [ ] host mode diff not working! 
 
 ---
 
@@ -105,3 +107,4 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Test that json output works fine for all commands 
 - [ ] Test clone feature
 - [ ] Visual tests
+

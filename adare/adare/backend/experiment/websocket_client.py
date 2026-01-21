@@ -102,7 +102,7 @@ class AdareVMClient:
         async with self._connection_lock:
             if not self.connected:
                 return
-            
+
             try:
                 # Cancel message handler task
                 if self.message_handler_task:
@@ -111,18 +111,59 @@ class AdareVMClient:
                         await self.message_handler_task
                     except asyncio.CancelledError:
                         pass
-                
+
                 # Close WebSocket connection
                 if self.websocket:
                     await self.websocket.close()
-                
+
                 self.connected = False
                 self.websocket = None
-                
+
                 log.info("Disconnected from adarevm server")
-                
+
             except Exception as e:
                 log.error(f"Unexpected error during disconnect: {e}", exc_info=True)
+
+    async def reconnect(self, retries: int = 3, base_delay: float = 2.0) -> bool:
+        """
+        Attempt to reconnect to the WebSocket server with exponential backoff.
+
+        This method is used for dev mode session restoration to reconnect to
+        an already-running VM's WebSocket server.
+
+        Args:
+            retries: Maximum number of reconnection attempts
+            base_delay: Base delay in seconds between attempts (exponential backoff)
+
+        Returns:
+            True if reconnected successfully, False otherwise
+        """
+        log.info(f"Attempting to reconnect to WebSocket server (max {retries} attempts)")
+
+        for attempt in range(retries):
+            try:
+                # Calculate delay with exponential backoff (2^attempt * base_delay)
+                if attempt > 0:
+                    delay = (2 ** attempt) * base_delay
+                    log.debug(f"Waiting {delay:.1f}s before reconnection attempt {attempt + 1}")
+                    await asyncio.sleep(delay)
+
+                log.info(f"Reconnection attempt {attempt + 1}/{retries}")
+
+                # Try to connect
+                success = await self.connect(timeout=5.0)
+
+                if success:
+                    log.info(f"Successfully reconnected on attempt {attempt + 1}")
+                    return True
+                else:
+                    log.warning(f"Reconnection attempt {attempt + 1} failed")
+
+            except Exception as e:
+                log.error(f"Reconnection attempt {attempt + 1} failed with error: {e}")
+
+        log.error(f"Failed to reconnect after {retries} attempts")
+        return False
     
     async def _handle_messages(self):
         """Handle incoming messages from the server."""

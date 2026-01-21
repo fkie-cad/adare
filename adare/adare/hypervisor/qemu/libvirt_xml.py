@@ -366,7 +366,11 @@ def generate_domain_xml(
             # Use virtio-gpu with 3D acceleration for Windows
             # VRAM increased to 256MB (262144 KB) to reduce GUI lag
             model = ET.SubElement(video, 'model', type='virtio', heads='1', primary='yes', vram='262144')
-            ET.SubElement(model, 'acceleration', accel3d='yes')
+            
+            # Only enable 3D acceleration if virtiofs is enabled (implies no snapshots required)
+            # 3D acceleration (virgl) blocks live migration/snapshots in QEMU
+            if vm_config.virtiofs_enabled:
+                ET.SubElement(model, 'acceleration', accel3d='yes')
         else:
             # Use QXL for Linux (better compatibility with standard drivers)
             model = ET.SubElement(video, 'model', type='qxl', ram='65536', vram='65536', vgamem='16384', heads='1', primary='yes')
@@ -407,7 +411,10 @@ def generate_domain_xml(
             # Use virtio-gpu with 3D acceleration for Windows
             # VRAM increased to 256MB (262144 KB) to reduce GUI lag
             model = ET.SubElement(video, 'model', type='virtio', heads='1', primary='yes', vram='262144')
-            ET.SubElement(model, 'acceleration', accel3d='yes')
+            
+            # Only enable 3D acceleration if virtiofs is enabled (blocking snapshots)
+            if vm_config.virtiofs_enabled:
+                ET.SubElement(model, 'acceleration', accel3d='yes')
         else:
             # Use QXL for Linux
             model = ET.SubElement(video, 'model', type='qxl', ram='65536', vram='65536', vgamem='16384', heads='1', primary='yes')

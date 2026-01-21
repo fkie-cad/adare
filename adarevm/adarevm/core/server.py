@@ -116,6 +116,7 @@ class AdareVMServer:
             "pull_file_chunk": self._pull_file_chunk,
             "get_filesystem_snapshot": self._get_filesystem_snapshot,
             "get_timestamp": self._get_timestamp,
+            "chain_commands": self._chain_commands,
         }
     
     async def start_server(self):
@@ -1134,6 +1135,52 @@ class AdareVMServer:
             "connected_clients": len(self.clients)
         }
 
+    async def _chain_commands(self, websocket, commands: List[Dict[str, Any]]):
+        """Execute multiple commands sequentially in a single request."""
+        log.info(f"Chaining {len(commands)} commands")
+        results = []
+        
+        for i, cmd in enumerate(commands):
+            tool_name = cmd.get('tool')
+            params = cmd.get('params', {})
+            cmd_id = cmd.get('id', f"chain_{i}")
+            
+            log.debug(f"Chain[{i}]: {tool_name}")
+            
+            if tool_name not in self.tools:
+                 results.append({
+                     "id": cmd_id,
+                     "status": "error", 
+                     "message": f"Unknown tool: {tool_name}"
+                 })
+                 continue
+                 
+            try:
+                # Execute tool
+                tool_func = self.tools[tool_name]
+                # Tools communicate via websocket events which is fine
+                result = await tool_func(websocket, **params)
+                
+                # Add command ID to result for correlation
+                if isinstance(result, dict) and 'id' not in result:
+                    result['id'] = cmd_id
+                    
+                results.append(result)
+                
+            except Exception as e:
+                log.error(f"Chain command failed: {tool_name}: {e}", exc_info=True)
+                results.append({
+                    "id": cmd_id,
+                    "status": "error", 
+                    "message": str(e)
+                })
+                
+        return {
+            "status": "success",
+            "results": results,
+            "count": len(results)
+        }
+
     async def _collect_system_info(self, websocket):
         """Collect comprehensive system information from the guest VM."""
         import platform
@@ -1158,10 +1205,31 @@ class AdareVMServer:
                 # Use Windows platform functions
                 from adarevm.platforms.windows import get_os_info, get_installed_programs, get_windows_features, get_installed_updates
 
-                system_info['os_info'] = get_os_info()
-                system_info['installed_programs'] = get_installed_programs()
-                system_info['windows_features'] = get_windows_features()
-                system_info['installed_updates'] = get_installed_updates()
+                # Execute in parallel to avoid blocking for long durations (20s+)
+                try:
+                    results = await asyncio.gather(
+                        asyncio.to_thread(get_os_info),
+                        asyncio.to_thread(get_installed_programs),
+                        asyncio.to_thread(get_windows_features),
+                        asyncio.to_thread(get_installed_updates),
+                        return_exceptions=True
+                    )
+                    
+                    # Process results
+                    system_info['os_info'] = results[0] if not isinstance(results[0], Exception) else {"error": str(results[0])}
+                    system_info['installed_programs'] = results[1] if not isinstance(results[1], Exception) else []
+                    system_info['windows_features'] = results[2] if not isinstance(results[2], Exception) else []
+                    system_info['installed_updates'] = results[3] if not isinstance(results[3], Exception) else []
+                    
+                    # Log exceptions if any
+                    for i, res in enumerate(results):
+                        if isinstance(res, Exception):
+                            log.error(f"System info collection task {i} failed: {res}")
+                            
+                except Exception as e:
+                    log.error(f"Parallel system info collection failed: {e}")
+                    # Fallback to sequential or partial
+                    system_info['os_info'] = get_os_info()
 
             else:
                 # Use Linux platform functions
