@@ -13,8 +13,8 @@ from adare.types.playbook import Playbook
 @dataclass
 class ExperimentConfig:
     project_path: Path
-    experiment_name: str
     environment_name: str
+    experiment_name: Optional[str] = None
     disable_printing: bool = False
     test_mode: bool = False
     preserve_snapshot: bool = False

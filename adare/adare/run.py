@@ -656,7 +656,6 @@ def dev():
     pass
 
 @dev.command()
-@click.argument('experiment')
 @click.option('-e', '--environment', required=True, help='Environment name')
 @click.option('--project', '-p', help='Project name/path')
 @click.option('--gui-mode', type=click.Choice(['auto', 'agent', 'host']),
@@ -665,11 +664,10 @@ def dev():
 @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
 @click.option('--debug-screenshots', is_flag=True, help='Save screenshots for debugging')
 @click.option('--log', type=click.Path(), help='Save logs to file')
-def start(experiment, environment, project, gui_mode, vm_memory, vm_cpus, debug_screenshots, log):
+def start(environment, project, gui_mode, vm_memory, vm_cpus, debug_screenshots, log):
     """Start a new dev mode session."""
     from adare.cli.dev import exec_dev_start
     args = SimpleNamespace(
-        experiment=experiment,
         environment=environment,
         project=project,
         gui_mode=gui_mode,

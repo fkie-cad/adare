@@ -11,7 +11,7 @@ import ulid
 
 from .session import DevModeSession, DevModeState
 from .vm_state_checker import is_vm_running
-from .session_restorer import restore_context
+from .session_restorer import restore_context, restore_infrastructure_context
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.types.stages import ConnectToVMStage
 
@@ -53,7 +53,6 @@ class DevModeSessionManager:
     async def create_session(
         self,
         project_path: Path,
-        experiment_name: str,
         environment_name: str,
         gui_mode: Optional[str] = None,
         vm_memory: Optional[int] = None,
@@ -66,7 +65,6 @@ class DevModeSessionManager:
 
         Args:
             project_path: Path to the ADARE project
-            experiment_name: Name of the experiment to develop
             environment_name: Name of the environment (VM) to use
             gui_mode: GUI execution mode override ('auto', 'agent', 'host')
             vm_memory: VM RAM in MB (None uses platform defaults)
@@ -84,13 +82,12 @@ class DevModeSessionManager:
 
         log.info(
             f"Creating dev mode session {session_id} for "
-            f"experiment='{experiment_name}' environment='{environment_name}'"
+            f"environment='{environment_name}'"
         )
 
         session = DevModeSession(
             session_id=session_id,
             project_path=project_path,
-            experiment_name=experiment_name,
             environment_name=environment_name,
             gui_mode=gui_mode,
             vm_memory=vm_memory,
@@ -102,7 +99,7 @@ class DevModeSessionManager:
         success = await session.start()
         if not success:
             raise RuntimeError(
-                f"Failed to start dev mode session for {experiment_name}"
+                f"Failed to start dev mode session"
             )
 
         self._sessions[session_id] = session
@@ -525,6 +522,83 @@ class DevModeSessionManager:
 
         except Exception as e:
             log.error(f"Failed to restore and restart session {session_id}: {e}", exc_info=True)
+    async def load_session_for_cleanup(
+        self,
+        session_id: str
+    ) -> Optional[DevModeSession]:
+        """
+        Load session infrastructure for cleanup operation.
+
+        This method restores ONLY the infrastructure context (directories, VM object)
+        needed to destroy resources. It does NOT load playbooks, start servers,
+        or attempt to reconnect to the VM application layer.
+
+        Args:
+            session_id: Session ID to load
+
+        Returns:
+            DevModeSession with infrastructure loaded, or None if failed
+        """
+        log.info(f"Loading session context for cleanup: {session_id}")
+
+        # Import database API
+        from adare.database.api.devmode import DevModeApi
+
+        try:
+            # 1. Query database for session metadata
+            db_api = DevModeApi()
+            db_session = db_api.get_session(session_id)
+
+            if not db_session:
+                log.warning(f"Session {session_id} not found in database")
+                return None
+
+            # 2. Create session object
+            session = DevModeSession(
+                session_id=session_id,
+                project_path=Path(db_session.project_path),
+                experiment_name=db_session.experiment_name,
+                environment_name=db_session.environment_name,
+                gui_mode=None,
+                vm_memory=None,
+                vm_cpus=None,
+                debug_screenshots=False
+            )
+
+            # 3. Restore ONLY infrastructure context
+            # This attaches to the VM object (so we can destroy it) but doesn't
+            # try to connect to the agent
+            success = await restore_infrastructure_context(session, db_session)
+
+            if not success:
+                log.error(f"Failed to restore infrastructure context for cleanup of {session_id}")
+                return None
+            
+            # 4. Attempt to find VM instance ID for release (best effort)
+            try:
+                from adare.database.api.experiment import ExperimentApi
+                from adare.database.models.project_models import ExperimentRun
+                
+                # Check if we can get the instance ID from fake experiment run (if it exists)
+                # But since we didn't fully restore, check DB directly again
+                if session.experiment_ctx:
+                     with ExperimentApi(session.project_path) as api:
+                        # Construct fake experiment run ID
+                        fake_run_id = f"devmode_{session_id}"
+                        experiment_run = api._session.query(ExperimentRun).filter(
+                            ExperimentRun.id == fake_run_id
+                        ).first()
+
+                        if experiment_run and experiment_run.vm_instance_id:
+                            session.vm_instance_id = experiment_run.vm_instance_id
+                            log.debug(f"Loaded VM instance ID for cleanup: {session.vm_instance_id}")
+            except Exception as e:
+                log.debug(f"Could not load VM instance ID (non-fatal): {e}")
+
+            return session
+
+        except Exception as e:
+            log.error(f"Failed to load session for cleanup {session_id}: {e}", exc_info=True)
             return None
 
     async def get_or_restore_session(

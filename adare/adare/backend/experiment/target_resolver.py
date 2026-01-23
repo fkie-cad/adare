@@ -48,7 +48,7 @@ class MCPTargetResolver:
             experiment_run_ulid: ULID for experiment run (for stage logging)
         """
         self.experiment_dir = experiment_dir
-        self.images_dir = experiment_dir / "img"
+        self.images_dir = experiment_dir / "img" if experiment_dir else None
         self.mcp_gui_url = mcp_gui_url
         self.experiment_run_ulid = experiment_run_ulid
         self._connection_tested = False

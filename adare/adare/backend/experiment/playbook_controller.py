@@ -67,7 +67,7 @@ class PlaybookController:
     specialized modules for different aspects of playbook execution.
     """
     
-    def __init__(self, websocket_client: AdareVMClient, experiment_dir: Path, project_dir: Path,
+    def __init__(self, websocket_client: AdareVMClient, experiment_dir: Optional[Path], project_dir: Path,
                  mcp_gui_url: str = "http://localhost:13109/mcp", debug_screenshots: bool = False,
                  screenshots_dir: Path = None, playbook: Optional[Playbook] = None,
                  experiment_id: Optional[str] = None, experiment_run_id: Optional[str] = None,
@@ -297,19 +297,22 @@ class PlaybookController:
         await self.test_loader.load_tests(self.client)
 
         # 2. Execute playbook actions (can now use loaded tests)
-        playbook_path = experiment_dir / "playbook.yml"
-        if playbook_path.exists():
-            log.info("Executing playbook actions...")
-            playbook_result = await self.execute_playbook()
-            if not playbook_result.success:
-                # Even on failure, try to capture final snapshot for partial diff
-                if auto_fs_diff and initial_snapshot_ref:
-                    # Host mode: Skip here (handled in cleanup phase)
-                    if diff_mode != 'host':
-                        await self._capture_and_export_diff(initial_snapshot_ref, "_fs_snapshot_final")
-                return playbook_result
+        if experiment_dir:
+            playbook_path = experiment_dir / "playbook.yml"
+            if playbook_path.exists():
+                log.info("Executing playbook actions...")
+                playbook_result = await self.execute_playbook()
+                if not playbook_result.success:
+                    # Even on failure, try to capture final snapshot for partial diff
+                    if auto_fs_diff and initial_snapshot_ref:
+                        # Host mode: Skip here (handled in cleanup phase)
+                        if diff_mode != 'host':
+                            await self._capture_and_export_diff(initial_snapshot_ref, "_fs_snapshot_final")
+                    return playbook_result
+            else:
+                log.warning("No playbook.yml found, skipping GUI actions")
         else:
-            log.warning("No playbook.yml found, skipping GUI actions")
+            log.warning("No experiment directory provided, skipping playbook execution")
 
         # Capture final snapshot and calculate diff if enabled
         if auto_fs_diff and initial_snapshot_ref:

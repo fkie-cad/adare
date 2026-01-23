@@ -21,7 +21,6 @@ from adare.backend.devmode.session import DevModeSnapshot
 class DevSessionStartRequest:
     """Request to start a new dev mode session."""
     project_path: Path
-    experiment_name: str
     environment_name: str
     gui_mode: Optional[str] = None
     vm_memory: Optional[int] = None
@@ -118,13 +117,13 @@ class DevSessionInfo:
     """Detailed dev session information."""
     session_id: str
     project_path: Path
-    experiment_name: str
     environment_name: str
     vm_running: bool
     actions_executed: int
     created_at: datetime
     current_variables: Dict[str, Any]
     available_snapshots: List[DevModeSnapshot]
+    experiment_name: Optional[str] = None
     next_steps: List[str] = field(default_factory=list)
     tip: Optional[str] = None
 

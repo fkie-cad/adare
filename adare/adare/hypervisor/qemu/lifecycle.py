@@ -1155,9 +1155,9 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 # Fall back to copying wheels
 
         # Build file manifest
-        files_to_copy = [
-            {'source': str(context.experiment_directory.playbookfile), 'dest': 'playbook.yml'}
-        ]
+        files_to_copy = []
+        if context.experiment_directory:
+            files_to_copy.append({'source': str(context.experiment_directory.playbookfile), 'dest': 'playbook.yml'})
 
         if wheels_available and not wheels_already_installed:
             # Wheel mode: copy wheels (not yet installed in VM)
@@ -1202,7 +1202,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 'dest': 'project_shared'
             })
 
-        if context.experiment_directory.shared.exists():
+        if context.experiment_directory and context.experiment_directory.shared.exists():
             log.info(f"Adding shared experiment directory to transfer: {context.experiment_directory.shared}")
             files_to_copy.append({
                 'source': str(context.experiment_directory.shared),
@@ -1257,8 +1257,9 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         (run_dir / 'artifacts').mkdir(parents=True, exist_ok=True)
 
         # Copy playbook.yml to run directory for easy guest access
-        shutil.copy2(context.experiment_directory.playbookfile, run_dir / 'playbook.yml')
-        log.debug(f"Copied playbook to {run_dir / 'playbook.yml'}")
+        if context.experiment_directory:
+            shutil.copy2(context.experiment_directory.playbookfile, run_dir / 'playbook.yml')
+            log.debug(f"Copied playbook to {run_dir / 'playbook.yml'}")
 
         virtiofs_shares.append({
             'tag': 'run',
@@ -1281,14 +1282,15 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             'readonly': True  # VM runtime shouldn't be modified by guest
         })
 
-        # 3. Experiment directory
-        experiment_dir = context.experiment_directory.path
-        virtiofs_shares.append({
-            'tag': 'experiment',
-            'host_path': str(experiment_dir),
-            'guest_mount': f'{base_mount}\\experiment' if is_windows else f'{base_mount}/experiment',
-            'readonly': True
-        })
+        # 3. Experiment directory (optional)
+        if context.experiment_directory:
+            experiment_dir = context.experiment_directory.path
+            virtiofs_shares.append({
+                'tag': 'experiment',
+                'host_path': str(experiment_dir),
+                'guest_mount': f'{base_mount}\\experiment' if is_windows else f'{base_mount}/experiment',
+                'readonly': True
+            })
 
         # 4. Project shared directory (optional)
         if context.project_directory.shared.exists():
@@ -1300,7 +1302,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             })
 
         # 5. Experiment shared directory (optional)
-        if context.experiment_directory.shared.exists():
+        if context.experiment_directory and context.experiment_directory.shared.exists():
             virtiofs_shares.append({
                 'tag': 'shared',
                 'host_path': str(context.experiment_directory.shared),

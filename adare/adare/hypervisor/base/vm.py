@@ -103,7 +103,8 @@ class AbstractVM(ABC):
         self,
         ctx_manager=None,
         log_file: Optional[Path] = None,
-        silent: bool = False
+        silent: bool = False,
+        force: bool = False
     ):
         """
         Stop the VM.

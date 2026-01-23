@@ -290,7 +290,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 log.debug(f"Error checking if VM '{self.vm_name}' is booted: {e}")
             return False
 
-    async def stop(self, ctx_manager=None, log_file: Optional[Path] = None, silent: bool = False):
+    async def stop(self, ctx_manager=None, log_file: Optional[Path] = None, silent: bool = False, force: bool = False):
         """Stop the VM."""
         async def _stop_async():
             current_state = self._get_state(raise_on_missing=False)
