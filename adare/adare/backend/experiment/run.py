@@ -1122,13 +1122,13 @@ def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
         log.info(f"Experiment run {context.experiment_run_ulid} finished after {duration_total} seconds (vm run time: {duration_vm})")
         __cleanup_experiment_run(context.experiment_run_directory)
 
-async def step_shutdown_mcp_server(context: ExperimentRunCtx, post_interrupt: bool = False):
+async def step_shutdown_mcp_server(context: ExperimentRunCtx, post_interrupt: bool = False, force: bool = False):
     """Stop the MCP GUI server."""
     event = None if post_interrupt else context.user_interrupt_event
     with StageCtxManager(ShutdownComputerVisionServerStage(), context.experiment_run_ulid, event=event):
         log.info('stopping MCP GUI server')
         if context.mcp_server is not None:
-            await context.mcp_server.stop()
+            await context.mcp_server.stop(force_external=force)
 
 
 async def step_shutdown_ws(context: ExperimentRunCtx, post_interrupt: bool = False):

@@ -24,30 +24,26 @@ from adare.types.playbook import Playbook
 log = logging.getLogger(__name__)
 
 
-async def restore_context(
+async def restore_infrastructure_context(
     session: DevModeSession,
-    db_session: DevSession,
-    console_ulid: Optional[str] = None,
-    should_start_vm: bool = False
+    db_session: DevSession
 ) -> bool:
     """
-    Restore session context from database metadata and filesystem.
+    Restore underlying infrastructure context (VM, directories, config).
 
-    This function recreates all the internal state needed for a DevModeSession
-    to function without creating a new VM - it reconnects to the existing one.
+    This loads enough context to manage the VM lifecycle (stop/destroy)
+    and clean up files, but does NOT load application logic (playbooks,
+    websockets, etc).
 
     Args:
         session: DevModeSession object to populate
         db_session: Database record with session metadata
-        console_ulid: Optional console ULID for flow integration
-        should_start_vm: If True, start the VM and reconnect WebSocket after restoration.
-                        Used when resuming stopped sessions.
 
     Returns:
-        True if restoration successful, False otherwise
+        True if infrastructure restored successfully, False otherwise
     """
     try:
-        log.info(f"Restoring dev session context for {session.session_id}")
+        log.info(f"Restoring infrastructure context for session {session.session_id}")
 
         # 1. Recreate ExperimentConfig from database metadata
         config = ExperimentConfig(
@@ -81,23 +77,12 @@ async def restore_context(
 
         log.debug(f"Recreated ExperimentRunCtx with ulid: {session.experiment_ctx.experiment_run_ulid}")
 
-        # 3. Setup directories and load playbook from filesystem
+        # 3. Setup directories
         session.experiment_ctx.project_directory = ProjectDirectory(config.project_path)
         session.experiment_ctx.experiment_directory = ExperimentDirectory(
             config.project_path,
             config.experiment_name
         )
-
-        # Load playbook from filesystem
-        playbook_path = session.experiment_ctx.experiment_directory.playbookfile
-        if not playbook_path.exists():
-            log.error(f"Playbook file not found: {playbook_path}")
-            return False
-
-        from adare.types.playbook import parse_playbook
-        session.experiment_ctx.playbook = parse_playbook(playbook_path)
-
-        log.debug(f"Loaded playbook from {playbook_path}")
 
         # 4. Get environment metadata
         from adare.backend.environment import database as environment_database
@@ -120,7 +105,7 @@ async def restore_context(
             # This prevents accidental base disk deletion during cleanup
             if db_session.overlay_disk_path:
                 session.experiment_ctx.vm_file = Path(db_session.overlay_disk_path)
-                log.info(f"Restored overlay disk path: {db_session.overlay_disk_path}")
+                log.debug(f"Restored overlay disk path: {db_session.overlay_disk_path}")
             else:
                 # Fallback for old sessions without overlay_disk_path (unsafe!)
                 log.warning(
@@ -128,11 +113,6 @@ async def restore_context(
                     f"Using base disk as fallback (UNSAFE - base disk may be deleted!)"
                 )
                 session.experiment_ctx.vm_file = environment_database.get_environment_vm_file(environment_ulid)
-
-            log.debug(
-                f"Environment: platform={session.experiment_ctx.guest_platform}, "
-                f"hypervisor={session.experiment_ctx.hypervisor_type}"
-            )
 
         except EnvironmentDoesNotExistInDatabase as e:
             log.error(f"Environment not found: {e}")
@@ -166,7 +146,7 @@ async def restore_context(
                 disk_path=str(session.experiment_ctx.vm_file) if session.experiment_ctx.vm_file else None
             )
 
-            log.debug(f"Attached to existing QEMU VM: {vm_name} (disk: {session.experiment_ctx.vm_file})")
+            log.debug(f"Attached to existing QEMU VM: {vm_name}")
 
         elif hypervisor == 'virtualbox':
             from adare.hypervisor.virtualbox.vm import VirtualBoxVM
@@ -193,7 +173,6 @@ async def restore_context(
                 vm_instance = vm_api.get_vm_instance_by_name(vm_name)
                 if vm_instance and vm_instance.websocket_port:
                     session.experiment_ctx.config.websocket_port = vm_instance.websocket_port
-                    log.debug(f"Restored websocket_port: {vm_instance.websocket_port}")
                 else:
                     log.warning(f"Could not restore websocket_port for VM instance {vm_name}")
         except Exception as e:
@@ -201,13 +180,10 @@ async def restore_context(
 
         # 6. Recreate VMLifecycleManager
         session.vm_manager = VMLifecycleManager(hypervisor_type=hypervisor)
-        log.debug("Recreated VMLifecycleManager")
 
-        # 7. Setup experiment run directory structure
-        # Create run directory for file operations
-        from adare.backend.experiment.directory import ExperimentRunDirectory
-
+        # 7. Setup experiment run directory structure (for file ops)
         # Create run directory using project directory and experiment name
+        from adare.backend.experiment.directory import ExperimentRunDirectory
         run_dir = ExperimentRunDirectory(
             session.experiment_ctx.project_directory,
             session.experiment_ctx.config.experiment_name
@@ -215,16 +191,62 @@ async def restore_context(
         run_dir.create()
         session.experiment_ctx.experiment_run_directory = run_dir
 
-        log.debug(f"Created run directory: {run_dir.path}")
+        log.debug("Infrastructure context restored (VM, directories, config)")
+        
+        # 8. Query and restore snapshots from hypervisor (needed for file cleanup)
+        await _restore_snapshots(session)
+        
+        return True
 
-        # 8. Initialize and start MCP server for target resolution (non-fatal)
+    except Exception as e:
+        log.error(f"Failed to restore infrastructure context: {e}", exc_info=True)
+        return False
+
+
+async def restore_application_context(
+    session: DevModeSession,
+    console_ulid: Optional[str] = None,
+    should_start_vm: bool = False
+) -> bool:
+    """
+    Restore application-layer context (playbooks, controllers, WebSocket).
+    
+    This loads the "logic" part of the session. It requires infrastructure
+    context to be loaded first.
+
+    Args:
+        session: DevModeSession object (already has infrastructure loaded)
+        console_ulid: Optional console ULID for flow integration
+        should_start_vm: If True, start the VM and reconnect WebSocket.
+
+    Returns:
+        True if application context restored successfully, False otherwise
+    """
+    if not session.experiment_ctx:
+        log.error("Infrastructure context not loaded - cannot restore application context")
+        return False
+        
+    try:
+        log.info(f"Restoring application context for session {session.session_id}")
+        
+        # 1. Load playbook from filesystem
+        playbook_path = session.experiment_ctx.experiment_directory.playbookfile
+        if playbook_path.exists():
+            from adare.types.playbook import parse_playbook
+            session.experiment_ctx.playbook = parse_playbook(playbook_path)
+            log.debug(f"Loaded playbook from {playbook_path}")
+        else:
+            log.debug(f"No playbook found at {playbook_path}, continuing without loaded playbook")
+            session.experiment_ctx.playbook = None
+
+        # 2. Initialize and start MCP server for target resolution (non-fatal)
         try:
             from adare.backend.experiment.run import step_start_mcp_server
             from adare.backend.experiment.mcp_server_manager import MCPServerManager
 
-            # Initialize MCP server object (required before calling step_start_mcp_server)
+            # Initialize MCP server object
             session.experiment_ctx.mcp_server = MCPServerManager(
-                log_file=run_dir.mcp_gui_log_file
+                log_file=session.experiment_ctx.experiment_run_directory.mcp_gui_log_file
             )
 
             # Start the server
@@ -236,10 +258,9 @@ async def restore_context(
                 f"Failed to start MCP server: {e}. "
                 f"Target resolution will not be available, but session can still be used."
             )
-            # MCP server failure is non-fatal - session can work without it
             session.experiment_ctx.mcp_server = None
 
-        # 9. Recreate PlaybookController
+        # 3. Recreate PlaybookController
         from adare.config import get_vm_credentials
 
         vm_os = session.experiment_ctx.guest_platform
@@ -247,9 +268,9 @@ async def restore_context(
         if vm_os:
             vm_user, _ = get_vm_credentials(vm_os)
 
-        # Note: WebSocket client will be None initially - will try to reconnect separately
+        # WebSocket client will be None initially
         session.playbook_controller = PlaybookController(
-            websocket_client=None,  # Will be set after WebSocket reconnection
+            websocket_client=None,
             experiment_dir=session.experiment_ctx.experiment_directory.path,
             project_dir=session.experiment_ctx.project_directory.path,
             debug_screenshots=True,
@@ -266,18 +287,15 @@ async def restore_context(
 
         log.debug("Recreated PlaybookController")
 
-        # 10. Query and restore snapshots from hypervisor
-        await _restore_snapshots(session)
-
-        # 11. Restore initial variables
+        # 4. Restore initial variables
         if session.experiment_ctx.playbook and session.experiment_ctx.playbook.variables:
             session.initial_variables = session.playbook_controller.execution_context.copy()
 
-        # 12. Start VM and reconnect WebSocket if requested (for stopped session resumption)
+        # 5. Start VM and reconnect WebSocket if requested
         if should_start_vm:
             log.info("Starting VM for stopped session resumption...")
 
-            # Force QEMU_LIBGUESTFS=true for dev mode (virtiofs incompatible with snapshots)
+            # Force QEMU_LIBGUESTFS=true for dev mode
             import os
             os.environ['QEMU_LIBGUESTFS'] = 'true'
 
@@ -292,7 +310,6 @@ async def restore_context(
             )
             from adare.backend.events.emitters import StageCtxManager
 
-            # Determine stage ULID for event context
             stage_ulid = console_ulid or session.experiment_ctx.experiment_run_ulid
 
             try:
@@ -324,16 +341,53 @@ async def restore_context(
                 log.error(f"Failed to start VM and reconnect WebSocket: {e}", exc_info=True)
                 return False
 
-        # 13. Mark session as running
+        # 6. Mark session as running
         session.is_running = True
-        session.started_at = db_session.created_at
+        
+        # Restore original start time from DB if possible (need to pass db_session probably, 
+        # or just set current time if re-running)
+        # Assuming caller tracks this, or we just set it to now if not available
+        if not session.started_at:
+             session.started_at = datetime.now()
 
-        log.info(f"Successfully restored dev session {session.session_id}")
+        log.info(f"Successfully restored dev session application context {session.session_id}")
         return True
 
     except Exception as e:
-        log.error(f"Failed to restore session context: {e}", exc_info=True)
+        log.error(f"Failed to restore application context: {e}", exc_info=True)
         return False
+
+
+async def restore_context(
+    session: DevModeSession,
+    db_session: DevSession,
+    console_ulid: Optional[str] = None,
+    should_start_vm: bool = False
+) -> bool:
+    """
+    Restore complete session context (infrastructure + application).
+
+    This function recreates all the internal state needed for a DevModeSession
+    to function efficiently.
+
+    Args:
+        session: DevModeSession object to populate
+        db_session: Database record with session metadata
+        console_ulid: Optional console ULID for flow integration
+        should_start_vm: If True, start the VM and reconnect WebSocket after restoration.
+
+    Returns:
+        True if restoration successful, False otherwise
+    """
+    # 1. Restore infrastructure (VM, files, config)
+    if not await restore_infrastructure_context(session, db_session):
+        return False
+        
+    # 2. Restore application (playbook, websocket, logic)
+    if not await restore_application_context(session, console_ulid, should_start_vm):
+        return False
+        
+    return True
 
 
 async def _restore_snapshots(session: DevModeSession) -> None:

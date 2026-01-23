@@ -71,29 +71,13 @@ class DevModeService:
         To resume an existing stopped session, use resume_session() instead.
 
         Args:
-            request: DevSessionStartRequest with project path, experiment name, environment name
+            request: DevSessionStartRequest with project path and environment name
 
         Returns:
             Result[DevSessionInfo] with session details on success,
             or error information on failure
         """
         try:
-            # Validate experiment exists
-            experiment_ulid = experiment_database.get_experiment_by_project_and_name(
-                request.project_path,
-                request.experiment_name,
-                trigger_error=False
-            )
-            if not experiment_ulid:
-                return Result.fail(
-                    "EXPERIMENT_NOT_FOUND",
-                    f"Experiment '{request.experiment_name}' not found in project",
-                    [
-                        f"Check available experiments with: adare experiment list",
-                        f"Load experiment with: adare experiment load {request.experiment_name}"
-                    ]
-                )
-
             # Validate environment exists
             try:
                 environment_ulid = environment_database.resolve_environment_identifier(
@@ -112,7 +96,6 @@ class DevModeService:
             # Create session via manager (async)
             session_id = asyncio.run(self._manager.create_session(
                 request.project_path,
-                request.experiment_name,
                 request.environment_name,
                 gui_mode=request.gui_mode,
                 vm_memory=request.vm_memory,
@@ -136,7 +119,7 @@ class DevModeService:
             self._db_api.save_session(
                 session_id=session_id,
                 project_path=request.project_path,
-                experiment_name=request.experiment_name,
+                experiment_name="None",  # Placeholder for DB schema compatibility
                 environment_name=request.environment_name,
                 vm_name=vm_name
             )
@@ -163,13 +146,13 @@ class DevModeService:
             return Result.ok(DevSessionInfo(
                 session_id=state.session_id,
                 project_path=request.project_path,
-                experiment_name=state.experiment_name,
                 environment_name=state.environment_name,
                 vm_running=state.vm_running,
                 actions_executed=state.actions_executed,
                 created_at=self._db_api.get_session(session_id).created_at,
                 current_variables=state.current_variables,
                 available_snapshots=state.available_snapshots,
+                experiment_name=None,
                 next_steps=next_steps,
                 tip=tip
             ))
@@ -359,75 +342,24 @@ class DevModeService:
                 await self._manager.stop_and_remove_session(request.session_id)
                 return 'removed'
             else:
-                # Session not in memory - check if VM is still running
-                db_session = self._db_api.get_session(request.session_id)
-                from adare.backend.devmode.vm_state_checker import is_vm_running
-
-                vm_is_running = False
-                try:
-                    environment_ulid = environment_database.resolve_environment_identifier(
-                        db_session.environment_name
-                    )
-                    hypervisor_type = environment_database.get_environment_hypervisor(
-                        environment_ulid
-                    )
-                    vm_is_running = is_vm_running(db_session.vm_name, hypervisor_type)
-                except Exception as e:
-                    log.warning(f"Could not verify VM state for {db_session.vm_name}: {e}")
-                    # If we can't verify state, assume VM might be running and try to restore
-                    # Better to attempt cleanup and fail gracefully than leave VM running
-                    log.info(f"Cannot verify VM state, will attempt session restoration for safety")
-                    vm_is_running = True  # Err on the side of trying to clean up
-
-                if vm_is_running:
-                    # VM is running but session not in memory - restore it first
-                    log.info(f"VM is running for session {request.session_id}, restoring session for cleanup")
-                    session = await self._manager.get_or_restore_session(request.session_id)
-
-                    if session:
-                        # Now do full cleanup with session in memory
-                        await self._manager.stop_and_remove_session(request.session_id)
-                        return 'removed'
-                    else:
-                        # Restoration failed - try to force stop the VM directly
-                        log.error(f"Failed to restore session {request.session_id}, attempting direct VM cleanup")
-                        try:
-                            # Get hypervisor type to attempt direct VM stop
-                            environment_ulid = environment_database.resolve_environment_identifier(
-                                db_session.environment_name
-                            )
-                            hypervisor_type = environment_database.get_environment_hypervisor(environment_ulid)
-
-                            # Import and use direct VM stop
-                            if hypervisor_type == 'qemu':
-                                from adare.hypervisor.qemu.vm import QemuVM
-                                from adare.hypervisor.qemu.manager import QemuVMManager
-                                manager = QemuVMManager()
-                                vm = QemuVM(db_session.vm_name, manager)
-                                await vm.stop(force=True)
-                                await vm.destroy()
-                                log.info(f"Forcefully stopped and destroyed VM {db_session.vm_name}")
-                            elif hypervisor_type == 'virtualbox':
-                                from adare.hypervisor.virtualbox.vm import VirtualBoxVM
-                                from adare.hypervisor.virtualbox.manager import VirtualBoxManager
-                                manager = VirtualBoxManager()
-                                vm = VirtualBoxVM(db_session.vm_name, manager)
-                                await vm.stop(force=True)
-                                await vm.remove()
-                                log.info(f"Forcefully stopped and removed VM {db_session.vm_name}")
-
-                            # VM cleaned up, can now clean database
-                            return 'removed'
-                        except Exception as e:
-                            log.error(f"Failed to directly stop VM {db_session.vm_name}: {e}")
-                            raise RuntimeError(
-                                f"Cannot restore session or directly stop VM. "
-                                f"Please manually stop VM '{db_session.vm_name}' using virsh/VBoxManage, "
-                                f"then run: adare dev stop --rm {request.session_id}"
-                            )
+                # Session not in memory - load minimal infrastructure for cleanup
+                # This works regardless of whether the VM is running or stopped
+                log.info(f"Loading session {request.session_id} infrastructure for cleanup")
+                session = await self._manager.load_session_for_cleanup(request.session_id)
+                
+                if session:
+                    # Loaded successfully - do full cleanup
+                    # stop_and_remove() handles VM stop/destroy and file deletion
+                    # regardless of the actual VM state (safe to call on stopped VM)
+                    await session.stop_and_remove()
+                    return 'removed'
                 else:
-                    # VM not running, session not in memory - just clean up database
-                    log.info(f"Session {request.session_id} not in memory and VM not running, cleaning up database only")
+                    # Could not load infrastructure - DB state might be corrupted
+                    # or environment invalid. Fallback to DB-only cleanup.
+                    log.warning(
+                        f"Could not load infrastructure for session {request.session_id}. "
+                        f"Performing database-only cleanup."
+                    )
                     return 'removed_from_db_only'
         else:
             # For stop without removal: we need the session object for graceful shutdown
@@ -1276,8 +1208,10 @@ class DevModeService:
                         [f"List available checkpoints with: adare dev checkpoint list --session-id {request.session_id}"]
                     )
 
-            # Get or restore session from manager
-            session = asyncio.run(self._manager.get_or_restore_session(request.session_id))
+            # Get infrastructure-only session context 
+            # We use load_session_for_cleanup because we only need infrastructure access 
+            # (hypervisor) to delete files, not full application context.
+            session = asyncio.run(self._manager.load_session_for_cleanup(request.session_id))
             if session and session.experiment_ctx.hypervisor_type == 'qemu':
                 # Delete external snapshot files
                 vm = session.experiment_ctx.vm

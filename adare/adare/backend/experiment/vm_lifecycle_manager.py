@@ -487,13 +487,13 @@ class VMLifecycleManager:
         # For backward compatibility - this is now a no-op as the strategy handles mounting
         log.debug("mount_shared_directories() called - directories should already be mounted from start_and_initialize_vm()")
 
-    async def stop_vm(self, context: ExperimentRunCtx, post_interrupt: bool = False):
+    async def stop_vm(self, context: ExperimentRunCtx, post_interrupt: bool = False, force: bool = False):
         """Stop the virtual machine."""
         event = None if post_interrupt else context.user_interrupt_event
         with StageCtxManager(VMStopStage(), context.experiment_run_ulid, event=event):
             log.info('stopping virtualbox virtual machine')
             if context.vm:
-                await context.vm.stop()
+                await context.vm.stop(force=force)
 
     async def retrieve_artifacts(self, context: ExperimentRunCtx, post_interrupt: bool = False):
         """

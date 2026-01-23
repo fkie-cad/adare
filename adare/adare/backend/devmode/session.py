@@ -69,11 +69,11 @@ class DevModeState:
     """
     session_id: str
     vm_running: bool
-    experiment_name: str
     environment_name: str
     actions_executed: int
     current_variables: Dict[str, Any]
     available_snapshots: List[DevModeSnapshot]
+    experiment_name: Optional[str] = None
 
 
 class DevModeSession:
@@ -100,13 +100,13 @@ class DevModeSession:
         self,
         session_id: str,
         project_path: Path,
-        experiment_name: str,
         environment_name: str,
         gui_mode: Optional[str] = None,
         vm_memory: Optional[int] = None,
         vm_cpus: Optional[int] = None,
         debug_screenshots: bool = False,
-        console_ulid: Optional[str] = None
+        console_ulid: Optional[str] = None,
+        experiment_name: Optional[str] = None
     ):
         """
         Initialize dev mode session (does not start VM).
@@ -114,23 +114,23 @@ class DevModeSession:
         Args:
             session_id: Unique identifier for this session
             project_path: Path to the ADARE project
-            experiment_name: Name of the experiment to develop
             environment_name: Name of the environment (VM) to use
             gui_mode: GUI execution mode override ('auto', 'agent', 'host')
             vm_memory: VM RAM in MB (None uses platform defaults)
             vm_cpus: VM CPU count (None uses default of 4)
             debug_screenshots: Save debug screenshots during execution
             console_ulid: Optional flow console ULID for event integration
+            experiment_name: Optional name of the experiment (None for bare session)
         """
         self.session_id = session_id
         self.project_path = project_path
-        self.experiment_name = experiment_name
         self.environment_name = environment_name
         self.gui_mode = gui_mode
         self.vm_memory = vm_memory
         self.vm_cpus = vm_cpus
         self.debug_screenshots = debug_screenshots
         self.console_ulid = console_ulid
+        self.experiment_name = experiment_name
 
         # Core components (initialized in start())
         self.experiment_ctx: Optional[ExperimentRunCtx] = None
@@ -253,12 +253,74 @@ class DevModeSession:
                 stage_ulid,
                 event=self.experiment_ctx.user_interrupt_event
             ):
-                # 3. Setup experiment environment
-                step_setup_experiment_environment(self.experiment_ctx)
-                log.info("Experiment environment setup complete")
+                if self.experiment_name:
+                    # 3. Setup experiment environment (standard flow)
+                    step_setup_experiment_environment(self.experiment_ctx)
+                    log.info("Experiment environment setup complete")
+                else:
+                    # 3. Manual setup for bare session (no experiment)
+                    from adare.backend.project.directory import ProjectDirectory
+                    from adare.backend.experiment.directory import ExperimentRunDirectory
+                    from adare.backend.environment import database as environment_database
+                    from adare.backend.experiment import database as experiment_database
+
+                    # Setup ProjectDirectory
+                    self.experiment_ctx.project_directory = ProjectDirectory(self.project_path)
+                    
+                    # Set experiment name to None to avoid validation errors
+                    self.experiment_ctx.config.experiment_name = None
+
+                    # Set base info in DB (using placeholder name for experiment)
+                    experiment_database.set_experiment_run_base_info(
+                        self.experiment_ctx.experiment_run_ulid,
+                        "_dev_session", # Placeholder
+                        self.experiment_ctx.config.environment_name,
+                        self.experiment_ctx.config.project_path
+                    )
+
+                    # Update start timestamp
+                    experiment_database.update_experiment_run_start(
+                        self.experiment_ctx.project_directory.path, 
+                        self.experiment_ctx.experiment_run_ulid, 
+                        self.experiment_ctx.timestamp_start
+                    )
+
+                    # Resolve environment manually
+                    self.experiment_ctx.environment_file = environment_database.get_environment_path_by_project_and_name(
+                        self.project_path, self.environment_name
+                    )
+                    self.experiment_ctx.environment_ulid = environment_database.resolve_environment_identifier(
+                        self.experiment_name or self.environment_name
+                    )
+
+                    # Resolve VM file and platform
+                    self.experiment_ctx.vm_file = environment_database.get_environment_vm_file(self.experiment_ctx.environment_ulid)
+                    self.experiment_ctx.guest_platform = environment_database.get_environment_os(self.experiment_ctx.environment_ulid)
+                    self.experiment_ctx.hypervisor_type = environment_database.get_environment_hypervisor(self.experiment_ctx.environment_ulid)
+
+                    # Fallback parsing if needed
+                    if not self.experiment_ctx.vm_file or not self.experiment_ctx.guest_platform:
+                        from adare.types.environment import parse_environment_file
+                        env_meta = parse_environment_file(self.experiment_ctx.environment_file)
+                        if not self.experiment_ctx.vm_file:
+                            self.experiment_ctx.vm_file = Path(env_meta.vm)
+                        if not self.experiment_ctx.guest_platform:
+                            self.experiment_ctx.guest_platform = env_meta.os.platform
+                    
+                    log.info(f"Manual environment setup complete: {self.environment_name}")
 
                 # 4. Prepare run directory
+                # If no experiment name, temporarily set a placeholder for directory creation
+                original_exp_name = self.experiment_ctx.config.experiment_name
+                if not original_exp_name:
+                    self.experiment_ctx.config.experiment_name = "_dev_session"
+                
                 step_prepare_run_environment(self.experiment_ctx)
+                
+                # Restore original name (None)
+                if not original_exp_name:
+                    self.experiment_ctx.config.experiment_name = None
+
                 log.info("Run directory prepared")
 
                 # 5. Start MCP server for target detection
@@ -305,34 +367,12 @@ class DevModeSession:
                 await step_connect_websocket(self.experiment_ctx)
                 log.info("Connected to WebSocket")
 
-            # 12. Initialize PlaybookController
-            # Get VM credentials for automatic variables
-            from adare.config import get_vm_credentials
-            vm_os = self.experiment_ctx.guest_platform if self.experiment_ctx.guest_platform else None
-            vm_user = None
-            if vm_os:
-                vm_user, _ = get_vm_credentials(vm_os)
+            # 12. PlaybookController is now lazily initialized in _ensure_playbook_controller()
+            # This avoids crashes when experiment context is incomplete during simple start
+            self.playbook_controller = None
 
-            self.playbook_controller = PlaybookController(
-                websocket_client=self.experiment_ctx.client,
-                experiment_dir=self.experiment_ctx.experiment_directory.path,
-                project_dir=self.experiment_ctx.project_directory.path,
-                debug_screenshots=True,
-                screenshots_dir=self.experiment_ctx.experiment_run_directory.screenshots_directory,
-                playbook=self.experiment_ctx.playbook,
-                experiment_run_id=self.console_ulid or self.experiment_ctx.experiment_run_ulid,
-                vm=self.experiment_ctx.vm,
-                experiment_run_directory=self.experiment_ctx.experiment_run_directory.path,
-                vm_os=vm_os,
-                vm_user=vm_user,
-                test_mode=True,
-                config=self.experiment_ctx.config
-            )
-            log.info("PlaybookController initialized")
-
-            # Store initial variables for reset operations
-            if self.experiment_ctx.playbook and self.experiment_ctx.playbook.variables:
-                self.initial_variables = self.playbook_controller.execution_context.copy()
+            # Store initial variables for reset operations - will be populated when controller initializes
+            self.initial_variables = {}
 
             # 13. Create initial snapshot for reset operations
             await self._create_dev_snapshot("initial", "Initial VM state for dev mode")
@@ -366,6 +406,58 @@ class DevModeSession:
             await self.stop()  # Cleanup on failure
             return False
 
+    async def _ensure_playbook_controller(self) -> bool:
+        """
+        Lazily initialize the PlaybookController if it doesn't exist.
+        
+        Returns:
+            True if controller is ready, False otherwise
+        """
+        if self.playbook_controller:
+            return True
+            
+        try:
+            log.info("Initializing PlaybookController lazily...")
+            
+            # Get VM credentials for automatic variables
+            from adare.config import get_vm_credentials
+            vm_os = self.experiment_ctx.guest_platform if self.experiment_ctx.guest_platform else None
+            vm_user = None
+            if vm_os:
+                vm_user, _ = get_vm_credentials(vm_os)
+
+            # Handle potentially missing directory paths
+            experiment_dir = None
+            if self.experiment_ctx.experiment_directory:
+                experiment_dir = self.experiment_ctx.experiment_directory.path
+            
+            self.playbook_controller = PlaybookController(
+                websocket_client=self.experiment_ctx.client,
+                experiment_dir=experiment_dir,
+                project_dir=self.experiment_ctx.project_directory.path,
+                debug_screenshots=True,
+                screenshots_dir=self.experiment_ctx.experiment_run_directory.screenshots_directory,
+                playbook=self.experiment_ctx.playbook,
+                experiment_run_id=self.console_ulid or self.experiment_ctx.experiment_run_ulid,
+                vm=self.experiment_ctx.vm,
+                experiment_run_directory=self.experiment_ctx.experiment_run_directory.path,
+                vm_os=vm_os,
+                vm_user=vm_user,
+                test_mode=True,
+                config=self.experiment_ctx.config
+            )
+            log.info("PlaybookController initialized lazily")
+
+            # Store initial variables if not already done
+            if not self.initial_variables and self.experiment_ctx.playbook and self.experiment_ctx.playbook.variables:
+                self.initial_variables = self.playbook_controller.execution_context.copy()
+                
+            return True
+            
+        except Exception as e:
+            log.error(f"Failed to initialize PlaybookController: {e}", exc_info=True)
+            return False
+
     async def execute_action(self, action: ActionType) -> 'ActionResult':
         """
         Execute a single action interactively.
@@ -379,9 +471,14 @@ class DevModeSession:
         Returns:
             ActionResult with success status and details
         """
-        if not self.is_running or not self.playbook_controller:
+        if not self.is_running:
             from adare.backend.experiment.execution.base import ActionResult
             return ActionResult(success=False, message="Session not running")
+            
+        # Ensure controller is initialized
+        if not await self._ensure_playbook_controller():
+            from adare.backend.experiment.execution.base import ActionResult
+            return ActionResult(success=False, message="Failed to initialize playbook controller")
 
         try:
             log.debug(f"Executing action: {action.__class__.__name__}")
@@ -423,8 +520,12 @@ class DevModeSession:
         Returns:
             PlaybookExecutionResult with execution statistics
         """
-        if not self.is_running or not self.playbook_controller:
+        if not self.is_running:
             raise RuntimeError("Session not running")
+            
+        # Ensure controller is initialized
+        if not await self._ensure_playbook_controller():
+            raise RuntimeError("Failed to initialize playbook controller")
 
         log.info(f"Executing playbook with {len(playbook.actions)} actions")
 
@@ -460,6 +561,9 @@ class DevModeSession:
             True if reset successful, False otherwise
         """
         try:
+            # Ensure controller is initialized (needed for variable reset)
+            await self._ensure_playbook_controller()
+            
             if not self.playbook_controller:
                 return False
 
@@ -511,10 +615,11 @@ class DevModeSession:
                     log.info("Falling back to variable-only reset")
 
             # Reset playbook variables (always done, for both QEMU and VirtualBox)
-            self.playbook_controller.execution_context.clear()
-            self.playbook_controller.execution_context.update(
-                initial_snapshot.variable_state.copy()
-            )
+            if self.playbook_controller:
+                self.playbook_controller.execution_context.clear()
+                self.playbook_controller.execution_context.update(
+                    initial_snapshot.variable_state.copy()
+                )
 
             # Reset counters
             self.actions_executed = 0
@@ -577,10 +682,11 @@ class DevModeSession:
                 log.debug("WebSocket reconnected")
 
             # 6. Reset playbook controller state
-            self.playbook_controller.execution_context.clear()
-            self.playbook_controller.execution_context.update(
-                initial_snapshot.variable_state.copy()
-            )
+            if self.playbook_controller:
+                self.playbook_controller.execution_context.clear()
+                self.playbook_controller.execution_context.update(
+                    initial_snapshot.variable_state.copy()
+                )
 
             # 7. Reset counters
             self.actions_executed = 0
@@ -830,18 +936,33 @@ class DevModeSession:
                     event=None
                 ):
                     # 1. Shutdown WebSocket connection
-                    try:
-                        await step_shutdown_ws(self.experiment_ctx, post_interrupt=True)
-                        log.debug("WebSocket shut down")
-                    except Exception as e:
-                        log.warning(f"Failed to shutdown WebSocket: {e}")
+                    if self.experiment_ctx.client:
+                        try:
+                            await step_shutdown_ws(self.experiment_ctx, post_interrupt=True)
+                            log.debug("WebSocket shut down")
+                        except Exception as e:
+                            log.warning(f"Failed to shutdown WebSocket: {e}")
+                    
+                    # 2. Shutdown MCP server (only if no other sessions are using it)
+                    if self.experiment_ctx.mcp_server:
+                        try:
+                            # Check if other sessions are running
+                            from adare.database.api.devmode import DevModeApi
+                            with DevModeApi() as api:
+                                running_sessions = api.list_running_sessions()
+                                # Filter out current session (active or already marked stopped)
+                                other_active_sessions = [
+                                    s for s in running_sessions 
+                                    if s.session_id != self.session_id
+                                ]
 
-                    # 2. Shutdown MCP server
-                    try:
-                        await step_shutdown_mcp_server(self.experiment_ctx, post_interrupt=True)
-                        log.debug("MCP server shut down")
-                    except Exception as e:
-                        log.warning(f"Failed to shutdown MCP server: {e}")
+                            if other_active_sessions:
+                                log.info(f"Skipping MCP server shutdown - used by {len(other_active_sessions)} other session(s)")
+                            else:
+                                await step_shutdown_mcp_server(self.experiment_ctx, post_interrupt=True, force=True)
+                                log.debug("MCP server shut down (last session)")
+                        except Exception as e:
+                            log.warning(f"Failed to shutdown MCP server: {e}")
 
                     # 3. Stop VM (graceful shutdown, keep disk and snapshots)
                     if self.vm_manager:
@@ -899,18 +1020,33 @@ class DevModeSession:
                     event=None
                 ):
                     # 1. Shutdown WebSocket
-                    try:
-                        await step_shutdown_ws(self.experiment_ctx, post_interrupt=True)
-                        log.debug("WebSocket shut down")
-                    except Exception as e:
-                        log.warning(f"Failed to shutdown WebSocket: {e}")
+                    if self.experiment_ctx.client:
+                        try:
+                            await step_shutdown_ws(self.experiment_ctx, post_interrupt=True)
+                            log.debug("WebSocket shut down")
+                        except Exception as e:
+                            log.warning(f"Failed to shutdown WebSocket: {e}")
 
-                    # 2. Shutdown MCP server
-                    try:
-                        await step_shutdown_mcp_server(self.experiment_ctx, post_interrupt=True)
-                        log.debug("MCP server shut down")
-                    except Exception as e:
-                        log.warning(f"Failed to shutdown MCP server: {e}")
+                    # 2. Shutdown MCP server (only if no other sessions are using it)
+                    if self.experiment_ctx.mcp_server:
+                        try:
+                            # Check if other sessions are running
+                            from adare.database.api.devmode import DevModeApi
+                            with DevModeApi() as api:
+                                running_sessions = api.list_running_sessions()
+                                # Filter out current session
+                                other_active_sessions = [
+                                    s for s in running_sessions 
+                                    if s.session_id != self.session_id
+                                ]
+
+                            if other_active_sessions:
+                                log.info(f"Skipping MCP server shutdown - used by {len(other_active_sessions)} other session(s)")
+                            else:
+                                await step_shutdown_mcp_server(self.experiment_ctx, post_interrupt=True, force=True)
+                                log.debug("MCP server shut down (last session)")
+                        except Exception as e:
+                            log.warning(f"Failed to shutdown MCP server: {e}")
 
                     # 3. Stop VM first (required before snapshot deletion)
                     if self.vm_manager and self.experiment_ctx.vm:
@@ -918,7 +1054,7 @@ class DevModeSession:
 
                         # Stop VM with force (required for checkpoint cleanup)
                         try:
-                            await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
+                            await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True, force=True)
                             log.debug("VM stopped")
                         except Exception as e:
                             log.warning(f"Failed to stop VM: {e}")

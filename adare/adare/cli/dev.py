@@ -194,7 +194,6 @@ def exec_dev_start(arguments):
 
     # Setup
     project_directory = _get_project_path(arguments)
-    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
     log_file = Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
 
     # Create flow console
@@ -215,7 +214,6 @@ def exec_dev_start(arguments):
         api = AdareAPI()
         result = api.devmode.start_session(DevSessionStartRequest(
             project_path=project_directory,
-            experiment_name=experiment_name,
             environment_name=arguments.environment,
             gui_mode=getattr(arguments, 'gui_mode', None),
             vm_memory=getattr(arguments, 'vm_memory', None),
@@ -548,7 +546,10 @@ def exec_dev_playbook(arguments):
     # Create flow console
     user_interrupt_event = threading.Event()
     console_ulid = str(ulid.ULID())
-    flow_console = ExperimentFlowConsole(disable=False, external_stop_event=user_interrupt_event)
+    # Use indent_offset=1 to fix indentation issue:
+    # "Dangling" stages (Level 1) will be printed as Level 0
+    # "Sub-stages" (Level 2) will be printed as Level 1
+    flow_console = ExperimentFlowConsole(disable=False, external_stop_event=user_interrupt_event, indent_offset=1)
     flowconsolemanager.add_handler(console_ulid, flow_console)
     flow_console.start()
 

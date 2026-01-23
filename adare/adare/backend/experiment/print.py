@@ -30,9 +30,11 @@ class ExperimentFlowConsole:
     experiment_start_time: datetime | None
     show_live_duration: bool
 
+    indent_offset: int
+
     layout: Text
 
-    def __init__(self, disable: bool = False, external_stop_event: threading.Event = None):
+    def __init__(self, disable: bool = False, external_stop_event: threading.Event = None, indent_offset: int = 0):
         self.console = Console()
         self.stop_event = threading.Event()
         self.external_stop_event = external_stop_event
@@ -41,6 +43,7 @@ class ExperimentFlowConsole:
         self.disable = disable
         self._lock = threading.Lock()
         self._original_log_level = None
+        self.indent_offset = indent_offset
         
         # Initialize live duration tracking
         self.experiment_start_time = None
@@ -165,7 +168,9 @@ class ExperimentFlowConsole:
                     message = f'{spinner[spinner_position]} {message}'
 
             if message_object['level'] > 0:
-                message = ' ' * 2 * message_object['level'] + message
+                # Apply indentation offset (ensure level doesn't go below 0)
+                effective_level = max(0, message_object['level'] - self.indent_offset)
+                message = ' ' * 2 * effective_level + message
 
             # Add result_status right after message text (before duration)
             if message_object['result_status']:
