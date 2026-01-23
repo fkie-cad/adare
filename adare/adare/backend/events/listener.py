@@ -187,12 +187,12 @@ def _execute_db_batch(batch):
             failed_operations += 1
             operation_type = operation.get('type', 'unknown')
             ulid = operation.get('data', {}).get('ulid', 'unknown')
-            log.error(f"CLAUDE: Error executing {operation_type} operation for ULID {ulid}: {e}", exc_info=True)
+            log.error(f"Error executing {operation_type} operation for ULID {ulid}: {e}", exc_info=True)
 
     if failed_operations > 0:
-        log.warning(f"CLAUDE: Database batch completed with {successful_operations} successful and {failed_operations} failed operations")
+        log.warning(f"Database batch completed with {successful_operations} successful and {failed_operations} failed operations")
     else:
-        log.debug(f"CLAUDE: Database batch completed successfully with {successful_operations} operations")
+        log.debug(f"Database batch completed successfully with {successful_operations} operations")
 
 
 def _get_stage_level(stage_name: str) -> int:
@@ -263,7 +263,7 @@ def event_listener_cli(ulid):
         log.error(f"[EventListener CLI] No console found for ULID: {ulid}")
         return
 
-    log.info("CLAUDE: Event listener optimized with stage hierarchy caching and async DB operations")
+    log.info("Event listener optimized with stage hierarchy caching and async DB operations")
     for event in subscribe_cli(ulid):
         try:
             log.info(f"[EventListener CLI] Processing event for {ulid}: {event}")

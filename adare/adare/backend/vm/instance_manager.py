@@ -61,25 +61,25 @@ class VmInstanceManager:
         Returns:
             Available VmInstance or None if none available
         """
-        log.debug(f"CLAUDE: find_available_instance called for vm_id={vm_id}")
+        log.debug(f"find_available_instance called for vm_id={vm_id}")
         from adare.database.api.vm import VmApi
 
         try:
             with VmApi() as api:
                 instances = api.get_vm_instances_for_vm(vm_id, status='available')
-                log.debug(f"CLAUDE: Found {len(instances)} available instances for vm_id={vm_id}")
+                log.debug(f"Found {len(instances)} available instances for vm_id={vm_id}")
 
                 if instances:
                     # Return the most recently used available instance
                     instances.sort(key=lambda x: x.last_used_at, reverse=True)
                     selected = instances[0]
-                    log.debug(f"CLAUDE: Selected available instance: {selected.instance_name} (last used: {selected.last_used_at})")
+                    log.debug(f"Selected available instance: {selected.instance_name} (last used: {selected.last_used_at})")
                     return selected
 
-                log.debug(f"CLAUDE: No available instances found for vm_id={vm_id}")
+                log.debug(f"No available instances found for vm_id={vm_id}")
                 return None
         except Exception as e:
-            log.error(f"CLAUDE: Error in find_available_instance: {e}")
+            log.error(f"Error in find_available_instance: {e}")
             raise
 
     def get_instance_count_for_vm(self, vm_id: str) -> int:
@@ -143,7 +143,7 @@ class VmInstanceManager:
         Raises:
             VMError: If instance creation fails
         """
-        log.debug(f"CLAUDE: create_new_instance called - vm_id={vm_id}, experiment_run_id={experiment_run_id}")
+        log.debug(f"create_new_instance called - vm_id={vm_id}, experiment_run_id={experiment_run_id}")
         from adare.database.api.vm import VmApi
         import adare.backend.vm.database as vm_database
 
@@ -152,30 +152,30 @@ class VmInstanceManager:
         try:
             # Check if we need to cleanup old instances first
             current_count = self.get_instance_count_for_vm(vm_id)
-            log.debug(f"CLAUDE: Current instance count for vm_id={vm_id}: {current_count}/{self.MAX_INSTANCES_PER_VM}")
+            log.debug(f"Current instance count for vm_id={vm_id}: {current_count}/{self.MAX_INSTANCES_PER_VM}")
 
             if current_count >= self.MAX_INSTANCES_PER_VM:
-                log.info(f"CLAUDE: VM {vm_id} has {current_count} instances, cleaning up oldest available")
+                log.info(f"VM {vm_id} has {current_count} instances, cleaning up oldest available")
                 cleanup_success = await self.cleanup_oldest_available_instance(vm_id)
                 if not cleanup_success:
                     # If no available instances to cleanup, we're at capacity
                     raise VMError(log, f"VM {vm_id} at maximum instance capacity ({self.MAX_INSTANCES_PER_VM}) with all instances active")
-                log.debug(f"CLAUDE: Cleanup completed, proceeding with new instance creation")
+                log.debug(f"Cleanup completed, proceeding with new instance creation")
 
             # Get source VM
-            log.debug(f"CLAUDE: Fetching source VM record for vm_id={vm_id}")
+            log.debug(f"Fetching source VM record for vm_id={vm_id}")
             vm_record = vm_database.get_vm_by_id(vm_id)
             if not vm_record:
                 raise VMError(log, f"Source VM {vm_id} not found")
 
-            log.debug(f"CLAUDE: Source VM found: {vm_record.name}")
+            log.debug(f"Source VM found: {vm_record.name}")
 
             # Generate unique instance name before port allocation
             instance_name = self._generate_instance_name(vm_record.name, experiment_run_id)
-            log.debug(f"CLAUDE: Generated instance name: {instance_name}")
+            log.debug(f"Generated instance name: {instance_name}")
 
             # Atomically allocate port and create instance record in single transaction
-            log.debug(f"CLAUDE: Atomically reserving port and creating VM instance record")
+            log.debug(f"Atomically reserving port and creating VM instance record")
             instance = None
             instance_id = None
             websocket_port = None
@@ -199,31 +199,31 @@ class VmInstanceManager:
 
                 # Extract the ID while the instance is still attached to session
                 instance_id = instance.id
-                log.info(f"CLAUDE: Atomically created VM instance: {instance_name} on port {websocket_port} (ID: {instance_id})")
+                log.info(f"Atomically created VM instance: {instance_name} on port {websocket_port} (ID: {instance_id})")
 
             # Verify the instance can be retrieved from database after commit
-            log.debug(f"CLAUDE: Verifying instance {instance_id} can be retrieved from database")
+            log.debug(f"Verifying instance {instance_id} can be retrieved from database")
             with VmApi() as api:
                 verification = api.get_vm_instance_by_id(instance_id)
                 if verification:
-                    log.debug(f"CLAUDE: Instance verification successful - port {verification.websocket_port} atomically reserved")
+                    log.debug(f"Instance verification successful - port {verification.websocket_port} atomically reserved")
                     return verification  # Return the fresh instance from verification
                 else:
-                    log.error(f"CLAUDE: Instance {instance_id} not retrievable after creation and commit")
+                    log.error(f"Instance {instance_id} not retrievable after creation and commit")
                     # Debug: Check what instances exist
                     all_instances = api.get_all_vm_instances()
-                    log.error(f"CLAUDE: Total instances in DB: {len(all_instances)}")
+                    log.error(f"Total instances in DB: {len(all_instances)}")
                     for inst in all_instances[-3:]:  # Show last 3 instances
-                        log.error(f"CLAUDE:   Recent instance: {inst.id} - {inst.instance_name}")
+                        log.error(f"  Recent instance: {inst.id} - {inst.instance_name}")
                     raise VMError(log, f"Database consistency error: created instance {instance_id} but cannot retrieve it")
 
         except VMError:
             # Re-raise VMErrors as-is to preserve specific error handling
             raise
         except Exception as e:
-            log.error(f"CLAUDE: Error in create_new_instance: {e}")
+            log.error(f"Error in create_new_instance: {e}")
             import traceback
-            log.debug(f"CLAUDE: create_new_instance traceback: {traceback.format_exc()}")
+            log.debug(f"create_new_instance traceback: {traceback.format_exc()}")
             raise
 
     async def reuse_instance(self, instance: VmInstance, experiment_run_id: str) -> VmInstance:
@@ -260,7 +260,7 @@ class VmInstanceManager:
                             base_snapshot_name=None
                         )
             else:
-                log.debug(f"CLAUDE: Skipping snapshot validation for non-VirtualBox instance")
+                log.debug(f"Skipping snapshot validation for non-VirtualBox instance")
 
         # Allocate fresh websocket port for reused instance atomically
         from adare.backend.vm.port_manager import PORT_RANGE_START, PORT_RANGE_END
@@ -315,7 +315,7 @@ class VmInstanceManager:
         Returns:
             VmInstance ready for use
         """
-        log.debug(f"CLAUDE: allocate_instance_for_experiment called - vm_id={vm_id}, experiment_run_id={experiment_run_id}")
+        log.debug(f"allocate_instance_for_experiment called - vm_id={vm_id}, experiment_run_id={experiment_run_id}")
 
         # Add timeout to lock acquisition
         import threading
@@ -325,19 +325,19 @@ class VmInstanceManager:
 
         try:
             # Try to acquire lock with timeout
-            log.debug(f"CLAUDE: Attempting to acquire instance manager lock")
+            log.debug(f"Attempting to acquire instance manager lock")
             lock_acquired = self._lock.acquire(timeout=30)  # 30 second timeout
             if not lock_acquired:
                 raise VMError(log, "Timeout acquiring instance manager lock after 30 seconds")
 
-            log.debug(f"CLAUDE: Lock acquired in {time.time() - start_time:.2f}s")
+            log.debug(f"Lock acquired in {time.time() - start_time:.2f}s")
 
             # Synchronize database instance states with hypervisor (with stage visibility)
             from adare.backend.experiment.stagectxmanager import StageCtxManager
             from adare.types.stages import VMInstanceSyncStage
             from adare.database.api.vm import VmApi
 
-            log.debug(f"CLAUDE: Synchronizing instance states before allocation for vm_id={vm_id}")
+            log.debug(f"Synchronizing instance states before allocation for vm_id={vm_id}")
             with VmApi() as api:
                 instance_count = len(api.get_vm_instances_for_vm(vm_id))
 
@@ -357,26 +357,26 @@ class VmInstanceManager:
                 stage_ctx.set_status(stage_ctx.stage.status)
 
                 if sync_count > 0:
-                    log.info(f"CLAUDE: Synchronized {sync_count} instance states before allocation")
+                    log.info(f"Synchronized {sync_count} instance states before allocation")
 
             # First try to find available instance for reuse
-            log.debug(f"CLAUDE: Searching for available instances for vm_id={vm_id}")
+            log.debug(f"Searching for available instances for vm_id={vm_id}")
             available_instance = self.find_available_instance(vm_id)
 
             if available_instance:
-                log.info(f"CLAUDE: Found available instance for reuse: {available_instance.instance_name}")
+                log.info(f"Found available instance for reuse: {available_instance.instance_name}")
                 return await self.reuse_instance(available_instance, experiment_run_id)
             else:
-                log.info(f"CLAUDE: No available instances found, creating new instance")
+                log.info(f"No available instances found, creating new instance")
                 return await self.create_new_instance(vm_id, experiment_run_id)
 
         except Exception as e:
-            log.error(f"CLAUDE: Error in allocate_instance_for_experiment: {e}")
+            log.error(f"Error in allocate_instance_for_experiment: {e}")
             raise
         finally:
             if lock_acquired:
                 self._lock.release()
-                log.debug(f"CLAUDE: Released instance manager lock after {time.time() - start_time:.2f}s total")
+                log.debug(f"Released instance manager lock after {time.time() - start_time:.2f}s total")
 
     async def release_instance(self, instance_id: str):
         """
@@ -624,7 +624,7 @@ class VmInstanceManager:
                 vm = api.get_vm_by_id(instance.vm_id)
 
         if not vm:
-            log.debug(f"CLAUDE: Cannot determine hypervisor for instance {instance.instance_name}")
+            log.debug(f"Cannot determine hypervisor for instance {instance.instance_name}")
             return "error"
 
         # Use identifier strategy for hypervisor-agnostic state checking
@@ -632,11 +632,11 @@ class VmInstanceManager:
         identifier = strategy.get_identifier(instance)
 
         if not identifier:
-            log.debug(f"CLAUDE: Instance {instance.instance_name} has no hypervisor identifier")
+            log.debug(f"Instance {instance.instance_name} has no hypervisor identifier")
             return "not_found"
 
         state = strategy.get_vm_state(identifier)
-        log.debug(f"CLAUDE: {vm.hypervisor} state for {instance.instance_name}: {state}")
+        log.debug(f"{vm.hypervisor} state for {instance.instance_name}: {state}")
         return state
 
     # Keep old method name as alias for backward compatibility
@@ -686,8 +686,8 @@ class VmInstanceManager:
         Returns:
             Number of instances updated
         """
-        log.info(f"CLAUDE: ===== PARALLEL VERSION EXECUTING ===== vm_id={vm_id}")
-        log.debug(f"CLAUDE: Syncing instance states for vm_id={vm_id}")
+        log.info(f"===== PARALLEL VERSION EXECUTING ===== vm_id={vm_id}")
+        log.debug(f"Syncing instance states for vm_id={vm_id}")
         from adare.database.api.vm import VmApi
 
         updated_count = 0
@@ -695,13 +695,13 @@ class VmInstanceManager:
         with VmApi() as api:
             # Get all instances for this VM
             instances = api.get_vm_instances_for_vm(vm_id)
-            log.debug(f"CLAUDE: Found {len(instances)} instances to sync for vm_id={vm_id}")
+            log.debug(f"Found {len(instances)} instances to sync for vm_id={vm_id}")
 
             if not instances:
                 return 0
 
             # Create parallel tasks for state checking
-            log.debug(f"CLAUDE: Starting parallel state checks for {len(instances)} instances")
+            log.debug(f"Starting parallel state checks for {len(instances)} instances")
             tasks = [
                 self._check_instance_state_async(instance)
                 for instance in instances
@@ -715,7 +715,7 @@ class VmInstanceManager:
 
             for result in results:
                 if isinstance(result, Exception):
-                    log.error(f"CLAUDE: Error checking instance state: {result}")
+                    log.error(f"Error checking instance state: {result}")
                     continue
 
                 instance_id, current_db_status, hypervisor_state = result
@@ -727,14 +727,14 @@ class VmInstanceManager:
                     # VM doesn't exist in hypervisor - mark as available for cleanup/reuse
                     if current_db_status != "available":
                         new_db_status = "available"
-                        log.info(f"CLAUDE: Instance {instance_id} not found in hypervisor, will mark as available")
+                        log.info(f"Instance {instance_id} not found in hypervisor, will mark as available")
 
                 elif hypervisor_state in ["poweroff", "aborted", "saved", "shutoff"]:
                     # VM is stopped - mark as available for reuse
                     # Note: "shutoff" is the libvirt/QEMU state for powered off VMs
                     if current_db_status != "available":
                         new_db_status = "available"
-                        log.info(f"CLAUDE: Instance {instance_id} is stopped ({hypervisor_state}), will mark as available")
+                        log.info(f"Instance {instance_id} is stopped ({hypervisor_state}), will mark as available")
 
                 elif hypervisor_state in ["running", "paused"]:
                     # VM is running - keep status as-is (might be legitimately active)
@@ -751,9 +751,9 @@ class VmInstanceManager:
                     last_used_at=datetime.now(UTC)
                 )
                 updated_count += 1
-                log.info(f"CLAUDE: Updated instance {instance_id} status to {new_status}")
+                log.info(f"Updated instance {instance_id} status to {new_status}")
 
-            log.info(f"CLAUDE: Synchronized {updated_count} instance states for vm_id={vm_id} (parallel mode)")
+            log.info(f"Synchronized {updated_count} instance states for vm_id={vm_id} (parallel mode)")
             return updated_count
 
     def _generate_instance_name(self, base_vm_name: str, experiment_run_id: str) -> str:
@@ -824,9 +824,9 @@ class VmInstanceManager:
     async def _cleanup_qemu_vm(self, instance: VmInstance):
         """Clean up QEMU/libvirt VM for an instance."""
         try:
-            from adare.hypervisor.qemu.vm import QEMUVM
+            from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
 
-            vm = QEMUVM.get_vm_by_name(instance.instance_name)
+            vm = QEMUVMRegistry.get_vm_by_name(instance.instance_name)
             if not vm:
                 log.warning(f"QEMU VM not found: {instance.instance_name}")
                 return

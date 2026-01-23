@@ -209,7 +209,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 ]
             )
 
-    # CLAUDE: Check for name collision immediately, before ANY expensive operations
+    # Check for name collision immediately, before ANY expensive operations
     # Override environment name with filename without extension to match what we do later
     environment_name = environment_file.stem
     
@@ -241,7 +241,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
         # This is good - no conflict
         pass
 
-    # CLAUDE: Calculate environment file hash with progress bar for better UX
+    # Calculate environment file hash with progress bar for better UX
     log.info(f'Calculating environment file hash...')
     environment_file_sha256 = file_sha256_with_progress(
         environment_file,
@@ -261,7 +261,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
     managed_environment_file = _copy_environment_file(environment_file, environment_name, environment_file_sha256)
     log.info(f'Environment file stored at: {managed_environment_file}')
 
-    # CLAUDE: Early check - if environment already exists by hash, skip VM processing entirely
+    # Early check - if environment already exists by hash, skip VM processing entirely
     existing_environment_id = environment_database.get_environment_by_hash(environment_file_sha256, trigger_exception=False)
     if existing_environment_id:
         if not force:
@@ -336,7 +336,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 from adare.backend.vm.commands import load_vm_file_for_environment
                 log.info(f'Processing VM file during environment load: {vm_path}')
 
-                # CLAUDE: Removed duplicate hash calculation - let load_vm_file_for_environment handle it
+                # Removed duplicate hash calculation - let load_vm_file_for_environment handle it
                 import adare.backend.vm.database as vm_database
 
                 # Call load_vm_file_for_environment which handles hash calculation and duplicate checking

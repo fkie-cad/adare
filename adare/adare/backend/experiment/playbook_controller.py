@@ -188,7 +188,32 @@ class PlaybookController:
 
         # Connect test loader to action executor (use setter method to ensure proper initialization)
         self.action_executor.set_test_loader(self.test_loader)
-    
+
+    def update_websocket_client(self, new_client: AdareVMClient):
+        """
+        Update the WebSocket client for this controller and all sub-components.
+
+        This is needed when reconnecting to a VM during session restoration,
+        where the PlaybookController was created with a disconnected or None client
+        and needs to be updated with a newly connected client.
+
+        Args:
+            new_client: The new connected WebSocket client
+        """
+        # Update main client reference
+        self.client = new_client
+
+        # Update action executor and its sub-executors
+        self.action_executor.client = new_client
+        self.action_executor.target_resolution.client = new_client
+        self.action_executor.simple_actions.client = new_client
+        self.action_executor.flow_control.client = new_client
+
+        # Update GUI executor if it exists
+        if hasattr(self.action_executor.simple_actions, 'gui_executor') and \
+           hasattr(self.action_executor.simple_actions.gui_executor, 'client'):
+            self.action_executor.simple_actions.gui_executor.client = new_client
+
     def _create_jinja_environment(self):
         """Create Jinja environment with all necessary filters."""
         import jinja2
@@ -322,24 +347,45 @@ class PlaybookController:
     async def execute_playbook(self) -> PlaybookExecutionResult:
         """
         Execute YAML playbook actions in order.
-        
+
         Returns:
             PlaybookExecutionResult with execution details
         """
         playbook = self.playbook
-        
+
+        # Validate WebSocket client is available for actions that need it
+        if self.client is None:
+            error_msg = (
+                "Cannot execute playbook: WebSocket client is not connected. "
+                "The adarevm server is either not running or not reachable. "
+                "In dev mode, ensure the VM is running and the WebSocket server is accessible."
+            )
+            log.error(error_msg)
+            return PlaybookExecutionResult(
+                success=False,
+                total_actions=0,
+                successful_actions=0,
+                failed_actions=0,
+                action_results=[],
+                total_tests=0,
+                successful_tests=0,
+                failed_tests=0,
+                execution_time=0.0,
+                error_message=error_msg
+            )
+
         # Set up experiment variables and playbook access
         self.execution_context['playbook'] = playbook
         if hasattr(playbook, 'variables') and playbook.variables:
             log.info("Loading experiment variables...")
-            # CLAUDE: Debug what variables are in the registry
-            log.info(f"CLAUDE: Variables in registry: {list(playbook.variables.variables.keys())}")
+            # Debug what variables are in the registry
+            log.info(f"Variables in registry: {list(playbook.variables.variables.keys())}")
             for name, var in playbook.variables.variables.items():
-                log.info(f"CLAUDE: Variable '{name}' = '{var.value}' (type: {var.type})")
+                log.info(f"Variable '{name}' = '{var.value}' (type: {var.type})")
 
             # Convert VariableRegistry to execution context format (for actions - full resolution)
             var_dict = playbook.variables.to_execution_context(for_tests=False)
-            log.info(f"CLAUDE: Variables in execution context: {list(var_dict.keys())}")
+            log.info(f"Variables in execution context: {list(var_dict.keys())}")
             self.execution_context.update(var_dict)
             log.debug(f"Loaded {len(playbook.variables.variables)} variables into execution context")
         
@@ -694,14 +740,14 @@ class PlaybookController:
             # Smart selection based on hypervisor and tool availability
             if self._is_qemu_vm():
                 if self._is_virt_diff_available():
-                    log.info("CLAUDE: Auto mode: Using host-side diff (QEMU + virt-diff available)")
+                    log.info("Auto mode: Using host-side diff (QEMU + virt-diff available)")
                     return 'host'
                 else:
-                    log.warning("CLAUDE: Auto mode: virt-diff not found, falling back to guest-side diff")
-                    log.warning("CLAUDE: For faster diffs, install: sudo apt-get install libguestfs-tools")
+                    log.warning("Auto mode: virt-diff not found, falling back to guest-side diff")
+                    log.warning("For faster diffs, install: sudo apt-get install libguestfs-tools")
                     return 'guest'
             else:
-                log.debug("CLAUDE: Auto mode: Using guest-side diff (non-QEMU hypervisor)")
+                log.debug("Auto mode: Using guest-side diff (non-QEMU hypervisor)")
                 return 'guest'
 
         return requested_mode

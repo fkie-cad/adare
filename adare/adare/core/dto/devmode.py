@@ -52,6 +52,8 @@ class DevPlaybookExecuteRequest:
     session_id: str
     playbook_source: str  # 'file', 'url', 'stdin'
     playbook_content: str  # path, URL, or stdin content
+    console_ulid: Optional[str] = None  # For flow console routing
+    restore_initial: bool = False  # Restore to initial checkpoint before execution
 
 
 @dataclass
@@ -160,6 +162,7 @@ class DevSessionListItem:
     actions_executed: int
     created_at: datetime
     project_path: Path
+    status: str  # 'running', 'stopped', 'crashed'
 
 
 @dataclass

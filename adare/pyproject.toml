@@ -36,6 +36,9 @@ fastmcp = "^2.9.2"
 websockets = "^15.0"
 libvirt-python = { version = "^11.0.0", optional = true }
 pillow = "^12.0.0"
+fastapi = "^0.115.0"
+uvicorn = {extras = ["standard"], version = "^0.32.0"}
+python-multipart = "^0.0.20"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^7.4.0"

@@ -52,7 +52,7 @@ def create_ova_test_context(ova_file_path: Path, guest_platform: str):
 # VM Setup Functions
 async def import_ova_for_test(context):
     """Import OVA file directly for testing."""
-    log.info("CLAUDE: Phase 1 - Importing OVA file...")
+    log.info("Phase 1 - Importing OVA file...")
     
     from adare.config import get_vm_credentials
     from adare.hypervisor.virtualbox.vm import VirtualBoxVM
@@ -89,45 +89,45 @@ async def import_ova_for_test(context):
         }
     }
     
-    log.info("CLAUDE: OVA imported successfully")
+    log.info("OVA imported successfully")
 
 
 async def setup_shared_folders_for_test(context):
     """Setup shared folders in VirtualBox for testing."""
-    log.info("CLAUDE: Setting up shared folders...")
+    log.info("Setting up shared folders...")
     
     # Add shared folders to VirtualBox (similar to VM lifecycle manager)
     for name, paths in context.config.shared_directories.items():
         await context.vm.add_shared_folder(name, host_path=paths['host'], stop_event=context.user_interrupt_event)
     
-    log.info("CLAUDE: Shared folders configured in VirtualBox")
+    log.info("Shared folders configured in VirtualBox")
 
 
 async def start_test_vm(context):
     """Start the test VM."""
-    log.info("CLAUDE: Starting test VM...")
+    log.info("Starting test VM...")
     
     # Start VM using same approach as VMLifecycleManager
     await context.vm.start(stop_event=context.user_interrupt_event)
-    log.info("CLAUDE: Test VM started")
+    log.info("Test VM started")
 
 
 async def wait_for_test_vm_ready(context):
     """Wait for test VM to be ready."""
-    log.info("CLAUDE: Waiting for test VM to be ready...")
+    log.info("Waiting for test VM to be ready...")
     
     # Wait for VM to be responsive using same approach as VMLifecycleManager
     await context.vm.wait_until_ready(stop_event=context.user_interrupt_event)
-    log.info("CLAUDE: Test VM is ready")
+    log.info("Test VM is ready")
 
 
 async def mount_shared_directories_in_test_vm(context):
     """Mount shared directories in test VM."""
-    log.info("CLAUDE: Mounting shared directories in test VM...")
+    log.info("Mounting shared directories in test VM...")
     
     # Mount shared directories using same approach as VMLifecycleManager
     await context.vm.mount_shared_directories(stop_event=context.user_interrupt_event)
-    log.info("CLAUDE: Shared directories mounted in test VM")
+    log.info("Shared directories mounted in test VM")
 
 
 # VM Compatibility Test Functions
@@ -135,10 +135,10 @@ async def test_vm_response(context):
     """Test basic VM responsiveness."""
     test_result = await context.vm.run_command("true", stop_event=context.user_interrupt_event)
     if test_result.returncode == 0:
-        log.info("CLAUDE: VM is responsive to commands")
+        log.info("VM is responsive to commands")
         return True
     else:
-        log.warning(f"CLAUDE: VM not responding to commands. Exit code: {test_result.returncode}")
+        log.warning(f"VM not responding to commands. Exit code: {test_result.returncode}")
         return False
 
 
@@ -147,10 +147,10 @@ async def test_shared_folders(context):
     # Check if vm runtime directory is accessible
     ls_result = await context.vm.run_command("test -d /adare/vm", stop_event=context.user_interrupt_event)
     if ls_result.returncode == 0:
-        log.info("CLAUDE: Shared folders are accessible")
+        log.info("Shared folders are accessible")
         return True
     else:
-        log.warning(f"CLAUDE: Shared folders not accessible. Exit code: {ls_result.returncode}")
+        log.warning(f"Shared folders not accessible. Exit code: {ls_result.returncode}")
         return False
 
 
@@ -158,10 +158,10 @@ async def test_python_availability(context):
     """Test Python availability in VM."""
     python_result = await context.vm.run_command("python3 --version", stop_event=context.user_interrupt_event)
     if python_result.returncode == 0:
-        log.info("CLAUDE: Python is available")
+        log.info("Python is available")
         return True
     else:
-        log.warning(f"CLAUDE: Python not available. Exit code: {python_result.returncode}")
+        log.warning(f"Python not available. Exit code: {python_result.returncode}")
         return False
 
 
@@ -169,10 +169,10 @@ async def test_poetry_availability(context):
     """Test Poetry availability in VM."""
     poetry_result = await context.vm.run_command("poetry --version", stop_event=context.user_interrupt_event)
     if poetry_result.returncode == 0:
-        log.info("CLAUDE: Poetry is available")
+        log.info("Poetry is available")
         return True
     else:
-        log.warning(f"CLAUDE: Poetry not available. Exit code: {poetry_result.returncode}")
+        log.warning(f"Poetry not available. Exit code: {poetry_result.returncode}")
         return False
 
 
@@ -190,17 +190,17 @@ async def test_adarevm_server_start(context):
         start_result = await context.vm.run_command(start_command, stop_event=context.user_interrupt_event)
 
         if start_result.returncode == 0:
-            log.info("CLAUDE: AdareVM server started successfully")
+            log.info("AdareVM server started successfully")
             # Give server time to initialize
             import asyncio
             await asyncio.sleep(3.0)
             return True
         else:
-            log.warning(f"CLAUDE: Failed to start adarevm server. Exit code: {start_result.returncode}")
+            log.warning(f"Failed to start adarevm server. Exit code: {start_result.returncode}")
             return False
             
     except Exception as e:
-        log.warning(f"CLAUDE: Exception starting adarevm server: {e}")
+        log.warning(f"Exception starting adarevm server: {e}")
         return False
 
 
@@ -216,14 +216,14 @@ async def test_websocket_connection(context):
         # Try to connect with reasonable timeout
         connected = await client.connect(timeout=30.0)
         if connected:
-            log.info("CLAUDE: WebSocket connection established")
+            log.info("WebSocket connection established")
             return True
         else:
-            log.warning("CLAUDE: Could not establish WebSocket connection")
+            log.warning("Could not establish WebSocket connection")
             return False
             
     except Exception as e:
-        log.warning(f"CLAUDE: WebSocket test error: {e}")
+        log.warning(f"WebSocket test error: {e}")
         return False
 
 
@@ -232,13 +232,13 @@ async def test_screenshot_command(context):
     try:
         result = await context.client.call_tool("take_screenshot", timeout=10.0)
         if result and not result.get('error'):
-            log.info("CLAUDE: Screenshot command successful")
+            log.info("Screenshot command successful")
             return True
         else:
-            log.warning(f"CLAUDE: Screenshot command failed: {result}")
+            log.warning(f"Screenshot command failed: {result}")
             return False
     except Exception as e:
-        log.warning(f"CLAUDE: Screenshot command error: {e}")
+        log.warning(f"Screenshot command error: {e}")
         return False
 
 
@@ -250,13 +250,13 @@ async def test_click_command(context):
         
         result = await context.client.call_tool("click", {"x": click_x, "y": click_y}, timeout=10.0)
         if result and not result.get('error'):
-            log.info(f"CLAUDE: Click command successful (clicked at {click_x}, {click_y})")
+            log.info(f"Click command successful (clicked at {click_x}, {click_y})")
             return True
         else:
-            log.warning(f"CLAUDE: Click command failed: {result}")
+            log.warning(f"Click command failed: {result}")
             return False
     except Exception as e:
-        log.warning(f"CLAUDE: Click command error: {e}")
+        log.warning(f"Click command error: {e}")
         return False
 
 
@@ -269,7 +269,7 @@ async def test_vm_compatibility(context, flow_console):
         VMScreenshotTestStage, VMClickTestStage
     )
     
-    log.info("CLAUDE: Testing VM compatibility with ADARE WebSocket server...")
+    log.info("Testing VM compatibility with ADARE WebSocket server...")
     
     compatibility_results = {
         'vm_responsive': False,
@@ -318,53 +318,53 @@ async def test_vm_compatibility(context, flow_console):
                 compatibility_results['click_command'] = await test_click_command(context)
             
     except Exception as e:
-        log.error(f"CLAUDE: Compatibility test error: {e}")
+        log.error(f"Compatibility test error: {e}")
     
     # Summary 
     passed_tests = sum(compatibility_results.values())
     total_tests = len(compatibility_results)
     
-    log.info(f"CLAUDE: Compatibility test results: {passed_tests}/{total_tests} tests passed")
+    log.info(f"Compatibility test results: {passed_tests}/{total_tests} tests passed")
     for test_name, result in compatibility_results.items():
         status = "PASS" if result else "FAIL"
-        log.info(f"CLAUDE:   - {test_name}: {status}")
+        log.info(f"  - {test_name}: {status}")
         
     # Return results instead of throwing exception - let flow console show the summary
     success = passed_tests >= 6  # At least VM basics + server + websocket + one command
     
     if success:
-        log.info("CLAUDE: VM appears compatible with ADARE (WebSocket server working)")
+        log.info("VM appears compatible with ADARE (WebSocket server working)")
     else:
-        log.warning(f"CLAUDE: VM compatibility insufficient: only {passed_tests}/{total_tests} tests passed")
+        log.warning(f"VM compatibility insufficient: only {passed_tests}/{total_tests} tests passed")
     
     return success
 
 
 async def cleanup_test_vm(context, keep_vm: bool = False):
     """Clean up test VM and resources."""
-    log.info("CLAUDE: Cleaning up test resources...")
+    log.info("Cleaning up test resources...")
     
     try:
         # Disconnect WebSocket client (adarevm server stops automatically when VM stops)
         if context.client:
             await context.client.disconnect()
-            log.info("CLAUDE: WebSocket client disconnected")
+            log.info("WebSocket client disconnected")
         
         # Handle VM cleanup based on keep_vm flag
         if context.vm:
             if keep_vm:
                 # Stop VM but don't remove it
                 await context.vm.stop()
-                log.info("CLAUDE: Test VM stopped but kept for manual inspection")
-                log.info("CLAUDE: You can manually remove it later with: VBoxManage unregistervm --delete")
+                log.info("Test VM stopped but kept for manual inspection")
+                log.info("You can manually remove it later with: VBoxManage unregistervm --delete")
             else:
                 await context.vm.remove()
-                log.info("CLAUDE: Test VM removed successfully")
+                log.info("Test VM removed successfully")
         
     except Exception as e:
-        log.error(f"CLAUDE: Error during cleanup: {e}")
+        log.error(f"Error during cleanup: {e}")
     
-    log.info("CLAUDE: Cleanup completed")
+    log.info("Cleanup completed")
 
 
 async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = False, vm_cleanup_mode: str = 'prompt') -> bool:
@@ -392,8 +392,8 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
     
     start_time = time.time()
     
-    log.info(f"CLAUDE: ova_test function started - Testing OVA file: {ova_file_path}")
-    log.info(f"CLAUDE: Platform: {guest_platform}")
+    log.info(f"ova_test function started - Testing OVA file: {ova_file_path}")
+    log.info(f"Platform: {guest_platform}")
     
     # Create and start flow console for better visibility
     from adare.backend.experiment.commands import __create_and_start_flow_console, __start_event_listeners
@@ -418,7 +418,7 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
     try:
         # VM Test Setup Phase - Import OVA, setup shared folders, start and prepare VM
         if not stop_event.is_set():
-            log.info("CLAUDE: Starting VM Test Setup Phase...")
+            log.info("Starting VM Test Setup Phase...")
             async with StageCtxManagerLite(VMTestSetupStage(), flow_console, level=1):
                 setup_steps = [
                     import_ova_for_test,
@@ -438,17 +438,17 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
         
         # Check if VM compatibility tests passed
         if not vm_compatibility_success:
-            log.error("CLAUDE: VM compatibility tests failed - VM may not be fully compatible with ADARE")
+            log.error("VM compatibility tests failed - VM may not be fully compatible with ADARE")
             flow_console.finish_experiment_timer(success=False)
             return False
         
         elapsed_time = time.time() - start_time
-        log.info(f"CLAUDE: OVA test completed successfully! File is compatible with ADARE. (took {elapsed_time:.1f} seconds)")
+        log.info(f"OVA test completed successfully! File is compatible with ADARE. (took {elapsed_time:.1f} seconds)")
         flow_console.finish_experiment_timer(success=True)
         return True
         
     except Exception as e:
-        log.error(f"CLAUDE: OVA test failed with unexpected error: {e}")
+        log.error(f"OVA test failed with unexpected error: {e}")
         # Always show traceback for debugging VM test failures
         import traceback
         traceback.print_exc()
@@ -463,14 +463,14 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
                 if context.vm:
                     if vm_cleanup_mode == 'keep':
                         keep_vm = True
-                        log.info("CLAUDE: Keeping VM for further testing (--keep-vm specified)")
+                        log.info("Keeping VM for further testing (--keep-vm specified)")
                     else:
                         keep_vm = False
-                        log.info("CLAUDE: Removing VM automatically (default behavior)")
+                        log.info("Removing VM automatically (default behavior)")
                 
                 await cleanup_test_vm(context, keep_vm=keep_vm)
         except Exception as cleanup_error:
-            log.error(f"CLAUDE: Error during cleanup: {cleanup_error}")
+            log.error(f"Error during cleanup: {cleanup_error}")
         
         # Stop the flow console
         try:

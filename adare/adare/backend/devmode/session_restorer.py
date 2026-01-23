@@ -27,7 +27,8 @@ log = logging.getLogger(__name__)
 async def restore_context(
     session: DevModeSession,
     db_session: DevSession,
-    console_ulid: Optional[str] = None
+    console_ulid: Optional[str] = None,
+    should_start_vm: bool = False
 ) -> bool:
     """
     Restore session context from database metadata and filesystem.
@@ -39,6 +40,8 @@ async def restore_context(
         session: DevModeSession object to populate
         db_session: Database record with session metadata
         console_ulid: Optional console ULID for flow integration
+        should_start_vm: If True, start the VM and reconnect WebSocket after restoration.
+                        Used when resuming stopped sessions.
 
     Returns:
         True if restoration successful, False otherwise
@@ -112,7 +115,19 @@ async def restore_context(
                 config.project_path,
                 config.environment_name
             )
-            session.experiment_ctx.vm_file = environment_database.get_environment_vm_file(environment_ulid)
+
+            # CRITICAL: Restore overlay path from database, not base disk path
+            # This prevents accidental base disk deletion during cleanup
+            if db_session.overlay_disk_path:
+                session.experiment_ctx.vm_file = Path(db_session.overlay_disk_path)
+                log.info(f"Restored overlay disk path: {db_session.overlay_disk_path}")
+            else:
+                # Fallback for old sessions without overlay_disk_path (unsafe!)
+                log.warning(
+                    f"Session {session.session_id} missing overlay_disk_path field. "
+                    f"Using base disk as fallback (UNSAFE - base disk may be deleted!)"
+                )
+                session.experiment_ctx.vm_file = environment_database.get_environment_vm_file(environment_ulid)
 
             log.debug(
                 f"Environment: platform={session.experiment_ctx.guest_platform}, "
@@ -140,6 +155,7 @@ async def restore_context(
             username, password = get_vm_credentials(session.experiment_ctx.guest_platform)
 
             # Create VM object (config auto-loaded from ~/.adare/qemu/vms/{vm_name}.json)
+            # disk_path points to the OVERLAY disk (not base disk) thanks to restoration above
             session.experiment_ctx.vm = QEMUVM(
                 vm_name=vm_name,
                 guest_os=session.experiment_ctx.guest_platform,
@@ -150,7 +166,7 @@ async def restore_context(
                 disk_path=str(session.experiment_ctx.vm_file) if session.experiment_ctx.vm_file else None
             )
 
-            log.debug(f"Attached to existing QEMU VM: {vm_name}")
+            log.debug(f"Attached to existing QEMU VM: {vm_name} (disk: {session.experiment_ctx.vm_file})")
 
         elif hypervisor == 'virtualbox':
             from adare.hypervisor.virtualbox.vm import VirtualBoxVM
@@ -204,7 +220,7 @@ async def restore_context(
         # 8. Initialize and start MCP server for target resolution (non-fatal)
         try:
             from adare.backend.experiment.run import step_start_mcp_server
-            from adare.backend.experiment.execution.mcp_server_manager import MCPServerManager
+            from adare.backend.experiment.mcp_server_manager import MCPServerManager
 
             # Initialize MCP server object (required before calling step_start_mcp_server)
             session.experiment_ctx.mcp_server = MCPServerManager(
@@ -239,6 +255,7 @@ async def restore_context(
             debug_screenshots=True,
             screenshots_dir=session.experiment_ctx.experiment_run_directory.screenshots_directory,
             playbook=session.experiment_ctx.playbook,
+            experiment_run_id=console_ulid or session.console_ulid or session.experiment_ctx.experiment_run_ulid,
             vm=session.experiment_ctx.vm,
             experiment_run_directory=session.experiment_ctx.experiment_run_directory.path,
             vm_os=vm_os,
@@ -256,7 +273,58 @@ async def restore_context(
         if session.experiment_ctx.playbook and session.experiment_ctx.playbook.variables:
             session.initial_variables = session.playbook_controller.execution_context.copy()
 
-        # 12. Mark session as running
+        # 12. Start VM and reconnect WebSocket if requested (for stopped session resumption)
+        if should_start_vm:
+            log.info("Starting VM for stopped session resumption...")
+
+            # Force QEMU_LIBGUESTFS=true for dev mode (virtiofs incompatible with snapshots)
+            import os
+            os.environ['QEMU_LIBGUESTFS'] = 'true'
+
+            # Import required step functions
+            from adare.backend.experiment.run import (
+                step_install_and_run_websocket_server,
+                step_connect_websocket,
+            )
+            from adare.backend.events.stages import (
+                VirtualMachineSetupStage,
+                SoftwareInstallationStage,
+            )
+            from adare.backend.events.emitters import StageCtxManager
+
+            # Determine stage ULID for event context
+            stage_ulid = console_ulid or session.experiment_ctx.experiment_run_ulid
+
+            try:
+                # Start VM
+                with StageCtxManager(
+                    VirtualMachineSetupStage(),
+                    stage_ulid,
+                    event=session.experiment_ctx.user_interrupt_event
+                ):
+                    await session.vm_manager.start_vm(session.experiment_ctx)
+                    log.info("VM started successfully")
+
+                # Install WebSocket server and connect
+                with StageCtxManager(
+                    SoftwareInstallationStage(),
+                    stage_ulid,
+                    event=session.experiment_ctx.user_interrupt_event
+                ):
+                    await step_install_and_run_websocket_server(session.experiment_ctx)
+                    log.info("AdareVM WebSocket server installed")
+
+                    await step_connect_websocket(session.experiment_ctx)
+                    log.info("Connected to WebSocket")
+
+                # Update playbook controller with WebSocket client
+                session.playbook_controller.update_websocket_client(session.experiment_ctx.client)
+
+            except Exception as e:
+                log.error(f"Failed to start VM and reconnect WebSocket: {e}", exc_info=True)
+                return False
+
+        # 13. Mark session as running
         session.is_running = True
         session.started_at = db_session.created_at
 

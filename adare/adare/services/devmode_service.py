@@ -67,6 +67,9 @@ class DevModeService:
         """
         Create and start a new dev mode session.
 
+        This method always creates a new session with a unique ID.
+        To resume an existing stopped session, use resume_session() instead.
+
         Args:
             request: DevSessionStartRequest with project path, experiment name, environment name
 
@@ -138,6 +141,12 @@ class DevModeService:
                 vm_name=vm_name
             )
 
+            # Store overlay disk path (critical for preventing base disk deletion)
+            if session.experiment_ctx.vm and hasattr(session.experiment_ctx.vm, 'config'):
+                overlay_path = str(session.experiment_ctx.vm.config.disk_path)
+                self._db_api.update_session_overlay_path(session_id, overlay_path)
+                log.info(f"Stored overlay disk path for session {session_id}: {overlay_path}")
+
             # Get session state for response
             state = session.get_state()
 
@@ -183,6 +192,253 @@ class DevModeService:
                 ["Check logs for details"]
             )
 
+    def resume_session(self, session_id: str, console_ulid: Optional[str] = None) -> Result[DevSessionInfo]:
+        """
+        Resume a stopped dev mode session.
+
+        This method:
+        1. Validates the session exists and is stopped
+        2. Validates VM resources (disk files, checkpoints) exist
+        3. Calls restore_and_restart_session() to restart VM and reconnect
+        4. Returns session info with preserved state
+
+        Args:
+            session_id: Session ID to resume
+            console_ulid: Optional flow console ULID for event integration
+
+        Returns:
+            Result[DevSessionInfo] with resumed session details on success,
+            or error information on failure
+        """
+        try:
+            # Validate session exists and is stopped
+            db_session = self._db_api.get_session(session_id)
+            if not db_session:
+                return Result.fail(
+                    "SESSION_NOT_FOUND",
+                    f"Session '{session_id}' not found in database",
+                    ["Check available sessions with: adare dev list"]
+                )
+
+            # Check if already running
+            if db_session.status == 'running':
+                return Result.fail(
+                    "SESSION_ALREADY_RUNNING",
+                    f"Session '{session_id}' is already running",
+                    [
+                        f"Use existing session: adare dev action {session_id} -y '<action>'",
+                        f"Or stop and restart: adare dev stop {session_id}"
+                    ]
+                )
+
+            if db_session.status != 'stopped':
+                return Result.fail(
+                    "SESSION_NOT_STOPPED",
+                    f"Session '{session_id}' has status '{db_session.status}', expected 'stopped'",
+                    [
+                        "Only stopped sessions can be resumed",
+                        f"Current status: {db_session.status}"
+                    ]
+                )
+
+            # Validate VM resources exist
+            validation_result = self._validate_vm_resources(db_session)
+            if not validation_result.is_success:
+                return validation_result
+
+            # Resume session via manager (async)
+            log.info(f"Resuming stopped session {session_id}...")
+            session = asyncio.run(
+                self._manager.restore_and_restart_session(session_id, console_ulid)
+            )
+
+            if not session:
+                return Result.fail(
+                    "SESSION_RESUME_FAILED",
+                    f"Failed to resume session '{session_id}'",
+                    [
+                        "Check VM exists and can be started",
+                        "Check hypervisor (VirtualBox/QEMU) is running",
+                        "Check logs for details"
+                    ]
+                )
+
+            # Get session state for response
+            state = session.get_state()
+
+            # Count checkpoints
+            checkpoints = self._db_api.list_checkpoints(session_id)
+
+            next_steps = [
+                f"Execute single action: adare dev action {session_id} -y '<action_yaml>'",
+                f"Execute playbook: adare dev playbook {session_id} -f <playbook.yml>",
+                f"View session state: adare dev state {session_id}",
+                f"Reset session: adare dev reset-soft {session_id}  (or reset-hard)",
+                f"Stop session: adare dev stop {session_id}"
+            ]
+
+            tip = f"Session resumed with {len(state.current_variables)} variables and {len(checkpoints)} checkpoints preserved"
+
+            return Result.ok(DevSessionInfo(
+                session_id=state.session_id,
+                project_path=Path(db_session.project_path),
+                experiment_name=state.experiment_name,
+                environment_name=state.environment_name,
+                vm_running=state.vm_running,
+                actions_executed=state.actions_executed,
+                created_at=db_session.created_at,
+                current_variables=state.current_variables,
+                available_snapshots=state.available_snapshots,
+                next_steps=next_steps,
+                tip=tip
+            ))
+
+        except Exception as e:
+            log.error(f"Unexpected error resuming session: {e}", exc_info=True)
+            return Result.fail(
+                "INTERNAL_ERROR",
+                f"Unexpected error: {str(e)}",
+                ["Check logs for details"]
+            )
+
+    def resume_most_recent(self, project_path: Path, console_ulid: Optional[str] = None) -> Result[DevSessionInfo]:
+        """
+        Resume the most recently stopped session for the project.
+
+        This is used when 'adare dev resume' is called without a session ID.
+        It finds the most recent stopped session (any experiment, any environment)
+        and resumes it.
+
+        Args:
+            project_path: Path to the project
+            console_ulid: Optional flow console ULID for event integration
+
+        Returns:
+            Result[DevSessionInfo] with resumed session details on success,
+            or error information on failure
+        """
+        try:
+            # Get most recent stopped session (any experiment, any environment)
+            stopped_sessions = self._db_api.list_sessions(project_path, status='stopped')
+
+            if not stopped_sessions:
+                return Result.fail(
+                    "NO_STOPPED_SESSIONS",
+                    "No stopped sessions found in project",
+                    [
+                        "Check available sessions: adare dev list",
+                        "Create new session: adare dev start <experiment> -e <environment>"
+                    ]
+                )
+
+            # Get most recent (list is already ordered by updated_at desc from list_sessions)
+            most_recent = stopped_sessions[0]
+
+            log.info(f"Resuming most recent stopped session: {most_recent.session_id}")
+
+            # Resume the session
+            return self.resume_session(most_recent.session_id, console_ulid)
+
+        except Exception as e:
+            log.error(f"Unexpected error resuming most recent session: {e}", exc_info=True)
+            return Result.fail(
+                "INTERNAL_ERROR",
+                f"Unexpected error: {str(e)}",
+                ["Check logs for details"]
+            )
+
+    async def _stop_session_async(self, request: DevSessionStopRequest):
+        """Async helper for stopping session - keeps everything in same event loop."""
+
+        # For removal: check if session is in memory first
+        if request.remove_resources:
+            session = self._manager._sessions.get(request.session_id)
+
+            if session:
+                # Session is running in memory - do graceful shutdown
+                await self._manager.stop_and_remove_session(request.session_id)
+                return 'removed'
+            else:
+                # Session not in memory - check if VM is still running
+                db_session = self._db_api.get_session(request.session_id)
+                from adare.backend.devmode.vm_state_checker import is_vm_running
+
+                vm_is_running = False
+                try:
+                    environment_ulid = environment_database.resolve_environment_identifier(
+                        db_session.environment_name
+                    )
+                    hypervisor_type = environment_database.get_environment_hypervisor(
+                        environment_ulid
+                    )
+                    vm_is_running = is_vm_running(db_session.vm_name, hypervisor_type)
+                except Exception as e:
+                    log.warning(f"Could not verify VM state for {db_session.vm_name}: {e}")
+                    # If we can't verify state, assume VM might be running and try to restore
+                    # Better to attempt cleanup and fail gracefully than leave VM running
+                    log.info(f"Cannot verify VM state, will attempt session restoration for safety")
+                    vm_is_running = True  # Err on the side of trying to clean up
+
+                if vm_is_running:
+                    # VM is running but session not in memory - restore it first
+                    log.info(f"VM is running for session {request.session_id}, restoring session for cleanup")
+                    session = await self._manager.get_or_restore_session(request.session_id)
+
+                    if session:
+                        # Now do full cleanup with session in memory
+                        await self._manager.stop_and_remove_session(request.session_id)
+                        return 'removed'
+                    else:
+                        # Restoration failed - try to force stop the VM directly
+                        log.error(f"Failed to restore session {request.session_id}, attempting direct VM cleanup")
+                        try:
+                            # Get hypervisor type to attempt direct VM stop
+                            environment_ulid = environment_database.resolve_environment_identifier(
+                                db_session.environment_name
+                            )
+                            hypervisor_type = environment_database.get_environment_hypervisor(environment_ulid)
+
+                            # Import and use direct VM stop
+                            if hypervisor_type == 'qemu':
+                                from adare.hypervisor.qemu.vm import QemuVM
+                                from adare.hypervisor.qemu.manager import QemuVMManager
+                                manager = QemuVMManager()
+                                vm = QemuVM(db_session.vm_name, manager)
+                                await vm.stop(force=True)
+                                await vm.destroy()
+                                log.info(f"Forcefully stopped and destroyed VM {db_session.vm_name}")
+                            elif hypervisor_type == 'virtualbox':
+                                from adare.hypervisor.virtualbox.vm import VirtualBoxVM
+                                from adare.hypervisor.virtualbox.manager import VirtualBoxManager
+                                manager = VirtualBoxManager()
+                                vm = VirtualBoxVM(db_session.vm_name, manager)
+                                await vm.stop(force=True)
+                                await vm.remove()
+                                log.info(f"Forcefully stopped and removed VM {db_session.vm_name}")
+
+                            # VM cleaned up, can now clean database
+                            return 'removed'
+                        except Exception as e:
+                            log.error(f"Failed to directly stop VM {db_session.vm_name}: {e}")
+                            raise RuntimeError(
+                                f"Cannot restore session or directly stop VM. "
+                                f"Please manually stop VM '{db_session.vm_name}' using virsh/VBoxManage, "
+                                f"then run: adare dev stop --rm {request.session_id}"
+                            )
+                else:
+                    # VM not running, session not in memory - just clean up database
+                    log.info(f"Session {request.session_id} not in memory and VM not running, cleaning up database only")
+                    return 'removed_from_db_only'
+        else:
+            # For stop without removal: we need the session object for graceful shutdown
+            session = await self._manager.get_or_restore_session(request.session_id)
+
+            if not session:
+                return None  # Already stopped
+
+            await self._manager.shutdown_session(request.session_id)
+            return 'stopped'
+
     def stop_session(self, request: DevSessionStopRequest) -> Result[bool]:
         """
         Stop a dev mode session.
@@ -202,38 +458,26 @@ class DevModeService:
                     ["Check active sessions with: adare dev list"]
                 )
 
-            # Try to get or restore session for proper VM shutdown
-            session = self._manager.get_or_restore_session(request.session_id)
+            # Single asyncio.run() for entire flow
+            # Note: If VM is running but session not in memory, _stop_session_async
+            # will automatically restore the session first before removal
+            result = asyncio.run(self._stop_session_async(request))
 
-            if session:
-                # Session available (from memory or restored)
-                if request.remove_resources:
-                    # Full cleanup: stop and remove everything
-                    asyncio.run(
-                        self._manager.stop_and_remove_session(request.session_id)
-                    )
-                    # Delete database entry (cascades to checkpoints)
-                    self._db_api.delete_session(request.session_id)
-                else:
-                    # Shutdown only: keep resources for restart
-                    asyncio.run(
-                        self._manager.shutdown_session(request.session_id)
-                    )
-                    # Mark as stopped in database (keep entry)
-                    self._db_api.update_session_status(request.session_id, 'stopped')
+            if result == 'removed':
+                # Delete database entry (cascades to checkpoints)
+                self._db_api.delete_session(request.session_id)
+            elif result == 'removed_from_db_only':
+                # Session wasn't running, just clean up database
+                log.info(f"Cleaning up database records for stopped session {request.session_id}")
+                self._db_api.delete_session(request.session_id)
+            elif result == 'stopped':
+                # Mark as stopped in database (keep entry)
+                self._db_api.update_session_status(request.session_id, 'stopped')
+            elif result is None:
+                # Already stopped, just update status
+                self._db_api.update_session_status(request.session_id, 'stopped')
 
-                return Result.ok(True)
-            else:
-                # Session not in memory - handle based on mode
-                if request.remove_resources:
-                    # Clean up database entries only (VM already gone)
-                    log.info(f"Session {request.session_id} not running, cleaning up database")
-                    self._db_api.delete_session(request.session_id)
-                else:
-                    # Already stopped, just update status
-                    self._db_api.update_session_status(request.session_id, 'stopped')
-
-                return Result.ok(True)
+            return Result.ok(True)
 
         except Exception as e:
             log.error(f"Error stopping dev session: {e}", exc_info=True)
@@ -245,7 +489,7 @@ class DevModeService:
 
     def list_sessions(self, request: DevSessionListRequest) -> Result[List[DevSessionListItem]]:
         """
-        List active dev mode sessions.
+        List all dev mode sessions (running, stopped, crashed).
 
         Args:
             request: DevSessionListRequest with optional project filter
@@ -254,8 +498,8 @@ class DevModeService:
             Result[List[DevSessionListItem]] with session list
         """
         try:
-            # Get sessions from database
-            db_sessions = self._db_api.list_running_sessions(request.project_path)
+            # Get ALL sessions from database (not just running)
+            db_sessions = self._db_api.list_sessions(request.project_path)
 
             # Build list items
             items = []
@@ -268,7 +512,7 @@ class DevModeService:
                     vm_running = state.vm_running
                     actions_executed = state.actions_executed
                 else:
-                    # Session not in manager (stale)
+                    # Session not in manager
                     vm_running = False
                     actions_executed = 0
 
@@ -279,7 +523,8 @@ class DevModeService:
                     vm_running=vm_running,
                     actions_executed=actions_executed,
                     created_at=db_session.created_at,
-                    project_path=Path(db_session.project_path)
+                    project_path=Path(db_session.project_path),
+                    status=db_session.status
                 ))
 
             return Result.ok(items)
@@ -313,7 +558,7 @@ class DevModeService:
                 )
 
             # Get or restore session from manager
-            session = self._manager.get_or_restore_session(request.session_id)
+            session = asyncio.run(self._manager.get_or_restore_session(request.session_id))
             if not session:
                 return Result.fail(
                     "SESSION_RESTORATION_FAILED",
@@ -352,7 +597,13 @@ class DevModeService:
 
     def cleanup_stale_sessions(self, request: DevSessionCleanupRequest) -> Result[DevCleanupResult]:
         """
-        Cleanup stale sessions.
+        Cleanup orphaned dev mode sessions.
+
+        Removes sessions marked as 'running' that are not actually active in memory.
+        This handles cases where sessions crashed or were killed unexpectedly.
+
+        Does NOT remove sessions with 'stopped' status - these are intentionally
+        not in memory and can be resumed later.
 
         Args:
             request: DevSessionCleanupRequest with optional project filter
@@ -367,10 +618,14 @@ class DevModeService:
             db_sessions = self._db_api.list_sessions(request.project_path)
 
             for db_session in db_sessions:
+                # Skip stopped sessions - they're intentionally not in memory
+                if db_session.status == 'stopped':
+                    continue
+
                 # Check if session exists in manager
                 session = self._manager.get_session(db_session.session_id)
                 if not session:
-                    # Stale session - remove from database
+                    # Stale session - remove from database (marked as running but not actually running)
                     self._db_api.delete_session(db_session.session_id)
                     removed_ids.append(db_session.session_id)
 
@@ -391,6 +646,48 @@ class DevModeService:
     # Action Execution
     # =========================================================================
 
+    async def _execute_action_async(self, request: DevActionExecuteRequest):
+        """
+        Execute a single action in a single event loop.
+
+        This async helper ensures the entire action execution (session retrieval,
+        parsing, and execution) happens in one event loop, keeping the WebSocket
+        message handler alive throughout.
+
+        Args:
+            request: DevActionExecuteRequest with session ID and action details
+
+        Returns:
+            Tuple of (action_result, execution_time)
+
+        Raises:
+            RuntimeError: If session not found or action execution fails
+            ValueError: If invalid action source
+        """
+        # Get or restore session (stays in same event loop)
+        session = await self._manager.get_or_restore_session(request.session_id)
+        if not session:
+            raise RuntimeError(
+                f"Dev session '{request.session_id}' not found or could not be restored"
+            )
+
+        # Parse action based on source
+        if request.action_source == 'file':
+            action = self._parse_action_from_file(request.action_content)
+        elif request.action_source == 'yaml':
+            action = self._parse_action_from_yaml(request.action_content)
+        elif request.action_source == 'stdin':
+            action = self._parse_action_from_stdin()
+        else:
+            raise ValueError(f"Invalid action source '{request.action_source}'")
+
+        # Execute action (in same event loop!)
+        start_time = time.time()
+        action_result = await session.execute_action(action)
+        execution_time = time.time() - start_time
+
+        return action_result, execution_time
+
     def execute_action(self, request: DevActionExecuteRequest) -> Result[DevActionResult]:
         """
         Execute a single action.
@@ -402,36 +699,11 @@ class DevModeService:
             Result[DevActionResult] with execution result
         """
         try:
-            # Get or restore session from manager
-            session = self._manager.get_or_restore_session(request.session_id)
-            if not session:
-                return Result.fail(
-                    "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found or could not be restored",
-                    [
-                        "Check active sessions with: adare dev list",
-                        "VM may not be running - check with hypervisor tools"
-                    ]
-                )
-
-            # Parse action based on source
-            if request.action_source == 'file':
-                action = self._parse_action_from_file(request.action_content)
-            elif request.action_source == 'yaml':
-                action = self._parse_action_from_yaml(request.action_content)
-            elif request.action_source == 'stdin':
-                action = self._parse_action_from_stdin()
-            else:
-                return Result.fail(
-                    "INVALID_ACTION_SOURCE",
-                    f"Invalid action source '{request.action_source}'",
-                    ["Valid sources: file, yaml, stdin"]
-                )
-
-            # Execute action (async)
-            start_time = time.time()
-            action_result = asyncio.run(session.execute_action(action))
-            execution_time = time.time() - start_time
+            # CRITICAL: Execute entire flow in ONE asyncio.run() call
+            # This keeps the WebSocket message_handler_task alive throughout execution
+            action_result, execution_time = asyncio.run(
+                self._execute_action_async(request)
+            )
 
             return Result.ok(DevActionResult(
                 success=action_result.success,
@@ -441,6 +713,23 @@ class DevModeService:
                 data=action_result.data
             ))
 
+        except RuntimeError as e:
+            # Raised by _execute_action_async when session not found
+            return Result.fail(
+                "SESSION_NOT_FOUND",
+                str(e),
+                [
+                    "Check active sessions with: adare dev list",
+                    "VM may not be running - check with hypervisor tools"
+                ]
+            )
+        except ValueError as e:
+            # Raised by _execute_action_async for invalid action source
+            return Result.fail(
+                "INVALID_ACTION_SOURCE",
+                str(e),
+                ["Valid sources: file, yaml, stdin"]
+            )
         except yaml.YAMLError as e:
             return Result.fail(
                 "YAML_PARSE_ERROR",
@@ -461,6 +750,65 @@ class DevModeService:
                 ["Check logs for details", "Verify action syntax"]
             )
 
+    async def _execute_playbook_async(self, request: DevPlaybookExecuteRequest):
+        """
+        Execute playbook in a single event loop.
+
+        This async helper ensures the entire playbook execution (session retrieval,
+        parsing, and execution) happens in one event loop, keeping the WebSocket
+        message handler alive throughout.
+
+        Args:
+            request: DevPlaybookExecuteRequest with session ID and playbook details
+
+        Returns:
+            Tuple of (playbook_result, execution_time)
+
+        Raises:
+            RuntimeError: If session not found or playbook execution fails
+            ValueError: If invalid playbook source
+        """
+        # Get or restore session (stays in same event loop)
+        session = await self._manager.get_or_restore_session(
+            request.session_id,
+            console_ulid=request.console_ulid
+        )
+        if not session:
+            raise RuntimeError(
+                f"Dev session '{request.session_id}' not found or could not be restored"
+            )
+
+        # Parse playbook based on source
+        if request.playbook_source == 'file':
+            playbook = self._parse_playbook_from_file(request.playbook_content)
+        elif request.playbook_source == 'url':
+            playbook = self._fetch_playbook_from_url(request.playbook_content)
+        elif request.playbook_source == 'stdin':
+            playbook = self._parse_playbook_from_stdin()
+        else:
+            raise ValueError(f"Invalid playbook source '{request.playbook_source}'")
+
+        # Restore to initial checkpoint if requested
+        if request.restore_initial:
+            log.info("--restore flag set: restoring to initial checkpoint before playbook execution")
+            restore_success = await session.restore_checkpoint('initial')
+
+            if not restore_success:
+                raise RuntimeError(
+                    "Failed to restore initial checkpoint. "
+                    "Checkpoint may not exist or restore operation failed. "
+                    "Aborting playbook execution to avoid running with stale state."
+                )
+
+            log.info("Successfully restored to initial checkpoint")
+
+        # Execute playbook (in same event loop!)
+        start_time = time.time()
+        playbook_result = await session.execute_playbook(playbook)
+        execution_time = time.time() - start_time
+
+        return playbook_result, execution_time
+
     def execute_playbook(self, request: DevPlaybookExecuteRequest) -> Result[DevPlaybookResult]:
         """
         Execute a playbook.
@@ -472,36 +820,11 @@ class DevModeService:
             Result[DevPlaybookResult] with execution statistics
         """
         try:
-            # Get or restore session from manager
-            session = self._manager.get_or_restore_session(request.session_id)
-            if not session:
-                return Result.fail(
-                    "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found or could not be restored",
-                    [
-                        "Check active sessions with: adare dev list",
-                        "VM may not be running - check with hypervisor tools"
-                    ]
-                )
-
-            # Parse playbook based on source
-            if request.playbook_source == 'file':
-                playbook = self._parse_playbook_from_file(request.playbook_content)
-            elif request.playbook_source == 'url':
-                playbook = self._fetch_playbook_from_url(request.playbook_content)
-            elif request.playbook_source == 'stdin':
-                playbook = self._parse_playbook_from_stdin()
-            else:
-                return Result.fail(
-                    "INVALID_PLAYBOOK_SOURCE",
-                    f"Invalid playbook source '{request.playbook_source}'",
-                    ["Valid sources: file, url, stdin"]
-                )
-
-            # Execute playbook (async)
-            start_time = time.time()
-            playbook_result = asyncio.run(session.execute_playbook(playbook))
-            execution_time = time.time() - start_time
+            # CRITICAL: Execute entire flow in ONE asyncio.run() call
+            # This keeps the WebSocket message_handler_task alive throughout execution
+            playbook_result, execution_time = asyncio.run(
+                self._execute_playbook_async(request)
+            )
 
             # Convert action results
             action_results = [
@@ -523,9 +846,30 @@ class DevModeService:
                 execution_time=execution_time,
                 action_results=action_results,
                 error_message=playbook_result.error_message,
-                test_stats=playbook_result.test_stats
+                test_stats={
+                    'total_tests': playbook_result.total_tests,
+                    'successful_tests': playbook_result.successful_tests,
+                    'failed_tests': playbook_result.failed_tests,
+                } if playbook_result.total_tests > 0 else None
             ))
 
+        except RuntimeError as e:
+            # Raised by _execute_playbook_async when session not found
+            return Result.fail(
+                "SESSION_NOT_FOUND",
+                str(e),
+                [
+                    "Check active sessions with: adare dev list",
+                    "VM may not be running - check with hypervisor tools"
+                ]
+            )
+        except ValueError as e:
+            # Raised by _execute_playbook_async for invalid playbook source
+            return Result.fail(
+                "INVALID_PLAYBOOK_SOURCE",
+                str(e),
+                ["Valid sources: file, url, stdin"]
+            )
         except yaml.YAMLError as e:
             return Result.fail(
                 "YAML_PARSE_ERROR",
@@ -550,6 +894,33 @@ class DevModeService:
     # Reset Operations
     # =========================================================================
 
+    async def _reset_soft_async(self, request: DevResetRequest):
+        """
+        Execute soft reset in a single event loop.
+
+        Args:
+            request: DevResetRequest with session ID
+
+        Returns:
+            Tuple of (success, execution_time)
+
+        Raises:
+            RuntimeError: If session not found
+        """
+        # Get or restore session (stays in same event loop)
+        session = await self._manager.get_or_restore_session(request.session_id)
+        if not session:
+            raise RuntimeError(
+                f"Dev session '{request.session_id}' not found or could not be restored"
+            )
+
+        # Perform soft reset (in same event loop!)
+        start_time = time.time()
+        success = await session.reset_soft()
+        execution_time = time.time() - start_time
+
+        return success, execution_time
+
     def reset_soft(self, request: DevResetRequest) -> Result[DevResetResult]:
         """
         Soft reset (variables only).
@@ -561,22 +932,11 @@ class DevModeService:
             Result[DevResetResult] with reset details
         """
         try:
-            # Get or restore session from manager
-            session = self._manager.get_or_restore_session(request.session_id)
-            if not session:
-                return Result.fail(
-                    "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found or could not be restored",
-                    [
-                        "Check active sessions with: adare dev list",
-                        "VM may not be running - check with hypervisor tools"
-                    ]
-                )
-
-            # Perform soft reset (async)
-            start_time = time.time()
-            success = asyncio.run(session.reset_soft())
-            execution_time = time.time() - start_time
+            # CRITICAL: Execute entire flow in ONE asyncio.run() call
+            # This keeps the WebSocket message_handler_task alive throughout execution
+            success, execution_time = asyncio.run(
+                self._reset_soft_async(request)
+            )
 
             if success:
                 return Result.ok(DevResetResult(
@@ -592,6 +952,16 @@ class DevModeService:
                     ["Try hard reset instead: adare dev reset-hard"]
                 )
 
+        except RuntimeError as e:
+            # Raised by _reset_soft_async when session not found
+            return Result.fail(
+                "SESSION_NOT_FOUND",
+                str(e),
+                [
+                    "Check active sessions with: adare dev list",
+                    "VM may not be running - check with hypervisor tools"
+                ]
+            )
         except Exception as e:
             log.error(f"Error during soft reset: {e}", exc_info=True)
             return Result.fail(
@@ -599,6 +969,33 @@ class DevModeService:
                 f"Soft reset failed: {str(e)}",
                 ["Check logs for details"]
             )
+
+    async def _reset_hard_async(self, request: DevResetRequest):
+        """
+        Execute hard reset in a single event loop.
+
+        Args:
+            request: DevResetRequest with session ID
+
+        Returns:
+            Tuple of (success, execution_time)
+
+        Raises:
+            RuntimeError: If session not found
+        """
+        # Get or restore session (stays in same event loop)
+        session = await self._manager.get_or_restore_session(request.session_id)
+        if not session:
+            raise RuntimeError(
+                f"Dev session '{request.session_id}' not found or could not be restored"
+            )
+
+        # Perform hard reset (in same event loop!)
+        start_time = time.time()
+        success = await session.reset_hard()
+        execution_time = time.time() - start_time
+
+        return success, execution_time
 
     def reset_hard(self, request: DevResetRequest) -> Result[DevResetResult]:
         """
@@ -611,22 +1008,11 @@ class DevModeService:
             Result[DevResetResult] with reset details
         """
         try:
-            # Get or restore session from manager
-            session = self._manager.get_or_restore_session(request.session_id)
-            if not session:
-                return Result.fail(
-                    "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found or could not be restored",
-                    [
-                        "Check active sessions with: adare dev list",
-                        "VM may not be running - check with hypervisor tools"
-                    ]
-                )
-
-            # Perform hard reset (async)
-            start_time = time.time()
-            success = asyncio.run(session.reset_hard())
-            execution_time = time.time() - start_time
+            # CRITICAL: Execute entire flow in ONE asyncio.run() call
+            # This keeps the WebSocket message_handler_task alive throughout execution
+            success, execution_time = asyncio.run(
+                self._reset_hard_async(request)
+            )
 
             if success:
                 return Result.ok(DevResetResult(
@@ -642,6 +1028,16 @@ class DevModeService:
                     ["Check session state: adare dev state"]
                 )
 
+        except RuntimeError as e:
+            # Raised by _reset_hard_async when session not found
+            return Result.fail(
+                "SESSION_NOT_FOUND",
+                str(e),
+                [
+                    "Check active sessions with: adare dev list",
+                    "VM may not be running - check with hypervisor tools"
+                ]
+            )
         except Exception as e:
             log.error(f"Error during hard reset: {e}", exc_info=True)
             return Result.fail(
@@ -654,6 +1050,30 @@ class DevModeService:
     # Checkpoint Operations
     # =========================================================================
 
+    async def _create_checkpoint_async(self, request: DevCheckpointCreateRequest):
+        """
+        Create checkpoint in a single event loop.
+
+        Args:
+            request: DevCheckpointCreateRequest with session ID, name, description
+
+        Returns:
+            success: bool
+
+        Raises:
+            RuntimeError: If session not found
+        """
+        # Get or restore session (stays in same event loop)
+        session = await self._manager.get_or_restore_session(request.session_id)
+        if not session:
+            raise RuntimeError(
+                f"Dev session '{request.session_id}' not found or could not be restored"
+            )
+
+        # Create checkpoint (in same event loop!)
+        success = await session.create_checkpoint(request.name, request.description)
+        return success
+
     def create_checkpoint(self, request: DevCheckpointCreateRequest) -> Result[bool]:
         """
         Create a named checkpoint (live snapshot).
@@ -665,20 +1085,11 @@ class DevModeService:
             Result[bool] with True on success
         """
         try:
-            # Get or restore session from manager
-            session = self._manager.get_or_restore_session(request.session_id)
-            if not session:
-                return Result.fail(
-                    "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found or could not be restored",
-                    [
-                        "Check active sessions with: adare dev list",
-                        "VM may not be running - check with hypervisor tools"
-                    ]
-                )
-
-            # Create checkpoint (async)
-            success = asyncio.run(session.create_checkpoint(request.name, request.description))
+            # CRITICAL: Execute entire flow in ONE asyncio.run() call
+            # This keeps the WebSocket message_handler_task alive throughout execution
+            success = asyncio.run(
+                self._create_checkpoint_async(request)
+            )
 
             if success:
                 return Result.ok(True)
@@ -689,6 +1100,16 @@ class DevModeService:
                     ["Check hypervisor is running", "Check VM has sufficient disk space"]
                 )
 
+        except RuntimeError as e:
+            # Raised by _create_checkpoint_async when session not found
+            return Result.fail(
+                "SESSION_NOT_FOUND",
+                str(e),
+                [
+                    "Check active sessions with: adare dev list",
+                    "VM may not be running - check with hypervisor tools"
+                ]
+            )
         except Exception as e:
             log.error(f"Error creating checkpoint: {e}", exc_info=True)
             return Result.fail(
@@ -696,6 +1117,30 @@ class DevModeService:
                 f"Checkpoint creation failed: {str(e)}",
                 ["Check logs for details"]
             )
+
+    async def _restore_checkpoint_async(self, request: DevCheckpointRestoreRequest):
+        """
+        Restore checkpoint in a single event loop.
+
+        Args:
+            request: DevCheckpointRestoreRequest with session ID and checkpoint name
+
+        Returns:
+            success: bool
+
+        Raises:
+            RuntimeError: If session not found
+        """
+        # Get or restore session (stays in same event loop)
+        session = await self._manager.get_or_restore_session(request.session_id)
+        if not session:
+            raise RuntimeError(
+                f"Dev session '{request.session_id}' not found or could not be restored"
+            )
+
+        # Restore checkpoint (in same event loop!)
+        success = await session.restore_checkpoint(request.name)
+        return success
 
     def restore_checkpoint(self, request: DevCheckpointRestoreRequest) -> Result[bool]:
         """
@@ -708,20 +1153,11 @@ class DevModeService:
             Result[bool] with True on success
         """
         try:
-            # Get or restore session from manager
-            session = self._manager.get_or_restore_session(request.session_id)
-            if not session:
-                return Result.fail(
-                    "SESSION_NOT_FOUND",
-                    f"Dev session '{request.session_id}' not found or could not be restored",
-                    [
-                        "Check active sessions with: adare dev list",
-                        "VM may not be running - check with hypervisor tools"
-                    ]
-                )
-
-            # Restore checkpoint (async)
-            success = asyncio.run(session.restore_checkpoint(request.name))
+            # CRITICAL: Execute entire flow in ONE asyncio.run() call
+            # This keeps the WebSocket message_handler_task alive throughout execution
+            success = asyncio.run(
+                self._restore_checkpoint_async(request)
+            )
 
             if success:
                 return Result.ok(True)
@@ -734,6 +1170,16 @@ class DevModeService:
                     ]
                 )
 
+        except RuntimeError as e:
+            # Raised by _restore_checkpoint_async when session not found
+            return Result.fail(
+                "SESSION_NOT_FOUND",
+                str(e),
+                [
+                    "Check active sessions with: adare dev list",
+                    "VM may not be running - check with hypervisor tools"
+                ]
+            )
         except Exception as e:
             log.error(f"Error restoring checkpoint: {e}", exc_info=True)
             return Result.fail(
@@ -831,7 +1277,7 @@ class DevModeService:
                     )
 
             # Get or restore session from manager
-            session = self._manager.get_or_restore_session(request.session_id)
+            session = asyncio.run(self._manager.get_or_restore_session(request.session_id))
             if session and session.experiment_ctx.hypervisor_type == 'qemu':
                 # Delete external snapshot files
                 vm = session.experiment_ctx.vm
@@ -873,6 +1319,62 @@ class DevModeService:
     # =========================================================================
     # Helper Methods
     # =========================================================================
+
+    def _validate_vm_resources(self, db_session) -> Result[bool]:
+        """
+        Validate that VM resources exist for session resumption.
+
+        Args:
+            db_session: DevSession database record
+
+        Returns:
+            Result[bool] with True on success, or error information if resources missing
+        """
+        try:
+            # Get environment metadata
+            environment_ulid = environment_database.resolve_environment_identifier(
+                db_session.environment_name
+            )
+
+            # Check if VM disk file exists
+            vm_file = environment_database.get_environment_vm_file(environment_ulid)
+            if vm_file and not vm_file.exists():
+                return Result.fail(
+                    "VM_DISK_NOT_FOUND",
+                    f"VM disk file not found: {vm_file}",
+                    [
+                        "The VM disk file for this session no longer exists",
+                        "This session cannot be resumed",
+                        f"Clean up orphaned session with: adare dev stop --rm {db_session.session_id}",
+                        f"Create new session with: adare dev start {db_session.experiment_name} -e {db_session.environment_name}"
+                    ]
+                )
+
+            # Check if checkpoint files exist (non-fatal warning)
+            checkpoints = self._db_api.list_checkpoints(db_session.session_id)
+            missing_checkpoints = []
+
+            for checkpoint in checkpoints:
+                if checkpoint.memory_file_path and not Path(checkpoint.memory_file_path).exists():
+                    missing_checkpoints.append(checkpoint.name)
+                elif checkpoint.disk_file_path and not Path(checkpoint.disk_file_path).exists():
+                    missing_checkpoints.append(checkpoint.name)
+
+            if missing_checkpoints:
+                log.warning(
+                    f"Some checkpoint files are missing for session {db_session.session_id}: "
+                    f"{', '.join(missing_checkpoints)}. These checkpoints will be unavailable."
+                )
+
+            return Result.ok(True)
+
+        except Exception as e:
+            log.error(f"Error validating VM resources: {e}", exc_info=True)
+            return Result.fail(
+                "VALIDATION_ERROR",
+                f"Failed to validate VM resources: {str(e)}",
+                ["Check logs for details"]
+            )
 
     def _parse_action_from_file(self, file_path: str):
         """Parse single action from YAML file."""

@@ -52,7 +52,7 @@ async def verify_vm_integrity(vm_id: str, experiment_run_ulid: str = None, inter
     # Get VM file path
     vm_file_path = Path(vm_record.file)
 
-    # CLAUDE: Check if this is an external VM file
+    # Check if this is an external VM file
     is_external = not _is_vm_managed(vm_file_path)
 
     if not vm_file_path.exists():
@@ -147,7 +147,7 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
 
     # Extract hypervisor from environment metadata
     hypervisor = getattr(environment_metadata, 'hypervisor', 'virtualbox')
-    log.info(f"CLAUDE: Using hypervisor: {hypervisor}")
+    log.info(f"Using hypervisor: {hypervisor}")
 
     # Calculate hash FIRST (heavy operation done during environment load)
     log.info(f"Calculating VM file hash during environment load...")
@@ -177,7 +177,7 @@ def load_vm_file_for_environment(project_path: Path, vm_path: Path, environment_
     # VM doesn't exist or existing VM can't be reused - create new one with file operations
     log.info(f"Creating new VM entry with file operations...")
 
-    # CLAUDE: Determine if we should copy or reference
+    # Determine if we should copy or reference
     if no_copy:
         log.info(f"Using --no-copy mode: VM file will be referenced at original location")
         log.warning(f"IMPORTANT: VM file must remain at {vm_path} for experiments to work!")
@@ -445,15 +445,15 @@ def verify_and_cleanup_vm_instance_for_experiment(vm_instance_id: str, experimen
 
         # Perform automatic cleanup
         context_info = f" (experiment: {experiment_id})" if experiment_id else ""
-        log.info(f"CLAUDE: Automatically removing orphaned VM instance '{vm_instance.instance_name}' from database{context_info}")
+        log.info(f"Automatically removing orphaned VM instance '{vm_instance.instance_name}' from database{context_info}")
 
         try:
             with VmApi() as api:
                 api.delete_vm_instance(vm_instance_id)
-            log.info(f"CLAUDE: Successfully cleaned up missing VM instance '{vm_instance.instance_name}' from database")
+            log.info(f"Successfully cleaned up missing VM instance '{vm_instance.instance_name}' from database")
             return False  # VM instance was missing and cleaned up
         except Exception as e:
-            log.error(f"CLAUDE: Failed to cleanup missing VM instance '{vm_instance.instance_name}': {e}")
+            log.error(f"Failed to cleanup missing VM instance '{vm_instance.instance_name}': {e}")
             raise VMError(log, f"Failed to cleanup missing VM instance: {e}")
 
     log.debug(f"VM instance '{vm_instance.instance_name}' verified as ready in VirtualBox")
@@ -495,46 +495,46 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     from adare.hypervisor.virtualbox.vm import VirtualBoxVM
     from adare.hypervisor.virtualbox.manager import VirtualBoxManager
 
-    log.info(f"CLAUDE: Starting OPTIMIZED VM instance preparation for experiment {experiment_id}")
-    log.debug(f"CLAUDE: ensure_vm_ready_for_experiment called with vm_id={vm_id}, experiment_id={experiment_id}, experiment_run_ulid={experiment_run_ulid}")
-    log.debug(f"CLAUDE: Performance tracking - function entry at {time.time():.3f}")
+    log.info(f"Starting OPTIMIZED VM instance preparation for experiment {experiment_id}")
+    log.debug(f"ensure_vm_ready_for_experiment called with vm_id={vm_id}, experiment_id={experiment_id}, experiment_run_ulid={experiment_run_ulid}")
+    log.debug(f"Performance tracking - function entry at {time.time():.3f}")
 
     # Check for interruption before starting
     if interrupt_event and interrupt_event.is_set():
-        log.info("CLAUDE: VM preparation cancelled before starting due to interrupt")
+        log.info("VM preparation cancelled before starting due to interrupt")
         return None
 
     # Step 0: Verify VM exists and cleanup if missing (experiment-scoped)
-    log.debug(f"CLAUDE: Step 0 - Verifying VM exists and cleaning up if missing")
+    log.debug(f"Step 0 - Verifying VM exists and cleaning up if missing")
     try:
         vm_is_available = verify_and_cleanup_vm_for_experiment(vm_id, experiment_id)
         if not vm_is_available:
             # VM was missing and cleaned up - cannot proceed
             raise VMError(log, f"VM with ID {vm_id} was missing from VirtualBox and has been removed from database. Cannot proceed with experiment.")
-        log.debug(f"CLAUDE: VM verification passed - VM is available")
+        log.debug(f"VM verification passed - VM is available")
     except Exception as e:
-        log.error(f"CLAUDE: VM verification failed: {e}")
+        log.error(f"VM verification failed: {e}")
         raise
 
     # Step 1: Allocate VM instance (reuse existing or create new)
-    log.debug(f"CLAUDE: Step 1 - Starting VM instance allocation for vm_id={vm_id}")
+    log.debug(f"Step 1 - Starting VM instance allocation for vm_id={vm_id}")
     try:
         if experiment_run_ulid:
-            log.debug(f"CLAUDE: Allocating instance with experiment_run_ulid={experiment_run_ulid}")
+            log.debug(f"Allocating instance with experiment_run_ulid={experiment_run_ulid}")
             vm_instance = await allocate_vm_instance_for_experiment(vm_id, experiment_run_ulid)
         else:
             # Fallback for non-experiment use cases
             import ulid
             temp_run_id = str(ulid.ULID())
-            log.debug(f"CLAUDE: Allocating instance with temp_run_id={temp_run_id}")
+            log.debug(f"Allocating instance with temp_run_id={temp_run_id}")
             vm_instance = await allocate_vm_instance_for_experiment(vm_id, temp_run_id)
 
-        log.info(f"CLAUDE: Allocated VM instance: {vm_instance.instance_name} on port {vm_instance.websocket_port}")
-        log.debug(f"CLAUDE: VM instance details - ID={vm_instance.id}, status={vm_instance.status}, vbox_uuid={vm_instance.vbox_uuid}")
+        log.info(f"Allocated VM instance: {vm_instance.instance_name} on port {vm_instance.websocket_port}")
+        log.debug(f"VM instance details - ID={vm_instance.id}, status={vm_instance.status}, vbox_uuid={vm_instance.vbox_uuid}")
     except Exception as e:
-        log.error(f"CLAUDE: Failed to allocate VM instance: {e}")
+        log.error(f"Failed to allocate VM instance: {e}")
         import traceback
-        log.debug(f"CLAUDE: VM instance allocation traceback: {traceback.format_exc()}")
+        log.debug(f"VM instance allocation traceback: {traceback.format_exc()}")
         raise
 
     # Step 2: Ensure source VM is ready in VirtualBox (if this is a new instance)
@@ -544,7 +544,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
 
     # Detect hypervisor type to skip VirtualBox-specific snapshot operations for QEMU
     is_qemu = (source_vm.hypervisor == 'qemu')
-    log.debug(f"CLAUDE: Source VM hypervisor: {source_vm.hypervisor} (is_qemu={is_qemu})")
+    log.debug(f"Source VM hypervisor: {source_vm.hypervisor} (is_qemu={is_qemu})")
 
     # Check if this is a reused instance or new instance
     if vm_instance.vbox_uuid:
@@ -568,7 +568,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
                 with VmApi() as api:
                     vm_instance = api.get_vm_instance_by_id(vm_instance.id)
         elif is_qemu:
-            log.debug(f"CLAUDE: QEMU instance - skipping snapshot creation (uses overlay disks)")
+            log.debug(f"QEMU instance - skipping snapshot creation (uses overlay disks)")
 
         # Restore instance to clean state (only if base snapshot exists, VirtualBox only)
         if not is_qemu and vm_instance.base_snapshot_name:
@@ -597,7 +597,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
         elif not is_qemu and not vm_instance.base_snapshot_name:
             log.warning(f"VM instance '{vm_instance.instance_name}' has no base snapshot available - cannot restore to clean state")
         elif is_qemu:
-            log.debug(f"CLAUDE: QEMU instance - skipping snapshot restoration (uses overlay disks)")
+            log.debug(f"QEMU instance - skipping snapshot restoration (uses overlay disks)")
 
     else:
         # New instance - need to import from source VM
@@ -637,25 +637,25 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
             if not success:
                 log.warning(f"Failed to create base snapshot for instance {vm_instance.instance_name}")
         else:
-            log.info(f"CLAUDE: QEMU VM - skipping VirtualBox-style snapshot creation (uses overlay disks instead)")
+            log.info(f"QEMU VM - skipping VirtualBox-style snapshot creation (uses overlay disks instead)")
 
     total_time = time.time() - start_time
-    log.info(f"CLAUDE: VM instance preparation completed in {total_time:.1f} seconds!")
-    log.info(f"CLAUDE: Instance: {vm_instance.instance_name}, Port: {vm_instance.websocket_port}")
-    log.debug(f"CLAUDE: Performance tracking - function exit at {time.time():.3f}, total duration: {total_time:.3f}s")
+    log.info(f"VM instance preparation completed in {total_time:.1f} seconds!")
+    log.info(f"Instance: {vm_instance.instance_name}, Port: {vm_instance.websocket_port}")
+    log.debug(f"Performance tracking - function exit at {time.time():.3f}, total duration: {total_time:.3f}s")
 
     # Verify the instance exists before returning
-    log.debug(f"CLAUDE: Verifying instance exists before returning ID: {vm_instance.id}")
+    log.debug(f"Verifying instance exists before returning ID: {vm_instance.id}")
     from adare.database.api.vm import VmApi
     with VmApi() as api:
         verification_instance = api.get_vm_instance_by_id(vm_instance.id)
         if not verification_instance:
-            log.error(f"CLAUDE: CRITICAL - Instance {vm_instance.id} was created but cannot be retrieved!")
+            log.error(f"CRITICAL - Instance {vm_instance.id} was created but cannot be retrieved!")
             raise VMError(log, f"Instance {vm_instance.id} was created but cannot be retrieved from database")
         else:
-            log.debug(f"CLAUDE: Instance verification successful: {verification_instance.instance_name}")
+            log.debug(f"Instance verification successful: {verification_instance.instance_name}")
 
-    log.info(f"CLAUDE: Returning VM instance ID: {vm_instance.id}")
+    log.info(f"Returning VM instance ID: {vm_instance.id}")
     return vm_instance.id  # Return instance ID, not source VM ID
 
 

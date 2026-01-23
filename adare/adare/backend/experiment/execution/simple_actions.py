@@ -98,7 +98,7 @@ class SimpleActionsExecutor:
             execution_context=execution_context,
             experiment_run_directory=experiment_run_directory
         )
-        log.info(f"CLAUDE: SimpleActionsExecutor initialized with GUI mode: {gui_mode.value}")
+        log.info(f"SimpleActionsExecutor initialized with GUI mode: {gui_mode.value}")
 
     def get_click_handler(self, click_type: str):
         """Get the appropriate click handler based on click type."""
@@ -675,7 +675,7 @@ class SimpleActionsExecutor:
 
             # Process each source file
             for file_idx, src_path in enumerate(src_paths, start=1):
-                log.info(f"CLAUDE: Pull {file_idx}/{total_files}: {src_path} (mode: {action.mode})")
+                log.info(f"Pull {file_idx}/{total_files}: {src_path} (mode: {action.mode})")
 
                 # Determine destination path
                 dest_path = self._determine_dest_path(
@@ -782,7 +782,7 @@ class SimpleActionsExecutor:
             # Progress callback for logging
             def progress_callback(chunk_idx, total_chunks, bytes_xfer, total_bytes):
                 log.info(
-                    f"CLAUDE: Transfer progress [{file_idx}/{total_files}]: "
+                    f"Transfer progress [{file_idx}/{total_files}]: "
                     f"chunk {chunk_idx + 1}/{total_chunks} "
                     f"({bytes_xfer}/{total_bytes} bytes, "
                     f"{(bytes_xfer/total_bytes*100):.1f}%)"
@@ -974,7 +974,7 @@ class SimpleActionsExecutor:
                 )
 
             log.info(
-                f"CLAUDE: Computing diff between snapshots: "
+                f"Computing diff between snapshots: "
                 f"{action.snapshot_before} ({len(snapshot_before.files)} files) -> "
                 f"{action.snapshot_after} ({len(snapshot_after.files)} files)"
             )
@@ -988,16 +988,16 @@ class SimpleActionsExecutor:
             if action.include_modified:
                 modified_paths = [item['path'] for item in diff['modified']]
                 files_to_pull.extend(modified_paths)
-                log.info(f"CLAUDE: Including {len(modified_paths)} modified files")
+                log.info(f"Including {len(modified_paths)} modified files")
 
             if action.include_added:
                 added_paths = [item['path'] for item in diff['added']]
                 files_to_pull.extend(added_paths)
-                log.info(f"CLAUDE: Including {len(added_paths)} added files")
+                log.info(f"Including {len(added_paths)} added files")
 
             # Check if there are files to pull
             if not files_to_pull:
-                log.info("CLAUDE: No changed files to pull")
+                log.info("No changed files to pull")
                 return ActionResult(
                     success=True,
                     message="No changed files found between snapshots",
@@ -1008,7 +1008,7 @@ class SimpleActionsExecutor:
                     }
                 )
 
-            log.info(f"CLAUDE: Total files to pull: {len(files_to_pull)}")
+            log.info(f"Total files to pull: {len(files_to_pull)}")
 
             # 4. Ensure experiment run directory exists
             if not self.experiment_run_directory:
@@ -1021,7 +1021,7 @@ class SimpleActionsExecutor:
             dest_dir = Path(self.experiment_run_directory) / "artifacts" / action.dst
             dest_dir.mkdir(parents=True, exist_ok=True)
 
-            log.info(f"CLAUDE: Destination directory: {dest_dir}")
+            log.info(f"Destination directory: {dest_dir}")
 
             # 5. Execute transfer based on mode
             start_time = time.time()
@@ -1072,7 +1072,7 @@ class SimpleActionsExecutor:
             )
 
         except Exception as e:
-            log.error(f"CLAUDE: Error executing pull_changed_files action: {e}", exc_info=True)
+            log.error(f"Error executing pull_changed_files action: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
     async def _pull_changed_files_websocket(self, file_paths: list, dest_dir: Path,
@@ -1087,7 +1087,7 @@ class SimpleActionsExecutor:
                 file_progress = bytes_xfer / file_size * 100 if file_size > 0 else 0
 
                 log.info(
-                    f"CLAUDE: Transfer progress: file {file_idx}/{total_files} "
+                    f"Transfer progress: file {file_idx}/{total_files} "
                     f"({overall_progress:.1f}% overall) - "
                     f"chunk {chunk_idx + 1}/{total_chunks} "
                     f"({bytes_xfer}/{file_size} bytes, {file_progress:.1f}%)"
@@ -1103,7 +1103,7 @@ class SimpleActionsExecutor:
             return result
 
         except Exception as e:
-            log.error(f"CLAUDE: WebSocket batch pull failed: {e}")
+            log.error(f"WebSocket batch pull failed: {e}")
             return {
                 'success_count': 0,
                 'failed_count': len(file_paths),
@@ -1133,7 +1133,7 @@ class SimpleActionsExecutor:
 
         for file_idx, guest_path in enumerate(file_paths, start=1):
             try:
-                log.info(f"CLAUDE: Pulling file {file_idx}/{len(file_paths)}: {guest_path}")
+                log.info(f"Pulling file {file_idx}/{len(file_paths)}: {guest_path}")
 
                 # Preserve directory structure
                 if ':' in guest_path:  # Windows path
@@ -1164,7 +1164,7 @@ class SimpleActionsExecutor:
                         'file_size': file_size
                     })
 
-                    log.info(f"CLAUDE: Successfully pulled {guest_path} ({file_size} bytes)")
+                    log.info(f"Successfully pulled {guest_path} ({file_size} bytes)")
                 else:
                     failed_count += 1
                     error_msg = "VBoxManage copy_from_guest returned False"
@@ -1174,7 +1174,7 @@ class SimpleActionsExecutor:
             except Exception as e:
                 failed_count += 1
                 error_msg = str(e)
-                log.error(f"CLAUDE: Hypervisor pull failed for {guest_path}: {error_msg}")
+                log.error(f"Hypervisor pull failed for {guest_path}: {error_msg}")
                 failures.append({'path': guest_path, 'error': error_msg})
                 file_results.append({'path': guest_path, 'success': False, 'error': error_msg})
 

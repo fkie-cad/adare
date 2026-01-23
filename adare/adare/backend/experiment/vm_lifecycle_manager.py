@@ -61,10 +61,10 @@ class VMLifecycleManager:
         needs_update = False
 
         if not vm_runtime_dir.exists():
-            log.info("CLAUDE: Creating project VM runtime directory for first time")
+            log.info("Creating project VM runtime directory for first time")
             needs_update = True
         elif not adarevm_target.exists() or not adarelib_target.exists():
-            log.info("CLAUDE: Project VM runtime directory incomplete, updating")
+            log.info("Project VM runtime directory incomplete, updating")
             needs_update = True
         else:
             # Check if source files are newer than target
@@ -75,7 +75,7 @@ class VMLifecycleManager:
 
             if (adarevm_source_time > adarevm_target_time or
                 adarelib_source_time > adarelib_target_time):
-                log.info("CLAUDE: Source files newer than cached runtime, updating")
+                log.info("Source files newer than cached runtime, updating")
                 needs_update = True
 
         if needs_update:
@@ -85,14 +85,14 @@ class VMLifecycleManager:
             vm_runtime_dir.mkdir(parents=True)
 
             # Copy adarevm
-            log.info(f"CLAUDE: Copying adarevm from {adarevm_source} to {adarevm_target}")
+            log.info(f"Copying adarevm from {adarevm_source} to {adarevm_target}")
             shutil.copytree(adarevm_source, adarevm_target, dirs_exist_ok=True)
 
             # Copy adarelib
-            log.info(f"CLAUDE: Copying adarelib from {adarelib_source} to {adarelib_target}")
+            log.info(f"Copying adarelib from {adarelib_source} to {adarelib_target}")
             shutil.copytree(adarelib_source, adarelib_target, dirs_exist_ok=True)
 
-            log.info("CLAUDE: Project VM runtime directory ready")
+            log.info("Project VM runtime directory ready")
 
         # Build wheels (separate from copy logic since we check mtime separately)
         wheels_dir = vm_runtime_dir / 'wheels'
@@ -104,7 +104,7 @@ class VMLifecycleManager:
         # Check if wheels need rebuilding
         rebuild_wheels = False
         if not adarelib_wheel or not adarevm_wheel:
-            log.info("CLAUDE: Wheels not found - building...")
+            log.info("Wheels not found - building...")
             rebuild_wheels = True
         else:
             # Check if source is newer than wheels
@@ -116,10 +116,10 @@ class VMLifecycleManager:
 
             if (adarelib_source_time > adarelib_wheel_time or
                 adarevm_source_time > adarevm_wheel_time):
-                log.info("CLAUDE: Source code newer than wheels - rebuilding...")
+                log.info("Source code newer than wheels - rebuilding...")
                 rebuild_wheels = True
             else:
-                log.info("CLAUDE: Wheels are up-to-date - skipping build")
+                log.info("Wheels are up-to-date - skipping build")
 
         if rebuild_wheels:
             try:
@@ -128,7 +128,7 @@ class VMLifecycleManager:
                     old_wheel.unlink()
 
                 # Build adarelib wheel first (it has no path dependencies)
-                log.info("CLAUDE: Building adarelib wheel...")
+                log.info("Building adarelib wheel...")
                 import subprocess
                 subprocess.run(
                     ["poetry", "build", "-f", "wheel", "--output", str(wheels_dir)],
@@ -138,7 +138,7 @@ class VMLifecycleManager:
                 )
 
                 # Build adarevm wheel without path dependency
-                log.info("CLAUDE: Building adarevm wheel...")
+                log.info("Building adarevm wheel...")
 
                 # Temporarily modify pyproject.toml to use version dependency instead of path
                 # This is necessary because Poetry embeds absolute paths for path dependencies,
@@ -166,13 +166,13 @@ class VMLifecycleManager:
                     # Restore original pyproject.toml
                     adarevm_pyproject.write_text(original_content)
 
-                log.info(f"CLAUDE: Wheels built in {wheels_dir}")
+                log.info(f"Wheels built in {wheels_dir}")
             except subprocess.CalledProcessError as e:
-                log.warning(f"CLAUDE: Wheel build failed: {e.stderr.decode() if e.stderr else str(e)}")
-                log.warning("CLAUDE: Falling back to editable install mode (wheels will not be available)")
+                log.warning(f"Wheel build failed: {e.stderr.decode() if e.stderr else str(e)}")
+                log.warning("Falling back to editable install mode (wheels will not be available)")
                 # Don't raise - let it fall back to editable install
         else:
-            log.info("CLAUDE: Project VM runtime directory up-to-date")
+            log.info("Project VM runtime directory up-to-date")
 
     def _get_latest_mtime(self, directory: Path) -> float:
         """Get the latest modification time in a directory tree."""
@@ -208,7 +208,7 @@ class VMLifecycleManager:
         from adare.backend.vm.commands import ensure_vm_ready_for_experiment
         from adare.database.api.vm import VmApi
 
-        log.info("CLAUDE: Starting VM instance preparation for experiment (with dynamic port allocation)")
+        log.info("Starting VM instance preparation for experiment (with dynamic port allocation)")
 
         # Use shorter experiment ID for VM instance naming (first 8 chars of ULID)
         short_experiment_id = context.experiment_run_ulid[:8]
@@ -228,7 +228,7 @@ class VMLifecycleManager:
             timeout=300  # 5 minute timeout for VM import operations
         )
 
-        log.info(f"CLAUDE: VM instance allocation completed successfully, instance_id={vm_instance_id}")
+        log.info(f"VM instance allocation completed successfully, instance_id={vm_instance_id}")
 
         # Check if VM preparation was interrupted - return early if so
         if vm_instance_id is None:
@@ -236,28 +236,28 @@ class VMLifecycleManager:
             return
 
         # Get the prepared VM instance from database
-        log.debug(f"CLAUDE: Attempting to fetch VM instance with ID: {vm_instance_id}")
+        log.debug(f"Attempting to fetch VM instance with ID: {vm_instance_id}")
         try:
             with VmApi() as api:
                 vm_instance = api.get_vm_instance_by_id(vm_instance_id)
                 if not vm_instance:
                     # Try to debug what instances exist
-                    log.error(f"CLAUDE: VM instance {vm_instance_id} not found! Checking database...")
+                    log.error(f"VM instance {vm_instance_id} not found! Checking database...")
                     all_instances = api.get_all_vm_instances()
-                    log.error(f"CLAUDE: Found {len(all_instances)} total instances in database:")
+                    log.error(f"Found {len(all_instances)} total instances in database:")
                     for inst in all_instances:
-                        log.error(f"CLAUDE:   - {inst.id}: {inst.instance_name} (status: {inst.status})")
+                        log.error(f"  - {inst.id}: {inst.instance_name} (status: {inst.status})")
 
                     # Check if ID format is correct
-                    log.error(f"CLAUDE: Problematic ID: '{vm_instance_id}' (length: {len(vm_instance_id)}, type: {type(vm_instance_id)})")
+                    log.error(f"Problematic ID: '{vm_instance_id}' (length: {len(vm_instance_id)}, type: {type(vm_instance_id)})")
 
                     raise LoggedException(log, f"VM instance with ID {vm_instance_id} not found after preparation")
 
-                log.debug(f"CLAUDE: Successfully found VM instance: {vm_instance.instance_name}")
+                log.debug(f"Successfully found VM instance: {vm_instance.instance_name}")
         except Exception as e:
-            log.error(f"CLAUDE: Error fetching VM instance: {e}")
+            log.error(f"Error fetching VM instance: {e}")
             import traceback
-            log.debug(f"CLAUDE: Fetch VM instance traceback: {traceback.format_exc()}")
+            log.debug(f"Fetch VM instance traceback: {traceback.format_exc()}")
             raise
 
         # Update experiment run with VM instance ID
@@ -568,8 +568,8 @@ class VMLifecycleManager:
                 base_disk_path = str(context.vm.get_base_disk_path())
                 overlay_disk_path = str(context.vm.config.disk_path)
 
-                log.debug(f"CLAUDE: Base disk: {base_disk_path}")
-                log.debug(f"CLAUDE: Overlay disk: {overlay_disk_path}")
+                log.debug(f"Base disk: {base_disk_path}")
+                log.debug(f"Overlay disk: {overlay_disk_path}")
 
                 # Validate disk paths exist
                 from pathlib import Path
@@ -688,9 +688,9 @@ class VMLifecycleManager:
                 experiment_id = context.experiment_run_ulid or 'default'
                 try:
                     await context.vm.cleanup_overlay_disk(experiment_id)
-                    log.info(f"CLAUDE: Cleaned up QEMU overlay for experiment {experiment_id}")
+                    log.info(f"Cleaned up QEMU overlay for experiment {experiment_id}")
                 except Exception as e:
-                    log.warning(f"CLAUDE: Failed to cleanup overlay disk: {e}")
+                    log.warning(f"Failed to cleanup overlay disk: {e}")
 
             # QEMU-specific: Undefine libvirt domain to prevent stale disk path references
             # This ensures the domain doesn't persist with references to deleted overlay
@@ -704,21 +704,21 @@ class VMLifecycleManager:
                             state, _ = context.vm._libvirt_domain.state()
                             if state == libvirt.VIR_DOMAIN_SHUTOFF:
                                 context.vm._libvirt_domain.undefine()
-                                log.info(f"CLAUDE: Undefined libvirt domain '{context.vm.vm_name}'")
+                                log.info(f"Undefined libvirt domain '{context.vm.vm_name}'")
                             else:
                                 log.warning(
-                                    f"CLAUDE: Cannot undefine domain '{context.vm.vm_name}' - "
+                                    f"Cannot undefine domain '{context.vm.vm_name}' - "
                                     f"still running (state: {state}). Domain will be undefined on next start."
                                 )
                         except libvirt.libvirtError as e:
                             # Domain might already be undefined or in invalid state
-                            log.debug(f"CLAUDE: Could not undefine domain: {e}")
+                            log.debug(f"Could not undefine domain: {e}")
                         finally:
                             # Always clear cached domain object to force redefinition
                             context.vm._libvirt_domain = None
-                            log.debug(f"CLAUDE: Cleared libvirt domain cache for '{context.vm.vm_name}'")
+                            log.debug(f"Cleared libvirt domain cache for '{context.vm.vm_name}'")
                 except Exception as e:
-                    log.warning(f"CLAUDE: Failed to cleanup libvirt domain: {e}")
+                    log.warning(f"Failed to cleanup libvirt domain: {e}")
 
             # Release VM instance for reuse by other experiments
             log.info('Releasing VM instance for reuse by future experiments')

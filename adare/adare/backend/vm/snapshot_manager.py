@@ -14,6 +14,7 @@ from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 from adare.hypervisor.virtualbox.manager import VirtualBoxManager
 from adare.hypervisor.qemu.vm import QEMUVM
 from adare.hypervisor.qemu.manager import QEMUManager
+from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
 from adare.hypervisor.exceptions import VMNotFoundException
 from adare.backend.vm import database as vm_database
 from adare.backend.vm.exceptions import VMError
@@ -163,7 +164,7 @@ class SnapshotManager:
 
         # Check for interruption before starting
         if interrupt_event and interrupt_event.is_set():
-            log.info(f"CLAUDE: Snapshot restore cancelled before starting for VM '{vm_record.name}'")
+            log.info(f"Snapshot restore cancelled before starting for VM '{vm_record.name}'")
             return False
 
         # Get VirtualBox VM instance
@@ -187,7 +188,7 @@ class SnapshotManager:
 
         try:
             # Add detailed logging for debugging hanging issues
-            log.info(f"CLAUDE: Starting snapshot restore for VM '{vm_record.name}' to '{vm_record.base_snapshot_name}' (timeout: {timeout}s)")
+            log.info(f"Starting snapshot restore for VM '{vm_record.name}' to '{vm_record.base_snapshot_name}' (timeout: {timeout}s)")
 
             # Restore to base snapshot with interrupt support
             result = vbox_vm.restore_snapshot(
@@ -198,25 +199,25 @@ class SnapshotManager:
 
             # Check for interruption after operation
             if interrupt_event and interrupt_event.is_set():
-                log.info(f"CLAUDE: Snapshot restore interrupted for VM '{vm_record.name}'")
+                log.info(f"Snapshot restore interrupted for VM '{vm_record.name}'")
                 return False
 
             if result:
-                log.info(f"CLAUDE: Successfully restored VM '{vm_record.name}' to base snapshot '{vm_record.base_snapshot_name}'")
+                log.info(f"Successfully restored VM '{vm_record.name}' to base snapshot '{vm_record.base_snapshot_name}'")
                 return True
             else:
-                log.error(f"CLAUDE: Failed to restore VM '{vm_record.name}' to base snapshot - VBoxManage returned failure")
+                log.error(f"Failed to restore VM '{vm_record.name}' to base snapshot - VBoxManage returned failure")
                 return False
 
         except InterruptedError:
-            log.info(f"CLAUDE: Snapshot restore operation interrupted for VM '{vm_record.name}'")
+            log.info(f"Snapshot restore operation interrupted for VM '{vm_record.name}'")
             return False
         except Exception as e:
             # Provide more specific error information
             if "timeout" in str(e).lower():
-                log.error(f"CLAUDE: Snapshot restore timed out after {timeout}s for VM '{vm_record.name}': {e}")
+                log.error(f"Snapshot restore timed out after {timeout}s for VM '{vm_record.name}': {e}")
             else:
-                log.error(f"CLAUDE: Error restoring base snapshot for VM '{vm_record.name}': {e}")
+                log.error(f"Error restoring base snapshot for VM '{vm_record.name}': {e}")
             return False
     
     def create_experiment_snapshot_for_instance(self, vm_instance, experiment_id: str,
@@ -439,7 +440,7 @@ class SnapshotManager:
         elif hypervisor == 'qemu':
             # QEMU: use instance_name to load VM config
             try:
-                qemu_vm = QEMUVM.get_vm_by_name(
+                qemu_vm = QEMUVMRegistry.get_vm_by_name(
                     vm_name=vm_instance.instance_name,
                     manager=QEMUManager()
                 )
@@ -576,7 +577,7 @@ class SnapshotManager:
 
         # Check for interruption before starting
         if interrupt_event and interrupt_event.is_set():
-            log.info(f"CLAUDE: Snapshot restore cancelled before starting for VM instance '{vm_instance.instance_name}'")
+            log.info(f"Snapshot restore cancelled before starting for VM instance '{vm_instance.instance_name}'")
             return False
 
         # Get hypervisor-appropriate VM object
@@ -592,7 +593,7 @@ class SnapshotManager:
 
         try:
             # Add detailed logging for debugging hanging issues
-            log.info(f"CLAUDE: Starting snapshot restore for VM instance '{vm_instance.instance_name}' to '{vm_instance.base_snapshot_name}' (timeout: {timeout}s)")
+            log.info(f"Starting snapshot restore for VM instance '{vm_instance.instance_name}' to '{vm_instance.base_snapshot_name}' (timeout: {timeout}s)")
 
             # Restore to base snapshot with interrupt support
             result = vm_obj.restore_snapshot(
@@ -603,18 +604,18 @@ class SnapshotManager:
 
             # Check for interruption after operation
             if interrupt_event and interrupt_event.is_set():
-                log.info(f"CLAUDE: Snapshot restore interrupted for VM instance '{vm_instance.instance_name}'")
+                log.info(f"Snapshot restore interrupted for VM instance '{vm_instance.instance_name}'")
                 return False
 
             if result:
-                log.info(f"CLAUDE: Successfully restored VM instance '{vm_instance.instance_name}' to base snapshot '{vm_instance.base_snapshot_name}'")
+                log.info(f"Successfully restored VM instance '{vm_instance.instance_name}' to base snapshot '{vm_instance.base_snapshot_name}'")
                 return True
             else:
-                log.error(f"CLAUDE: Failed to restore VM instance '{vm_instance.instance_name}' to base snapshot - VBoxManage returned failure")
+                log.error(f"Failed to restore VM instance '{vm_instance.instance_name}' to base snapshot - VBoxManage returned failure")
                 return False
 
         except InterruptedError:
-            log.info(f"CLAUDE: Snapshot restore operation interrupted for VM instance '{vm_instance.instance_name}'")
+            log.info(f"Snapshot restore operation interrupted for VM instance '{vm_instance.instance_name}'")
             return False
         except VMNotFoundException as e:
             log.error(f"VM or snapshot not found: {e}")
