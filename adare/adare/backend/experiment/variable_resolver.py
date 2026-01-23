@@ -80,7 +80,7 @@ class MetadataManager:
         # Add placeholder to current template context for subsequent Jinja resolution
         if template_context is not None:
             template_context[placeholder_name] = regex_pattern
-            log.debug(f"CLAUDE: Added regex placeholder '{placeholder_name}' to template context with value '{regex_pattern}'")
+            log.debug(f"Added regex placeholder '{placeholder_name}' to template context with value '{regex_pattern}'")
 
     def add_timestamp_metadata(self, placeholder_name: str, timestamp_value: str, tolerance: Optional[Any] = None, template_context: Optional[Dict[str, Any]] = None, yaml_metadata: Optional[Dict[str, Any]] = None):
         """
@@ -127,9 +127,9 @@ class MetadataManager:
         # Tolerance placeholders should remain as placeholders for VM-side processing
         if template_context is not None and tolerance is None:
             template_context[placeholder_name] = timestamp_value
-            log.debug(f"CLAUDE: Added non-tolerance placeholder '{placeholder_name}' to template context with value '{timestamp_value}'")
+            log.debug(f"Added non-tolerance placeholder '{placeholder_name}' to template context with value '{timestamp_value}'")
         elif tolerance is not None:
-            log.debug(f"CLAUDE: Skipping template context addition for tolerance placeholder '{placeholder_name}' (tolerance={tolerance})")
+            log.debug(f"Skipping template context addition for tolerance placeholder '{placeholder_name}' (tolerance={tolerance})")
 
     def add_tolerance_metadata_from_analysis(self, placeholder_name: str, analysis: FilterAnalysis, template_context: Dict[str, Any]):
         """
@@ -173,7 +173,7 @@ class MetadataManager:
 
         # Do NOT add tolerance placeholders to template context
         # They should remain as placeholders for VM-side processing
-        log.debug(f"CLAUDE: Skipping template context addition for tolerance placeholder '{placeholder_name}' (has tolerance)")
+        log.debug(f"Skipping template context addition for tolerance placeholder '{placeholder_name}' (has tolerance)")
 
     def get_placeholder_metadata(self) -> Dict[str, Any]:
         """
@@ -276,9 +276,9 @@ class YamlTagProcessor:
             elif isinstance(item, YamlTimestamp):
                 # Apply smart resolution logic for YAML timestamps
                 has_tolerance = self.tolerance_detector.has_yaml_tolerance(item)
-                log.info(f"CLAUDE: Processing YamlTimestamp '{item.string}', has_tolerance={has_tolerance}, tolerance={getattr(item, 'tolerance', None)}")
-                log.info(f"CLAUDE: YamlTimestamp object attributes: {[attr for attr in dir(item) if not attr.startswith('_')]}")
-                log.info(f"CLAUDE: YamlTimestamp hasattr tolerance: {hasattr(item, 'tolerance')}, value: {getattr(item, 'tolerance', 'NOT_FOUND')}")
+                log.info(f"Processing YamlTimestamp '{item.string}', has_tolerance={has_tolerance}, tolerance={getattr(item, 'tolerance', None)}")
+                log.info(f"YamlTimestamp object attributes: {[attr for attr in dir(item) if not attr.startswith('_')]}")
+                log.info(f"YamlTimestamp hasattr tolerance: {hasattr(item, 'tolerance')}, value: {getattr(item, 'tolerance', 'NOT_FOUND')}")
 
                 if has_tolerance:
                     # Has tolerance - create placeholder, try to extract variable name from template
@@ -299,7 +299,7 @@ class YamlTagProcessor:
                             resolved_timestamp = template_resolver(timestamp_value, template_context)
                             # Check if resolution resulted in empty/blank value - this indicates the variable will be populated later
                             if not resolved_timestamp or resolved_timestamp.isspace():
-                                log.info(f"CLAUDE: Timestamp template '{timestamp_value}' resolved to empty value - likely populated during execution")
+                                log.info(f"Timestamp template '{timestamp_value}' resolved to empty value - likely populated during execution")
                                 # Store the original template for runtime resolution during test execution
                                 resolved_timestamp = timestamp_value  # Keep original template for test-time resolution
                         else:
@@ -311,7 +311,7 @@ class YamlTagProcessor:
                     yaml_metadata = getattr(item, 'metadata', {})
                     self.metadata_manager.add_timestamp_metadata(placeholder_name, resolved_timestamp, getattr(item, 'tolerance', None), template_context, yaml_metadata)
                     processed_list.append(f'{{{{ {placeholder_name} }}}}')
-                    log.info(f"CLAUDE: Converted YamlTimestamp with tolerance to placeholder '{placeholder_name}' (resolved_timestamp='{resolved_timestamp}')")
+                    log.info(f"Converted YamlTimestamp with tolerance to placeholder '{placeholder_name}' (resolved_timestamp='{resolved_timestamp}')")
                 else:
                     # No tolerance - resolve directly
                     timestamp_value = item.string
@@ -320,7 +320,7 @@ class YamlTagProcessor:
                             resolved_timestamp = template_resolver(timestamp_value, template_context)
                         else:
                             resolved_timestamp = timestamp_value
-                        log.info(f"CLAUDE: Resolved YamlTimestamp WITHOUT tolerance '{timestamp_value}' to '{resolved_timestamp}'")
+                        log.info(f"Resolved YamlTimestamp WITHOUT tolerance '{timestamp_value}' to '{resolved_timestamp}'")
                         processed_list.append(resolved_timestamp)
                     else:
                         log.info(f"Using YamlTimestamp value directly: '{timestamp_value}'")
@@ -358,7 +358,7 @@ class YamlTagProcessor:
         elif isinstance(data, YamlTimestamp):
             # Handle single timestamp objects (similar to list processing logic)
             has_tolerance = self.tolerance_detector.has_yaml_tolerance(data)
-            log.info(f"CLAUDE: Processing single YamlTimestamp '{data.string}', has_tolerance={has_tolerance}")
+            log.info(f"Processing single YamlTimestamp '{data.string}', has_tolerance={has_tolerance}")
 
             if has_tolerance:
                 placeholder_name = self.create_placeholder_name('timestamp')
@@ -376,7 +376,7 @@ class YamlTagProcessor:
 
                 yaml_metadata = getattr(data, 'metadata', {})
                 self.metadata_manager.add_timestamp_metadata(placeholder_name, resolved_timestamp, getattr(data, 'tolerance', None), template_context, yaml_metadata)
-                log.info(f"CLAUDE: Converted single YamlTimestamp with tolerance to placeholder '{placeholder_name}'")
+                log.info(f"Converted single YamlTimestamp with tolerance to placeholder '{placeholder_name}'")
                 return f'{{{{ {placeholder_name} }}}}'
             else:
                 # No tolerance - resolve directly
@@ -386,7 +386,7 @@ class YamlTagProcessor:
                         resolved_timestamp = template_resolver(timestamp_value, template_context)
                     else:
                         resolved_timestamp = timestamp_value
-                    log.info(f"CLAUDE: Resolved single YamlTimestamp WITHOUT tolerance to '{resolved_timestamp}'")
+                    log.info(f"Resolved single YamlTimestamp WITHOUT tolerance to '{resolved_timestamp}'")
                     return resolved_timestamp
                 else:
                     log.info(f"Using single YamlTimestamp value directly: '{timestamp_value}'")

@@ -62,7 +62,7 @@ def _check_qemu_vm(vm_name: str) -> bool:
 
         conn = libvirt.open(libvirt_uri)
         if not conn:
-            log.debug(f"CLAUDE: Could not open libvirt connection for {vm_name}")
+            log.debug(f"Could not open libvirt connection for {vm_name}")
             return False
 
         log_file = get_experiment_log_file()
@@ -76,24 +76,24 @@ def _check_qemu_vm(vm_name: str) -> bool:
             is_active = domain.isActive()
 
             if is_active:
-                log.debug(f"CLAUDE: QEMU VM '{vm_name}' is running")
+                log.debug(f"QEMU VM '{vm_name}' is running")
             else:
-                log.debug(f"CLAUDE: QEMU VM '{vm_name}' exists but is not running")
+                log.debug(f"QEMU VM '{vm_name}' exists but is not running")
 
             conn.close()  # Clean up connection
             return is_active
 
         except libvirt.libvirtError as e:
             # Domain not found or other libvirt error
-            log.debug(f"CLAUDE: QEMU VM '{vm_name}' not found: {e}")
+            log.debug(f"QEMU VM '{vm_name}' not found: {e}")
             conn.close()
             return False
 
     except ImportError:
-        log.error("CLAUDE: libvirt-python not installed. Install with: pip install libvirt-python")
+        log.error("libvirt-python not installed. Install with: pip install libvirt-python")
         return False
     except Exception as e:
-        log.error(f"CLAUDE: Error checking QEMU VM state: {e}", exc_info=True)
+        log.error(f"Error checking QEMU VM state: {e}", exc_info=True)
         return False
 
 

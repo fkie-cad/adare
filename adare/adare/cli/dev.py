@@ -11,6 +11,7 @@ This module provides exec_* functions that implement dev mode commands:
 
 import logging
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -58,6 +59,61 @@ def _get_project_path(arguments):
     if not project_directory:
         raise NoProjectFoundError(log, message='no project directory found')
     return project_directory
+
+
+def _resolve_session_id(session_id: Optional[str], project_directory: Optional[Path] = None) -> str:
+    """
+    Resolve session ID: use provided ID or auto-detect if only one session running.
+
+    Args:
+        session_id: Explicitly provided session ID (None if not provided)
+        project_directory: Optional project filter for session lookup
+
+    Returns:
+        Valid session ID (either provided or auto-detected)
+
+    Exits:
+        With error message if session_id is None and:
+        - No sessions running
+        - Multiple sessions running (shows list)
+    """
+    # Fast path: session_id explicitly provided
+    if session_id:
+        return session_id
+
+    # Slow path: auto-detect session
+    from adare.database.api.devmode import DevModeApi
+
+    api = DevModeApi()
+    running_sessions = api.list_running_sessions(project_directory)
+
+    if len(running_sessions) == 0:
+        print_error_message(
+            title='No active dev sessions found',
+            next_steps=[
+                'Start a new session with: adare dev start <experiment> -e <environment>',
+                'Check all sessions with: adare dev list'
+            ]
+        )
+        exit(1)
+    elif len(running_sessions) == 1:
+        # Auto-detect: exactly one session
+        detected_id = running_sessions[0].session_id
+        log.info(f"Auto-detected session: {detected_id}")
+        return detected_id
+    else:
+        # Multiple sessions: user must specify
+        print_error_message(
+            title=f'Multiple dev sessions running ({len(running_sessions)})',
+            next_steps=[
+                'Specify session with: adare dev <command> -s <session_id>',
+                'List all sessions with: adare dev list'
+            ]
+        )
+        print("\nActive sessions:")
+        for session in running_sessions:
+            print(f"  - {session.session_id} ({session.experiment_name} / {session.environment_name})")
+        exit(1)
 
 
 def _start_event_listeners(console_ulid: str) -> None:
@@ -201,22 +257,95 @@ def exec_dev_start(arguments):
             _cleanup_log_file_handler(log_handler)
 
 
+def exec_dev_resume(arguments):
+    """Resume a stopped dev mode session."""
+    import ulid
+    from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
+
+    # Setup
+    project_directory = _get_project_path(arguments)
+    log_file = Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
+
+    # Create flow console
+    user_interrupt_event = threading.Event()
+    console_ulid = str(ulid.ULID())
+    flow_console = ExperimentFlowConsole(disable=False, external_stop_event=user_interrupt_event)
+    flowconsolemanager.add_handler(console_ulid, flow_console)
+    flow_console.start()
+
+    # Start event system
+    _start_event_listeners(console_ulid)
+
+    # Setup logging
+    log_handler = _setup_log_file_handler(log_file) if log_file else None
+
+    try:
+        # Resume session
+        api = AdareAPI()
+
+        # If session_id provided, resume that specific session
+        if hasattr(arguments, 'session_id') and arguments.session_id:
+            result = api.devmode.resume_session(arguments.session_id, console_ulid=console_ulid)
+        else:
+            # No session_id - resume most recent stopped session
+            result = api.devmode.resume_most_recent(project_directory, console_ulid=console_ulid)
+
+        if result.success:
+            flow_console.log_success('DEV_RESUME_SUCCESS', f'Dev session resumed: {result.data.session_id}')
+            flow_console.stop()
+            print_success_message(
+                title=f'Dev session resumed: {result.data.session_id}',
+                next_steps=result.data.next_steps,
+                tip=result.data.tip
+            )
+            print(f"\n  Variables preserved: {len(result.data.current_variables)}")
+            print(f"  Checkpoints available: {len(result.data.available_snapshots)}")
+            print(f"  Experiment: {result.data.experiment_name}")
+            print(f"  Environment: {result.data.environment_name}")
+            print(f"  VM Running: {result.data.vm_running}")
+            if log_file:
+                print(f"\nLogs saved to: {log_file}")
+        else:
+            flow_console.stop()
+            _handle_api_error(result)
+
+    except KeyboardInterrupt:
+        user_interrupt_event.set()
+        flow_console.log_interrupted('DEV_RESUME_INTERRUPTED', 'Interrupted by user')
+        flow_console.stop()
+        print("\n\nDev session resume interrupted")
+        exit(1)
+    except Exception as e:
+        flow_console.log_error('DEV_RESUME_ERROR', f'Error: {str(e)}')
+        flow_console.stop()
+        print_error_message(title='Failed to resume dev session', next_steps=['Check logs'])
+        exit(1)
+    finally:
+        flowconsolemanager.remove_handler(console_ulid)
+        _stop_event_listeners()
+        if log_handler:
+            _cleanup_log_file_handler(log_handler)
+
+
 def exec_dev_stop(arguments):
     """Stop a dev mode session."""
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+
     api = AdareAPI()
 
     # Extract remove_resources flag (default to False)
     remove_resources = getattr(arguments, 'remove_resources', False)
 
     result = api.devmode.stop_session(DevSessionStopRequest(
-        session_id=arguments.session_id,
+        session_id=session_id,
         remove_resources=remove_resources
     ))
 
     if result.success:
         if remove_resources:
             print_success_message(
-                title=f'Dev session removed: {arguments.session_id}',
+                title=f'Dev session removed: {session_id}',
                 next_steps=[
                     'All resources deleted (VM, snapshots, database)',
                     'Session cannot be restarted'
@@ -224,10 +353,11 @@ def exec_dev_stop(arguments):
             )
         else:
             print_success_message(
-                title=f'Dev session stopped: {arguments.session_id}',
+                title=f'Dev session stopped: {session_id}',
                 next_steps=[
                     'VM shut down, resources preserved',
-                    'Restart with: adare dev start <experiment> -e <env>'
+                    f'Resume with: adare dev resume {session_id}',
+                    'Or resume most recent: adare dev resume'
                 ]
             )
     else:
@@ -247,18 +377,37 @@ def exec_dev_list(arguments):
 
     if result.success:
         if not result.data:
-            print("CLAUDE: No active dev sessions found")
+            print("CLAUDE: No dev sessions found")
             print("\nStart a new session with: adare dev start <experiment> -e <environment>")
         else:
-            print(f"CLAUDE: Found {len(result.data)} active dev session(s):\n")
+            print(f"CLAUDE: Found {len(result.data)} dev session(s):\n")
             for session in result.data:
-                print(f"  Session ID: {session.session_id}")
-                print(f"  Experiment: {session.experiment_name}")
-                print(f"  Environment: {session.environment_name}")
-                print(f"  VM Running: {session.vm_running}")
-                print(f"  Actions Executed: {session.actions_executed}")
-                print(f"  Created: {session.created_at}")
-                print(f"  Project: {session.project_path}")
+                # Status indicator
+                if session.status == 'running':
+                    status_icon = "✓"
+                    status_text = "running"
+                elif session.status == 'stopped':
+                    status_icon = "⏸"
+                    status_text = "stopped"
+                elif session.status == 'crashed':
+                    status_icon = "✗"
+                    status_text = "crashed"
+                else:
+                    status_icon = "?"
+                    status_text = session.status
+
+                print(f"  {status_icon} Session ID: {session.session_id} ({status_text})")
+                print(f"    Experiment: {session.experiment_name}")
+                print(f"    Environment: {session.environment_name}")
+                print(f"    VM Running: {session.vm_running}")
+                print(f"    Actions Executed: {session.actions_executed}")
+                print(f"    Created: {session.created_at}")
+                print(f"    Project: {session.project_path}")
+
+                # Show action hint for stopped sessions
+                if session.status == 'stopped':
+                    print(f"    → Resume with: adare dev resume {session.session_id}")
+
                 print()
     else:
         _handle_api_error(result)
@@ -266,9 +415,12 @@ def exec_dev_list(arguments):
 
 def exec_dev_state(arguments):
     """Show session state."""
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+
     api = AdareAPI()
     result = api.devmode.get_state(DevSessionStateRequest(
-        session_id=arguments.session_id
+        session_id=session_id
     ))
 
     if result.success:
@@ -321,6 +473,9 @@ def exec_dev_cleanup(arguments):
 
 def exec_dev_action(arguments):
     """Execute a single action."""
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+
     # Determine source and content
     if arguments.action_file:
         source = 'file'
@@ -342,7 +497,7 @@ def exec_dev_action(arguments):
 
     api = AdareAPI()
     result = api.devmode.execute_action(DevActionExecuteRequest(
-        session_id=arguments.session_id,
+        session_id=session_id,
         action_source=source,
         action_content=content
     ))
@@ -364,7 +519,13 @@ def exec_dev_action(arguments):
 
 
 def exec_dev_playbook(arguments):
-    """Execute a playbook."""
+    """Execute a playbook with flow console UI."""
+    import ulid
+    from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
+
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+
     # Determine source and content
     if arguments.playbook_file:
         source = 'file'
@@ -384,46 +545,72 @@ def exec_dev_playbook(arguments):
         )
         exit(1)
 
-    api = AdareAPI()
-    result = api.devmode.execute_playbook(DevPlaybookExecuteRequest(
-        session_id=arguments.session_id,
-        playbook_source=source,
-        playbook_content=content
-    ))
+    # Create flow console
+    user_interrupt_event = threading.Event()
+    console_ulid = str(ulid.ULID())
+    flow_console = ExperimentFlowConsole(disable=False, external_stop_event=user_interrupt_event)
+    flowconsolemanager.add_handler(console_ulid, flow_console)
+    flow_console.start()
 
-    if result.success:
-        playbook_result = result.data
-        if playbook_result.success:
-            print_success_message(
-                title=f'Playbook executed successfully'
+    # Start event system
+    _start_event_listeners(console_ulid)
+
+    try:
+        # Execute playbook with console_ulid
+        api = AdareAPI()
+        result = api.devmode.execute_playbook(DevPlaybookExecuteRequest(
+            session_id=session_id,
+            playbook_source=source,
+            playbook_content=content,
+            console_ulid=console_ulid,
+            restore_initial=arguments.restore
+        ))
+
+        # Log completion and summary to flow console BEFORE stopping
+        if result.success:
+            playbook_result = result.data
+
+            # Use flow console's formatted summary display
+            flow_console.log_experiment_summary(
+                ulid=console_ulid,
+                success=playbook_result.success,
+                total_actions=playbook_result.total_actions,
+                successful_actions=playbook_result.successful_actions,
+                failed_actions=playbook_result.failed_actions,
+                total_tests=playbook_result.test_stats.get('total_tests', 0) if playbook_result.test_stats else 0,
+                successful_tests=playbook_result.test_stats.get('successful_tests', 0) if playbook_result.test_stats else 0,
+                failed_tests=playbook_result.test_stats.get('failed_tests', 0) if playbook_result.test_stats else 0,
+                duration=playbook_result.execution_time,
+                was_interrupted=False
             )
+
+            # Give flow console time to render summary
+            time.sleep(0.5)
         else:
+            flow_console.log_error('PLAYBOOK_FAILED', 'Playbook execution failed')
+            time.sleep(0.2)
+
+        # Stop flow console AFTER summary is logged
+        flow_console.stop()
+
+        # Show error message if failed
+        if result.success and not result.data.success:
             print_error_message(
-                title='Playbook execution failed',
-                next_steps=['Check error message below']
+                title='Playbook execution completed with errors',
+                next_steps=['Check the summary above for details']
             )
+        elif not result.success:
+            _handle_api_error(result)
 
-        print(f"\nCLAUDE: Total Actions: {playbook_result.total_actions}")
-        print(f"CLAUDE: Successful: {playbook_result.successful_actions}")
-        print(f"CLAUDE: Failed: {playbook_result.failed_actions}")
-        print(f"CLAUDE: Execution Time: {playbook_result.execution_time:.2f}s")
-
-        if playbook_result.error_message:
-            print(f"CLAUDE: Error: {playbook_result.error_message}")
-
-        if playbook_result.test_stats:
-            print(f"\nCLAUDE: Test Statistics:")
-            for key, value in playbook_result.test_stats.items():
-                print(f"  {key}: {value}")
-
-        # Show individual action results if any failed
-        if playbook_result.failed_actions > 0:
-            print(f"\nCLAUDE: Failed Actions:")
-            for i, action_result in enumerate(playbook_result.action_results):
-                if not action_result.success:
-                    print(f"  Action {i+1}: {action_result.message}")
-    else:
-        _handle_api_error(result)
+    except KeyboardInterrupt:
+        user_interrupt_event.set()
+        flow_console.log_interrupted('PLAYBOOK_INTERRUPTED', 'Interrupted by user')
+        flow_console.stop()
+        print("\n\nPlaybook execution interrupted")
+        exit(1)
+    finally:
+        flowconsolemanager.remove_handler(console_ulid)
+        _stop_event_listeners()
 
 
 # =============================================================================
@@ -432,9 +619,12 @@ def exec_dev_playbook(arguments):
 
 def exec_dev_reset_soft(arguments):
     """Soft reset (variables only)."""
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+
     api = AdareAPI()
     result = api.devmode.reset_soft(DevResetRequest(
-        session_id=arguments.session_id,
+        session_id=session_id,
         reset_type='soft'
     ))
 
@@ -451,9 +641,12 @@ def exec_dev_reset_soft(arguments):
 
 def exec_dev_reset_hard(arguments):
     """Hard reset (full VM restore)."""
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+
     api = AdareAPI()
     result = api.devmode.reset_hard(DevResetRequest(
-        session_id=arguments.session_id,
+        session_id=session_id,
         reset_type='hard'
     ))
 
@@ -476,9 +669,12 @@ def exec_dev_reset_hard(arguments):
 
 def exec_dev_checkpoint_create(arguments):
     """Create a checkpoint."""
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+
     api = AdareAPI()
     result = api.devmode.create_checkpoint(DevCheckpointCreateRequest(
-        session_id=arguments.session_id,
+        session_id=session_id,
         name=arguments.name,
         description=arguments.description
     ))
@@ -496,9 +692,12 @@ def exec_dev_checkpoint_create(arguments):
 
 def exec_dev_checkpoint_restore(arguments):
     """Restore a checkpoint."""
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+
     api = AdareAPI()
     result = api.devmode.restore_checkpoint(DevCheckpointRestoreRequest(
-        session_id=arguments.session_id,
+        session_id=session_id,
         name=arguments.name
     ))
 
@@ -506,24 +705,24 @@ def exec_dev_checkpoint_restore(arguments):
         print_success_message(
             title=f'Checkpoint "{arguments.name}" restored'
         )
-        print("\nCLAUDE: VM has been restored to checkpoint state")
-        print("CLAUDE: Variables have been restored")
-        print("CLAUDE: This operation required VM restart")
     else:
         _handle_api_error(result)
 
 
 def exec_dev_checkpoint_list(arguments):
     """List checkpoints."""
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+
     api = AdareAPI()
     result = api.devmode.list_checkpoints(DevCheckpointListRequest(
-        session_id=arguments.session_id
+        session_id=session_id
     ))
 
     if result.success:
         if not result.data:
-            print(f"CLAUDE: No checkpoints found for session {arguments.session_id}")
-            print(f"\nCreate a checkpoint with: adare dev checkpoint-create {arguments.session_id} <name>")
+            print(f"CLAUDE: No checkpoints found for session {session_id}")
+            print(f"\nCreate a checkpoint with: adare dev checkpoint-create -s {session_id} <name>")
         else:
             print(f"CLAUDE: Found {len(result.data)} checkpoint(s):\n")
             for checkpoint in result.data:
@@ -543,11 +742,14 @@ def exec_dev_checkpoint_list(arguments):
 
 def exec_dev_checkpoint_delete(arguments):
     """Delete a checkpoint."""
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+
     from adare.core.dto.devmode import DevCheckpointDeleteRequest
 
     api = AdareAPI()
     result = api.devmode.delete_checkpoint(DevCheckpointDeleteRequest(
-        session_id=arguments.session_id,
+        session_id=session_id,
         name=arguments.name
     ))
 

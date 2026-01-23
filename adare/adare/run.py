@@ -681,7 +681,29 @@ def start(experiment, environment, project, gui_mode, vm_memory, vm_cpus, debug_
     exec_with_error_printing(exec_dev_start, args)
 
 @dev.command()
-@click.argument('session_id')
+@click.argument('session_id', required=False)
+@click.option('--project', '-p', help='Project name/path')
+@click.option('--log', type=click.Path(), help='Save logs to file')
+def resume(session_id, project, log):
+    """Resume a stopped dev mode session.
+
+    If SESSION_ID is provided, resumes that specific session.
+    If SESSION_ID is omitted, resumes the most recently stopped session.
+
+    Examples:
+        adare dev resume                      # Resume most recent stopped session
+        adare dev resume 01K72Q...            # Resume specific session by ID
+    """
+    from adare.cli.dev import exec_dev_resume
+    args = SimpleNamespace(
+        session_id=session_id,
+        project=project,
+        log=log
+    )
+    exec_with_error_printing(exec_dev_resume, args)
+
+@dev.command()
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 @click.option('--rm', is_flag=True, help='Remove all resources (VM, snapshots, database entries)')
 def stop(session_id, rm):
     """Stop a dev mode session.
@@ -694,7 +716,7 @@ def stop(session_id, rm):
     exec_with_error_printing(exec_dev_stop, args)
 
 @dev.command()
-@click.argument('session_id')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 def remove(session_id):
     """Remove a dev mode session and all resources (alias for 'stop --rm')."""
     from adare.cli.dev import exec_dev_stop
@@ -710,7 +732,7 @@ def list(project):
     exec_with_error_printing(exec_dev_list, args)
 
 @dev.command()
-@click.argument('session_id')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 @click.option('-f', '--file', 'action_file', help='Action YAML file')
 @click.option('-y', '--yaml', 'action_yaml', help='Inline YAML string')
 @click.option('--stdin', is_flag=True, help='Read from stdin')
@@ -726,18 +748,20 @@ def action(session_id, action_file, action_yaml, stdin):
     exec_with_error_printing(exec_dev_action, args)
 
 @dev.command()
-@click.argument('session_id')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 @click.option('-f', '--file', 'playbook_file', help='Playbook YAML file')
 @click.option('-u', '--url', help='Playbook URL')
 @click.option('--stdin', is_flag=True, help='Read from stdin')
-def playbook(session_id, playbook_file, url, stdin):
+@click.option('--restore', is_flag=True, help='Restore to initial checkpoint before execution')
+def playbook(session_id, playbook_file, url, stdin, restore):
     """Execute a playbook."""
     from adare.cli.dev import exec_dev_playbook
     args = SimpleNamespace(
         session_id=session_id,
         playbook_file=playbook_file,
         url=url,
-        stdin=stdin
+        stdin=stdin,
+        restore=restore
     )
     exec_with_error_printing(exec_dev_playbook, args)
 
@@ -747,7 +771,7 @@ def reset():
     pass
 
 @reset.command(name='soft')
-@click.argument('session_id')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 def reset_soft(session_id):
     """Soft reset: Reset variables only (<1 second)."""
     from adare.cli.dev import exec_dev_reset_soft
@@ -755,7 +779,7 @@ def reset_soft(session_id):
     exec_with_error_printing(exec_dev_reset_soft, args)
 
 @reset.command(name='hard')
-@click.argument('session_id')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 def reset_hard(session_id):
     """Hard reset: Full VM restore (10-30 seconds)."""
     from adare.cli.dev import exec_dev_reset_hard
@@ -768,7 +792,7 @@ def checkpoint():
     pass
 
 @checkpoint.command(name='create')
-@click.argument('session_id')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 @click.argument('name')
 @click.option('-d', '--description', default='', help='Checkpoint description')
 def checkpoint_create(session_id, name, description):
@@ -778,7 +802,7 @@ def checkpoint_create(session_id, name, description):
     exec_with_error_printing(exec_dev_checkpoint_create, args)
 
 @checkpoint.command(name='restore')
-@click.argument('session_id')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 @click.argument('name')
 def checkpoint_restore(session_id, name):
     """Restore to a named checkpoint."""
@@ -787,7 +811,7 @@ def checkpoint_restore(session_id, name):
     exec_with_error_printing(exec_dev_checkpoint_restore, args)
 
 @checkpoint.command(name='list')
-@click.argument('session_id')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 def checkpoint_list(session_id):
     """List available checkpoints."""
     from adare.cli.dev import exec_dev_checkpoint_list
@@ -795,7 +819,7 @@ def checkpoint_list(session_id):
     exec_with_error_printing(exec_dev_checkpoint_list, args)
 
 @checkpoint.command(name='delete')
-@click.argument('session_id')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 @click.argument('name')
 def checkpoint_delete(session_id, name):
     """Delete a checkpoint."""
@@ -804,7 +828,7 @@ def checkpoint_delete(session_id, name):
     exec_with_error_printing(exec_dev_checkpoint_delete, args)
 
 @dev.command()
-@click.argument('session_id')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 def state(session_id):
     """Show session state (variables, stats, snapshots)."""
     from adare.cli.dev import exec_dev_state
@@ -1314,6 +1338,23 @@ def create_example(output_file):
     from pathlib import Path
     create_example_action_file(Path(output_file))
 
+# ------------------------------
+# Web Server commands
+# ------------------------------
+@cli.group(name='webserver', cls=AliasedGroup)
+def webserver():
+    """Web server for ADARE dev mode session control."""
+    pass
+
+@webserver.command()
+@click.option('--port', type=int, default=8000, help='Server port (default: 8000)')
+@click.option('--host', default='127.0.0.1', help='Server host (default: 127.0.0.1)')
+@click.option('--dev', is_flag=True, help='Run in development mode with auto-reload')
+def start(port, host, dev):
+    """Start the ADARE web server."""
+    from adare.cli.webserver import exec_webserver_start
+    args = SimpleNamespace(port=port, host=host, dev=dev)
+    exec_with_error_printing(exec_webserver_start, args)
 
 
 # ------------------------------

@@ -46,7 +46,7 @@ class StageEventCoordinator:
         with self._lock:
             if not self._started:
                 return
-                
+
             self._stop_event.set()
             if self._worker_thread and self._worker_thread.is_alive():
                 self._worker_thread.join(timeout=5.0)
@@ -130,7 +130,7 @@ class StageEventCoordinator:
         from adare.backend.events.pubsub import publish
         
         log.debug("StageEventCoordinator worker thread started")
-        log.info("CLAUDE: Event coordinator optimized for 10x faster UI responsiveness (timeout: 100ms->10ms)")
+        log.info("Event coordinator optimized for 10x faster UI responsiveness (timeout: 100ms->10ms)")
         
         while not self._stop_event.is_set():
             try:

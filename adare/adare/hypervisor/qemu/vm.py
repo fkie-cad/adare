@@ -31,47 +31,27 @@ from adare.hypervisor.exceptions import (
     VMStartException
 )
 from adare.hypervisor.qemu.manager import QEMUManager
+from adare.hypervisor.qemu.mixins.configuration import ConfigurationMixin
+from adare.hypervisor.qemu.mixins.disk import DiskManagementMixin
 from adare.hypervisor.qemu.mixins.commands import CommandExecutionMixin
 from adare.hypervisor.qemu.mixins.snapshots import SnapshotMixin
 from adare.hypervisor.qemu.mixins.networking import NetworkingMixin
+from adare.hypervisor.qemu.mixins.registry import RegistryMixin
 from adare.hypervisor.qemu.models import QEMUVMConfig, CommandResult
 from adare.hypervisor.qemu.libvirt_stderr_redirect import (
     LibvirtStderrRedirect,
     get_experiment_log_file
 )
+from adare.hypervisor.qemu.utilities.disk_utils import get_boot_mode_for_os
+from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
 
 log = logging.getLogger(__name__)
 
 
-def get_boot_mode_for_os(guest_os: str) -> str:
-    """
-    Determine appropriate boot mode based on guest OS.
-
-    Windows VMs work better with UEFI boot when converted from VirtualBox
-    or other hypervisors. Linux VMs typically work fine with either BIOS
-    or UEFI, so we default to BIOS for broader compatibility.
-
-    Args:
-        guest_os: Guest OS string (e.g., 'windows', 'linux', 'Windows_10')
-
-    Returns:
-        'uefi' for Windows, 'bios' for others
-
-    Example:
-        >>> get_boot_mode_for_os('Windows_10')
-        'uefi'
-        >>> get_boot_mode_for_os('Ubuntu_22')
-        'bios'
-    """
-    if 'windows' in guest_os.lower():
-        return 'uefi'
-    return 'bios'
-
-
-class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
+class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
     """
     QEMU VM management class with modular operations.
-    Inherits from mixins for command execution, snapshots, and networking.
+    Inherits from mixins for registry, configuration, disk management, command execution, snapshots, and networking.
     """
 
     def __init__(
@@ -123,647 +103,6 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
         self.config = self._load_or_create_vm_config()
 
         log.debug(f"CLAUDE: Initialized QEMUVM for '{self.vm_name}' ({self.guest_os})")
-
-    @staticmethod
-    def _detect_disk_format_static(file_path: Path, qemu_img_exe: str = 'qemu-img') -> str:
-        """
-        Detect disk image format using qemu-img info (static version).
-
-        Args:
-            file_path: Path to disk image file
-            qemu_img_exe: Path to qemu-img executable
-
-        Returns:
-            Format string (e.g., 'qcow2', 'vmdk', 'vdi', 'raw', 'vpc')
-            Returns 'ova' for OVA files (special marker indicating extraction needed)
-
-        Raises:
-            HypervisorException: If format detection fails
-        """
-        # For OVA files, need to extract first to detect disk format
-        if str(file_path).endswith('.ova'):
-            log.debug(f"CLAUDE: OVA file detected, will need extraction: {file_path}")
-            return 'ova'
-
-        # Use qemu-img info with JSON output
-        args = [qemu_img_exe, 'info', '--output=json', str(file_path)]
-
-        try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                check=False
-            )
-
-            if result.returncode != 0:
-                raise HypervisorException(
-                    f"Failed to detect disk format for {file_path}: {result.stderr}"
-                )
-
-            info = json.loads(result.stdout)
-            disk_format = info.get('format', 'unknown')
-
-            log.debug(f"CLAUDE: Detected disk format: {disk_format} for {file_path}")
-            return disk_format
-
-        except json.JSONDecodeError as e:
-            raise HypervisorException(
-                f"Failed to parse qemu-img info output: {e}"
-            )
-        except FileNotFoundError:
-            raise HypervisorException(
-                f"qemu-img executable not found. Please install QEMU tools."
-            )
-        except Exception as e:
-            raise HypervisorException(
-                f"Error detecting disk format: {e}"
-            )
-
-    def _detect_disk_format(self, file_path: Path) -> str:
-        """
-        Detect disk image format using qemu-img info (instance method wrapper).
-
-        Args:
-            file_path: Path to disk image file
-
-        Returns:
-            Format string (e.g., 'qcow2', 'vmdk', 'vdi', 'raw', 'vpc')
-            Returns 'ova' for OVA files (special marker indicating extraction needed)
-
-        Raises:
-            HypervisorException: If format detection fails
-        """
-        return self._detect_disk_format_static(file_path, self.executables.qemu_img)
-
-    def _get_vm_config_path(self) -> Path:
-        """Get path to VM configuration JSON file."""
-        # Store VM configs in ~/.adare/qemu/vms/
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
-        config_dir.mkdir(parents=True, exist_ok=True)
-        return config_dir / f"{self.vm_name}.json"
-
-    def _load_or_create_vm_config(self) -> QEMUVMConfig:
-        """Load VM config from JSON or create new one."""
-        config_path = self._get_vm_config_path()
-
-        if config_path.exists():
-            log.debug(f"CLAUDE: Loading VM config from {config_path}")
-            with open(config_path, 'r') as f:
-                data = json.load(f)
-            config = QEMUVMConfig.from_dict(data)
-
-            # CRITICAL FIX: Override disk_path if external path provided
-            # This prevents using stale disk_path from saved config
-            if self._external_disk_path:
-                config.disk_path = self._external_disk_path
-                log.debug(f"CLAUDE: Overriding config disk_path with external: {self._external_disk_path}")
-
-            # Validate and sync guest_os and boot_mode from current environment
-            # This fixes stale configs that may have incorrect values
-            expected_boot_mode = get_boot_mode_for_os(self.guest_os)
-            config_updated = False
-
-            if config.guest_os != self.guest_os:
-                log.info(f"CLAUDE: Updating guest_os in VM config: {config.guest_os} → {self.guest_os}")
-                config.guest_os = self.guest_os
-                config_updated = True
-
-            if config.boot_mode != expected_boot_mode:
-                log.info(f"CLAUDE: Updating boot_mode in VM config: {config.boot_mode} → {expected_boot_mode}")
-                config.boot_mode = expected_boot_mode
-                config_updated = True
-
-            # Sync Windows resource defaults
-            # Windows VMs need more resources (4 vCPU, 8GB RAM) for proper operation
-            if 'windows' in self.guest_os.lower():
-                # Upgrade to Windows defaults if currently at standard defaults
-                if config.cpus == 2:
-                    log.info(f"CLAUDE: Upgrading Windows VM to 4 vCPUs (was: 2)")
-                    config.cpus = 4
-                    config_updated = True
-
-                if config.ram == 2048:
-                    log.info(f"CLAUDE: Upgrading Windows VM to 8192 MB RAM (was: 2048)")
-                    config.ram = 8192
-                    config_updated = True
-
-            if config_updated:
-                log.info(f"CLAUDE: Saving updated VM config to {config_path}")
-                self._save_vm_config_obj(config)
-
-            return config
-        else:
-            log.debug(f"CLAUDE: Creating new VM config for '{self.vm_name}'")
-            # Create new config
-            vm_uuid = str(uuid.uuid4())
-
-            # Determine disk path: use external path if provided, otherwise use managed storage
-            if self._external_disk_path:
-                disk_path = self._external_disk_path
-                log.debug(f"CLAUDE: Using external disk path for --no-copy mode: {disk_path}")
-            else:
-                disk_dir = Path.home() / '.adare' / 'qemu' / 'disks'
-                disk_dir.mkdir(parents=True, exist_ok=True)
-                disk_path = str(disk_dir / f"{self.vm_name}.qcow2")
-                log.debug(f"CLAUDE: Using managed disk path: {disk_path}")
-
-            # Socket paths
-            runtime_dir = Path.home() / '.adare' / 'qemu' / 'run'
-            runtime_dir.mkdir(parents=True, exist_ok=True)
-            qmp_socket = str(runtime_dir / f"{self.vm_name}.qmp")
-            qga_socket = str(runtime_dir / f"{self.vm_name}.qga")
-            pid_file = str(runtime_dir / f"{self.vm_name}.pid")
-
-            # Validate socket path lengths (Unix sockets have ~108 character limit)
-            for name, path in [("QMP", qmp_socket), ("Guest Agent", qga_socket)]:
-                if len(path) > 107:
-                    raise ValueError(f"{name} socket path too long ({len(path)} > 107 chars): {path}")
-
-            # Determine boot mode based on guest OS
-            boot_mode = get_boot_mode_for_os(self.guest_os)
-
-            # Windows VMs need more resources for proper operation
-            # Use higher defaults if the current values are the standard defaults
-            if 'windows' in self.guest_os.lower():
-                # If using default values (2 vCPU, 2048 MB), upgrade to Windows defaults
-                config_cpus = self.cpus if self.cpus != 2 else 4
-                config_ram = self.ram if self.ram != 2048 else 8192  # 8GB for Windows 11
-                if config_cpus != self.cpus or config_ram != self.ram:
-                    log.info(f"CLAUDE: Using Windows VM defaults: {config_cpus} vCPU, {config_ram} MB RAM")
-            else:
-                config_cpus = self.cpus
-                config_ram = self.ram
-
-            config = QEMUVMConfig(
-                vm_name=self.vm_name,
-                uuid=vm_uuid,
-                guest_os=self.guest_os,
-                disk_path=disk_path,
-                cpus=config_cpus,
-                ram=config_ram,
-                machine=self.machine,
-                accel=self.accel,
-                drive_format=self.drive_format,
-                boot_mode=boot_mode,
-                network='user',
-                qmp_socket_path=qmp_socket,
-                guest_agent_socket_path=qga_socket,
-                pid_file_path=pid_file
-            )
-
-            self._save_vm_config_obj(config)
-            return config
-
-    def _save_vm_config(self):
-        """Save current VM config to JSON file."""
-        self._save_vm_config_obj(self.config)
-
-    def _save_vm_config_obj(self, config: QEMUVMConfig):
-        """
-        Save VM config object to JSON file.
-
-        IMPORTANT: This method ensures that overlay paths are NEVER persisted to the
-        config file. If the current disk_path is an overlay, we substitute it with
-        the original disk path to prevent overlay chaining on subsequent runs.
-        """
-        config_path = self._get_vm_config_path()
-
-        # Create a copy of config dict to avoid modifying the in-memory config
-        config_dict = config.to_dict()
-
-        # CRITICAL: Don't persist overlay paths - they cause chaining bugs
-        # If disk_path contains '-overlay-', substitute with the original path
-        disk_path = config_dict.get('disk_path', '')
-        if '-overlay-' in disk_path:
-            # Determine the original disk path to persist instead
-            if self._external_disk_path:
-                # External qcow2: use the original path
-                original_path = self._external_disk_path
-                log.debug(f"CLAUDE: Config save: replacing overlay path with external: {original_path}")
-            else:
-                # Managed VM: use the base disk path (without -base suffix for config)
-                # The original config disk_path format is: /path/to/VM-name.qcow2
-                # Strip overlay suffix and -base to get back to original format
-                stripped = self._strip_overlay_suffixes(Path(disk_path).stem)
-                stripped = stripped.replace('-base', '')
-                original_path = str(Path(disk_path).parent / f"{stripped}{Path(disk_path).suffix}")
-                log.debug(f"CLAUDE: Config save: replacing overlay path with original: {original_path}")
-
-            config_dict['disk_path'] = original_path
-
-        log.debug(f"CLAUDE: Saving VM config to {config_path}")
-        with open(config_path, 'w') as f:
-            json.dump(config_dict, f, indent=2)
-
-    def get_base_disk_path(self) -> str:
-        """
-        Get path for immutable base disk.
-
-        The base disk is never modified after creation. It serves as the
-        backing file for experiment-specific overlays.
-
-        For external VMs: Returns the external path directly (original IS the base)
-        For managed VMs: Returns path with -base suffix
-
-        Returns:
-            Path to base disk
-        """
-        # External qcow2: the original file IS the base (no -base suffix needed)
-        if self._external_disk_path:
-            return self._external_disk_path
-
-        # Managed VM: add -base suffix
-        current_disk = Path(self.config.disk_path)
-        return str(current_disk.parent / f"{current_disk.stem}-base{current_disk.suffix}")
-
-    def _get_true_base_disk(self) -> str:
-        """
-        Get the TRUE base disk path, ignoring any overlay paths in config.
-
-        This method ensures we ALWAYS use the original base disk (never an overlay)
-        when creating new overlays. This prevents overlay chaining which causes
-        logs/data from previous runs to accumulate.
-
-        Priority:
-        1. For external qcow2 (--no-copy mode): Use the original external path
-        2. For managed VMs: Use the -base.qcow2 file
-
-        Returns:
-            Absolute path to the true base disk
-
-        Raises:
-            HypervisorException: If no valid base disk can be found
-        """
-        # Priority 1: External qcow2 (--no-copy mode)
-        # self._external_disk_path is set at init and NEVER changes
-        if self._external_disk_path:
-            external_path = Path(self._external_disk_path)
-            if external_path.exists():
-                log.debug(f"CLAUDE: True base disk (external): {external_path}")
-                return str(external_path)
-            else:
-                raise HypervisorException(
-                    f"External disk not found: {external_path}\n"
-                    f"The original qcow2 file may have been moved or deleted."
-                )
-
-        # Priority 2: Managed VM with -base suffix
-        # Look for the base disk that was created during import/conversion
-        base_disk_path = self.get_base_disk_path()
-        if Path(base_disk_path).exists():
-            log.debug(f"CLAUDE: True base disk (managed): {base_disk_path}")
-            return base_disk_path
-
-        # Fallback: Try to find base by stripping overlay suffixes from config path
-        # This handles edge cases where config.disk_path might be an overlay
-        current_disk = Path(self.config.disk_path)
-        stripped_stem = self._strip_overlay_suffixes(current_disk.stem)
-        stripped_stem = stripped_stem.replace('-base', '')  # Also strip -base if present
-
-        # Look for base disk with stripped name
-        potential_base = current_disk.parent / f"{stripped_stem}-base{current_disk.suffix}"
-        if potential_base.exists():
-            log.debug(f"CLAUDE: True base disk (fallback): {potential_base}")
-            return str(potential_base)
-
-        # Last resort: check if stripped path exists as standalone qcow2
-        potential_standalone = current_disk.parent / f"{stripped_stem}{current_disk.suffix}"
-        if potential_standalone.exists() and '-overlay-' not in str(potential_standalone):
-            log.debug(f"CLAUDE: True base disk (standalone): {potential_standalone}")
-            return str(potential_standalone)
-
-        raise HypervisorException(
-            f"Cannot find base disk for VM '{self.vm_name}'.\n"
-            f"Checked:\n"
-            f"  - External path: {self._external_disk_path}\n"
-            f"  - Base disk path: {base_disk_path}\n"
-            f"  - Fallback base: {potential_base}\n"
-            f"Please ensure the VM has been properly imported."
-        )
-
-    @staticmethod
-    def _strip_overlay_suffixes(filename_stem: str) -> str:
-        """
-        Strip all -overlay-{ULID} patterns from a filename stem.
-
-        This prevents filename length explosion when overlays are chained.
-        Each ULID is 26 uppercase alphanumeric characters.
-
-        Args:
-            filename_stem: Filename without extension (e.g., "VM-name-overlay-01ABC...")
-
-        Returns:
-            Cleaned filename stem with all overlay suffixes removed
-
-        Examples:
-            >>> _strip_overlay_suffixes("VM-name-overlay-01KDK1XEYYBCSSS33BFD72Q3VV")
-            "VM-name"
-            >>> _strip_overlay_suffixes("VM-name-overlay-01ABC...-overlay-01DEF...")
-            "VM-name"
-        """
-        # Strip all -overlay-{ULID} patterns (ULID = 26 uppercase alphanumeric chars)
-        cleaned = re.sub(r'-overlay-[0-9A-Z]{26}', '', filename_stem)
-        log.debug(f"CLAUDE: Stripped overlay suffixes: '{filename_stem}' => '{cleaned}'")
-        return cleaned
-
-    def get_overlay_disk_path(self, experiment_id: str) -> str:
-        """
-        Get path for experiment-specific overlay disk.
-
-        Always derives overlay name from the base VM name by stripping ALL
-        -overlay-{ULID} suffixes to prevent filename length explosion from
-        chaining overlay names.
-
-        This ensures overlays remain under the ext4 255-character filename limit
-        by using a regex pattern to strip all overlay suffixes: -overlay-[0-9A-Z]{26}
-
-        Args:
-            experiment_id: Unique experiment ID (ULID - 26 alphanumeric characters)
-
-        Returns:
-            Path like: /path/to/VM-name-overlay-{exp_id}.qcow2
-
-        Raises:
-            HypervisorException: If generated filename exceeds 255 characters
-
-        Examples:
-            Base: ADARE-Ubuntu-24.04_exp_01KDK1XE-base.qcow2
-            Overlay: ADARE-Ubuntu-24.04_exp_01KDK1XE-overlay-01KDKGR211GPRRSC0NGX8GWZMH.qcow2
-            (72 characters - well within 255 limit)
-        """
-        # First, try to get the base disk path (normal case)
-        base_disk_path = self.get_base_disk_path()
-        base_disk = Path(base_disk_path)
-
-        # Check if base disk exists (managed/converted case)
-        if base_disk.exists():
-            # Base disk format: VM-name-base.qcow2
-            # Extract VM name by removing -base suffix
-            vm_name_part = base_disk.stem.replace('-base', '')
-
-            # Strip any overlay suffixes that may have leaked into base name
-            # This handles edge cases where base disk was created from overlay
-            vm_name_part = self._strip_overlay_suffixes(vm_name_part)
-
-            overlay_name = f"{vm_name_part}-overlay-{experiment_id}{base_disk.suffix}"
-
-            # Validate filename length (ext4 limit: 255 characters)
-            if len(overlay_name) > 255:
-                raise HypervisorException(
-                    f"Overlay filename exceeds 255 character limit: {len(overlay_name)} chars\n"
-                    f"Filename: {overlay_name}\n"
-                    f"This should not happen with ULID-based naming. Please report this bug."
-                )
-
-            log.debug(f"CLAUDE: Generated overlay name (managed case): {overlay_name}")
-            return str(base_disk.parent / overlay_name)
-
-        # External qcow2 case: base disk doesn't exist, use config.disk_path directly
-        # This handles --no-copy mode where source qcow2 is used without conversion
-        current_disk = Path(self.config.disk_path)
-        if current_disk.exists() and current_disk.suffix == '.qcow2':
-            # Use the original disk name (without -overlay or -base suffix)
-            # Strip ALL -overlay-{ULID} patterns to get clean VM name
-            vm_name_part = current_disk.stem
-
-            # First strip all overlay suffixes (handles chained overlays)
-            vm_name_part = self._strip_overlay_suffixes(vm_name_part)
-
-            # Then strip -base suffix if present
-            if '-base' in vm_name_part:
-                vm_name_part = vm_name_part.replace('-base', '')
-
-            overlay_name = f"{vm_name_part}-overlay-{experiment_id}{current_disk.suffix}"
-
-            # Validate filename length (ext4 limit: 255 characters)
-            if len(overlay_name) > 255:
-                raise HypervisorException(
-                    f"Overlay filename exceeds 255 character limit: {len(overlay_name)} chars\n"
-                    f"Filename: {overlay_name}\n"
-                    f"Base VM name may be too long. Consider using a shorter VM name."
-                )
-
-            # For external VMs, store overlays in managed storage (not next to original file)
-            if self._external_disk_path:
-                overlay_dir = Path.home() / '.adare' / 'qemu' / 'disks'
-                overlay_dir.mkdir(parents=True, exist_ok=True)
-                log.debug(f"CLAUDE: Using managed storage for external VM overlay: {overlay_dir}")
-                return str(overlay_dir / overlay_name)
-            else:
-                # Managed VM - store overlay next to base disk
-                log.debug(f"CLAUDE: Generated overlay name (external case): {overlay_name}")
-                return str(current_disk.parent / overlay_name)
-
-        # Fallback: should not reach here, but use safe overlay generation
-        # This maintains backward compatibility if we missed an edge case
-        vm_name_part = self._strip_overlay_suffixes(current_disk.stem)
-        vm_name_part = vm_name_part.replace('-base', '')  # Also strip base if present
-        overlay_name = f"{vm_name_part}-overlay-{experiment_id}{current_disk.suffix}"
-
-        # Validate filename length (ext4 limit: 255 characters)
-        if len(overlay_name) > 255:
-            log.warning(
-                f"CLAUDE: Fallback overlay name exceeds 255 chars ({len(overlay_name)}): {overlay_name}"
-            )
-            # Truncate base name to fit within limit
-            # 255 - len("-overlay-{26-char-ULID}.qcow2") = 255 - 36 = 219
-            max_base_length = 219  # 255 - 36
-            if len(vm_name_part) > max_base_length:
-                vm_name_part = vm_name_part[:max_base_length]
-                overlay_name = f"{vm_name_part}-overlay-{experiment_id}{current_disk.suffix}"
-                log.warning(f"CLAUDE: Truncated base name to: {vm_name_part}")
-
-        log.debug(f"CLAUDE: Generated overlay name (fallback case): {overlay_name}")
-        return str(current_disk.parent / overlay_name)
-
-    async def create_overlay_disk(self, experiment_id: str) -> str:
-        """
-        Create qcow2 overlay backed by immutable base disk.
-
-        This creates a new overlay that captures all modifications while
-        leaving the base disk untouched. The overlay is deleted after
-        experiment completion.
-
-        IMPORTANT: This method always uses the TRUE base disk (via _get_true_base_disk()),
-        never an existing overlay. This prevents overlay chaining where logs/data from
-        previous runs accumulate.
-
-        Args:
-            experiment_id: Unique ID for this experiment
-
-        Returns:
-            Path to created overlay disk
-
-        Raises:
-            HypervisorException: If overlay creation fails
-        """
-        # CRITICAL: Always use the TRUE base disk, never an overlay
-        # This prevents overlay chaining which causes logs to accumulate
-        base_disk = self._get_true_base_disk()
-        log.debug(f"CLAUDE: Using true base disk for overlay: {base_disk}")
-
-        # Clean up orphaned overlays from previous crashed runs BEFORE creating new one
-        # This ensures we don't leave stale overlays that could confuse the system
-        await self._cleanup_orphaned_overlays(experiment_id)
-
-        # Create overlay path with experiment ID
-        overlay_path = self.get_overlay_disk_path(experiment_id)
-
-        # Calculate backing file path (absolute for external VMs, relative for managed VMs)
-        # External VMs: Use absolute path since overlay is in different directory than base
-        # Managed VMs: Use relative path for libguestfs compatibility
-        overlay_dir = Path(overlay_path).parent
-        base_path = Path(base_disk)
-
-        if self._external_disk_path:
-            # External VM - use absolute path (cross-directory backing file)
-            backing_file = str(base_path.resolve())
-            log.debug(f"CLAUDE: Using absolute backing path for external VM: {backing_file}")
-        elif overlay_dir == base_path.parent:
-            # Same directory - use just filename (most common case)
-            backing_file = base_path.name
-        else:
-            # Different directories - use relative path
-            backing_file = os.path.relpath(base_disk, overlay_dir)
-
-        log.debug(f"CLAUDE: Base disk absolute path: {base_disk}")
-        log.debug(f"CLAUDE: Backing file path: {backing_file}")
-
-        # Check available disk space before creating overlay
-        import shutil
-        stat = shutil.disk_usage(overlay_dir)
-        min_required_space = 10 * 1024 * 1024 * 1024  # 10GB minimum
-        if stat.free < min_required_space:
-            raise HypervisorException(
-                f"Insufficient disk space for overlay creation.\n"
-                f"Location: {overlay_dir}\n"
-                f"Available: {stat.free / (1024**3):.2f} GB\n"
-                f"Required: ~10 GB minimum\n"
-                f"Please free up disk space and try again."
-            )
-        log.debug(f"CLAUDE: Disk space check passed: {stat.free / (1024**3):.2f} GB available")
-
-        # Build qemu-img command to create backing file
-        qemu_img = self.executables.qemu_img
-        args = [
-            qemu_img,
-            'create',
-            '-f', 'qcow2',
-            '-F', 'qcow2',  # Backing file format
-            '-b', backing_file,  # Backing file (relative path for libguestfs compatibility)
-            overlay_path      # New overlay
-        ]
-
-        log.debug(f"CLAUDE: Creating overlay disk backed by {backing_file}")
-        log.debug(f"CLAUDE: Command: {' '.join(args)}")
-
-        # Execute qemu-img create
-        process = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-
-        stdout, stderr = await process.communicate()
-
-        if process.returncode != 0:
-            raise HypervisorException(
-                f"Failed to create overlay disk: {stderr.decode()}"
-            )
-
-        log.debug(f"CLAUDE: Successfully created overlay: {overlay_path}")
-        return overlay_path
-
-    async def _cleanup_orphaned_overlays(self, current_experiment_id: str) -> None:
-        """
-        Clean up orphaned overlay disks from previous crashed runs.
-
-        This method finds and deletes overlay files that were left behind when
-        previous experiment runs crashed before cleanup could occur.
-
-        Only deletes overlays that:
-        1. Match this VM's naming pattern (VM-name-overlay-*.qcow2)
-        2. Are NOT the current experiment's overlay
-        3. Are NOT the base disk
-
-        Args:
-            current_experiment_id: ID of current experiment (will NOT be deleted)
-        """
-        try:
-            # Get the base disk to determine the overlay directory and naming pattern
-            base_disk = self._get_true_base_disk()
-            base_path = Path(base_disk)
-
-            # Determine overlay directory based on VM type
-            if self._external_disk_path:
-                # External VM: overlays are in managed storage, not next to base
-                overlay_dir = Path.home() / '.adare' / 'qemu' / 'disks'
-                # External qcow2: use the original filename stem
-                vm_name_stem = Path(self._external_disk_path).stem
-                log.debug(f"CLAUDE: Cleaning external VM overlays from managed storage: {overlay_dir}")
-            else:
-                # Managed VM: overlays are next to base disk
-                overlay_dir = base_path.parent
-                # Managed VM: strip -base suffix
-                vm_name_stem = base_path.stem.replace('-base', '')
-
-            # Strip any overlay suffixes that might have leaked into the stem
-            vm_name_stem = self._strip_overlay_suffixes(vm_name_stem)
-
-            # Find all overlays matching this VM's pattern
-            overlay_pattern = f"{vm_name_stem}-overlay-*.qcow2"
-            orphan_overlays = list(overlay_dir.glob(overlay_pattern))
-
-            # Get the path for current experiment's overlay (should NOT be deleted)
-            current_overlay_path = Path(self.get_overlay_disk_path(current_experiment_id))
-
-            # Delete orphaned overlays
-            deleted_count = 0
-            for overlay in orphan_overlays:
-                # Skip current experiment's overlay
-                if overlay == current_overlay_path:
-                    continue
-
-                # Skip the base disk (shouldn't match pattern, but be safe)
-                if overlay == base_path:
-                    continue
-
-                # Delete orphaned overlay
-                try:
-                    overlay.unlink()
-                    deleted_count += 1
-                    log.info(f"CLAUDE: Deleted orphaned overlay: {overlay.name}")
-                except OSError as e:
-                    log.warning(f"CLAUDE: Failed to delete orphaned overlay {overlay}: {e}")
-
-            if deleted_count > 0:
-                log.info(f"CLAUDE: Cleaned up {deleted_count} orphaned overlay(s)")
-
-        except HypervisorException as e:
-            # If we can't determine base disk, log warning but don't fail
-            log.warning(f"CLAUDE: Could not clean orphaned overlays: {e}")
-
-    async def cleanup_overlay_disk(self, experiment_id: str) -> None:
-        """
-        Delete experiment overlay disk.
-
-        This removes the overlay file, leaving the base disk intact.
-        The next experiment will create a fresh overlay from the base.
-
-        Args:
-            experiment_id: Unique ID for this experiment
-        """
-        overlay_path = self.get_overlay_disk_path(experiment_id)
-
-        if Path(overlay_path).exists():
-            try:
-                os.remove(overlay_path)
-                log.debug(f"CLAUDE: Deleted overlay disk: {overlay_path}")
-            except OSError as e:
-                log.warning(f"CLAUDE: Failed to delete overlay {overlay_path}: {e}")
-        else:
-            log.debug(f"CLAUDE: Overlay already deleted: {overlay_path}")
 
     async def create(
         self,
@@ -1302,21 +641,34 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             if not silent:
                 log.debug(f"CLAUDE: Destroying QEMU VM '{self.vm_name}'")
 
-            # Stop VM if running
-            if self.get_state() == "running":
+            # Force stop regardless of reported state (ensure VM is truly stopped)
+            try:
                 await self.stop(silent=silent, force=True)
+            except Exception as e:
+                if not silent:
+                    log.debug(f"CLAUDE: Stop failed or VM already stopped: {e}")
 
             log_file_path = get_experiment_log_file()
 
             # Undefine libvirt domain (removes from virsh list)
+            # Use undefineFlags for proper cleanup of snapshots and managed storage
+            flags = (libvirt.VIR_DOMAIN_UNDEFINE_MANAGED_SAVE |
+                     libvirt.VIR_DOMAIN_UNDEFINE_SNAPSHOTS_METADATA |
+                     libvirt.VIR_DOMAIN_UNDEFINE_NVRAM)
+
             if self._libvirt_domain:
                 try:
                     with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
-                        self._libvirt_domain.undefine()
+                        try:
+                            self._libvirt_domain.undefineFlags(flags)
+                        except AttributeError:
+                            # Fall back to basic undefine if undefineFlags not available
+                            self._libvirt_domain.undefine()
                     if not silent:
                         log.debug(f"CLAUDE: Undefined libvirt domain '{self.vm_name}'")
                 except libvirt.libvirtError as e:
-                    log.warning(f"CLAUDE: Could not undefine libvirt domain: {e}")
+                    log.error(f"CLAUDE: Could not undefine libvirt domain: {e}")
+                    raise  # Propagate error instead of just warning
                 self._libvirt_domain = None
             else:
                 # Try to lookup and undefine if it exists
@@ -1324,20 +676,82 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                     with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
                         conn = self._get_libvirt_connection()
                         domain = conn.lookupByName(self.vm_name)
-                        domain.undefine()
+                        try:
+                            domain.undefineFlags(flags)
+                        except AttributeError:
+                            # Fall back to basic undefine if undefineFlags not available
+                            domain.undefine()
                     if not silent:
                         log.debug(f"CLAUDE: Undefined libvirt domain '{self.vm_name}'")
                 except libvirt.libvirtError:
                     pass  # Domain doesn't exist, which is fine
 
-            # Delete disk
+            # Delete disk with retry logic (disk might be momentarily in use)
+            disk_deleted = False
             if os.path.exists(self.config.disk_path):
-                try:
-                    os.remove(self.config.disk_path)
-                    if not silent:
-                        log.debug(f"CLAUDE: Deleted VM disk: {self.config.disk_path}")
-                except Exception as e:
-                    log.error(f"CLAUDE: Error deleting disk: {e}")
+                from pathlib import Path
+                disk_name = Path(self.config.disk_path).name
+
+                # CRITICAL SAFETY CHECK: Ensure we're deleting an overlay, not a base disk
+                # Base disks are immutable and should never be deleted
+                # Overlay disks have "-overlay-" or "-dev-" in their name
+                if "-overlay-" not in disk_name and "-dev-" not in disk_name:
+                    error_msg = (
+                        f"CRITICAL: Attempted to delete what appears to be a BASE disk: {self.config.disk_path}\n"
+                        f"Base disks should be preserved for reuse. Only overlay disks "
+                        f"(containing '-overlay-' or '-dev-') should be deleted.\n"
+                        f"This indicates a bug in session restoration or disk path tracking."
+                    )
+                    log.error(f"CLAUDE: {error_msg}")
+                    raise RuntimeError(
+                        f"Refusing to delete potential base disk: {disk_name}. "
+                        f"Only overlay disks (containing '-overlay-' or '-dev-') should be deleted."
+                    )
+
+                # Try multiple times with small delay (disk might be in use momentarily)
+                for attempt in range(3):
+                    try:
+                        os.remove(self.config.disk_path)
+                        if not silent:
+                            log.debug(f"CLAUDE: Deleted VM disk: {self.config.disk_path}")
+                        disk_deleted = True
+                        break
+                    except Exception as e:
+                        if attempt < 2:
+                            if not silent:
+                                log.debug(f"CLAUDE: Disk deletion attempt {attempt+1} failed, retrying: {e}")
+                            await asyncio.sleep(0.5)
+                        else:
+                            log.error(f"CLAUDE: Failed to delete disk after 3 attempts: {e}")
+                            raise  # Propagate error instead of swallowing it
+
+                # Verify deletion
+                if disk_deleted and os.path.exists(self.config.disk_path):
+                    raise RuntimeError(f"Disk file still exists after deletion: {self.config.disk_path}")
+
+                # Clean up empty parent directory for overlay disk artifacts
+                if disk_deleted:
+                    disk_path = Path(self.config.disk_path)
+                    disk_name = disk_path.name
+
+                    # Safety check: only clean up artifact dirs for overlay/dev disks
+                    if "-overlay-" in disk_name or "-dev-" in disk_name:
+                        artifact_dir = disk_path.parent / disk_path.stem
+                        try:
+                            if artifact_dir.exists() and artifact_dir.is_dir():
+                                # Check if directory is empty
+                                if not any(artifact_dir.iterdir()):
+                                    artifact_dir.rmdir()
+                                    if not silent:
+                                        log.info(f"CLAUDE: Removed empty artifact directory: {artifact_dir}")
+                                else:
+                                    if not silent:
+                                        log.debug(f"CLAUDE: Artifact directory not empty, preserving: {artifact_dir}")
+                        except Exception as e:
+                            # Non-critical error, log and continue
+                            log.debug(f"CLAUDE: Failed to remove artifact directory: {e}")
+            elif not silent:
+                log.debug(f"CLAUDE: Disk does not exist: {self.config.disk_path}")
 
             # Delete config
             config_path = self._get_vm_config_path()
@@ -1357,8 +771,25 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                     except:
                         pass
 
+            # Post-removal verification
+            # Verify domain is undefined
+            try:
+                with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
+                    conn = self._get_libvirt_connection()
+                    domain = conn.lookupByName(self.vm_name)
+                    log.error(f"CLAUDE: Domain '{self.vm_name}' still defined after undefine!")
+                    return 1
+            except libvirt.libvirtError:
+                if not silent:
+                    log.debug("CLAUDE: Verified domain is undefined")
+
+            # Verify disk file deleted
+            if os.path.exists(self.config.disk_path):
+                log.error(f"CLAUDE: Disk still exists after deletion: {self.config.disk_path}")
+                return 1
+
             if not silent:
-                log.debug(f"CLAUDE: VM '{self.vm_name}' destroyed")
+                log.debug(f"CLAUDE: VM '{self.vm_name}' destroyed and verified")
 
             return 0
 
@@ -1422,57 +853,6 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
             True if VM exists, False otherwise
         """
         return os.path.exists(self.config.disk_path)
-
-    @classmethod
-    def get_vm_by_name(cls, vm_name: str, manager=None) -> 'QEMUVM':
-        """
-        Get a VM instance by name.
-
-        Args:
-            vm_name: Name of the VM
-            manager: Optional QEMUManager instance
-
-        Returns:
-            QEMUVM instance
-
-        Raises:
-            VMNotFoundException: If VM config not found
-        """
-        from adare.config import get_vm_credentials
-
-        if manager is None:
-            manager = QEMUManager()
-
-        # Check if config exists
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
-        config_path = config_dir / f"{vm_name}.json"
-
-        if not config_path.exists():
-            raise VMNotFoundException(f"QEMU VM '{vm_name}' not found")
-
-        # Load config
-        with open(config_path, 'r') as f:
-            data = json.load(f)
-
-        guest_os = data.get('guest_os', 'linux')
-        username, password = get_vm_credentials(guest_os)
-
-        # Create VM instance
-        vm = cls(
-            vm_name=vm_name,
-            guest_os=guest_os,
-            manager=manager,
-            username=username,
-            password=password,
-            executables=manager.executables,
-            cpus=data.get('cpus', 2),
-            ram=data.get('ram', 2048),
-            machine=data.get('machine', 'pc'),
-            accel=data.get('accel', 'kvm'),
-            drive_format=data.get('drive_format', 'qcow2')
-        )
-
-        return vm
 
     @property
     def vm_identifier(self) -> str:
@@ -2191,148 +1571,3 @@ class QEMUVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, AbstractVM):
                   f"for resolution {self._screen_width}x{self._screen_height}")
 
         return normalized_x, normalized_y
-
-    @staticmethod
-    def get_vm_info_by_uuid(uuid: str) -> Optional[Dict[str, Any]]:
-        """
-        Get VM information by UUID/identifier.
-        
-        For QEMU, we search through all VM config files to find one with matching UUID.
-        
-        Args:
-            uuid: VM UUID/identifier
-            
-        Returns:
-            Dictionary of VM information if found, None otherwise
-        """
-        from adare.config import get_vm_credentials
-        import glob
-        
-        # Search for all VM config files
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
-        if not config_dir.exists():
-            return None
-            
-        config_files = glob.glob(str(config_dir / "*.json"))
-        for config_file in config_files:
-            try:
-                with open(config_file, 'r') as f:
-                    data = json.load(f)
-                    
-                # Check if UUID matches
-                if data.get('uuid') == uuid:
-                    vm_name = data.get('vm_name')
-                    guest_os = data.get('guest_os', 'linux')
-                    username, password = get_vm_credentials(guest_os)
-                    
-                    return {
-                        'name': vm_name,
-                        'uuid': uuid,
-                        'guest_os': guest_os,
-                        'username': username,
-                        'password': password,
-                        'cpus': data.get('cpus', 2),
-                        'ram': data.get('ram', 2048),
-                        'disk_path': data.get('disk_path'),
-                        'config_path': config_file
-                    }
-            except (json.JSONDecodeError, KeyError, IOError):
-                # Skip invalid config files
-                continue
-                
-        return None
-
-    @staticmethod
-    def get_vm_name_by_uuid(uuid: str) -> Optional[str]:
-        """
-        Get VM name by UUID/identifier.
-        
-        For QEMU, we search through all VM config files to find one with matching UUID.
-        
-        Args:
-            uuid: VM UUID/identifier
-            
-        Returns:
-            VM name if found, None otherwise
-        """
-        # Search for all VM config files
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
-        if not config_dir.exists():
-            return None
-            
-        import glob
-        config_files = glob.glob(str(config_dir / "*.json"))
-        for config_file in config_files:
-            try:
-                with open(config_file, 'r') as f:
-                    data = json.load(f)
-                    
-                # Check if UUID matches
-                if data.get('uuid') == uuid:
-                    return data.get('vm_name')
-            except (json.JSONDecodeError, KeyError, IOError):
-                # Skip invalid config files
-                continue
-                
-        return None
-
-    @staticmethod
-    def get_vm_uuid_by_name(vm_name: str) -> Optional[str]:
-        """
-        Get VM UUID/identifier by name.
-        
-        For QEMU, the UUID is stored in the VM config file.
-        
-        Args:
-            vm_name: Name of the VM
-            
-        Returns:
-            VM UUID/identifier if found, None otherwise
-        """
-        # Check if config exists
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
-        config_path = config_dir / f"{vm_name}.json"
-        
-        if not config_path.exists():
-            return None
-            
-        try:
-            with open(config_path, 'r') as f:
-                data = json.load(f)
-            return data.get('uuid')
-        except (json.JSONDecodeError, KeyError, IOError):
-            return None
-
-    @staticmethod
-    def verify_vm_exists_by_uuid(uuid: str) -> bool:
-        """
-        Verify if a VM exists by its UUID/identifier.
-        
-        For QEMU, we search through all VM config files to find one with matching UUID.
-        
-        Args:
-            uuid: VM UUID/identifier
-            
-        Returns:
-            True if VM exists, False otherwise
-        """
-        # Search for all VM config files
-        config_dir = Path.home() / '.adare' / 'qemu' / 'vms'
-        if not config_dir.exists():
-            return False
-            
-        import glob
-        config_files = glob.glob(str(config_dir / "*.json"))
-        for config_file in config_files:
-            try:
-                with open(config_file, 'r') as f:
-                    data = json.load(f)
-                    
-                # Check if UUID matches
-                if data.get('uuid') == uuid:
-                    return True
-            except (json.JSONDecodeError, KeyError, IOError):
-                # Skip invalid config files
-                continue
-                
-        return False

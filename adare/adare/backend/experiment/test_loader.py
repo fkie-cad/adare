@@ -275,8 +275,8 @@ class TestLoader:
             # Merge with runtime context (runtime context takes precedence)
             combined_context = {**base_context, **runtime_execution_context}
 
-            log.info(f"CLAUDE: Resolving test '{test_name}' with runtime context. Base context keys: {list(base_context.keys())}, Runtime context keys: {list(runtime_execution_context.keys())}")
-            log.info(f"CLAUDE: Combined context: {combined_context}")
+            log.info(f"Resolving test '{test_name}' with runtime context. Base context keys: {list(base_context.keys())}, Runtime context keys: {list(runtime_execution_context.keys())}")
+            log.info(f"Combined context: {combined_context}")
 
             # Find the test by name
             for test in playbook_data['tests']:
@@ -287,14 +287,14 @@ class TestLoader:
                     if self.variable_resolver:
                         # Re-run the full variable resolution process with runtime context
                         resolved_test = self.variable_resolver.process_data(test, combined_context)
-                        log.info(f"CLAUDE: Re-processed test '{test_name}' with variable resolver and runtime context")
-                        log.debug(f"CLAUDE: Resolved test data: {resolved_test}")
+                        log.info(f"Re-processed test '{test_name}' with variable resolver and runtime context")
+                        log.debug(f"Resolved test data: {resolved_test}")
 
                         # Also capture any new metadata generated
                         metadata = self.variable_resolver.get_placeholder_metadata()
                         if metadata:
                             resolved_test['_VARIABLE_METADATA'] = metadata
-                            log.info(f"CLAUDE: Generated metadata during runtime resolution: {list(metadata.keys())}")
+                            log.info(f"Generated metadata during runtime resolution: {list(metadata.keys())}")
 
                         return resolved_test
                     else:

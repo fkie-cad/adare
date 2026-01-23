@@ -18,6 +18,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Add support for Wayland-based Linux systems  
   - [ ] Validate if `ydotool` is suitable and reliable -> if yes make sure to coply to AGPLv3 
     - [ ] it is suitable but we need to develop some python bindings; build as indepedent package to be usable later similar to pyautogui! -> or wait until pyautogui supports wayland via ydotool (existing pr since 20.09.2025)
+  - [ ] Supported via 
 - [ ] Replace `pyautogui.screenshot` as default screenshot in linux vms with `maim` for improved stability (`grim` for wayland)
 - [ ] Implement interactive experiment development tools  
   - [ ] Idea: Use **NiceGUI** for web-based interactive playbook and test creation (e.g., cropping images, extracting icons)  
@@ -43,7 +44,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] check if we need to place building wheel into a single stage showing? I think yes!
 - [ ] adjust our tool be Model View Controller for frontend and terminal support later
 - [ ] change stage message for qemu; maybe even stages
-- [ ] agentless qemu runs with only certain actions (gui actions) and no tests.
+- [x] agentless qemu runs with only certain actions (gui actions) and no tests.
  
 ---
 
@@ -64,7 +65,9 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] Remove Claude: log messages
 - [ ] Improve the possible solutions on Exceptions to be correct and provide only working options!
 - [ ] Describe VirtualBoxVM to Qemu VM: 1) Bitlocker deaktivieren 2) qemu guest agent installieren 3) virtio installieren und mit dummy disk in qemu "aktivieren" 
-
+- [ ] adare dev playbook with more info about commands
+- [ ] make adare dev list in tabular form as other output like adare env list. 
+- [ ] remove --log parameter from adare dev start!
 ---
 
 ## 🧹 Code Quality  
@@ -82,6 +85,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] address: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. 
 - [ ] command line seems slow responsive; improve
 - [ ] change from poetry to uv
+- [ ] make flowconsole and stages a more general concept. So remove coupling to improve code quality.
+- [ ] split adare/adare/hypervisor/qemu/vm.py in multiple files!
 
 ---
 
@@ -93,8 +98,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] long step after installing AdareVM which is not part of any Stage
 - [ ] improve stages in general!
 - [ ] ctrl-c during waiting for vm does not work?!
-- [ ] qemu vm stop -> force shutoff
-- [ ] host mode diff not working! 
+- [x] qemu vm stop -> force shutoff
+
 
 ---
 
@@ -107,4 +112,3 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Test that json output works fine for all commands 
 - [ ] Test clone feature
 - [ ] Visual tests
-

@@ -119,7 +119,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
         self._temp_screenshot_dir = Path(tempfile.gettempdir()) / "adare_qmp_screenshots"
         self._temp_screenshot_dir.mkdir(parents=True, exist_ok=True)
 
-        log.debug(f"CLAUDE: Initialized QEMUHostGUIExecutor (QMP-based, debug_screenshots={self.debug_screenshots})")
+        log.debug(f"Initialized QEMUHostGUIExecutor (QMP-based, debug_screenshots={self.debug_screenshots})")
 
     async def screenshot(self, region: Optional[dict] = None) -> Dict[str, Any]:
         """
@@ -161,7 +161,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             try:
                 temp_ppm.unlink()
             except Exception as e:
-                log.warning(f"CLAUDE: Failed to cleanup temp screenshot: {e}")
+                log.warning(f"Failed to cleanup temp screenshot: {e}")
 
             log.info("Screenshot captured successfully")
 
@@ -176,7 +176,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             }
 
         except Exception as e:
-            log.error(f"CLAUDE: QMP screenshot failed: {e}", exc_info=True)
+            log.error(f"QMP screenshot failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
     async def click(self, x: int, y: int, button_type: str = 'left') -> Dict[str, Any]:
@@ -213,7 +213,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             }
 
         except Exception as e:
-            log.error(f"CLAUDE: QMP click failed: {e}", exc_info=True)
+            log.error(f"QMP click failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
     async def drag(self, x1: int, y1: int, x2: int, y2: int) -> Dict[str, Any]:
@@ -241,7 +241,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             }
 
         except Exception as e:
-            log.error(f"CLAUDE: QMP drag failed: {e}", exc_info=True)
+            log.error(f"QMP drag failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
     async def keyboard(self, action_type: str, value: str) -> Dict[str, Any]:
@@ -282,7 +282,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             }
 
         except Exception as e:
-            log.error(f"CLAUDE: QMP keyboard failed: {e}", exc_info=True)
+            log.error(f"QMP keyboard failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
     async def scroll(self, direction: str, amount: int) -> Dict[str, Any]:
@@ -318,7 +318,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             }
 
         except Exception as e:
-            log.error(f"CLAUDE: QMP scroll failed: {e}", exc_info=True)
+            log.error(f"QMP scroll failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
     # Helper methods
@@ -352,14 +352,14 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             with open(filepath, 'wb') as f:
                 f.write(image_data)
 
-            log.debug(f"CLAUDE: Debug screenshot saved: {filepath}")
+            log.debug(f"Debug screenshot saved: {filepath}")
 
             # Return relative path (relative to run directory)
             relative_path = f"reporting/screenshots/{filename}"
             return relative_path
 
         except Exception as e:
-            log.error(f"CLAUDE: Failed to save debug screenshot: {e}")
+            log.error(f"Failed to save debug screenshot: {e}")
             return None
 
     async def _convert_ppm_to_png_base64(self, ppm_path: Path, region: Optional[dict] = None) -> str:
@@ -403,7 +403,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
                 return png_base64
 
             except Exception as e:
-                log.error(f"CLAUDE: PPM to PNG conversion failed: {e}", exc_info=True)
+                log.error(f"PPM to PNG conversion failed: {e}", exc_info=True)
                 raise
 
         loop = asyncio.get_event_loop()
@@ -421,7 +421,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
         """
         qcode = PYAUTOGUI_TO_QCODE.get(key.lower())
         if not qcode:
-            log.warning(f"CLAUDE: No QMP qcode mapping for key '{key}', using literal")
+            log.warning(f"No QMP qcode mapping for key '{key}', using literal")
             # Try using the key as-is (might work for single characters)
             qcode = key.lower()
         return qcode
@@ -500,7 +500,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             if qcode:
                 qcodes.append(qcode)
             else:
-                log.warning(f"CLAUDE: Failed to map key '{key}' in combination '{combo}'")
+                log.warning(f"Failed to map key '{key}' in combination '{combo}'")
                 return []
 
         # Create events: press all keys down, then release in reverse order

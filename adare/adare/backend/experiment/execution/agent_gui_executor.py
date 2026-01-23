@@ -24,7 +24,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
             **kwargs: Additional parameters (ignored, for compatibility)
         """
         self.client = websocket_client
-        log.debug("CLAUDE: Initialized AgentGUIExecutor (WebSocket-based)")
+        log.debug("Initialized AgentGUIExecutor (WebSocket-based)")
 
     async def screenshot(self, region: Optional[dict] = None) -> Dict[str, Any]:
         """
@@ -46,7 +46,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
                 result = await self.client.screenshot()
             return result
         except Exception as e:
-            log.error(f"CLAUDE: Agent screenshot failed: {e}", exc_info=True)
+            log.error(f"Agent screenshot failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
     async def click(self, x: int, y: int, button_type: str = 'left') -> Dict[str, Any]:
@@ -70,7 +70,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
                 result = await self.client.click(x, y)
             return result
         except Exception as e:
-            log.error(f"CLAUDE: Agent click failed: {e}", exc_info=True)
+            log.error(f"Agent click failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
     async def drag(self, x1: int, y1: int, x2: int, y2: int) -> Dict[str, Any]:
@@ -90,7 +90,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
             result = await self.client.drag(x1, y1, x2, y2)
             return result
         except Exception as e:
-            log.error(f"CLAUDE: Agent drag failed: {e}", exc_info=True)
+            log.error(f"Agent drag failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
     async def keyboard(self, action_type: str, value: str) -> Dict[str, Any]:
@@ -108,7 +108,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
             result = await self.client.keyboard(action_type, value)
             return result
         except Exception as e:
-            log.error(f"CLAUDE: Agent keyboard failed: {e}", exc_info=True)
+            log.error(f"Agent keyboard failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
     async def scroll(self, direction: str, amount: int) -> Dict[str, Any]:
@@ -126,5 +126,5 @@ class AgentGUIExecutor(AbstractGUIExecutor):
             result = await self.client.scroll(direction, amount)
             return result
         except Exception as e:
-            log.error(f"CLAUDE: Agent scroll failed: {e}", exc_info=True)
+            log.error(f"Agent scroll failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}

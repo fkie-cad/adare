@@ -136,6 +136,7 @@ class DevModeSession:
         self.experiment_ctx: Optional[ExperimentRunCtx] = None
         self.playbook_controller: Optional[PlaybookController] = None
         self.vm_manager: Optional[VMLifecycleManager] = None
+        self.vm_instance_id: Optional[str] = None  # Track VM instance for cleanup
 
         # Dev mode specific state
         self.snapshots: List[DevModeSnapshot] = []
@@ -209,7 +210,7 @@ class DevModeSession:
             # instead of shared folders.
             import os
             os.environ['QEMU_LIBGUESTFS'] = 'true'
-            log.info("CLAUDE: Forced QEMU_LIBGUESTFS=true to enable snapshots (virtiofs incompatible)")
+            log.info("Forced QEMU_LIBGUESTFS=true to enable snapshots (virtiofs incompatible)")
 
             # Import required modules
             from adare.backend.experiment.run import (
@@ -319,6 +320,7 @@ class DevModeSession:
                 debug_screenshots=True,
                 screenshots_dir=self.experiment_ctx.experiment_run_directory.screenshots_directory,
                 playbook=self.experiment_ctx.playbook,
+                experiment_run_id=self.console_ulid or self.experiment_ctx.experiment_run_ulid,
                 vm=self.experiment_ctx.vm,
                 experiment_run_directory=self.experiment_ctx.experiment_run_directory.path,
                 vm_os=vm_os,
@@ -335,6 +337,24 @@ class DevModeSession:
             # 13. Create initial snapshot for reset operations
             await self._create_dev_snapshot("initial", "Initial VM state for dev mode")
             log.info("Initial snapshot created")
+
+            # 14. Retrieve and store VM instance ID for cleanup
+            try:
+                from adare.database.api.experiment import ExperimentApi
+                from adare.database.models.project_models import ExperimentRun
+
+                with ExperimentApi(self.experiment_ctx.config.project_path) as api:
+                    experiment_run = api._session.query(ExperimentRun).filter(
+                        ExperimentRun.id == self.experiment_ctx.experiment_run_ulid
+                    ).first()
+
+                    if experiment_run and experiment_run.vm_instance_id:
+                        self.vm_instance_id = experiment_run.vm_instance_id
+                        log.info(f"Stored VM instance ID for cleanup: {self.vm_instance_id}")
+                    else:
+                        log.warning("No VM instance ID found in fake experiment run")
+            except Exception as e:
+                log.error(f"Failed to retrieve VM instance ID: {e}")
 
             self.started_at = datetime.now()
             self.is_running = True
@@ -453,13 +473,13 @@ class DevModeSession:
 
             # QEMU: Restore external snapshot (memory + disk, no OS boot)
             if self.experiment_ctx.hypervisor_type == 'qemu':
-                log.info(f"CLAUDE: Soft reset: restoring external snapshot '{initial_snapshot.snapshot_name}'")
+                log.info(f"Soft reset: restoring external snapshot '{initial_snapshot.snapshot_name}'")
 
                 try:
                     # Disconnect WebSocket before VM state change
                     if self.experiment_ctx.client:
                         await self.experiment_ctx.client.disconnect()
-                        log.debug("CLAUDE: WebSocket disconnected")
+                        log.debug("WebSocket disconnected")
 
                     # Restore external snapshot
                     success = vm.restore_external_snapshot(
@@ -468,11 +488,11 @@ class DevModeSession:
                     )
 
                     if not success:
-                        log.error("CLAUDE: External snapshot restore failed")
+                        log.error("External snapshot restore failed")
                         # Fall back to variable-only reset
-                        log.info("CLAUDE: Falling back to variable-only reset")
+                        log.info("Falling back to variable-only reset")
                     else:
-                        log.info("CLAUDE: External snapshot restored (no OS reboot)")
+                        log.info("External snapshot restored (no OS reboot)")
 
                         # Reconnect WebSocket
                         from adare.backend.experiment.run import (
@@ -484,11 +504,11 @@ class DevModeSession:
                             event=self.experiment_ctx.user_interrupt_event
                         ):
                             await step_connect_websocket(self.experiment_ctx)
-                            log.debug("CLAUDE: WebSocket reconnected")
+                            log.debug("WebSocket reconnected")
 
                 except Exception as e:
-                    log.error(f"CLAUDE: External snapshot restore failed: {e}", exc_info=True)
-                    log.info("CLAUDE: Falling back to variable-only reset")
+                    log.error(f"External snapshot restore failed: {e}", exc_info=True)
+                    log.info("Falling back to variable-only reset")
 
             # Reset playbook variables (always done, for both QEMU and VirtualBox)
             self.playbook_controller.execution_context.clear()
@@ -831,6 +851,15 @@ class DevModeSession:
                         except Exception as e:
                             log.warning(f"Failed to stop VM: {e}")
 
+                    # 4. Release VM instance for reuse
+                    if self.vm_instance_id:
+                        try:
+                            from adare.backend.vm.commands import release_vm_instance_for_experiment
+                            await release_vm_instance_for_experiment(self.vm_instance_id)
+                            log.info(f"Released VM instance {self.vm_instance_id} for reuse")
+                        except Exception as e:
+                            log.error(f"Failed to release VM instance: {e}")
+
             self.is_running = False
             log.info(f"Session {self.session_id} shut down (resources preserved)")
 
@@ -852,6 +881,9 @@ class DevModeSession:
         """
         try:
             log.info(f"Stopping and removing session {self.session_id} with full cleanup")
+
+            # Track cleanup failures for better error reporting
+            cleanup_failures = []
 
             if self.experiment_ctx:
                 from adare.backend.experiment.run import (
@@ -880,32 +912,55 @@ class DevModeSession:
                     except Exception as e:
                         log.warning(f"Failed to shutdown MCP server: {e}")
 
-                    # 3. Delete all snapshots (external files + DB records)
-                    try:
-                        await self._cleanup_snapshots()
-                        log.debug("Snapshots deleted")
-                    except Exception as e:
-                        log.warning(f"Failed to cleanup snapshots: {e}")
-
-                    # 4. Stop and DESTROY VM (complete removal)
+                    # 3. Stop VM first (required before snapshot deletion)
                     if self.vm_manager and self.experiment_ctx.vm:
                         vm = self.experiment_ctx.vm
 
-                        # Stop VM if running
+                        # Stop VM with force (required for checkpoint cleanup)
                         try:
                             await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
                             log.debug("VM stopped")
                         except Exception as e:
                             log.warning(f"Failed to stop VM: {e}")
+                            # Continue anyway - destroy will try again
 
-                        # Destroy VM (undefine domain + delete disks)
+                    # 4. Delete all checkpoints (requires VM to be stopped)
+                    try:
+                        await self._cleanup_snapshots()
+                        log.debug("Checkpoints cleaned up")
+                    except Exception as e:
+                        error_msg = f"Failed to cleanup checkpoints: {e}"
+                        log.error(error_msg)
+                        cleanup_failures.append(error_msg)
+                        # Continue with VM destruction
+
+                    # 5. Destroy VM (undefine domain + delete disks)
+                    if self.vm_manager and self.experiment_ctx.vm:
                         try:
-                            await vm.destroy(silent=False)
-                            log.info(f"VM '{vm.vm_name}' destroyed")
+                            result = await vm.destroy(silent=False)
+                            if result != 0:
+                                error_msg = f"VM destroy returned error code {result}"
+                                log.error(error_msg)
+                                cleanup_failures.append(error_msg)
+                            else:
+                                log.info(f"VM '{vm.vm_name}' destroyed")
                         except Exception as e:
-                            log.warning(f"Failed to destroy VM: {e}")
+                            error_msg = f"VM destroy failed: {e}"
+                            log.error(error_msg)
+                            cleanup_failures.append(error_msg)
 
-                    # 5. Delete experiment run directory
+                    # 6. Release VM instance before removal
+                    if self.vm_instance_id:
+                        try:
+                            from adare.backend.vm.commands import release_vm_instance_for_experiment
+                            await release_vm_instance_for_experiment(self.vm_instance_id)
+                            log.info(f"Released VM instance {self.vm_instance_id}")
+                        except Exception as e:
+                            error_msg = f"Failed to release VM instance: {e}"
+                            log.error(error_msg)
+                            cleanup_failures.append(error_msg)
+
+                    # 7. Delete experiment run directory
                     try:
                         import shutil
                         run_dir = self.experiment_ctx.experiment_run_directory.path
@@ -923,7 +978,12 @@ class DevModeSession:
                         log.warning(f"Failed to remove fake experiment run: {e}")
 
             self.is_running = False
-            log.info(f"Session {self.session_id} completely removed")
+
+            # Report final status
+            if cleanup_failures:
+                log.error(f"Session {self.session_id} removal completed with errors: {'; '.join(cleanup_failures)}")
+            else:
+                log.info(f"Session {self.session_id} completely removed")
 
         except Exception as e:
             log.error(f"Error during session removal: {e}", exc_info=True)
@@ -1000,9 +1060,9 @@ class DevModeSession:
             if not success:
                 raise HypervisorException(f"Failed to create external snapshot '{snapshot_name}'")
 
-            log.info(f"CLAUDE: External snapshot created: {snapshot_name}")
-            log.debug(f"CLAUDE: Memory file: {memory_file_path}")
-            log.debug(f"CLAUDE: Disk file: {disk_file_path}")
+            log.info(f"External snapshot created: {snapshot_name}")
+            log.debug(f"Memory file: {memory_file_path}")
+            log.debug(f"Disk file: {disk_file_path}")
 
         else:
             log.warning(f"Unknown hypervisor type: {self.experiment_ctx.hypervisor_type}")
@@ -1068,7 +1128,7 @@ class DevModeSession:
             # QEMU Hard Reset: Restore disk snapshot + full OS reboot
             vm = self.experiment_ctx.vm
 
-            log.info(f"CLAUDE: Hard reset: restoring disk snapshot '{snapshot_name}_disk' with full reboot")
+            log.info(f"Hard reset: restoring disk snapshot '{snapshot_name}_disk' with full reboot")
 
             try:
                 # Check if disk snapshot exists
@@ -1078,29 +1138,29 @@ class DevModeSession:
                     success = vm.restore_snapshot(disk_snapshot_name, silent=False)
                     if not success:
                         raise Exception("Disk snapshot restore failed")
-                    log.info("CLAUDE: Disk snapshot restored")
+                    log.info("Disk snapshot restored")
                 else:
                     # Fall back to overlay recreation if snapshot doesn't exist
-                    log.warning(f"CLAUDE: Disk snapshot '{disk_snapshot_name}' not found, falling back to overlay recreation")
+                    log.warning(f"Disk snapshot '{disk_snapshot_name}' not found, falling back to overlay recreation")
 
                     experiment_id = self.experiment_ctx.experiment_run_ulid
 
                     # Delete old overlay disk
                     old_overlay = vm.get_overlay_disk_path(experiment_id)
                     if Path(old_overlay).exists():
-                        log.debug(f"CLAUDE: Deleting old overlay: {old_overlay}")
+                        log.debug(f"Deleting old overlay: {old_overlay}")
                         Path(old_overlay).unlink()
 
                     # Create fresh overlay from base disk
                     new_overlay = await vm.create_overlay_disk(experiment_id)
-                    log.debug(f"CLAUDE: Created fresh overlay: {new_overlay}")
+                    log.debug(f"Created fresh overlay: {new_overlay}")
 
                     # Update VM config to use new overlay
                     vm.config.disk_path = new_overlay
-                    log.info("CLAUDE: QEMU overlay reset complete")
+                    log.info("QEMU overlay reset complete")
 
             except Exception as e:
-                log.error(f"CLAUDE: Hard reset disk restoration failed: {e}", exc_info=True)
+                log.error(f"Hard reset disk restoration failed: {e}", exc_info=True)
                 raise
 
         else:
@@ -1139,12 +1199,12 @@ class DevModeSession:
                         disk_path=checkpoint.disk_file_path
                     )
                     if success:
-                        log.debug(f"CLAUDE: Deleted external snapshot: {checkpoint.snapshot_name}")
+                        log.debug(f"Deleted external snapshot: {checkpoint.snapshot_name}")
                     else:
-                        log.warning(f"CLAUDE: Failed to delete external snapshot: {checkpoint.snapshot_name}")
+                        log.warning(f"Failed to delete external snapshot: {checkpoint.snapshot_name}")
 
                 except Exception as e:
-                    log.warning(f"CLAUDE: Error deleting external snapshot {checkpoint.snapshot_name}: {e}")
+                    log.warning(f"Error deleting external snapshot {checkpoint.snapshot_name}: {e}")
 
         elif self.experiment_ctx.hypervisor_type == 'virtualbox':
             vm = self.experiment_ctx.vm
@@ -1161,4 +1221,19 @@ class DevModeSession:
         with DevModeApi() as api:
             deleted_count = api.delete_session_checkpoints(self.session_id)
 
-        log.info(f"CLAUDE: Cleaned up {deleted_count} checkpoints for session {self.session_id}")
+        log.info(f"Cleaned up {deleted_count} checkpoints for session {self.session_id}")
+
+        # Clean up empty snapshot directory for QEMU
+        if self.experiment_ctx.hypervisor_type == 'qemu':
+            try:
+                vm = self.experiment_ctx.vm
+                snapshot_dir = vm._get_snapshot_storage_dir()
+                if snapshot_dir.exists():
+                    # Check if directory is empty
+                    if not any(snapshot_dir.iterdir()):
+                        snapshot_dir.rmdir()
+                        log.info(f"CLAUDE: Removed empty snapshot directory: {snapshot_dir}")
+                    else:
+                        log.warning(f"CLAUDE: Snapshot directory not empty after cleanup: {snapshot_dir}")
+            except Exception as e:
+                log.warning(f"CLAUDE: Failed to remove snapshot directory: {e}")

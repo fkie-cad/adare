@@ -57,6 +57,28 @@ class SnapshotMixin(AbstractSnapshotMixin):
         except OSError as e:
             raise HypervisorException(f"Failed to create snapshot directory {dir_path}: {e}")
 
+    def _cleanup_snapshot_dir_if_empty(self) -> bool:
+        """
+        Remove snapshot directory if it exists and is empty.
+
+        Returns:
+            True if directory was removed, False otherwise
+        """
+        try:
+            snapshot_dir = self._get_snapshot_storage_dir()
+            if snapshot_dir.exists() and snapshot_dir.is_dir():
+                # Check if directory is empty
+                if not any(snapshot_dir.iterdir()):
+                    snapshot_dir.rmdir()
+                    log.info(f"CLAUDE: Removed empty snapshot directory: {snapshot_dir}")
+                    return True
+                else:
+                    log.debug(f"CLAUDE: Snapshot directory not empty: {snapshot_dir}")
+            return False
+        except Exception as e:
+            log.warning(f"CLAUDE: Failed to remove snapshot directory: {e}")
+            return False
+
     def _check_guest_agent(self) -> bool:
         """
         Check if QEMU guest agent is running in the VM.
@@ -259,6 +281,8 @@ class SnapshotMixin(AbstractSnapshotMixin):
         success = True
 
         # Delete libvirt snapshot metadata
+        # Note: libvirt doesn't support deleting external disk snapshots via API
+        # We delete the files manually instead
         try:
             result = subprocess.run(
                 ['virsh', 'snapshot-delete', self.vm_name, snapshot_name],
@@ -268,33 +292,65 @@ class SnapshotMixin(AbstractSnapshotMixin):
             )
 
             if result.returncode != 0:
-                log.warning(f"CLAUDE: Failed to delete libvirt snapshot metadata: {result.stderr}")
+                # Check if it's the expected "external disk snapshots not supported" error
+                if "external disk snapshots not supported" in result.stderr:
+                    log.debug(f"CLAUDE: Libvirt doesn't support external snapshot deletion via API (expected), deleting files manually")
+                else:
+                    log.warning(f"CLAUDE: Failed to delete libvirt snapshot metadata: {result.stderr}")
                 # Continue with file deletion anyway
         except Exception as e:
             log.warning(f"CLAUDE: Error deleting libvirt snapshot metadata: {e}")
             # Continue with file deletion anyway
 
-        # Delete memory file
-        try:
-            if os.path.exists(memory_path):
-                os.remove(memory_path)
-                log.debug(f"CLAUDE: Deleted memory file: {memory_path}")
-            else:
-                log.debug(f"CLAUDE: Memory file not found (may already be deleted): {memory_path}")
-        except OSError as e:
-            log.error(f"CLAUDE: Failed to delete memory file {memory_path}: {e}")
-            success = False
+        # Delete memory file with retry logic
+        memory_deleted = False
+        if os.path.exists(memory_path):
+            for attempt in range(3):
+                try:
+                    os.remove(memory_path)
+                    log.debug(f"CLAUDE: Deleted memory file: {memory_path}")
+                    memory_deleted = True
+                    break
+                except OSError as e:
+                    if attempt < 2:
+                        import time
+                        log.debug(f"CLAUDE: Snapshot memory deletion attempt {attempt+1} failed, retrying: {e}")
+                        time.sleep(0.5)
+                    else:
+                        log.error(f"CLAUDE: Failed to delete snapshot memory file after 3 attempts: {e}")
+                        success = False
 
-        # Delete disk file
-        try:
-            if os.path.exists(disk_path):
-                os.remove(disk_path)
-                log.debug(f"CLAUDE: Deleted disk file: {disk_path}")
-            else:
-                log.debug(f"CLAUDE: Disk file not found (may already be deleted): {disk_path}")
-        except OSError as e:
-            log.error(f"CLAUDE: Failed to delete disk file {disk_path}: {e}")
-            success = False
+            # Verify deletion
+            if memory_deleted and os.path.exists(memory_path):
+                log.error(f"CLAUDE: Snapshot memory still exists after deletion: {memory_path}")
+                success = False
+        else:
+            log.debug(f"CLAUDE: Memory file not found (may already be deleted): {memory_path}")
+
+        # Delete disk file with retry logic
+        disk_deleted = False
+        if os.path.exists(disk_path):
+            for attempt in range(3):
+                try:
+                    os.remove(disk_path)
+                    log.debug(f"CLAUDE: Deleted disk file: {disk_path}")
+                    disk_deleted = True
+                    break
+                except OSError as e:
+                    if attempt < 2:
+                        import time
+                        log.debug(f"CLAUDE: Snapshot disk deletion attempt {attempt+1} failed, retrying: {e}")
+                        time.sleep(0.5)
+                    else:
+                        log.error(f"CLAUDE: Failed to delete snapshot disk file after 3 attempts: {e}")
+                        success = False
+
+            # Verify deletion
+            if disk_deleted and os.path.exists(disk_path):
+                log.error(f"CLAUDE: Snapshot disk still exists after deletion: {disk_path}")
+                success = False
+        else:
+            log.debug(f"CLAUDE: Snapshot disk file not found (may already be deleted): {disk_path}")
 
         if success:
             log.info(f"CLAUDE: Successfully deleted external snapshot '{snapshot_name}'")

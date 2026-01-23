@@ -51,20 +51,21 @@ class AdareVMClient:
         
         # Background task for handling messages
         self.message_handler_task: Optional[asyncio.Task] = None
-        
-        # Connection lock
-        self._connection_lock = asyncio.Lock()
+
+        # Connection lock (event-loop-aware, recreated in current loop)
+        self._connection_lock = None
     
     async def connect(self, timeout: float = 10.0) -> bool:
         """
         Connect to the adarevm WebSocket server.
-        
+
         Args:
             timeout: Connection timeout in seconds
-            
+
         Returns:
             True if connected successfully
         """
+        await self._ensure_connection_lock()
         async with self._connection_lock:
             if self.connected:
                 return True
@@ -96,21 +97,54 @@ class AdareVMClient:
             except (websockets.exceptions.WebSocketException, ConnectionError, OSError) as e:
                 log.error(f"Failed to connect to adarevm server: {e}")
                 return False
-    
+
+    async def _ensure_connection_lock(self):
+        """
+        Ensure connection lock exists in current event loop.
+
+        This is critical for dev mode where commands run in separate asyncio.run() calls.
+        When asyncio.run() exits, the event loop and all its primitives are cleaned up.
+        We need to recreate the lock in the current event loop.
+        """
+        if self._connection_lock is None:
+            self._connection_lock = asyncio.Lock()
+            return
+
+        try:
+            # Always recreate the lock to ensure it's from the current event loop
+            # This is safer than trying to detect if it's from a different loop
+            self._connection_lock = asyncio.Lock()
+        except RuntimeError:
+            self._connection_lock = asyncio.Lock()
+
     async def disconnect(self):
         """Disconnect from the adarevm server."""
+        await self._ensure_connection_lock()
         async with self._connection_lock:
             if not self.connected:
                 return
 
             try:
-                # Cancel message handler task
+                # Cancel message handler task (handle cross-loop scenario)
                 if self.message_handler_task:
-                    self.message_handler_task.cancel()
                     try:
-                        await self.message_handler_task
-                    except asyncio.CancelledError:
-                        pass
+                        current_loop = asyncio.get_running_loop()
+                        task_loop = self.message_handler_task.get_loop()
+                        if current_loop == task_loop:
+                            # Same loop - safe to cancel
+                            self.message_handler_task.cancel()
+                            try:
+                                await self.message_handler_task
+                            except asyncio.CancelledError:
+                                pass
+                        else:
+                            # Different loop - task is already dead, just clear reference
+                            log.debug("Message handler task is from different event loop (already destroyed)")
+                    except RuntimeError:
+                        # No running loop or task has no loop, just clear
+                        log.debug("Could not determine task loop, clearing reference")
+                    finally:
+                        self.message_handler_task = None
 
                 # Close WebSocket connection
                 if self.websocket:
@@ -239,7 +273,39 @@ class AdareVMClient:
                 self.event_handlers[event_type].remove(handler)
             except ValueError:
                 pass
-    
+
+    async def _ensure_message_handler_running(self):
+        """
+        Ensure the message handler task is running in the current event loop.
+
+        This is critical for dev mode where commands run in separate asyncio.run() calls.
+        When asyncio.run() exits, the event loop and all its tasks are cleaned up.
+        If we reconnected in a previous command, the message_handler_task is dead.
+        We need to restart it in the current event loop before making WebSocket calls.
+        """
+        if not self.connected or not self.websocket:
+            return
+
+        # Check if message handler task exists and is still running
+        if self.message_handler_task and not self.message_handler_task.done():
+            # Task exists and is running - check if it's in the current event loop
+            try:
+                current_loop = asyncio.get_running_loop()
+                task_loop = self.message_handler_task.get_loop()
+                if current_loop == task_loop:
+                    # Task is running in current loop, all good
+                    return
+                else:
+                    # Task is from a different event loop (previous asyncio.run())
+                    log.debug("Message handler task is from a different event loop, restarting")
+            except RuntimeError:
+                # No running loop, which is odd but handle it
+                log.debug("No running event loop detected")
+
+        # Message handler is not running in current loop - restart it
+        log.info("Restarting message handler task in current event loop")
+        self.message_handler_task = asyncio.create_task(self._handle_messages())
+
     async def call_tool(self, tool_name: str, params: Dict[str, Any] = None, timeout: float = 30.0) -> Dict[str, Any]:
         """
         Call a tool on the adarevm server.
@@ -258,7 +324,10 @@ class AdareVMClient:
         """
         if not self.connected:
             raise RuntimeError("Not connected to adarevm server")
-        
+
+        # Ensure message handler is running in current event loop
+        await self._ensure_message_handler_running()
+
         # Create tool call message
         call_msg = create_tool_call(tool_name, params or {})
         
@@ -673,7 +742,7 @@ class AdareVMClient:
         Raises:
             RuntimeError: If all transfers fail
         """
-        log.info(f"CLAUDE: Starting batch chunked pull: {len(guest_paths)} files -> {host_dest_dir}")
+        log.info(f"Starting batch chunked pull: {len(guest_paths)} files -> {host_dest_dir}")
 
         total_files = len(guest_paths)
         success_count = 0
@@ -684,7 +753,7 @@ class AdareVMClient:
 
         for file_idx, guest_path in enumerate(guest_paths, start=1):
             try:
-                log.info(f"CLAUDE: Pulling file {file_idx}/{total_files}: {guest_path}")
+                log.info(f"Pulling file {file_idx}/{total_files}: {guest_path}")
 
                 # Preserve directory structure
                 # Extract relative path from guest_path
@@ -724,13 +793,13 @@ class AdareVMClient:
                     'chunks': result['chunks_transferred']
                 })
 
-                log.info(f"CLAUDE: Successfully pulled {guest_path} ({result['file_size']} bytes)")
+                log.info(f"Successfully pulled {guest_path} ({result['file_size']} bytes)")
 
             except Exception as e:
                 # Log and track failure, but continue with remaining files
                 failed_count += 1
                 error_msg = str(e)
-                log.error(f"CLAUDE: Failed to pull {guest_path}: {error_msg}")
+                log.error(f"Failed to pull {guest_path}: {error_msg}")
 
                 failures.append({
                     'path': guest_path,
@@ -754,7 +823,7 @@ class AdareVMClient:
         }
 
         log.info(
-            f"CLAUDE: Batch pull complete: {success_count}/{total_files} succeeded, "
+            f"Batch pull complete: {success_count}/{total_files} succeeded, "
             f"{failed_count} failed, {total_bytes_transferred} bytes transferred"
         )
 

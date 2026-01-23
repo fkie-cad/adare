@@ -52,14 +52,14 @@ def _cleanup_vm_file_if_unused(vm_file_path: Path, project_path: Path, db):
         # No other environments are using this VM file, safe to delete
         if vm_file_path.exists():
             vm_file_path.unlink()
-            log.info(f"CLAUDE: Cleaned up unused VM file: {vm_file_path}")
+            log.info(f"Cleaned up unused VM file: {vm_file_path}")
         else:
             log.debug(f"VM file {vm_file_path} already deleted or doesn't exist")
             
     except (OSError, PermissionError) as e:
-        log.warning(f"CLAUDE: Failed to cleanup VM file {vm_file_path}: {e}")
+        log.warning(f"Failed to cleanup VM file {vm_file_path}: {e}")
     except ValueError as e:
-        log.warning(f"CLAUDE: Invalid path during VM file cleanup {vm_file_path}: {e}")
+        log.warning(f"Invalid path during VM file cleanup {vm_file_path}: {e}")
 
 
 
@@ -138,22 +138,22 @@ def get_environment_os(environment_ulid: str) -> str:
         # Try osinfo first (fast path for VirtualBox and properly configured QEMU VMs)
         if env and env.vm and env.vm.osinfo:
             platform = env.vm.osinfo.platform
-            log.info(f"CLAUDE: Retrieved OS platform from database: {platform} (env={env.name}, vm={env.vm.name})")
+            log.info(f"Retrieved OS platform from database: {platform} (env={env.name}, vm={env.vm.name})")
             return platform
 
         # Fallback: Parse environment file for OS info (QEMU VMs without osinfo)
         if env and env.file:
             try:
                 from adare.types.environment import parse_environment_file
-                log.info(f"CLAUDE: osinfo not available for environment {environment_ulid}, parsing environment file")
+                log.info(f"osinfo not available for environment {environment_ulid}, parsing environment file")
                 env_metadata = parse_environment_file(Path(env.file))
                 platform = env_metadata.os.platform
-                log.info(f"CLAUDE: Retrieved OS platform from environment file: {platform} (env={env.name})")
+                log.info(f"Retrieved OS platform from environment file: {platform} (env={env.name})")
                 return platform
             except Exception as e:
-                log.warning(f"CLAUDE: Failed to parse environment file for OS info: {e}")
+                log.warning(f"Failed to parse environment file for OS info: {e}")
 
-        log.warning(f"CLAUDE: Could not determine OS for environment {environment_ulid}")
+        log.warning(f"Could not determine OS for environment {environment_ulid}")
         return None
 
 def get_environment_hypervisor(environment_ulid: str) -> str:

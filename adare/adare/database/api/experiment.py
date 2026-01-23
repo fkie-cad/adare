@@ -321,10 +321,12 @@ class ExperimentApi(ProjectDatabaseApi):
 
     def remove_fake_experiment_run(self, experiment_run_ulid: str):
         experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_ulid, ExperimentRun.fake == True).first()
-        if experiment_run.fake:
+        if experiment_run:
+            # Query already filtered for fake == True, so if it exists, it's guaranteed to be fake
             self._session.delete(experiment_run)
         else:
-            raise ValueError(f'experiment run with ulid {experiment_run_ulid} is not fake')
+            # Experiment run not found or not fake - log and continue (may have been already deleted)
+            log.debug(f'Fake experiment run with ulid {experiment_run_ulid} not found (may have been already deleted)')
 
     def experiment_sha256_equals(self, experiment_ulid: str, sha256: str) -> bool:
         experiment = self._session.query(Experiment).filter(Experiment.id == experiment_ulid).first()

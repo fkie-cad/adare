@@ -197,6 +197,32 @@ class DevModeApi(EnhancedDatabaseApi):
         log.info(f"Updated dev session {session_id} status to '{status}'")
         return session
 
+    def update_session_overlay_path(self, session_id: str, overlay_disk_path: str) -> DevSession:
+        """
+        Update the overlay disk path for a session.
+
+        This is critical for preventing base disk deletion - we must track
+        which overlay disk is being used so we delete the overlay, not the base.
+
+        Args:
+            session_id: Session ID to update
+            overlay_disk_path: Path to the experiment overlay disk
+
+        Returns:
+            Updated DevSession instance
+
+        Raises:
+            EntityNotFoundError: If session not found
+        """
+        session = self.get_session_or_404(session_id)
+        session.overlay_disk_path = overlay_disk_path
+        session.updated_at = datetime.now()
+        self._session.flush()
+        self._session.commit()
+
+        log.info(f"Updated dev session {session_id} overlay_disk_path to '{overlay_disk_path}'")
+        return session
+
     def delete_session(self, session_id: str) -> bool:
         """
         Delete a dev session from the database.
@@ -439,3 +465,29 @@ class DevModeApi(EnhancedDatabaseApi):
             True if checkpoint exists, False otherwise
         """
         return self.get_checkpoint(session_id, name) is not None
+
+    def get_stopped_session_by_experiment(
+        self,
+        project_path: Path,
+        experiment_name: str,
+        environment_name: str
+    ) -> Optional[DevSession]:
+        """
+        Get most recent stopped session matching experiment and environment.
+
+        This is used for session resumption when user runs 'adare dev start' again.
+
+        Args:
+            project_path: Path to the ADARE project
+            experiment_name: Name of the experiment
+            environment_name: Name of the environment
+
+        Returns:
+            Most recent stopped DevSession matching criteria, or None if not found
+        """
+        return self._session.query(DevSession).filter(
+            DevSession.project_path == str(project_path),
+            DevSession.experiment_name == experiment_name,
+            DevSession.environment_name == environment_name,
+            DevSession.status == 'stopped'
+        ).order_by(DevSession.updated_at.desc()).first()
