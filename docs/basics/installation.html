@@ -310,7 +310,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../advanced/playbook-patterns.html">Advanced Playbook Patterns</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/output-formats.html">Output Formats (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/testfunction-create.html">Create your own testfunction set (in development)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../advanced/vm-create.html">VM Creation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/vm-create.html">Create an ADARE VM</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../advanced/vm-create.html#installing-adare-guest-agent-adarevm-adarelib">Installing ADARE Guest Agent (adarevm &amp; adarelib)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
@@ -446,6 +446,26 @@
 <li><p>Uncheck “Hyper-V”</p></li>
 <li><p>Restart your computer</p></li>
 </ul>
+</div>
+</li>
+<li><p><strong>QEMU</strong> (optional - for QEMU hypervisor support)</p>
+<p>If you plan to use the QEMU hypervisor instead of VirtualBox, you need to install QEMU and libguestfs:</p>
+<p><strong>Ubuntu/Debian:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>apt<span class="w"> </span>update
+sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>qemu-system-x86<span class="w"> </span>qemu-utils<span class="w"> </span>python3-guestfs<span class="w"> </span>libguestfs-tools
+</pre></div>
+</div>
+<p><strong>Fedora/RHEL/CentOS:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>dnf<span class="w"> </span>install<span class="w"> </span>qemu-kvm<span class="w"> </span>qemu-img<span class="w"> </span>python3-libguestfs<span class="w"> </span>libguestfs-tools
+</pre></div>
+</div>
+<p><strong>Arch Linux:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>pacman<span class="w"> </span>-S<span class="w"> </span>qemu<span class="w"> </span>python-guestfs<span class="w"> </span>libguestfs
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The libguestfs tools are required for file operations with stopped QEMU VMs.</p>
 </div>
 </li>
 <li><p><strong>Make</strong> (build tool)</p>

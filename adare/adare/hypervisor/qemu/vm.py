@@ -1253,9 +1253,17 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             Response dictionary
         """
         async def _qmp_async():
-            import libvirt
             import libvirt_qemu
             try:
+                # Lazy load libvirt domain if needed
+                if not self._libvirt_domain:
+                    try:
+                        conn = self._get_libvirt_connection()
+                        if conn:
+                            self._libvirt_domain = conn.lookupByName(self.vm_name)
+                    except Exception as e:
+                        log.warning(f"CLAUDE: Failed to lazy-load domain for QMP: {e}")
+
                 if not self._libvirt_domain:
                     return {"error": {"desc": "Domain not defined"}}
 
@@ -1294,7 +1302,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
         return await self.manager.run_async(_qmp_async)
 
-    async def send_qmp_screenshot(self, output_path: str) -> bool:
+    async def send_qmp_screenshot(self, output_path: str) -> Tuple[bool, Optional[str]]:
         """
         Capture screenshot via QMP screendump command.
 
@@ -1302,14 +1310,19 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             output_path: Path where screenshot will be saved (PPM format)
 
         Returns:
-            True if successful, False otherwise
+            Tuple of (success, error_message)
         """
         command = {
             "execute": "screendump",
             "arguments": {"filename": output_path}
         }
         response = await self._send_qmp_command(command)
-        return 'return' in response
+        
+        if 'return' in response:
+            return True, None
+        else:
+            error_desc = response.get('error', {}).get('desc', 'Unknown QMP error')
+            return False, error_desc
 
     async def send_qmp_mouse_click(self, x: int, y: int, button: str = 'left') -> bool:
         """

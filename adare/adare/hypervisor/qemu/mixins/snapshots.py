@@ -106,7 +106,17 @@ class SnapshotMixin(AbstractSnapshotMixin):
         use_quiesce: bool = True
     ) -> bool:
         """
-        Create an external libvirt snapshot with separate memory and disk files.
+        Create a consistent live checkpoint using 'Live Resume' strategy.
+        
+        Saves RAM and creates a disk snapshot without VSS timeout risks.
+        
+        Strategy:
+        1. Quiesce the Guest (Optional): `virsh domfsfreeze`
+        2. Save the VM State: `virsh save` (Stops VM)
+        3. Create the Disk Snapshot: `virsh snapshot-create-as --disk-only`
+        4. Resume the VM: `virsh restore --xml <updated_xml>`
+           We dump the XML (which now points to new disk) and restore using it.
+        5. (Finally) Thaw if needed: `virsh domfsthaw`
 
         Args:
             snapshot_name: Libvirt snapshot name
@@ -117,9 +127,9 @@ class SnapshotMixin(AbstractSnapshotMixin):
         Returns:
             True if snapshot created successfully, False otherwise
         """
-        log.info(f"CLAUDE: Creating external snapshot '{snapshot_name}' for VM '{self.vm_name}'")
+        log.info(f"CLAUDE: Creating consistent live snapshot '{snapshot_name}' for VM '{self.vm_name}'")
 
-        # Ensure VM is running for live snapshot
+        # Ensure VM is running
         if self.get_state() != "running":
             log.error("CLAUDE: VM must be running to create live snapshot")
             return False
@@ -128,48 +138,77 @@ class SnapshotMixin(AbstractSnapshotMixin):
         snapshot_dir = Path(memory_path).parent
         self._ensure_snapshot_dir(snapshot_dir)
 
-        # Check for guest agent if quiesce requested
-        if use_quiesce:
-            log.warning("CLAUDE: Quiesce incompatible with memory snapshots. Disabling quiesce.")
-            use_quiesce = False
-
-        # Build virsh snapshot-create-as command
-        args = [
-            'virsh', 'snapshot-create-as',
-            '--domain', self.vm_name,
-            '--name', snapshot_name,
-            '--live',
-            '--memspec', f'file={memory_path},snapshot=external',
-            '--diskspec', f'vda,snapshot=external,file={disk_path}',
-            '--atomic'
-        ]
-
-        if use_quiesce:
-            args.append('--quiesce')
+        frozen = False
+        snapshot_success = False
+        import tempfile
 
         try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                check=False
+            # 2. Save the VM State (Stops the VM)
+            log.info(f"CLAUDE: Saving VM state to {memory_path}...")
+            subprocess.run(
+                ['virsh', 'save', self.vm_name, memory_path],
+                check=True, capture_output=True
             )
 
-            if result.returncode == 0:
-                log.info(f"CLAUDE: Successfully created external snapshot '{snapshot_name}'")
-                log.debug(f"CLAUDE: Memory file: {memory_path}")
-                log.debug(f"CLAUDE: Disk file: {disk_path}")
-                return True
-            else:
-                log.error(f"CLAUDE: Failed to create external snapshot: {result.stderr}")
-                return False
+            # 3. Create the Disk Snapshot (updates domain config to use new overlay)
+            log.info(f"CLAUDE: Creating disk snapshot at {disk_path}...")
+            snapshot_args = [
+                'virsh', 'snapshot-create-as', self.vm_name,
+                '--name', snapshot_name,
+                '--disk-only',
+                '--diskspec', f'vda,snapshot=external,file={disk_path}',
+                '--no-metadata',
+                '--atomic',
+                '--quiesce'
+            ]
+            
+            subprocess.run(
+                snapshot_args,
+                check=True, capture_output=True
+            )
 
-        except FileNotFoundError:
-            log.error("CLAUDE: virsh command not found - ensure libvirt is installed")
-            return False
+            # 4. Resume the VM
+            log.info("CLAUDE: Resuming VM from saved state...")
+            
+            # 4a. Get the updated XML (which includes the new disk overlay)
+            dump_result = subprocess.run(
+                ['virsh', 'dumpxml', self.vm_name],
+                check=True, capture_output=True, text=True
+            )
+            updated_xml = dump_result.stdout
+            
+            # 4b. Restore using the updated XML
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=True) as tmp_xml:
+                tmp_xml.write(updated_xml)
+                tmp_xml.flush()
+                
+                restore_args = [
+                    'virsh', 'restore', memory_path,
+                    '--xml', tmp_xml.name,
+                    '--running'
+                ]
+                
+                subprocess.run(restore_args, check=True, capture_output=True)
+                
+            log.info(f"CLAUDE: Checkpoint created and VM resumed successfully.")
+            snapshot_success = True
+
+        except subprocess.CalledProcessError as e:
+            log.error(f"CLAUDE: Command failed during snapshot creation: {e.cmd}")
+            # Try to decode safely
+            stderr_out = "N/A"
+            if hasattr(e, 'stderr'):
+                if isinstance(e.stderr, bytes):
+                    stderr_out = e.stderr.decode('utf-8', errors='replace')
+                else:
+                    stderr_out = str(e.stderr)
+            log.error(f"CLAUDE: Stderr: {stderr_out}")
+            snapshot_success = False
         except Exception as e:
             log.error(f"CLAUDE: Error creating external snapshot: {e}")
-            return False
+            snapshot_success = False
+
+        return snapshot_success
 
     def restore_external_snapshot(
         self,

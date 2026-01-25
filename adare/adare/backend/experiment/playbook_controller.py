@@ -189,6 +189,33 @@ class PlaybookController:
         # Connect test loader to action executor (use setter method to ensure proper initialization)
         self.action_executor.set_test_loader(self.test_loader)
 
+    def update_experiment_directory(self, experiment_dir: Path):
+        """
+        Update the experiment directory mid-session.
+        
+        This is useful when running a playbook from a specific location in dev mode,
+        ensuring that relative paths (images, etc.) are resolved correctly against
+        that playbook's location.
+        
+        Args:
+            experiment_dir: New experiment directory path
+        """
+        log.info(f"Updating experiment directory to: {experiment_dir}")
+        self.experiment_dir = experiment_dir
+        
+        # Update components that rely on experiment_dir
+        
+        # 1. Target Resolver (for images/)
+        if self.target_resolver:
+            self.target_resolver.experiment_dir = experiment_dir
+            self.target_resolver.images_dir = experiment_dir / "img"
+            log.debug(f"Updated TargetResolver images dir to: {self.target_resolver.images_dir}")
+            
+        # 2. Test Loader (for testfunctions)
+        if self.test_loader:
+            self.test_loader.experiment_dir = experiment_dir
+            log.debug("Updated TestLoader experiment dir")
+
     def update_websocket_client(self, new_client: AdareVMClient):
         """
         Update the WebSocket client for this controller and all sub-components.
@@ -347,9 +374,12 @@ class PlaybookController:
             failed_tests=failed_tests
         )
     
-    async def execute_playbook(self) -> PlaybookExecutionResult:
+    async def execute_playbook(self, indices: Optional[List[int]] = None) -> PlaybookExecutionResult:
         """
         Execute YAML playbook actions in order.
+
+        Args:
+            indices: Optional list of 1-based indices to execute. If None, execute all.
 
         Returns:
             PlaybookExecutionResult with execution details
@@ -402,11 +432,25 @@ class PlaybookController:
 
         # Execute actions sequentially
         total_actions = len(playbook.actions)
-        log.info(f"Executing {total_actions} playbook actions...")
+        
+        # Filter actions?
+        # Note: We iterate over all actions to preserve 'i' matching the original playbook index
+        execution_count = len(indices) if indices else total_actions
+        
+        log.info(f"Executing {execution_count} playbook actions (out of {total_actions})...")
+        if indices:
+            log.info(f"Selected indices: {indices}")
         
         for i, action in enumerate(playbook.actions):
+            # i is 0-based, so action index is i+1
+            action_index = i + 1
+            
+            # Skip if indices provided and this action is not selected
+            if indices and action_index not in indices:
+                continue
+
             action_name = type(action).__name__
-            log.info(f"Executing action {i+1}/{total_actions}: {action_name}")
+            log.info(f"Executing action {action_index}/{total_actions}: {action_name}")
 
             # Skip pause actions when not in test mode
             if isinstance(action, PauseAction) and not self.test_mode:

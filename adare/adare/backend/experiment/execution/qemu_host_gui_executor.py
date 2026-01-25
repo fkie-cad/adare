@@ -118,6 +118,11 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
         # Temp directory for PPM→PNG conversion (always needed for QMP)
         self._temp_screenshot_dir = Path(tempfile.gettempdir()) / "adare_qmp_screenshots"
         self._temp_screenshot_dir.mkdir(parents=True, exist_ok=True)
+        # Ensure QEMU process (running as different user) can write to this directory
+        try:
+            self._temp_screenshot_dir.chmod(0o777)
+        except Exception as e:
+            log.warning(f"Failed to set permissions on {self._temp_screenshot_dir}: {e}")
 
         log.debug(f"Initialized QEMUHostGUIExecutor (QMP-based, debug_screenshots={self.debug_screenshots})")
 
@@ -134,15 +139,25 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
         try:
             log.info("Capturing screenshot via QMP...")
 
+            # Determine screenshot directory (prefer experiment run dir to avoid AppArmor/tmp issues)
+            if self.screenshots_dir:
+                # Use a temp subdir in the experiment directory
+                temp_dir = self.screenshots_dir.parent / "temp_qmp"
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                screen_dir = temp_dir
+            else:
+                # Fallback to tmp dir
+                screen_dir = self._temp_screenshot_dir
+
             # Generate temp file path for PPM screenshot
             import time
-            temp_ppm = self._temp_screenshot_dir / f"screenshot_{int(time.time() * 1000)}.ppm"
+            temp_ppm = screen_dir / f"screenshot_{int(time.time() * 1000)}.ppm"
 
             # Capture screenshot via QMP
-            success = await self.vm.send_qmp_screenshot(str(temp_ppm))
+            success, error_msg = await self.vm.send_qmp_screenshot(str(temp_ppm))
 
             if not success:
-                return {'status': 'error', 'message': 'QMP screendump failed'}
+                return {'status': 'error', 'message': f'QMP screendump failed: {error_msg}'}
 
             # Wait briefly for file to be written
             await asyncio.sleep(0.1)

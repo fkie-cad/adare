@@ -45,7 +45,7 @@ class VmInstanceManager:
     """
 
     # Configuration
-    MAX_INSTANCES_PER_VM = 5  # Maximum instances per source VM
+    MAX_INSTANCES_PER_VM = 20  # Maximum instances per source VM
     CLEANUP_AGE_DAYS = 7      # Age threshold for automatic cleanup
 
     def __init__(self):
@@ -129,6 +129,37 @@ class VmInstanceManager:
 
             return False
 
+    async def cleanup_oldest_error_instance(self, vm_id: str) -> bool:
+        """
+        Clean up the oldest instance in 'error' state for a VM.
+
+        This helps recover capacity occupied by broken instances.
+
+        Args:
+            vm_id: Source VM ID
+
+        Returns:
+            True if an instance was cleaned up
+        """
+        from adare.database.api.vm import VmApi
+
+        with VmApi() as api:
+            instances = api.get_vm_instances_for_vm(vm_id, status='error')
+
+            if instances:
+                # Find oldest error instance
+                oldest = min(instances, key=lambda x: x.last_used_at)
+                log.info(f"Cleaning up oldest error instance: {oldest.instance_name}")
+
+                # Clean up hypervisor VM
+                await self._cleanup_hypervisor_instance(oldest)
+
+                # Delete from database
+                api.delete_vm_instance(oldest.id)
+                return True
+
+            return False
+
     async def create_new_instance(self, vm_id: str, experiment_run_id: str) -> VmInstance:
         """
         Create a new VM instance for an experiment.
@@ -155,11 +186,20 @@ class VmInstanceManager:
             log.debug(f"Current instance count for vm_id={vm_id}: {current_count}/{self.MAX_INSTANCES_PER_VM}")
 
             if current_count >= self.MAX_INSTANCES_PER_VM:
-                log.info(f"VM {vm_id} has {current_count} instances, cleaning up oldest available")
+                log.info(f"VM {vm_id} has {current_count} instances, attempting cleanup")
+                
+                # First try to cleanup oldest available instance
                 cleanup_success = await self.cleanup_oldest_available_instance(vm_id)
+                
                 if not cleanup_success:
-                    # If no available instances to cleanup, we're at capacity
+                    # If no available instances, try to cleanup error instances
+                    log.info(f"No available instances to cleanup, checking for error instances")
+                    cleanup_success = await self.cleanup_oldest_error_instance(vm_id)
+
+                if not cleanup_success:
+                    # If still no room, we're at capacity
                     raise VMError(log, f"VM {vm_id} at maximum instance capacity ({self.MAX_INSTANCES_PER_VM}) with all instances active")
+                
                 log.debug(f"Cleanup completed, proceeding with new instance creation")
 
             # Get source VM

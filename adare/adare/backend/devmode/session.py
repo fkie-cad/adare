@@ -378,8 +378,8 @@ class DevModeSession:
             self.initial_variables = {}
 
             # 13. Create initial snapshot for reset operations
-            await self._create_dev_snapshot("initial", "Initial VM state for dev mode")
-            log.info("Initial snapshot created")
+            #("initial", "Initial VM state for dev mode")
+            #log.info("Initial snapshot created")
 
             # 14. Retrieve and store VM instance ID for cleanup
             try:
@@ -511,7 +511,7 @@ class DevModeSession:
             from adare.backend.experiment.execution.base import ActionResult
             return ActionResult(success=False, message=str(e))
 
-    async def execute_playbook(self, playbook: Playbook) -> 'PlaybookExecutionResult':
+    async def execute_playbook(self, playbook: Playbook, experiment_dir: Optional[Path] = None, indices: Optional[List[int]] = None) -> 'PlaybookExecutionResult':
         """
         Execute a full playbook (for testing sequences).
 
@@ -519,6 +519,8 @@ class DevModeSession:
 
         Args:
             playbook: The playbook to execute
+            experiment_dir: Optional path to experiment directory (playbook parent)
+            indices: Optional list of 1-based indices to execute
 
         Returns:
             PlaybookExecutionResult with execution statistics
@@ -529,6 +531,10 @@ class DevModeSession:
         # Ensure controller is initialized
         if not await self._ensure_playbook_controller():
             raise RuntimeError("Failed to initialize playbook controller")
+
+        # Update experiment directory if provided (crucial for bare sessions)
+        if experiment_dir and self.playbook_controller:
+            self.playbook_controller.update_experiment_directory(experiment_dir)
 
         log.info(f"Executing playbook with {len(playbook.actions)} actions")
 
@@ -541,7 +547,7 @@ class DevModeSession:
             self.playbook_controller.execution_context.update(var_dict)
 
         # Execute using existing PlaybookController logic
-        result = await self.playbook_controller.execute_playbook()
+        result = await self.playbook_controller.execute_playbook(indices=indices)
 
         # Update statistics
         self.actions_executed += result.total_actions
