@@ -1515,6 +1515,70 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         response = await self._send_qmp_command(command)
         return 'return' in response
 
+    async def send_qmp_trace_event_set_state(self, name: str, enable: bool) -> bool:
+        """
+        Set QEMU trace event state via QMP.
+
+        Args:
+            name: Trace event name or pattern (glob)
+            enable: True to enable, False to disable
+
+        Returns:
+            True if successful
+        """
+        command = {
+            "execute": "trace-event-set-state",
+            "arguments": {
+                "name": name,
+                "enable": enable
+            }
+        }
+        response = await self._send_qmp_command(command)
+        return 'return' in response
+
+    async def enable_input_tracing(self) -> bool:
+        """
+        Enable QEMU tracing for input events.
+        
+        Enables:
+        - input_event_key_number
+        - input_event_key_qcode
+        - input_event_btn
+        - input_event_abs
+        - input_event_rel
+        """
+        patterns = [
+            "input_event_key*",
+            "input_event_btn",
+            "input_event_abs",
+            "input_event_rel", 
+            "ps2_put_keycode" # Fallback/additional info
+        ]
+        
+        success = True
+        for pattern in patterns:
+            if not await self.send_qmp_trace_event_set_state(pattern, True):
+                log.warning(f"Failed to enable trace pattern: {pattern}")
+                success = False
+                
+        return success
+
+    async def disable_input_tracing(self) -> bool:
+        """Disable QEMU tracing for input events."""
+        patterns = [
+            "input_event_key*",
+            "input_event_btn",
+            "input_event_abs",
+            "input_event_rel",
+            "ps2_put_keycode"
+        ]
+        
+        success = True
+        for pattern in patterns:
+            await self.send_qmp_trace_event_set_state(pattern, False)
+            
+        return success
+
     def update_screen_resolution(self, width: int, height: int) -> None:
         """
         Update cached screen resolution for coordinate normalization.

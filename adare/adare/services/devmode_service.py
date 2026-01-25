@@ -41,6 +41,7 @@ from adare.core.dto.devmode import (
     DevCheckpointInfo,
     DevResetResult,
     DevCleanupResult,
+    DevSessionRecordRequest,
 )
 
 log = logging.getLogger(__name__)
@@ -91,6 +92,14 @@ class DevModeService:
                         "Check available environments with: adare environment list",
                         f"Load environment with: adare environment load <environment.yml>"
                     ]
+                )
+
+            # Check hypervisor type
+            hypervisor = environment_database.get_environment_hypervisor(environment_ulid)
+            if hypervisor == 'virtualbox':
+                raise NotImplementedError(
+                    "Dev mode start is not yet implemented for VirtualBox environments. "
+                    "Please use QEMU/KVM for now."
                 )
 
             # Create session via manager (async)
@@ -418,6 +427,66 @@ class DevModeService:
                 f"Unexpected error: {str(e)}",
                 ["Check logs for details"]
             )
+
+    def record_session(self, request: DevSessionRecordRequest) -> Result[bool]:
+        """
+        Start recording a dev session.
+        
+        Args:
+            request: DevSessionRecordRequest
+            
+        Returns:
+            Result[bool]
+        """
+        try:
+            # Check session exists
+            if not self._db_api.session_exists(request.session_id):
+                return Result.fail("SESSION_NOT_FOUND", f"Session '{request.session_id}' not found")
+                
+            # Get or restore session
+            session = asyncio.run(self._manager.get_or_restore_session(request.session_id))
+            if not session:
+                return Result.fail("SESSION_RESTORE_FAILED", "Failed to restore session")
+                
+            if not session.is_running:
+                return Result.fail("SESSION_NOT_RUNNING", "Session must be running to record")
+                
+            # Start recording
+            success = asyncio.run(session.start_recording(request.output_file))
+            if not success:
+               return Result.fail("RECORD_START_FAILED", "Failed to start recording (check logs)")
+               
+            return Result.ok(True)
+            
+        except Exception as e:
+            log.error(f"Error starting recording: {e}", exc_info=True)
+            return Result.fail("INTERNAL_ERROR", str(e))
+
+    def stop_recording_session(self, session_id: str) -> Result[bool]:
+        """
+        Stop recording a dev session.
+        
+        Args:
+            session_id: Session ID
+            
+        Returns:
+            Result[bool]
+        """
+        try:
+             # Get or restore session (should be in memory if we are same process)
+            session = asyncio.run(self._manager.get_or_restore_session(session_id))
+            if not session:
+                return Result.fail("SESSION_NOT_FOUND", "Session not found")
+                
+            success = asyncio.run(session.stop_recording())
+            if not success:
+                return Result.fail("RECORD_STOP_FAILED", "Failed to stop recording")
+                
+            return Result.ok(True)
+        except Exception as e:
+            log.error(f"Error stopping recording: {e}", exc_info=True)
+            return Result.fail("INTERNAL_ERROR", str(e))
+
 
     def list_sessions(self, request: DevSessionListRequest) -> Result[List[DevSessionListItem]]:
         """

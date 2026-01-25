@@ -187,16 +187,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             )
 
         # Parse output: "/dev/sda1: ext4\n/dev/sda2: unknown\n"
-        os_filesystems = []
-        for line in result.stdout.strip().split('\n'):
-            if ':' not in line:
-                continue
-            device, fs_type = line.split(':', 1)
-            device = device.strip()
-            fs_type = fs_type.strip()
-
-            if fs_type in ['ntfs', 'ext4', 'xfs', 'ext3']:
-                os_filesystems.append((device, fs_type))
+        os_filesystems = self._parse_filesystems_output(result.stdout)
 
         if not os_filesystems:
             raise HypervisorException(
@@ -263,6 +254,28 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         log.debug(f"CLAUDE: Selected root filesystem: {largest_device} ({largest_fs_type}, size: {largest_size} bytes)")
         return largest_device, largest_fs_type
 
+    def _parse_filesystems_output(self, stdout: str) -> List[Tuple[str, str]]:
+        """
+        Parse guestfish list-filesystems output.
+        
+        Args:
+            stdout: Output from 'list-filesystems' command
+            
+        Returns:
+            List of (device, fs_type) tuples for supported OS filesystems
+        """
+        os_filesystems = []
+        for line in stdout.strip().split('\n'):
+            if ':' not in line:
+                continue
+            device, fs_type = line.split(':', 1)
+            device = device.strip()
+            fs_type = fs_type.strip()
+
+            if fs_type in ['ntfs', 'ext4', 'xfs', 'ext3']:
+                os_filesystems.append((device, fs_type))
+        return os_filesystems
+
     def _is_ntfs_hibernated(self, disk_path: str, device: str) -> tuple[bool, str]:
         """
         Check if NTFS filesystem is in hibernation state.
@@ -313,19 +326,34 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         test_result = subprocess.run(test_cmd, capture_output=True, text=True, check=False)
 
-        # Check stderr for hibernation-related messages
-        stderr_lower = test_result.stderr.lower()
-        if 'hibernat' in stderr_lower or 'hiberfile' in stderr_lower or 'unsafe' in stderr_lower:
-            log.debug(f"CLAUDE: NTFS hibernation detected in stderr: {test_result.stderr[:200]}")
+        # Check stderr for hibernation-related messages and hiberfil.sys existence
+        is_hibernated = self._check_ntfs_hibernation_output(test_result.stdout, test_result.stderr)
+        
+        if is_hibernated:
+            log.debug(f"CLAUDE: NTFS hibernation detected on {device}")
             return True, fs_type
 
-        # Check if hiberfil.sys exists (indicates hibernation)
-        if test_result.returncode == 0 and 'true' in test_result.stdout.lower():
-            log.debug(f"CLAUDE: Hibernation file (hiberfil.sys) detected on {device}")
-            return True, fs_type
-
-        log.debug(f"CLAUDE: No hibernation detected on {device}")
         return False, fs_type
+
+    def _check_ntfs_hibernation_output(self, stdout: str, stderr: str) -> bool:
+        """
+        Analyze guestfish output to detect NTFS hibernation.
+        
+        Args:
+            stdout: Output from guestfish command
+            stderr: Error output from guestfish command
+            
+        Returns:
+            True if hibernation detected
+        """
+        stderr_lower = stderr.lower()
+        if 'hibernat' in stderr_lower or 'hiberfile' in stderr_lower or 'unsafe' in stderr_lower:
+            return True
+
+        if 'true' in stdout.lower():
+            return True
+            
+        return False
 
     def _remove_ntfs_hibernation(self, disk_path: str, device: str) -> None:
         """
@@ -617,33 +645,15 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             raise
 
         # Build guestfish script commands with manual mount
-        script_lines = [
-            'run',  # Launch guestfish backend
-            f'mount {root_device} /',  # Mount root filesystem
-        ]
+        script_content = self._generate_guestfish_retrieval_script(root_device, retrieval_specs)
 
-        for spec in retrieval_specs:
-            guest_path = spec['guest_path']
-            host_path = spec['host_path']
-            file_type = spec['type']
-
-            # Add optional marker (- prefix) for all paths to continue on error
-            # This allows best-effort retrieval even if some paths don't exist
-            prefix = '-'
-
-            if file_type == 'file':
-                # Download individual file
-                script_lines.append(f"{prefix}download {guest_path} {host_path}")
-            elif file_type == 'directory':
-                # Copy directory (guestfish copies to parent with original name)
-                # e.g., copy-out /adare/run/artifacts /dest/parent creates /dest/parent/artifacts
-                script_lines.append(f"{prefix}copy-out {guest_path} {host_path.parent}")
-
-        if not script_lines:
-            log.warning("No retrieval specs provided for batched retrieval")
+        if not script_content:
+            log.warning("No retrieval specs provided or script generation failed")
             return {'retrieved': [], 'missing': []}
 
-        script_content = '\n'.join(script_lines)
+
+
+
         log.debug(f"CLAUDE: Guestfish script:\n{script_content}")
 
         # Write script to temporary file
@@ -743,6 +753,44 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                     Path(script_path).unlink()
                 except Exception as e:
                     log.warning(f"Failed to clean up temp script {script_path}: {e}")
+
+    def _generate_guestfish_retrieval_script(self, root_device: str, retrieval_specs: List[Dict[str, Any]]) -> str:
+        """
+        Generate guestfish script for batched file retrieval.
+        
+        Args:
+            root_device: Root filesystem device
+            retrieval_specs: List of retrieval specifications
+            
+        Returns:
+            String containing the guestfish script
+        """
+        script_lines = [
+            'run',  # Launch guestfish backend
+            f'mount {root_device} /',  # Mount root filesystem
+        ]
+
+        for spec in retrieval_specs:
+            guest_path = spec['guest_path']
+            host_path = spec['host_path']
+            file_type = spec['type']
+
+            # Add optional marker (- prefix) for all paths to continue on error
+            # This allows best-effort retrieval even if some paths don't exist
+            prefix = '-'
+
+            if file_type == 'file':
+                # Download individual file
+                script_lines.append(f"{prefix}download {guest_path} {host_path}")
+            elif file_type == 'directory':
+                # Copy directory (guestfish copies to parent with original name)
+                # e.g., copy-out /adare/run/artifacts /dest/parent creates /dest/parent/artifacts
+                script_lines.append(f"{prefix}copy-out {guest_path} {host_path.parent}")
+                
+        if len(script_lines) <= 2:  # Only run and mount
+            return ""
+
+        return '\n'.join(script_lines)
 
     def _validate_external_disk_writable(self, disk_path: Path) -> None:
         """

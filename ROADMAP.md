@@ -5,7 +5,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 ---
 
 ## ✅ Current Development Tasks  
-- [x] Provide all output in JSON/YML format for automation (toggle via flag to use this as stdout (logging errors+warnings in json; or save to file)  -> need to be tested more first way is implemented
+- [ ] adare dev record modus.
 
 ---
 
@@ -21,7 +21,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] Supported via 
 - [ ] Replace `pyautogui.screenshot` as default screenshot in linux vms with `maim` for improved stability (`grim` for wayland)
 - [ ] Implement interactive experiment development tools  
-  - [ ] Idea: Use **NiceGUI** for web-based interactive playbook and test creation (e.g., cropping images, extracting icons)  
+  - [ ] Idea: Use GUI for web-based interactive playbook and test creation (e.g., cropping images, extracting icons)  
 - [ ] Enhance `adare vm test` with automatic platform and desktop environment detection  
 - [ ] Use standardized installation directory (via `platformdirs`) and migrate installer scripts to Python  
 - [ ] Implement watchers that if gui find failed searches for specific things (e.g. remove popup) and then tries again
@@ -44,7 +44,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] check if we need to place building wheel into a single stage showing? I think yes!
 - [ ] adjust our tool be Model View Controller for frontend and terminal support later
 - [ ] change stage message for qemu; maybe even stages
-- [x] agentless qemu runs with only certain actions (gui actions) and no tests.
  
 ---
 
@@ -98,7 +97,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] long step after installing AdareVM which is not part of any Stage
 - [ ] improve stages in general!
 - [ ] ctrl-c during waiting for vm does not work?!
-- [x] qemu vm stop -> force shutoff
 
 
 ---
@@ -112,3 +110,4 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Test that json output works fine for all commands 
 - [ ] Test clone feature
 - [ ] Visual tests
+- [ ] adare dev with VirtualBox VMs

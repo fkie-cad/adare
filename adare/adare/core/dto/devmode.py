@@ -108,6 +108,14 @@ class DevSessionCleanupRequest:
     project_path: Optional[Path] = None
 
 
+@dataclass
+class DevSessionRecordRequest:
+    """Request to record a dev session."""
+    session_id: str
+    output_file: Path
+
+
+
 # =============================================================================
 # Response DTOs
 # =============================================================================

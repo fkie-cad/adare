@@ -31,6 +31,7 @@ from adare.core.dto.devmode import (
     DevSessionListRequest,
     DevSessionStateRequest,
     DevSessionCleanupRequest,
+    DevSessionRecordRequest,
 )
 from adare.console import print_success_message, print_error_message
 
@@ -378,35 +379,38 @@ def exec_dev_list(arguments):
             print("CLAUDE: No dev sessions found")
             print("\nStart a new session with: adare dev start <experiment> -e <environment>")
         else:
-            print(f"CLAUDE: Found {len(result.data)} dev session(s):\n")
+            # Use Rich table panel for display
+            from adare.frontend.terminal.dev_session_list import DevSessionTablePanel
+            from adare.frontend.terminal.console import DefaultConsole
+            from rich.layout import Layout
+            import pandas as pd
+
+            # Convert to DataFrame
+            data = []
             for session in result.data:
-                # Status indicator
-                if session.status == 'running':
-                    status_icon = "✓"
-                    status_text = "running"
-                elif session.status == 'stopped':
-                    status_icon = "⏸"
-                    status_text = "stopped"
-                elif session.status == 'crashed':
-                    status_icon = "✗"
-                    status_text = "crashed"
-                else:
-                    status_icon = "?"
-                    status_text = session.status
-
-                print(f"  {status_icon} Session ID: {session.session_id} ({status_text})")
-                print(f"    Experiment: {session.experiment_name}")
-                print(f"    Environment: {session.environment_name}")
-                print(f"    VM Running: {session.vm_running}")
-                print(f"    Actions Executed: {session.actions_executed}")
-                print(f"    Created: {session.created_at}")
-                print(f"    Project: {session.project_path}")
-
-                # Show action hint for stopped sessions
-                if session.status == 'stopped':
-                    print(f"    → Resume with: adare dev resume {session.session_id}")
-
-                print()
+                data.append({
+                    'session_id': session.session_id,
+                    'experiment_name': session.experiment_name,
+                    'environment_name': session.environment_name,
+                    'vm_running': session.vm_running,
+                    'actions_executed': session.actions_executed,
+                    'created_at': session.created_at,
+                    'status': session.status,
+                })
+            
+            df = pd.DataFrame(data)
+            
+            # Print table
+            console = DefaultConsole()
+            layout = Layout(name="root")
+            panel = DevSessionTablePanel(df)
+            layout.update(panel)
+            console.print(layout)
+            
+            # Show action hint as footer if there are stopped sessions
+            has_stopped = any(s.status == 'stopped' for s in result.data)
+            if has_stopped:
+                print("\nResume a session with: adare dev resume <session_id>")
     else:
         _handle_api_error(result)
 
@@ -761,3 +765,54 @@ def exec_dev_checkpoint_delete(arguments):
         print("\nCLAUDE: Checkpoint and associated snapshot files have been removed")
     else:
         _handle_api_error(result)
+
+
+def exec_dev_record(arguments):
+    """
+    Record user interactions in a dev session.
+    
+    Args:
+        arguments: Parsed arguments
+    """
+    project_directory = _get_project_path(arguments)
+    session_id = _resolve_session_id(getattr(arguments, 'session_id', None), project_directory)
+    output_file = Path(getattr(arguments, 'output', 'playbook.yml')).resolve()
+    
+    log.info(f"Recording session {session_id} to {output_file}")
+    print(f"Starting recording for session {session_id}...")
+    print(f"Output will be saved to: {output_file}")
+    print("Press Ctrl+C to stop recording.")
+    
+    api = AdareAPI()
+    
+    try:
+        # Start recording
+        result = api.devmode.record_session(DevSessionRecordRequest(
+            session_id=session_id,
+            output_file=output_file
+        ))
+        
+        if not result.success:
+            _handle_api_error(result)
+            
+        # Loop until interrupted
+        try:
+            while True:
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            print("\nStopping recording...")
+            
+            # Stop recording
+            stop_result = api.devmode.stop_recording_session(session_id)
+            if stop_result.success:
+                print_success_message(
+                    title="Recording stopped",
+                    next_steps=[f"View playbook: {output_file}"],
+                    tip=f"Run with: adare dev playbook {session_id} -f {output_file}"
+                )
+            else:
+                _handle_api_error(stop_result)
+                
+    except Exception as e:
+        print_error_message(title="Recording failed", next_steps=[str(e)])
+        exit(1)

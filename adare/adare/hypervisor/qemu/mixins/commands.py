@@ -7,7 +7,10 @@ Implements AbstractCommandMixin for QEMU-specific command execution using:
 """
 import asyncio
 import json
-import libvirt_qemu
+try:
+    import libvirt_qemu
+except ImportError:
+    libvirt_qemu = None
 import logging
 import os
 import subprocess

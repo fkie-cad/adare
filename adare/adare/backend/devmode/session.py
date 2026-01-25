@@ -146,6 +146,9 @@ class DevModeSession:
 
         # Store initial variable state for reset operations
         self.initial_variables: Dict[str, Any] = {}
+        
+        # Recording state
+        self.recorder: Optional[any] = None # SessionRecorder instance
 
     @staticmethod
     def _make_json_serializable(obj):
@@ -1373,3 +1376,51 @@ class DevModeSession:
                         log.warning(f"CLAUDE: Snapshot directory not empty after cleanup: {snapshot_dir}")
             except Exception as e:
                 log.warning(f"CLAUDE: Failed to remove snapshot directory: {e}")
+
+    async def start_recording(self, output_file: Path) -> bool:
+        """
+        Start recording user interactions to a playbook file.
+        
+        Args:
+            output_file: Path to save the recording (playbook YAML)
+            
+        Returns:
+            True if started successfully
+        """
+        if self.recorder and self.recorder.is_recording:
+            log.warning("Recording already in progress")
+            return False
+            
+        if self.experiment_ctx.hypervisor_type != 'qemu':
+            log.error("Recording is currently only supported for QEMU")
+            return False
+            
+        try:
+            from adare.backend.devmode.recorder import SessionRecorder
+            
+            self.recorder = SessionRecorder(self.experiment_ctx.vm, output_file)
+            await self.recorder.start()
+            return True
+            
+        except Exception as e:
+            log.error(f"Failed to start recording: {e}", exc_info=True)
+            return False
+
+    async def stop_recording(self) -> bool:
+        """
+        Stop current recording session.
+        
+        Returns:
+            True if stopped successfully
+        """
+        if not self.recorder or not self.recorder.is_recording:
+            log.warning("No active recording to stop")
+            return False
+            
+        try:
+            await self.recorder.stop()
+            self.recorder = None
+            return True
+        except Exception as e:
+            log.error(f"Failed to stop recording: {e}", exc_info=True)
+            return False

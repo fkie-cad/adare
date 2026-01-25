@@ -474,11 +474,11 @@ class TestSerialConsoleConfiguration:
         console = devices.find("console")
 
         assert console is not None
-        assert console.get("type") == "file"
+        assert console.get("type") == "pty"
 
+        # Serial redirection is disabled in code, so source should be None
         source = console.find("source")
-        assert source is not None
-        assert source.get("path") == full_vm_config.serial_console_log_path
+        assert source is None
 
 
 class TestNetworkConfiguration:
@@ -728,14 +728,10 @@ class TestQEMUDebugLog:
         args = findall_with_namespace(qemu_cmdline, "qemu:arg")
         arg_values = [arg.get("value") for arg in args]
 
-        assert "-D" in arg_values
-        d_index = arg_values.index("-D")
-        assert arg_values[d_index + 1] == full_vm_config.qemu_debug_log_path
-
-        # Also check for -d argument with debug categories
-        assert "-d" in arg_values
-        d_lower_index = arg_values.index("-d")
-        assert arg_values[d_lower_index + 1] == "guest_errors"
+        assert "-D" not in arg_values
+        # Debug logging is disabled in code, so -D and -d should NOT be present
+        assert "-D" not in arg_values
+        assert "-d" not in arg_values
 
 
 class TestPowerManagement:
@@ -979,7 +975,7 @@ class TestWindowsVideoConfiguration:
         # Check absence of qxl fields
         assert model.get("ram") is None
         # valid for virtio now
-        assert model.get("vram") == "65536"
+        assert model.get("vram") == "262144"
         assert model.get("vgamem") is None
         
         # Check graphics configuration for GL
