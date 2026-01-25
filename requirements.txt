@@ -17,3 +17,4 @@ guibot~=0.50.1
 python-dateutil~=2.9.0.post0
 datefinder~=0.7.3
 tqdm~=4.66.2
+sqlalchemy-serializer~=1.6.2

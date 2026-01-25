@@ -226,9 +226,10 @@ class TestGetVmObject:
         self, snapshot_manager, mock_qemu_vm_instance, mock_qemu_vm
     ):
         """Test returns QEMUVM for QEMU instances."""
-        with patch(QEMU_VM_PATCH_PATH) as mock_qemu_class:
+        # Use QEMUVMRegistry patch instead of QEMUVM patch
+        with patch('adare.backend.vm.snapshot_manager.QEMUVMRegistry') as mock_registry:
             with patch(QEMU_MANAGER_PATCH_PATH):
-                mock_qemu_class.get_vm_by_name.return_value = mock_qemu_vm
+                mock_registry.get_vm_by_name.return_value = mock_qemu_vm
 
                 result = snapshot_manager._get_vm_object(mock_qemu_vm_instance)
 
@@ -236,9 +237,9 @@ class TestGetVmObject:
 
     def test_raises_vm_error_when_qemu_vm_not_found(self, snapshot_manager, mock_qemu_vm_instance):
         """Test raises VMError when QEMU VM not found."""
-        with patch(QEMU_VM_PATCH_PATH) as mock_qemu_class:
+        with patch('adare.backend.vm.snapshot_manager.QEMUVMRegistry') as mock_registry:
             with patch(QEMU_MANAGER_PATCH_PATH):
-                mock_qemu_class.get_vm_by_name.side_effect = VMNotFoundException("Not found")
+                mock_registry.get_vm_by_name.side_effect = VMNotFoundException("Not found")
 
                 with pytest.raises(VMError, match="not found"):
                     snapshot_manager._get_vm_object(mock_qemu_vm_instance)
