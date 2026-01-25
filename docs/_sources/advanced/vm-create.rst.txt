@@ -1,6 +1,7 @@
 ********************
-VM Creation Guide  
+Create an ADARE VM  
 ********************
+
 
 This guide shows you how to set up a virtual machine that's compatible with ADARE. You'll need to create a custom VM if:
 
@@ -9,10 +10,36 @@ This guide shows you how to set up a virtual machine that's compatible with ADAR
 - You want a customized forensic analysis environment
 
 Once configured, export the VM as an ``.ova`` or ``.ovf`` file in **OVF 1.0 format**.
+At the moment, ADARE only supports VirtualBox VMs but it is planned to support Qemu/KVM in the future.
 
 
-General
-=======
+General Guideline
+=================
+There are two options for creating your own ADARE-compatible VM:
+1. **Start from scratch:** Create a new VM with a minimal OS installation and set it up as explained in TODO.
+2. **Modify an existing VM:** Take one of the provided ADARE VMs and customize it by e.g. installing additional software as explained in TODO
+
+
+
+Extend
+======
+
+VirtualBox
+----------
+
+
+
+
+Create
+======
+
+
+
+
+
+
+VirtualBox
+==========
 
 - Disable all that can create pop up's as far as possible (like update notifications etc., automatic updates, error reporting, etc.)
 - Disable screen lock and sleep mode if possible
@@ -175,7 +202,11 @@ Install using pip in the ``pyadare`` conda environment:
 
 .. code-block:: powershell
 
-   %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install \\vboxsvr\adare\wheels\*.whl
+   # First, mount the shared folder if not already mounted
+   net use Z: \\vboxsvr\adare\wheels
+
+   # Install wheels (PowerShell requires explicit wildcard expansion)
+   %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem Z:\wheels\*.whl | Select-Object -ExpandProperty FullName)
 
 Windows with Poetry
 -------------------
@@ -184,7 +215,11 @@ Install using system pip:
 
 .. code-block:: powershell
 
-   pip install \\vboxsvr\adare\wheels\*.whl
+   # First, mount the shared folder if not already mounted
+   net use Z: \\vboxsvr\adare\wheels
+
+   # Install wheels (PowerShell requires explicit wildcard expansion)
+   pip install --force-reinstall @(Get-ChildItem Z:\wheels\*.whl | Select-Object -ExpandProperty FullName)
 
 Linux with Conda (Miniforge)
 -----------------------------
@@ -193,7 +228,7 @@ Install using pip in the ``pyadare`` conda environment:
 
 .. code-block:: bash
 
-   /home/adare/.miniforge3/bin/conda run -n pyadare pip install /adare/app/wheels/*.whl
+   /home/adare/.miniforge3/bin/conda run -n pyadare pip install --break-system-packages /adare/app/wheels/*.whl
 
 Linux with Poetry
 -----------------
@@ -202,7 +237,12 @@ Install using system pip:
 
 .. code-block:: bash
 
-   pip install /adare/app/wheels/*.whl
+   pip install --break-system-packages /adare/app/wheels/*.whl
+
+.. note::
+
+   Ubuntu 24.04+ requires the ``--break-system-packages`` flag due to PEP 668.
+   This is safe in ADARE's isolated VM environment.
 
 Verification
 ============
@@ -234,6 +274,8 @@ Expected output:
 
 .. important::
 
-   - Wheels are provided automatically by the ADARE host in the shared folder (``\\vboxsvr\adare\wheels\`` on Windows, ``/adare/app/wheels/`` on Linux)
+   - Wheels are provided automatically by the ADARE host in the shared folder
+   - Windows: Mount as ``Z:\wheels`` using ``net use Z: \\vboxsvr\adare\wheels``
+   - Linux: Automatically available at ``/adare/app/wheels/``
    - The shared folder is only accessible during experiment runs
    - ADARE automatically detects version mismatches and reinstalls when needed

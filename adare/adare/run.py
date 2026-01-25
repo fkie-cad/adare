@@ -751,7 +751,8 @@ def action(session_id, action_file, action_yaml, stdin):
 @click.option('-u', '--url', help='Playbook URL')
 @click.option('--stdin', is_flag=True, help='Read from stdin')
 @click.option('--restore', is_flag=True, help='Restore to initial checkpoint before execution')
-def playbook(session_id, playbook_file, url, stdin, restore):
+@click.option('--indices', help='Select specific action indices to execute (e.g. 1-3,5,7-9)')
+def playbook(session_id, playbook_file, url, stdin, restore, indices):
     """Execute a playbook."""
     from adare.cli.dev import exec_dev_playbook
     args = SimpleNamespace(
@@ -759,7 +760,8 @@ def playbook(session_id, playbook_file, url, stdin, restore):
         playbook_file=playbook_file,
         url=url,
         stdin=stdin,
-        restore=restore
+        restore=restore,
+        indices=indices
     )
     exec_with_error_printing(exec_dev_playbook, args)
 

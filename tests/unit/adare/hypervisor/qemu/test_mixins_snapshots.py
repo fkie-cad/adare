@@ -2,7 +2,7 @@
 Unit tests for adare.hypervisor.qemu.mixins.snapshots module.
 """
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 from pathlib import Path
 
 from adare.hypervisor.qemu.mixins.snapshots import SnapshotMixin
@@ -30,22 +30,115 @@ class TestSnapshotMixin:
 
     @patch('subprocess.run')
     def test_create_external_snapshot_success(self, mock_run, mixin):
+        # All calls success
         mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = "<domain>test</domain>"
         
         with patch('pathlib.Path.mkdir'):
-            success = mixin.create_external_snapshot(
-                "snap1", 
-                "/tmp/snap1.save", 
-                "/tmp/snap1.qcow2",
-                use_quiesce=False
-            )
+            with patch('tempfile.NamedTemporaryFile') as mock_temp:
+                mock_temp.return_value.__enter__.return_value.name = "/tmp/fake.xml"
+                success = mixin.create_external_snapshot(
+                    "snap1", 
+                    "/tmp/snap1.save", 
+                    "/tmp/snap1.qcow2",
+                    use_quiesce=False
+                )
         
         assert success is True
-        mock_run.assert_called()
-        args = mock_run.call_args[0][0]
-        assert 'snapshot-create-as' in args
-        assert '--memspec' in args
-        assert '--diskspec' in args
+        
+        calls = mock_run.call_args_list
+        # Expected sequence: save, snapshot, dumpxml, restore
+        
+        # 1. Save: ['virsh', 'save', ...]
+        save_calls = [c for c in calls if c[0][0][1] == 'save']
+        assert len(save_calls) == 1
+        
+        # 2. Snapshot
+        snap_calls = [c for c in calls if 'snapshot-create-as' in str(c[0][0])]
+        assert len(snap_calls) == 1
+        
+        # 3. DumpXML
+        dump_calls = [c for c in calls if 'dumpxml' in str(c[0][0])]
+        assert len(dump_calls) == 1
+        
+        # 4. Restore
+        restore_calls = [c for c in calls if c[0][0][1] == 'restore']
+        assert len(restore_calls) == 1
+        restore_args = restore_calls[0][0][0]
+        assert '--xml' in restore_args
+        assert '--running' in restore_args
+
+    @patch('subprocess.run')
+    def test_create_external_snapshot_with_manual_quiesce(self, mock_run, mixin):
+        # All calls return 0 (success)
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = "<domain>test</domain>"
+        
+        with patch('pathlib.Path.mkdir'):
+             with patch('tempfile.NamedTemporaryFile') as mock_temp:
+                mock_temp.return_value.__enter__.return_value.name = "/tmp/fake.xml"
+                success = mixin.create_external_snapshot(
+                    "snap1", 
+                    "/tmp/snap1.save", 
+                    "/tmp/snap1.qcow2",
+                    use_quiesce=True
+                )
+            
+        assert success is True
+        
+        calls = mock_run.call_args_list
+        # 1. Ping
+        assert any('guest-ping' in str(c[0][0]) for c in calls)
+        # 2. Freeze
+        assert any('domfsfreeze' in str(c[0][0]) for c in calls)
+        # 3. Save
+        assert any('save' in str(c[0][0]) for c in calls)
+        # 4. Snapshot
+        assert any('snapshot-create-as' in str(c[0][0]) for c in calls)
+        # 5. Restore
+        assert any('restore' in str(c[0][0]) for c in calls)
+        # 6. Thaw
+        assert any('domfsthaw' in str(c[0][0]) for c in calls)
+
+    @patch('subprocess.run')
+    def test_create_external_snapshot_quiesce_freeze_fail(self, mock_run, mixin):
+        # Ping succeeds, Freeze fails, Save succeeds, Snapshot succeeds, Restore succeeds.
+        from subprocess import CalledProcessError
+        
+        def side_effect(args, **kwargs):
+            cmd_str = str(args)
+            if 'guest-ping' in cmd_str:
+                return MagicMock(returncode=0)
+            elif 'domfsfreeze' in cmd_str:
+                # Raise error as check=True is used for freeze
+                raise CalledProcessError(1, args)
+            elif 'stdout' in str(dict(kwargs)): # Basic Mock doesn't support kwargs checking nicely in side_effect usually
+                 pass
+            
+            # Default success mock
+            m = MagicMock(returncode=0)
+            m.stdout = "<domain>test</domain>"
+            return m
+            
+        mock_run.side_effect = side_effect
+        
+        with patch('pathlib.Path.mkdir'):
+             with patch('tempfile.NamedTemporaryFile') as mock_temp:
+                mock_temp.return_value.__enter__.return_value.name = "/tmp/fake.xml"
+                success = mixin.create_external_snapshot(
+                    "snap1", "/tmp/m", "/tmp/d", use_quiesce=True
+                )
+            
+        assert success is True 
+        
+        calls = mock_run.call_args_list
+        # Ensure freeze was called
+        freeze_called = any('domfsfreeze' in str(c[0][0]) for c in calls)
+        assert freeze_called
+        
+        # Ensure thaw was NOT called
+        thaw_called = any('domfsthaw' in str(c[0][0]) for c in calls)
+        assert not thaw_called
 
     @patch('subprocess.run')
     @patch('os.path.exists', return_value=True)
@@ -61,7 +154,6 @@ class TestSnapshotMixin:
         
         assert success is True
         assert mock_run.call_count == 3
-        # Check calls?
         calls = mock_run.call_args_list
         assert calls[1][0][0][1] == "test-vm" # virt-xml ...
         assert calls[2][0][0][1] == "restore" # virsh restore
@@ -74,14 +166,6 @@ class TestSnapshotMixin:
         mock_run.return_value.returncode = 1
         mock_run.return_value.stderr = "external disk snapshots not supported"
         
-        # Files exist initially, then they are removed.
-        # Logic checks exists calling (disk_path) and (memory_path).
-        # We need to ensure that subsequent checks return False.
-        # But os.remove is called in between.
-        # Let's make exists return True first few times, then False?
-        # The code checks: if os.path.exists(mem): remove(mem); if memory_deleted and os.path.exists(mem): fail
-        
-        # We can implement a side effect based on a mutable set of existing files
         existing_files = {"/tmp/mem", "/tmp/disk"}
         
         def exists_side_effect(path):

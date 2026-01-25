@@ -230,10 +230,19 @@ class TargetResolutionExecutor:
         """
         try:
             # Take new screenshot (use GUI executor if available for mode-aware screenshots)
+            result = None
             if self.gui_executor:
                 result = await self.gui_executor.screenshot()
-            else:
+                # Check for error status
+                if result and result.get('status') == 'error':
+                    log.warning(f"GUI executor screenshot failed: {result.get('message')}. Falling back to WebSocket.")
+                    result = None # forcing fallback
+
+            # Fallback to WebSocket if GUI executor didn't work (or wasn't available)
+            if not result:
+                log.debug("Using WebSocket client for screenshot")
                 result = await self.client.screenshot()
+
             if result and 'image' in result:
                 # Extract base64 data from result
                 if 'data' in result['image']:

@@ -347,6 +347,8 @@ class FlowControlExecutor:
                             data=data if data else None
                         )
                 except Exception as e:
+                    if isinstance(e, FileNotFoundError):
+                        raise
                     log.debug(f"Condition evaluation failed on check #{check_count}: {e}")
 
                 # Check timeout AFTER each evaluation attempt
@@ -448,6 +450,8 @@ class FlowControlExecutor:
                 return False
 
         except Exception as e:
+            if isinstance(e, FileNotFoundError):
+                raise
             log.error(f"Error evaluating wait condition: {e}")
             return False
 

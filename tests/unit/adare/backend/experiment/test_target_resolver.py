@@ -72,6 +72,17 @@ class TestMCPTargetResolver:
                 assert match.confidence == 0.95
 
     @pytest.mark.asyncio
+    async def test_resolve_target_image_file_not_found(self, resolver):
+        target = Target(image="missing.png")
+        screenshot = "base64screenshot"
+        
+        # Mock file reading to raise FileNotFoundError
+        with patch("builtins.open", side_effect=FileNotFoundError("Mocked file not found")):
+            # It should raise FileNotFoundError, not return None
+            with pytest.raises(FileNotFoundError):
+                await resolver.resolve_target(target, screenshot_base64=screenshot)
+
+    @pytest.mark.asyncio
     async def test_resolve_target_text_success(self, resolver):
         target = Target(text="Login", strategy=TopLeftStrategy())
         screenshot = "base64screenshot"

@@ -54,13 +54,14 @@ class MCPTargetResolver:
         self._connection_tested = False
         self._connection_available = False
     
-    def _select_match_by_strategy(self, matches: List[TargetMatch], strategy) -> Optional[TargetMatch]:
+    def _select_match_by_strategy(self, matches: List[TargetMatch], strategy, reference_coords: Optional[Tuple[int, int]] = None) -> Optional[TargetMatch]:
         """
         Select a single match from multiple matches based on strategy.
         
         Args:
             matches: List of found matches
             strategy: Strategy object for selection
+            reference_coords: Optional reference coordinates for ClosestToStrategy
             
         Returns:
             Selected match or None if no valid match
@@ -98,7 +99,14 @@ class MCPTargetResolver:
             # Check mode: target reference vs coordinates
             if strategy.text or strategy.image:
                 # TARGET REFERENCE MODE (new)
-                reference_coords = strategy._resolved_reference_coords
+                if reference_coords is None:
+                    # Fallback to coordinate mode if reference_coords missing (should not happen if logic flows correctly)
+                    # Try to access attribute for backward compatibility if it was somehow set
+                    if hasattr(strategy, '_resolved_reference_coords'):
+                         reference_coords = strategy._resolved_reference_coords
+                    else:
+                        log.error("ClosestToStrategy: Reference coordinates missing for text/image reference mode")
+                        return None
 
                 def distance(match):
                     x, y = match.coordinates
@@ -234,6 +242,8 @@ class MCPTargetResolver:
             TargetMatch if found, None otherwise
         """
         try:
+            reference_coords = None
+
             # Handle ClosestToStrategy with target reference
             if isinstance(target.strategy, ClosestToStrategy):
                 if target.strategy.text or target.strategy.image:
@@ -261,8 +271,10 @@ class MCPTargetResolver:
                     reference_coords = reference_match.coordinates
                     log.info(f"Reference target found at {reference_coords}")
 
-                    # Store reference coordinates in strategy for _select_match_by_strategy
-                    target.strategy._resolved_reference_coords = reference_coords
+                    log.info(f"Reference target found at {reference_coords}")
+
+                    # Store reference coordinates in local variable (previously stored in strategy)
+                    # target.strategy._resolved_reference_coords = reference_coords
 
                     # Optionally crop screenshot for performance optimization
                     if target.strategy.max_distance:
@@ -311,7 +323,7 @@ class MCPTargetResolver:
                             log.debug(f"Encoded icon to base64, size: {len(icon_base64)} chars")
                         except FileNotFoundError:
                             log.error(f"Icon file not found: {image_path}")
-                            return None
+                            raise
                         except Exception as e:
                             log.error(f"Failed to read icon file: {e}")
                             return None
@@ -372,7 +384,7 @@ class MCPTargetResolver:
                             log.info(f"Applying {strategy_name} strategy{strategy_params} to select from {len(matches)} matches")
                             
                             try:
-                                selected_match = self._select_match_by_strategy(matches, target.strategy)
+                                selected_match = self._select_match_by_strategy(matches, target.strategy, reference_coords)
                                 if selected_match:
                                     selected_index = matches.index(selected_match) + 1
                                     log.info(f"Selected match {selected_index}: image '{target.image}' at {selected_match.coordinates} via MCP")
@@ -454,7 +466,7 @@ class MCPTargetResolver:
                             log.info(f"Applying {strategy_name} strategy{strategy_params} to select from {len(matches)} matches")
                             
                             try:
-                                selected_match = self._select_match_by_strategy(matches, target.strategy)
+                                selected_match = self._select_match_by_strategy(matches, target.strategy, reference_coords)
                                 if selected_match:
                                     selected_index = matches.index(selected_match) + 1
                                     log.info(f"Selected match {selected_index}: '{selected_match.text}' at {selected_match.coordinates} via MCP")
@@ -473,6 +485,8 @@ class MCPTargetResolver:
                             return None
                         
             except Exception as mcp_error:
+                if isinstance(mcp_error, FileNotFoundError):
+                    raise
                 log.error(f"MCP connection failed: {mcp_error}", exc_info=True)
                 log.error(f"Ensure MCP GUI server is running at {self.mcp_gui_url}")
                 return None
@@ -481,6 +495,8 @@ class MCPTargetResolver:
             return None
             
         except Exception as e:
+            if isinstance(e, FileNotFoundError):
+                raise
             log.error(f"Error resolving target via MCP: {e}")
             return None
 

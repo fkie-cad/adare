@@ -780,7 +780,13 @@ class DevModeService:
             )
 
         # Parse playbook based on source
+        experiment_dir = None
         if request.playbook_source == 'file':
+            # Identify experiment directory as parent of playbook file
+            playbook_path = Path(request.playbook_content)
+            experiment_dir = playbook_path.parent.resolve()
+            log.info(f" inferred experiment directory from playbook file: {experiment_dir}")
+            
             playbook = self._parse_playbook_from_file(request.playbook_content)
         elif request.playbook_source == 'url':
             playbook = self._fetch_playbook_from_url(request.playbook_content)
@@ -805,7 +811,11 @@ class DevModeService:
 
         # Execute playbook (in same event loop!)
         start_time = time.time()
-        playbook_result = await session.execute_playbook(playbook)
+        playbook_result = await session.execute_playbook(
+            playbook, 
+            experiment_dir=experiment_dir,
+            indices=request.indices
+        )
         execution_time = time.time() - start_time
 
         return playbook_result, execution_time
@@ -1065,7 +1075,10 @@ class DevModeService:
             RuntimeError: If session not found
         """
         # Get or restore session (stays in same event loop)
-        session = await self._manager.get_or_restore_session(request.session_id)
+        session = await self._manager.get_or_restore_session(
+            request.session_id, 
+            connect_websocket=False
+        )
         if not session:
             raise RuntimeError(
                 f"Dev session '{request.session_id}' not found or could not be restored"

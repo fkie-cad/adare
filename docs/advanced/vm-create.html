@@ -7,7 +7,7 @@
         <link rel="prefetch" href="../_static/logo.png" as="image">
 
     <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.09.25 -->
-        <title>VM Creation Guide - ADARE documentation</title>
+        <title>Create an ADARE VM - ADARE documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=580074bf" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
@@ -310,7 +310,7 @@
 <li class="toctree-l1"><a class="reference internal" href="playbook-patterns.html">Advanced Playbook Patterns</a></li>
 <li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats (in development)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="testfunction-create.html">Create your own testfunction set (in development)</a></li>
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">VM Creation Guide</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Create an ADARE VM</a></li>
 <li class="toctree-l1"><a class="reference internal" href="#installing-adare-guest-agent-adarevm-adarelib">Installing ADARE Guest Agent (adarevm &amp; adarelib)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Architecture</span></p>
@@ -354,17 +354,33 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="vm-creation-guide">
-<h1>VM Creation Guide<a class="headerlink" href="#vm-creation-guide" title="Link to this heading">¶</a></h1>
+          <section id="create-an-adare-vm">
+<h1>Create an ADARE VM<a class="headerlink" href="#create-an-adare-vm" title="Link to this heading">¶</a></h1>
 <p>This guide shows you how to set up a virtual machine that’s compatible with ADARE. You’ll need to create a custom VM if:</p>
 <ul class="simple">
 <li><p>None of the provided VMs have the OS/distribution you need</p></li>
 <li><p>You need specific software pre-installed</p></li>
 <li><p>You want a customized forensic analysis environment</p></li>
 </ul>
-<p>Once configured, export the VM as an <code class="docutils literal notranslate"><span class="pre">.ova</span></code> or <code class="docutils literal notranslate"><span class="pre">.ovf</span></code> file in <strong>OVF 1.0 format</strong>.</p>
-<section id="general">
-<h2>General<a class="headerlink" href="#general" title="Link to this heading">¶</a></h2>
+<p>Once configured, export the VM as an <code class="docutils literal notranslate"><span class="pre">.ova</span></code> or <code class="docutils literal notranslate"><span class="pre">.ovf</span></code> file in <strong>OVF 1.0 format</strong>.
+At the moment, ADARE only supports VirtualBox VMs but it is planned to support Qemu/KVM in the future.</p>
+<section id="general-guideline">
+<h2>General Guideline<a class="headerlink" href="#general-guideline" title="Link to this heading">¶</a></h2>
+<p>There are two options for creating your own ADARE-compatible VM:
+1. <strong>Start from scratch:</strong> Create a new VM with a minimal OS installation and set it up as explained in TODO.
+2. <strong>Modify an existing VM:</strong> Take one of the provided ADARE VMs and customize it by e.g. installing additional software as explained in TODO</p>
+</section>
+<section id="extend">
+<h2>Extend<a class="headerlink" href="#extend" title="Link to this heading">¶</a></h2>
+<section id="virtualbox">
+<h3>VirtualBox<a class="headerlink" href="#virtualbox" title="Link to this heading">¶</a></h3>
+</section>
+</section>
+<section id="create">
+<h2>Create<a class="headerlink" href="#create" title="Link to this heading">¶</a></h2>
+</section>
+<section id="id1">
+<h2>VirtualBox<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p>Disable all that can create pop up’s as far as possible (like update notifications etc., automatic updates, error reporting, etc.)</p></li>
 <li><p>Disable screen lock and sleep mode if possible</p></li>
@@ -474,8 +490,8 @@
 - Miniforge3</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>Download Install script: <a href="#id1"><span class="problematic" id="id2">``</span></a>cd /tmp &amp;&amp; wget <a class="reference external" href="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh">https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh</a>’’</p></li>
-<li><p>Install: <a href="#id3"><span class="problematic" id="id4">``</span></a>cd /tmp &amp;&amp; bash Miniforge3-Linux-x86_64.sh -b -p /home/adare/.miniforge3’’ (install into /home/adare/.miniforge3 instead of /home/adare/miniforge3)</p></li>
+<li><p>Download Install script: <a href="#id2"><span class="problematic" id="id3">``</span></a>cd /tmp &amp;&amp; wget <a class="reference external" href="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh">https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh</a>’’</p></li>
+<li><p>Install: <a href="#id4"><span class="problematic" id="id5">``</span></a>cd /tmp &amp;&amp; bash Miniforge3-Linux-x86_64.sh -b -p /home/adare/.miniforge3’’ (install into /home/adare/.miniforge3 instead of /home/adare/miniforge3)</p></li>
 <li><p>Create a conda environment with Python 3.10: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">create</span> <span class="pre">-n</span> <span class="pre">pyadare</span> <span class="pre">python=3.10</span></code></p></li>
 </ul>
 </div></blockquote>
@@ -500,7 +516,7 @@
 </li>
 <li><p>Configure Seahorse (keyring) to unlock automatically on login by setting an empty password.</p></li>
 <li><p>Disbale Auto Updates/Notifications:
-- GNOME: <a href="#id5"><span class="problematic" id="id6">``</span></a>sudo systemctl stop unattended-upgrades’’ und <a href="#id7"><span class="problematic" id="id8">``</span></a>sudo systemctl disable unattended-upgrades’’</p></li>
+- GNOME: <a href="#id6"><span class="problematic" id="id7">``</span></a>sudo systemctl stop unattended-upgrades’’ und <a href="#id8"><span class="problematic" id="id9">``</span></a>sudo systemctl disable unattended-upgrades’’</p></li>
 </ul>
 </section>
 <section id="other-desktop-environments">
@@ -532,29 +548,42 @@
 <section id="windows-with-conda-miniforge">
 <h3>Windows with Conda (Miniforge)<a class="headerlink" href="#windows-with-conda-miniforge" title="Link to this heading">¶</a></h3>
 <p>Install using pip in the <code class="docutils literal notranslate"><span class="pre">pyadare</span></code> conda environment:</p>
-<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="k">%</span><span class="n">USERPROFILE</span><span class="p">%\.</span><span class="n">miniforge3</span><span class="p">\</span><span class="n">Scripts</span><span class="p">\</span><span class="n">conda</span><span class="p">.</span><span class="n">exe</span> <span class="n">run</span> <span class="n">-n</span> <span class="n">pyadare</span> <span class="n">pip</span> <span class="n">install</span> <span class="p">\\</span><span class="n">vboxsvr</span><span class="p">\</span><span class="n">adare</span><span class="p">\</span><span class="n">wheels</span><span class="p">\*.</span><span class="n">whl</span>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># First, mount the shared folder if not already mounted</span>
+<span class="n">net</span> <span class="n">use</span> <span class="n">Z</span><span class="p">:</span> <span class="p">\\</span><span class="n">vboxsvr</span><span class="p">\</span><span class="n">adare</span><span class="p">\</span><span class="n">wheels</span>
+
+<span class="c"># Install wheels (PowerShell requires explicit wildcard expansion)</span>
+<span class="k">%</span><span class="n">USERPROFILE</span><span class="p">%\.</span><span class="n">miniforge3</span><span class="p">\</span><span class="n">Scripts</span><span class="p">\</span><span class="n">conda</span><span class="p">.</span><span class="n">exe</span> <span class="n">run</span> <span class="n">-n</span> <span class="n">pyadare</span> <span class="n">pip</span> <span class="n">install</span> <span class="p">-</span><span class="n">-force-reinstall</span> <span class="p">@(</span><span class="nb">Get-ChildItem</span> <span class="n">Z</span><span class="p">:\</span><span class="n">wheels</span><span class="p">\*.</span><span class="n">whl</span> <span class="p">|</span> <span class="nb">Select-Object</span> <span class="n">-ExpandProperty</span> <span class="n">FullName</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
 <section id="windows-with-poetry">
 <h3>Windows with Poetry<a class="headerlink" href="#windows-with-poetry" title="Link to this heading">¶</a></h3>
 <p>Install using system pip:</p>
-<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="p">\\</span><span class="n">vboxsvr</span><span class="p">\</span><span class="n">adare</span><span class="p">\</span><span class="n">wheels</span><span class="p">\*.</span><span class="n">whl</span>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># First, mount the shared folder if not already mounted</span>
+<span class="n">net</span> <span class="n">use</span> <span class="n">Z</span><span class="p">:</span> <span class="p">\\</span><span class="n">vboxsvr</span><span class="p">\</span><span class="n">adare</span><span class="p">\</span><span class="n">wheels</span>
+
+<span class="c"># Install wheels (PowerShell requires explicit wildcard expansion)</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="p">-</span><span class="n">-force-reinstall</span> <span class="p">@(</span><span class="nb">Get-ChildItem</span> <span class="n">Z</span><span class="p">:\</span><span class="n">wheels</span><span class="p">\*.</span><span class="n">whl</span> <span class="p">|</span> <span class="nb">Select-Object</span> <span class="n">-ExpandProperty</span> <span class="n">FullName</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
 <section id="linux-with-conda-miniforge">
 <h3>Linux with Conda (Miniforge)<a class="headerlink" href="#linux-with-conda-miniforge" title="Link to this heading">¶</a></h3>
 <p>Install using pip in the <code class="docutils literal notranslate"><span class="pre">pyadare</span></code> conda environment:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>/home/adare/.miniforge3/bin/conda<span class="w"> </span>run<span class="w"> </span>-n<span class="w"> </span>pyadare<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>/adare/app/wheels/*.whl
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>/home/adare/.miniforge3/bin/conda<span class="w"> </span>run<span class="w"> </span>-n<span class="w"> </span>pyadare<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--break-system-packages<span class="w"> </span>/adare/app/wheels/*.whl
 </pre></div>
 </div>
 </section>
 <section id="linux-with-poetry">
 <h3>Linux with Poetry<a class="headerlink" href="#linux-with-poetry" title="Link to this heading">¶</a></h3>
 <p>Install using system pip:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>/adare/app/wheels/*.whl
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>--break-system-packages<span class="w"> </span>/adare/app/wheels/*.whl
 </pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Ubuntu 24.04+ requires the <code class="docutils literal notranslate"><span class="pre">--break-system-packages</span></code> flag due to PEP 668.
+This is safe in ADARE’s isolated VM environment.</p>
 </div>
 </section>
 </section>
@@ -584,7 +613,9 @@ Version: 0.1.0
 <div class="admonition important">
 <p class="admonition-title">Important</p>
 <ul class="simple">
-<li><p>Wheels are provided automatically by the ADARE host in the shared folder (<code class="docutils literal notranslate"><span class="pre">\\vboxsvr\adare\wheels\</span></code> on Windows, <code class="docutils literal notranslate"><span class="pre">/adare/app/wheels/</span></code> on Linux)</p></li>
+<li><p>Wheels are provided automatically by the ADARE host in the shared folder</p></li>
+<li><p>Windows: Mount as <code class="docutils literal notranslate"><span class="pre">Z:\wheels</span></code> using <code class="docutils literal notranslate"><span class="pre">net</span> <span class="pre">use</span> <span class="pre">Z:</span> <span class="pre">\\vboxsvr\adare\wheels</span></code></p></li>
+<li><p>Linux: Automatically available at <code class="docutils literal notranslate"><span class="pre">/adare/app/wheels/</span></code></p></li>
 <li><p>The shared folder is only accessible during experiment runs</p></li>
 <li><p>ADARE automatically detects version mismatches and reinstalls when needed</p></li>
 </ul>
@@ -647,8 +678,14 @@ Version: 0.1.0
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">VM Creation Guide</a><ul>
-<li><a class="reference internal" href="#general">General</a></li>
+<li><a class="reference internal" href="#">Create an ADARE VM</a><ul>
+<li><a class="reference internal" href="#general-guideline">General Guideline</a></li>
+<li><a class="reference internal" href="#extend">Extend</a><ul>
+<li><a class="reference internal" href="#virtualbox">VirtualBox</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#create">Create</a></li>
+<li><a class="reference internal" href="#id1">VirtualBox</a></li>
 <li><a class="reference internal" href="#windows-setup">Windows Setup</a><ul>
 <li><a class="reference internal" href="#user-account-configuration">User Account Configuration</a></li>
 <li><a class="reference internal" href="#additional-configuration">Additional Configuration</a></li>

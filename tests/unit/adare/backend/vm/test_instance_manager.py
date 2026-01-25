@@ -98,7 +98,7 @@ class TestConstants:
 
     def test_max_instances_per_vm(self):
         """Verify MAX_INSTANCES_PER_VM constant value."""
-        assert VmInstanceManager.MAX_INSTANCES_PER_VM == 5
+        assert VmInstanceManager.MAX_INSTANCES_PER_VM == 20
 
     def test_cleanup_age_days(self):
         """Verify CLEANUP_AGE_DAYS constant value."""
@@ -475,11 +475,36 @@ class TestCreateNewInstance:
         """Test raises VMError at max capacity with no available instances."""
         with patch(VM_API_PATCH_PATH, return_value=mock_vm_api):
             with patch(VM_DATABASE_PATCH_PATH + '.get_vm_by_id', return_value=mock_vm_record):
-                with patch.object(instance_manager, 'get_instance_count_for_vm', return_value=5):
+                with patch.object(instance_manager, 'get_instance_count_for_vm', return_value=20):
                     with patch.object(instance_manager, 'cleanup_oldest_available_instance',
                                      new_callable=AsyncMock, return_value=False):
-                        with pytest.raises(VMError, match="maximum instance capacity"):
-                            await instance_manager.create_new_instance("test-vm-id", "exp-id")
+                        with patch.object(instance_manager, 'cleanup_oldest_error_instance',
+                                         new_callable=AsyncMock, return_value=False):
+                            with pytest.raises(VMError, match="maximum instance capacity"):
+                                await instance_manager.create_new_instance("test-vm-id", "exp-id")
+
+    @pytest.mark.asyncio
+    async def test_cleans_up_error_instance_when_at_max_capacity(self, instance_manager, mock_vm_api, mock_vm_record, mock_vm_instance):
+        """Test cleans up error instance when at max capacity and no available instances."""
+        mock_vm_api.get_vm_instance_by_name.return_value = mock_vm_instance
+        mock_vm_api.get_vm_instance_by_id.return_value = mock_vm_instance
+
+        cleanup_error_mock = AsyncMock(return_value=True)
+
+        with patch(VM_API_PATCH_PATH, return_value=mock_vm_api):
+            with patch(VM_DATABASE_PATCH_PATH + '.get_vm_by_id', return_value=mock_vm_record):
+                # At capacity (20)
+                with patch.object(instance_manager, 'get_instance_count_for_vm', return_value=20):
+                    # No available instances to clean up
+                    with patch.object(instance_manager, 'cleanup_oldest_available_instance', 
+                                     new_callable=AsyncMock, return_value=False):
+                        # Should fall back to cleaning up error instances
+                        with patch.object(instance_manager, 'cleanup_oldest_error_instance', cleanup_error_mock):
+                            with patch('adare.backend.vm.instance_manager.reserve_port_atomically', return_value=18765):
+                                result = await instance_manager.create_new_instance("test-vm-id", "exp-id123")
+
+        assert result is not None
+        cleanup_error_mock.assert_called_once_with("test-vm-id")
 
     @pytest.mark.asyncio
     async def test_cleans_up_when_at_max_capacity(self, instance_manager, mock_vm_api, mock_vm_record, mock_vm_instance):
@@ -491,7 +516,7 @@ class TestCreateNewInstance:
 
         with patch(VM_API_PATCH_PATH, return_value=mock_vm_api):
             with patch(VM_DATABASE_PATCH_PATH + '.get_vm_by_id', return_value=mock_vm_record):
-                with patch.object(instance_manager, 'get_instance_count_for_vm', return_value=5):
+                with patch.object(instance_manager, 'get_instance_count_for_vm', return_value=20):
                     with patch.object(instance_manager, 'cleanup_oldest_available_instance', cleanup_mock):
                         with patch('adare.backend.vm.instance_manager.reserve_port_atomically', return_value=18765):
                             result = await instance_manager.create_new_instance("test-vm-id", "exp-id123")

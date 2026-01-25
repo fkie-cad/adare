@@ -206,7 +206,8 @@ class DevModeSessionManager:
     async def restore_session(
         self,
         session_id: str,
-        console_ulid: Optional[str] = None
+        console_ulid: Optional[str] = None,
+        connect_websocket: bool = True
     ) -> Optional[DevModeSession]:
         """
         Restore a session from database when not in memory but VM is running.
@@ -221,6 +222,7 @@ class DevModeSessionManager:
         Args:
             session_id: Session ID to restore
             console_ulid: Optional console ULID for flow console routing
+            connect_websocket: Whether to reconnect WebSocket (default: True)
 
         Returns:
             DevModeSession if restored successfully, None otherwise
@@ -310,107 +312,109 @@ class DevModeSessionManager:
 
             # 6. Attempt WebSocket reconnection (optional - some ops work without it)
             websocket_reconnected = False
-            try:
-                from adare.backend.experiment.websocket_client import AdareVMClient
-
-                # Verify VM is running before attempting reconnection
-                vm_state = None
+            if connect_websocket:
                 try:
-                    if session.experiment_ctx.hypervisor_type == 'qemu':
-                        # QEMU: Check if process is running
-                        if hasattr(session.experiment_ctx.vm, '_qemu_process') and session.experiment_ctx.vm._qemu_process:
-                            vm_state = 'running' if session.experiment_ctx.vm._qemu_process.poll() is None else 'stopped'
+                    from adare.backend.experiment.websocket_client import AdareVMClient
+
+                    # Verify VM is running before attempting reconnection
+                    vm_state = None
+                    try:
+                        if session.experiment_ctx.hypervisor_type == 'qemu':
+                            # QEMU: Check if process is running
+                            if hasattr(session.experiment_ctx.vm, '_qemu_process') and session.experiment_ctx.vm._qemu_process:
+                                vm_state = 'running' if session.experiment_ctx.vm._qemu_process.poll() is None else 'stopped'
+                            else:
+                                log.debug("QEMU process not available - cannot verify VM state")
+
+                        elif session.experiment_ctx.hypervisor_type == 'virtualbox':
+                            # VirtualBox: Use get_state() method
+                            vm_state = session.experiment_ctx.vm.get_state()
+
+                        if vm_state and vm_state not in ['running', 'Running', 'running (since']:
+                            log.error(f"VM is not running (state: {vm_state}) - WebSocket reconnection will fail")
+                            raise RuntimeError(f"VM is not running (state: {vm_state})")
+
+                        if vm_state:
+                            log.debug(f"VM state verified: {vm_state}")
+
+                    except RuntimeError:
+                        raise  # Re-raise VM not running error
+                    except Exception as e:
+                        log.debug(f"Could not verify VM status: {e} - proceeding with reconnection attempt")
+
+                    # Query actual forwarded port from VM port forwarding rules
+                    websocket_port = None
+                    try:
+                        # Both QEMU and VirtualBox VMs have list_port_forwarding_rules()
+                        port_forwarding_rules = await session.experiment_ctx.vm.list_port_forwarding_rules(silent=True)
+
+                        if 'adarevm' in port_forwarding_rules:
+                            adarevm_rule = port_forwarding_rules['adarevm']
+                            websocket_port = adarevm_rule.host_port
+                            log.debug(
+                                f"Found adarevm port forwarding: host:{adarevm_rule.host_port} -> "
+                                f"guest:{adarevm_rule.guest_port}"
+                            )
                         else:
-                            log.debug("QEMU process not available - cannot verify VM state")
+                            log.error("No 'adarevm' port forwarding rule found in VM config")
+                            raise RuntimeError("adarevm port forwarding rule not found")
 
-                    elif session.experiment_ctx.hypervisor_type == 'virtualbox':
-                        # VirtualBox: Use get_state() method
-                        vm_state = session.experiment_ctx.vm.get_state()
+                    except Exception as e:
+                        log.error(f"Failed to query port forwarding rules: {e}")
+                        # Try database fallback as last resort
+                        if hasattr(session.experiment_ctx.config, 'websocket_port') and session.experiment_ctx.config.websocket_port:
+                            websocket_port = session.experiment_ctx.config.websocket_port
+                            log.warning(f"Using websocket_port from config as fallback: {websocket_port}")
+                        else:
+                            log.error("No websocket port available from VM config or database")
+                            raise RuntimeError("Cannot determine WebSocket port for reconnection")
 
-                    if vm_state and vm_state not in ['running', 'Running', 'running (since']:
-                        log.error(f"VM is not running (state: {vm_state}) - WebSocket reconnection will fail")
-                        raise RuntimeError(f"VM is not running (state: {vm_state})")
+                    # Use console_ulid if available, otherwise fall back to session/context ulid
+                    stage_ulid = console_ulid or session.console_ulid or session.experiment_ctx.experiment_run_ulid
 
-                    if vm_state:
-                        log.debug(f"VM state verified: {vm_state}")
+                    with StageCtxManager(
+                        ConnectToVMStage(),
+                        stage_ulid,
+                        event=None  # Dev mode doesn't have a dedicated interrupt event at this point
+                    ) as stage_ctx:
+                        stage_ctx.stage.sub_msg = f"Reconnecting to localhost:{websocket_port}"
 
-                except RuntimeError:
-                    raise  # Re-raise VM not running error
+                        log.info(f"Attempting WebSocket reconnection to localhost:{websocket_port}")
+                        client = AdareVMClient(port=websocket_port)
+
+                        # Try to reconnect
+                        if hasattr(client, 'reconnect'):
+                            websocket_reconnected = await client.reconnect(retries=2)
+                        else:
+                            # Fallback to connect if reconnect not available yet
+                            websocket_reconnected = await client.connect(timeout=5.0)
+
+                        if websocket_reconnected:
+                            session.experiment_ctx.client = client
+                            session.playbook_controller.update_websocket_client(client)
+                            log.info("WebSocket reconnected successfully")
+                            stage_ctx.stage.sub_msg = "Connected successfully"
+                        else:
+                            log.warning(
+                                "WebSocket reconnection failed. Some operations "
+                                "(playbook execution) will not work."
+                            )
+                            stage_ctx.stage.sub_msg = "Connection failed"
+                            # Don't raise error - session can still be used for cleanup operations
+
                 except Exception as e:
-                    log.debug(f"Could not verify VM status: {e} - proceeding with reconnection attempt")
-
-                # Query actual forwarded port from VM port forwarding rules
-                websocket_port = None
-                try:
-                    # Both QEMU and VirtualBox VMs have list_port_forwarding_rules()
-                    port_forwarding_rules = await session.experiment_ctx.vm.list_port_forwarding_rules(silent=True)
-
-                    if 'adarevm' in port_forwarding_rules:
-                        adarevm_rule = port_forwarding_rules['adarevm']
-                        websocket_port = adarevm_rule.host_port
-                        log.debug(
-                            f"Found adarevm port forwarding: host:{adarevm_rule.host_port} -> "
-                            f"guest:{adarevm_rule.guest_port}"
-                        )
-                    else:
-                        log.error("No 'adarevm' port forwarding rule found in VM config")
-                        raise RuntimeError("adarevm port forwarding rule not found")
-
-                except Exception as e:
-                    log.error(f"Failed to query port forwarding rules: {e}")
-                    # Try database fallback as last resort
-                    if hasattr(session.experiment_ctx.config, 'websocket_port') and session.experiment_ctx.config.websocket_port:
-                        websocket_port = session.experiment_ctx.config.websocket_port
-                        log.warning(f"Using websocket_port from config as fallback: {websocket_port}")
-                    else:
-                        log.error("No websocket port available from VM config or database")
-                        raise RuntimeError("Cannot determine WebSocket port for reconnection")
-
-                # Use console_ulid if available, otherwise fall back to session/context ulid
-                stage_ulid = console_ulid or session.console_ulid or session.experiment_ctx.experiment_run_ulid
-
-                with StageCtxManager(
-                    ConnectToVMStage(),
-                    stage_ulid,
-                    event=None  # Dev mode doesn't have a dedicated interrupt event at this point
-                ) as stage_ctx:
-                    stage_ctx.stage.sub_msg = f"Reconnecting to localhost:{websocket_port}"
-
-                    log.info(f"Attempting WebSocket reconnection to localhost:{websocket_port}")
-                    client = AdareVMClient(port=websocket_port)
-
-                    # Try to reconnect
-                    if hasattr(client, 'reconnect'):
-                        websocket_reconnected = await client.reconnect(retries=2)
-                    else:
-                        # Fallback to connect if reconnect not available yet
-                        websocket_reconnected = await client.connect(timeout=5.0)
-
-                    if websocket_reconnected:
-                        session.experiment_ctx.client = client
-                        session.playbook_controller.update_websocket_client(client)
-                        log.info("WebSocket reconnected successfully")
-                        stage_ctx.stage.sub_msg = "Connected successfully"
-                    else:
-                        log.warning(
-                            "WebSocket reconnection failed. Some operations "
-                            "(playbook execution) will not work."
-                        )
-                        stage_ctx.stage.sub_msg = "Connection failed"
-                        # Don't raise error - session can still be used for cleanup operations
-
-            except Exception as e:
-                log.warning(f"WebSocket reconnection failed: {e}")
-                log.info(
-                    "Session restored but WebSocket unavailable. "
-                    "This can happen if:\n"
-                    "  1. adarevm server crashed after session was created\n"
-                    "  2. Port forwarding is not configured (port 18765)\n"
-                    "  3. VM firewall is blocking the connection\n"
-                    "  4. VM is not running or not accessible\n"
-                    "Stop/cleanup operations will still work, but playbook execution requires WebSocket."
-                )
-
+                    log.warning(f"WebSocket reconnection failed: {e}")
+                    log.info(
+                        "Session restored but WebSocket unavailable. "
+                        "This can happen if:\n"
+                        "  1. adarevm server crashed after session was created\n"
+                        "  2. Port forwarding is not configured (port 18765)\n"
+                        "  3. VM firewall is blocking the connection\n"
+                        "  4. VM is not running or not accessible\n"
+                        "Stop/cleanup operations will still work, but playbook execution requires WebSocket."
+                    )
+            else:
+                log.debug("Skipping WebSocket reconnection as requested")
             # 7. Add to sessions dict
             self._sessions[session_id] = session
 
@@ -604,7 +608,8 @@ class DevModeSessionManager:
     async def get_or_restore_session(
         self,
         session_id: str,
-        console_ulid: Optional[str] = None
+        console_ulid: Optional[str] = None,
+        connect_websocket: bool = True
     ) -> Optional[DevModeSession]:
         """
         Get session from memory or restore from database if not present.
@@ -619,6 +624,7 @@ class DevModeSessionManager:
         Args:
             session_id: Session ID to retrieve
             console_ulid: Optional console ULID for flow console routing
+            connect_websocket: Whether to reconnect WebSocket if restored (default: True)
 
         Returns:
             DevModeSession if found or restored, None otherwise
@@ -647,7 +653,11 @@ class DevModeSessionManager:
             # Only restore 'running' sessions automatically
             # Stopped sessions must be explicitly resumed via restore_and_restart_session()
             if db_session.status == 'running':
-                restored = await self.restore_session(session_id, console_ulid=console_ulid)
+                restored = await self.restore_session(
+                    session_id, 
+                    console_ulid=console_ulid,
+                    connect_websocket=connect_websocket
+                )
                 return restored
             elif db_session.status == 'stopped':
                 log.info(

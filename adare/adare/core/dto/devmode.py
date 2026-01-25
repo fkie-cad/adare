@@ -53,6 +53,7 @@ class DevPlaybookExecuteRequest:
     playbook_content: str  # path, URL, or stdin content
     console_ulid: Optional[str] = None  # For flow console routing
     restore_initial: bool = False  # Restore to initial checkpoint before execution
+    indices: Optional[List[int]] = None  # Specific action indices (1-based) to execute
 
 
 @dataclass

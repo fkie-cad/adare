@@ -13,7 +13,7 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from adare.backend.basics import determine_projectdirectory
 from adare.exceptions import NoProjectFoundError
@@ -520,6 +520,32 @@ def exec_dev_action(arguments):
         _handle_api_error(result)
 
 
+def _parse_indices(indices_str: Optional[str]) -> Optional[List[int]]:
+    """
+    Parse indices string into a list of integers.
+    Supports formats: "1-3", "1,3,4", "1-3,4-9"
+    """
+    if not indices_str:
+        return None
+        
+    try:
+        indices = set()
+        parts = indices_str.split(',')
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if '-' in part:
+                start, end = map(int, part.split('-'))
+                indices.update(range(start, end + 1))
+            else:
+                indices.add(int(part))
+        return sorted(list(indices))
+    except ValueError:
+        print_error_message(title="Invalid indices format", next_steps=["Use format like '1-3', '1,3,4', or '1-3,4-9'"])
+        exit(1)
+
+
 def exec_dev_playbook(arguments):
     """Execute a playbook with flow console UI."""
     import ulid
@@ -547,6 +573,9 @@ def exec_dev_playbook(arguments):
         )
         exit(1)
 
+    # Parse indices if provided
+    indices = _parse_indices(getattr(arguments, 'indices', None))
+
     # Create flow console
     user_interrupt_event = threading.Event()
     console_ulid = str(ulid.ULID())
@@ -568,7 +597,8 @@ def exec_dev_playbook(arguments):
             playbook_source=source,
             playbook_content=content,
             console_ulid=console_ulid,
-            restore_initial=arguments.restore
+            restore_initial=arguments.restore,
+            indices=indices
         ))
 
         # Log completion and summary to flow console BEFORE stopping
@@ -729,18 +759,32 @@ def exec_dev_checkpoint_list(arguments):
             print(f"CLAUDE: No checkpoints found for session {session_id}")
             print(f"\nCreate a checkpoint with: adare dev checkpoint-create -s {session_id} <name>")
         else:
-            print(f"CLAUDE: Found {len(result.data)} checkpoint(s):\n")
+            # Use Rich table panel for display
+            from adare.frontend.terminal.dev_session_list import DevCheckpointTablePanel
+            from adare.frontend.terminal.console import DefaultConsole
+            from rich.layout import Layout
+            import pandas as pd
+
+            # Convert to DataFrame
+            data = []
             for checkpoint in result.data:
-                print(f"  Name: {checkpoint.name}")
-                if checkpoint.description:
-                    print(f"  Description: {checkpoint.description}")
-                print(f"  Created: {checkpoint.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-                print(f"  Variables: {checkpoint.variable_count}")
-                if checkpoint.file_size_mb > 0:
-                    print(f"  File Size: {checkpoint.file_size_mb:.1f} MB")
-                if checkpoint.checkpoint_id:
-                    print(f"  ID: {checkpoint.checkpoint_id}")
-                print()
+                data.append({
+                    'name': checkpoint.name,
+                    'description': checkpoint.description,
+                    'created_at': checkpoint.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'variable_count': checkpoint.variable_count,
+                    'file_size_mb': checkpoint.file_size_mb,
+                    'checkpoint_id': checkpoint.checkpoint_id,
+                })
+            
+            df = pd.DataFrame(data)
+            
+            # Print table
+            console = DefaultConsole()
+            layout = Layout(name="root")
+            panel = DevCheckpointTablePanel(df)
+            layout.update(panel)
+            console.print(layout)
     else:
         _handle_api_error(result)
 
