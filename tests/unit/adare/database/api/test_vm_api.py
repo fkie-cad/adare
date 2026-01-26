@@ -155,12 +155,18 @@ class TestVmApiContextManager:
 
     def test_context_manager_enters_and_exits(self, vm_api):
         """Context manager enters and exits properly."""
-        # The vm_api fixture has mocked __enter__ and __exit__
-        with vm_api:
-            pass
-
-        vm_api.__enter__.assert_called()
-        vm_api.__exit__.assert_called()
+        # The 'with' statement calls __enter__ and __exit__ on the class, not the instance
+        # when using @patch on methods. However, since we have an instance 'vm_api',
+        # we need to ensure the mocks are set up correctly on the class or the instance's type.
+        
+        # We need to patch the base class methods which VmApi inherits
+        with patch('adare.database.api.base.EnhancedDatabaseApi.__enter__', return_value=vm_api) as mock_enter:
+            with patch('adare.database.api.base.EnhancedDatabaseApi.__exit__') as mock_exit:
+                with vm_api:
+                    pass
+                
+                mock_enter.assert_called()
+                mock_exit.assert_called()
 
 
 # === GET VM TESTS ===
@@ -964,7 +970,8 @@ class TestEdgeCases:
         mock_suggestion = MagicMock()
         mock_suggestion.name = "windows-10"
 
-        with patch('adare.database.api.vm.suggest_similar_vm_names', return_value=[mock_suggestion]):
+        # Patch the source module since it is imported locally
+        with patch('adare.helperfunctions.vm_suggestions.suggest_similar_vm_names', return_value=[mock_suggestion]):
             result = vm_api.suggest_similar_vms("windows")
 
         assert len(result) == 1
