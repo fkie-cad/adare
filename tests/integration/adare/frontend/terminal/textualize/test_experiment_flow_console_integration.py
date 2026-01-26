@@ -9,12 +9,7 @@ class FlowConsoleTestApp(App):
         # We mount the widget to be tested
         yield ExperimentRunFlowConsoleWidget()
 
-@pytest.fixture(autouse=True)
-def clean_messages():
-    """Cleanup the class-level messages dictionary before each test."""
-    ExperimentRunFlowConsoleWidget.messages.clear()
-    yield
-    ExperimentRunFlowConsoleWidget.messages.clear()
+# Removed clean_messages fixture as messages are now instance-based and clean per test run (new App -> new Widget -> new State)
 
 @pytest.mark.asyncio
 async def test_console_integration_add_messages():
@@ -27,7 +22,9 @@ async def test_console_integration_add_messages():
         await pilot.pause()
         
         # Check if the message is recorded
-        assert "int_1" in widget.messages
+        # Access via state snapshot or direct access if allowed
+        assert widget.exists("int_1")
+        
         # Check if the UI reflects the message (recomposed)
         statics = widget.query(Static)
         assert len(statics) == 1
@@ -70,4 +67,5 @@ async def test_console_integration_spinner_update():
         
         statics = widget.query(Static)
         assert "Done" in str(statics[0].renderable)
-        assert widget.messages["spin_1"]["spinner"] is None
+        # We check state via exposed method or direct access
+        assert widget.state.messages["spin_1"]["spinner"] is None
