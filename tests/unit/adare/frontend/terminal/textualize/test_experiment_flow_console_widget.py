@@ -7,20 +7,17 @@ from adare.frontend.terminal.textualize.experiment_flow_console_widget import Ex
 from adarelib.constants import StatusEnum
 
 class TestExperimentRunFlowConsoleWidget:
-    @pytest.fixture(autouse=True)
-    def clean_messages(self):
-        """Cleanup the class-level messages dictionary before each test."""
-        ExperimentRunFlowConsoleWidget.messages.clear()
-        yield
-        ExperimentRunFlowConsoleWidget.messages.clear()
+
 
     @pytest.fixture
     def widget(self):
-        return ExperimentRunFlowConsoleWidget()
+        w = ExperimentRunFlowConsoleWidget()
+        w._update_console_ui = MagicMock()
+        return w
 
     def test_initialization(self, widget):
-        assert widget.messages == {}
-        assert widget.lines == []
+        assert widget.state.messages == {}
+        assert widget._widgets_map == {}
         assert widget.tick == 0
         assert widget.ticks_per_second == 12
 
@@ -29,8 +26,8 @@ class TestExperimentRunFlowConsoleWidget:
         message = "Operation successful"
         widget.log_success(identifier, message, level=1)
 
-        assert identifier in widget.messages
-        entry = widget.messages[identifier]
+        assert identifier in widget.state.messages
+        entry = widget.state.messages[identifier]
         assert entry["message"] == message
         assert entry["status"] == StatusEnum.SUCCESS
         assert entry["level"] == 1
@@ -41,8 +38,8 @@ class TestExperimentRunFlowConsoleWidget:
         message = "Operation failed"
         widget.log_error(identifier, message)
 
-        assert identifier in widget.messages
-        entry = widget.messages[identifier]
+        assert identifier in widget.state.messages
+        entry = widget.state.messages[identifier]
         assert entry["message"] == message
         assert entry["status"] == StatusEnum.ERROR
 
@@ -51,7 +48,7 @@ class TestExperimentRunFlowConsoleWidget:
         message = "Warning issued"
         widget.log_warning(identifier, message)
 
-        entry = widget.messages[identifier]
+        entry = widget.state.messages[identifier]
         assert entry["status"] == StatusEnum.WARNING
 
     def test_log_spinner(self, widget):
@@ -59,7 +56,7 @@ class TestExperimentRunFlowConsoleWidget:
         message = "Loading..."
         widget.log_spinner(identifier, message, spinner="dots")
 
-        entry = widget.messages[identifier]
+        entry = widget.state.messages[identifier]
         assert entry["spinner"] == "dots"
         assert entry["status"] == StatusEnum.NONE
 
@@ -69,7 +66,7 @@ class TestExperimentRunFlowConsoleWidget:
         
         widget.log_spinner_done(identifier, StatusEnum.SUCCESS, message="Done!")
         
-        entry = widget.messages[identifier]
+        entry = widget.state.messages[identifier]
         assert entry["spinner"] is None
         assert entry["status"] == StatusEnum.SUCCESS
         assert entry["message"] == "Done!"
@@ -79,7 +76,7 @@ class TestExperimentRunFlowConsoleWidget:
         widget.log_success(identifier, "Success Msg")
         
         # Manually trigger message generation
-        msg_str = widget._generate_message(identifier)
+        msg_str = widget._generate_message(identifier, widget.state.messages[identifier])
         
         # Check for icon and message
         icon = StatusEnum.get_icon(StatusEnum.SUCCESS, color=True)
@@ -90,7 +87,7 @@ class TestExperimentRunFlowConsoleWidget:
         identifier = "id_indent"
         widget.log_success(identifier, "Indented", level=2)
         
-        msg_str = widget._generate_message(identifier)
+        msg_str = widget._generate_message(identifier, widget.state.messages[identifier])
         # 2 levels * 2 spaces = 4 spaces
         assert "    " in msg_str or (StatusEnum.get_icon(StatusEnum.SUCCESS, color=True) + " Indented") in msg_str
 
@@ -99,9 +96,9 @@ class TestExperimentRunFlowConsoleWidget:
         widget.log_spinner(identifier, "Spinning", spinner="dots")
         
         # Check frame 0
-        msg_str_0 = widget._generate_message(identifier, spinner_position=0)
+        msg_str_0 = widget._generate_message(identifier, widget.state.messages[identifier], spinner_position=0)
         # Check frame 1
-        msg_str_1 = widget._generate_message(identifier, spinner_position=1)
+        msg_str_1 = widget._generate_message(identifier, widget.state.messages[identifier], spinner_position=1)
         
         assert "Spinning" in msg_str_0
         # dots frames usually change

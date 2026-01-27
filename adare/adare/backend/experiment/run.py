@@ -48,7 +48,7 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
 
 
-def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDirectory):
+def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDirectory, copy_existing: bool = True):
     """Ensure a log file exists and copy it to the experiment run directory.
     
     If no log file is currently active (e.g., when --logfile is not specified),
@@ -56,43 +56,48 @@ def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDire
     configure logging to use it, ensuring the experiment run has log output.
     
     Args:
+    Args:
         run_directory: The experiment run directory where the log should be copied
+        copy_existing: Whether to copy the existing log file (default: True). 
+                      Set to False for dev mode/long-running processes to avoid copying history.
     """
     import shutil
     import logging
-    from adare.logger.logger import get_current_logfile
+    from adare.logger.logger import get_current_logfile, FileHandlerFormatter
     
     current_logfile = get_current_logfile()
     target_path = run_directory.log_directory / 'adare.log'
     
-    if current_logfile:
+    if current_logfile and copy_existing:
         # Copy existing log file
         try:
             shutil.copy2(current_logfile, target_path)
             log.info(f'Copied adare log to {target_path}')
         except Exception as e:
             log.warning(f'Failed to copy adare log to run directory: {e}')
+    elif not copy_existing:
+        log.info('Skipping copy of existing log file (requested)')
     else:
-        # No active log file - create one in the run directory and configure logging
         log.info('No active log file found, creating new log file for experiment run')
-        try:
-            # Create the log file and add a file handler
-            from adare.logger.logger import FileHandlerFormatter
-            file_handler = logging.FileHandler(target_path, encoding='utf-8')
-            file_handler.setFormatter(FileHandlerFormatter())
-            file_handler.setLevel(logging.DEBUG)
-            
-            # Add handler to root logger to capture all log messages
-            root_logger = logging.getLogger()
-            root_logger.addHandler(file_handler)
-            
-            # Ensure root logger level allows DEBUG messages to be captured
-            if root_logger.level > logging.DEBUG:
-                root_logger.setLevel(logging.DEBUG)
-            
-            log.info(f'Created new log file at {target_path} and configured logging')
-        except Exception as e:
-            log.warning(f'Failed to create log file in run directory: {e}')
+
+    # Always configure logging to the run directory file to capture all future logs
+    try:
+        # Create the log file handler (append mode to preserve copied content)
+        file_handler = logging.FileHandler(target_path, mode='a', encoding='utf-8')
+        file_handler.setFormatter(FileHandlerFormatter())
+        file_handler.setLevel(logging.DEBUG)
+        
+        # Add handler to root logger to capture all log messages
+        root_logger = logging.getLogger()
+        root_logger.addHandler(file_handler)
+        
+        # Ensure root logger level allows DEBUG messages to be captured
+        if root_logger.level > logging.DEBUG:
+            root_logger.setLevel(logging.DEBUG)
+        
+        log.info(f'Configured logging to {target_path}')
+    except Exception as e:
+        log.warning(f'Failed to configure logging to run directory: {e}')
 
 
 def __verify_playbook_testfunction_integrity(project_path: Path, playbook) -> None:
@@ -625,14 +630,25 @@ def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: 
     :param external_stop_event: event to monitor for external interruption (Ctrl-C)
     :return: the flow_console
     """
+    # Check if a handler already exists (e.g. TUI widget)
+    existing_handler = flowconsolemanager.get_handler(experiment_run_ulid)
+    if existing_handler:
+        log.info(f"Reusing existing flow console handler for {experiment_run_ulid}")
+        return existing_handler
+        
     flow_console = ExperimentFlowConsole(disable_printing, external_stop_event)
     flowconsolemanager.add_handler(experiment_run_ulid, flow_console)
     flow_console.start()
     return flow_console
 
 
-def step_initialize(context: ExperimentRunCtx, fake: bool = False):
-    context.experiment_run_ulid = experiment_database.initialize_experiment_run(context.config.project_path, fake)
+def step_initialize(context: ExperimentRunCtx, fake: bool = False, run_ulid: str = None):
+    # Initialize experiment run in database (using optional specific ULID if provided)
+    context.experiment_run_ulid = experiment_database.initialize_experiment_run(
+        context.config.project_path, 
+        fake,
+        id=run_ulid
+    )
     context.timestamp_start = datetime.now(timezone.utc)
     context.timestamp_before_vm_start = datetime.now(timezone.utc)
     context.adarevm = ADAREVM_DIR
@@ -776,8 +792,13 @@ def step_validate_integrity(context: ExperimentRunCtx):
         stage_ctx.stage.sub_msg = ""
         stage_ctx.set_status(stage_ctx.stage.status)
 
-def step_prepare_run_environment(context: ExperimentRunCtx):
-    """Consolidated step: Check application data and create run directory."""
+def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool = False):
+    """Consolidated step: Check application data and create run directory.
+
+    Args:
+        context: Experiment run context
+        skip_adare_log: If True, skip adare.log creation (for dev mode)
+    """
     with StageCtxManager(PrepareRunEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         # Check application data
         adarevm_poetry_lock = ADAREVM_DIR / 'poetry.lock'
@@ -788,14 +809,14 @@ def step_prepare_run_environment(context: ExperimentRunCtx):
         if adarelib_poetry_lock.exists():
             log.info(f'removing {adarelib_poetry_lock} to ensure that adarelib is installed correctly')
             adarelib_poetry_lock.unlink()
-        
+
         # Create run directory
         run_dir = ExperimentRunDirectory(context.project_directory, context.config.experiment_name)
         run_dir.create()
         context.experiment_run_directory = run_dir
-        
-        # Copy adare log to run directory if runlog is enabled
-        if context.config.runlog:
+
+        # Copy adare log to run directory if runlog is enabled (skip in dev mode)
+        if context.config.runlog and not skip_adare_log:
             _ensure_and_copy_adare_log_to_run_directory(run_dir)
         
         # Initialize MCP server with log file

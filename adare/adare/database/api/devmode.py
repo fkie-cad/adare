@@ -223,6 +223,33 @@ class DevModeApi(EnhancedDatabaseApi):
         log.info(f"Updated dev session {session_id} overlay_disk_path to '{overlay_disk_path}'")
         return session
 
+    def update_session_run_path(self, session_id: str, run_directory_path: str) -> DevSession:
+        """
+        Update the run directory path for a session.
+
+        This prevents "None" directories by storing the exact path after creation
+        and ensuring all operations (restoration, checkpoints, logging) use the
+        same directory path.
+
+        Args:
+            session_id: Session ID to update
+            run_directory_path: Absolute path to the experiment run directory
+
+        Returns:
+            Updated DevSession instance
+
+        Raises:
+            EntityNotFoundError: If session not found
+        """
+        session = self.get_session_or_404(session_id)
+        session.run_directory_path = run_directory_path
+        session.updated_at = datetime.now()
+        self._session.flush()
+        self._session.commit()
+
+        log.info(f"CLAUDE: Updated dev session {session_id} run_directory_path to '{run_directory_path}'")
+        return session
+
     def delete_session(self, session_id: str) -> bool:
         """
         Delete a dev session from the database.

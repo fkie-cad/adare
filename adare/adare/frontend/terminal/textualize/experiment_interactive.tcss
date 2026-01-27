@@ -19,12 +19,14 @@ StepListPanel {
     margin: 1;
     padding: 1;
     border: round $primary;
+    height: 1fr;
 }
 
 FlowPanel {
     margin: 1;
     padding: 1;
     border: round $primary;
+    height: 1fr;
 }
 
 MachinePanel {
@@ -106,4 +108,8 @@ PlayButton {
 .box-step-in_queue {
     border: round orange;
     padding: 0;
+}
+
+.main-layout-col {
+    height: 1fr;
 }

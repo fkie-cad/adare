@@ -79,20 +79,20 @@ class LibvirtStderrRedirect(contextlib.AbstractContextManager):
             # Determine redirect target
             if self.log_file and Path(self.log_file).exists():
                 redirect_target = self.log_file
-                log.debug(f"CLAUDE: Redirecting libvirt stderr to {redirect_target}")
+                log.debug(f"Redirecting libvirt stderr to {redirect_target}")
             else:
                 redirect_target = "/dev/null"
                 if self.log_file:
-                    log.debug(f"CLAUDE: Log file {self.log_file} not available, using /dev/null")
+                    log.debug(f"Log file {self.log_file} not available, using /dev/null")
                 else:
-                    log.debug("CLAUDE: No log file specified, redirecting libvirt stderr to /dev/null")
+                    log.debug("No log file specified, redirecting libvirt stderr to /dev/null")
 
             # Open redirect target for appending
             self._redirect_file = open(redirect_target, 'a', encoding='utf-8')
 
             # Write start marker if redirecting to log file
             if redirect_target != "/dev/null":
-                self._redirect_file.write("\n[LIBVIRT] === stderr capture START ===\n")
+                self._redirect_file.write("[LIBVIRT START]")
                 self._redirect_file.flush()
 
             # Redirect stderr at file descriptor level
@@ -102,7 +102,7 @@ class LibvirtStderrRedirect(contextlib.AbstractContextManager):
             return self
 
         except Exception as e:
-            log.warning(f"CLAUDE: Failed to redirect stderr: {e}")
+            log.warning(f"Failed to redirect stderr: {e}")
             # Clean up on failure
             self._cleanup()
             raise
@@ -126,7 +126,7 @@ class LibvirtStderrRedirect(contextlib.AbstractContextManager):
                 # Write end marker if we wrote to a real log file
                 if self.log_file and Path(self.log_file).exists():
                     try:
-                        self._redirect_file.write("[LIBVIRT] === stderr capture END ===\n\n")
+                        self._redirect_file.write("[LIBVIRT END]")
                         self._redirect_file.flush()
                     except (OSError, ValueError):
                         # File might be closed or invalid, ignore
@@ -136,9 +136,9 @@ class LibvirtStderrRedirect(contextlib.AbstractContextManager):
             if self._saved_stderr_fd is not None:
                 try:
                     os.dup2(self._saved_stderr_fd, 2)
-                    log.debug("CLAUDE: Restored original stderr")
+                    log.debug("Restored original stderr")
                 except OSError as e:
-                    log.warning(f"CLAUDE: Failed to restore stderr: {e}")
+                    log.warning(f"Failed to restore stderr: {e}")
 
         finally:
             # Always cleanup resources

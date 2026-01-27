@@ -5,14 +5,14 @@ from rich.text import Text
 from rich.spinner import SPINNERS
 from textual.app import App, ComposeResult, RenderResult
 from textual.widget import Widget
-from textual.containers import VerticalGroup
+from textual.containers import VerticalScroll
 from textual.widgets import Static
 from textual.reactive import reactive
 from adarelib.constants import StatusEnum
 from adare.backend.experiment.console_state import ConsoleState
 
 
-class ExperimentRunFlowConsoleWidget(VerticalGroup):
+class ExperimentRunFlowConsoleWidget(VerticalScroll):
     """
     A Textual widget that displays log messages with an animated spinner.
     Uses ConsoleState for thread-safe message storage.
@@ -22,26 +22,52 @@ class ExperimentRunFlowConsoleWidget(VerticalGroup):
     # A reactive tick counter (used to cycle spinner frames)
     tick: reactive[int] = reactive(0)
     ticks_per_second: int = 12
-    lines: list
+    _widgets_map: Dict[str, Static]
 
     def __init__(self):
         super().__init__()
         self.state = ConsoleState()
         self.tick = 0
-        self.lines = []
+        self._widgets_map = {}
 
     def on_mount(self) -> None:
         # Set an interval to update the tick, which triggers re-rendering.
-        # Note: We might want observing state changes to trigger this too, but
-        # for spinner animation we need a consistent tick anyway.
         self.set_interval(1 / self.ticks_per_second, self._update_tick)
+        # Initial update
+        self._update_console_ui()
 
     def _update_tick(self) -> None:
         self.tick += 1
-        # Only recompose if something changed?
-        # Textual `refresh(recompose=True)` rebuilds the widget tree.
-        # Ideally we'd only do this if needed, but spinners need constant updates.
-        self.refresh(recompose=True)
+        self._update_console_ui()
+
+    def _update_console_ui(self) -> None:
+        """
+        Efficiently update the console UI by modifying existing widgets
+        or adding new ones, avoiding full recomposition.
+        """
+        snapshot = self.state.get_snapshot()
+        should_scroll = False
+        
+        # We need to handle identifiers that might have been removed (unlikely in this append-only log, but good practice)
+        # For now, we assume append-only or simple updates.
+        
+        for identifier, message_object in snapshot.items():
+            text_content = self._generate_message(identifier, message_object, self.tick)
+            rich_text = Text.from_markup(text_content)
+            
+            if identifier in self._widgets_map:
+                # Update existing widget
+                self._widgets_map[identifier].update(rich_text)
+            else:
+                # Create new widget
+                new_widget = Static(rich_text)
+                self.mount(new_widget)
+                self._widgets_map[identifier] = new_widget
+                should_scroll = True
+        
+        if should_scroll:
+            # Schedule scroll_end after the refresh so layout is updated and virtual size is correct
+            self.call_after_refresh(self.scroll_end, animate=False)
 
     def _generate_message(self, identifier: str, message_object: dict, spinner_position: int = 0) -> str:
         # NOTE: message_object comes from snapshot
@@ -78,12 +104,8 @@ class ExperimentRunFlowConsoleWidget(VerticalGroup):
         return message
 
     def compose(self) -> ComposeResult:
-        # Thread-safe snapshot read
-        snapshot = self.state.get_snapshot()
-        self.lines = [self._generate_message(identifier, snapshot[identifier], self.tick) for identifier in snapshot]
-        
-        for line in self.lines:
-            yield Static(Text.from_markup(line))
+        # We don't yield anything initially; _update_console_ui will handle mounting.
+        yield from []
 
     @property
     def n_lines(self):
@@ -104,13 +126,22 @@ class ExperimentRunFlowConsoleWidget(VerticalGroup):
     # Ideally: self.app.call_from_thread(self.refresh, recompose=True) if we possess 'app'.
     
     def _trigger_refresh(self):
-        # Safely trigger refresh from any thread
-        if self.app:
+        # Safely trigger UI update from any thread
+        try:
+            # self.app raises NoActiveAppError/LookupError if not mounted or no active app
+            app = self.app
+        except (Exception, LookupError): 
+            app = None
+
+        if app:
             try:
-                self.app.call_from_thread(self.refresh, layout=True, recompose=True)
+                app.call_from_thread(self._update_console_ui)
             except RuntimeError:
                 # If called from the same thread (e.g. in tests or main loop), call directly
-                self.refresh(layout=True, recompose=True)
+                self._update_console_ui()
+        else:
+            # Fallback for tests or no-app context
+            self._update_console_ui()
 
     def log_success(self, identifier: str, message: str, level: int = 0) -> None:
         self.state.log_success(identifier, message, level)
@@ -165,6 +196,15 @@ class ExperimentRunFlowConsoleWidget(VerticalGroup):
     def exists(self, identifier: str) -> bool:
         return self.state.exists(identifier)
 
+    # --- Methods for compatibility with ExperimentFlowConsole interface ---
+    def start(self):
+        """Start the console (no-op for widget as it's driven by Textual app)."""
+        pass
+
+    def stop(self):
+        """Stop the console (no-op for widget)."""
+        pass
+
 
 class FlowWidgetManager:
     def __init__(self):
@@ -172,12 +212,19 @@ class FlowWidgetManager:
 
     def add_handler(self, experimentrun_ulid: str, handler: ExperimentRunFlowConsoleWidget):
         self.handlers[experimentrun_ulid] = handler
+        # Also register with the backend flowconsolemanager so run.py can find it
+        from adare.backend.experiment.print import flowconsolemanager
+        flowconsolemanager.add_handler(experimentrun_ulid, handler)
 
     def get_handler(self, experimentrun_ulid: str) -> ExperimentRunFlowConsoleWidget:
         return self.handlers[experimentrun_ulid]
 
     def remove_handler(self, experimentrun_ulid: str):
-        del self.handlers[experimentrun_ulid]
+        if experimentrun_ulid in self.handlers:
+            del self.handlers[experimentrun_ulid]
+            # Also remove from backend manager
+            from adare.backend.experiment.print import flowconsolemanager
+            flowconsolemanager.remove_handler(experimentrun_ulid)
 
 
 flowwidgetmanager = FlowWidgetManager()

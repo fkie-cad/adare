@@ -305,10 +305,13 @@ class SnapshotMixin(AbstractSnapshotMixin):
         disk_path: str
     ) -> bool:
         """
-        Delete an external snapshot by removing libvirt metadata and files.
+        Delete an external snapshot by removing snapshot files.
+
+        External snapshots created with --no-metadata have no libvirt metadata
+        to delete, only the external files need to be removed.
 
         Args:
-            snapshot_name: Libvirt snapshot name
+            snapshot_name: Snapshot name (for logging only)
             memory_path: Path to external memory save file
             disk_path: Path to external disk overlay file
 
@@ -319,27 +322,8 @@ class SnapshotMixin(AbstractSnapshotMixin):
 
         success = True
 
-        # Delete libvirt snapshot metadata
-        # Note: libvirt doesn't support deleting external disk snapshots via API
-        # We delete the files manually instead
-        try:
-            result = subprocess.run(
-                ['virsh', 'snapshot-delete', self.vm_name, snapshot_name],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-
-            if result.returncode != 0:
-                # Check if it's the expected "external disk snapshots not supported" error
-                if "external disk snapshots not supported" in result.stderr:
-                    log.debug(f"CLAUDE: Libvirt doesn't support external snapshot deletion via API (expected), deleting files manually")
-                else:
-                    log.warning(f"CLAUDE: Failed to delete libvirt snapshot metadata: {result.stderr}")
-                # Continue with file deletion anyway
-        except Exception as e:
-            log.warning(f"CLAUDE: Error deleting libvirt snapshot metadata: {e}")
-            # Continue with file deletion anyway
+        # External snapshots created with --no-metadata have no libvirt metadata
+        # Only the external files need to be removed
 
         # Delete memory file with retry logic
         memory_deleted = False
@@ -392,7 +376,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             log.debug(f"CLAUDE: Snapshot disk file not found (may already be deleted): {disk_path}")
 
         if success:
-            log.info(f"CLAUDE: Successfully deleted external snapshot '{snapshot_name}'")
+            log.info(f"CLAUDE: Successfully deleted external snapshot files for '{snapshot_name}'")
 
         return success
 

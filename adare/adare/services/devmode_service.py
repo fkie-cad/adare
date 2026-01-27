@@ -124,14 +124,22 @@ class DevModeService:
 
             vm_name = session.experiment_ctx.vm_name
 
+            # Get experiment name (defaults to "_dev_session" for bare sessions)
+            experiment_name = session.experiment_ctx.config.experiment_name or "_dev_session"
+
             # Persist to database
             self._db_api.save_session(
                 session_id=session_id,
                 project_path=request.project_path,
-                experiment_name="None",  # Placeholder for DB schema compatibility
+                experiment_name=experiment_name,
                 environment_name=request.environment_name,
                 vm_name=vm_name
             )
+
+            # Store run directory path (prevents "None" directories on restoration)
+            if session.run_directory_path:
+                self._db_api.update_session_run_path(session_id, str(session.run_directory_path))
+                log.info(f"CLAUDE: Stored run directory path for session {session_id}: {session.run_directory_path}")
 
             # Store overlay disk path (critical for preventing base disk deletion)
             if session.experiment_ctx.vm and hasattr(session.experiment_ctx.vm, 'config'):

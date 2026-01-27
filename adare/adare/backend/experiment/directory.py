@@ -47,7 +47,7 @@ class ExperimentRunDirectory(Directory):
 
 
     def create(self):
-        self.path.parent.mkdir(parents=False, exist_ok=True)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.mkdir(parents=False)
         self.log_directory.mkdir(parents=False)
         self.reporting_directory.mkdir(parents=False, exist_ok=True)

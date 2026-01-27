@@ -547,7 +547,22 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
     log.debug(f"Source VM hypervisor: {source_vm.hypervisor} (is_qemu={is_qemu})")
 
     # Check if this is a reused instance or new instance
+    # VirtualBox uses vbox_uuid, QEMU uses check via identifier_strategy
+    is_reused = False
     if vm_instance.vbox_uuid:
+        is_reused = True
+    elif is_qemu:
+        # QEMU check - verify if instance exists in libvirt
+        from adare.hypervisor.base.identifier_strategy import get_identifier_strategy
+        try:
+            strategy = get_identifier_strategy('qemu')
+            identifier = strategy.get_identifier(vm_instance)
+            if identifier and strategy.verify_exists(identifier):
+                is_reused = True
+        except Exception as e:
+            log.warning(f"Failed to verify QEMU instance existence: {e}")
+
+    if is_reused:
         # Reused instance - VM already exists in VirtualBox
         log.info(f"Reusing existing VM instance: {vm_instance.instance_name}")
 

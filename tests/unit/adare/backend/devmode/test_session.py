@@ -41,9 +41,12 @@ class TestDevModeSession:
         mock_vm_mgr.setup_file_transfer = AsyncMock()
         mock_vm_mgr.setup_networking = AsyncMock()
         mock_vm_mgr.start_vm = AsyncMock()
-        
+        mock_vm_mgr.stop_vm = AsyncMock() # Fix await stop_vm
+
         mock_ctx = mock_ctx_cls.return_value
+        mock_ctx.mcp_server.stop = AsyncMock() # Fix await mcp_server.stop
         mock_ctx.experiment_run_ulid = "test-run-id"
+        mock_ctx.experiment_run_directory.log_directory = Path("/tmp")
         
         # Act
         result = await session.start()

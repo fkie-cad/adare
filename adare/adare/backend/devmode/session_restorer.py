@@ -69,7 +69,8 @@ async def restore_infrastructure_context(
 
         # Initialize with fake=True (no database entry creation)
         # But we need to manually set the experiment_run_ulid for proper functioning
-        session.experiment_ctx.experiment_run_ulid = f"devmode_{session.session_id}"
+        # We use session_id directly as the experiment run ID (aligned with session.py)
+        session.experiment_ctx.experiment_run_ulid = session.session_id
         session.experiment_ctx.timestamp_start = datetime.now()
         session.experiment_ctx.timestamp_before_vm_start = datetime.now()
         session.experiment_ctx.adarevm = ADAREVM_DIR
@@ -182,14 +183,44 @@ async def restore_infrastructure_context(
         session.vm_manager = VMLifecycleManager(hypervisor_type=hypervisor)
 
         # 7. Setup experiment run directory structure (for file ops)
-        # Create run directory using project directory and experiment name
-        from adare.backend.experiment.directory import ExperimentRunDirectory
-        run_dir = ExperimentRunDirectory(
-            session.experiment_ctx.project_directory,
-            session.experiment_ctx.config.experiment_name
-        )
-        run_dir.create()
-        session.experiment_ctx.experiment_run_directory = run_dir
+        # Try to restore from stored path first (prevents "None" directories)
+        if db_session.run_directory_path:
+            stored_path = Path(db_session.run_directory_path)
+
+            # Verify the directory still exists
+            if stored_path.exists():
+                log.info(f"CLAUDE: Restoring run directory from stored path: {stored_path}")
+
+                # Reconstruct ExperimentRunDirectory using the stored path
+                # We need to create an instance that points to the existing directory
+                run_dir = ExperimentRunDirectory.__new__(ExperimentRunDirectory)
+                run_dir.path = stored_path
+                run_dir.log_directory = stored_path / 'logs'
+                run_dir.screenshots_directory = stored_path / 'reporting' / 'screenshots'
+                run_dir.mcp_gui_log_file = stored_path / 'logs' / 'mcp_gui.log'
+
+                session.experiment_ctx.experiment_run_directory = run_dir
+                session.run_directory_path = stored_path
+
+                log.info(f"CLAUDE: Successfully restored run directory: {stored_path}")
+            else:
+                log.warning(f"CLAUDE: Stored run directory does not exist: {stored_path}, falling back to recreation")
+                # Fall through to recreation logic below
+
+        # Fallback: Recreate run directory if no stored path or path doesn't exist
+        if not hasattr(session.experiment_ctx, 'experiment_run_directory') or session.experiment_ctx.experiment_run_directory is None:
+            log.info("CLAUDE: Creating new run directory (fallback)")
+
+            # Ensure experiment_name is never None
+            experiment_name = session.experiment_ctx.config.experiment_name or "_dev_session"
+
+            run_dir = ExperimentRunDirectory(
+                session.experiment_ctx.project_directory,
+                experiment_name
+            )
+            run_dir.create()
+            session.experiment_ctx.experiment_run_directory = run_dir
+            session.run_directory_path = run_dir.path
 
         log.debug("Infrastructure context restored (VM, directories, config)")
         

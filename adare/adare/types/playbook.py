@@ -402,11 +402,27 @@ class WaitCondition:
             self.negate.validate_depth(current_depth + 1, max_depth)
 
 @attrs.define
+class PixelChangeConstraint:
+    above: Optional[float] = None  # Skip if change > value (Wait for stability)
+    below: Optional[float] = None  # Skip if change < value (Wait for activity)
+    strategy: str = 'once'         # 'once' (latch) or 'continuous' (enforce always). Default: 'once'
+
+    def __attrs_post_init__(self):
+        valid_strategies = {'once', 'continuous'}
+        if self.strategy not in valid_strategies:
+             raise ValueError(f"PixelChangeConstraint.strategy must be one of {valid_strategies}, got '{self.strategy}'")
+
+@attrs.define
+class SkipOptions:
+    pixel_change: Optional[PixelChangeConstraint] = None
+
+@attrs.define
 class WaitUntilAction:
     condition: WaitCondition
     timeout: float = 60.0
-    check_interval: float = 0.0  # 0 = no delay between checks, let processing time be the natural interval
+    check_interval: float = 3.0  # Default 3s check interval (previously 0.0)
     initial_delay: float = 5.0   # Default 5s delay to let UI stabilize
+    skip: Optional[SkipOptions] = None
     description: str = ''
 
     def __attrs_post_init__(self):
@@ -550,6 +566,12 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
         Optional[Union[int, float]],
         structure_optional_numeric
     )
+    
+    # Register structure hook for SkipOptions
+    converter.register_structure_hook(
+        Optional[SkipOptions],
+        lambda obj, _: _structure_skip_options(obj, converter) if obj is not None else None
+    )
 
     # Register strict structure hooks for all main classes to validate fields
     _register_strict_hooks(converter)
@@ -657,6 +679,13 @@ def _structure_wait_condition(obj, converter):
         return WaitCondition(negate=condition)
     raise ValueError(f"Unknown wait condition: {obj}")
 
+def _structure_skip_options(obj, converter):
+    """Structure SkipOptions object."""
+    if 'pixel_change' in obj:
+        pixel_change = converter.structure(obj['pixel_change'], PixelChangeConstraint)
+        return SkipOptions(pixel_change=pixel_change)
+    raise ValueError(f"Unknown skip option: {obj}")
+
 def _register_strict_hooks(converter):
     """Register strict structure hooks that validate all fields."""
     
@@ -738,6 +767,11 @@ def _register_strict_hooks(converter):
                 Union[str, List[str]],
                 lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj)
             )
+            # Register structure hook for SkipOptions
+            fresh_converter.register_structure_hook(
+                Optional[SkipOptions],
+                lambda obj, _: _structure_skip_options(obj, fresh_converter) if obj is not None else None
+            )
             return fresh_converter.structure(obj, cls)
         return strict_structure_hook
     
@@ -751,6 +785,6 @@ def _register_strict_hooks(converter):
                 SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
                 TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
                 BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook,
-                SnapshotFilesystemAction, PullChangedFilesAction]:
+                SnapshotFilesystemAction, PullChangedFilesAction, PixelChangeConstraint, SkipOptions]:
         if attrs.has(cls):
             converter.register_structure_hook(cls, _validate_attrs_class(cls))

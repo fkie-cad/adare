@@ -17,8 +17,12 @@ from adare.types.playbook import (
 )
 from adare.backend.events.emitters import emit_action
 from .base import ActionResult
+from adare.helperfunctions.image import calculate_pixel_change
 
 log = logging.getLogger(__name__)
+
+MIN_PIXEL_POLL_INTERVAL = 0.5
+
 
 
 class FlowControlExecutor:
@@ -306,6 +310,7 @@ class FlowControlExecutor:
 
             check_count = 0
             last_screenshot_path = None  # Track last screenshot for timeout result
+            last_screenshot_base64 = None  # Track previous screenshot for pixel change check
 
             # Apply initial delay if specified to let UI stabilize (doesn't count towards timeout)
             if action.initial_delay > 0:
@@ -316,6 +321,7 @@ class FlowControlExecutor:
             start_time = time.time()
 
             # Always do at least one check, then continue until timeout
+            pixel_constraint_satisfied = False
             while True:
                 check_count += 1
                 log.debug(f"Wait until check #{check_count} (elapsed: {time.time() - start_time:.1f}s)")
@@ -328,9 +334,53 @@ class FlowControlExecutor:
                     log.debug(f"Failed to get screenshot on check #{check_count}")
                     continue
 
-                # Evaluate the condition tree
+                # --- Pixel Change Optimization ---
+                should_skip_check = False
+                
+                # Check if we should evaluate pixel constraints
+                # We evaluate if:
+                # 1. We have pixel change options configured
+                # 2. AND we have a previous screenshot
+                # 3. AND (we haven't satisfied the constraint yet OR strategy is 'continuous')
+                
+                should_evaluate_pixel_constraint = False
+                if action.skip and action.skip.pixel_change and last_screenshot_base64:
+                    if action.skip.pixel_change.strategy == 'continuous':
+                        should_evaluate_pixel_constraint = True
+                    elif not pixel_constraint_satisfied:
+                        should_evaluate_pixel_constraint = True
+                        
+                if should_evaluate_pixel_constraint:
+                    try:
+                        change_percent = calculate_pixel_change(last_screenshot_base64, screenshot_base64)
+                        constraint = action.skip.pixel_change
+                        
+                        if constraint.above is not None and change_percent > constraint.above:
+                            log.debug(f"Skipping wait_until check: Pixel change {change_percent:.2f}% > {constraint.above}% (waiting for stability)")
+                            should_skip_check = True
+                        elif constraint.below is not None and change_percent < constraint.below:
+                            log.debug(f"Skipping wait_until check: Pixel change {change_percent:.2f}% < {constraint.below}% (waiting for activity)")
+                            should_skip_check = True
+                        log.debug(f"Pixel change evaluated: {change_percent:.2f}% > {constraint.above}%, < {constraint.below}%")
+                        # If we didn't skip, and we evaluated, marks as satisfied
+                        if not should_skip_check:
+                            pixel_constraint_satisfied = True
+                            if constraint.strategy == 'once':
+                                log.info("Pixel change constraint satisfied (latched) - proceeding with condition checks")
+                            
+                    except Exception as e:
+                        # If optimization fails, fallback to normal check (fail open)
+                        log.warning(f"Failed to calculate pixel change: {e}. Proceeding with standard check.")
+                
+                # Update last screenshot tracking
+                last_screenshot_base64 = screenshot_base64
+
+                # Evaluate the condition tree (unless skipped)
                 try:
-                    condition_result = await self._evaluate_wait_condition(action.condition, screenshot_base64)
+                    condition_result = False
+                    if not should_skip_check:
+                        condition_result = await self._evaluate_wait_condition(action.condition, screenshot_base64)
+
                     if condition_result:
                         elapsed_time = time.time() - start_time
                         log.info(f"Wait until condition satisfied after {elapsed_time:.1f}s")
@@ -369,15 +419,22 @@ class FlowControlExecutor:
                     )
 
                 # Sleep for check_interval before next attempt (only if check_interval > 0)
-                if action.check_interval > 0:
+                # Sleep for check_interval before next attempt (only if check_interval > 0)
+                # If we skipped due to pixel change optimization, enforce a minimum poll interval
+                interval = action.check_interval
+                if should_skip_check and interval < MIN_PIXEL_POLL_INTERVAL:
+                    # Enforce minimum sleep to prevent busy-wait on pixel checks
+                    interval = MIN_PIXEL_POLL_INTERVAL
+
+                if interval > 0:
                     remaining_time = action.timeout - elapsed_time
-                    if remaining_time > action.check_interval:
-                        await asyncio.sleep(action.check_interval)
+                    if remaining_time > interval:
+                        await asyncio.sleep(interval)
                     elif remaining_time > 0:
-                        # Sleep for the remaining time if it's less than check_interval
+                        # Sleep for the remaining time if it's less than interval
                         await asyncio.sleep(remaining_time)
                         # After this sleep we'll definitely timeout on next iteration
-                # If check_interval is 0, don't sleep - let the natural processing time be the interval
+                # If interval is 0, don't sleep - let the natural processing time be the interval
 
         except Exception as e:
             log.error(f"Wait until action failed: {e}", exc_info=True)
