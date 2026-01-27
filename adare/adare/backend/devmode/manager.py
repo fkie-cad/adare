@@ -588,7 +588,8 @@ class DevModeSessionManager:
                 if session.experiment_ctx:
                      with ExperimentApi(session.project_path) as api:
                         # Construct fake experiment run ID
-                        fake_run_id = f"devmode_{session_id}"
+                        # In new model, the run ID is exactly the session ID
+                        fake_run_id = session_id
                         experiment_run = api._session.query(ExperimentRun).filter(
                             ExperimentRun.id == fake_run_id
                         ).first()

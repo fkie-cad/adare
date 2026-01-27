@@ -273,8 +273,11 @@ class ExperimentApi(ProjectDatabaseApi):
         self._session.commit()
         return experiment_run
 
-    def initialize_experiment_run(self, fake: bool = False) -> ExperimentRun:
-        experiment_run = ExperimentRun(fake=fake)
+    def initialize_experiment_run(self, fake: bool = False, id: str = None) -> ExperimentRun:
+        if id:
+             experiment_run = ExperimentRun(id=id, fake=fake)
+        else:
+            experiment_run = ExperimentRun(fake=fake)
         self._session.add(experiment_run)
         self._session.commit()
         return experiment_run

@@ -86,6 +86,20 @@ PYAUTOGUI_TO_QCODE = {
     '/': 'slash',
 }
 
+# Mapping for characters that require SHIFT
+# Character -> (base_char, needs_shift)
+# This assumes a standard US keyboard layout
+SHIFT_MAP = {
+    # Symbols on number keys
+    '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
+    '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+    
+    # Symbols on punctuation keys
+    '_': '-', '+': '=', '{': '[', '}': ']', '|': '\\',
+    ':': ';', '"': "'", '<': ',', '>': '.', '?': '/',
+    '~': '`',
+}
+
 
 class QEMUHostGUIExecutor(AbstractGUIExecutor):
     """GUI executor using QMP commands for QEMU VMs (host-based)."""
@@ -476,6 +490,18 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             if char.isupper():
                 char_lower = char.lower()
                 qcode = self._pyautogui_key_to_qcode(char_lower)
+                if qcode:
+                    # Shift down, key down, key up, shift up
+                    events.extend([
+                        {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": "shift"}}},
+                        {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": qcode}}},
+                        {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": qcode}}},
+                        {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": "shift"}}}
+                    ])
+            # Handle shifted symbols
+            elif char in SHIFT_MAP:
+                base_char = SHIFT_MAP[char]
+                qcode = self._pyautogui_key_to_qcode(base_char)
                 if qcode:
                     # Shift down, key down, key up, shift up
                     events.extend([

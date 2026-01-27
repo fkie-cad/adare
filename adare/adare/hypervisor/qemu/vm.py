@@ -1494,18 +1494,41 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         """
         Send keyboard events via QMP input-send-event command.
 
+        Batches events to prevent QMP buffer overflow or truncation with long strings.
+
         Args:
             events: List of QMP keyboard event dictionaries
 
         Returns:
-            True if successful, False otherwise
+            True if successful (all batches sent), False otherwise
         """
-        command = {
-            "execute": "input-send-event",
-            "arguments": {"events": events}
-        }
-        response = await self._send_qmp_command(command)
-        return 'return' in response
+        # Batch size for QMP commands (prevent truncation/buffer issues)
+        BATCH_SIZE = 10
+        success = True
+
+        for i in range(0, len(events), BATCH_SIZE):
+            batch = events[i:i + BATCH_SIZE]
+            
+            command = {
+                "execute": "input-send-event",
+                "arguments": {"events": batch}
+            }
+            
+            response = await self._send_qmp_command(command)
+            
+            if 'return' not in response:
+                log.error(f"CLAUDE: QMP keyboard batch {i//BATCH_SIZE} failed: {response}")
+                success = False
+                # Continue trying to send remaining batches? 
+                # Probably better to try to finish typing even if one chunk fails, 
+                # though state might be inconsistent. 
+                # For now, we'll mark as failure but continue.
+
+            # Small delay to ensure QEMU processes the batch
+            if len(events) > BATCH_SIZE:
+                await asyncio.sleep(0.01)
+
+        return success
 
     async def send_qmp_scroll(self, amount: int) -> bool:
         """

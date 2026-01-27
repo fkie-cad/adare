@@ -160,4 +160,44 @@ class MCPServerManager:
                 return s.connect_ex(('localhost', port)) == 0
         except:
             return False
+
+    def _kill_process_on_port(self, port: int) -> bool:
+        """
+        Kill process listening on the specified port.
+        
+        Uses lsof or fuser to find PID and terminate it.
+        """
+        try:
+            # Try finding PID using lsof
+            cmd = f"lsof -t -i:{port}"
+            try:
+                pid_str = subprocess.check_output(cmd.split(), stderr=subprocess.DEVNULL).decode().strip()
+                if pid_str:
+                    pid = int(pid_str)
+                    log.info(f"Killing process {pid} on port {port}")
+                    import os
+                    import signal
+                    os.kill(pid, signal.SIGTERM)
+                    return True
+            except subprocess.CalledProcessError:
+                # No process found with lsof
+                pass
+            except Exception as e:
+                log.warning(f"Error using lsof: {e}")
+
+            # Fallback to fuser (common on some linux distros)
+            cmd = f"fuser -k {port}/tcp"
+            try:
+                subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+                # We assume if it ran without crashing, it might have worked? 
+                # fuser returns non-zero if no process killed.
+                return True
+            except Exception as e:
+                log.warning(f"Error using fuser: {e}")
+                
+            return False
+            
+        except Exception as e:
+            log.error(f"Failed to kill process on port {port}: {e}")
+            return False
     

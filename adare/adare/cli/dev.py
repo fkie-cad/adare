@@ -177,11 +177,14 @@ def _setup_log_file_handler(log_file: Path) -> Optional[logging.Handler]:
         return None
 
 
-def _cleanup_log_file_handler(handler: logging.Handler) -> None:
+def _cleanup_log_file_handler(handler: Optional[logging.Handler]) -> None:
     """Remove and close log file handler."""
     if handler:
-        logging.getLogger().removeHandler(handler)
-        handler.close()
+        try:
+            logging.getLogger().removeHandler(handler)
+            handler.close()
+        except Exception as e:
+            log.warning(f"Error cleaning up log handler: {e}")
 
 
 # =============================================================================
@@ -718,9 +721,6 @@ def exec_dev_checkpoint_create(arguments):
         print_success_message(
             title=f'Checkpoint "{arguments.name}" created'
         )
-        if arguments.description:
-            print(f"\nCLAUDE: Description: {arguments.description}")
-        print("\nCLAUDE: Checkpoint is a live snapshot - VM continued running during creation")
     else:
         _handle_api_error(result)
 

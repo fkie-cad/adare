@@ -100,9 +100,11 @@ class InteractiveDevelopmentServer:
             )
             
             # Create experiment run directory for this development session
+            # Ensure experiment_name is never None (defensive check)
+            experiment_name = self.session.experiment_name or "_dev_session"
             experiment_run_directory = ExperimentRunDirectory(
-                self.session.project_directory, 
-                self.session.experiment_name
+                self.session.project_directory,
+                experiment_name
             )
             experiment_run_directory.create()
             

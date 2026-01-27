@@ -27,8 +27,7 @@ class FlowPanel(Vertical):
 
     def compose(self) -> ComposeResult:
         self.log_handler = flowwidgetmanager.get_handler(self.experiment_run_ulid)
-        with VerticalScroll():
-            yield self.log_handler
+        yield self.log_handler
 
 
 class PlayButton(Button):
@@ -319,13 +318,13 @@ class ExperimentApp(App):
         yield Header()
         yield Footer()
         with HorizontalGroup():
-            with Vertical():
+            with Vertical(classes='main-layout-col'):
                 yield MachinePanel(
                     experiment=self.run_ctx.experiment_name,
                     environment=self.run_ctx.environment_name,
                 )
                 yield StepListPanel(self.steps)
-            with Vertical():
+            with Vertical(classes='main-layout-col'):
                 yield FlowPanel(self.run_ctx.experiment_run_ulid)
 
 

@@ -243,9 +243,9 @@ def update_experiment_run(experiment_run_ulid: str, experimentrun_directory: Exp
         return experiment_run.id
 
 
-def initialize_experiment_run(project_path: Path, fake: bool = False):
+def initialize_experiment_run(project_path: Path, fake: bool = False, id: str = None):
     with ExperimentApi(project_path) as api:
-        return api.initialize_experiment_run(fake).id
+        return api.initialize_experiment_run(fake, id).id
 
 def set_experiment_run_base_info(experiment_run_ulid: str, experiment_name: str, environment_name: str, project_path: Path) -> str:
     """

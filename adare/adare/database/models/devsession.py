@@ -31,6 +31,7 @@ class DevSession(SerializerMixin, GlobalBase):
         environment_name: Name of the VM environment
         vm_name: Name of the VM instance (for cleanup verification)
         overlay_disk_path: Path to the experiment overlay disk (prevents base disk deletion)
+        run_directory_path: Path to the experiment run directory (prevents "None" directories)
         status: Session status (running, stopped, crashed)
         created_at: Timestamp when session was created
         updated_at: Timestamp of last status update
@@ -44,6 +45,7 @@ class DevSession(SerializerMixin, GlobalBase):
     environment_name = Column(String(255), nullable=False)
     vm_name = Column(String(255), nullable=False)
     overlay_disk_path = Column(String(1024), nullable=True)  # Path to experiment overlay disk
+    run_directory_path = Column(String(1024), nullable=True)  # Path to the experiment run directory
     status = Column(String(20), default='running', nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())

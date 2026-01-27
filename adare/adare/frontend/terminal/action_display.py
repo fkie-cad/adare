@@ -40,9 +40,21 @@ def get_action_display_info(action_type: ActionType, action_data: dict, is_compl
             return "double-click action"
     
     elif action_type == ActionType.KEYBOARD:
+        # Check for standard fields first (key, text)
+        key = action_data.get('key')
+        text = action_data.get('text')
+        
+        # Check for legacy fields
         keys = action_data.get('keys_sent') or action_data.get('keys')
         combination = action_data.get('combination')
-        if keys:
+        
+        if key:
+            return f"press '{key}'"
+        elif text:
+            # Truncate text if too long
+            display_text = text[:15] + "..." if len(text) > 15 else text
+            return f"type '{display_text}'"
+        elif keys:
             return f"type '{keys}'"
         elif combination:
             return f"press {'+'.join(combination)}"
