@@ -28,6 +28,7 @@ class DevSessionStartRequest:
     debug_screenshots: bool = False
     log_file: Optional[Path] = None
     console_ulid: Optional[str] = None
+    shared_directories: Optional[Dict[str, Dict[str, Path]]] = None
 
 
 @dataclass
@@ -53,7 +54,7 @@ class DevPlaybookExecuteRequest:
     playbook_content: str  # path, URL, or stdin content
     console_ulid: Optional[str] = None  # For flow console routing
     restore_initial: bool = False  # Restore to initial checkpoint before execution
-    indices: Optional[List[int]] = None  # Specific action indices (1-based) to execute
+    indices: Optional[str] = None  # Index specification string (e.g., "1-3,S-5,7,23-E")
 
 
 @dataclass

@@ -460,8 +460,24 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
 
         # Collect and create all parent directories
         parent_dirs = set()
+        import re
+        
+        # Helper to resolve destination path in guest
+        def resolve_guest_dest(dest):
+            # Check for Windows drive letter (e.g. C:\ or C:/)
+            # We assume the drive is mounted at root /
+            if re.match(r'^[a-zA-Z]:[\\/]', dest):
+                # Strip drive letter (C:) and normalize to forward slashes 
+                # C:\Path -> /Path
+                return dest[2:].replace('\\', '/')
+            # Check for Linux absolute path
+            elif dest.startswith('/'):
+                return dest
+            else:
+                return f"{target_base_dir}/{dest}"
+
         for file_spec in files_to_copy:
-            dest_full = f"{target_base_dir}/{file_spec['dest']}"
+            dest_full = resolve_guest_dest(file_spec['dest'])
             parent = str(Path(dest_full).parent)
             parent_dirs.add(parent)
 
@@ -473,8 +489,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         # Copy each file/directory
         for file_spec in files_to_copy:
             source_path = file_spec['source']
-            dest_relative = file_spec['dest']
-            dest_full = f"{target_base_dir}/{dest_relative}"
+            dest_full = resolve_guest_dest(file_spec['dest'])
             dest_parent = str(Path(dest_full).parent)
 
             log.info(f"Copying {source_path} -> {dest_full}")
@@ -1256,6 +1271,17 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 'source': str(context.experiment_directory.shared),
                 'dest': 'shared'
             })
+    
+        # User defined shared directories (fallback copy)
+        if hasattr(context.config, 'shared_directories') and context.config.shared_directories:
+             for name, details in context.config.shared_directories.items():
+                host_path = details.get('host')
+                vm_path = details.get('vm')
+                if host_path and vm_path:
+                    files_to_copy.append({
+                        'source': str(host_path),
+                        'dest': str(vm_path)
+                    })
 
 
         log.info(f"Transferring {len(files_to_copy)} files to VM disk via libguestfs")
@@ -1357,6 +1383,23 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 'guest_mount': f'{base_mount}\\shared' if is_windows else f'{base_mount}/shared',
                 'readonly': True
             })
+    
+        # 6. User-defined shared directories
+        if hasattr(context.config, 'shared_directories') and context.config.shared_directories:
+            log.info(f"Configuring {len(context.config.shared_directories)} user-defined shared directories")
+            for name, details in context.config.shared_directories.items():
+                host_path = details.get('host')
+                vm_path = details.get('vm')
+                
+                if host_path and vm_path:
+                    # Treat vm_path as the absolute mount point in the guest
+                    share = {
+                        'tag': name,
+                        'host_path': str(host_path),
+                        'guest_mount': str(vm_path),
+                        'readonly': False
+                    }
+                    virtiofs_shares.append(share)
 
         # Write config.json to run directory with new paths
         config_data = self._build_config_json(is_windows)

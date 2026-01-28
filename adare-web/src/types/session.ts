@@ -58,10 +58,13 @@ export interface ExecutionStats {
 }
 
 export interface StartSessionRequest {
-  project: string
-  experiment: string
-  environment: string
-  auto_boot?: boolean
+  project_path: string
+  experiment_name: string
+  environment_name: string
+  gui_mode?: string
+  vm_memory?: number
+  vm_cpus?: number
+  debug_screenshots?: boolean
 }
 
 export interface ResetSessionRequest {

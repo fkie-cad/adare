@@ -134,8 +134,11 @@ class ClickActionCompleteEvent(ActionCompleteEvent):
 @attrs.define
 class KeyboardActionStartEvent(ActionStartEvent):
     """Event for keyboard action start."""
-    keys: Optional[str] = None
-    
+    key: Optional[str] = None           # Single key press (e.g., "enter")
+    text: Optional[str] = None          # Text input (e.g., "hello world")
+    combination: Optional[list] = None  # Key combo (e.g., ["ctrl", "c"])
+    keys: Optional[str] = None          # Legacy field for backward compatibility
+
     def get_event_type(self) -> EventType:
         return EventType.KEYBOARD_START
 
@@ -143,8 +146,11 @@ class KeyboardActionStartEvent(ActionStartEvent):
 @attrs.define
 class KeyboardActionCompleteEvent(ActionCompleteEvent):
     """Event for keyboard action completion."""
-    keys_sent: Optional[str] = None
-    
+    key: Optional[str] = None           # Single key press
+    text: Optional[str] = None          # Text input
+    combination: Optional[list] = None  # Key combo
+    keys_sent: Optional[str] = None     # Legacy field for backward compatibility
+
     def get_event_type(self) -> EventType:
         return EventType.KEYBOARD_COMPLETE
 

@@ -107,7 +107,8 @@ class DevModeSession:
         vm_cpus: Optional[int] = None,
         debug_screenshots: bool = False,
         console_ulid: Optional[str] = None,
-        experiment_name: Optional[str] = None
+        experiment_name: Optional[str] = None,
+        shared_directories: Optional[Dict[str, Dict[str, Path]]] = None
     ):
         """
         Initialize dev mode session (does not start VM).
@@ -122,6 +123,7 @@ class DevModeSession:
             debug_screenshots: Save debug screenshots during execution
             console_ulid: Optional flow console ULID for event integration
             experiment_name: Optional name of the experiment (None for bare session)
+            shared_directories: Optional Dict of shared directories {name: {'host': Path, 'vm': Path}}
         """
         self.session_id = session_id
         self.project_path = project_path
@@ -132,6 +134,7 @@ class DevModeSession:
         self.debug_screenshots = debug_screenshots
         self.console_ulid = console_ulid
         self.experiment_name = experiment_name
+        self.shared_directories = shared_directories or {}
 
         # Core components (initialized in start())
         self.experiment_ctx: Optional[ExperimentRunCtx] = None
@@ -303,13 +306,12 @@ class DevModeSession:
         try:
             log.info(f"Starting dev mode session {self.session_id}")
 
-            # Force QEMU_LIBGUESTFS=true for dev mode because virtiofs is incompatible with
-            # the live migration/snapshot mechanism used by checkpoints.
-            # This forces file transfer to use libguestfs (copy files to disk before boot)
-            # instead of shared folders.
-            import os
-            os.environ['QEMU_LIBGUESTFS'] = 'true'
-            log.info("Forced QEMU_LIBGUESTFS=true to enable snapshots (virtiofs incompatible)")
+            # QEMU_LIBGUESTFS is no longer forced to 'true' for dev mode.
+            # This allows using virtio-fs for shared directories, which enables
+            # real-time bidirectional file sync between host and guest.
+            #
+            # Note: This may impact internal snapshot compatibility (savevm) in some
+            # QEMU versions, but Adare primarily uses external qcow2 snapshots/overlays.
 
             # Import required modules
             from adare.backend.experiment.run import (
@@ -332,7 +334,8 @@ class DevModeSession:
                 disable_printing=True,  # No CLI output in dev mode
                 gui_mode_override=self.gui_mode,  # Pass GUI mode override
                 vm_memory=self.vm_memory or 4096,  # VM RAM (default: 4096)
-                vm_cpus=self.vm_cpus or 4  # VM CPUs (default: 4)
+                vm_cpus=self.vm_cpus or 4,  # VM CPUs (default: 4)
+                shared_directories=self.shared_directories
             )
 
             # 2. Initialize ExperimentRunCtx with fake run
@@ -961,13 +964,18 @@ class DevModeSession:
                         log.error("WebSocket port not set in context - cannot reconnect")
                         return False
 
-                    # Reconnect to WebSocket server (server already running in restored memory)
-                    from adare.backend.experiment.run import step_connect_websocket
+                    # Restart agent and reconnect to WebSocket server
+                    # (Required because shared directory issues may kill the agent during restore)
+                    from adare.backend.experiment.run import (
+                        step_connect_websocket,
+                        step_install_and_run_websocket_server
+                    )
                     with StageCtxManager(
                         SoftwareInstallationStage(),
                         self.experiment_ctx.experiment_run_ulid,
                         event=self.experiment_ctx.user_interrupt_event
                     ):
+                        await step_install_and_run_websocket_server(self.experiment_ctx)
                         await step_connect_websocket(self.experiment_ctx)
 
                 # VirtualBox path (unchanged)
@@ -1330,6 +1338,27 @@ class DevModeSession:
             log.info(f"External snapshot created: {snapshot_name}")
             log.debug(f"Memory file: {memory_file_path}")
             log.debug(f"Disk file: {disk_file_path}")
+
+            # Restart agent and reconnect
+            # (Required because shared directory issues may kill the agent during snapshot creation)
+            log.info("Restarting AdareVM agent after snapshot creation")
+            
+            # Disconnect existing client if active
+            if self.experiment_ctx.client:
+                 await self.experiment_ctx.client.disconnect()
+
+            from adare.backend.experiment.run import (
+                step_install_and_run_websocket_server,
+                step_connect_websocket
+            )
+            
+            with StageCtxManager(
+                SoftwareInstallationStage(),
+                self.experiment_ctx.experiment_run_ulid,
+                event=self.experiment_ctx.user_interrupt_event
+            ):
+                await step_install_and_run_websocket_server(self.experiment_ctx)
+                await step_connect_websocket(self.experiment_ctx)
 
         else:
             log.warning(f"Unknown hypervisor type: {self.experiment_ctx.hypervisor_type}")

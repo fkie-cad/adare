@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 import threading
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, Any
 from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 from adare.backend.project.directory import ProjectDirectory
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
@@ -55,3 +55,5 @@ class ExperimentRunCtx:
     playbook: Optional[Playbook] = None
     test_mode: bool = False
     adarevm_pid: Optional[int] = None  # PID for process monitoring
+    cached_agent_commands: Optional[Any] = None  # Cached CommandSet for dev mode restores
+    cached_env_info: Optional[Any] = None  # Cached EnvironmentInfo for dev mode restores

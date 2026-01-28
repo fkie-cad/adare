@@ -44,12 +44,7 @@ app = FastAPI(
 # CORS middleware for development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3002",
-    ],  # Vite dev server
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite dev server
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -271,7 +266,7 @@ async def execute_action(session_id: str, request: ActionExecuteRequest):
 
     result = api.devmode.execute_action(dto)
 
-    # Send action complete or error event
+    # Send action complete event
     if result.is_success():
         await ws_manager.send_action_complete(
             session_id,
@@ -283,10 +278,6 @@ async def execute_action(session_id: str, request: ActionExecuteRequest):
                 "coordinates": result.value.coordinates,
             },
         )
-    else:
-        # Send error event on failure
-        error_msg = result.error if hasattr(result, 'error') else "Action execution failed"
-        await ws_manager.send_action_error(session_id, "action", str(error_msg))
 
     return result_to_response(result)
 
@@ -424,11 +415,6 @@ async def restore_checkpoint(session_id: str, checkpoint_name: str):
 
     dto = DevCheckpointRestoreRequest(session_id=session_id, name=checkpoint_name)
     result = api.devmode.restore_checkpoint(dto)
-
-    # Broadcast checkpoint restored event
-    if result.is_success():
-        await ws_manager.send_checkpoint_restored(session_id, checkpoint_name)
-
     return result_to_response(result)
 
 
@@ -448,11 +434,6 @@ async def delete_checkpoint(session_id: str, checkpoint_name: str):
 
     dto = DevCheckpointDeleteRequest(session_id=session_id, name=checkpoint_name)
     result = api.devmode.delete_checkpoint(dto)
-
-    # Broadcast checkpoint deleted event
-    if result.is_success():
-        await ws_manager.send_checkpoint_deleted(session_id, checkpoint_name)
-
     return result_to_response(result)
 
 
@@ -532,157 +513,95 @@ async def get_action_types():
     Get metadata for all available action types.
 
     Returns:
-        Action type definitions with display metadata
+        Action type definitions
     """
-    # Define action type metadata with frontend-friendly format
-    action_types = [
-        {
-            "type": "Click",
-            "category": "gui",
-            "display_name": "Click",
+    # Define action type metadata
+    action_types = {
+        "Click": {
+            "category": "GUI",
             "description": "Click on a target (image or text)",
-            "icon": "pi-mouse-pointer",
-            "default_params": {
-                "target": {"type": "text", "text": ""},
-                "strategy": "sweep",
-                "button": "left",
-            },
+            "required_fields": ["target"],
+            "optional_fields": ["strategy", "button", "click_count", "wait"],
         },
-        {
-            "type": "Keyboard",
-            "category": "gui",
-            "display_name": "Keyboard",
+        "Keyboard": {
+            "category": "GUI",
             "description": "Type text or press keys",
-            "icon": "pi-keyboard",
-            "default_params": {"text": ""},
+            "required_fields": ["text"],
+            "optional_fields": ["wait"],
         },
-        {
-            "type": "Scroll",
-            "category": "gui",
-            "display_name": "Scroll",
+        "Scroll": {
+            "category": "GUI",
             "description": "Scroll in a direction",
-            "icon": "pi-arrows-v",
-            "default_params": {"direction": "down", "amount": 3},
+            "required_fields": ["direction"],
+            "optional_fields": ["clicks", "wait"],
         },
-        {
-            "type": "Drag",
-            "category": "gui",
-            "display_name": "Drag",
-            "description": "Drag from source to destination",
-            "icon": "pi-arrows-alt",
-            "default_params": {
-                "source": {"type": "text", "text": ""},
-                "destination": {"type": "text", "text": ""},
-            },
-        },
-        {
-            "type": "Wait",
-            "category": "control",
-            "display_name": "Wait",
-            "description": "Wait for a fixed duration",
-            "icon": "pi-clock",
-            "default_params": {"seconds": 5},
-        },
-        {
-            "type": "Loop",
-            "category": "control",
-            "display_name": "Loop",
-            "description": "Repeat actions multiple times",
-            "icon": "pi-refresh",
-            "default_params": {"iterations": 3, "actions": []},
-        },
-        {
-            "type": "Block",
-            "category": "control",
-            "display_name": "Block",
+        "Block": {
+            "category": "Control Flow",
             "description": "Group actions together",
-            "icon": "pi-box",
-            "default_params": {"actions": [], "description": ""},
+            "required_fields": ["actions"],
+            "optional_fields": ["description"],
         },
-        {
-            "type": "Conditional",
-            "category": "control",
-            "display_name": "Conditional",
-            "description": "Execute actions based on condition",
-            "icon": "pi-question-circle",
-            "default_params": {
-                "condition": {"type": "timeout", "timeout_seconds": 10},
-                "if_true": [],
-            },
+        "Loop": {
+            "category": "Control Flow",
+            "description": "Repeat actions",
+            "required_fields": ["actions", "count"],
+            "optional_fields": ["description"],
         },
-        {
-            "type": "Screenshot",
-            "category": "data",
-            "display_name": "Screenshot",
-            "description": "Capture a screenshot",
-            "icon": "pi-camera",
-            "default_params": {"filename": "screenshot.png"},
+        "Command": {
+            "category": "System",
+            "description": "Execute shell command",
+            "required_fields": ["command"],
+            "optional_fields": ["timeout", "wait"],
         },
-        {
-            "type": "SetVar",
-            "category": "data",
-            "display_name": "Set Variable",
-            "description": "Set a variable value",
-            "icon": "pi-pencil",
-            "default_params": {"name": "my_var", "value": ""},
+        "Screenshot": {
+            "category": "Data",
+            "description": "Capture screenshot",
+            "required_fields": ["filename"],
+            "optional_fields": ["wait"],
         },
-        {
-            "type": "FileRead",
-            "category": "data",
-            "display_name": "File Read",
-            "description": "Read file contents into variable",
-            "icon": "pi-file",
-            "default_params": {"filename": "", "var_name": "file_content"},
+        "Wait": {
+            "category": "Control Flow",
+            "description": "Wait for duration",
+            "required_fields": ["seconds"],
+            "optional_fields": [],
         },
-        {
-            "type": "FileWrite",
-            "category": "data",
-            "display_name": "File Write",
-            "description": "Write content to a file",
-            "icon": "pi-file-edit",
-            "default_params": {"filename": "", "content": ""},
+        "WaitFor": {
+            "category": "Control Flow",
+            "description": "Wait for condition",
+            "required_fields": ["condition"],
+            "optional_fields": ["timeout"],
         },
-        {
-            "type": "Command",
-            "category": "system",
-            "display_name": "Command",
-            "description": "Execute a shell command",
-            "icon": "pi-terminal",
-            "default_params": {"command": "", "wait_for_completion": True, "timeout_seconds": 30},
+        "SetVariable": {
+            "category": "Data",
+            "description": "Set a variable",
+            "required_fields": ["name", "value"],
+            "optional_fields": [],
         },
-        {
-            "type": "Test",
-            "category": "system",
-            "display_name": "Test",
-            "description": "Run a test function",
-            "icon": "pi-check-circle",
-            "default_params": {"test_name": ""},
+        "FileRead": {
+            "category": "Data",
+            "description": "Read file contents",
+            "required_fields": ["path"],
+            "optional_fields": ["variable"],
         },
-        {
-            "type": "Checkpoint",
-            "category": "system",
-            "display_name": "Checkpoint",
-            "description": "Create a VM checkpoint",
-            "icon": "pi-bookmark",
-            "default_params": {"name": "", "description": ""},
+        "FileWrite": {
+            "category": "Data",
+            "description": "Write to file",
+            "required_fields": ["path", "content"],
+            "optional_fields": [],
         },
-        {
-            "type": "RestoreCheckpoint",
-            "category": "system",
-            "display_name": "Restore Checkpoint",
-            "description": "Restore a VM checkpoint",
-            "icon": "pi-replay",
-            "default_params": {"name": ""},
+        "RegistryRead": {
+            "category": "System",
+            "description": "Read Windows registry",
+            "required_fields": ["key", "value"],
+            "optional_fields": ["variable"],
         },
-        {
-            "type": "Reset",
-            "category": "system",
-            "display_name": "Reset",
-            "description": "Reset the VM state",
-            "icon": "pi-undo",
-            "default_params": {"reset_type": "soft"},
+        "Test": {
+            "category": "Tests",
+            "description": "Run test function",
+            "required_fields": ["function"],
+            "optional_fields": ["args"],
         },
-    ]
+    }
 
     return {"success": True, "data": action_types}
 

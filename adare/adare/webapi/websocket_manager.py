@@ -167,58 +167,6 @@ class WebSocketManager:
             },
         )
 
-    async def send_checkpoint_restored(
-        self, session_id: str, checkpoint_name: str
-    ) -> None:
-        """Send checkpoint restored event."""
-        from datetime import datetime
-        await self.broadcast(
-            session_id,
-            {
-                "type": "checkpoint_restored",
-                "session_id": session_id,
-                "data": {
-                    "checkpoint_name": checkpoint_name,
-                    "timestamp": datetime.now().isoformat(),
-                },
-            },
-        )
-
-    async def send_checkpoint_deleted(
-        self, session_id: str, checkpoint_name: str
-    ) -> None:
-        """Send checkpoint deleted event."""
-        from datetime import datetime
-        await self.broadcast(
-            session_id,
-            {
-                "type": "checkpoint_deleted",
-                "session_id": session_id,
-                "data": {
-                    "checkpoint_name": checkpoint_name,
-                    "timestamp": datetime.now().isoformat(),
-                },
-            },
-        )
-
-    async def send_action_error(
-        self, session_id: str, action_type: str, error_message: str
-    ) -> None:
-        """Send action execution error event."""
-        from datetime import datetime
-        await self.broadcast(
-            session_id,
-            {
-                "type": "action_error",
-                "session_id": session_id,
-                "data": {
-                    "action_type": action_type,
-                    "error_message": error_message,
-                    "timestamp": datetime.now().isoformat(),
-                },
-            },
-        )
-
 
 # Global WebSocket manager instance
 ws_manager = WebSocketManager()

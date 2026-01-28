@@ -283,9 +283,19 @@ class SimpleActionsExecutor:
                     message="No key, text, or combination specified"
                 )
 
+            # Prepare data for result
+            result_data = {}
+            if action.key:
+                result_data['key'] = action.key
+            elif action.text:
+                result_data['text'] = action.text
+            elif action.combination:
+                result_data['combination'] = action.combination
+
             return ActionResult(
                 success=result.get('status') == 'success',
-                message=result.get('message', '')
+                message=result.get('message', ''),
+                data=result_data
             )
         except Exception as e:
             log.error(f"Error executing keyboard action: {e}", exc_info=True)

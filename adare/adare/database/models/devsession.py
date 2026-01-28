@@ -49,6 +49,7 @@ class DevSession(SerializerMixin, GlobalBase):
     status = Column(String(20), default='running', nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
+    cached_start_command = Column(String(1024), nullable=True)  # Cached adarevm start command
 
     def __str__(self):
         return f"DevSession({self.session_id})"

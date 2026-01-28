@@ -71,16 +71,16 @@
 
     <Dialog v-model:visible="showStartDialog" header="Start New Dev Session" :modal="true">
       <div class="form-group">
-        <label for="project">Project</label>
-        <InputText id="project" v-model="startForm.project" placeholder="my-project" />
+        <label for="project">Project Path</label>
+        <InputText id="project" v-model="startForm.project_path" placeholder="/path/to/project" />
       </div>
       <div class="form-group">
-        <label for="experiment">Experiment</label>
-        <InputText id="experiment" v-model="startForm.experiment" placeholder="my-experiment" />
+        <label for="experiment">Experiment Name</label>
+        <InputText id="experiment" v-model="startForm.experiment_name" placeholder="my-experiment" />
       </div>
       <div class="form-group">
-        <label for="environment">Environment</label>
-        <InputText id="environment" v-model="startForm.environment" placeholder="win10-env" />
+        <label for="environment">Environment Name</label>
+        <InputText id="environment" v-model="startForm.environment_name" placeholder="win10-env" />
       </div>
       <template #footer>
         <Button label="Cancel" severity="secondary" @click="showStartDialog = false" />
@@ -107,9 +107,9 @@ const toast = useToast()
 
 const showStartDialog = ref(false)
 const startForm = ref({
-  project: '',
-  experiment: '',
-  environment: '',
+  project_path: '',
+  experiment_name: '',
+  environment_name: '',
 })
 
 onMounted(() => {
@@ -121,7 +121,7 @@ async function loadSessions() {
 }
 
 async function handleStartSession() {
-  if (!startForm.value.project || !startForm.value.experiment || !startForm.value.environment) {
+  if (!startForm.value.project_path || !startForm.value.experiment_name || !startForm.value.environment_name) {
     toast.add({
       severity: 'warn',
       summary: 'Validation Error',

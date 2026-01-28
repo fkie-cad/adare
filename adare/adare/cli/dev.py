@@ -195,10 +195,45 @@ def exec_dev_start(arguments):
     """Start dev session with flow console UI."""
     import ulid
     from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
+    from pathlib import Path
 
     # Setup
     project_directory = _get_project_path(arguments)
     log_file = Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
+    
+    # Process shared directories
+    # Format: host_path:vm_path
+    shared_directories = {}
+    raw_shared_dirs = getattr(arguments, 'shared_dir', None)
+    
+    if raw_shared_dirs:
+        for idx, dir_spec in enumerate(raw_shared_dirs):
+            try:
+                host_path_str, vm_path_str = dir_spec.split(':', 1)
+                
+                # Setup structure expected by ExperimentConfig:
+                # Dict[str, Dict[str, Path]] = {name: {'host': Path, 'vm': Path}}
+                # Auto-generate name since user only provides paths
+                share_name = f"dev_shared_{idx+1}"
+                
+
+                host_path = Path(host_path_str).resolve()
+                if not host_path.exists():
+                     # Auto-create if it doesn't exist, as this is a dev convenience feature
+                     host_path.mkdir(parents=True, exist_ok=True)
+                     log.info(f"Created shared directory on host: {host_path}")
+
+                shared_directories[share_name] = {
+                    'host': host_path,
+                    'vm': Path(vm_path_str)
+                }
+                log.debug(f"Parsed shared directory: {host_path_str} -> {vm_path_str} ({share_name})")
+            except ValueError:
+                print_error_message(
+                    title=f"Invalid shared directory format: {dir_spec}",
+                    next_steps=["Use format: HOST_PATH:VM_PATH (e.g., /tmp/data:/mnt/data)"]
+                )
+                exit(1)
 
     # Create flow console
     user_interrupt_event = threading.Event()
@@ -224,7 +259,8 @@ def exec_dev_start(arguments):
             vm_cpus=getattr(arguments, 'vm_cpus', None),
             debug_screenshots=getattr(arguments, 'debug_screenshots', False),
             log_file=log_file,
-            console_ulid=console_ulid
+            console_ulid=console_ulid,
+            shared_directories=shared_directories if shared_directories else None
         ))
 
         if result.success:
@@ -237,6 +273,11 @@ def exec_dev_start(arguments):
             )
             if log_file:
                 print(f"\nLogs saved to: {log_file}")
+            
+            if shared_directories:
+                print("\nShared Directories:")
+                for name, paths in shared_directories.items():
+                    print(f"  - {paths['host']} -> {paths['vm']} ({name})")
         else:
             flow_console.stop()
             _handle_api_error(result)
@@ -523,29 +564,78 @@ def exec_dev_action(arguments):
         _handle_api_error(result)
 
 
-def _parse_indices(indices_str: Optional[str]) -> Optional[List[int]]:
+def parse_indices_with_bounds(indices_str: str, total_actions: int) -> List[int]:
     """
-    Parse indices string into a list of integers.
-    Supports formats: "1-3", "1,3,4", "1-3,4-9"
+    Parse indices string into a list of integers with S/E support.
+
+    Supports formats:
+    - "1-3", "1,3,4", "1-3,4-9" (numeric indices)
+    - "S-5", "7,23-E", "S-E" (S=start=1, E=end=total_actions)
+    - Case-insensitive: "s-5", "e" work the same as "S-5", "E"
+
+    Args:
+        indices_str: Index specification string (cannot be None/empty)
+        total_actions: Total number of actions in the playbook
+
+    Returns:
+        Sorted list of unique 1-based indices
+
+    Raises:
+        ValueError: If format is invalid or indices are out of bounds
+    """
+    # Normalize case
+    indices_str = indices_str.upper()
+
+    # Replace S with 1 and E with total_actions
+    indices_str = indices_str.replace('S', '1')
+    indices_str = indices_str.replace('E', str(total_actions))
+
+    # Parse ranges and single values
+    indices = set()
+    parts = indices_str.split(',')
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        if '-' in part:
+            range_parts = part.split('-')
+            if len(range_parts) != 2:
+                raise ValueError(f"Invalid range format: '{part}'")
+            start, end = map(int, range_parts)
+            if start > end:
+                raise ValueError(f"Invalid range '{part}': start ({start}) > end ({end})")
+            indices.update(range(start, end + 1))
+        else:
+            indices.add(int(part))
+
+    # Validate all indices are in bounds
+    for idx in indices:
+        if idx < 1 or idx > total_actions:
+            raise ValueError(
+                f"Index {idx} out of bounds (playbook has {total_actions} actions)"
+            )
+
+    return sorted(list(indices))
+
+
+def _parse_indices(indices_str: Optional[str], total_actions: int) -> Optional[List[int]]:
+    """
+    CLI wrapper for parse_indices_with_bounds.
+    Returns None if indices_str is None, exits on error.
     """
     if not indices_str:
         return None
-        
+
     try:
-        indices = set()
-        parts = indices_str.split(',')
-        for part in parts:
-            part = part.strip()
-            if not part:
-                continue
-            if '-' in part:
-                start, end = map(int, part.split('-'))
-                indices.update(range(start, end + 1))
-            else:
-                indices.add(int(part))
-        return sorted(list(indices))
-    except ValueError:
-        print_error_message(title="Invalid indices format", next_steps=["Use format like '1-3', '1,3,4', or '1-3,4-9'"])
+        return parse_indices_with_bounds(indices_str, total_actions)
+    except ValueError as e:
+        print_error_message(
+            title="Invalid indices format",
+            next_steps=[
+                str(e),
+                "Use format like '1-3', 'S-5', '7,23-E', or 'S-E'"
+            ]
+        )
         exit(1)
 
 
@@ -576,8 +666,8 @@ def exec_dev_playbook(arguments):
         )
         exit(1)
 
-    # Parse indices if provided
-    indices = _parse_indices(getattr(arguments, 'indices', None))
+    # Keep indices as string - will be parsed in service layer after playbook is loaded
+    indices = getattr(arguments, 'indices', None)
 
     # Create flow console
     user_interrupt_event = threading.Event()

@@ -98,6 +98,305 @@ class SnapshotMixin(AbstractSnapshotMixin):
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
+        return snapshot_success
+
+    def _get_attached_virtiofs_payloads(self) -> list:
+        """
+        Get XML payloads for all currently attached virtiofs devices.
+        
+        Returns:
+            List of XML strings for attached filesystems
+        """
+        import libvirt
+        import xml.etree.ElementTree as ET
+        
+        payloads = []
+        try:
+            # Get current domain XML
+            xml_desc = self._libvirt_domain.XMLDesc(0)
+            root = ET.fromstring(xml_desc)
+            
+            # Find all filesystem devices with type='virtiofs' (driver type)
+            # XPath: ./devices/filesystem/driver[@type='virtiofs']/..
+            devices = root.find('devices')
+            if devices is not None:
+                for fs in devices.findall('filesystem'):
+                    driver = fs.find('driver')
+                    if driver is not None and driver.get('type') == 'virtiofs':
+                        # Convert element back to string
+                        payload = ET.tostring(fs, encoding='unicode')
+                        payloads.append(payload)
+                        
+            log.debug(f"CLAUDE: Found {len(payloads)} attached virtiofs devices")
+            return payloads
+            
+        except Exception as e:
+            log.error(f"CLAUDE: Failed to get attached virtiofs devices: {e}")
+            return []
+
+    def _detach_virtiofs_shares(self, payloads: list) -> bool:
+        """
+        Hot-unplug virtiofs devices with verification.
+        
+        Args:
+            payloads: List of XML strings for devices to detach
+            
+        Returns:
+            True if all detached successfully
+        """
+        if not payloads:
+            return True
+            
+        import libvirt
+        import time
+        
+        count = len(payloads)
+        log.info(f"CLAUDE: Detaching {count} virtiofs devices for snapshotting...")
+        
+        # 1. Request detachment for all devices
+        for i, xml in enumerate(payloads):
+            try:
+                # Detach device (live config)
+                self._libvirt_domain.detachDevice(xml)
+                log.debug(f"CLAUDE: Requested detach for virtiofs device {i+1}/{count}")
+            except libvirt.libvirtError as e:
+                log.error(f"CLAUDE: Failed to detach virtiofs device {i+1}: {e}")
+                return False
+
+        # 2. Poll until all virtiofs devices are gone
+        # Max wait 10 seconds (usually takes < 1s)
+        timeout = 10
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            remaining = self._get_attached_virtiofs_payloads()
+            if not remaining:
+                log.info("CLAUDE: All virtiofs devices successfully detached")
+                return True
+            
+            # Log progress if waiting
+            elapsed = time.time() - start_time
+            if elapsed > 1.0:
+                 log.debug(f"CLAUDE: Waiting for detachment... ({len(remaining)} remaining)")
+            
+            time.sleep(0.5)
+            
+        log.error(f"CLAUDE: Timeout waiting for virtiofs detachment. {len(remaining)} devices remaining.")
+        return False
+
+    def _attach_virtiofs_shares(self, payloads: list) -> bool:
+        """
+        Hot-plug virtiofs devices.
+        
+        Args:
+            payloads: List of XML strings for devices to attach
+            
+        Returns:
+            True if all attached successfully
+        """
+        if not payloads:
+            return True
+            
+        import libvirt
+        
+        count = len(payloads)
+        log.info(f"CLAUDE: Re-attaching {count} virtiofs devices after snapshot...")
+        
+        success = True
+        for i, xml in enumerate(payloads):
+            try:
+                # Attach device (live config)
+                self._libvirt_domain.attachDevice(xml)
+                log.debug(f"CLAUDE: Attached virtiofs device {i+1}/{count}")
+            except libvirt.libvirtError as e:
+                log.error(f"CLAUDE: Failed to attach virtiofs device {i+1}: {e}")
+                success = False
+                
+        return success
+
+    def _prepare_guest_for_snapshot(self) -> None:
+        """
+        Prepare guest OS for snapshot by releasing shared folder handles.
+        
+        This prevents "Invalid Handle" errors and ensures a clean state for restoration.
+        """
+        if not self.config.virtiofs_enabled or not self.config.virtiofs_shares:
+            return
+
+        try:
+            # Only attempt if guest agent is responsive
+            if not self._check_guest_agent():
+                log.warning("CLAUDE: Guest agent not responsive, skipping pre-snapshot unmount")
+                return
+
+            log.info("CLAUDE: Preparing guest for snapshot (releasing shared folders)...")
+            
+            # Detect OS
+            is_windows = 'windows' in self.guest_os.lower()
+            
+            if is_windows:
+                # Kill virtiofs.exe processes to release handles
+                # /F = force, /IM = image name
+                cmd = 'taskkill /F /IM virtiofs.exe'
+                try:
+                    self._run_guest_agent_command_sync(cmd)
+                    log.debug("CLAUDE: Killed virtiofs.exe processes in guest")
+                except Exception as e:
+                    log.warning(f"CLAUDE: Failed to kill virtiofs.exe (might not be running): {e}")
+            else:
+                # Linux: Lazy unmount all shares
+                for share in self.config.virtiofs_shares:
+                    mount_point = share['guest_mount']
+                    cmd = f'umount -l {mount_point}'
+                    try:
+                        self._run_guest_agent_command_sync(cmd)
+                    except Exception as e:
+                        log.warning(f"CLAUDE: Failed to unmount {mount_point}: {e}")
+                        
+        except Exception as e:
+            log.warning(f"CLAUDE: Error during guest migration preparation: {e}")
+
+    def _refresh_guest_mounts(self) -> None:
+        """
+        Refresh/Remount shared folders in the guest after restoration.
+        """
+        if not self.config.virtiofs_enabled or not self.config.virtiofs_shares:
+            return
+
+        try:
+            # Wait for agent to come back (it should be running as we restored state)
+            import time
+            time.sleep(2)
+            if not self._check_guest_agent():
+                log.warning("CLAUDE: Guest agent not responsive after restore, cannot refresh mounts")
+                return
+
+            log.info("CLAUDE: Refreshing guest mounts...")
+            
+            is_windows = 'windows' in self.guest_os.lower()
+            
+            if is_windows:
+                # Re-run virtiofs.exe for each share using Scheduled Task for Session 0 isolation escape
+                # This ensures the mount is visible to the user session
+                virtiofs_exe = r"C:\Program Files\VirtIO-Win\VioFS\virtiofs.exe"
+                
+                for share in self.config.virtiofs_shares:
+                    tag = share['tag']
+                    mount_point = str(share['guest_mount']).replace('/', '\\')
+                    
+                    # Force remove the directory first (virtiofs fails if it exists)
+                    # Then run the mount command
+                    # Note: We must escape the double quotes for the PS string
+                    mount_cmd = (
+                        f'if (Test-Path "{mount_point}") {{ Remove-Item "{mount_point}" -Force -Recurse -ErrorAction SilentlyContinue }}; '
+                        f'& "{virtiofs_exe}" -t {tag} -m "{mount_point}"'
+                    )
+                    
+                    try:
+                        self._run_as_user_windows_sync(mount_cmd)
+                        log.debug(f"CLAUDE: Restarted virtiofs for {tag} (user session)")
+                    except Exception as e:
+                        log.error(f"CLAUDE: Failed to remount {tag}: {e}")
+            else:
+                # Linux: Remount
+                for share in self.config.virtiofs_shares:
+                    tag = share['tag']
+                    mount_point = share['guest_mount']
+                    cmd = f'mount -t virtiofs {tag} {mount_point}'
+                    try:
+                        self._run_guest_agent_command_sync(cmd)
+                        log.debug(f"CLAUDE: Remounted {mount_point}")
+                    except Exception as e:
+                        log.error(f"CLAUDE: Failed to remount {mount_point}: {e}")
+                        
+        except Exception as e:
+            log.error(f"CLAUDE: Error refreshing guest mounts: {e}")
+
+    def _run_as_user_windows_sync(self, command: str) -> None:
+        """
+        Run a command in Windows guest as the logged-in user using Scheduled Tasks.
+        Replicates logic from mixins/commands.py _build_guest_command_args.
+        Synchronous version for snapshot operations.
+        """
+        import time
+        import base64
+        import uuid
+        
+        # Parameters
+        user = self.username
+        pw = self.password
+        
+        # Use UUID to ensure uniqueness for rapid consecutive calls (looping through shares)
+        unique_id = str(uuid.uuid4())[:8]
+        task_name = f"adare_snap_{unique_id}"
+        script_path = f"C:\\Windows\\Temp\\adare_{unique_id}.ps1"
+        rl = "LIMITED" # or HIGHEST if admin needed, default to LIMITED for regular user
+        
+        # Construct the complex PowerShell script
+        # Note: We need to escape internal quotes carefully
+        ps_command = (                                                                                                                                 
+            f"& {{ "                                                                                                                                       
+            f"$u = '{user}'; $p = '{pw}'; $t = '{task_name}'; "                                                                                 
+            f"$script = '{script_path}'; "                                                                                                                 
+            f"$st = (Get-Date).AddMinutes(2).ToString('HH:mm'); "                                                                                                                                                                                                 
+            f"'{command}' | Out-File -FilePath $script -Encoding ascii; "                                                                                  
+            f"$c = \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script\"; "                                                                  
+            f"schtasks /Create /TN $t /TR \"$c\" /SC ONCE /ST $st /RU $u /RP $p /RL {rl} /F; "                                                          
+            f"schtasks /Run /TN $t; "                                                                                                                      
+            f"Start-Sleep -Seconds 15; "                                                                                                                    
+            f"if (Test-Path $script) {{ Remove-Item $script -Force }}; "
+            # Try to delete task as well (might fail if running, but good hygiene)
+            f"schtasks /Delete /TN $t /F | Out-Null; "                                                                                   
+            f"}} "                                                                                                                                         
+        )
+        
+        # Base64 encode for -EncodedCommand
+        command_base64 = base64.b64encode(ps_command.encode('utf-16le')).decode('utf-8')
+        
+        # Call via QGA using powershell.exe
+        # qemu-agent-command takes arguments, but here we just pass the full string to our helper
+        # which wraps it in cmd.exe /c
+        
+        # Helper expects the raw command string, it wraps it in 'cmd /c'
+        # But we need to run 'powershell -EncodedCommand ...'
+        full_cmd = f"powershell.exe -EncodedCommand {command_base64}"
+        
+        self._run_guest_agent_command_sync(full_cmd)
+
+    def _run_guest_agent_command_sync(self, cmd_str: str) -> None:
+        """Helper to run QGA commands synchronously via libvirt qemu-agent-command."""
+        import json
+        try:
+            # Construct QMP command for guest-exec
+            # We use capture-output to avoid hanging if the command produces output
+            if 'windows' in self.guest_os.lower():
+                qmp_cmd = {
+                    "execute": "guest-exec",
+                    "arguments": {
+                        "path": "cmd.exe",
+                        "arg": ["/c", cmd_str],
+                        "capture-output": True
+                    }
+                }
+            else:
+                qmp_cmd = {
+                    "execute": "guest-exec",
+                    "arguments": {
+                        "path": "/bin/sh",
+                        "arg": ["-c", cmd_str],
+                        "capture-output": True
+                    }
+                }
+            
+            cmd_json = json.dumps(qmp_cmd)
+            subprocess.run(
+                ['virsh', 'qemu-agent-command', self.vm_name, cmd_json],
+                check=False, capture_output=True
+            )
+            
+        except Exception as e:
+            log.warning(f"CLAUDE: Failed to run sync guest command: {e}")
+
     def create_external_snapshot(
         self,
         snapshot_name: str,
@@ -112,11 +411,13 @@ class SnapshotMixin(AbstractSnapshotMixin):
         
         Strategy:
         1. Quiesce the Guest (Optional): `virsh domfsfreeze`
-        2. Save the VM State: `virsh save` (Stops VM)
-        3. Create the Disk Snapshot: `virsh snapshot-create-as --disk-only`
-        4. Resume the VM: `virsh restore --xml <updated_xml>`
+        2. Detach VirtioFS devices (hot-unplug) - REQUIRED for migration/save
+        3. Save the VM State: `virsh save` (Stops VM)
+        4. Create the Disk Snapshot: `virsh snapshot-create-as --disk-only`
+        5. Resume the VM: `virsh restore --xml <updated_xml>`
            We dump the XML (which now points to new disk) and restore using it.
-        5. (Finally) Thaw if needed: `virsh domfsthaw`
+        6. Re-attach VirtioFS devices (hot-plug)
+        7. (Finally) Thaw if needed: `virsh domfsthaw`
 
         Args:
             snapshot_name: Libvirt snapshot name
@@ -140,9 +441,29 @@ class SnapshotMixin(AbstractSnapshotMixin):
 
         frozen = False
         snapshot_success = False
+        virtiofs_payloads = []
         import tempfile
 
         try:
+            # 1.5. Detach VirtioFS devices (they block migration/save)
+            virtiofs_payloads = []
+            if self.config.virtiofs_enabled and self.config.virtiofs_shares:
+                # NEW: Release handles in guest BEFORE detach
+                self._prepare_guest_for_snapshot()
+                virtiofs_payloads = self._get_attached_virtiofs_payloads()
+            
+            if virtiofs_payloads:
+                if not self._detach_virtiofs_shares(virtiofs_payloads):
+                    # If detach fails, likely devices are still busy, but we killed procs?
+                    # Try to maintain state by re-attaching
+                    log.warning("CLAUDE: Failed to detach some virtiofs devices, snapshot might fail")
+                    # Should we abort? If we proceed, save will fail.
+                    # Let's try to abort gracefully
+                    log.error("CLAUDE: Aborting snapshot due to detach failure")
+                    self._attach_virtiofs_shares(virtiofs_payloads)
+                    self._refresh_guest_mounts()
+                    return False
+
             # 2. Save the VM State (Stops the VM)
             log.info(f"CLAUDE: Saving VM state to {memory_path}...")
             subprocess.run(
@@ -177,7 +498,27 @@ class SnapshotMixin(AbstractSnapshotMixin):
             )
             updated_xml = dump_result.stdout
             
-            # 4b. Restore using the updated XML
+            # 4b. Strip virtiofs devices from XML to match saved state
+            # The saved state has 0 filesystems (because we detached them).
+            # The dumped XML might still have them if they are in the persistent config.
+            # We must remove them to avoid "Target domain filesystem count mismatch".
+            try:
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(updated_xml)
+                devices = root.find('devices')
+                if devices is not None:
+                    # Find and remove all virtiofs filesystems
+                    for fs in devices.findall('filesystem'):
+                        driver = fs.find('driver')
+                        if driver is not None and driver.get('type') == 'virtiofs':
+                            devices.remove(fs)
+                            log.debug("CLAUDE: Stripped virtiofs device from restore XML")
+                    
+                    updated_xml = ET.tostring(root, encoding='unicode')
+            except Exception as e:
+                log.error(f"CLAUDE: Failed to strip filesystems from XML: {e}")
+            
+            # 4c. Restore using the updated (and stripped) XML
             with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=True) as tmp_xml:
                 tmp_xml.write(updated_xml)
                 tmp_xml.flush()
@@ -189,6 +530,12 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 ]
                 
                 subprocess.run(restore_args, check=True, capture_output=True)
+                
+            # 6. Re-attach VirtioFS devices
+            if virtiofs_payloads:
+                self._attach_virtiofs_shares(virtiofs_payloads)
+                # NEW: Refresh guest mounts
+                self._refresh_guest_mounts()
                 
             log.info(f"CLAUDE: Checkpoint created and VM resumed successfully.")
             snapshot_success = True
@@ -204,9 +551,25 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     stderr_out = str(e.stderr)
             log.error(f"CLAUDE: Stderr: {stderr_out}")
             snapshot_success = False
+            
+            # Attempt to re-attach devices if we failed after detach but before/during save
+            if virtiofs_payloads and self.get_state() == "running":
+                try:
+                    self._attach_virtiofs_shares(virtiofs_payloads)
+                    self._refresh_guest_mounts()
+                except Exception:
+                    pass
         except Exception as e:
             log.error(f"CLAUDE: Error creating external snapshot: {e}")
             snapshot_success = False
+            
+            # Attempt recovery
+            if virtiofs_payloads and self.get_state() == "running":
+                try:
+                    self._attach_virtiofs_shares(virtiofs_payloads)
+                    self._refresh_guest_mounts()
+                except Exception:
+                    pass
 
         return snapshot_success
 
@@ -285,6 +648,33 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 self._path_discovery_attempted = False
                 self._cached_guest_path = None
                 log.debug("CLAUDE: PATH cache invalidated after snapshot restore")
+
+                # Re-attach configured virtiofs shares
+                # When we snapshot, we hot-unplug these devices.
+                # When we restore, they are still missing (because we restored to the unplugged state).
+                # We need to re-attach them now.
+                if self.config.virtiofs_enabled and self.config.virtiofs_shares:
+                    log.info("CLAUDE: Re-attaching virtiofs shares after restore...")
+                    try:
+                        from adare.hypervisor.qemu.libvirt_xml import generate_virtiofs_xml_element
+                        import xml.etree.ElementTree as ET
+                        
+                        is_q35 = 'q35' in self.machine or (self.config.boot_mode == 'uefi')
+                        base_bus = 6
+                        base_slot = 7
+                        
+                        payloads = []
+                        for idx, share in enumerate(self.config.virtiofs_shares):
+                            elem = generate_virtiofs_xml_element(share, is_q35, idx, base_bus, base_slot)
+                            payloads.append(ET.tostring(elem, encoding='unicode'))
+                            
+                        self._attach_virtiofs_shares(payloads)
+                        
+                        # NEW: Refresh guest mounts
+                        self._refresh_guest_mounts()
+                            
+                    except Exception as e:
+                        log.error(f"CLAUDE: Failed to re-attach virtiofs shares after restore: {e}")
 
                 return True
             else:
