@@ -93,7 +93,13 @@ class EventManager:
         if isinstance(action, ClickAction):
             return ClickActionStartEvent(target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
         elif isinstance(action, KeyboardAction):
-            return KeyboardActionStartEvent(keys=getattr(action, 'keys', None), **event_data)
+            return KeyboardActionStartEvent(
+                key=action.key if hasattr(action, 'key') else None,
+                text=action.text if hasattr(action, 'text') else None,
+                combination=action.combination if hasattr(action, 'combination') else None,
+                keys=getattr(action, 'keys', None),  # Keep legacy field
+                **event_data
+            )
         elif isinstance(action, CommandAction):
             return CommandActionStartEvent(command=getattr(action, 'command', None), **event_data)
         elif isinstance(action, ActionTestAction):
@@ -228,7 +234,13 @@ class EventManager:
         if isinstance(action, ClickAction):
             event = ClickActionCompleteEvent(coordinates=result.coordinates, target_info=self._get_target_info(getattr(action, 'target', None)), **event_data)
         elif isinstance(action, KeyboardAction):
-            event = KeyboardActionCompleteEvent(keys_sent=getattr(action, 'keys', None), **event_data)
+            event = KeyboardActionCompleteEvent(
+                key=result.data.get('key') if result.data else None,
+                text=result.data.get('text') if result.data else None,
+                combination=result.data.get('combination') if result.data else None,
+                keys_sent=getattr(action, 'keys', None),  # Keep legacy field
+                **event_data
+            )
         elif isinstance(action, CommandAction):
             event = CommandActionCompleteEvent(
                 command_executed=getattr(action, 'command', None),

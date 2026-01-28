@@ -372,60 +372,135 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     from .agent_command_builders import (
         detect_environment,
         WindowsAgentCommandBuilder,
-        LinuxAgentCommandBuilder
+        LinuxAgentCommandBuilder,
+        CommandSet, SetupCommand, EnvironmentInfo
     )
+    from adare.database.api.devmode import DevModeApi
 
     vm = context.vm
     wheels_dir = context.project_directory.vm_runtime / 'wheels'
 
-    # Step 1: Detect Python environment in the VM
-    env_info = await detect_environment(vm, context.guest_platform, stop_event)
+    # Check for cached start command in database (for dev mode restores)
+    # This optimization skips environment detection and installation
+    cached_command_str = None
+    if context.experiment_run_ulid:
+        try:
+            with DevModeApi() as api:
+                session = api.get_session(context.experiment_run_ulid)
+                if session and session.cached_start_command:
+                    cached_command_str = session.cached_start_command
+                    log.info("Using cached adarevm start command from database (skipping detection/install)")
+        except Exception as e:
+            log.warning(f"Failed to check for cached start command: {e}")
 
-    # Step 1.5: Determine GUI mode and skip_xhost flag
-    from .execution.gui_executor_factory import resolve_gui_execution_mode
-    from .execution.base import GUIExecutionMode
+    commands = None
+    env_info = None
 
-    # Get playbook settings (may have GUI mode preference)
-    playbook_settings = context.playbook.settings if hasattr(context, 'playbook') and context.playbook else None
-
-    # Get CLI override from config
-    cli_override = context.config.gui_mode_override if hasattr(context.config, 'gui_mode_override') else None
-
-    # Resolve GUI execution mode
-    gui_mode = resolve_gui_execution_mode(vm, playbook_settings, cli_override=cli_override)
-    skip_xhost = (gui_mode == GUIExecutionMode.HOST)
-
-    # Store gui_mode in VM instance for environment building
-    vm.adare_gui_mode = gui_mode
-
-    if skip_xhost:
-        log.info("Skipping xhost setup - using host-based GUI automation")
-
-    # Step 2: Create platform-specific command builder
-    if context.guest_platform == 'windows':
-        builder = WindowsAgentCommandBuilder(
-            wheels_dir=wheels_dir,
-            shared_folders=context.config.shared_directories,
-            websocket_port=context.config.websocket_port,
-            skip_xhost=skip_xhost,
-            hypervisor_type=context.hypervisor_type or 'virtualbox'
+    if cached_command_str:
+        # Use cached command - bypass detection logic
+        # We construct a synthetic CommandSet with installation skipped
+        # NOTE: We assume Windows/Poetry defaults for now if we don't store env info,
+        # but the run_command is the most important part.
+        # Run CWD is typically None for installed packages or specific for editable
+        # For robustness, we might want to store CWD too, but usually it's None for wheels
+        
+        # Helper: Try to guess run_cwd from command if it has 'cd ...;' prefix
+        run_cwd = None
+        if "cd " in cached_command_str:
+             parts = cached_command_str.split(';')
+             if parts[0].strip().startswith("cd "):
+                 run_cwd = parts[0].strip()[3:].strip()
+                 # Strip 'cd ...; ' from stored command if we want to use cwd arg
+                 # But our CommandSet usage below uses run_command as is.
+                 # Let's keep it simple: run_command contains the full string including 'cd' if needed
+                 # provided run_command is executed with shell=True/via agent that handles it.
+                 # Actually, vm.run_command supports 'cwd' arg.
+                 # If we stored the FULL command string including 'cd', we can just run it.
+        
+        # Check platform from context or VM
+        platform = context.guest_platform or 'windows'
+        
+        commands = CommandSet(
+            setup_commands=[], # Skip setup commands on restore
+            install_command="",
+            run_command=cached_command_str,
+            run_cwd=None, # Already embedded in command string or not needed
+            skip_installation=True
         )
+        
+        # Create dummy env info
+        env_info = EnvironmentInfo(
+             use_conda=False, conda_env_exists=False, miniforge_path=None, platform=platform
+        )
+        # Note: We still need to do minimal setup like port forwarding/firewall? 
+        # Actually usually persistent changes survive snapshots, but some like
+        # port forwarding are VM configuration (survives). 
+        # Firewall rules in guest survive snapshots.
+        # Shared folder mounts might need remounting.
+        
+        # Perform shared folder mounting (which IS needed after restore)
+        if context.guest_platform == 'windows':
+            shared_folders = {
+                name: paths['vm']
+                for name, paths in context.config.shared_directories.items()
+                if paths.get('vm')
+            }
+            if shared_folders:
+                 # Check/Wait for agent readiness first? 
+                 # install_and_run_adare_vm usually does verify_guest_agent_readiness
+                 # We should probably still do that.
+                 pass
+
     else:
-        builder = LinuxAgentCommandBuilder(
-            wheels_dir=wheels_dir,
-            shared_folders=context.config.shared_directories,
-            websocket_port=context.config.websocket_port,
-            skip_xhost=skip_xhost,
-            hypervisor_type=context.hypervisor_type or 'virtualbox'
-        )
+        # Step 1: Detect Python environment in the VM
+        env_info = await detect_environment(vm, context.guest_platform, stop_event)
 
-    # Step 3: Discover guest PATH to ensure correct environment
-    await vm._discover_guest_path()
+        # Step 1.5: Determine GUI mode and skip_xhost flag
+        from .execution.gui_executor_factory import resolve_gui_execution_mode
+        from .execution.base import GUIExecutionMode
 
-    # Step 4: Build all commands (setup, install, run)
-    commands = await builder.build_commands(env_info, vm, stop_event)
+        # Get playbook settings (may have GUI mode preference)
+        playbook_settings = context.playbook.settings if hasattr(context, 'playbook') and context.playbook else None
 
-    # Step 4: Execute setup commands (PATH, firewall, etc.)
+        # Get CLI override from config
+        cli_override = context.config.gui_mode_override if hasattr(context.config, 'gui_mode_override') else None
+
+        # Resolve GUI execution mode
+        gui_mode = resolve_gui_execution_mode(vm, playbook_settings, cli_override=cli_override)
+        skip_xhost = (gui_mode == GUIExecutionMode.HOST)
+
+        # Store gui_mode in VM instance for environment building
+        vm.adare_gui_mode = gui_mode
+
+        if skip_xhost:
+            log.info("Skipping xhost setup - using host-based GUI automation")
+
+        # Step 2: Create platform-specific command builder
+        if context.guest_platform == 'windows':
+            builder = WindowsAgentCommandBuilder(
+                wheels_dir=wheels_dir,
+                shared_folders=context.config.shared_directories,
+                websocket_port=context.config.websocket_port,
+                skip_xhost=skip_xhost,
+                hypervisor_type=context.hypervisor_type or 'virtualbox'
+            )
+        else:
+            builder = LinuxAgentCommandBuilder(
+                wheels_dir=wheels_dir,
+                shared_folders=context.config.shared_directories,
+                websocket_port=context.config.websocket_port,
+                skip_xhost=skip_xhost,
+                hypervisor_type=context.hypervisor_type or 'virtualbox'
+            )
+
+        # Step 3: Discover guest PATH to ensure correct environment
+        await vm._discover_guest_path()
+
+        # Step 4: Build all commands (setup, install, run)
+        commands = await builder.build_commands(env_info, vm, stop_event)
+
+    # Common path: Verification and Execution
+
     # Verify guest agent readiness before executing commands
     log.info("Verifying guest agent readiness...")
     if not await _verify_guest_agent_readiness(vm, stop_event, max_retries=8):
@@ -435,6 +510,7 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         )
     log.info("Guest agent verification successful")
 
+    # Step: Execute setup commands (if any)
     for idx, setup_cmd in enumerate(commands.setup_commands):
         # Apply retry logic to ALL commands (not just first)
         max_retries = 3
@@ -496,6 +572,7 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     #input("Press Enter to continue after setup commands...")  # Debug pause
 
     # Step 5: Mount shared folders (Windows only)
+    # Always needed, even with cached commands, as mounts might not persist or we want to ensure them
     if context.guest_platform == 'windows':
         shared_folders = {
             name: paths['vm']
@@ -510,7 +587,7 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
 
     # Step 6: Install adarevm if needed
     if not commands.skip_installation:
-        log.info(f"Installing adarevm ({'wheels' if builder.wheels_available else 'editable'} mode)")
+        log.info(f"Installing adarevm")
 
         # Use admin for Linux installations (--break-system-packages requires sudo)
         # Windows uses user site-packages and doesn't need admin
@@ -571,9 +648,12 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
                         -1, "", f"Timeout after {max_retries} attempts: {e}"
                     )
     else:
-        log.info("Installation skipped - using preinstalled agent")
+        log.info("Installation skipped")
 
     # Step 7: Run adarevm as background process
+    # Use cached command or built command
+    # If run_cwd is set, we use it
+    
     # TODO: figure out a way to run poetry as sudo in linux
     if context.guest_platform == 'linux':
         result = await vm.run_command(
@@ -620,6 +700,37 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
         except (AttributeError, ValueError) as e:
             log.warning(f"Failed to parse adarevm PID: {e}")
             context.adarevm_pid = None
+            
+    # Step 8: Cache the start command in DB if not already cached
+    if not cached_command_str and context.experiment_run_ulid:
+         # Construct cacheable command string
+         # If run_cwd is used, we might want to prepend 'cd {cwd}; ' 
+         # But Windows run_command might handle cwd differently.
+         # For simplicity, if we rely on command string only, we should unify it.
+         # For now, we only cache if run_cwd is None (which is true for Wheel based installs)
+         # or we manually handle it.
+         
+         # If run_cwd is present, prepend it to command for simple storage
+         # This matches logic used in builder.build_run_command for some cases.
+         command_to_cache = commands.run_command
+         if commands.run_cwd:
+              # Simple heuristic: prepend CD. 
+              # Windows: cd /d C:\path & cmd
+              # Linux: cd /path && cmd
+              # This might duplicate if command already has 'cd'
+              if "cd " not in command_to_cache:
+                  if context.guest_platform == 'windows':
+                       command_to_cache = f"cd /d {commands.run_cwd} & {command_to_cache}"
+                  else:
+                       command_to_cache = f"cd {commands.run_cwd} && {command_to_cache}"
+         
+         try:
+            with DevModeApi() as api:
+                # Need to use update_session_cached_command
+                api.update_session_cached_command(context.experiment_run_ulid, command_to_cache)
+                log.info(f"Cached adarevm start command to database")
+         except Exception as e:
+             log.warning(f"Failed to cache command to DB: {e}")
 
 
 def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool, external_stop_event: threading.Event = None):

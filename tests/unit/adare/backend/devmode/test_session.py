@@ -128,6 +128,5 @@ class TestDevModeSession:
         assert result is True
         # Verify restore external snapshot call
         session.experiment_ctx.vm.restore_external_snapshot.assert_called_once()
-        # Verify websocket disconnect/reconnect
         session.experiment_ctx.client.disconnect.assert_called_once()
 

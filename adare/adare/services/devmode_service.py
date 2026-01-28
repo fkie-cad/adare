@@ -110,7 +110,8 @@ class DevModeService:
                 vm_memory=request.vm_memory,
                 vm_cpus=request.vm_cpus,
                 debug_screenshots=request.debug_screenshots,
-                console_ulid=request.console_ulid
+                console_ulid=request.console_ulid,
+                shared_directories=request.shared_directories
             ))
 
             # Get session to retrieve VM name
@@ -803,6 +804,15 @@ class DevModeService:
         else:
             raise ValueError(f"Invalid playbook source '{request.playbook_source}'")
 
+        # Parse indices if provided (now that we know action count)
+        parsed_indices = None
+        if request.indices:
+            from adare.cli.dev import parse_indices_with_bounds
+            try:
+                parsed_indices = parse_indices_with_bounds(request.indices, len(playbook.actions))
+            except ValueError as e:
+                raise ValueError(f"Invalid indices specification: {e}")
+
         # Restore to initial checkpoint if requested
         if request.restore_initial:
             log.info("--restore flag set: restoring to initial checkpoint before playbook execution")
@@ -820,9 +830,9 @@ class DevModeService:
         # Execute playbook (in same event loop!)
         start_time = time.time()
         playbook_result = await session.execute_playbook(
-            playbook, 
+            playbook,
             experiment_dir=experiment_dir,
-            indices=request.indices
+            indices=parsed_indices
         )
         execution_time = time.time() - start_time
 

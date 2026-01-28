@@ -250,6 +250,28 @@ class DevModeApi(EnhancedDatabaseApi):
         log.info(f"CLAUDE: Updated dev session {session_id} run_directory_path to '{run_directory_path}'")
         return session
 
+    def update_session_cached_command(self, session_id: str, command: str) -> DevSession:
+        """
+        Update the cached start command for a session.
+
+        Allows skipping environment detection and installation on restore.
+
+        Args:
+            session_id: Session ID to update
+            command: The full command string to start adarevm
+
+        Returns:
+            Updated DevSession instance
+        """
+        session = self.get_session_or_404(session_id)
+        session.cached_start_command = command
+        session.updated_at = datetime.now()
+        self._session.flush()
+        self._session.commit()
+
+        log.info(f"Updated dev session {session_id} cached_start_command")
+        return session
+
     def delete_session(self, session_id: str) -> bool:
         """
         Delete a dev session from the database.

@@ -58,7 +58,8 @@ class DevModeSessionManager:
         vm_memory: Optional[int] = None,
         vm_cpus: Optional[int] = None,
         debug_screenshots: bool = False,
-        console_ulid: Optional[str] = None
+        console_ulid: Optional[str] = None,
+        shared_directories: Optional[Dict[str, Dict[str, Path]]] = None
     ) -> str:
         """
         Create and start a new dev mode session.
@@ -71,6 +72,7 @@ class DevModeSessionManager:
             vm_cpus: VM CPU count (None uses default of 4)
             debug_screenshots: Save debug screenshots during execution
             console_ulid: Optional flow console ULID for event integration
+            shared_directories: Optional Dict of shared directories {name: {'host': Path, 'vm': Path}}
 
         Returns:
             Session ID (ULID string)
@@ -93,7 +95,8 @@ class DevModeSessionManager:
             vm_memory=vm_memory,
             vm_cpus=vm_cpus,
             debug_screenshots=debug_screenshots,
-            console_ulid=console_ulid
+            console_ulid=console_ulid,
+            shared_directories=shared_directories
         )
 
         success = await session.start()

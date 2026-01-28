@@ -662,9 +662,10 @@ def dev():
               help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU)')
 @click.option('--vm-memory', type=int, help='VM RAM in MB (default: 4096 for Linux, 8192 for Windows)')
 @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
+@click.option('--shared-dir', multiple=True, help='Shared directories in format HOST_PATH:VM_PATH')
 @click.option('--debug-screenshots', is_flag=True, help='Save screenshots for debugging')
 @click.option('--log', type=click.Path(), help='Save logs to file')
-def start(environment, project, gui_mode, vm_memory, vm_cpus, debug_screenshots, log):
+def start(environment, project, gui_mode, vm_memory, vm_cpus, shared_dir, debug_screenshots, log):
     """Start a new dev mode session."""
     from adare.cli.dev import exec_dev_start
     args = SimpleNamespace(
@@ -673,6 +674,7 @@ def start(environment, project, gui_mode, vm_memory, vm_cpus, debug_screenshots,
         gui_mode=gui_mode,
         vm_memory=vm_memory,
         vm_cpus=vm_cpus,
+        shared_dir=shared_dir,
         debug_screenshots=debug_screenshots,
         log=log
     )
@@ -751,7 +753,7 @@ def action(session_id, action_file, action_yaml, stdin):
 @click.option('-u', '--url', help='Playbook URL')
 @click.option('--stdin', is_flag=True, help='Read from stdin')
 @click.option('--restore', is_flag=True, help='Restore to initial checkpoint before execution')
-@click.option('--indices', help='Select specific action indices to execute (e.g. 1-3,5,7-9)')
+@click.option('--indices', help='Select specific action indices to execute (e.g. 1-3,5,7-9,S-5,7,23-E). S=start, E=end')
 def playbook(session_id, playbook_file, url, stdin, restore, indices):
     """Execute a playbook."""
     from adare.cli.dev import exec_dev_playbook

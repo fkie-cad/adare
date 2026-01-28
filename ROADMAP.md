@@ -44,6 +44,9 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] check if we need to place building wheel into a single stage showing? I think yes!
 - [ ] adjust our tool be Model View Controller for frontend and terminal support later
 - [ ] change stage message for qemu; maybe even stages
+- [ ] Playbook support keyboard keys X times. 
+- [x] support adare dev checkpoint live snapshot with virtiofs shared directory. Maybe unplug before checkpoint and plug after checkpoint?
+
  
 ---
 
@@ -67,6 +70,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] adare dev playbook with more info about commands
 - [ ] make adare dev list in tabular form as other output like adare env list. 
 - [ ] remove --log parameter from adare dev start!
+- [ ] adare dev playbook indices allow 23-E or S-5 to symbolize from 23 to END and so on!
+
 ---
 
 ## 🧹 Code Quality  
