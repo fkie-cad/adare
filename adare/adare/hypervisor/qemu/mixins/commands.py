@@ -261,7 +261,8 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     f"$msg = \"Task_Status: $($info.Status) | Exit_Code: $($info.'Last Run Result')\"; "                                                           
                     f"[Console]::Error.WriteLine($msg); "                                                                                                          
                     #f"schtasks /Delete /TN $t /F; "                                                                                                                
-                    f"if (Test-Path $script) {{ Remove-Item $script -Force }}; "                                                                                   
+                    f"if (Test-Path $script) {{ try {{ Remove-Item $script -Force -ErrorAction SilentlyContinue }} catch {{ }} }}; "                                                                                   
+                    f"exit 0; "
                     f"}} "                                                                                                                                         
                 )
                 log.debug(f"CLAUDE DEBUG: Full Windows guest command (Scheduled Task): {command}")  

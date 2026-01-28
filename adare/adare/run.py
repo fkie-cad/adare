@@ -664,8 +664,7 @@ def dev():
 @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
 @click.option('--shared-dir', multiple=True, help='Shared directories in format HOST_PATH:VM_PATH')
 @click.option('--debug-screenshots', is_flag=True, help='Save screenshots for debugging')
-@click.option('--log', type=click.Path(), help='Save logs to file')
-def start(environment, project, gui_mode, vm_memory, vm_cpus, shared_dir, debug_screenshots, log):
+def start(environment, project, gui_mode, vm_memory, vm_cpus, shared_dir, debug_screenshots):
     """Start a new dev mode session."""
     from adare.cli.dev import exec_dev_start
     args = SimpleNamespace(
@@ -675,16 +674,15 @@ def start(environment, project, gui_mode, vm_memory, vm_cpus, shared_dir, debug_
         vm_memory=vm_memory,
         vm_cpus=vm_cpus,
         shared_dir=shared_dir,
-        debug_screenshots=debug_screenshots,
-        log=log
+        debug_screenshots=debug_screenshots
     )
     exec_with_error_printing(exec_dev_start, args)
 
 @dev.command()
 @click.argument('session_id', required=False)
 @click.option('--project', '-p', help='Project name/path')
-@click.option('--log', type=click.Path(), help='Save logs to file')
-def resume(session_id, project, log):
+
+def resume(session_id, project):
     """Resume a stopped dev mode session.
 
     If SESSION_ID is provided, resumes that specific session.
@@ -697,8 +695,7 @@ def resume(session_id, project, log):
     from adare.cli.dev import exec_dev_resume
     args = SimpleNamespace(
         session_id=session_id,
-        project=project,
-        log=log
+        project=project
     )
     exec_with_error_printing(exec_dev_resume, args)
 
@@ -851,6 +848,18 @@ dev.add_alias('l', 'list')
 dev.add_alias('res', 'reset')
 dev.add_alias('cp', 'checkpoint')
 
+
+@dev.command(name='update-testfunctions')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
+def update_testfunctions(session_id):
+    """Reload test functions in the running VM.
+    
+    This packages the current test files from the host and uploads them to the VM again.
+    The adarevm agent will extract them to a new location and use them for subsequent tests.
+    """
+    from adare.cli.dev import exec_dev_update_testfunctions
+    args = SimpleNamespace(session_id=session_id)
+    exec_with_error_printing(exec_dev_update_testfunctions, args)
 
 # ------------------------------
 # Testfunction commands

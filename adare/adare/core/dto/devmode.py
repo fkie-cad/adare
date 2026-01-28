@@ -117,6 +117,12 @@ class DevSessionRecordRequest:
     output_file: Path
 
 
+@dataclass
+class DevUpdateTestfunctionsRequest:
+    """Request to update testfunctions in the VM."""
+    session_id: str
+
+
 
 # =============================================================================
 # Response DTOs
@@ -201,3 +207,11 @@ class DevCleanupResult:
     """Result of cleanup operation."""
     sessions_removed: int
     removed_session_ids: List[str] = field(default_factory=list)
+
+
+@dataclass
+class DevUpdateTestfunctionsResult:
+    """Result of updating testfunctions."""
+    success: bool
+    message: str
+    execution_time: float

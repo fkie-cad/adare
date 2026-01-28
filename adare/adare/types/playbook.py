@@ -125,11 +125,28 @@ class Settings:
     gui_execution_mode: str = 'auto'  # GUI automation mode: 'auto', 'agent', 'host' (QEMU only)
 
 @attrs.define
+class Offset:
+    x: int = 0
+    y: int = 0
+    base: str = 'center'  # center, top-left, top-right, bottom-left, bottom-right, center-left, center-right, top-center, bottom-center
+
+    def __attrs_post_init__(self):
+        valid_bases = {
+            'center', 'top-left', 'top-right', 'bottom-left', 'bottom-right',
+            'center-left', 'center-right', 'top-center', 'bottom-center'
+        }
+        if self.base not in valid_bases:
+            raise ValueError(f"Offset.base must be one of {valid_bases}, got '{self.base}'")
+
+
+@attrs.define
 class Target:
     image: Optional[str] = None
     text: Optional[str] = None
     position: Optional[List[int]] = None
     strategy: Optional[TargetStrategyType] = None
+    offset: Optional[Offset] = None
+
 
 @attrs.define
 class ExistsCondition:
@@ -361,6 +378,7 @@ class BlockAction:
     actions: List[ActionType]  # Remove quotes
     description: str = ''
     when: Optional[List[Union['ExistsCondition', 'NotExistsCondition']]] = None
+    delay: Optional[float] = None
 
 @attrs.define
 class WaitCondition:
@@ -571,6 +589,12 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
     converter.register_structure_hook(
         Optional[SkipOptions],
         lambda obj, _: _structure_skip_options(obj, converter) if obj is not None else None
+    )
+
+    # Register structure hook for Offset
+    converter.register_structure_hook(
+        Optional[Offset],
+        lambda obj, _: converter.structure(obj, Offset) if obj is not None else None
     )
 
     # Register strict structure hooks for all main classes to validate fields
@@ -785,6 +809,6 @@ def _register_strict_hooks(converter):
                 SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
                 TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
                 BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook,
-                SnapshotFilesystemAction, PullChangedFilesAction, PixelChangeConstraint, SkipOptions]:
+                SnapshotFilesystemAction, PullChangedFilesAction, PixelChangeConstraint, SkipOptions, Offset]:
         if attrs.has(cls):
             converter.register_structure_hook(cls, _validate_attrs_class(cls))

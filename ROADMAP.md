@@ -2,17 +2,11 @@
 
 This document tracks ongoing development tasks, planned features, quality-of-life improvements, known bugs, and areas requiring additional testing for **ADARE**.  
 
----
-
-## ✅ Current Development Tasks  
-- [ ] adare dev record modus.
 
 ---
 
 ## 🚀 Planned Features
-- [x] Add support for preinstalled agent to make especially windows development faster? -> needs to be tested!
-- [ ] perform actions with virtualbox SDK and get screenshots from video stream directly!
-- [ ] add datasets that are downloaded to an project and retrieved from an URL (e.g. hosted by us in minio instance)
+- [ ] add datasets that are downloaded to an project and retrieved from an URL (e.g. hosted by us in minio instance) 
 - [ ] add no_idle action to disable the default idle (e.g. when wanting to save a timestamp) -> or better only idle between gui actions
 - [ ] experiment run by glob (does not work as load does not work by glob)
 - [ ] Add support for Wayland-based Linux systems  
@@ -44,9 +38,9 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] check if we need to place building wheel into a single stage showing? I think yes!
 - [ ] adjust our tool be Model View Controller for frontend and terminal support later
 - [ ] change stage message for qemu; maybe even stages
-- [ ] Playbook support keyboard keys X times. 
 - [x] support adare dev checkpoint live snapshot with virtiofs shared directory. Maybe unplug before checkpoint and plug after checkpoint?
-
+- [ ] add host mode for VirtualBox: perform actions with virtualbox SDK and get screenshots from video stream directly
+- [ ] Possibility to test on host rather than on guest (1) for pure host mode with qemu/libguestfs (2) for tests that can only run on an linux host when we have an windows guest.
  
 ---
 
@@ -82,25 +76,19 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] Consider lazy loading of modules at least for certain libraries -> improve speed
 - [ ] Think about the access pattern to both database. Can we simplify/improve this?
 - [ ] we validate on experiment load against files and analyze it would be faster and better to validate against database
-- [ ] remove all kind of emojis/icons from logging messages. ✅🆕
 - [ ] in some terminal files we use directly database and do queries. Should we not provide this through an API that provides the data? What is better code quality?
 - [ ] add tests for modular code parts; make code more modular where required!
 - [ ] background commands in vm (as installation); when to check for results (move to separate thread?)
-- [ ] address: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. 
 - [ ] command line seems slow responsive; improve
 - [ ] change from poetry to uv
-- [ ] make flowconsole and stages a more general concept. So remove coupling to improve code quality.
-- [ ] split adare/adare/hypervisor/qemu/vm.py in multiple files!
 
 ---
 
 ## 🐞 Known Bugs  
-- [ ] adare env rm for qemu vm removes the base image!
 - [ ] check if verify_guest_agent_readiness is duplicate? 
 - [ ] is it correct I see twice should the check not only happen once?: guestfish CLI tool available.
 - [ ] do we really need qemu detect os since this is already with environment provided data or? 
 - [ ] long step after installing AdareVM which is not part of any Stage
-- [ ] improve stages in general!
 - [ ] ctrl-c during waiting for vm does not work?!
 
 

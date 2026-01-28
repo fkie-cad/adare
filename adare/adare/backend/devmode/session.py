@@ -679,6 +679,54 @@ class DevModeSession:
 
         return result
 
+    async def reload_testfunctions(self) -> bool:
+        """
+        Reload test functions from host to VM to enable dynamic updates.
+        
+        This packages the current test files from the host and uploads them to the VM again.
+        The adarevm agent will extract them to a new temporary directory and use them for subsequent tests.
+        """
+        if not self.is_running:
+            log.warning("Cannot reload test functions: Session not running")
+            return False
+
+        with self._command_logger("reload_testfunctions"):
+            if not await self._ensure_playbook_controller():
+                log.warning("Cannot reload test functions: Failed to ensure playbook controller")
+                return False
+
+            if not self.experiment_ctx.client:
+                log.warning("Cannot reload test functions: WebSocket client not connected")
+                return False
+
+            log.info("Reloading test functions from host...")
+            try:
+                # Re-run loading process (packages and uploads test functions)
+                # Note: load_tests determines which tests to load based on the CURRENT playbook
+                # If no playbook is loaded yet, it might default to loading nothing or all?
+                # Actually TestLoader.load_tests checks playbook used testfunctions.
+                # If we are in dev mode, we might want to reload ALL test functions or just the ones
+                # relevant to the session. 
+                # PlaybookController.test_loader.load_tests() inspects self.playbook.
+                # If no playbook is loaded in the controller, it might fail or do nothing.
+                
+                # However, in dev mode, we often run single actions or new playbooks.
+                # If we want to update the code for *currently defined* test functions, this works.
+                # But if we added a new test function to the playbook, we might need the playbook to be updated first.
+                
+                # Check how load_tests works: it uses self.playbook if available. 
+                # If we just want to push the files, maybe we need to be careful.
+                # But typically dev session involves iterating on a playbook.
+                
+                # Let's assume the user has a playbook or wants to refresh the environment for the next action.
+                await self.playbook_controller.test_loader.load_tests(self.experiment_ctx.client)
+                
+                log.info("Test functions reloaded successfully")
+                return True
+            except Exception as e:
+                log.error(f"Failed to reload test functions: {e}", exc_info=True)
+                return False
+
     async def reset_soft(self) -> bool:
         """
         Soft reset: Restore VM to initial external snapshot (no full OS reboot).

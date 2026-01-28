@@ -42,6 +42,8 @@ from adare.core.dto.devmode import (
     DevResetResult,
     DevCleanupResult,
     DevSessionRecordRequest,
+    DevUpdateTestfunctionsRequest,
+    DevUpdateTestfunctionsResult,
 )
 
 log = logging.getLogger(__name__)
@@ -599,6 +601,45 @@ class DevModeService:
 
         except Exception as e:
             log.error(f"Error getting session state: {e}", exc_info=True)
+            return Result.fail(
+                "INTERNAL_ERROR",
+                f"Unexpected error: {str(e)}",
+                ["Check logs for details"]
+            )
+
+    def update_testfunctions(self, request: DevUpdateTestfunctionsRequest) -> Result[DevUpdateTestfunctionsResult]:
+        """
+        Update testfunctions in the VM.
+        
+        Args:
+            request: DevUpdateTestfunctionsRequest
+            
+        Returns:
+            Result[DevUpdateTestfunctionsResult]
+        """
+        try:
+            start_time = time.time()
+            
+            # Use manager to process update
+            success = asyncio.run(self._manager.update_testfunctions(request.session_id))
+            
+            execution_time = time.time() - start_time
+            
+            if success:
+                return Result.ok(DevUpdateTestfunctionsResult(
+                    success=True,
+                    message="Testfunctions updated successfully",
+                    execution_time=execution_time
+                ))
+            else:
+                return Result.fail(
+                    "UPDATE_FAILED",
+                    "Failed to update testfunctions",
+                    ["Check if session is active and running", "Check logs for details"]
+                )
+                
+        except Exception as e:
+            log.error(f"Error updating testfunctions: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
                 f"Unexpected error: {str(e)}",

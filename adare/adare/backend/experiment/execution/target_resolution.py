@@ -104,6 +104,46 @@ class TargetResolutionExecutor:
             match = await self.target_resolver.resolve_target(target, screenshot_base64)
             execution_time = time.time() - start_time
 
+
+            # Apply offset if target found and offset specified
+            if match and hasattr(target, 'offset') and target.offset:
+                coords = match.coordinates
+                final_x, final_y = coords
+                offset = target.offset
+                
+                # Determine anchor point based on base
+                anchor_x, anchor_y = coords  # Default to center (coordinates from resolver are usually center)
+                
+                # If we have region info, we can be more precise about anchors
+                if match.region:
+                    rx, ry, rw, rh = match.region
+                    
+                    if offset.base == 'center':
+                        anchor_x, anchor_y = rx + rw // 2, ry + rh // 2
+                    elif offset.base == 'top-left':
+                        anchor_x, anchor_y = rx, ry
+                    elif offset.base == 'top-right':
+                        anchor_x, anchor_y = rx + rw, ry
+                    elif offset.base == 'bottom-left':
+                        anchor_x, anchor_y = rx, ry + rh
+                    elif offset.base == 'bottom-right':
+                        anchor_x, anchor_y = rx + rw, ry + rh
+                    elif offset.base == 'center-left':
+                        anchor_x, anchor_y = rx, ry + rh // 2
+                    elif offset.base == 'center-right':
+                        anchor_x, anchor_y = rx + rw, ry + rh // 2
+                    elif offset.base == 'top-center':
+                        anchor_x, anchor_y = rx + rw // 2, ry
+                    elif offset.base == 'bottom-center':
+                        anchor_x, anchor_y = rx + rw // 2, ry + rh
+                
+                # Apply x/y offsets
+                final_x = anchor_x + offset.x
+                final_y = anchor_y + offset.y
+                
+                log.info(f"Applied offset {offset} to match at {coords}. Region: {match.region}. New coords: ({final_x}, {final_y})")
+                match.coordinates = (final_x, final_y)
+
             # Emit find complete event
             if self.experiment_run_id and event_emitter:
                 success = match is not None
