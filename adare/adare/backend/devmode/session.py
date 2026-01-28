@@ -234,7 +234,12 @@ class DevModeSession:
         handler.setLevel(logging.DEBUG)
 
         # Add to root logger
-        logging.getLogger().addHandler(handler)
+        root_logger = logging.getLogger()
+        root_logger.addHandler(handler)
+        # Ensure root logger level allows DEBUG messages to be captured
+        if root_logger.level > logging.DEBUG:
+            root_logger.setLevel(logging.DEBUG)
+
         self.session_log_handler = handler
         log.info(f"Dev session logging initialized: {session_log_file}")
 
@@ -1317,6 +1322,39 @@ class DevModeSession:
             if vm.get_state() != 'running':
                 raise HypervisorException("VM must be running to create live snapshot")
 
+            # STOP AGENT BEFORE SNAPSHOT
+            # This ensures that when the snapshot is restored, the agent is NOT running,
+            # allowing for a clean fresh start using the cached command.
+            log.info("Stopping AdareVM agent before snapshot to ensure clean state")
+
+            # 1. Disconnect WebSocket client
+            if self.experiment_ctx.client:
+                try:
+                    await self.experiment_ctx.client.disconnect()
+                except Exception as e:
+                    log.warning(f"Error disconnecting client before snapshot: {e}")
+
+            # 2. Kill adarevm process in VM
+            try:
+                if self.experiment_ctx.guest_platform == 'windows':
+                    # Windows: Force kill adarevm (and python wrappers if needed)
+                    # We use taskkill /F /IM adarevm.exe and potentially python processes if we can distinguish them
+                    # But simpler to target adarevm.exe or use the stored PID if available (but PID is QEMU specific in context)
+                    # Let's try basic taskkill first.
+                    stop_cmd = "taskkill /F /IM adarevm.exe"
+                else:
+                    # Linux: pkill
+                    stop_cmd = "pkill -f adarevm"
+
+                # Run stop command (ignore errors if not running)
+                # We use a short timeout
+                await vm.run_command(stop_cmd, timeout=10)
+            except Exception as e:
+                log.warning(f"Failed to stop adarevm agent in VM (might not be running): {e}")
+
+            # Wait a moment for process to die and file handles to close
+            await asyncio.sleep(2)
+
             # Compute snapshot storage directory
             snapshot_dir = vm._get_snapshot_storage_dir()
 
@@ -1343,10 +1381,6 @@ class DevModeSession:
             # (Required because shared directory issues may kill the agent during snapshot creation)
             log.info("Restarting AdareVM agent after snapshot creation")
             
-            # Disconnect existing client if active
-            if self.experiment_ctx.client:
-                 await self.experiment_ctx.client.disconnect()
-
             from adare.backend.experiment.run import (
                 step_install_and_run_websocket_server,
                 step_connect_websocket

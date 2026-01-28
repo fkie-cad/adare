@@ -644,6 +644,17 @@ class SnapshotMixin(AbstractSnapshotMixin):
             if restore_result.returncode == 0:
                 log.info(f"CLAUDE: Successfully restored external snapshot for VM '{self.vm_name}'")
 
+                # RE-INITIALIZE DOMAIN OBJECT
+                # The domain ID changes after restore, and sometimes the existing object becomes invalid/stale.
+                # We must refresh it to ensure subsequent operations (like attachDevice) work correctly.
+                try:
+                    conn = self._get_libvirt_connection()
+                    self._libvirt_domain = conn.lookupByName(self.vm_name)
+                    log.debug("CLAUDE: Refreshed libvirt domain object after restore")
+                except Exception as e:
+                    log.error(f"CLAUDE: Failed to refresh libvirt domain object: {e}")
+                    # Continue anyway, we might still have a working object or fail later
+
                 # Invalidate PATH cache after snapshot restore
                 self._path_discovery_attempted = False
                 self._cached_guest_path = None
