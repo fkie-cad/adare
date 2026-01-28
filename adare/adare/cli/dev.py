@@ -150,41 +150,6 @@ def _stop_event_listeners() -> None:
     log.debug("Event listeners stopped")
 
 
-def _setup_log_file_handler(log_file: Path) -> Optional[logging.Handler]:
-    """Setup file handler for logging to a file."""
-    try:
-        # Create parent directory if needed
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # Create file handler
-        file_handler = logging.FileHandler(log_file, mode='w')
-        file_handler.setLevel(logging.DEBUG)
-
-        # Use detailed formatter for file logs
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        file_handler.setFormatter(formatter)
-
-        # Add to root logger
-        logging.getLogger().addHandler(file_handler)
-        log.info(f"Logging to file: {log_file}")
-
-        return file_handler
-    except OSError as e:
-        log.error(f"Failed to setup log file handler: {e}")
-        return None
-
-
-def _cleanup_log_file_handler(handler: Optional[logging.Handler]) -> None:
-    """Remove and close log file handler."""
-    if handler:
-        try:
-            logging.getLogger().removeHandler(handler)
-            handler.close()
-        except Exception as e:
-            log.warning(f"Error cleaning up log handler: {e}")
 
 
 # =============================================================================
@@ -246,7 +211,6 @@ def exec_dev_start(arguments):
     _start_event_listeners(console_ulid)
 
     # Setup logging
-    log_handler = _setup_log_file_handler(log_file) if log_file else None
 
     try:
         # Start session
@@ -258,7 +222,6 @@ def exec_dev_start(arguments):
             vm_memory=getattr(arguments, 'vm_memory', None),
             vm_cpus=getattr(arguments, 'vm_cpus', None),
             debug_screenshots=getattr(arguments, 'debug_screenshots', False),
-            log_file=log_file,
             console_ulid=console_ulid,
             shared_directories=shared_directories if shared_directories else None
         ))
@@ -271,8 +234,6 @@ def exec_dev_start(arguments):
                 next_steps=result.data.next_steps,
                 tip=result.data.tip
             )
-            if log_file:
-                print(f"\nLogs saved to: {log_file}")
             
             if shared_directories:
                 print("\nShared Directories:")
@@ -289,6 +250,7 @@ def exec_dev_start(arguments):
         print("\n\nDev session start interrupted")
         exit(1)
     except Exception as e:
+        log.error(f"Dev session start failed: {e}", exc_info=True)
         flow_console.log_error('DEV_START_ERROR', f'Error: {str(e)}')
         flow_console.stop()
         print_error_message(title='Failed to start dev session', next_steps=['Check logs'])
@@ -296,8 +258,6 @@ def exec_dev_start(arguments):
     finally:
         flowconsolemanager.remove_handler(console_ulid)
         _stop_event_listeners()
-        if log_handler:
-            _cleanup_log_file_handler(log_handler)
 
 
 def exec_dev_resume(arguments):
@@ -320,7 +280,6 @@ def exec_dev_resume(arguments):
     _start_event_listeners(console_ulid)
 
     # Setup logging
-    log_handler = _setup_log_file_handler(log_file) if log_file else None
 
     try:
         # Resume session
@@ -346,8 +305,7 @@ def exec_dev_resume(arguments):
             print(f"  Experiment: {result.data.experiment_name}")
             print(f"  Environment: {result.data.environment_name}")
             print(f"  VM Running: {result.data.vm_running}")
-            if log_file:
-                print(f"\nLogs saved to: {log_file}")
+            print(f"  VM Running: {result.data.vm_running}")
         else:
             flow_console.stop()
             _handle_api_error(result)
@@ -366,8 +324,6 @@ def exec_dev_resume(arguments):
     finally:
         flowconsolemanager.remove_handler(console_ulid)
         _stop_event_listeners()
-        if log_handler:
-            _cleanup_log_file_handler(log_handler)
 
 
 def exec_dev_stop(arguments):
@@ -950,3 +906,33 @@ def exec_dev_record(arguments):
     except Exception as e:
         print_error_message(title="Recording failed", next_steps=[str(e)])
         exit(1)
+
+
+def exec_dev_update_testfunctions(arguments):
+    """
+    Update test functions in the VM.
+    
+    Args:
+        arguments: Parsed arguments
+    """
+    project_directory = _get_project_path(arguments)
+    session_id = _resolve_session_id(getattr(arguments, 'session_id', None), project_directory)
+    
+    api = AdareAPI()
+    
+    from adare.core.dto.devmode import DevUpdateTestfunctionsRequest
+    
+    result = api.devmode.update_testfunctions(DevUpdateTestfunctionsRequest(
+        session_id=session_id
+    ))
+    
+    if result.success:
+        print_success_message(
+            title="Test functions updated successfully",
+            next_steps=[
+                f"Execution time: {result.data.execution_time:.2f}s",
+                "You can now run tests with the updated code"
+            ]
+        )
+    else:
+        _handle_api_error(result)

@@ -74,6 +74,10 @@ class DevModeAPI:
         """Delete a checkpoint."""
         return self._service.delete_checkpoint(request)
 
+    def update_testfunctions(self, request):
+        """Update testfunctions."""
+        return self._service.update_testfunctions(request)
+
 
 class TestFunctionAPI:
     """Testfunction operations API."""

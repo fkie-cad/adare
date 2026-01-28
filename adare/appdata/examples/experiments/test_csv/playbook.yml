@@ -52,6 +52,16 @@ variables:
     value: "{{adare_shared_data}}/malformed.csv"
     description: "Malformed CSV file"
 
+  small_users_csv:
+    type: path
+    value: "{{adare_shared_data}}/small_users.csv"
+    description: "Small users CSV file for compare_rows testing"
+
+  reference_users_csv:
+    type: path
+    value: "{{adare_shared_data}}/reference_users.csv"
+    description: "Reference users CSV file for compare_files testing"
+
   # Regex patterns for complex matching
   email_regex:
     type: regex
@@ -271,6 +281,236 @@ tests:
       dst: '{{malformed_csv}}'
       entry: ['corrupted', 'data']
 
+  # ========================================
+  # CSV compare_rows tests (embedded reference data)
+  # ========================================
+
+  # Basic exact match - all rows and columns
+  - name: test_compare_rows_exact_match
+    description: 'Test csv.compare_rows with exact match of all rows'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+
+  # Selective columns - check only first 3 columns
+  - name: test_compare_rows_selective_columns
+    description: 'Test csv.compare_rows checking only specific columns'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com']
+        - ['2', 'Jane Smith', 'jane@example.com']
+        - ['3', 'Bob Jones', 'bob@example.com']
+      columns: [0, 1, 2]  # Only check first 3 columns
+
+  # Unordered comparison - ignore row order
+  - name: test_compare_rows_ignore_order
+    description: 'Test csv.compare_rows with ignore_order=true'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+      ignore_order: true
+
+  # Allow extra rows - actual has more rows than reference
+  - name: test_compare_rows_allow_extra
+    description: 'Test csv.compare_rows with allow_extra_rows=true'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+      allow_extra_rows: true
+
+  # Allow missing rows - reference has more rows than actual
+  - name: test_compare_rows_allow_missing
+    description: 'Test csv.compare_rows with allow_missing_rows=true'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+        - ['4', 'Alice Brown', 'alice@example.com', 'Manager']
+      allow_missing_rows: true
+
+  # With regex patterns
+  - name: test_compare_rows_with_regex
+    description: 'Test csv.compare_rows with regex patterns'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', '{{email_regex}}', 'Admin']
+        - ['2', 'Jane Smith', '{{email_regex}}', 'User']
+        - ['3', 'Bob Jones', '{{email_regex}}', 'User']
+
+  # With timestamp tolerance
+  - name: test_compare_rows_with_timestamps
+    description: 'Test csv.compare_rows with timestamp tolerance'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{events_csv}}'
+      reference_rows:
+        - ['EVENT001', 'user_login', '{{ fixed_timestamp | tolerance(30) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'success']
+        - ['EVENT002', 'file_access', '{{ fixed_timestamp_warning | tolerance(300) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'warning']
+      columns: [0, 1, 2, 3]
+
+  # Failure case: missing rows (not allowed)
+  - name: test_compare_rows_missing_rows_fail
+    description: 'Test csv.compare_rows fails when rows are missing'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+        - ['4', 'Alice Brown', 'alice@example.com', 'Manager']
+      allow_missing_rows: false
+
+  # Failure case: extra rows (not allowed)
+  - name: test_compare_rows_extra_rows_fail
+    description: 'Test csv.compare_rows fails when extra rows exist'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+      allow_extra_rows: false
+
+  # Failure case: mismatched values
+  - name: test_compare_rows_value_mismatch_fail
+    description: 'Test csv.compare_rows fails on value mismatch'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'wrong@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+
+  # Failure case: row order matters
+  - name: test_compare_rows_order_matters_fail
+    description: 'Test csv.compare_rows fails when row order is wrong'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+      ignore_order: false
+
+  # ========================================
+  # CSV compare_files tests (external reference files)
+  # ========================================
+
+  # Basic file comparison
+  - name: test_compare_files_exact_match
+    description: 'Test csv.compare_files with exact file match'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+
+  # Selective columns
+  - name: test_compare_files_selective_columns
+    description: 'Test csv.compare_files checking only specific columns'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+      columns: [0, 1, 2]
+
+  # Unordered comparison
+  - name: test_compare_files_ignore_order
+    description: 'Test csv.compare_files with ignore_order=true'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+      ignore_order: true
+
+  # Allow extra rows in actual
+  - name: test_compare_files_allow_extra
+    description: 'Test csv.compare_files with allow_extra_rows=true'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+      allow_extra_rows: true
+
+  # Allow missing rows from reference
+  - name: test_compare_files_allow_missing
+    description: 'Test csv.compare_files with allow_missing_rows=true'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+      allow_missing_rows: true
+
+  # Combination: ignore order + allow extra
+  - name: test_compare_files_flexible_match
+    description: 'Test csv.compare_files with flexible matching options'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+      ignore_order: true
+      allow_extra_rows: true
+
+  # Failure case: file not found
+  - name: test_compare_files_missing_actual
+    description: 'Test csv.compare_files fails when actual file missing'
+    function: csv.compare_files
+    expect_to_fail: true
+    parameter:
+      actual: '{{adare_shared_data}}/nonexistent.csv'
+      reference: '{{reference_users_csv}}'
+
+  # Failure case: reference file not found
+  - name: test_compare_files_missing_reference
+    description: 'Test csv.compare_files fails when reference file missing'
+    function: csv.compare_files
+    expect_to_fail: true
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{adare_shared_data}}/nonexistent.csv'
+
+  # Edge case: empty reference_rows
+  - name: test_compare_rows_empty_reference
+    description: 'Test csv.compare_rows with empty reference_rows'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows: []
+
+  # Edge case: invalid reference_rows structure
+  - name: test_compare_rows_invalid_structure
+    description: 'Test csv.compare_rows with invalid reference_rows structure'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows: 'not a list'
+
 actions:
   # Run all CSV tests - Basic tests first
   - test: test_csv_contains_line_exact_match
@@ -310,3 +550,28 @@ actions:
   - test: test_csv_contains_line_partial_match
   - test: test_csv_contains_line_special_chars
   - test: test_csv_contains_line_malformed
+
+  # CSV compare_rows tests
+  - test: test_compare_rows_exact_match
+  - test: test_compare_rows_selective_columns
+  - test: test_compare_rows_ignore_order
+  - test: test_compare_rows_allow_extra
+  - test: test_compare_rows_allow_missing
+  - test: test_compare_rows_with_regex
+  - test: test_compare_rows_with_timestamps
+  - test: test_compare_rows_missing_rows_fail
+  - test: test_compare_rows_extra_rows_fail
+  - test: test_compare_rows_value_mismatch_fail
+  - test: test_compare_rows_order_matters_fail
+  - test: test_compare_rows_empty_reference
+  - test: test_compare_rows_invalid_structure
+
+  # CSV compare_files tests
+  - test: test_compare_files_exact_match
+  - test: test_compare_files_selective_columns
+  - test: test_compare_files_ignore_order
+  - test: test_compare_files_allow_extra
+  - test: test_compare_files_allow_missing
+  - test: test_compare_files_flexible_match
+  - test: test_compare_files_missing_actual
+  - test: test_compare_files_missing_reference

@@ -678,3 +678,24 @@ class DevModeSessionManager:
         except Exception as e:
             log.error(f"Failed to restore session {session_id}: {e}", exc_info=True)
             return None
+
+    async def update_testfunctions(self, session_id: str) -> bool:
+        """
+        Reload test functions for an active session.
+
+        Args:
+            session_id: Session ID to update
+
+        Returns:
+            True if successful, False if session not found or update failed
+        """
+        session = await self.get_or_restore_session(session_id)
+        if not session:
+            log.warning(f"Session {session_id} not found for test function update")
+            return False
+
+        if not session.is_running:
+            log.warning(f"Session {session_id} is not running")
+            return False
+
+        return await session.reload_testfunctions()

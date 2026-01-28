@@ -126,6 +126,15 @@ class FlowControlExecutor:
                     success=False,
                     message=f"Block action failed: {result.message}"
                 )
+            
+            # Apply custom delay between actions if specified
+            # Note: This is loop-internal delay (between block actions).
+            # It does NOT duplicate the global idle delay which happens separately after the block finishes.
+            if action.delay is not None and action.delay > 0:
+                # Don't delay after the last action
+                if i < len(action.actions) - 1:
+                    log.debug(f"Block action delay: sleeping for {action.delay}s")
+                    await asyncio.sleep(action.delay)
 
         # Include screenshot path in final result data
         data = {'actions_executed': len(results)}
