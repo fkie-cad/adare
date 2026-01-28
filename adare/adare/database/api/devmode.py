@@ -74,7 +74,7 @@ class DevModeApi(EnhancedDatabaseApi):
         ).first()
 
         if existing:
-            raise ValidationError(f"Dev session '{session_id}' already exists")
+            raise ValidationError(log, f"Dev session '{session_id}' already exists")
 
         # Create new session
         session = DevSession(
@@ -124,7 +124,7 @@ class DevModeApi(EnhancedDatabaseApi):
         """
         session = self.get_session(session_id)
         if not session:
-            raise EntityNotFoundError(f"Dev session '{session_id}' not found")
+            raise EntityNotFoundError(log, f"Dev session '{session_id}' not found")
         return session
 
     def list_sessions(
@@ -185,6 +185,7 @@ class DevModeApi(EnhancedDatabaseApi):
         valid_statuses = ['running', 'stopped', 'crashed']
         if status not in valid_statuses:
             raise ValidationError(
+                log,
                 f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}"
             )
 
@@ -381,6 +382,7 @@ class DevModeApi(EnhancedDatabaseApi):
 
         if existing:
             raise ValidationError(
+                log,
                 f"Checkpoint '{checkpoint.name}' already exists for session {checkpoint.session_id}"
             )
 
@@ -438,6 +440,7 @@ class DevModeApi(EnhancedDatabaseApi):
         checkpoint = self.get_checkpoint(session_id, name)
         if not checkpoint:
             raise EntityNotFoundError(
+                log,
                 f"Checkpoint '{name}' not found for session {session_id}"
             )
         return checkpoint

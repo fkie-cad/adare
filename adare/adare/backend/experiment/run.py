@@ -695,7 +695,12 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
                 context.adarevm_pid = int(match.group(1))
                 log.debug(f"Stored adarevm process PID: {context.adarevm_pid}")
             else:
-                log.warning("Could not extract PID from background process start")
+                if context.guest_platform == 'windows':
+                     # Windows uses schtasks which doesn't return the PID of the started process
+                     # This is expected behavior, so just log debug
+                     log.debug("Could not extract PID from background process start (expected on Windows/schtasks)")
+                else:
+                     log.warning("Could not extract PID from background process start")
                 context.adarevm_pid = None
         except (AttributeError, ValueError) as e:
             log.warning(f"Failed to parse adarevm PID: {e}")

@@ -70,7 +70,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] adare dev playbook with more info about commands
 - [ ] make adare dev list in tabular form as other output like adare env list. 
 - [ ] remove --log parameter from adare dev start!
-- [ ] adare dev playbook indices allow 23-E or S-5 to symbolize from 23 to END and so on!
+- [x] adare dev playbook indices allow 23-E or S-5 to symbolize from 23 to END and so on!
 
 ---
 
