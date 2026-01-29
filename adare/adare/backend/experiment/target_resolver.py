@@ -360,6 +360,14 @@ class MCPTargetResolver:
                                     confidence=confidence,  # Use actual similarity from CV matching
                                     method='image'
                                 ))
+                                # For icons, we know the size of the icon we looked for
+                                try:
+                                    # Decode icon again to get dimensions if we didn't save them
+                                    # Optimization: do this once before loop
+                                    pass # Logic below
+                                except:
+                                    pass
+
                             
                             # Log all found matches with their actual confidences
                             log.info(f"Found {len(matches)} matches for image '{target.image}':")
@@ -442,6 +450,25 @@ class MCPTargetResolver:
                                     method='text',
                                     text=found_text
                                 ))
+                                # Check if we have width/height to populate region
+                                if "width" in location_info["location"] and "height" in location_info["location"]:
+                                    w = location_info["location"]["width"]
+                                    h = location_info["location"]["height"]
+                                    # Assuming x,y are center (standard for MCP), region usually wants top-left
+                                    # But let's verify. standard MCP find_text usually returns center x,y.
+                                    # Verify location info content
+                                    log.info(f"DEBUG: location_info['location'] keys: {location_info['location'].keys()}")
+                                    
+                                    # User confirmed x,y are Center.
+                                    # So Region Top-Left is Center - Half Dimension.
+                                    if "width" in location_info["location"] and "height" in location_info["location"]:
+                                        w = location_info["location"]["width"]
+                                        h = location_info["location"]["height"]
+                                        rx = int(x - w / 2)
+                                        ry = int(y - h / 2)
+                                        matches[-1].region = (rx, ry, w, h)
+                                        log.info(f"DEBUG: Calculated Region: {matches[-1].region} from x={x}, y={y}, w={w}, h={h}")
+
                             
                             # Log all found matches with their actual confidences
                             log.info(f"Found {len(matches)} matches for text '{target.text}':")

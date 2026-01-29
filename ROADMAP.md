@@ -41,7 +41,8 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [x] support adare dev checkpoint live snapshot with virtiofs shared directory. Maybe unplug before checkpoint and plug after checkpoint?
 - [ ] add host mode for VirtualBox: perform actions with virtualbox SDK and get screenshots from video stream directly
 - [ ] Possibility to test on host rather than on guest (1) for pure host mode with qemu/libguestfs (2) for tests that can only run on an linux host when we have an windows guest.
- 
+- [x] enable cache to remeber results from e.g. wait_until to click. Users can also use old locations. -> TODO: Document 
+  
 ---
 
 ## 🛠 Quality of Life Improvements  

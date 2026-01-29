@@ -115,11 +115,8 @@ def _load_hypervisor_module(hypervisor: str):
         raise
 
 
-# Auto-register VirtualBox as default on module import
-try:
-    _load_hypervisor_module('virtualbox')
-except Exception as e:
-    log.warning(f"Could not auto-register VirtualBox: {e}")
+
+
 
 
 __all__ = [

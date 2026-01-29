@@ -405,26 +405,23 @@ class SnapshotMixin(AbstractSnapshotMixin):
         use_quiesce: bool = True
     ) -> bool:
         """
-        Create a consistent live checkpoint using 'Live Resume' strategy.
+        Create a consistent live checkpoint using 'virsh snapshot-create'.
         
-        Saves RAM and creates a disk snapshot without VSS timeout risks.
+        Saves RAM and creates a disk snapshot atomically.
         
         Strategy:
-        1. Quiesce the Guest (Optional): `virsh domfsfreeze`
-        2. Detach VirtioFS devices (hot-unplug) - REQUIRED for migration/save
-        3. Save the VM State: `virsh save` (Stops VM)
-        4. Create the Disk Snapshot: `virsh snapshot-create-as --disk-only`
-        5. Resume the VM: `virsh restore --xml <updated_xml>`
-           We dump the XML (which now points to new disk) and restore using it.
-        6. Re-attach VirtioFS devices (hot-plug)
-        7. (Finally) Thaw if needed: `virsh domfsthaw`
-
+        1. Quiesce the Guest (Optional).
+        2. Detach VirtioFS devices (hot-unplug) - REQUIRED for atomic snapshotting.
+        3. Generates XML for external snapshot (disk + memory).
+        4. Create atomic snapshot: `virsh snapshot-create --atomic --live`
+        5. Re-attach VirtioFS devices (hot-plug).
+        
         Args:
             snapshot_name: Libvirt snapshot name
             memory_path: Path for external memory save file
             disk_path: Path for external disk overlay file
             use_quiesce: Whether to use guest agent to quiesce filesystem (default True)
-
+            
         Returns:
             True if snapshot created successfully, False otherwise
         """
@@ -438,111 +435,77 @@ class SnapshotMixin(AbstractSnapshotMixin):
         # Ensure snapshot directory exists
         snapshot_dir = Path(memory_path).parent
         self._ensure_snapshot_dir(snapshot_dir)
-
-        frozen = False
+        
         snapshot_success = False
         virtiofs_payloads = []
         import tempfile
 
         try:
-            # 1.5. Detach VirtioFS devices (they block migration/save)
-            virtiofs_payloads = []
+            # 1. Detach VirtioFS devices (they block/complicate snapshots)
+            # Reusing existing logic to detach and store payloads for re-attach
             if self.config.virtiofs_enabled and self.config.virtiofs_shares:
-                # NEW: Release handles in guest BEFORE detach
                 self._prepare_guest_for_snapshot()
                 virtiofs_payloads = self._get_attached_virtiofs_payloads()
             
             if virtiofs_payloads:
                 if not self._detach_virtiofs_shares(virtiofs_payloads):
-                    # If detach fails, likely devices are still busy, but we killed procs?
-                    # Try to maintain state by re-attaching
                     log.warning("CLAUDE: Failed to detach some virtiofs devices, snapshot might fail")
-                    # Should we abort? If we proceed, save will fail.
-                    # Let's try to abort gracefully
+                    # Abort if detach fails to avoid potential state corruption
                     log.error("CLAUDE: Aborting snapshot due to detach failure")
                     self._attach_virtiofs_shares(virtiofs_payloads)
                     self._refresh_guest_mounts()
                     return False
 
-            # 2. Save the VM State (Stops the VM)
-            log.info(f"CLAUDE: Saving VM state to {memory_path}...")
-            subprocess.run(
-                ['virsh', 'save', self.vm_name, memory_path],
-                check=True, capture_output=True
-            )
+            # 2. Prepare Snapshot XML
+            # Use vda as the default disk target, matching previous assumption
+            snapshot_xml = f"""<domainsnapshot>
+  <name>{snapshot_name}</name>
+  <memory snapshot='external' file='{memory_path}'/>
+  <disks>
+    <disk name='vda' snapshot='external'>
+      <source file='{disk_path}'/>
+    </disk>
+  </disks>
+</domainsnapshot>"""
 
-            # 3. Create the Disk Snapshot (updates domain config to use new overlay)
-            log.info(f"CLAUDE: Creating disk snapshot at {disk_path}...")
-            snapshot_args = [
-                'virsh', 'snapshot-create-as', self.vm_name,
-                '--name', snapshot_name,
-                '--disk-only',
-                '--diskspec', f'vda,snapshot=external,file={disk_path}',
-                '--no-metadata',
-                '--atomic',
-                '--quiesce'
-            ]
-            
-            subprocess.run(
-                snapshot_args,
-                check=True, capture_output=True
-            )
+            log.debug(f"CLAUDE: Generated snapshot XML:\n{snapshot_xml}")
 
-            # 4. Resume the VM
-            log.info("CLAUDE: Resuming VM from saved state...")
-            
-            # 4a. Get the updated XML (which includes the new disk overlay)
-            dump_result = subprocess.run(
-                ['virsh', 'dumpxml', self.vm_name],
-                check=True, capture_output=True, text=True
-            )
-            updated_xml = dump_result.stdout
-            
-            # 4b. Strip virtiofs devices from XML to match saved state
-            # The saved state has 0 filesystems (because we detached them).
-            # The dumped XML might still have them if they are in the persistent config.
-            # We must remove them to avoid "Target domain filesystem count mismatch".
-            try:
-                import xml.etree.ElementTree as ET
-                root = ET.fromstring(updated_xml)
-                devices = root.find('devices')
-                if devices is not None:
-                    # Find and remove all virtiofs filesystems
-                    for fs in devices.findall('filesystem'):
-                        driver = fs.find('driver')
-                        if driver is not None and driver.get('type') == 'virtiofs':
-                            devices.remove(fs)
-                            log.debug("CLAUDE: Stripped virtiofs device from restore XML")
-                    
-                    updated_xml = ET.tostring(root, encoding='unicode')
-            except Exception as e:
-                log.error(f"CLAUDE: Failed to strip filesystems from XML: {e}")
-            
-            # 4c. Restore using the updated (and stripped) XML
+            # 3. Create Atomic Live Snapshot
+            # Using a temporary file for the XML to pass to virsh
             with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=True) as tmp_xml:
-                tmp_xml.write(updated_xml)
+                tmp_xml.write(snapshot_xml)
                 tmp_xml.flush()
                 
-                restore_args = [
-                    'virsh', 'restore', memory_path,
-                    '--xml', tmp_xml.name,
-                    '--running'
+                cmd = [
+                    'virsh', 'snapshot-create', self.vm_name, tmp_xml.name,
+                    '--live',
+                    '--atomic',
+                    '--no-metadata' # Important: We manage snapshot files ourselves
                 ]
                 
-                subprocess.run(restore_args, check=True, capture_output=True)
+                # Quiesce is only valid for disk-only snapshots.
+                # When saving memory, the state is already consistent.
+                if use_quiesce and not memory_path:
+                    cmd.append('--quiesce')
+                elif use_quiesce and memory_path:
+                    log.debug("CLAUDE: Skipping quiesce for full snapshot (memory+disk) - incompatible with memory state")
                 
-            # 6. Re-attach VirtioFS devices
+                log.info(f"CLAUDE: Executing atomic live snapshot creation...")
+                subprocess.run(
+                    cmd,
+                    check=True, capture_output=True
+                )
+
+            # 4. Re-attach VirtioFS devices
             if virtiofs_payloads:
                 self._attach_virtiofs_shares(virtiofs_payloads)
-                # NEW: Refresh guest mounts
                 self._refresh_guest_mounts()
                 
-            log.info(f"CLAUDE: Checkpoint created and VM resumed successfully.")
+            log.info(f"CLAUDE: Checkpoint created successfully.")
             snapshot_success = True
 
         except subprocess.CalledProcessError as e:
             log.error(f"CLAUDE: Command failed during snapshot creation: {e.cmd}")
-            # Try to decode safely
             stderr_out = "N/A"
             if hasattr(e, 'stderr'):
                 if isinstance(e.stderr, bytes):
@@ -552,13 +515,14 @@ class SnapshotMixin(AbstractSnapshotMixin):
             log.error(f"CLAUDE: Stderr: {stderr_out}")
             snapshot_success = False
             
-            # Attempt to re-attach devices if we failed after detach but before/during save
+            # Attempt recovery of detached devices
             if virtiofs_payloads and self.get_state() == "running":
                 try:
                     self._attach_virtiofs_shares(virtiofs_payloads)
                     self._refresh_guest_mounts()
                 except Exception:
                     pass
+                    
         except Exception as e:
             log.error(f"CLAUDE: Error creating external snapshot: {e}")
             snapshot_success = False
@@ -632,14 +596,46 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 log.error(f"CLAUDE: Failed to update disk path: {virt_xml_result.stderr}")
                 return False
 
+            # Step 2b: Get the updated XML with new disk path
+            dump_result = subprocess.run(
+                ['virsh', 'dumpxml', self.vm_name],
+                check=True, capture_output=True, text=True
+            )
+            updated_xml = dump_result.stdout
+
+            # Step 2c: Strip virtiofs devices from XML to match saved state
+            # The saved state (snapshot) has 0 filesystems because we detached them.
+            # We must use restoration XML that matches this state.
+            try:
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(updated_xml)
+                devices = root.find('devices')
+                if devices is not None:
+                    # Find and remove all virtiofs filesystems
+                    for fs in devices.findall('filesystem'):
+                        driver = fs.find('driver')
+                        if driver is not None and driver.get('type') == 'virtiofs':
+                            devices.remove(fs)
+                            log.debug("CLAUDE: Stripped virtiofs device from restore XML")
+                    
+                    updated_xml = ET.tostring(root, encoding='unicode')
+            except Exception as e:
+                log.error(f"CLAUDE: Failed to strip filesystems from XML: {e}")
+
             # Step 3: Restore memory state (VM will resume immediately)
             log.debug("CLAUDE: Restoring memory state")
-            restore_result = subprocess.run(
-                ['virsh', 'restore', memory_path],
-                capture_output=True,
-                text=True,
-                check=False
-            )
+            
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=True) as tmp_xml:
+                tmp_xml.write(updated_xml)
+                tmp_xml.flush()
+                
+                restore_result = subprocess.run(
+                    ['virsh', 'restore', memory_path, '--xml', tmp_xml.name],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
 
             if restore_result.returncode == 0:
                 log.info(f"CLAUDE: Successfully restored external snapshot for VM '{self.vm_name}'")

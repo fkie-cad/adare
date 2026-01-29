@@ -388,7 +388,7 @@ class FlowControlExecutor:
                 try:
                     condition_result = False
                     if not should_skip_check:
-                        condition_result = await self._evaluate_wait_condition(action.condition, screenshot_base64)
+                        condition_result = await self._evaluate_wait_condition(action.condition, screenshot_base64, screenshot_path)
 
                     if condition_result:
                         elapsed_time = time.time() - start_time
@@ -449,13 +449,14 @@ class FlowControlExecutor:
             log.error(f"Wait until action failed: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
-    async def _evaluate_wait_condition(self, condition, screenshot_base64: str) -> bool:
+    async def _evaluate_wait_condition(self, condition, screenshot_base64: str, screenshot_path: Optional[str] = None) -> bool:
         """
         Recursively evaluate a WaitCondition tree.
 
         Args:
             condition: WaitCondition object to evaluate
             screenshot_base64: Screenshot data for target resolution
+            screenshot_path: Path to screenshot file (for caching)
 
         Returns:
             bool: True if condition is satisfied, False otherwise
@@ -475,6 +476,11 @@ class FlowControlExecutor:
                         log.debug("Applied default TopLeft strategy for text target")
 
                 target_match = await self.target_resolution.target_resolver.resolve_target(target, screenshot_base64)
+                
+                # Cache successful match if we have a path
+                if target_match and screenshot_path:
+                    self.target_resolution.cache_match(target, target_match, screenshot_path)
+                    
                 return target_match is not None
 
             elif condition.not_exists is not None:
@@ -496,20 +502,20 @@ class FlowControlExecutor:
             elif condition.all is not None:
                 # AND logic: all conditions must be true
                 for sub_condition in condition.all:
-                    if not await self._evaluate_wait_condition(sub_condition, screenshot_base64):
+                    if not await self._evaluate_wait_condition(sub_condition, screenshot_base64, screenshot_path):
                         return False
                 return True
 
             elif condition.any is not None:
                 # OR logic: at least one condition must be true
                 for sub_condition in condition.any:
-                    if await self._evaluate_wait_condition(sub_condition, screenshot_base64):
+                    if await self._evaluate_wait_condition(sub_condition, screenshot_base64, screenshot_path):
                         return True
                 return False
 
             elif condition.negate is not None:
                 # NOT logic: invert the result
-                return not await self._evaluate_wait_condition(condition.negate, screenshot_base64)
+                return not await self._evaluate_wait_condition(condition.negate, screenshot_base64, screenshot_path)
 
             else:
                 log.error("WaitCondition has no valid field set")
