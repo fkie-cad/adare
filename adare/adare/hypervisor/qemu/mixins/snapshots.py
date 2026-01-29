@@ -397,6 +397,30 @@ class SnapshotMixin(AbstractSnapshotMixin):
         except Exception as e:
             log.warning(f"CLAUDE: Failed to run sync guest command: {e}")
 
+    def _sync_guest_filesystem(self) -> None:
+        """
+        Attempt to sync/flush guest filesystem buffers.
+        """
+        try:
+            log.info("CLAUDE: Syncing guest filesystem...")
+            # Try to run sync command via guest agent
+            if 'windows' in self.guest_os.lower():
+                # No direct 'sync' in Windows, but we can try to wait or run a dummy command
+                # The user suggested ensuring disk is safe.
+                # We'll rely on the wait that follows, or we could try a Powershell flush if we had one.
+                # For now, just logging.
+                pass
+            else:
+                # Linux
+                self._run_guest_agent_command_sync("sync")
+            
+            # Wait a bit to ensure flush completes
+            import time
+            time.sleep(2)
+            
+        except Exception as e:
+            log.warning(f"CLAUDE: Failed to sync guest filesystem: {e}")
+
     def create_external_snapshot(
         self,
         snapshot_name: str,
@@ -441,7 +465,10 @@ class SnapshotMixin(AbstractSnapshotMixin):
         import tempfile
 
         try:
-            # 1. Detach VirtioFS devices (they block/complicate snapshots)
+            # 1. Sync Guest Filesystem (NEW)
+            self._sync_guest_filesystem()
+
+            # 2. Detach VirtioFS devices (they block/complicate snapshots)
             # Reusing existing logic to detach and store payloads for re-attach
             if self.config.virtiofs_enabled and self.config.virtiofs_shares:
                 self._prepare_guest_for_snapshot()
@@ -456,7 +483,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     self._refresh_guest_mounts()
                     return False
 
-            # 2. Prepare Snapshot XML
+            # 3. Prepare Snapshot XML
             # Use vda as the default disk target, matching previous assumption
             snapshot_xml = f"""<domainsnapshot>
   <name>{snapshot_name}</name>
@@ -470,39 +497,64 @@ class SnapshotMixin(AbstractSnapshotMixin):
 
             log.debug(f"CLAUDE: Generated snapshot XML:\n{snapshot_xml}")
 
-            # 3. Create Atomic Live Snapshot
-            # Using a temporary file for the XML to pass to virsh
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=True) as tmp_xml:
-                tmp_xml.write(snapshot_xml)
-                tmp_xml.flush()
-                
-                cmd = [
-                    'virsh', 'snapshot-create', self.vm_name, tmp_xml.name,
-                    '--live',
-                    '--atomic',
-                    '--no-metadata' # Important: We manage snapshot files ourselves
-                ]
-                
-                # Quiesce is only valid for disk-only snapshots.
-                # When saving memory, the state is already consistent.
-                if use_quiesce and not memory_path:
-                    cmd.append('--quiesce')
-                elif use_quiesce and memory_path:
-                    log.debug("CLAUDE: Skipping quiesce for full snapshot (memory+disk) - incompatible with memory state")
-                
-                log.info(f"CLAUDE: Executing atomic live snapshot creation...")
-                subprocess.run(
-                    cmd,
-                    check=True, capture_output=True
-                )
+            # 4. Suspend VM (NEW) to ensure disk consistency
+            vm_was_suspended = False
+            try:
+                if self.get_state() == "running":
+                    log.info("CLAUDE: Suspending VM for snapshot...")
+                    self._libvirt_domain.suspend()
+                    vm_was_suspended = True
+                    # Verify state?
+                    import time
+                    time.sleep(1) # Give it a moment
+            except Exception as e:
+                log.warning(f"CLAUDE: Failed to suspend VM: {e}")
+                # We proceed, but warn
 
-            # 4. Re-attach VirtioFS devices
+            try:
+                # 5. Create Atomic Live Snapshot
+                # Using a temporary file for the XML to pass to virsh
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=True) as tmp_xml:
+                    tmp_xml.write(snapshot_xml)
+                    tmp_xml.flush()
+                    
+                    cmd = [
+                        'virsh', 'snapshot-create', self.vm_name, tmp_xml.name,
+                        '--live',
+                        '--atomic',
+                        '--no-metadata' # Important: We manage snapshot files ourselves
+                    ]
+                    
+                    # Quiesce logic:
+                    # If we suspended, we don't need --quiesce (agent command).
+                    # 'virsh snapshot-create --live' on a paused domain effectively snapshots the state.
+                    if use_quiesce and not memory_path:
+                         # Disk-only snapshot usually needs quiesce if running
+                         if not vm_was_suspended:
+                            cmd.append('--quiesce')
+                    
+                    log.info(f"CLAUDE: Executing atomic snapshot creation...")
+                    subprocess.run(
+                        cmd,
+                        check=True, capture_output=True
+                    )
+
+                log.info(f"CLAUDE: Checkpoint created successfully.")
+                snapshot_success = True
+
+            finally:
+                # 6. Resume VM (NEW)
+                if vm_was_suspended:
+                    try:
+                        log.info("CLAUDE: Resuming VM after snapshot...")
+                        self._libvirt_domain.resume()
+                    except Exception as e:
+                        log.error(f"CLAUDE: Failed to resume VM: {e}")
+
+            # 7. Re-attach VirtioFS devices
             if virtiofs_payloads:
                 self._attach_virtiofs_shares(virtiofs_payloads)
                 self._refresh_guest_mounts()
-                
-            log.info(f"CLAUDE: Checkpoint created successfully.")
-            snapshot_success = True
 
         except subprocess.CalledProcessError as e:
             log.error(f"CLAUDE: Command failed during snapshot creation: {e.cmd}")
@@ -647,8 +699,20 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     conn = self._get_libvirt_connection()
                     self._libvirt_domain = conn.lookupByName(self.vm_name)
                     log.debug("CLAUDE: Refreshed libvirt domain object after restore")
+
+                    # NEW: Explicitly resume the VM
+                    # Snapshots are taken in 'paused' state, so 'restore' brings it back paused.
+                    state = self.get_state() 
+                    if state == "paused":
+                        log.info("CLAUDE: Resuming VM from paused state after restore...")
+                        self._libvirt_domain.resume()
+                    elif state != "running":
+                         # Just in case it's somehow "shutoff" or something unexpected, try to start/resume
+                         log.warning(f"CLAUDE: VM state after restore is '{state}', attempting resume...")
+                         self._libvirt_domain.resume()
+
                 except Exception as e:
-                    log.error(f"CLAUDE: Failed to refresh libvirt domain object: {e}")
+                    log.error(f"CLAUDE: Failed to refresh/resume libvirt domain object: {e}")
                     # Continue anyway, we might still have a working object or fail later
 
                 # Invalidate PATH cache after snapshot restore
