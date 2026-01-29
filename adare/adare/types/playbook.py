@@ -146,6 +146,7 @@ class Target:
     position: Optional[List[int]] = None
     strategy: Optional[TargetStrategyType] = None
     offset: Optional[Offset] = None
+    use_cache: Optional[bool] = None  # If True, use cached result from previous matching action
 
 
 @attrs.define

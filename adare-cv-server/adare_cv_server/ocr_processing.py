@@ -125,6 +125,15 @@ class TextDetector:
         return TextDetector._format_output(all_text, output_format)
 
     @staticmethod
+    def _calculate_box_dimensions(box: List[List[float]]) -> Tuple[int, int]:
+        """Calculate width and height from bounding box."""
+        x_coords = [point[0] for point in box]
+        y_coords = [point[1] for point in box]
+        width = int(max(x_coords) - min(x_coords))
+        height = int(max(y_coords) - min(y_coords))
+        return width, height
+
+    @staticmethod
     async def find_text(
         text: str,
         screenshot_bytes: bytes,
@@ -150,12 +159,15 @@ class TextDetector:
             box, (text_rec, confidence) = detection
             if text.lower() in text_rec.lower():
                 center_x, center_y = OCRProcessor.calculate_text_center(box, offset_x, offset_y)
+                width, height = TextDetector._calculate_box_dimensions(box)
 
                 matches.append({
                     "text": text_rec,
                     "confidence": float(confidence),
                     "x": center_x,
                     "y": center_y,
+                    "width": width,
+                    "height": height
                 })
 
         log.info(f"Found {len(matches)} text matches")
@@ -199,13 +211,19 @@ class TextDetector:
         confidences = []
 
         for match in matches:
-            locations.append({
+            loc_data = {
                 "text": match["text"],
                 "location": {
                     "x": match["x"],
                     "y": match["y"],
                 }
-            })
+            }
+            if "width" in match:
+                loc_data["location"]["width"] = match["width"]
+            if "height" in match:
+                loc_data["location"]["height"] = match["height"]
+                
+            locations.append(loc_data)
             confidences.append(match["confidence"])
 
         return {

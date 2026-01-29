@@ -42,6 +42,66 @@ class TargetResolutionExecutor:
         self.gui_executor = gui_executor
         self.screenshot_counter = 0
 
+        # Cache for target resolution results: {'target_hash': str, 'result': MatchResult, 'timestamp': float, 'screenshot_path': str}
+        self.last_match_cache = {}
+        
+    def _get_target_hash(self, target) -> str:
+        """Generate a unique hash for a target definition."""
+        # Create a hashable representation of the target criteria
+        # We include strategy type but not memory address
+        strategy_repr = target.strategy.__class__.__name__ if hasattr(target, 'strategy') and target.strategy else "None"
+        
+        # Combine key target attributes
+        key_parts = [
+            str(target.image) if hasattr(target, 'image') else "None",
+            str(target.text) if hasattr(target, 'text') else "None",
+            str(target.position) if hasattr(target, 'position') else "None",
+            strategy_repr,
+            str(target.offset) if hasattr(target, 'offset') else "None"
+        ]
+        return ":".join(key_parts)
+
+    def cache_match(self, target, match_result, screenshot_path: str = None):
+        """
+        Cache a successful target match.
+        
+        Args:
+            target: The Target definition used
+            match_result: The result from target_resolver.resolve_target
+            screenshot_path: Path to the screenshot where match was found
+        """
+        if not match_result:
+            return
+            
+        target_hash = self._get_target_hash(target)
+        self.last_match_cache[target_hash] = {
+            'result': match_result,
+            'timestamp': time.time(),
+            'screenshot_path': screenshot_path
+        }
+        log.debug(f"Cached match for target {target_hash}")
+        
+    def get_cached_match(self, target):
+        """
+        Retrieve a cached match for the target if available.
+        
+        Args:
+            target: The Target to look up
+            
+        Returns:
+            Tuple of (Match object or None, screenshot_path or None, age_seconds or None)
+        """
+        target_hash = self._get_target_hash(target)
+        if target_hash in self.last_match_cache:
+            cache_entry = self.last_match_cache[target_hash]
+            age = time.time() - cache_entry['timestamp']
+            
+            # Log debug info but don't commit to using it yet
+            log.debug(f"Cache hit for target {target_hash} (age: {age:.2f}s)")
+            return cache_entry['result'], cache_entry['screenshot_path'], age
+            
+        return None, None, None
+
     async def resolve_target_with_steps(self, target, parent_action_id: str = None,
                                        event_emitter = None) -> Optional[Tuple[int, int]]:
         """Resolve target with find step emitted as action event."""
@@ -60,6 +120,7 @@ class TargetResolutionExecutor:
 
         # Create and emit find step events
         find_action_id = f"find_step_{int(time.time()*1000)}"
+        find_step = None
 
         # Create target description (used for logging, whether events are emitted or not)
         target_desc = target.image or target.text or f"position {target.position}" if target else "target"
@@ -80,6 +141,32 @@ class TargetResolutionExecutor:
             # Emit find start event using existing unified pattern
             start_event = event_emitter.create_action_start_event(find_step, -1, find_action_id, parent_action_id)
             emit_action(self.experiment_run_id, start_event, find_action_id)
+
+        # Check cache first if requested or if result is fresh (heuristic for "directly after")
+        cached_match, cached_screenshot_path, cached_age = self.get_cached_match(target)
+        should_use_cache = False
+        
+        if cached_match:
+            # Explicit request
+            if hasattr(target, 'use_cache') and target.use_cache:
+                should_use_cache = True
+                log.info(f"Using cached target (explicit request, age: {cached_age:.2f}s)")
+            
+            # Heuristic: If match is very recent (WaitUntil just finished), it's safe to reuse
+            # Limit to 5.0 seconds (generous buffer for processing implementation delays)
+            elif cached_age is not None and cached_age < 5.0:
+                 should_use_cache = True
+                 log.info(f"Using cached target (fresh heuristic, age: {cached_age:.2f}s)")
+
+        if should_use_cache and cached_match:
+            # Use cached result effectively skipping new screenshot and expensive resolution
+            return self._process_match_result(
+                target, cached_match, cached_screenshot_path, 
+                start_time=time.time(), # Fake start time for result structure
+                find_step=find_step, find_action_id=find_action_id, 
+                parent_action_id=parent_action_id, event_emitter=event_emitter,
+                from_cache=True
+            )
 
         try:
             # Get screenshot for target resolution
@@ -105,72 +192,13 @@ class TargetResolutionExecutor:
             execution_time = time.time() - start_time
 
 
-            # Apply offset if target found and offset specified
-            if match and hasattr(target, 'offset') and target.offset:
-                coords = match.coordinates
-                final_x, final_y = coords
-                offset = target.offset
-                
-                # Determine anchor point based on base
-                anchor_x, anchor_y = coords  # Default to center (coordinates from resolver are usually center)
-                
-                # If we have region info, we can be more precise about anchors
-                if match.region:
-                    rx, ry, rw, rh = match.region
-                    
-                    if offset.base == 'center':
-                        anchor_x, anchor_y = rx + rw // 2, ry + rh // 2
-                    elif offset.base == 'top-left':
-                        anchor_x, anchor_y = rx, ry
-                    elif offset.base == 'top-right':
-                        anchor_x, anchor_y = rx + rw, ry
-                    elif offset.base == 'bottom-left':
-                        anchor_x, anchor_y = rx, ry + rh
-                    elif offset.base == 'bottom-right':
-                        anchor_x, anchor_y = rx + rw, ry + rh
-                    elif offset.base == 'center-left':
-                        anchor_x, anchor_y = rx, ry + rh // 2
-                    elif offset.base == 'center-right':
-                        anchor_x, anchor_y = rx + rw, ry + rh // 2
-                    elif offset.base == 'top-center':
-                        anchor_x, anchor_y = rx + rw // 2, ry
-                    elif offset.base == 'bottom-center':
-                        anchor_x, anchor_y = rx + rw // 2, ry + rh
-                
-                # Apply x/y offsets
-                final_x = anchor_x + offset.x
-                final_y = anchor_y + offset.y
-                
-                log.info(f"Applied offset {offset} to match at {coords}. Region: {match.region}. New coords: ({final_x}, {final_y})")
-                match.coordinates = (final_x, final_y)
+            # Process the match result (calculate offsets, emit events, etc.)
+            return self._process_match_result(
+                target, match, screenshot_path, start_time, 
+                find_step, find_action_id, parent_action_id, event_emitter
+            )
 
-            # Emit find complete event
-            if self.experiment_run_id and event_emitter:
-                success = match is not None
-                coords = match.coordinates if match else None
 
-                # Log target found status
-                if success:
-                    log.info(f"Target found at ({coords[0]}, {coords[1]})")
-                else:
-                    log.error("Target not found")
-
-                # Include screenshot path in result data
-                data = {}
-                if screenshot_path:
-                    data['screenshot_path'] = screenshot_path
-
-                find_result = ActionResult(
-                    success=success,
-                    message="Target found" if success else "Target not found",
-                    execution_time=execution_time,
-                    coordinates=coords,
-                    data=data if data else None
-                )
-                complete_event = event_emitter.create_action_complete_event(find_step, -1, find_action_id, find_result, parent_action_id)
-                emit_action(self.experiment_run_id, complete_event, find_action_id)
-
-            return match.coordinates if match else None
 
         except Exception as e:
             execution_time = time.time() - start_time if 'start_time' in locals() else 0
@@ -183,6 +211,83 @@ class TargetResolutionExecutor:
                 emit_action(self.experiment_run_id, complete_event, find_action_id)
 
             return None
+
+    def _process_match_result(self, target, match, screenshot_path, start_time, 
+                             find_step, find_action_id, parent_action_id, event_emitter, 
+                             from_cache=False):
+        """Helper to process match result, applying offsets and emitting events."""
+        execution_time = time.time() - start_time
+        
+        # Apply offset if target found and offset specified
+        if match and hasattr(target, 'offset') and target.offset:
+            coords = match.coordinates
+            final_x, final_y = coords
+            offset = target.offset
+            
+            # Determine anchor point based on base
+            anchor_x, anchor_y = coords  # Default to center (coordinates from resolver are usually center)
+            
+            # If we have region info, we can be more precise about anchors
+            if match.region:
+                rx, ry, rw, rh = match.region
+                
+                if offset.base == 'center':
+                    anchor_x, anchor_y = rx + rw // 2, ry + rh // 2
+                elif offset.base == 'top-left':
+                    anchor_x, anchor_y = rx, ry
+                elif offset.base == 'top-right':
+                    anchor_x, anchor_y = rx + rw, ry
+                elif offset.base == 'bottom-left':
+                    anchor_x, anchor_y = rx, ry + rh
+                elif offset.base == 'bottom-right':
+                    anchor_x, anchor_y = rx + rw, ry + rh
+                elif offset.base == 'center-left':
+                    anchor_x, anchor_y = rx, ry + rh // 2
+                elif offset.base == 'center-right':
+                    anchor_x, anchor_y = rx + rw, ry + rh // 2
+                elif offset.base == 'top-center':
+                    anchor_x, anchor_y = rx + rw // 2, ry
+                elif offset.base == 'bottom-center':
+                    anchor_x, anchor_y = rx + rw // 2, ry + rh
+            
+            # Apply x/y offsets
+            final_x = anchor_x + offset.x
+            final_y = anchor_y + offset.y
+            
+            log.info(f"Applied offset {offset} to match at {coords}. Region: {match.region}. New coords: ({final_x}, {final_y})")
+            match.coordinates = (final_x, final_y)
+
+        # Emit find complete event
+        if self.experiment_run_id and event_emitter:
+            success = match is not None
+            coords = match.coordinates if match else None
+
+            # Log target found status
+            if success:
+                msg_suffix = " (CACHED)" if from_cache else ""
+                log.info(f"Target found at ({coords[0]}, {coords[1]}){msg_suffix}")
+            else:
+                log.error("Target not found")
+
+            # Include screenshot path in result data
+            data = {}
+            if screenshot_path:
+                data['screenshot_path'] = screenshot_path
+            
+            if from_cache:
+                data['cached'] = True
+
+            find_result = ActionResult(
+                success=success,
+                message="Target found" if success else "Target not found",
+                execution_time=execution_time,
+                coordinates=coords,
+                data=data if data else None
+            )
+            complete_event = event_emitter.create_action_complete_event(find_step, -1, find_action_id, find_result, parent_action_id)
+            emit_action(self.experiment_run_id, complete_event, find_action_id)
+
+        return match.coordinates if match else None
 
     async def execute_action_with_steps(self, action, execute_func, parent_action_id: str = None,
                                        event_emitter = None) -> ActionResult:

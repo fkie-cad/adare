@@ -1,0 +1,1 @@
+"""ADARE test suite."""
