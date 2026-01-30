@@ -455,8 +455,21 @@ class SimpleActionsExecutor:
                 websocket_timeout = action.timeout + 10
 
             # Execute raw shell command directly with options
+            
+            # Auto-detect raw PowerShell syntax and wrap it for execution
+            # This is done here (not in CommandAction) so that the Action object retains 
+            # the readable original command for logging purposes.
+            shell_command_to_execute = command
+            if shell_command_to_execute.lstrip().startswith(('$', '(')):
+                import base64
+                # UTF-16LE encoding is required for PowerShell Base64 commands
+                encoded_cmd = base64.b64encode(shell_command_to_execute.encode('utf-16le')).decode('utf-8')
+                # Use -EncodedCommand to avoid all quoting hell
+                shell_command_to_execute = f"powershell -EncodedCommand {encoded_cmd}"
+                log.debug(f"Auto-wrapped PowerShell command: {command[:50]}... -> powershell -EncodedCommand ...")
+
             result = await self.client.execute_shell(
-                shell_command=command,
+                shell_command=shell_command_to_execute,
                 cwd=cwd,
                 env=env,
                 timeout=action.timeout,

@@ -32,6 +32,8 @@ from adare.core.dto.devmode import (
     DevSessionStateRequest,
     DevSessionCleanupRequest,
     DevSessionRecordRequest,
+    DevCVRestartRequest,
+    DevCVStopRequest,
 )
 from adare.console import print_success_message, print_error_message
 
@@ -933,6 +935,59 @@ def exec_dev_update_testfunctions(arguments):
                 f"Execution time: {result.data.execution_time:.2f}s",
                 "You can now run tests with the updated code"
             ]
+        )
+    else:
+        _handle_api_error(result)
+
+def exec_dev_cv_start(arguments):
+    """Start/Response CV server with new options."""
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+    
+    # Parse debug flag
+    debug = None
+    if arguments.debug:
+        debug = True
+    elif arguments.no_debug:
+        debug = False
+        
+    # debug_output_dir
+    debug_output_dir = None
+    if arguments.debug_output:
+        debug_output_dir = Path(arguments.debug_output)
+        
+    api = AdareAPI()
+    result = api.devmode.restart_cv_server(DevCVRestartRequest(
+        session_id=session_id,
+        debug=debug,
+        debug_output_dir=debug_output_dir
+    ))
+    
+    if result.success:
+        print_success_message(
+            title=f'CV Server started/restarted for session {session_id}',
+            next_steps=[
+                f'Debug logging: {"Enabled" if debug else "Disabled" if debug is False else "Unchanged"}',
+                f'Debug output directory: {debug_output_dir if debug_output_dir else "Unchanged/Default"}'
+            ]
+        )
+    else:
+        _handle_api_error(result)
+
+
+def exec_dev_cv_stop(arguments):
+    """Stop CV server."""
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+    
+    api = AdareAPI()
+    result = api.devmode.stop_cv_server(DevCVStopRequest(
+        session_id=session_id
+    ))
+    
+    if result.success:
+        print_success_message(
+            title=f'CV Server stopped for session {session_id}'
         )
     else:
         _handle_api_error(result)

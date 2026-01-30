@@ -22,9 +22,9 @@ def assert_test_error(result):
 
 
 def assert_test_execution_error(result):
-    """Assert that a test result is execution error."""
+    """Assert that a test result is execution error (alias for ERROR)."""
     from adarelib.constants import StatusEnum
-    assert result.status == StatusEnum.EXECUTION_ERROR, f"Expected EXECUTION_ERROR, got {result.status}: {result.details}"
+    assert result.status == StatusEnum.ERROR, f"Expected ERROR, got {result.status}: {result.details}"
 
 
 def create_file_with_content(path: Path, content: str):

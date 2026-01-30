@@ -765,6 +765,36 @@ def playbook(session_id, playbook_file, url, stdin, restore, indices):
     exec_with_error_printing(exec_dev_playbook, args)
 
 @dev.group()
+def cv():
+    """CV Server management commands."""
+    pass
+
+@cv.command(name='start')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
+@click.option('--debug/--no-debug', default=None, help='Enable/disable CV debug logging (default: keep existing)')
+@click.option('--debug-output', '-o', type=click.Path(), help='Directory for debug screenshots')
+def cv_start(session_id, debug, debug_output):
+    """Start/Restart CV server with logging options."""
+    from adare.cli.dev import exec_dev_cv_start
+    args = SimpleNamespace(
+        session_id=session_id,
+        debug=debug is True,
+        no_debug=debug is False,
+        debug_output=debug_output
+    )
+    exec_with_error_printing(exec_dev_cv_start, args)
+
+@cv.command(name='stop')
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
+def cv_stop(session_id):
+    """Stop CV server."""
+    from adare.cli.dev import exec_dev_cv_stop
+    args = SimpleNamespace(
+        session_id=session_id
+    )
+    exec_with_error_printing(exec_dev_cv_stop, args)
+
+@dev.group()
 def reset():
     """Reset commands for dev session."""
     pass

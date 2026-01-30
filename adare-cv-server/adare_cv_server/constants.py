@@ -40,6 +40,14 @@ class OCRConstants:
 
     MAX_WORKERS = 1
     CSV_HEADER = "text,x,y,confidence"
+    
+    # PaddleOCR detection parameters
+    # unclip_ratio: Controls how much the detection box is expanded. 
+    # Smaller value (e.g. 1.2) helps separate close text instances.
+    # Default is usually around 1.5.
+    OCR_DET_UNCLIP_RATIO = 1.8
+    OCR_DET_DB_THRESH = 0.3
+    OCR_DET_BOX_THRESH = 0.6
 
 # Result limits
 DEFAULT_MAX_RESULTS = 50

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 import csv
 import json
 import sqlite3
+import pandas as pd
 
 
 # === Path Fixtures ===
@@ -66,6 +67,32 @@ def create_sqlite_db(tmp_path):
                 cursor.execute(f"INSERT INTO test_table VALUES ({placeholders})", row)
         conn.commit()
         conn.close()
+        return filepath
+    return _create
+
+
+@pytest.fixture
+def create_excel_file(tmp_path):
+    """Factory to create Excel files with multiple sheets."""
+    def _create(filename, sheets_data):
+        """
+        Create an Excel file with specified sheets and data.
+
+        Args:
+            filename: Name of the Excel file to create
+            sheets_data: Dict[sheet_name, List[List[str]]] - Sheet names mapped to row data
+
+        Returns:
+            Path to created Excel file
+        """
+        filepath = tmp_path / filename
+        with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+            for sheet_name, rows in sheets_data.items():
+                if rows:
+                    df = pd.DataFrame(rows)
+                else:
+                    df = pd.DataFrame()
+                df.to_excel(writer, sheet_name=sheet_name, index=False, header=False)
         return filepath
     return _create
 

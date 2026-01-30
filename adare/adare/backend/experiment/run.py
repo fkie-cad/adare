@@ -937,7 +937,20 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
         
         # Initialize MCP server with log file
         from adare.backend.experiment.mcp_server_manager import MCPServerManager
-        context.mcp_server = MCPServerManager(log_file=run_dir.mcp_gui_log_file)
+        
+        # Determine debug output directory
+        debug_output_dir = None
+        if context.debug_screenshots:
+            debug_output_dir = run_dir.screenshots_directory / 'cv_debug'
+            # Ensure parent screenshot directory exists (cv_debug will be created by server)
+            run_dir.screenshots_directory.mkdir(parents=True, exist_ok=True)
+            log.info(f"Enabled CV debug output to: {debug_output_dir}")
+
+        context.mcp_server = MCPServerManager(
+            log_file=run_dir.mcp_gui_log_file,
+            debug=context.config.dev_mode,
+            debug_output_dir=debug_output_dir
+        )
         
 
 

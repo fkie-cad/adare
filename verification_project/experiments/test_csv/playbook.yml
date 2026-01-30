@@ -1,0 +1,577 @@
+settings:
+  idle: 1.0
+  timeout: 120
+  screenshot:
+    format: "png"
+    quality: 95
+  continue_on_test_failure: true
+
+# Variables for cross-platform CSV testing
+variables:
+  fixed_timestamp:
+    type: timestamp
+    value: "2025-01-15 18:30:00"
+    timezone: "+04:00"
+    format: "%Y-%m-%dT%H:%M:%SZ"
+    description: "Fixed timestamp for consistent testing (CSV contains 14:30:00Z UTC = 18:30:00 +04:00)"
+
+  fixed_timestamp_warning:
+    type: timestamp
+    value: "2025-01-15 18:28:00"
+    timezone: "+04:00"
+    format: "%Y-%m-%dT%H:%M:%SZ"
+    description: "Fixed timestamp for warning events (CSV contains 14:28:00Z UTC = 18:28:00 +04:00)"
+
+  users_csv:
+    type: path
+    value: "{{adare_shared_data}}/users.csv"
+    description: "Users CSV file"
+
+  logs_csv:
+    type: path
+    value: "{{adare_shared_data}}/access_logs.csv"
+    description: "Access logs CSV file"
+
+  events_csv:
+    type: path
+    value: "{{adare_shared_data}}/events.csv"
+    description: "System events CSV file with timestamps"
+
+  transactions_csv:
+    type: path
+    value: "{{adare_shared_data}}/transactions.csv"
+    description: "Transaction records with amounts and regex patterns"
+
+  empty_csv:
+    type: path
+    value: "{{adare_shared_data}}/empty.csv"
+    description: "Empty CSV file"
+
+  malformed_csv:
+    type: path
+    value: "{{adare_shared_data}}/malformed.csv"
+    description: "Malformed CSV file"
+
+  small_users_csv:
+    type: path
+    value: "{{adare_shared_data}}/small_users.csv"
+    description: "Small users CSV file for compare_rows testing"
+
+  reference_users_csv:
+    type: path
+    value: "{{adare_shared_data}}/reference_users.csv"
+    description: "Reference users CSV file for compare_files testing"
+
+  # Regex patterns for complex matching
+  email_regex:
+    type: regex
+    value: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    description: "Email validation regex pattern"
+
+  version_regex:
+    type: regex
+    value: '^\d+\.\d+\.\d+$'
+    description: "Version number regex pattern"
+
+  ip_regex:
+    type: regex
+    value: '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'
+    description: "IP address regex pattern"
+
+  uuid_regex:
+    type: regex
+    value: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    description: "UUID regex pattern"
+
+# Test definitions for CSV functions
+tests:
+  # Basic CSV line matching tests
+  - name: test_csv_contains_line_exact_match
+    description: 'Test csv_contains_line with exact match'
+    function: csv.contains_line
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['1', 'John Doe', 'john@example.com', 'Admin']
+
+  - name: test_csv_contains_line_second_row
+    description: 'Test csv_contains_line with second row'
+    function: csv.contains_line
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['2', 'Jane Smith', 'jane@example.com', 'User']
+
+  - name: test_csv_contains_line_not_found
+    description: 'Test csv_contains_line with non-existent entry'
+    function: csv.contains_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['999', 'Nonexistent User', 'none@example.com', 'Guest']
+
+  # CSV with different data types
+  - name: test_csv_contains_line_mixed_types
+    description: 'Test csv_contains_line with mixed data types'
+    function: csv.contains_line
+    parameter:
+      dst: '{{logs_csv}}'
+      entry: ['2024-01-15', '10:30:45', '192.168.1.100', 'GET', '/api/users', '200']
+
+  - name: test_csv_contains_line_timestamp_match
+    description: 'Test csv_contains_line with timestamp matching'
+    function: csv.contains_line
+    parameter:
+      dst: '{{logs_csv}}'
+      entry: ['2024-01-15', '10:31:12', '192.168.1.101', 'POST', '/api/login', '401']
+
+  # Advanced regex pattern matching tests
+  - name: test_csv_contains_line_email_regex
+    description: 'Test csv_contains_line with email regex pattern'
+    function: csv.contains_line
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['1', 'John Doe', '{{email_regex}}', 'Admin']
+
+  - name: test_csv_contains_line_ip_regex
+    description: 'Test csv_contains_line with IP address regex pattern'
+    function: csv.contains_line
+    parameter:
+      dst: '{{logs_csv}}'
+      entry: ['2024-01-15', '10:30:45', '{{ip_regex}}', 'GET', '/api/users', '200']
+
+  - name: test_csv_contains_line_version_regex
+    description: 'Test csv_contains_line with version regex pattern'
+    function: csv.contains_line
+    parameter:
+      dst: '{{transactions_csv}}'
+      entry: ['TXN001', '{{version_regex}}', 'processing', '250.50']
+
+  - name: test_csv_contains_line_uuid_regex
+    description: 'Test csv_contains_line with UUID regex pattern'
+    function: csv.contains_line
+    parameter:
+      dst: '{{transactions_csv}}'
+      entry: ['TXN002', '2.1.0', 'completed', '{{uuid_regex}}']
+
+  # Timestamp with tolerance testing
+  - name: test_csv_contains_line_current_timestamp
+    description: 'Test csv_contains_line with fixed timestamp and tolerance'
+    function: csv.contains_line
+    parameter:
+      dst: '{{events_csv}}'
+      entry: ['EVENT001', 'user_login', '{{ fixed_timestamp | tolerance(30) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'success']
+
+  - name: test_csv_contains_line_recent_timestamp
+    description: 'Test csv_contains_line with warning timestamp and tolerance'
+    function: csv.contains_line
+    parameter:
+      dst: '{{events_csv}}'
+      entry: ['EVENT002', 'file_access', '{{ fixed_timestamp_warning | tolerance(300) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'warning']
+
+  - name: test_csv_contains_line_mixed_regex_timestamp
+    description: 'Test csv_contains_line with both regex and timestamp'
+    function: csv.contains_line
+    parameter:
+      dst: '{{events_csv}}'
+      entry: ['{{uuid_regex}}', 'system_update', '{{ fixed_timestamp | tolerance(30) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'info']
+
+  # Complex pattern combinations
+  - name: test_csv_contains_line_all_regex_patterns
+    description: 'Test csv_contains_line with multiple regex patterns'
+    function: csv.contains_line
+    parameter:
+      dst: '{{transactions_csv}}'
+      entry: ['{{uuid_regex}}', '{{version_regex}}', 'failed', !re '\d+\.\d{2}']
+
+  - name: test_csv_contains_line_partial_regex_fail
+    description: 'Test csv_contains_line with partial regex match (should fail)'
+    function: csv.contains_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['1', 'John Doe', 'invalid-email-format', 'Admin']
+
+  # Tolerance edge cases
+  - name: test_csv_contains_line_timestamp_exact
+    description: 'Test csv_contains_line with exact timestamp (no tolerance)'
+    function: csv.contains_line
+    parameter:
+      dst: '{{events_csv}}'
+      entry: ['EVENT003', 'exact_time', '2024-03-15T14:30:00Z', 'debug']
+
+  - name: test_csv_contains_line_timestamp_outside_tolerance
+    description: 'Test csv_contains_line with timestamp outside tolerance (should fail)'
+    function: csv.contains_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{events_csv}}'
+      entry: ['EVENT999', 'nonexistent_event', '{{ fixed_timestamp | tolerance(1) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'error']
+
+  # Complex regex patterns
+  - name: test_csv_contains_line_decimal_regex
+    description: 'Test csv_contains_line with decimal number regex'
+    function: csv.contains_line
+    parameter:
+      dst: '{{transactions_csv}}'
+      entry: ['TXN003', '3.0.1', 'completed', !re '\d+\.\d{2}']
+
+  - name: test_csv_contains_line_invalid_regex
+    description: 'Test csv_contains_line with invalid regex pattern (should fail)'
+    function: csv.contains_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['1', 'John Doe', '[unclosed-bracket', 'Admin']
+
+  # Edge cases
+  - name: test_csv_contains_line_empty_file
+    description: 'Test csv_contains_line with empty CSV file'
+    function: csv.contains_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{empty_csv}}'
+      entry: ['any', 'data']
+
+  - name: test_csv_contains_line_file_not_found
+    description: 'Test csv_contains_line with non-existent file'
+    function: csv.contains_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{adare_shared_data}}/nonexistent.csv'
+      entry: ['test', 'data']
+
+  - name: test_csv_contains_line_wrong_column_count
+    description: 'Test csv_contains_line with wrong column count'
+    function: csv.contains_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['1', 'John Doe']  # Missing columns
+
+  - name: test_csv_contains_line_extra_columns
+    description: 'Test csv_contains_line with extra columns'
+    function: csv.contains_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['1', 'John Doe', 'john@example.com', 'Admin', 'Extra', 'Columns']
+
+  # Partial matching scenarios
+  - name: test_csv_contains_line_partial_match
+    description: 'Test csv_contains_line with partial match (should fail)'
+    function: csv.contains_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{users_csv}}'
+      entry: ['1', 'John Doe', 'different@example.com', 'Admin']
+
+  # CSV with special characters
+  - name: test_csv_contains_line_special_chars
+    description: 'Test csv_contains_line with special characters'
+    function: csv.contains_line
+    parameter:
+      dst: '{{logs_csv}}'
+      entry: ['2024-01-15', '10:35:00', '192.168.1.105', 'GET', '/api/search?q=test&sort=date', '200']
+
+  # Testing with malformed CSV
+  - name: test_csv_contains_line_malformed
+    description: 'Test csv_contains_line with malformed CSV file'
+    function: csv.contains_line
+    expect_to_fail: true
+    parameter:
+      dst: '{{malformed_csv}}'
+      entry: ['corrupted', 'data']
+
+  # ========================================
+  # CSV compare_rows tests (embedded reference data)
+  # ========================================
+
+  # Basic exact match - all rows and columns
+  - name: test_compare_rows_exact_match
+    description: 'Test csv.compare_rows with exact match of all rows'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+
+  # Selective columns - check only first 3 columns
+  - name: test_compare_rows_selective_columns
+    description: 'Test csv.compare_rows checking only specific columns'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com']
+        - ['2', 'Jane Smith', 'jane@example.com']
+        - ['3', 'Bob Jones', 'bob@example.com']
+      columns: [0, 1, 2]  # Only check first 3 columns
+
+  # Unordered comparison - ignore row order
+  - name: test_compare_rows_ignore_order
+    description: 'Test csv.compare_rows with ignore_order=true'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+      ignore_order: true
+
+  # Allow extra rows - actual has more rows than reference
+  - name: test_compare_rows_allow_extra
+    description: 'Test csv.compare_rows with allow_extra_rows=true'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+      allow_extra_rows: true
+
+  # Allow missing rows - reference has more rows than actual
+  - name: test_compare_rows_allow_missing
+    description: 'Test csv.compare_rows with allow_missing_rows=true'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+        - ['4', 'Alice Brown', 'alice@example.com', 'Manager']
+      allow_missing_rows: true
+
+  # With regex patterns
+  - name: test_compare_rows_with_regex
+    description: 'Test csv.compare_rows with regex patterns'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', '{{email_regex}}', 'Admin']
+        - ['2', 'Jane Smith', '{{email_regex}}', 'User']
+        - ['3', 'Bob Jones', '{{email_regex}}', 'User']
+
+  # With timestamp tolerance
+  - name: test_compare_rows_with_timestamps
+    description: 'Test csv.compare_rows with timestamp tolerance'
+    function: csv.compare_rows
+    parameter:
+      dst: '{{events_csv}}'
+      reference_rows:
+        - ['EVENT001', 'user_login', '{{ fixed_timestamp | tolerance(30) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'success']
+        - ['EVENT002', 'file_access', '{{ fixed_timestamp_warning | tolerance(300) | format("%Y-%m-%dT%H:%M:%SZ") }}', 'warning']
+      columns: [0, 1, 2, 3]
+
+  # Failure case: missing rows (not allowed)
+  - name: test_compare_rows_missing_rows_fail
+    description: 'Test csv.compare_rows fails when rows are missing'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+        - ['4', 'Alice Brown', 'alice@example.com', 'Manager']
+      allow_missing_rows: false
+
+  # Failure case: extra rows (not allowed)
+  - name: test_compare_rows_extra_rows_fail
+    description: 'Test csv.compare_rows fails when extra rows exist'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+      allow_extra_rows: false
+
+  # Failure case: mismatched values
+  - name: test_compare_rows_value_mismatch_fail
+    description: 'Test csv.compare_rows fails on value mismatch'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['1', 'John Doe', 'wrong@example.com', 'Admin']
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+
+  # Failure case: row order matters
+  - name: test_compare_rows_order_matters_fail
+    description: 'Test csv.compare_rows fails when row order is wrong'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows:
+        - ['2', 'Jane Smith', 'jane@example.com', 'User']
+        - ['1', 'John Doe', 'john@example.com', 'Admin']
+        - ['3', 'Bob Jones', 'bob@example.com', 'User']
+      ignore_order: false
+
+  # ========================================
+  # CSV compare_files tests (external reference files)
+  # ========================================
+
+  # Basic file comparison
+  - name: test_compare_files_exact_match
+    description: 'Test csv.compare_files with exact file match'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+
+  # Selective columns
+  - name: test_compare_files_selective_columns
+    description: 'Test csv.compare_files checking only specific columns'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+      columns: [0, 1, 2]
+
+  # Unordered comparison
+  - name: test_compare_files_ignore_order
+    description: 'Test csv.compare_files with ignore_order=true'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+      ignore_order: true
+
+  # Allow extra rows in actual
+  - name: test_compare_files_allow_extra
+    description: 'Test csv.compare_files with allow_extra_rows=true'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+      allow_extra_rows: true
+
+  # Allow missing rows from reference
+  - name: test_compare_files_allow_missing
+    description: 'Test csv.compare_files with allow_missing_rows=true'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+      allow_missing_rows: true
+
+  # Combination: ignore order + allow extra
+  - name: test_compare_files_flexible_match
+    description: 'Test csv.compare_files with flexible matching options'
+    function: csv.compare_files
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{reference_users_csv}}'
+      ignore_order: true
+      allow_extra_rows: true
+
+  # Failure case: file not found
+  - name: test_compare_files_missing_actual
+    description: 'Test csv.compare_files fails when actual file missing'
+    function: csv.compare_files
+    expect_to_fail: true
+    parameter:
+      actual: '{{adare_shared_data}}/nonexistent.csv'
+      reference: '{{reference_users_csv}}'
+
+  # Failure case: reference file not found
+  - name: test_compare_files_missing_reference
+    description: 'Test csv.compare_files fails when reference file missing'
+    function: csv.compare_files
+    expect_to_fail: true
+    parameter:
+      actual: '{{users_csv}}'
+      reference: '{{adare_shared_data}}/nonexistent.csv'
+
+  # Edge case: empty reference_rows
+  - name: test_compare_rows_empty_reference
+    description: 'Test csv.compare_rows with empty reference_rows'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows: []
+
+  # Edge case: invalid reference_rows structure
+  - name: test_compare_rows_invalid_structure
+    description: 'Test csv.compare_rows with invalid reference_rows structure'
+    function: csv.compare_rows
+    expect_to_fail: true
+    parameter:
+      dst: '{{small_users_csv}}'
+      reference_rows: 'not a list'
+
+actions:
+  # Run all CSV tests - Basic tests first
+  - test: test_csv_contains_line_exact_match
+  - test: test_csv_contains_line_second_row
+  - test: test_csv_contains_line_not_found
+  - test: test_csv_contains_line_mixed_types
+  - test: test_csv_contains_line_timestamp_match
+
+  # Advanced regex pattern matching tests
+  - test: test_csv_contains_line_email_regex
+  - test: test_csv_contains_line_ip_regex
+  - test: test_csv_contains_line_version_regex
+  - test: test_csv_contains_line_uuid_regex
+
+  # Timestamp with tolerance testing
+  - test: test_csv_contains_line_current_timestamp
+  - test: test_csv_contains_line_recent_timestamp
+  - test: test_csv_contains_line_mixed_regex_timestamp
+
+  # Complex pattern combinations
+  - test: test_csv_contains_line_all_regex_patterns
+  - test: test_csv_contains_line_partial_regex_fail
+
+  # Tolerance edge cases
+  - test: test_csv_contains_line_timestamp_exact
+  - test: test_csv_contains_line_timestamp_outside_tolerance
+
+  # Complex regex patterns
+  - test: test_csv_contains_line_decimal_regex
+  - test: test_csv_contains_line_invalid_regex
+
+  # Edge cases
+  - test: test_csv_contains_line_empty_file
+  - test: test_csv_contains_line_file_not_found
+  - test: test_csv_contains_line_wrong_column_count
+  - test: test_csv_contains_line_extra_columns
+  - test: test_csv_contains_line_partial_match
+  - test: test_csv_contains_line_special_chars
+  - test: test_csv_contains_line_malformed
+
+  # CSV compare_rows tests
+  - test: test_compare_rows_exact_match
+  - test: test_compare_rows_selective_columns
+  - test: test_compare_rows_ignore_order
+  - test: test_compare_rows_allow_extra
+  - test: test_compare_rows_allow_missing
+  - test: test_compare_rows_with_regex
+  - test: test_compare_rows_with_timestamps
+  - test: test_compare_rows_missing_rows_fail
+  - test: test_compare_rows_extra_rows_fail
+  - test: test_compare_rows_value_mismatch_fail
+  - test: test_compare_rows_order_matters_fail
+  - test: test_compare_rows_empty_reference
+  - test: test_compare_rows_invalid_structure
+
+  # CSV compare_files tests
+  - test: test_compare_files_exact_match
+  - test: test_compare_files_selective_columns
+  - test: test_compare_files_ignore_order
+  - test: test_compare_files_allow_extra
+  - test: test_compare_files_allow_missing
+  - test: test_compare_files_flexible_match
+  - test: test_compare_files_missing_actual
+  - test: test_compare_files_missing_reference

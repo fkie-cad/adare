@@ -78,8 +78,8 @@ class EnvironmentMetadata:
 
     # Legacy Vagrant-based environment fields (for backward compatibility)
     vagrantbox: Optional[str] = None
-    
-    def __post_init__(self):
+
+    def __attrs_post_init__(self):
         """Validate that either vm or vagrantbox is specified."""
         if not self.vm and not self.vagrantbox:
             raise ValueError("Either 'vm' or 'vagrantbox' must be specified")

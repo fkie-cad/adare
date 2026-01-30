@@ -24,18 +24,23 @@ class MCPServerManager:
     that provides image and text detection services for playbook execution.
     """
     
-    def __init__(self, server_port: int = 13109, log_file: Optional[Path] = None):
+    
+    def __init__(self, server_port: int = 13109, log_file: Optional[Path] = None, debug: bool = False, debug_output_dir: Optional[Path] = None):
         """
         Initialize MCP server manager.
         
         Args:
             server_port: Port for MCP server (default: 13109)
             log_file: Path to log file for MCP server output
+            debug: Enable debug logging
+            debug_output_dir: Directory for debug output images
         """
         self.server_port = server_port
         self.process: Optional[subprocess.Popen] = None
         self.server_url = f"http://localhost:{server_port}/mcp"
         self.log_file = log_file
+        self.debug = debug
+        self.debug_output_dir = debug_output_dir
     
     async def start(self, allow_existing: bool = True) -> bool:
         """
@@ -72,10 +77,17 @@ class MCPServerManager:
                 log_file_handle.write(f"=== MCP GUI Server Log Started at {datetime.now()} ===\n")
                 log_file_handle.flush()
             
+            cmd = ["adare-cv-server", "--port", str(self.server_port)]
+            if self.debug:
+                cmd.append("--debug")
+            
+            if self.debug_output_dir:
+                cmd.extend(["--debug-output-dir", str(self.debug_output_dir)])
+
             # Start process with start_new_session=True to detach from parent
             # This ensures it survives when the CLI tool exits
             self.process = subprocess.Popen(
-                ["adare-cv-server", "--port", str(self.server_port)],
+                cmd,
                 stdout=log_file_handle or subprocess.PIPE,
                 stderr=subprocess.STDOUT if log_file_handle else subprocess.PIPE,
                 text=True,

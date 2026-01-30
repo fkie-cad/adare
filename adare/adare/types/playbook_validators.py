@@ -271,9 +271,9 @@ class FilterValidator(PlaybookValidator):
     # Map variable types to their allowed filters
     TYPE_FILTERS = {
         'TIMESTAMP': {'timezone', 'format', 'tolerance', 'localtime'},
-        'STRING': set(),
-        'REGEX': set(),
-        'PATH': set(),
+        'STRING': {'win_path', 'posix_path', 'double_backslash'},
+        'REGEX': {'double_backslash'},
+        'PATH': {'win_path', 'posix_path', 'double_backslash'},
         'INTEGER': set(),
         'FLOAT': set(),
         'BOOLEAN': set(),

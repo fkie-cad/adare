@@ -42,6 +42,7 @@ spec.loader.exec_module(helpers)
 assert_test_success = helpers.assert_test_success
 assert_test_failed = helpers.assert_test_failed
 assert_test_error = helpers.assert_test_error
+assert_test_execution_error = helpers.assert_test_execution_error
 
 
 # ============================================================================
@@ -159,7 +160,7 @@ class TestVisualExists:
         )
         result = await test.test(mock_visual_context)
 
-        assert result.status == StatusEnum.EXECUTION_ERROR
+        assert_test_execution_error(result)
         assert "Image file not found" in result.details[0]
 
     @pytest.mark.asyncio
@@ -171,7 +172,7 @@ class TestVisualExists:
         )
         result = await test.test(mock_visual_context)
 
-        assert result.status == StatusEnum.EXECUTION_ERROR
+        assert_test_execution_error(result)
         assert "Invalid parameters" in result.details[0]
 
     @pytest.mark.asyncio
@@ -283,7 +284,7 @@ class TestVisualNotExists:
         )
         result = await test.test(mock_visual_context)
 
-        assert result.status == StatusEnum.EXECUTION_ERROR
+        assert_test_execution_error(result)
         assert "Invalid parameters" in result.details[0]
 
     @pytest.mark.asyncio
@@ -410,7 +411,7 @@ class TestVisualCountEquals:
         )
         result = await test.test(mock_visual_context)
 
-        assert result.status == StatusEnum.EXECUTION_ERROR
+        assert_test_execution_error(result)
         assert "Parameter 'n' required" in result.details[0]
 
     @pytest.mark.asyncio
@@ -422,7 +423,7 @@ class TestVisualCountEquals:
         )
         result = await test.test(mock_visual_context)
 
-        assert result.status == StatusEnum.EXECUTION_ERROR
+        assert_test_execution_error(result)
         assert "Invalid parameters" in result.details[0]
 
 
@@ -546,7 +547,7 @@ class TestVisualCountMin:
         )
         result = await test.test(mock_visual_context)
 
-        assert result.status == StatusEnum.EXECUTION_ERROR
+        assert_test_execution_error(result)
         assert "Parameter 'min' required" in result.details[0]
 
 
@@ -683,7 +684,7 @@ class TestVisualCountMax:
         )
         result = await test.test(mock_visual_context)
 
-        assert result.status == StatusEnum.EXECUTION_ERROR
+        assert_test_execution_error(result)
         assert "Parameter 'max' required" in result.details[0]
 
     @pytest.mark.asyncio
@@ -695,7 +696,7 @@ class TestVisualCountMax:
         )
         result = await test.test(mock_visual_context)
 
-        assert result.status == StatusEnum.EXECUTION_ERROR
+        assert_test_execution_error(result)
         assert "Invalid parameters" in result.details[0]
 
 
@@ -748,7 +749,7 @@ class TestVisualEdgeCases:
         )
         result = await test.test(mock_visual_context)
 
-        assert result.status == StatusEnum.EXECUTION_ERROR
+        assert_test_execution_error(result)
         assert "Visual test execution failed" in result.details[0]
 
     @pytest.mark.asyncio
@@ -801,7 +802,7 @@ class TestVisualEdgeCases:
         )
         result = await test.test(mock_visual_context)
 
-        assert result.status == StatusEnum.EXECUTION_ERROR
+        assert_test_execution_error(result)
         assert "Invalid search params" in result.details[0]
 
     @pytest.mark.asyncio

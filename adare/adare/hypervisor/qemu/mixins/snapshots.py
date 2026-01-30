@@ -635,6 +635,49 @@ class SnapshotMixin(AbstractSnapshotMixin):
             if destroy_result.returncode != 0:
                 log.debug(f"CLAUDE: VM destroy returned non-zero (may already be stopped): {destroy_result.stderr}")
 
+            # Step 1b: Reset Disk Overlay (NEW)
+            # The 'disk_path' file is the overlay that captures writes AFTER the snapshot.
+            # To restore the disk state to the snapshot time, we must discard these writes.
+            # We do this by deleting the overlay and re-creating it, backed by the same backing file.
+            import json
+            try:
+                log.info("CLAUDE: Resetting disk overlay to ensure clean state...")
+                
+                # Get backing file info
+                info_cmd = ['qemu-img', 'info', '--output=json', disk_path]
+                info_res = subprocess.run(info_cmd, capture_output=True, text=True, check=True)
+                disk_info = json.loads(info_res.stdout)
+                
+                backing_file = disk_info.get('backing-filename')
+                if not backing_file:
+                    log.error(f"CLAUDE: Snapshot disk {disk_path} has no backing file! Cannot reset overlay safely.")
+                    return False
+                    
+                # Ideally get backing format too, but it's optional (qemu-img can probe). 
+                # Should be qcow2 usually.
+                backing_fmt = disk_info.get('backing-filename-format', 'qcow2')
+                
+                log.debug(f"CLAUDE: Found backing file: {backing_file} (fmt: {backing_fmt})")
+                
+                # Delete current dirty overlay
+                os.remove(disk_path)
+                log.debug(f"CLAUDE: Deleted dirty overlay: {disk_path}")
+                
+                # Re-create fresh overlay
+                create_cmd = [
+                    'qemu-img', 'create', 
+                    '-f', 'qcow2', 
+                    '-b', backing_file, 
+                    '-F', backing_fmt, 
+                    disk_path
+                ]
+                subprocess.run(create_cmd, check=True, capture_output=True)
+                log.info(f"CLAUDE: Re-created fresh overlay: {disk_path}")
+                
+            except Exception as e:
+                log.error(f"CLAUDE: Failed to reset disk overlay: {e}")
+                return False
+
             # Step 2: Update disk path to snapshot overlay
             log.debug("CLAUDE: Updating disk path to snapshot overlay")
             virt_xml_result = subprocess.run(

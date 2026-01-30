@@ -44,6 +44,8 @@ from adare.core.dto.devmode import (
     DevSessionRecordRequest,
     DevUpdateTestfunctionsRequest,
     DevUpdateTestfunctionsResult,
+    DevCVRestartRequest,
+    DevCVStopRequest,
 )
 
 log = logging.getLogger(__name__)
@@ -640,6 +642,75 @@ class DevModeService:
                 
         except Exception as e:
             log.error(f"Error updating testfunctions: {e}", exc_info=True)
+            return Result.fail(
+                "INTERNAL_ERROR",
+                f"Unexpected error: {str(e)}",
+                ["Check logs for details"]
+            )
+
+    def restart_cv_server(self, request: DevCVRestartRequest) -> Result[bool]:
+        """
+        Restart the CV server for an active session.
+
+        Args:
+            request: DevCVRestartRequest
+
+        Returns:
+            Result[bool]
+        """
+        try:
+            start_time = time.time()
+            
+            # Use manager to process update
+            success = asyncio.run(self._manager.restart_mcp_server(
+                request.session_id,
+                debug=request.debug,
+                debug_output_dir=request.debug_output_dir
+            ))
+            
+            if success:
+                return Result.ok(True)
+            else:
+                return Result.fail(
+                    "RESTART_FAILED",
+                    "Failed to restart CV server",
+                    ["Check if session is active and running", "Check logs for details"]
+                )
+                
+        except Exception as e:
+            log.error(f"Error restarting CV server: {e}", exc_info=True)
+            return Result.fail(
+                "INTERNAL_ERROR",
+                f"Unexpected error: {str(e)}",
+                ["Check logs for details"]
+            )
+
+    def stop_cv_server(self, request: DevCVStopRequest) -> Result[bool]:
+        """
+        Stop the CV server for an active session.
+
+        Args:
+            request: DevCVStopRequest
+
+        Returns:
+            Result[bool]
+        """
+        try:
+            success = asyncio.run(self._manager.stop_mcp_server(
+                request.session_id
+            ))
+            
+            if success:
+                return Result.ok(True)
+            else:
+                return Result.fail(
+                    "STOP_FAILED",
+                    "Failed to stop CV server",
+                    ["Check if session is active and running", "Check logs for details"]
+                )
+                
+        except Exception as e:
+            log.error(f"Error stopping CV server: {e}", exc_info=True)
             return Result.fail(
                 "INTERNAL_ERROR",
                 f"Unexpected error: {str(e)}",

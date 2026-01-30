@@ -1,0 +1,6 @@
+event_id,event_type,timestamp,severity
+EVENT001,user_login,2025-01-15T14:30:00Z,success
+EVENT002,file_access,2025-01-15T14:28:00Z,warning
+EVENT003,exact_time,2024-03-15T14:30:00Z,debug
+EVENT004,old_event,2020-01-01T00:00:00Z,error
+123e4567-e89b-12d3-a456-426614174000,system_update,2025-01-15T14:30:00Z,info

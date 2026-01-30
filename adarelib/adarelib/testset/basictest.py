@@ -129,11 +129,46 @@ class BasicTest:
     def has_placeholders(self, text: str) -> bool:
         """Check if text has any {{ }} placeholders."""
         return '{{' in text and '}}' in text
-    
+
     def get_placeholders(self, text: str) -> List[str]:
         """Get all placeholder names from text."""
         matches = re.findall(r'\{\{\s*([^}]+)\s*\}\}', text)
         return [match.strip() for match in matches]
+
+    def resolve_variables(self, text: str) -> str:
+        """
+        Resolve {{PLACEHOLDER}} syntax by replacing with resolved_value from variable_metadata.
+
+        Args:
+            text: String containing {{PLACEHOLDER}} patterns
+
+        Returns:
+            String with all placeholders replaced by their resolved values
+
+        Example:
+            Input: "service-{{VAR1}}" with metadata VAR1.resolved_value = "nginx"
+            Output: "service-nginx"
+        """
+        if not self.variable_metadata:
+            return text
+
+        if not self.has_placeholders(text):
+            return text
+
+        result = text
+
+        # Use regex to find and replace all {{PLACEHOLDER}} patterns
+        def replace_placeholder(match):
+            placeholder_with_spaces = match.group(1)
+            placeholder_name = placeholder_with_spaces.strip()
+            metadata = self.get_placeholder_metadata(placeholder_name)
+            if metadata:
+                return str(metadata.get('resolved_value', ''))
+            return match.group(0)  # Return original if no metadata found
+
+        result = re.sub(r'\{\{\s*([^}]+)\s*\}\}', replace_placeholder, result)
+
+        return result
     
     def get_placeholder_metadata(self, placeholder_name: str) -> Dict[str, Any]:
         """Get metadata for specific placeholder."""

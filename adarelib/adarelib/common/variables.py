@@ -215,9 +215,9 @@ class Variable:
     structured_metadata: Optional[Any] = None  # Type-specific metadata objects
     name: str = ""  # Variable name for reference in filters
     
-    def __post_init__(self):
+    def __attrs_post_init__(self):
         """Validate and coerce value on creation."""
-        log.info(f"CLAUDE: Variable.__post_init__ called - value='{self.value}', type={self.type}, metadata={self.metadata}")
+        log.info(f"CLAUDE: Variable.__attrs_post_init__ called - value='{self.value}', type={self.type}, metadata={self.metadata}")
         self.value = self._validate_and_coerce(self.value, self.type)
         # Create structured metadata if available
         if self.metadata and not self.structured_metadata:
@@ -325,22 +325,57 @@ class Variable:
     @staticmethod
     def _looks_like_regex(value: str) -> bool:
         """Heuristic to detect regex patterns."""
-        regex_chars = ['.', '*', '+', '?', '[', ']', '(', ')', '{', '}', '|', '^', '$']
+        regex_chars = ['*', '+', '?', '[', ']', '(', '{', '}', '|', '^', '$']
         return any(char in value for char in regex_chars)
     
     @staticmethod
     def _looks_like_timestamp(value: str) -> bool:
         """Heuristic to detect timestamp strings."""
+        # Avoid matching version numbers (e.g. 4.13.0) as timestamps
+        # If it contains only digits and dots, and has more than one dot, it's likely a version
+        if all(c.isdigit() or c == '.' for c in value) and value.count('.') > 1:
+            return False
+            
         try:
             dateutil.parser.parse(value)
             return True
         except (dateutil.parser.ParserError, ValueError, TypeError):
             return False
+
+    @staticmethod
+    def _is_raw_string_literal(text: Any) -> bool:
+        """Check if text is a Python-style raw string literal (e.g. r"..." or r'...')."""
+        if not isinstance(text, str):
+            return False
+        
+        # Check for r"..." prefix/suffix
+        if text.startswith('r"') and text.endswith('"') and len(text) >= 3:
+            return True
+            
+        # Check for r'...' prefix/suffix
+        if text.startswith("r'") and text.endswith("'") and len(text) >= 3:
+            return True
+            
+        return False
+        
+    @staticmethod
+    def _strip_raw_string_literal(text: str) -> str:
+        """Strip raw string literal wrapper."""
+        if text.startswith('r"') or text.startswith("r'"):
+            return text[2:-1]
+        return text
     
     def _validate_and_coerce(self, value: Any, var_type: VariableType) -> Any:
         """Validate and coerce value to match the specified type."""
         log.info(f"CLAUDE: _validate_and_coerce called with value='{value}', type={var_type}")
         try:
+            # Handle raw string literals for string-like types
+            if var_type in (VariableType.STRING, VariableType.PATH, VariableType.REGEX):
+                if Variable._is_raw_string_literal(value):
+                    original_value = value
+                    value = Variable._strip_raw_string_literal(value)
+                    log.debug(f"Stripped raw string literal: '{original_value}' -> '{value}'")
+
             if var_type == VariableType.STRING:
                 return str(value)
             
@@ -585,6 +620,14 @@ class VariableRegistry:
                     elif placeholder_type == 'timestamp':
                         self._create_timestamp_tolerance_metadata(placeholder_name, var)
                         log.debug(f"Created tolerance placeholder '{placeholder_name}' for variable '{name}'")
+                    
+                    # IMPORTANT: Add the RESOLVED value of the placeholder to the context as well
+                    # This enables recursive resolution: {{ var }} -> {{ var_resolved }} -> value
+                    # which is required for CommandAction and others that need a fully resolved string
+                    placeholder_value = self._get_variable_resolved_value(var)
+                    context[placeholder_name] = placeholder_value
+                    log.debug(f"Added resolved value for placeholder '{placeholder_name}': '{placeholder_value}'")
+
                 else:
                     # For regular variables: full resolution
                     resolved_value = self._get_variable_resolved_value(var)
@@ -677,6 +720,11 @@ class VariableRegistry:
                         metadata = self._create_timestamp_tolerance_metadata(placeholder_name, var, local_only=True)
                         current_call_metadata[placeholder_name] = metadata
                         log.debug(f"Created tolerance placeholder '{placeholder_name}' for variable '{name}'")
+                    
+                    # IMPORTANT: Add the RESOLVED value of the placeholder to the context as well
+                    placeholder_value = self._get_variable_resolved_value(var, resolution_context)
+                    context[placeholder_name] = placeholder_value
+                    log.debug(f"Added resolved value for placeholder '{placeholder_name}': '{placeholder_value}'")
                 else:
                     # For regular variables: full resolution with resolution context
                     resolved_value = self._get_variable_resolved_value(var, resolution_context)
@@ -1074,6 +1122,14 @@ class VariableRegistry:
                         log.debug(f"Filter '{filter_name}' already exists from type-based registration")
                     all_filters[filter_name] = filter_func
         
+
+        # Add general path utility filters
+        all_filters.update({
+            'win_path': lambda x: str(x).replace('/', '\\'),
+            'posix_path': lambda x: str(x).replace('\\', '/'),
+            'double_backslash': lambda x: str(x).replace('\\', '\\\\'),
+        })
+
         return all_filters
     
     @classmethod
