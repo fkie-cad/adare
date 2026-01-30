@@ -373,9 +373,34 @@ class FlowControlExecutor:
                         log.debug(f"Pixel change evaluated: {change_percent:.2f}% > {constraint.above}%, < {constraint.below}%")
                         # If we didn't skip, and we evaluated, marks as satisfied
                         if not should_skip_check:
+                            is_new_satisfaction = not pixel_constraint_satisfied
                             pixel_constraint_satisfied = True
-                            if constraint.strategy == 'once':
+                            
+                            if is_new_satisfaction and constraint.strategy == 'once':
                                 log.info("Pixel change constraint satisfied (latched) - proceeding with condition checks")
+
+                            # Handle idle BEFORE search if configured
+                            # We idle if:
+                            # 1. New satisfaction (once or continuous logic start)
+                            # 2. OR Continuous strategy (always idle if we passed checks this time, to ensure stability after every accepted change)
+                            should_idle = is_new_satisfaction or constraint.strategy == 'continuous'
+                            
+                            if should_idle and constraint.idle and constraint.idle > 0:
+                                log.info(f"Pixel constraint satisfied, waiting configured idle {constraint.idle}s for UI to stabilize before search...")
+                                await asyncio.sleep(constraint.idle)
+                                
+                                # Refresh screenshot for actual search (UI might have finished rendering)
+                                refresh_base64, refresh_path = await self.target_resolution.get_current_screenshot_with_path()
+                                
+                                if refresh_base64:
+                                    screenshot_base64 = refresh_base64
+                                    screenshot_path = refresh_path
+                                    if screenshot_path:
+                                        last_screenshot_path = screenshot_path
+                                else:
+                                    log.warning("Failed to refresh screenshot after idle, skipping check")
+                                    continue
+
                             
                     except Exception as e:
                         # If optimization fails, fallback to normal check (fail open)

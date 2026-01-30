@@ -27,6 +27,7 @@ class ExperimentConfig:
     gui_mode_override: Optional[str] = None  # CLI override for GUI execution mode
     enable_diff: Optional[bool] = None  # None=use playbook, True/False=override
     diff_mode: str = 'auto'  # 'auto', 'guest', or 'host'
+    dev_mode: bool = False  # Track if running in dev mode
 
 @dataclass
 class ExperimentRunCtx:

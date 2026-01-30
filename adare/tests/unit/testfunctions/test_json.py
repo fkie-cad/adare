@@ -188,7 +188,7 @@ class TestContainsKey:
         result = test.test()
 
         assert_test_failed(result)
-        assert "not found" in result.details[0]
+        assert "does not exist" in result.details[0]
 
     def test_contains_key_success_with_null_value(self, create_json_file):
         """Test successful key check when value is null."""
@@ -949,4 +949,4 @@ class TestArrayContains:
         result = test.test()
 
         assert_test_failed(result)
-        assert "not found" in result.details[0]
+        assert "does not exist" in result.details[0]

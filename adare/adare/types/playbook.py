@@ -232,13 +232,20 @@ class CommandAction:
     allow_failure: bool = False  # Continue execution even if command returns non-zero exit code
 
     def __attrs_post_init__(self):
-        """Validate that command is a string, not a list."""
         if isinstance(self.command, list):
             raise ValueError(
                 f"CommandAction.command must be a string, not a list. "
                 f"Found: {self.command}. "
                 f"Use 'command: \"your command here\"' instead of array notation."
             )
+
+        # Support for Python-style raw strings to make Windows paths easier in YAML
+        # E.g. command: r"C:\Windows\System32" -> shell command: C:\Windows\System32
+        if self.command.startswith('r"') and self.command.endswith('"') and len(self.command) >= 3:
+            self.command = self.command[2:-1]
+        elif self.command.startswith("r'") and self.command.endswith("'") and len(self.command) >= 3:
+            self.command = self.command[2:-1]
+
 
 @attrs.define
 class ScreenshotAction:
@@ -425,6 +432,7 @@ class PixelChangeConstraint:
     above: Optional[float] = None  # Skip if change > value (Wait for stability)
     below: Optional[float] = None  # Skip if change < value (Wait for activity)
     strategy: str = 'once'         # 'once' (latch) or 'continuous' (enforce always). Default: 'once'
+    idle: Optional[float] = None   # Wait (s) after constraint satisfied before searching.
 
     def __attrs_post_init__(self):
         valid_strategies = {'once', 'continuous'}

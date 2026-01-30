@@ -16,7 +16,9 @@ from contextlib import contextmanager
 
 from adare.backend.experiment.runctx import ExperimentRunCtx, ExperimentConfig
 from adare.backend.experiment.playbook_controller import PlaybookController
+from adare.backend.experiment.playbook_controller import PlaybookController
 from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
+from adare.backend.experiment.mcp_server_manager import MCPServerManager
 from adare.types.playbook import ActionType, Playbook
 from adare.hypervisor.exceptions import HypervisorException
 from adare.types.stages import (
@@ -340,7 +342,8 @@ class DevModeSession:
                 gui_mode_override=self.gui_mode,  # Pass GUI mode override
                 vm_memory=self.vm_memory or 4096,  # VM RAM (default: 4096)
                 vm_cpus=self.vm_cpus or 4,  # VM CPUs (default: 4)
-                shared_directories=self.shared_directories
+                shared_directories=self.shared_directories,
+                dev_mode=True,  # Dev mode session = force dev mode flag
             )
 
             # 2. Initialize ExperimentRunCtx with fake run
@@ -725,6 +728,115 @@ class DevModeSession:
                 return True
             except Exception as e:
                 log.error(f"Failed to reload test functions: {e}", exc_info=True)
+                return False
+
+    async def restart_mcp_server(self, debug: Optional[bool] = None, debug_output_dir: Optional[Path] = None) -> bool:
+        """
+        Restart the MCP GUI server with updated logging options.
+
+        Args:
+            debug: Enable debug logging (True/False). If None, keeps current setting.
+            debug_output_dir: Directory for debug output. If None and debug=True, 
+                              tries to allow existing or creates new.
+
+        Returns:
+            True if restarted successfully, False otherwise
+        """
+        if not self.experiment_ctx:
+            log.error("Cannot restart MCP server: context not initialized")
+            return False
+
+        with self._command_logger("restart_mcp_server"):
+            log.info("Restarting MCP GUI server...")
+            
+            # 1. Stop existing server
+            if self.experiment_ctx.mcp_server:
+                log.info("Stopping existing MCP server...")
+                await self.experiment_ctx.mcp_server.stop(force_external=True)
+                
+                # Wait for port to be released
+                # Explicit sleep to allow OS to release port if process shutdown was async
+                # TODO: More robust port check would be better, but simple delay works for now
+                import asyncio
+                await asyncio.sleep(1.0)
+            
+            # 2. Determine configuration
+            # Use provided values or fall back to existing config
+            current_server = self.experiment_ctx.mcp_server
+            
+            # Debug flag
+            new_debug = debug if debug is not None else (current_server.debug if current_server else False)
+            
+            # Debug output dir
+            new_debug_output_dir = debug_output_dir
+            if new_debug_output_dir is None:
+                 if current_server and current_server.debug_output_dir:
+                     new_debug_output_dir = current_server.debug_output_dir
+                 elif new_debug and self.experiment_ctx.experiment_run_directory:
+                     # Auto-configure if enabling debug for first time
+                     new_debug_output_dir = self.experiment_ctx.experiment_run_directory.screenshots_directory / 'cv_debug'
+                     new_debug_output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Log file (keep existing)
+            log_file = current_server.log_file if current_server else None
+            if not log_file and self.experiment_ctx.experiment_run_directory:
+                log_file = self.experiment_ctx.experiment_run_directory.mcp_gui_log_file
+
+            # 3. Create new manager
+            log.info(f"Creating new MCP server manager (debug={new_debug}, output={new_debug_output_dir})")
+            new_manager = MCPServerManager(
+                log_file=log_file,
+                debug=new_debug,
+                debug_output_dir=new_debug_output_dir
+            )
+            
+            # 4. Start new server
+            try:
+                success = await new_manager.start(allow_existing=False) # Should be fresh start since we stopped it
+                if success:
+                    self.experiment_ctx.mcp_server = new_manager
+                    log.info("MCP GUI server restarted successfully")
+                    return True
+                else:
+                    log.error("Failed to start new MCP server")
+                    # Restore old one? Might be hard if it's already stopped.
+                    return False
+            except Exception as e:
+                log.error(f"Error restarting MCP server: {e}", exc_info=True)
+                return False
+
+            except Exception as e:
+                log.error(f"Error restarting MCP server: {e}", exc_info=True)
+                return False
+
+    async def stop_mcp_server(self) -> bool:
+        """
+        Stop the MCP GUI server.
+
+        Returns:
+            True if stopped successfully (or wasn't running), False otherwise
+        """
+        if not self.experiment_ctx:
+            log.error("Cannot stop MCP server: context not initialized")
+            return False
+
+        with self._command_logger("stop_mcp_server"):
+            if not self.experiment_ctx.mcp_server:
+                log.info("MCP server not running")
+                return True
+                
+            log.info("Stopping MCP GUI server...")
+            try:
+                await self.experiment_ctx.mcp_server.stop(force_external=True)
+                # We can either set it to None or keep the manager instance.
+                # Setting to None is cleaner if we consider it "gone", 
+                # but might lose config if we want to restart later without args.
+                # However, restart_mcp_server handles None check.
+                # Let's keep the object but ensure it knows it's stopped (MCPServerManager tracks state).
+                log.info("MCP GUI server stopped")
+                return True
+            except Exception as e:
+                log.error(f"Error stopping MCP server: {e}", exc_info=True)
                 return False
 
     async def reset_soft(self) -> bool:

@@ -1,0 +1,5 @@
+id,name,email
+1,John,john@example.com,extra_column
+2,Jane
+3,Bob,bob@example.com,role,another_extra
+"unclosed quote,field

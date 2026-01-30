@@ -4,9 +4,10 @@ import logging
 import io
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Any, Tuple, Union
+from typing import List, Dict, Any, Tuple, Union, Optional
 import numpy as np
 import cv2
+from datetime import datetime
 
 from .constants import OCRConstants
 from .exceptions import OCRProcessingError
@@ -24,11 +25,23 @@ class OCRProcessor:
 
         try:
             log.info("Initializing PaddleOCR...")
+            
+            # Capture current logging level as PaddleOCR might change it
+            root_logger = logging.getLogger()
+            original_level = root_logger.getEffectiveLevel()
+            
             ocr = PaddleOCR(
                 use_doc_orientation_classify=False,
                 use_doc_unwarping=False,
-                use_textline_orientation=False
+                use_textline_orientation=False,
+                det_db_unclip_ratio=OCRConstants.OCR_DET_UNCLIP_RATIO,
+                det_db_thresh=OCRConstants.OCR_DET_DB_THRESH,
+                det_db_box_thresh=OCRConstants.OCR_DET_BOX_THRESH,
+                lang='en' # Explicitly set language
             )
+            
+            # Restore logging level
+            root_logger.setLevel(original_level)
 
             log.info("Converting bytes to numpy array...")
             nparr = np.frombuffer(screenshot_bytes, np.uint8)
@@ -87,6 +100,52 @@ class OCRProcessor:
 
 class TextDetector:
     """Handles text detection and search operations."""
+    
+    _debug_output_dir: Optional[Any] = None
+
+    @classmethod
+    def set_debug_output_dir(cls, output_dir: Any) -> None:
+        """Set directory for saving debug images."""
+        cls._debug_output_dir = output_dir
+
+    @classmethod
+    def _save_debug_image(cls, screenshot_bytes: bytes, detections: List[Any], prefix: str = "ocr") -> None:
+        """Save screenshot with annotated detections if debug dir is set."""
+        if not cls._debug_output_dir:
+            return
+
+        try:
+            # cv2 and numpy are already imported at the top
+            
+            # Decode image
+            nparr = np.frombuffer(screenshot_bytes, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+            # Draw detections
+            for detection in detections:
+                box, (text, score) = detection
+                box = np.array(box).astype(np.int32).reshape((-1, 1, 2))
+                
+                # Draw bounding box (Red)
+                cv2.polylines(img, [box], True, (0, 0, 255), 2)
+                
+                # Draw text and score (Blue)
+                # Ensure text is clean string
+                display_text = f"{text} ({score:.2f})"
+                x, y = box[0][0]
+                cv2.putText(img, display_text, (int(x), int(y) - 5), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+
+            # Save to file
+            timestamp = datetime.now().strftime("%H%M%S_%f")
+            filename = f"{prefix}_{timestamp}.png"
+            filepath = cls._debug_output_dir / filename
+            
+            cv2.imwrite(str(filepath), img)
+            log.info(f"Saved OCR debug image to {filepath}")
+
+        except Exception as e:
+            log.warning(f"Failed to save OCR debug image: {e}")
 
     @staticmethod
     async def get_all_text(
@@ -100,6 +159,10 @@ class TextDetector:
 
         try:
             result = await OCRProcessor.process_screenshot(screenshot_bytes)
+            
+            # Save debug image
+            TextDetector._save_debug_image(screenshot_bytes, result, "get_all_text")
+            
         except Exception as e:
             log.error(f"OCR processing failed: {e}", exc_info=True)
             return {
@@ -146,6 +209,12 @@ class TextDetector:
 
         try:
             result = await OCRProcessor.process_screenshot(screenshot_bytes)
+            
+            # Save debug image
+            # Filter result to only show matches? Or show all?
+            # Ideally show all but highlight matches. For now, simple standard debug image is good.
+            TextDetector._save_debug_image(screenshot_bytes, result, f"find_text_{text}")
+            
         except Exception as e:
             log.error(f"OCR processing failed: {e}", exc_info=True)
             return {

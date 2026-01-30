@@ -605,7 +605,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 condition=condition,
                 timeout=params.get('timeout', 60.0),
                 check_interval=params.get('check_interval', 0.0),
-                initial_delay=params.get('initial_delay', 5.0),
+                initial_delay=params.get('initial_delay', 0.0),
                 description=description
             )
 

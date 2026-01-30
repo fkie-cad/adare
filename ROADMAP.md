@@ -42,7 +42,9 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] add host mode for VirtualBox: perform actions with virtualbox SDK and get screenshots from video stream directly
 - [ ] Possibility to test on host rather than on guest (1) for pure host mode with qemu/libguestfs (2) for tests that can only run on an linux host when we have an windows guest.
 - [x] enable cache to remeber results from e.g. wait_until to click. Users can also use old locations. -> TODO: Document 
-  
+
+
+
 ---
 
 ## 🛠 Quality of Life Improvements  
@@ -55,6 +57,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] Installation guide → add `eval "$(_ADARE_COMPLETE=zsh_source adare)"` and autocomplete tutorial 
   - [ ] add info that we can only run one experiment inside a specific vm/env if not in a separate project 
   - [ ] add info for qemu install. We also need (sudo apt install python3-guestfs (Ubuntu/Debian) or sudo dnf install python3-libguestfs (Fedora/RHEL)) on host
+  - [ ] add info about how variables work in playbooks
 - [ ] Simplify and clarify logging:  
   - [ ] Define logging levels more clearly  
   - [ ] Replace excessive debug logging with structured log levels  

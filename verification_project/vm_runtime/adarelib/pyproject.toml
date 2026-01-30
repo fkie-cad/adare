@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "adarelib"
+version = "0.1.0"
+description = ""
+authors = ["miqsoft <mksaxhandball@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+cattrs = "^23.2.3"
+pyyaml = "^6.0.1"
+python-ulid = "^2.7.0"
+
+
+[build-system]
+requires = ["poetry-core", "setuptools>=40.8.0"]
+build-backend = "poetry.core.masonry.api"

@@ -172,7 +172,8 @@ def create_server():
 @click.option('--port', type=int, default=DEFAULT_PORT, help='Port to run the MCP server on.')
 @click.option('--host', type=str, default=DEFAULT_HOST, help='Host to bind the server to.')
 @click.option('--debug', is_flag=True, help='Enable debug logging.')
-def main(port: int, host: str, debug: bool) -> None:
+@click.option('--debug-output-dir', type=click.Path(file_okay=False, dir_okay=True), help='Directory for debug output images.')
+def main(port: int, host: str, debug: bool, debug_output_dir: str = None) -> None:
     """Start the Adare CV server."""
 
     # Configure logging
@@ -183,6 +184,13 @@ def main(port: int, host: str, debug: bool) -> None:
     )
 
     log.info(f"Starting Adare CV server on {host}:{port}")
+
+    if debug_output_dir:
+        from pathlib import Path
+        output_path = Path(debug_output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        log.info(f"Debug output enabled. Saving images to: {output_path}")
+        TextDetector.set_debug_output_dir(output_path)
 
     try:
         # Run FastMCP server

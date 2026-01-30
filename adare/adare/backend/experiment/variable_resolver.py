@@ -830,6 +830,21 @@ class VariableResolver:
         
         return resolved_target
 
+    def _is_raw_string_literal(self, text: str) -> bool:
+        """Check if text is a Python-style raw string literal (e.g. r"..." or r'...')."""
+        if not text:
+            return False
+        
+        # Check for r"..." prefix/suffix
+        if text.startswith('r"') and text.endswith('"') and len(text) >= 3:
+            return True
+            
+        # Check for r'...' prefix/suffix
+        if text.startswith("r'") and text.endswith("'") and len(text) >= 3:
+            return True
+            
+        return False
+
     def replace_variables(self, text: str, execution_context: Dict[str, Any]) -> str:
         """Replace Jinja2 template variables in text with values or metadata placeholders.
 
@@ -843,6 +858,15 @@ class VariableResolver:
             return text
 
         result = text
+
+        # Handle Python-style raw string literals commonly used in playbooks
+        # e.g., r"C:\Path\To\File" -> C:\Path\To\File
+        if self._is_raw_string_literal(result):
+            # Strip the r" or r' prefix and corresponding suffix
+            stripped = result[2:-1]
+            log.debug(f"Detected raw string literal: '{result}' -> '{stripped}'")
+            result = stripped
+
         max_iterations = 10  # Prevent infinite loops
         previous_results = set()  # Track previous results to detect cycles
 

@@ -123,6 +123,20 @@ class DevUpdateTestfunctionsRequest:
     session_id: str
 
 
+@dataclass
+class DevCVRestartRequest:
+    """Request to restart the CV server."""
+    session_id: str
+    debug: Optional[bool] = None
+    debug_output_dir: Optional[Path] = None
+
+
+@dataclass
+class DevCVStopRequest:
+    """Request to stop the CV server."""
+    session_id: str
+
+
 
 # =============================================================================
 # Response DTOs

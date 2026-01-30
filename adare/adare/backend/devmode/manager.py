@@ -699,3 +699,52 @@ class DevModeSessionManager:
             return False
 
         return await session.reload_testfunctions()
+
+    async def restart_mcp_server(
+        self,
+        session_id: str,
+        debug: Optional[bool] = None,
+        debug_output_dir: Optional[Path] = None
+    ) -> bool:
+        """
+        Restart MCP server for a session.
+
+        Args:
+            session_id: Session ID
+            debug: Enable debug logging
+            debug_output_dir: Directory for debug output
+
+        Returns:
+            True if successful, False otherwise
+        """
+        session = await self.get_or_restore_session(session_id)
+        if not session:
+            log.warning(f"Session {session_id} not found for MCP server restart")
+            return False
+
+        if not session.is_running:
+            log.warning(f"Session {session_id} is not running")
+            return False
+
+        return await session.restart_mcp_server(debug, debug_output_dir)
+
+    async def stop_mcp_server(self, session_id: str) -> bool:
+        """
+        Stop MCP server for a session.
+
+        Args:
+            session_id: Session ID
+
+        Returns:
+            True if successful, False otherwise
+        """
+        session = await self.get_or_restore_session(session_id)
+        if not session:
+            log.warning(f"Session {session_id} not found for MCP server stop")
+            return False
+
+        if not session.is_running:
+            log.warning(f"Session {session_id} is not running")
+            return False
+
+        return await session.stop_mcp_server()

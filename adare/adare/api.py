@@ -78,6 +78,14 @@ class DevModeAPI:
         """Update testfunctions."""
         return self._service.update_testfunctions(request)
 
+    def restart_cv_server(self, request):
+        """Restart CV server."""
+        return self._service.restart_cv_server(request)
+
+    def stop_cv_server(self, request):
+        """Stop CV server."""
+        return self._service.stop_cv_server(request)
+
 
 class TestFunctionAPI:
     """Testfunction operations API."""
