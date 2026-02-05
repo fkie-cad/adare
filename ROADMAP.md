@@ -26,7 +26,6 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
   - [ ] YAML  
 - [ ] integrated log viewer with `adare run log adare ULID` or `adare run log adarevm` that we can view logs but also filter them!
 - [ ] more advanced wait_until logic -> use image diffs to identify changed areas?! Only search in changed ares?! -> analyze if this works or is too complex?!
-- [ ] wait_until not search twice but remeber the action and execute it then directly?!
 - [ ] add option --custom-testfunction PATH_TO_DIR; which is then used instead of the existing one (even if same name) -> not copied only used; this will help developing testfunctions!
 - [ ] lets us save results in variables we use later again?! 
 - [ ] document (potentially implment variable feature to write/overwrite variables in playbook dynamically)
@@ -74,11 +73,9 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 
 ## 🧹 Code Quality  
 - [ ] Rethink test function results: currently lists → should be dictionaries for better JSON/database handling  
-- [ ] backend/experiment has way to many files. Try to structure the overall software better!
 - [ ] We have custom exceptions? are these clever named and used? should we have more? (general question: Exception vs Return False/None)
 - [ ] Refactor `detect_xsession` to use existing system commands with proper parameterization  
 - [ ] Consider lazy loading of modules at least for certain libraries -> improve speed
-- [ ] Think about the access pattern to both database. Can we simplify/improve this?
 - [ ] we validate on experiment load against files and analyze it would be faster and better to validate against database
 - [ ] in some terminal files we use directly database and do queries. Should we not provide this through an API that provides the data? What is better code quality?
 - [ ] add tests for modular code parts; make code more modular where required!

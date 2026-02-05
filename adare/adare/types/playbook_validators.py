@@ -379,6 +379,9 @@ class FilterValidator(PlaybookValidator):
             'adare_shared': 'PATH',
             'adare_shared_tools': 'PATH',
             'adare_shared_data': 'PATH',
+            'adare_project_shared': 'PATH',
+            'adare_project_shared_tools': 'PATH',
+            'adare_project_shared_data': 'PATH',
             'adare_run_dir': 'PATH',
         }
         types.update(automatic_vars)
@@ -616,6 +619,9 @@ class DuplicateVariableValidator(PlaybookValidator):
             'adare_shared',
             'adare_shared_tools',
             'adare_shared_data',
+            'adare_project_shared',
+            'adare_project_shared_tools',
+            'adare_project_shared_data',
             'adare_run_dir',
         }
         return var_name in automatic_vars
@@ -719,10 +725,15 @@ class VariableDefinitionValidator(PlaybookValidator):
             'adare_temp_dir',
             'adare_system_drive',  # Windows only
             'adare_root_dir',      # Linux only
-            # Shared mount variables
+            # Experiment-level shared mount variables
             'adare_shared',
             'adare_shared_tools',
             'adare_shared_data',
+            # Project-level shared mount variables
+            'adare_project_shared',
+            'adare_project_shared_tools',
+            'adare_project_shared_data',
+            # Run directory
             'adare_run_dir',
         }
 

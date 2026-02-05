@@ -1,1 +1,0 @@
-"""WebSocket protocol for adare-adarevm communication."""

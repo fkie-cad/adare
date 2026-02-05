@@ -201,8 +201,23 @@ class SimpleActionsExecutor:
                            event_emitter = None) -> ActionResult:
         """Execute click action with steps."""
         handler = self.get_click_handler(action.type)
+        
+        # Determine context identifier
+        target_name = "target"
+        if action.target.text:
+            target_name = f"text_{action.target.text[:15]}"
+        elif action.target.image:
+             try:
+                 target_name = f"img_{Path(action.target.image).stem}"
+             except:
+                 target_name = "img"
+        elif action.target.position:
+            target_name = "pos"
+            
+        action_context = f"click_{action.type}_{target_name}"
+        
         return await self.target_resolution.execute_action_with_steps(
-            action, handler, parent_event_id, event_emitter
+            action, handler, parent_event_id, event_emitter, action_context=action_context
         )
 
     async def execute_drag(self, action: DragAction, parent_event_id: str = None,
@@ -211,10 +226,10 @@ class SimpleActionsExecutor:
         try:
             # Resolve both targets (each will emit their own find steps with proper parent)
             src_coords = await self.target_resolution.resolve_target_with_steps(
-                action.src, parent_event_id, event_emitter
+                action.src, parent_event_id, event_emitter, action_context="drag_start"
             )
             dst_coords = await self.target_resolution.resolve_target_with_steps(
-                action.dst, parent_event_id, event_emitter
+                action.dst, parent_event_id, event_emitter, action_context="drag_end"
             )
 
             if not src_coords or not dst_coords:
@@ -331,7 +346,7 @@ class SimpleActionsExecutor:
         """Execute goto action with steps."""
         handler = self.get_click_handler('left')  # goto uses left click
         return await self.target_resolution.execute_action_with_steps(
-            action, handler, parent_event_id, event_emitter
+            action, handler, parent_event_id, event_emitter, action_context="goto"
         )
 
     async def execute_screenshot(self, action: ScreenshotAction, parent_event_id: str = None,

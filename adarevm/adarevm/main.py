@@ -13,11 +13,27 @@ DEFAULT_RUN_DIR = Path("C:/adare/run") if platform.system() == "Windows" else Pa
 
 
 def __setup_logging(logfile: str = None, log_level: int = logging.INFO):
+    """Setup logging with defensive directory creation.
+
+    Args:
+        logfile: Path to log file (optional)
+        log_level: Logging level (default: INFO)
+    """
     if not logfile:
+        # Fallback: create logs directory if it doesn't exist
         if platform.system() == "Windows":
-            logfile = 'C:/adare/run/logs/adarevm.log'
+            default_log_dir = Path("C:/adare/run/logs")
         else:
-            logfile = '/adare/run/logs/adarevm.log'
+            default_log_dir = Path("/adare/run/logs")
+
+        # Ensure directory exists
+        default_log_dir.mkdir(parents=True, exist_ok=True)
+        logfile = str(default_log_dir / 'adarevm.log')
+
+    # Defensive: Ensure parent directory exists for provided logfile path
+    log_path = Path(logfile)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
     logging.basicConfig(
         filename=logfile,
         level=log_level,

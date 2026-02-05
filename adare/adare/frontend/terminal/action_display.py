@@ -131,11 +131,17 @@ def get_action_display_info(action_type: ActionType, action_data: dict, is_compl
     
     elif action_type == ActionType.FIND:
         target_info = action_data.get('target_info')
+        matched_text = action_data.get('matched_text')  # What OCR actually detected
+
         if target_info:
             if target_info.get('image'):
                 return f"finding image '{target_info['image']}' on screen"
             elif target_info.get('text'):
-                return f"finding text '{target_info['text']}' on screen"
+                base_msg = f"finding text '{target_info['text']}' on screen"
+                # Show what was actually matched if different (fuzzy/regex matching)
+                if matched_text and matched_text != target_info['text']:
+                    return f"{base_msg} (matched: '{matched_text}')"
+                return base_msg
             elif target_info.get('position'):
                 return f"finding position {target_info['position']} on screen"
         return "finding target on screen"

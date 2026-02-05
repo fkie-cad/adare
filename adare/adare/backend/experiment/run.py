@@ -914,6 +914,11 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
     Args:
         context: Experiment run context
         skip_adare_log: If True, skip adare.log creation (for dev mode)
+
+    Note:
+        - The logs directory is ALWAYS created regardless of runlog flag
+        - The runlog flag only controls whether adare.log is copied/configured
+        - The adarevm agent writes to logs/adarevm.log automatically
     """
     with StageCtxManager(PrepareRunEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         # Check application data
@@ -929,6 +934,15 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
         # Create run directory
         run_dir = ExperimentRunDirectory(context.project_directory, context.config.experiment_name)
         run_dir.create()
+
+        # VALIDATE: Ensure logs directory was created
+        if not run_dir.log_directory.exists():
+            from adare.exceptions import LoggedException
+            raise LoggedException(log, message=f"Failed to create logs directory: {run_dir.log_directory}")
+
+        log.info(f"Run directory created: {run_dir.path}")
+        log.info(f"Logs directory verified: {run_dir.log_directory}")
+
         context.experiment_run_directory = run_dir
 
         # Copy adare log to run directory if runlog is enabled (skip in dev mode)

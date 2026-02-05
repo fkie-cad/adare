@@ -138,11 +138,69 @@ class Offset:
         if self.base not in valid_bases:
             raise ValueError(f"Offset.base must be one of {valid_bases}, got '{self.base}'")
 
+@attrs.define
+class TextMatchConfig:
+    """Configuration for text matching behavior.
+
+    Supports multiple matching modes:
+    - substring: Simple case-insensitive substring matching (default)
+    - regex: Regular expression pattern matching
+    - fuzzy: Fuzzy matching for OCR inaccuracies
+    - regex_fuzzy: Combined regex + fuzzy matching
+    """
+    mode: str = 'substring'  # 'substring', 'regex', 'fuzzy', 'regex_fuzzy'
+    flags: Optional[List[str]] = None  # Regex flags: IGNORECASE, MULTILINE, DOTALL, VERBOSE
+    allow_missing_chars: Optional[Union[bool, str, List[str]]] = None  # True = any char, "." = only dots, [".", ","] = specific chars
+    max_missing: Optional[int] = None  # Max missing chars allowed (requires allow_missing_chars)
+    min_similarity: Optional[float] = None  # Minimum similarity ratio 0.0-1.0
+    case_sensitive: bool = False  # Enable case-sensitive matching
+
+    def __attrs_post_init__(self):
+        """Validate configuration fields."""
+        # Validate mode
+        valid_modes = {'substring', 'regex', 'fuzzy', 'regex_fuzzy'}
+        if self.mode not in valid_modes:
+            raise ValueError(
+                f"TextMatchConfig.mode must be one of {valid_modes}, got '{self.mode}'"
+            )
+
+        # Validate min_similarity range
+        if self.min_similarity is not None:
+            if not (0.0 <= self.min_similarity <= 1.0):
+                raise ValueError(
+                    f"TextMatchConfig.min_similarity must be between 0.0 and 1.0, got {self.min_similarity}"
+                )
+
+        # Validate max_missing
+        if self.max_missing is not None:
+            if self.max_missing < 0:
+                raise ValueError(
+                    f"TextMatchConfig.max_missing must be >= 0, got {self.max_missing}"
+                )
+
+        # Fuzzy mode requires either allow_missing_chars or min_similarity
+        if self.mode in ('fuzzy', 'regex_fuzzy'):
+            if self.allow_missing_chars is None and self.min_similarity is None:
+                raise ValueError(
+                    f"TextMatchConfig with mode='{self.mode}' requires either "
+                    f"allow_missing_chars or min_similarity to be specified"
+                )
+
+        # Validate regex flags
+        if self.flags:
+            valid_flags = {'IGNORECASE', 'MULTILINE', 'DOTALL', 'VERBOSE'}
+            invalid_flags = set(self.flags) - valid_flags
+            if invalid_flags:
+                raise ValueError(
+                    f"TextMatchConfig.flags contains invalid values: {invalid_flags}. "
+                    f"Valid flags: {valid_flags}"
+                )
 
 @attrs.define
 class Target:
     image: Optional[str] = None
     text: Optional[str] = None
+    text_match: Optional[TextMatchConfig] = None  # Text matching configuration
     position: Optional[List[int]] = None
     strategy: Optional[TargetStrategyType] = None
     offset: Optional[Offset] = None
@@ -572,6 +630,12 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
         lambda obj, _: obj  # Pass through as-is, will be resolved at runtime
     )
 
+    # Register structure hook for allow_missing_chars field (Union[bool, str, List[str]])
+    converter.register_structure_hook(
+        Optional[Union[bool, str, List[str]]],
+        lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None
+    )
+
     # Register structure hook for numeric comparison fields (Union[int, float, None])
     def structure_optional_numeric(obj, _):
         if obj is None:
@@ -604,6 +668,12 @@ def parse_playbook(yaml_path: Union[str, Path]) -> Playbook:  # Accept Path or s
     converter.register_structure_hook(
         Optional[Offset],
         lambda obj, _: converter.structure(obj, Offset) if obj is not None else None
+    )
+
+    # Register structure hook for TextMatchConfig
+    converter.register_structure_hook(
+        Optional[TextMatchConfig],
+        lambda obj, _: converter.structure(obj, TextMatchConfig) if obj is not None else None
     )
 
     # Register strict structure hooks for all main classes to validate fields
@@ -805,6 +875,11 @@ def _register_strict_hooks(converter):
                 Optional[SkipOptions],
                 lambda obj, _: _structure_skip_options(obj, fresh_converter) if obj is not None else None
             )
+            # Register structure hook for allow_missing_chars field (Union[bool, str, List[str]])
+            fresh_converter.register_structure_hook(
+                Optional[Union[bool, str, List[str]]],
+                lambda obj, _: obj if obj is None or isinstance(obj, (bool, str, list)) else None
+            )
             return fresh_converter.structure(obj, cls)
         return strict_structure_hook
     
@@ -818,6 +893,7 @@ def _register_strict_hooks(converter):
                 SweepStrategy, BestConfidenceStrategy, ClosestToStrategy,
                 TopLeftStrategy, TopRightStrategy, BottomLeftStrategy,
                 BottomRightStrategy, LargestStrategy, SmallestStrategy, Playbook,
-                SnapshotFilesystemAction, PullChangedFilesAction, PixelChangeConstraint, SkipOptions, Offset]:
+                SnapshotFilesystemAction, PullChangedFilesAction, PixelChangeConstraint, SkipOptions, Offset,
+                TextMatchConfig]:
         if attrs.has(cls):
             converter.register_structure_hook(cls, _validate_attrs_class(cls))

@@ -514,7 +514,8 @@ class FindActionCompleteEvent(ActionCompleteEvent):
     """Event for find substage completion."""
     target_info: Optional[Dict[str, Any]] = None
     coordinates: Optional[Tuple[int, int]] = None
-    
+    matched_text: Optional[str] = None  # What OCR actually detected (for fuzzy/regex matching)
+
     def get_event_type(self) -> EventType:
         return EventType.ACTION_COMPLETE
 

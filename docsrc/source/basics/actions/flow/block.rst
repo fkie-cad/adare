@@ -57,6 +57,19 @@ Usage Examples
                  - keyboard:
                      combination: ["delete"]
 
+**Delayed Execution**
+
+.. code-block:: yaml
+
+   actions:
+     - block:
+         delay: 2.0
+         description: "Wait 2s then click OK"
+         actions:
+           - click:
+               target:
+                 text: "OK"
+
 Parameters
 ----------
 
@@ -76,6 +89,9 @@ Parameters
    * - ``description``
      - string
      - Human-readable description (optional)
+   * - ``delay``
+     - float
+     - Optional delay (seconds) before executing block actions
 
 Notes
 -----

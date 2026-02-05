@@ -86,6 +86,18 @@ class DevModeAPI:
         """Stop CV server."""
         return self._service.stop_cv_server(request)
 
+    def execute_playbook_batch(self, request):
+        """Execute batch of playbooks with checkpoint restoration."""
+        return self._service.execute_playbook_batch(request)
+
+    def resume_session(self, session_id, console_ulid=None):
+        """Resume a specific dev mode session by ID."""
+        return self._service.resume_session(session_id, console_ulid=console_ulid)
+
+    def resume_most_recent(self, project_path, console_ulid=None):
+        """Resume the most recently stopped dev mode session."""
+        return self._service.resume_most_recent(project_path, console_ulid=console_ulid)
+
 
 class TestFunctionAPI:
     """Testfunction operations API."""

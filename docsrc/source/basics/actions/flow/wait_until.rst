@@ -90,6 +90,42 @@ Condition Types
 - ``any``: Any sub-condition must be true (OR)
 - ``negate``: Condition must be false (NOT)
 
+Skip Conditions
+---------------
+
+Control when wait_until checks for the target condition based on screen activity.
+
+**Pixel Change Constraints**
+
+.. code-block:: yaml
+
+   # Wait for screen to stabilize before checking
+   - wait_until:
+       condition:
+         exists: {text: "Ready"}
+       skip:
+         pixel_change:
+           above: 0.01        # Skip check if change > 1%
+           strategy: 'once'   # Latch once satisfied
+           idle: 1.0          # Wait 1s after stability
+       timeout: 30.0
+
+   # Wait for screen activity before checking
+   - wait_until:
+       condition:
+         exists: {text: "Processing"}
+       skip:
+         pixel_change:
+           below: 0.005       # Skip check if change < 0.5%
+       timeout: 60.0
+
+**Parameters:**
+
+- ``above``: Skip if change % > value (wait for stability)
+- ``below``: Skip if change % < value (wait for activity)
+- ``strategy``: 'once' (latch) or 'continuous' (always enforce). Default: 'once'
+- ``idle``: Seconds to wait after constraint satisfied before checking condition
+
 Notes
 -----
 
