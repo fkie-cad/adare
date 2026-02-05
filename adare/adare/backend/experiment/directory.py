@@ -47,12 +47,50 @@ class ExperimentRunDirectory(Directory):
 
 
     def create(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.mkdir(parents=False)
-        self.log_directory.mkdir(parents=False)
-        self.reporting_directory.mkdir(parents=False, exist_ok=True)
-        self.screenshots_directory.mkdir(parents=False, exist_ok=True)
-        self.tmp_directory.mkdir(parents=False, exist_ok=True)
+        """Create run directory structure with all subdirectories.
+
+        Creates:
+            - Run directory (timestamped)
+            - logs/ - For adare.log and adarevm.log
+            - reporting/ - For forensic reports
+            - reporting/screenshots/ - For GUI action screenshots
+            - .tmp/ - For temporary files
+
+        Raises:
+            LoggedException: If directory creation fails
+        """
+        try:
+            # Create run directory path
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.mkdir(parents=False)
+
+            # CRITICAL: Create logs directory (ALWAYS, regardless of runlog flag)
+            self.log_directory.mkdir(parents=False, exist_ok=True)
+            log.info(f"Created logs directory: {self.log_directory}")
+
+            # Create other directories with exist_ok for safety
+            self.reporting_directory.mkdir(parents=False, exist_ok=True)
+            self.screenshots_directory.mkdir(parents=False, exist_ok=True)
+            self.tmp_directory.mkdir(parents=False, exist_ok=True)
+
+        except OSError as e:
+            error_msg = f"Failed to create run directory structure at {self.path}: {e}"
+            log.error(error_msg)
+            from adare.exceptions import LoggedException
+            raise LoggedException(log, message=error_msg) from e
+
+
+    def clean(self):
+        """Clean up temporary files and directories after experiment run.
+
+        Note: This only removes the .tmp directory, preserving logs and reports for forensic analysis.
+        """
+        try:
+            if self.tmp_directory.exists():
+                shutil.rmtree(self.tmp_directory)
+                log.debug(f"Cleaned up temporary directory: {self.tmp_directory}")
+        except Exception as e:
+            log.warning(f"Failed to clean up temporary directory {self.tmp_directory}: {e}")
 
 
 class DiffRunDirectory(Directory):
@@ -80,16 +118,42 @@ class DiffRunDirectory(Directory):
         self.diff_directory = self.artifacts_directory / 'diff'
 
     def create(self):
-        # Create diff parent directory if needed
-        self.path.parent.parent.mkdir(parents=True, exist_ok=True)
-        self.path.parent.mkdir(parents=False, exist_ok=True)
-        self.path.mkdir(parents=False)
-        self.log_directory.mkdir(parents=False)
-        self.reporting_directory.mkdir(parents=False, exist_ok=True)
-        self.screenshots_directory.mkdir(parents=False, exist_ok=True)
-        self.tmp_directory.mkdir(parents=False, exist_ok=True)
-        self.artifacts_directory.mkdir(parents=False, exist_ok=True)
-        self.diff_directory.mkdir(parents=False, exist_ok=True)
+        """Create diff run directory structure with all subdirectories.
+
+        Creates:
+            - Diff run directory (timestamped)
+            - logs/ - For adare.log and mcp_gui.log
+            - reporting/ - For forensic reports
+            - reporting/screenshots/ - For GUI action screenshots
+            - .tmp/ - For temporary files
+            - artifacts/ - For diff artifacts
+            - artifacts/diff/ - For diff results
+
+        Raises:
+            LoggedException: If directory creation fails
+        """
+        try:
+            # Create diff parent directory if needed
+            self.path.parent.parent.mkdir(parents=True, exist_ok=True)
+            self.path.parent.mkdir(parents=False, exist_ok=True)
+            self.path.mkdir(parents=False)
+
+            # CRITICAL: Create logs directory (ALWAYS)
+            self.log_directory.mkdir(parents=False, exist_ok=True)
+            log.info(f"Created logs directory: {self.log_directory}")
+
+            # Create other directories with exist_ok for safety
+            self.reporting_directory.mkdir(parents=False, exist_ok=True)
+            self.screenshots_directory.mkdir(parents=False, exist_ok=True)
+            self.tmp_directory.mkdir(parents=False, exist_ok=True)
+            self.artifacts_directory.mkdir(parents=False, exist_ok=True)
+            self.diff_directory.mkdir(parents=False, exist_ok=True)
+
+        except OSError as e:
+            error_msg = f"Failed to create diff run directory structure at {self.path}: {e}"
+            log.error(error_msg)
+            from adare.exceptions import LoggedException
+            raise LoggedException(log, message=error_msg) from e
 
 
     def clean(self):

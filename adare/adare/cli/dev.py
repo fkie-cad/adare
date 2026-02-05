@@ -319,6 +319,7 @@ def exec_dev_resume(arguments):
         print("\n\nDev session resume interrupted")
         exit(1)
     except Exception as e:
+        log.error(f"Dev session resume failed: {e}", exc_info=True)
         flow_console.log_error('DEV_RESUME_ERROR', f'Error: {str(e)}')
         flow_console.stop()
         print_error_message(title='Failed to resume dev session', next_steps=['Check logs'])
@@ -979,15 +980,49 @@ def exec_dev_cv_stop(arguments):
     """Stop CV server."""
     # AUTO-DETECT SESSION ID
     session_id = _resolve_session_id(arguments.session_id)
-    
+
     api = AdareAPI()
     result = api.devmode.stop_cv_server(DevCVStopRequest(
         session_id=session_id
     ))
-    
+
     if result.success:
         print_success_message(
             title=f'CV Server stopped for session {session_id}'
         )
+    else:
+        _handle_api_error(result)
+
+
+def exec_dev_playbook_batch(arguments):
+    """Execute multiple playbooks with checkpoint restoration."""
+    import ulid
+    from adare.console.flow import ExperimentFlowConsole
+    from adare.core.dto.devmode import DevPlaybookBatchExecuteRequest
+
+    # AUTO-DETECT SESSION ID
+    session_id = _resolve_session_id(arguments.session_id)
+
+    # Create flow console for progress tracking
+    console_ulid = str(ulid.ULID())
+    flow_console = ExperimentFlowConsole(
+        run_ulid=console_ulid,
+        total_action_count=0,  # Will be updated during execution
+        show_substages=True
+    )
+
+    # Execute batch
+    api = AdareAPI()
+    result = api.devmode.execute_playbook_batch(DevPlaybookBatchExecuteRequest(
+        session_id=session_id,
+        playbook_patterns=list(arguments.playbook_patterns),
+        checkpoint_name=arguments.checkpoint_name,
+        timeout=arguments.timeout,
+        console_ulid=console_ulid
+    ))
+
+    # Print summary
+    if result.success:
+        result.data.print_summary()
     else:
         _handle_api_error(result)

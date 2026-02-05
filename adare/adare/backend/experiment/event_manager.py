@@ -335,6 +335,7 @@ class EventManager:
             event = FindActionCompleteEvent(
                 target_info=getattr(action, 'target_info', None),
                 coordinates=result.coordinates,
+                matched_text=result.data.get('matched_text') if result.data else None,
                 **event_data
             )
         elif isinstance(action, ExecuteAction):

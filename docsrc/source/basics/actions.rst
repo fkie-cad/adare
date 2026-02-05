@@ -87,6 +87,15 @@ Configure experiment-wide behavior:
      continue_on_test_failure: true # Continue experiment even if tests fail
      auto_pull_on_test_failure: true # Automatically pull files on test failure for analysis
 
+     # Forensic features
+     collect_system_info: true      # Capture VM system info (default: true)
+     forensic_logging: true         # Generate YAML audit logs (default: true)
+     enable_filesystem_diff: true   # Auto snapshots at start/end (default: true)
+
+     # GUI automation mode (QEMU only)
+     gui_execution_mode: 'auto'     # 'auto' (choose best), 'agent' (VM-based),
+                                    # 'host' (CV server)
+
      # Retry behavior
      retry:
        attempts: 3                # Retry failed actions
@@ -183,6 +192,68 @@ ADARE uses Jinja2 templating for dynamic content:
      # Basic variable substitution
      - command:
          command: "mkdir {{base_path}}/{{case_id}}"
+
+Automatic Variables
+===================
+
+ADARE provides automatic variables based on VM configuration (no declaration needed):
+
+**User Variables:**
+
+- ``adare_username`` - Target VM username
+- ``adare_user_home`` - User home directory (/home/user or C:/Users/user)
+- ``adare_user_documents`` - Documents folder
+- ``adare_user_desktop`` - Desktop folder
+- ``adare_user_downloads`` - Downloads folder
+
+**System Variables:**
+
+- ``adare_os`` - Operating system ('windows' or 'linux')
+- ``adare_temp_dir`` - Temporary directory (/tmp or C:/Windows/Temp)
+- ``adare_system_drive`` - Windows system drive (C:)
+- ``adare_root_dir`` - Linux root directory (/)
+
+**Shared Mount Variables:**
+
+- ``adare_shared`` - Experiment-level shared directory mount
+- ``adare_shared_data`` - Experiment shared data mount
+- ``adare_shared_tools`` - Experiment shared tools mount
+- ``adare_project_shared`` - Project-level shared directory mount
+- ``adare_project_shared_data`` - Project shared data mount
+- ``adare_project_shared_tools`` - Project shared tools mount
+- ``adare_run_dir`` - Run directory mount
+
+These variables can be overridden by defining them in the ``variables`` section.
+
+Variable Scope & Persistence
+=============================
+
+Variables created in loops and blocks persist to parent scope:
+
+.. code-block:: yaml
+
+   actions:
+     - loop:
+         times: 3
+         actions:
+           - save_variable:
+               name: "var_{{index}}"
+               value: "value_{{index}}"
+
+     # Variables var_0, var_1, var_2 still accessible
+     - command:
+         command: "echo '{{var_0}} {{var_1}} {{var_2}}'"
+
+**Dynamic Variable Naming:**
+
+.. code-block:: yaml
+
+   - loop:
+         items: ["alpha", "beta", "gamma"]
+         item_var: name
+         actions:
+           - save_timestamp:
+               variable: "timestamp_{{name}}"  # Creates timestamp_alpha, etc.
 
 Variable Filters
 ================
@@ -317,6 +388,50 @@ Configure behavior when tests fail:
        function: file_exists
        parameter:
          dst: "/optional/file.txt"
+
+Custom YAML Tags
+================
+
+Use custom tags in test parameters for precise matching:
+
+.. code-block:: yaml
+
+   tests:
+     - name: exact_match
+       function: csv.line_matches
+       parameter:
+         pattern: [!s "exact text"]  # Exact string match
+
+     - name: regex_match
+       function: csv.line_matches
+       parameter:
+         pattern: [!re "^[a-z]+$"]   # Regex pattern
+
+     - name: path_match
+       function: file_exists
+       parameter:
+         dst: !path "/home/user"     # Path comparison
+
+     - name: wildcard_match
+       function: json.value_matches
+       parameter:
+         value: !reALL                # Match any value
+
+     - name: timestamp_match
+       function: file_modified_time_matches
+       parameter:
+         timestamp: !timestamp
+           timestamp: "{{deletion_time}}"
+           tolerance: 5
+           timezone: "UTC"
+
+**Available Tags:**
+
+- ``!s`` - Exact string match
+- ``!re <pattern>`` - Regex pattern match
+- ``!path`` - Path exact match
+- ``!reALL`` - Wildcard (match any value)
+- ``!timestamp {timestamp, tolerance, timezone, format}`` - Timestamp with tolerance
 
 Actions Reference
 *****************

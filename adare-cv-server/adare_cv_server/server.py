@@ -4,9 +4,9 @@ from fastmcp import FastMCP
 import base64
 import click
 import logging
-from typing import Dict, Any
 import cv2
 
+from typing import Dict, Any, Optional, List, Union
 from .constants import DEFAULT_PORT, DEFAULT_HOST, MCP_PATH, DEFAULT_MAX_RESULTS
 from .feature_matching import SIFTMatcher, ORBMatcher, TemplateMatcher
 from .ocr_processing import TextDetector
@@ -143,12 +143,50 @@ async def find_text(
     screenshot_base64: str,
     offset_x: int = 0,
     offset_y: int = 0,
-    format: str = "json"
+    format: str = "json",
+    match_mode: str = "substring",
+    regex_flags: Optional[List[str]] = None,
+    allow_missing_chars: Optional[Union[bool, str, List[str]]] = None,
+    max_missing: Optional[int] = None,
+    min_similarity: Optional[float] = None,
+    case_sensitive: bool = False
 ) -> Dict[str, Any]:
-    """Find text locations in provided screenshot data."""
+    """Find text locations in provided screenshot data with advanced matching.
+
+    Args:
+        text: Text or pattern to search for
+        screenshot_base64: Base64 encoded screenshot
+        offset_x: X offset to add to coordinates
+        offset_y: Y offset to add to coordinates
+        format: Output format ("json" or "csv")
+        match_mode: Matching mode ("substring", "regex", "fuzzy", "regex_fuzzy")
+        regex_flags: List of regex flag names (IGNORECASE, MULTILINE, DOTALL, VERBOSE)
+        allow_missing_chars: Allowed missing characters (fuzzy mode):
+            - True: Allow any character to be missing
+            - ".": Only allow this specific character to be missing
+            - [".", ","]: Only allow these characters to be missing
+        max_missing: Max missing chars allowed (requires allow_missing_chars)
+        min_similarity: Minimum similarity ratio 0.0-1.0
+        case_sensitive: Enable case-sensitive matching
+
+    Returns:
+        Dictionary with locations and confidences
+    """
     try:
         screenshot_bytes = base64.b64decode(screenshot_base64)
-        return await TextDetector.find_text(text, screenshot_bytes, offset_x, offset_y, format)
+        return await TextDetector.find_text(
+            text,
+            screenshot_bytes,
+            offset_x,
+            offset_y,
+            format,
+            match_mode,
+            regex_flags,
+            allow_missing_chars,
+            max_missing,
+            min_similarity,
+            case_sensitive
+        )
     except (OCRProcessingError, ImageDecodingError, base64.binascii.Error, ValueError) as e:
         log.error(f"Text search input error: {e}")
         return {

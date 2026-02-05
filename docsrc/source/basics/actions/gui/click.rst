@@ -62,9 +62,169 @@ Target Options
 --------------
 
 - ``image``: Path to reference image with optional ``confidence`` (0.0-1.0)
-- ``text``: Text to find with optional ``case_sensitive`` flag
+- ``text``: Text to find with optional ``text_match`` configuration
 - ``coordinates``: [x, y] pixel coordinates
 - ``strategy``: Selection strategy when multiple matches found (SweepStrategy, BestConfidenceStrategy, etc.)
+
+Advanced Text Matching
+-----------------------
+
+ADARE supports multiple text matching modes to handle OCR inaccuracies and enable flexible pattern matching.
+
+**Substring Matching (Default)**
+
+Simple case-insensitive substring matching. No configuration needed.
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           text: "Documents"
+         description: "Click Documents (case-insensitive substring match)"
+
+**Regex Pattern Matching**
+
+Match text using regular expression patterns.
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           text: "File \\d+"
+           text_match:
+             mode: regex
+             flags: [IGNORECASE]
+         description: "Click text matching 'File 1', 'File 2', etc."
+
+**Fuzzy Matching - Missing Characters Mode**
+
+Tolerate missing characters that OCR often fails to detect.
+
+**Allow any character to be missing:**
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           text: "More..."
+           text_match:
+             mode: fuzzy
+             allow_missing_chars: true
+             max_missing: 3
+         description: "Match 'More' even if any characters are missing"
+
+**Allow only specific characters to be missing (recommended):**
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           text: "More..."
+           text_match:
+             mode: fuzzy
+             allow_missing_chars: "."
+             max_missing: 3
+         description: "Match 'More' when only dots are missing"
+
+**Allow multiple specific characters to be missing:**
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           text: "Price: $19.99"
+           text_match:
+             mode: fuzzy
+             allow_missing_chars: [".", "$", ":"]
+             max_missing: 4
+         description: "Match even if dots, dollar sign, or colon are missing"
+
+**Fuzzy Matching - Percentage Similarity Mode**
+
+Match text based on similarity threshold (0.0-1.0), useful for OCR character confusion.
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           text: "Settings"
+           text_match:
+             mode: fuzzy
+             min_similarity: 0.85
+         description: "Match 'Settinqs' (OCR confused 'g' with 'q')"
+
+**Combined Regex + Fuzzy Matching**
+
+Use regex patterns with fuzzy tolerance for maximum flexibility.
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           text: "Doc.*ents"
+           text_match:
+             mode: regex_fuzzy
+             flags: [IGNORECASE]
+             min_similarity: 0.8
+         description: "Flexible pattern with error tolerance"
+
+**Case-Sensitive Fuzzy Matching**
+
+Enable case-sensitive comparison for fuzzy matching.
+
+.. code-block:: yaml
+
+   actions:
+     - click:
+         target:
+           text: "LOGIN"
+           text_match:
+             mode: fuzzy
+             min_similarity: 0.9
+             case_sensitive: true
+         description: "Case-sensitive fuzzy match for 'LOGIN'"
+
+**Text Match Configuration Fields**
+
+.. list-table::
+   :widths: 20 15 65
+   :header-rows: 1
+
+   * - Field
+     - Type
+     - Description
+   * - ``mode``
+     - string
+     - Matching mode: ``substring``, ``regex``, ``fuzzy``, ``regex_fuzzy`` (default: ``substring``)
+   * - ``flags``
+     - list
+     - Regex flags: ``IGNORECASE``, ``MULTILINE``, ``DOTALL``, ``VERBOSE``
+   * - ``allow_missing_chars``
+     - bool/string/list
+     - Allowed missing characters (fuzzy mode): ``true`` (any char), ``"."`` (only dots), ``[".", ","]`` (specific chars)
+   * - ``max_missing``
+     - int
+     - Max missing chars allowed (requires ``allow_missing_chars``)
+   * - ``min_similarity``
+     - float
+     - Minimum similarity ratio 0.0-1.0 (fuzzy mode)
+   * - ``case_sensitive``
+     - bool
+     - Enable case-sensitive matching (default: false)
+
+**Use Cases**
+
+- **Missing dots**: OCR often misses periods, ellipses, decimal points
+- **Version numbers**: Use regex to match dynamic version strings (e.g., ``v\\d+\\.\\d+``)
+- **Character confusion**: OCR may confuse similar characters (O/0, l/1, rn/m)
+- **Partial matches**: Fuzzy matching handles truncated or slightly modified text
 
 Target Selection Strategies
 ----------------------------

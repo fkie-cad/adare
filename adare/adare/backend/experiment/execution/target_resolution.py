@@ -103,7 +103,7 @@ class TargetResolutionExecutor:
         return None, None, None
 
     async def resolve_target_with_steps(self, target, parent_action_id: str = None,
-                                       event_emitter = None) -> Optional[Tuple[int, int]]:
+                                       event_emitter = None, action_context: str = None) -> Optional[Tuple[int, int]]:
         """Resolve target with find step emitted as action event."""
         # Apply smart defaults if no strategy specified
         if target.strategy is None:
@@ -124,6 +124,24 @@ class TargetResolutionExecutor:
 
         # Create target description (used for logging, whether events are emitted or not)
         target_desc = target.image or target.text or f"position {target.position}" if target else "target"
+
+        # Determine explicit screenshot context if not provided
+        if not action_context:
+            if target.image:
+                # Use image name without extension/path if possible
+                try:
+                    img_name = Path(target.image).stem
+                    action_context = f"find_img_{img_name}"
+                except:
+                    action_context = "find_img"
+            elif target.text:
+                 # Truncate text for filename safety
+                 safe_text = target.text[:20].replace(" ", "_")
+                 action_context = f"find_text_{safe_text}"
+            elif target.position:
+                 action_context = f"find_pos_{target.position[0]}_{target.position[1]}"
+            else:
+                 action_context = "find_target"
 
         # Include strategy in description if available
         strategy_desc = ""
@@ -171,7 +189,7 @@ class TargetResolutionExecutor:
         try:
             # Get screenshot for target resolution
             start_time = time.time()
-            screenshot_base64, screenshot_path = await self.get_current_screenshot_with_path()
+            screenshot_base64, screenshot_path = await self.get_current_screenshot_with_path(action_context=action_context)
             if not screenshot_base64:
                 log.error("Failed to get screenshot for target resolution")
 
@@ -273,9 +291,13 @@ class TargetResolutionExecutor:
             data = {}
             if screenshot_path:
                 data['screenshot_path'] = screenshot_path
-            
+
             if from_cache:
                 data['cached'] = True
+
+            # Include matched text for text-based targeting (shows what OCR actually detected)
+            if match and match.text and match.method == 'text':
+                data['matched_text'] = match.text
 
             find_result = ActionResult(
                 success=success,
@@ -290,11 +312,11 @@ class TargetResolutionExecutor:
         return match.coordinates if match else None
 
     async def execute_action_with_steps(self, action, execute_func, parent_action_id: str = None,
-                                       event_emitter = None) -> ActionResult:
+                                       event_emitter = None, action_context: str = None) -> ActionResult:
         """Execute an action with steps for target resolution and execution."""
         try:
             # Resolve target with find step (emitted as action event)
-            coords = await self.resolve_target_with_steps(action.target, parent_action_id, event_emitter)
+            coords = await self.resolve_target_with_steps(action.target, parent_action_id, event_emitter, action_context=action_context)
             if not coords:
                 return ActionResult(
                     success=False,
@@ -365,9 +387,12 @@ class TargetResolutionExecutor:
         screenshot_data, _ = await self.get_current_screenshot_with_path()
         return screenshot_data
 
-    async def get_current_screenshot_with_path(self) -> Tuple[Optional[str], Optional[str]]:
+    async def get_current_screenshot_with_path(self, action_context: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
         """
         Get current screenshot from WebSocket client and save to disk.
+
+        Args:
+            action_context: Optional context string (e.g., 'click_{target}') for filename
 
         Returns:
             Tuple of (base64_screenshot_data, relative_screenshot_path)
@@ -396,7 +421,7 @@ class TargetResolutionExecutor:
                     screenshot_base64 = result['image']
 
                 # Save screenshot to disk if debug mode is enabled
-                screenshot_path = await self._save_debug_screenshot(screenshot_base64)
+                screenshot_path = await self._save_debug_screenshot(screenshot_base64, action_context)
 
                 log.debug("Screenshot captured")
                 return screenshot_base64, screenshot_path
@@ -408,12 +433,13 @@ class TargetResolutionExecutor:
             log.error(f"Failed to capture screenshot: {e}")
             return None, None
 
-    async def _save_debug_screenshot(self, screenshot_base64: str) -> Optional[str]:
+    async def _save_debug_screenshot(self, screenshot_base64: str, action_context: Optional[str] = None) -> Optional[str]:
         """
         Save screenshot to disk for debugging purposes.
 
         Args:
             screenshot_base64: Base64 encoded screenshot data
+            action_context: Optional context string description for the filename
 
         Returns:
             Relative path to saved screenshot file, or None if not saved
@@ -425,8 +451,20 @@ class TargetResolutionExecutor:
             # Create screenshots directory if it doesn't exist
             self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
-            # Generate filename with counter (consistent with forensic reporter expectations)
-            filename = f"action_{self.screenshot_counter:03d}.png"
+            # Generate filename with counter and optional context
+            import re
+            
+            # Format: {counter:03d}_{sanitized_context}.png OR {counter:03d}.png
+            context_part = ""
+            if action_context:
+                # Sanitize context (remove non-alphanumeric except specific separators)
+                sanitized = re.sub(r'[^a-zA-Z0-9_\-]', '_', action_context)
+                # Collapse multiple underscores
+                sanitized = re.sub(r'_+', '_', sanitized).strip('_')
+                if sanitized:
+                    context_part = f"_{sanitized}"
+            
+            filename = f"{self.screenshot_counter:03d}{context_part}.png"
             filepath = self.screenshots_dir / filename
 
             # Increment counter for next screenshot

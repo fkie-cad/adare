@@ -717,6 +717,43 @@ class DevModeService:
                 ["Check logs for details"]
             )
 
+    def execute_playbook_batch(self, request: 'DevPlaybookBatchExecuteRequest') -> Result['PlaybookBatchSummary']:
+        """
+        Execute batch of playbooks with checkpoint restoration.
+
+        Args:
+            request: DevPlaybookBatchExecuteRequest
+
+        Returns:
+            Result[PlaybookBatchSummary]
+        """
+        try:
+            summary = asyncio.run(self._manager.execute_playbook_batch(
+                session_id=request.session_id,
+                playbook_patterns=request.playbook_patterns,
+                checkpoint_name=request.checkpoint_name,
+                timeout=request.timeout,
+                console_ulid=request.console_ulid
+            ))
+
+            return Result.ok(summary)
+
+        except RuntimeError as e:
+            log.error(f"Batch execution failed: {e}", exc_info=True)
+            return Result.fail(
+                "BATCH_EXECUTION_FAILED",
+                str(e),
+                ["Check session status", "Check playbook paths", "Check VM state"]
+            )
+
+        except Exception as e:
+            log.error(f"Error executing playbook batch: {e}", exc_info=True)
+            return Result.fail(
+                "INTERNAL_ERROR",
+                f"Unexpected error: {str(e)}",
+                ["Check logs for details"]
+            )
+
     def cleanup_stale_sessions(self, request: DevSessionCleanupRequest) -> Result[DevCleanupResult]:
         """
         Cleanup orphaned dev mode sessions.

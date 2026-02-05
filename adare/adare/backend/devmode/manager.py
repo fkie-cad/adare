@@ -748,3 +748,44 @@ class DevModeSessionManager:
             return False
 
         return await session.stop_mcp_server()
+
+    async def execute_playbook_batch(
+        self,
+        session_id: str,
+        playbook_patterns: List[str],
+        checkpoint_name: str,
+        timeout: int,
+        console_ulid: Optional[str]
+    ) -> 'PlaybookBatchSummary':
+        """
+        Execute multiple playbooks with checkpoint restoration.
+
+        Args:
+            session_id: Session ID to use
+            playbook_patterns: List of file paths or glob patterns
+            checkpoint_name: Name for the base checkpoint
+            timeout: Checkpoint restore timeout in seconds
+            console_ulid: Optional console ULID for flow events
+
+        Returns:
+            PlaybookBatchSummary with execution results
+
+        Raises:
+            RuntimeError: If session not found or critical errors occur
+        """
+        session = await self.get_or_restore_session(session_id, console_ulid=console_ulid)
+        if not session:
+            raise RuntimeError(f"Session {session_id} not found")
+
+        if not session.is_running:
+            raise RuntimeError(f"Session {session_id} is not running")
+
+        from adare.backend.devmode.playbook_batch_runner import PlaybookBatchRunner
+
+        runner = PlaybookBatchRunner(session)
+        return await runner.execute_batch(
+            playbook_patterns=playbook_patterns,
+            checkpoint_name=checkpoint_name,
+            timeout=timeout,
+            console_ulid=console_ulid
+        )

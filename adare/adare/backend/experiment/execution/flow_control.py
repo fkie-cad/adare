@@ -335,8 +335,23 @@ class FlowControlExecutor:
                 check_count += 1
                 log.debug(f"Wait until check #{check_count} (elapsed: {time.time() - start_time:.1f}s)")
 
+                # Generate context for screenshot naming
+                # Try to summarize condition (e.g., "wait_text_Home", "wait_img_btn")
+                # Since condition can be complex tree, we use a simplified description
+                condition_desc = "condition"
+                if action.condition.exists:
+                     t = action.condition.exists
+                     if t.text: condition_desc = f"exists_text_{t.text[:10]}"
+                     elif t.image: condition_desc = "exists_img"
+                elif action.condition.not_exists:
+                     t = action.condition.not_exists
+                     if t.text: condition_desc = f"not_exists_text_{t.text[:10]}"
+                     elif t.image: condition_desc = "not_exists_img"
+                
+                check_context = f"wait_until_{check_count}_{condition_desc}"
+
                 # Take screenshot for condition evaluation
-                screenshot_base64, screenshot_path = await self.target_resolution.get_current_screenshot_with_path()
+                screenshot_base64, screenshot_path = await self.target_resolution.get_current_screenshot_with_path(action_context=check_context)
                 if screenshot_path:
                     last_screenshot_path = screenshot_path  # Keep track for timeout case
                 if not screenshot_base64:
@@ -390,7 +405,8 @@ class FlowControlExecutor:
                                 await asyncio.sleep(constraint.idle)
                                 
                                 # Refresh screenshot for actual search (UI might have finished rendering)
-                                refresh_base64, refresh_path = await self.target_resolution.get_current_screenshot_with_path()
+                                refresh_context = f"{check_context}_post_idle"
+                                refresh_base64, refresh_path = await self.target_resolution.get_current_screenshot_with_path(action_context=refresh_context)
                                 
                                 if refresh_base64:
                                     screenshot_base64 = refresh_base64

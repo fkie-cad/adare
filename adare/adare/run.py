@@ -883,13 +883,39 @@ dev.add_alias('cp', 'checkpoint')
 @click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
 def update_testfunctions(session_id):
     """Reload test functions in the running VM.
-    
+
     This packages the current test files from the host and uploads them to the VM again.
     The adarevm agent will extract them to a new location and use them for subsequent tests.
     """
     from adare.cli.dev import exec_dev_update_testfunctions
     args = SimpleNamespace(session_id=session_id)
     exec_with_error_printing(exec_dev_update_testfunctions, args)
+
+
+@dev.command(name='playbook-batch')
+@click.argument('playbook_patterns', nargs=-1, required=True)
+@click.option('-s', '--session', 'session_id', default=None, help='Session ID (auto-detected if only one running)')
+@click.option('--checkpoint-name', default='batch_base', help='Base checkpoint name')
+@click.option('--timeout', default=120, type=int, help='Checkpoint restore timeout in seconds')
+def playbook_batch(session_id, playbook_patterns, checkpoint_name, timeout):
+    """Execute multiple playbooks with checkpoint restoration.
+
+    Supports both explicit paths and glob patterns:
+    - adare dev playbook-batch playbook1.yml playbook2.yml
+    - adare dev playbook-batch experiments/*/playbook.yml
+    - adare dev playbook-batch playbooks/test_*.yml
+
+    A base checkpoint is created before execution, and the VM is restored
+    to this checkpoint after each playbook completes.
+    """
+    from adare.cli.dev import exec_dev_playbook_batch
+    args = SimpleNamespace(
+        session_id=session_id,
+        playbook_patterns=list(playbook_patterns),
+        checkpoint_name=checkpoint_name,
+        timeout=timeout
+    )
+    exec_with_error_printing(exec_dev_playbook_batch, args)
 
 # ------------------------------
 # Testfunction commands

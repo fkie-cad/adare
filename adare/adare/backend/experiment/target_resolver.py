@@ -14,7 +14,7 @@ import base64
 import ulid
 
 from fastmcp import Client
-from adare.types.playbook import Target, SweepStrategy, BestConfidenceStrategy, ClosestToStrategy, TopLeftStrategy, TopRightStrategy, BottomLeftStrategy, BottomRightStrategy, LargestStrategy, SmallestStrategy
+from adare.types.playbook import Target, SweepStrategy, BestConfidenceStrategy, ClosestToStrategy, TopLeftStrategy, TopRightStrategy, BottomLeftStrategy, BottomRightStrategy, LargestStrategy, SmallestStrategy, TextMatchConfig
 # Stage events are now handled by action events in playbook controller
 
 log = logging.getLogger(__name__)
@@ -413,15 +413,36 @@ class MCPTargetResolver:
                     # Text-based targeting using find_text
                     if target.text:
                         log.debug(f"Using MCP find_text for text: {target.text}")
-                        
-                        # Find substage is now handled by action events in playbook controller
-                        
-                        result = await client.call_tool("find_text", {
+
+                        # Extract text matching configuration
+                        text_match = target.text_match or TextMatchConfig()  # Default to substring
+
+                        # Build MCP call parameters
+                        mcp_params = {
                             "text": target.text,
                             "screenshot_base64": screenshot_base64,
                             "offset_x": offset_x,
-                            "offset_y": offset_y
-                        })
+                            "offset_y": offset_y,
+                            "match_mode": text_match.mode,
+                        }
+
+                        # Add optional matching parameters
+                        if text_match.flags:
+                            mcp_params["regex_flags"] = text_match.flags
+                        if text_match.allow_missing_chars is not None:
+                            mcp_params["allow_missing_chars"] = text_match.allow_missing_chars
+                        if text_match.max_missing is not None:
+                            mcp_params["max_missing"] = text_match.max_missing
+                        if text_match.min_similarity is not None:
+                            mcp_params["min_similarity"] = text_match.min_similarity
+                        if text_match.case_sensitive:
+                            mcp_params["case_sensitive"] = text_match.case_sensitive
+
+                        log.debug(f"Text matching mode: {text_match.mode}")
+
+                        # Find substage is now handled by action events in playbook controller
+
+                        result = await client.call_tool("find_text", mcp_params)
                         
                         # Parse response
                         if result.data is not None:

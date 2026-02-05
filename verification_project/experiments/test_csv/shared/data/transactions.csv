@@ -1,5 +1,0 @@
-transaction_id,version,status,amount
-TXN001,1.2.3,processing,250.50
-TXN002,2.1.0,completed,123e4567-e89b-12d3-a456-426614174000
-TXN003,3.0.1,completed,999.99
-f47ac10b-58cc-4372-a567-0e02b2c3d479,4.5.6,failed,0.01

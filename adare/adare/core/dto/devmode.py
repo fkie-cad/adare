@@ -229,3 +229,13 @@ class DevUpdateTestfunctionsResult:
     success: bool
     message: str
     execution_time: float
+
+
+@dataclass
+class DevPlaybookBatchExecuteRequest:
+    """Request to execute multiple playbooks in batch."""
+    session_id: str
+    playbook_patterns: List[str]
+    checkpoint_name: str = "batch_base"
+    timeout: int = 120
+    console_ulid: Optional[str] = None
