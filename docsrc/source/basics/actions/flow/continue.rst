@@ -87,4 +87,4 @@ See Also
 
 - :doc:`loop` for iteration
 - :doc:`stop` for halting execution
-- :doc:`../../advanced/playbook-patterns` for advanced patterns
+- :doc:`../../../advanced/playbook-patterns` for advanced patterns

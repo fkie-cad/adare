@@ -422,9 +422,159 @@
 <h2>Target Options<a class="headerlink" href="#target-options" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">image</span></code>: Path to reference image with optional <code class="docutils literal notranslate"><span class="pre">confidence</span></code> (0.0-1.0)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">text</span></code>: Text to find with optional <code class="docutils literal notranslate"><span class="pre">case_sensitive</span></code> flag</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">text</span></code>: Text to find with optional <code class="docutils literal notranslate"><span class="pre">text_match</span></code> configuration</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">coordinates</span></code>: [x, y] pixel coordinates</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">strategy</span></code>: Selection strategy when multiple matches found (SweepStrategy, BestConfidenceStrategy, etc.)</p></li>
+</ul>
+</section>
+<section id="advanced-text-matching">
+<h2>Advanced Text Matching<a class="headerlink" href="#advanced-text-matching" title="Link to this heading">¶</a></h2>
+<p>ADARE supports multiple text matching modes to handle OCR inaccuracies and enable flexible pattern matching.</p>
+<p><strong>Substring Matching (Default)</strong></p>
+<p>Simple case-insensitive substring matching. No configuration needed.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Documents&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Click</span><span class="nv"> </span><span class="s">Documents</span><span class="nv"> </span><span class="s">(case-insensitive</span><span class="nv"> </span><span class="s">substring</span><span class="nv"> </span><span class="s">match)&quot;</span>
+</pre></div>
+</div>
+<p><strong>Regex Pattern Matching</strong></p>
+<p>Match text using regular expression patterns.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;File</span><span class="nv"> </span><span class="s">\\d+&quot;</span>
+<span class="w">        </span><span class="nt">text_match</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">regex</span>
+<span class="w">          </span><span class="nt">flags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">IGNORECASE</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Click</span><span class="nv"> </span><span class="s">text</span><span class="nv"> </span><span class="s">matching</span><span class="nv"> </span><span class="s">&#39;File</span><span class="nv"> </span><span class="s">1&#39;,</span><span class="nv"> </span><span class="s">&#39;File</span><span class="nv"> </span><span class="s">2&#39;,</span><span class="nv"> </span><span class="s">etc.&quot;</span>
+</pre></div>
+</div>
+<p><strong>Fuzzy Matching - Missing Characters Mode</strong></p>
+<p>Tolerate missing characters that OCR often fails to detect.</p>
+<p><strong>Allow any character to be missing:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;More...&quot;</span>
+<span class="w">        </span><span class="nt">text_match</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fuzzy</span>
+<span class="w">          </span><span class="nt">allow_missing_chars</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">          </span><span class="nt">max_missing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Match</span><span class="nv"> </span><span class="s">&#39;More&#39;</span><span class="nv"> </span><span class="s">even</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">any</span><span class="nv"> </span><span class="s">characters</span><span class="nv"> </span><span class="s">are</span><span class="nv"> </span><span class="s">missing&quot;</span>
+</pre></div>
+</div>
+<p><strong>Allow only specific characters to be missing (recommended):</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;More...&quot;</span>
+<span class="w">        </span><span class="nt">text_match</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fuzzy</span>
+<span class="w">          </span><span class="nt">allow_missing_chars</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;.&quot;</span>
+<span class="w">          </span><span class="nt">max_missing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Match</span><span class="nv"> </span><span class="s">&#39;More&#39;</span><span class="nv"> </span><span class="s">when</span><span class="nv"> </span><span class="s">only</span><span class="nv"> </span><span class="s">dots</span><span class="nv"> </span><span class="s">are</span><span class="nv"> </span><span class="s">missing&quot;</span>
+</pre></div>
+</div>
+<p><strong>Allow multiple specific characters to be missing:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Price:</span><span class="nv"> </span><span class="s">$19.99&quot;</span>
+<span class="w">        </span><span class="nt">text_match</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fuzzy</span>
+<span class="w">          </span><span class="nt">allow_missing_chars</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;.&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;$&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;:&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">          </span><span class="nt">max_missing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Match</span><span class="nv"> </span><span class="s">even</span><span class="nv"> </span><span class="s">if</span><span class="nv"> </span><span class="s">dots,</span><span class="nv"> </span><span class="s">dollar</span><span class="nv"> </span><span class="s">sign,</span><span class="nv"> </span><span class="s">or</span><span class="nv"> </span><span class="s">colon</span><span class="nv"> </span><span class="s">are</span><span class="nv"> </span><span class="s">missing&quot;</span>
+</pre></div>
+</div>
+<p><strong>Fuzzy Matching - Percentage Similarity Mode</strong></p>
+<p>Match text based on similarity threshold (0.0-1.0), useful for OCR character confusion.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Settings&quot;</span>
+<span class="w">        </span><span class="nt">text_match</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fuzzy</span>
+<span class="w">          </span><span class="nt">min_similarity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.85</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Match</span><span class="nv"> </span><span class="s">&#39;Settinqs&#39;</span><span class="nv"> </span><span class="s">(OCR</span><span class="nv"> </span><span class="s">confused</span><span class="nv"> </span><span class="s">&#39;g&#39;</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">&#39;q&#39;)&quot;</span>
+</pre></div>
+</div>
+<p><strong>Combined Regex + Fuzzy Matching</strong></p>
+<p>Use regex patterns with fuzzy tolerance for maximum flexibility.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Doc.*ents&quot;</span>
+<span class="w">        </span><span class="nt">text_match</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">regex_fuzzy</span>
+<span class="w">          </span><span class="nt">flags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">IGNORECASE</span><span class="p p-Indicator">]</span>
+<span class="w">          </span><span class="nt">min_similarity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.8</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Flexible</span><span class="nv"> </span><span class="s">pattern</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">error</span><span class="nv"> </span><span class="s">tolerance&quot;</span>
+</pre></div>
+</div>
+<p><strong>Case-Sensitive Fuzzy Matching</strong></p>
+<p>Enable case-sensitive comparison for fuzzy matching.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;LOGIN&quot;</span>
+<span class="w">        </span><span class="nt">text_match</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fuzzy</span>
+<span class="w">          </span><span class="nt">min_similarity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.9</span>
+<span class="w">          </span><span class="nt">case_sensitive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Case-sensitive</span><span class="nv"> </span><span class="s">fuzzy</span><span class="nv"> </span><span class="s">match</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">&#39;LOGIN&#39;&quot;</span>
+</pre></div>
+</div>
+<p><strong>Text Match Configuration Fields</strong></p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 15.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mode</span></code></p></td>
+<td><p>string</p></td>
+<td><p>Matching mode: <code class="docutils literal notranslate"><span class="pre">substring</span></code>, <code class="docutils literal notranslate"><span class="pre">regex</span></code>, <code class="docutils literal notranslate"><span class="pre">fuzzy</span></code>, <code class="docutils literal notranslate"><span class="pre">regex_fuzzy</span></code> (default: <code class="docutils literal notranslate"><span class="pre">substring</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">flags</span></code></p></td>
+<td><p>list</p></td>
+<td><p>Regex flags: <code class="docutils literal notranslate"><span class="pre">IGNORECASE</span></code>, <code class="docutils literal notranslate"><span class="pre">MULTILINE</span></code>, <code class="docutils literal notranslate"><span class="pre">DOTALL</span></code>, <code class="docutils literal notranslate"><span class="pre">VERBOSE</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">allow_missing_chars</span></code></p></td>
+<td><p>bool/string/list</p></td>
+<td><p>Allowed missing characters (fuzzy mode): <code class="docutils literal notranslate"><span class="pre">true</span></code> (any char), <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code> (only dots), <code class="docutils literal notranslate"><span class="pre">[&quot;.&quot;,</span> <span class="pre">&quot;,&quot;]</span></code> (specific chars)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">max_missing</span></code></p></td>
+<td><p>int</p></td>
+<td><p>Max missing chars allowed (requires <code class="docutils literal notranslate"><span class="pre">allow_missing_chars</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">min_similarity</span></code></p></td>
+<td><p>float</p></td>
+<td><p>Minimum similarity ratio 0.0-1.0 (fuzzy mode)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">case_sensitive</span></code></p></td>
+<td><p>bool</p></td>
+<td><p>Enable case-sensitive matching (default: false)</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Use Cases</strong></p>
+<ul class="simple">
+<li><p><strong>Missing dots</strong>: OCR often misses periods, ellipses, decimal points</p></li>
+<li><p><strong>Version numbers</strong>: Use regex to match dynamic version strings (e.g., <code class="docutils literal notranslate"><span class="pre">v\\d+\\.\\d+</span></code>)</p></li>
+<li><p><strong>Character confusion</strong>: OCR may confuse similar characters (O/0, l/1, rn/m)</p></li>
+<li><p><strong>Partial matches</strong>: Fuzzy matching handles truncated or slightly modified text</p></li>
 </ul>
 </section>
 <section id="target-selection-strategies">
@@ -582,6 +732,7 @@
 <li><a class="reference internal" href="#usage-examples">Usage Examples</a></li>
 <li><a class="reference internal" href="#parameters">Parameters</a></li>
 <li><a class="reference internal" href="#target-options">Target Options</a></li>
+<li><a class="reference internal" href="#advanced-text-matching">Advanced Text Matching</a></li>
 <li><a class="reference internal" href="#target-selection-strategies">Target Selection Strategies</a></li>
 <li><a class="reference internal" href="#notes">Notes</a></li>
 <li><a class="reference internal" href="#see-also">See Also</a></li>

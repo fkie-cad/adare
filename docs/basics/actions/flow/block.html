@@ -404,6 +404,17 @@
 <span class="w">                  </span><span class="nt">combination</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;delete&quot;</span><span class="p p-Indicator">]</span>
 </pre></div>
 </div>
+<p><strong>Delayed Execution</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">block</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">delay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wait</span><span class="nv"> </span><span class="s">2s</span><span class="nv"> </span><span class="s">then</span><span class="nv"> </span><span class="s">click</span><span class="nv"> </span><span class="s">OK&quot;</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">click</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;OK&quot;</span>
+</pre></div>
+</div>
 </section>
 <section id="parameters">
 <h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
@@ -432,6 +443,10 @@
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">description</span></code></p></td>
 <td><p>string</p></td>
 <td><p>Human-readable description (optional)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">delay</span></code></p></td>
+<td><p>float</p></td>
+<td><p>Optional delay (seconds) before executing block actions</p></td>
 </tr>
 </tbody>
 </table>

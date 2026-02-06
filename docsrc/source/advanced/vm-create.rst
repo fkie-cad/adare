@@ -38,10 +38,10 @@ Create
 
 
 
-VirtualBox
-==========
+VirtualBox Configuration Requirements
+=====================================
 
-- Disable all that can create pop up's as far as possible (like update notifications etc., automatic updates, error reporting, etc.)
+- Disable all that can create popups as far as possible (like update notifications etc., automatic updates, error reporting, etc.)
 - Disable screen lock and sleep mode if possible
 
 Windows Setup
@@ -144,9 +144,11 @@ Base Configuration (all environments)
 
 - Install:
   - Miniforge3
-    - Download Install script: ``cd /tmp && wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh''
-    - Install: ``cd /tmp && bash Miniforge3-Linux-x86_64.sh -b -p /home/adare/.miniforge3'' (install into /home/adare/.miniforge3 instead of /home/adare/miniforge3)
+
+    - Download Install script: ``cd /tmp && wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh``
+    - Install: ``cd /tmp && bash Miniforge3-Linux-x86_64.sh -b -p /home/adare/.miniforge3`` (install into /home/adare/.miniforge3 instead of /home/adare/miniforge3)
     - Create a conda environment with Python 3.10: ``conda create -n pyadare python=3.10``
+
   - VirtualBox Guest Additions
   - to be ready for future updates also install:
     - for x11: maim (for screenshots)
@@ -164,8 +166,8 @@ GNOME/KDE
   - ``gnome-screenshot``
 
 - Configure Seahorse (keyring) to unlock automatically on login by setting an empty password.
-- Disbale Auto Updates/Notifications:
-  - GNOME: ``sudo systemctl stop unattended-upgrades'' und ``sudo systemctl disable unattended-upgrades''
+- Disable Auto Updates/Notifications:
+  - GNOME: ``sudo systemctl stop unattended-upgrades`` and ``sudo systemctl disable unattended-upgrades``
 
 
 Other Desktop Environments

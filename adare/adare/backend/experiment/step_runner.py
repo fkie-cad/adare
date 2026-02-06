@@ -60,13 +60,13 @@ class ExperimentStepRunner:
                     if not task.done():
                         task.cancel()
 
-    async def run_cleanup_step(self, step_func: Callable, context: Any, post_interrupt: bool = False):
+    async def run_cleanup_step(self, step_func: Callable, context: Any, post_interrupt: bool = False, **kwargs):
         """Run a cleanup step regardless of stop event status."""
         log.info(f"Running cleanup step: {step_func.__name__}")
         if asyncio.iscoroutinefunction(step_func):
-            await step_func(context, post_interrupt=post_interrupt)
+            await step_func(context, post_interrupt=post_interrupt, **kwargs)
         else:
-            await asyncio.to_thread(step_func, context, post_interrupt)
+            await asyncio.to_thread(step_func, context, post_interrupt, **kwargs)
         log.info(f"Cleanup step {step_func.__name__} completed")
 
     async def run_steps_sequence(self, steps: list[Callable], context: Any):
