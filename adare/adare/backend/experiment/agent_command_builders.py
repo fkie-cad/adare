@@ -337,7 +337,7 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             # PowerShell array expansion: @(Get-ChildItem ...) forces wildcard expansion
             # before pip sees the arguments. PowerShell doesn't expand wildcards in
             # base64-encoded commands, so we must explicitly use Get-ChildItem.
-            return rf'$env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install --ignore-installed @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            return rf'$env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
         else:
             # Editable install from shared folder source
             return rf'cd {adarelib_path}; $env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd {adarevm_path}; $env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
@@ -358,7 +358,7 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             python_cmd = self._resolve_python_path(vm)
             log.info(f"Using executed python command: {python_cmd}")
 
-            return rf'{python_cmd} -m pip install --user --ignore-installed @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            return rf'{python_cmd} -m pip install --force-reinstall @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
         else:
             # Editable install via Poetry
             return rf'cd {adarevm_path}; poetry install'
@@ -420,7 +420,7 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
                 command="grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc; . ~/.bashrc",
                 requires_admin=False
             ),
-            # Add ~/.local/bin to PATH for --user installations (user bashrc, no admin needed)
+            # Add ~/.local/bin to PATH for installations (user bashrc, no admin needed)
             SetupCommand(
                 command="grep -qxF 'export PATH=\"$HOME/.local/bin:$PATH\"' ~/.bashrc || echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.bashrc; . ~/.bashrc",
                 requires_admin=False
@@ -448,7 +448,7 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         """Build Conda installation command."""
         if self.wheels_available:
             # Wheel install + X11 permission for GUI automation (if needed)
-            cmd = '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --ignore-installed /adare/vm/wheels/*.whl'
+            cmd = '/home/adare/.miniforge3/bin/conda run -n pyadare pip install --force-reinstall /adare/vm/wheels/*.whl'
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
@@ -464,7 +464,7 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         if self.wheels_available:
             # Use find for reliable wheel discovery (works with QEMU guest agent)
             # --no-cache-dir avoids cache permission issues
-            cmd = 'find /adare/vm/wheels -name "*.whl" -exec pip3 install --user --no-cache-dir --ignore-installed {} +'
+            cmd = 'find /adare/vm/wheels -name "*.whl" -exec pip3 install --no-cache-dir --force-reinstall {} +'
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
