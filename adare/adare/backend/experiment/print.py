@@ -38,11 +38,9 @@ class ExperimentFlowConsole:
         self.disable = disable
         self._original_log_level = None
         self.indent_offset = indent_offset
-        
-        terminal_size = self.console.size
-        # Ensure we have at least 1 line of height
-        desired_height = terminal_size.height - 2 if terminal_size.height > 2 else 1
-        self.console = Console(height=desired_height) 
+
+        # No need to re-initialize console with fixed height
+        # Console will use full terminal and scroll naturally
 
         self.layout = Text('Loading...')
 
@@ -61,13 +59,25 @@ class ExperimentFlowConsole:
                         message_identifiers.remove('EXPERIMENT_TIMER')
                         message_identifiers.insert(0, 'EXPERIMENT_TIMER')
 
-                    # Generate messages
+                    # Generate ALL messages (preserve full history)
                     generated_messages = [
-                        self._generate_message(identifier, messages_snapshot[identifier], tick_count) 
+                        self._generate_message(identifier, messages_snapshot[identifier], tick_count)
                         for identifier in message_identifiers
                     ]
                     non_empty_messages = [msg for msg in generated_messages if msg.strip()]
-                    messages_as_str = '\n'.join(non_empty_messages)
+
+                    # Apply sliding window: show only recent messages that fit terminal height
+                    terminal_height = self.console.size.height
+                    max_lines = terminal_height - 2  # Reserve 2 lines for Live display overhead
+
+                    if len(non_empty_messages) > max_lines:
+                        # Show most recent messages (tail behavior)
+                        visible_messages = non_empty_messages[-max_lines:]
+                    else:
+                        # Show all messages if they fit
+                        visible_messages = non_empty_messages
+
+                    messages_as_str = '\n'.join(visible_messages)
                     live.update(messages_as_str)
                     live.refresh()  # Force manual refresh since auto_refresh=False
                     tick_count += 1
@@ -96,6 +106,32 @@ class ExperimentFlowConsole:
             if self.thread and self.thread.is_alive():
                 self.thread.join()
             self._restore_console_logging()
+
+    def print_final_output(self):
+        """
+        Print all accumulated messages to console after experiment completes.
+        This ensures the full log is visible for review after stopping the live display.
+        """
+        if not self.disable:
+            # Get final snapshot of all messages
+            messages_snapshot = self.state.get_snapshot()
+            message_identifiers = list(messages_snapshot.keys())
+
+            # Ensure experiment timer appears first if it exists
+            if 'EXPERIMENT_TIMER' in message_identifiers:
+                message_identifiers.remove('EXPERIMENT_TIMER')
+                message_identifiers.insert(0, 'EXPERIMENT_TIMER')
+
+            # Generate and print all messages
+            generated_messages = [
+                self._generate_message(identifier, messages_snapshot[identifier], tick_count=0)
+                for identifier in message_identifiers
+            ]
+            non_empty_messages = [msg for msg in generated_messages if msg.strip()]
+
+            if non_empty_messages:
+                # Print to regular console (not Live), so it persists in terminal
+                self.console.print('\n'.join(non_empty_messages))
 
     def _suppress_console_logging(self):
         """Suppress console logging when flow console is active."""
