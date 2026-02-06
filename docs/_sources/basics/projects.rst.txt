@@ -89,3 +89,5 @@ Best Practices
 - Place experiment-specific files in the **experiment shared directory** for isolation and clarity
 - Both directories are optional - mounting is conditional on their existence
 - Use automatic variables in playbooks (e.g., ``{{adare_project_shared_tools}}/mytool.exe``) for portable paths
+
+For complete automatic variables list, see :doc:`actions` Variable section.

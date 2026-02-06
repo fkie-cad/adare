@@ -453,6 +453,39 @@
 <li><p><code class="docutils literal notranslate"><span class="pre">negate</span></code>: Condition must be false (NOT)</p></li>
 </ul>
 </section>
+<section id="skip-conditions">
+<h2>Skip Conditions<a class="headerlink" href="#skip-conditions" title="Link to this heading">¶</a></h2>
+<p>Control when wait_until checks for the target condition based on screen activity.</p>
+<p><strong>Pixel Change Constraints</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Wait for screen to stabilize before checking</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_until</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">exists</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Ready&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">skip</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">pixel_change</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">above</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span><span class="w">        </span><span class="c1"># Skip check if change &gt; 1%</span>
+<span class="w">        </span><span class="nt">strategy</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;once&#39;</span><span class="w">   </span><span class="c1"># Latch once satisfied</span>
+<span class="w">        </span><span class="nt">idle</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span><span class="w">          </span><span class="c1"># Wait 1s after stability</span>
+<span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+
+<span class="c1"># Wait for screen activity before checking</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wait_until</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">condition</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">exists</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Processing&quot;</span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="nt">skip</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">pixel_change</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">below</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.005</span><span class="w">       </span><span class="c1"># Skip check if change &lt; 0.5%</span>
+<span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60.0</span>
+</pre></div>
+</div>
+<p><strong>Parameters:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">above</span></code>: Skip if change % &gt; value (wait for stability)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">below</span></code>: Skip if change % &lt; value (wait for activity)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strategy</span></code>: ‘once’ (latch) or ‘continuous’ (always enforce). Default: ‘once’</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">idle</span></code>: Seconds to wait after constraint satisfied before checking condition</p></li>
+</ul>
+</section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading">¶</a></h2>
 <ul class="simple">
@@ -529,6 +562,7 @@
 <li><a class="reference internal" href="#usage-examples">Usage Examples</a></li>
 <li><a class="reference internal" href="#parameters">Parameters</a></li>
 <li><a class="reference internal" href="#condition-types">Condition Types</a></li>
+<li><a class="reference internal" href="#skip-conditions">Skip Conditions</a></li>
 <li><a class="reference internal" href="#notes">Notes</a></li>
 <li><a class="reference internal" href="#see-also">See Also</a></li>
 </ul>

@@ -431,6 +431,15 @@
 <span class="w">  </span><span class="nt">continue_on_test_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w"> </span><span class="c1"># Continue experiment even if tests fail</span>
 <span class="w">  </span><span class="nt">auto_pull_on_test_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w"> </span><span class="c1"># Automatically pull files on test failure for analysis</span>
 
+<span class="w">  </span><span class="c1"># Forensic features</span>
+<span class="w">  </span><span class="nt">collect_system_info</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">      </span><span class="c1"># Capture VM system info (default: true)</span>
+<span class="w">  </span><span class="nt">forensic_logging</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">         </span><span class="c1"># Generate YAML audit logs (default: true)</span>
+<span class="w">  </span><span class="nt">enable_filesystem_diff</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">   </span><span class="c1"># Auto snapshots at start/end (default: true)</span>
+
+<span class="w">  </span><span class="c1"># GUI automation mode (QEMU only)</span>
+<span class="w">  </span><span class="nt">gui_execution_mode</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;auto&#39;</span><span class="w">     </span><span class="c1"># &#39;auto&#39; (choose best), &#39;agent&#39; (VM-based),</span>
+<span class="w">                                 </span><span class="c1"># &#39;host&#39; (CV server)</span>
+
 <span class="w">  </span><span class="c1"># Retry behavior</span>
 <span class="w">  </span><span class="nt">retry</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">attempts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span><span class="w">                </span><span class="c1"># Retry failed actions</span>
@@ -522,6 +531,62 @@
 <span class="w">  </span><span class="c1"># Basic variable substitution</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;mkdir</span><span class="nv"> </span><span class="s">{{base_path}}/{{case_id}}&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="automatic-variables">
+<h3>Automatic Variables<a class="headerlink" href="#automatic-variables" title="Link to this heading">¶</a></h3>
+<p>ADARE provides automatic variables based on VM configuration (no declaration needed):</p>
+<p><strong>User Variables:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_username</span></code> - Target VM username</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_user_home</span></code> - User home directory (/home/user or C:/Users/user)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_user_documents</span></code> - Documents folder</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_user_desktop</span></code> - Desktop folder</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_user_downloads</span></code> - Downloads folder</p></li>
+</ul>
+<p><strong>System Variables:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_os</span></code> - Operating system (‘windows’ or ‘linux’)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_temp_dir</span></code> - Temporary directory (/tmp or C:/Windows/Temp)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_system_drive</span></code> - Windows system drive (C:)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_root_dir</span></code> - Linux root directory (/)</p></li>
+</ul>
+<p><strong>Shared Mount Variables:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_shared</span></code> - Experiment-level shared directory mount</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_shared_data</span></code> - Experiment shared data mount</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_shared_tools</span></code> - Experiment shared tools mount</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_project_shared</span></code> - Project-level shared directory mount</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_project_shared_data</span></code> - Project shared data mount</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_project_shared_tools</span></code> - Project shared tools mount</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adare_run_dir</span></code> - Run directory mount</p></li>
+</ul>
+<p>These variables can be overridden by defining them in the <code class="docutils literal notranslate"><span class="pre">variables</span></code> section.</p>
+</section>
+<section id="variable-scope-persistence">
+<h3>Variable Scope &amp; Persistence<a class="headerlink" href="#variable-scope-persistence" title="Link to this heading">¶</a></h3>
+<p>Variables created in loops and blocks persist to parent scope:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">times</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_variable</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;var_{{index}}&quot;</span>
+<span class="w">            </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;value_{{index}}&quot;</span>
+
+<span class="w">  </span><span class="c1"># Variables var_0, var_1, var_2 still accessible</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">&#39;{{var_0}}</span><span class="nv"> </span><span class="s">{{var_1}}</span><span class="nv"> </span><span class="s">{{var_2}}&#39;&quot;</span>
+</pre></div>
+</div>
+<p><strong>Dynamic Variable Naming:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loop</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">items</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;alpha&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;beta&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;gamma&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">item_var</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">name</span>
+<span class="w">      </span><span class="nt">actions</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">save_timestamp</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;timestamp_{{name}}&quot;</span><span class="w">  </span><span class="c1"># Creates timestamp_alpha, etc.</span>
 </pre></div>
 </div>
 </section>
@@ -642,6 +707,48 @@
 <span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/optional/file.txt&quot;</span>
 </pre></div>
 </div>
+</section>
+<section id="custom-yaml-tags">
+<h3>Custom YAML Tags<a class="headerlink" href="#custom-yaml-tags" title="Link to this heading">¶</a></h3>
+<p>Use custom tags in test parameters for precise matching:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">tests</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">exact_match</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csv.line_matches</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="kt">!s</span><span class="w"> </span><span class="s">&quot;exact</span><span class="nv"> </span><span class="s">text&quot;</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># Exact string match</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">regex_match</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csv.line_matches</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="kt">!re</span><span class="w"> </span><span class="s">&quot;^[a-z]+$&quot;</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># Regex pattern</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path_match</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_exists</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dst</span><span class="p">:</span><span class="w"> </span><span class="kt">!path</span><span class="w"> </span><span class="s">&quot;/home/user&quot;</span><span class="w">     </span><span class="c1"># Path comparison</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wildcard_match</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">json.value_matches</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="kt">!reALL</span><span class="w">                </span><span class="c1"># Match any value</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">timestamp_match</span>
+<span class="w">    </span><span class="nt">function</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file_modified_time_matches</span>
+<span class="w">    </span><span class="nt">parameter</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="kt">!timestamp</span>
+<span class="w">        </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{deletion_time}}&quot;</span>
+<span class="w">        </span><span class="nt">tolerance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+<span class="w">        </span><span class="nt">timezone</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;UTC&quot;</span>
+</pre></div>
+</div>
+<p><strong>Available Tags:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">!s</span></code> - Exact string match</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">!re</span> <span class="pre">&lt;pattern&gt;</span></code> - Regex pattern match</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">!path</span></code> - Path exact match</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">!reALL</span></code> - Wildcard (match any value)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">!timestamp</span> <span class="pre">{timestamp,</span> <span class="pre">tolerance,</span> <span class="pre">timezone,</span> <span class="pre">format}</span></code> - Timestamp with tolerance</p></li>
+</ul>
 </section>
 </section>
 <section id="actions-reference">
@@ -815,12 +922,15 @@
 <li><a class="reference internal" href="#variables-and-templating">Variables and Templating</a><ul>
 <li><a class="reference internal" href="#variable-types">Variable Types</a></li>
 <li><a class="reference internal" href="#template-syntax">Template Syntax</a></li>
+<li><a class="reference internal" href="#automatic-variables">Automatic Variables</a></li>
+<li><a class="reference internal" href="#variable-scope-persistence">Variable Scope &amp; Persistence</a></li>
 <li><a class="reference internal" href="#variable-filters">Variable Filters</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#test-definitions">Test Definitions</a><ul>
 <li><a class="reference internal" href="#basic-test-structure">Basic Test Structure</a></li>
 <li><a class="reference internal" href="#test-failure-handling">Test Failure Handling</a></li>
+<li><a class="reference internal" href="#custom-yaml-tags">Custom YAML Tags</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#actions-reference">Actions Reference</a><ul>

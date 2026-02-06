@@ -379,10 +379,10 @@ At the moment, ADARE only supports VirtualBox VMs but it is planned to support Q
 <section id="create">
 <h2>Create<a class="headerlink" href="#create" title="Link to this heading">¶</a></h2>
 </section>
-<section id="id1">
-<h2>VirtualBox<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<section id="virtualbox-configuration-requirements">
+<h2>VirtualBox Configuration Requirements<a class="headerlink" href="#virtualbox-configuration-requirements" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>Disable all that can create pop up’s as far as possible (like update notifications etc., automatic updates, error reporting, etc.)</p></li>
+<li><p>Disable all that can create popups as far as possible (like update notifications etc., automatic updates, error reporting, etc.)</p></li>
 <li><p>Disable screen lock and sleep mode if possible</p></li>
 </ul>
 </section>
@@ -490,8 +490,8 @@ At the moment, ADARE only supports VirtualBox VMs but it is planned to support Q
 - Miniforge3</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>Download Install script: <a href="#id2"><span class="problematic" id="id3">``</span></a>cd /tmp &amp;&amp; wget <a class="reference external" href="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh">https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh</a>’’</p></li>
-<li><p>Install: <a href="#id4"><span class="problematic" id="id5">``</span></a>cd /tmp &amp;&amp; bash Miniforge3-Linux-x86_64.sh -b -p /home/adare/.miniforge3’’ (install into /home/adare/.miniforge3 instead of /home/adare/miniforge3)</p></li>
+<li><p>Download Install script: <code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">/tmp</span> <span class="pre">&amp;&amp;</span> <span class="pre">wget</span> <span class="pre">https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh</span></code></p></li>
+<li><p>Install: <code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">/tmp</span> <span class="pre">&amp;&amp;</span> <span class="pre">bash</span> <span class="pre">Miniforge3-Linux-x86_64.sh</span> <span class="pre">-b</span> <span class="pre">-p</span> <span class="pre">/home/adare/.miniforge3</span></code> (install into /home/adare/.miniforge3 instead of /home/adare/miniforge3)</p></li>
 <li><p>Create a conda environment with Python 3.10: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">create</span> <span class="pre">-n</span> <span class="pre">pyadare</span> <span class="pre">python=3.10</span></code></p></li>
 </ul>
 </div></blockquote>
@@ -515,8 +515,8 @@ At the moment, ADARE only supports VirtualBox VMs but it is planned to support Q
 </ul>
 </li>
 <li><p>Configure Seahorse (keyring) to unlock automatically on login by setting an empty password.</p></li>
-<li><p>Disbale Auto Updates/Notifications:
-- GNOME: <a href="#id6"><span class="problematic" id="id7">``</span></a>sudo systemctl stop unattended-upgrades’’ und <a href="#id8"><span class="problematic" id="id9">``</span></a>sudo systemctl disable unattended-upgrades’’</p></li>
+<li><p>Disable Auto Updates/Notifications:
+- GNOME: <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">systemctl</span> <span class="pre">stop</span> <span class="pre">unattended-upgrades</span></code> and <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">systemctl</span> <span class="pre">disable</span> <span class="pre">unattended-upgrades</span></code></p></li>
 </ul>
 </section>
 <section id="other-desktop-environments">
@@ -685,7 +685,7 @@ Version: 0.1.0
 </ul>
 </li>
 <li><a class="reference internal" href="#create">Create</a></li>
-<li><a class="reference internal" href="#id1">VirtualBox</a></li>
+<li><a class="reference internal" href="#virtualbox-configuration-requirements">VirtualBox Configuration Requirements</a></li>
 <li><a class="reference internal" href="#windows-setup">Windows Setup</a><ul>
 <li><a class="reference internal" href="#user-account-configuration">User Account Configuration</a></li>
 <li><a class="reference internal" href="#additional-configuration">Additional Configuration</a></li>

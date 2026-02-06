@@ -89,4 +89,4 @@ See Also
 
 - :doc:`continue` for skipping current iteration
 - :doc:`../command/command` for capturing values to test
-- :doc:`../../advanced/playbook-patterns` for complex patterns
+- :doc:`../../../advanced/playbook-patterns` for complex patterns

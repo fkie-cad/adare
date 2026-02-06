@@ -1603,7 +1603,14 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 await step_runner.run_cleanup_step(step_shutdown_ws, experiment_run_context, post_interrupt=True)
                 
                 if vm_manager:
-                    await step_runner.run_cleanup_step(vm_manager.stop_vm, experiment_run_context, post_interrupt=True)
+                    # Determine if force shutdown is needed (Windows on QEMU)
+                    force_shutdown = False
+                    if (experiment_run_context.hypervisor_type == 'qemu' and 
+                        experiment_run_context.guest_platform == 'windows'):
+                        force_shutdown = True
+                        log.info("Forcing shutdown for Windows VM on QEMU to prevent updates")
+
+                    await step_runner.run_cleanup_step(vm_manager.stop_vm, experiment_run_context, post_interrupt=True, force=force_shutdown)
                     # Retrieve artifacts BEFORE destroying VM (critical for QEMU)
                     await step_runner.run_cleanup_step(vm_manager.retrieve_artifacts, experiment_run_context, post_interrupt=True)
                     # Perform host-side diff AFTER VM stopped, BEFORE overlay cleanup
