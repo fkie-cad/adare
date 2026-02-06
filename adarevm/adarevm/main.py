@@ -115,7 +115,25 @@ def run():
     log_level = config.get('log_level', 'INFO').upper()
     log_level = loglevel_lookup.get(log_level, logging.INFO)
     __setup_logging(logfile=logfile, log_level=log_level)
-    
+
+    # Log version information
+    try:
+        from importlib.metadata import version, PackageNotFoundError
+        try:
+            adarevm_version = version('adarevm')
+        except PackageNotFoundError:
+            adarevm_version = 'unknown (not installed)'
+
+        try:
+            adarelib_version = version('adarelib')
+        except PackageNotFoundError:
+            adarelib_version = 'unknown (not installed)'
+
+        log.info(f"adarevm version: {adarevm_version}")
+        log.info(f"adarelib version: {adarelib_version}")
+    except ImportError:
+        log.warning("Could not retrieve package versions (importlib.metadata not available)")
+
     # Resolve paths
     tools_paths = args.tools_paths + config.get('tools_paths', [])
     data_paths = args.data_paths + config.get('data_paths', [])

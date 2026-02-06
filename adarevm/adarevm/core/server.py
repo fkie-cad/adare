@@ -578,19 +578,88 @@ class AdareVMServer:
             log.error(f"Unexpected error in pull_file_chunk: {e}", exc_info=True)
             return {"status": "error", "error": str(e)}
 
+    def _is_wheel_installation(self) -> bool:
+        """Detect if adarevm was installed from wheel (vs Poetry editable).
+
+        Returns:
+            True if installed from wheel, False if editable/development install
+        """
+        import importlib.metadata
+
+        try:
+            # Get adarevm package metadata
+            dist = importlib.metadata.distribution('adarevm')
+
+            # Check if direct_url.json exists (indicates editable/VCS install)
+            # Wheel installs don't have direct_url.json
+            try:
+                if dist.read_text('direct_url.json'):
+                    log.info("Detected editable installation (direct_url.json found)")
+                    return False  # Editable/development install
+            except FileNotFoundError:
+                # No direct_url.json = wheel install
+                log.info("Detected wheel installation (no direct_url.json)")
+                return True
+
+        except Exception as e:
+            log.warning(f"Could not determine installation mode: {e}, defaulting to wheel mode")
+
+        return True  # Default to wheel mode
+
+    def _get_pip_command(self) -> List[str]:
+        """Get the appropriate pip command for current environment.
+
+        Returns:
+            List of command components for pip installation
+        """
+        import os
+        import platform
+        from pathlib import Path
+
+        # Check if running in conda environment
+        conda_env = os.environ.get('CONDA_DEFAULT_ENV')
+        if conda_env == 'pyadare':
+            if platform.system() == 'Windows':
+                conda_exe = Path(os.environ.get('USERPROFILE', '')) / '.miniforge3' / 'Scripts' / 'conda.exe'
+            else:
+                conda_exe = Path.home() / '.miniforge3' / 'bin' / 'conda'
+
+            if conda_exe.exists():
+                # Conda: pip install --no-cache-dir
+                log.info(f"Using conda environment: {conda_exe}")
+                return [str(conda_exe), 'run', '-n', 'pyadare', 'pip', 'install', '--no-cache-dir']
+
+        # Fallback to system pip with --user flag
+        pip_cmd = 'pip' if platform.system() == 'Windows' else 'pip3'
+        cmd = [pip_cmd, 'install', '--user', '--no-cache-dir']
+
+        # Note: --user flag eliminates need for --break-system-packages
+        log.info(f"Using system pip with --user: {' '.join(cmd)}")
+        return cmd
+
     def _find_project_directory(self) -> str:
         """Find the adarevm project directory containing pyproject.toml."""
         import os
+        import platform
         from pathlib import Path
 
-        # Common deployment paths to check
-        possible_paths = [
-            "/adare/vm/adarevm",  # VM runtime deployment path (adarevm in runtime directory)
-            "/adare/vm",  # VM runtime base path (whole vm directory)
-            "/adare",      # Alternative deployment path
-            Path(__file__).parent.parent.parent,  # Development path (../../../)
-            Path.cwd(),    # Current working directory
-        ]
+        # Platform-specific base paths
+        if platform.system() == "Windows":
+            possible_paths = [
+                "C:/adare/vm/adarevm",  # Primary Windows deployment path
+                "C:/adare/vm",           # VM runtime base path
+                "C:/adare",              # Alternative deployment path
+                Path(__file__).parent.parent.parent,  # Development path
+                Path.cwd(),              # Current working directory
+            ]
+        else:
+            possible_paths = [
+                "/adare/vm/adarevm",  # Primary Linux deployment path
+                "/adare/vm",          # VM runtime base path
+                "/adare",             # Alternative deployment path
+                Path(__file__).parent.parent.parent,  # Development path
+                Path.cwd(),           # Current working directory
+            ]
 
         for path in possible_paths:
             path = Path(path)
@@ -601,10 +670,12 @@ class AdareVMServer:
 
         # Fallback to current directory
         log.warning("Could not find pyproject.toml, falling back to current directory")
-        return str(Path.cwd())
+        cwd = Path.cwd()
+        log.warning(f"Using current working directory: {cwd}")
+        return str(cwd)
 
-    async def _install_dependencies(self, websocket, dependencies: List[str], prefer_binary: bool = False):
-        """Install Python dependencies using Poetry.
+    async def _install_dependencies_poetry(self, websocket, dependencies: List[str], prefer_binary: bool = False):
+        """Install Python dependencies using Poetry (for editable/development installs).
 
         Args:
             websocket: WebSocket connection
@@ -713,6 +784,118 @@ class AdareVMServer:
             log.error(error_msg)
             await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
             return {"status": "error", "message": error_msg}
+
+    async def _install_dependencies_pip(self, websocket, dependencies: List[str], prefer_binary: bool = False):
+        """Install Python dependencies using pip (for wheel-based installs).
+
+        Args:
+            websocket: WebSocket connection
+            dependencies: List of dependencies to install
+            prefer_binary: If True, prefer binary packages (passed as --only-binary :all:)
+        """
+        await self.send_event(websocket, EventType.LOG, {"message": f"Starting dependency installation: {len(dependencies)} packages"})
+
+        try:
+            if not dependencies:
+                log.info("No dependencies to install")
+                return {"status": "success", "message": "No dependencies to install"}
+
+            log.info(f"Installing dependencies with pip: {dependencies}")
+
+            # Step 1: Get pip command
+            await self.send_event(websocket, EventType.LOG, {"message": "Step 1/2: Preparing pip command..."})
+            pip_cmd = self._get_pip_command()
+
+            # Add prefer_binary flag if requested
+            if prefer_binary:
+                pip_cmd.append('--only-binary')
+                pip_cmd.append(':all:')
+
+            # Add dependencies
+            cmd = pip_cmd + dependencies
+
+            log.info(f"Running command: {' '.join(cmd)}")
+            await self.send_event(websocket, EventType.LOG, {"message": f"Command: {' '.join(cmd)}"})
+
+            # Step 2: Execute installation
+            await self.send_event(websocket, EventType.LOG, {"message": "Step 2/2: Installing dependencies (this may take several minutes)..."})
+
+            # Use asyncio subprocess to avoid blocking the event loop
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            # Wait for process with periodic heartbeat to keep WebSocket alive
+            stdout, stderr = await self._wait_for_process_with_heartbeat(
+                websocket, process, timeout=600.0
+            )
+
+            # Decode bytes to string
+            stdout = stdout.decode('utf-8') if stdout else ""
+            stderr = stderr.decode('utf-8') if stderr else ""
+
+            if process.returncode != 0:
+                await self.send_event(websocket, EventType.LOG, {"message": "Step 2/2: Installation failed"})
+                error_msg = f"Pip install failed with exit code {process.returncode}"
+                if stderr.strip():
+                    error_msg += f": {stderr}"
+                else:
+                    error_msg += " (no error output)"
+                if stdout.strip():
+                    error_msg += f"\nStdout: {stdout}"
+
+                log.error(error_msg)
+                log.error(f"CLAUDE: Pip command details - Exit code: {process.returncode}, Stderr: '{stderr}', Stdout: '{stdout}'")
+                await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
+                return {"status": "error", "message": error_msg}
+            else:
+                await self.send_event(websocket, EventType.LOG, {"message": "Step 2/2: Installation completed successfully"})
+                success_msg = f"Successfully installed all {len(dependencies)} dependencies with pip"
+                log.info(success_msg)
+                log.debug(f"Pip output: {stdout}")
+                await self.send_event(websocket, EventType.LOG, {"message": success_msg})
+
+                return {
+                    "status": "success",
+                    "message": success_msg,
+                    "installed_count": len(dependencies),
+                    "pip_output": stdout
+                }
+
+        except asyncio.TimeoutError as e:
+            error_msg = f"Pip dependency installation timed out: {e}"
+            log.error(error_msg)
+            await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
+            return {"status": "error", "message": error_msg}
+        except (OSError, FileNotFoundError) as e:
+            error_msg = f"Pip dependency installation failed: {e}"
+            log.error(error_msg)
+            await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
+            return {"status": "error", "message": error_msg}
+
+    async def _install_dependencies(self, websocket, dependencies: List[str], prefer_binary: bool = False):
+        """Install Python dependencies using the appropriate package manager.
+
+        Routes to Poetry (editable install) or pip (wheel install) based on installation mode.
+
+        Args:
+            websocket: WebSocket connection
+            dependencies: List of dependencies to install
+            prefer_binary: If True, prefer binary packages
+        """
+        # Detect installation mode
+        is_wheel_mode = self._is_wheel_installation()
+
+        if is_wheel_mode:
+            log.info("Using pip for dependency installation (wheel mode)")
+            await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: pip (wheel-based)"})
+            return await self._install_dependencies_pip(websocket, dependencies, prefer_binary)
+        else:
+            log.info("Using Poetry for dependency installation (editable mode)")
+            await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: Poetry (editable)"})
+            return await self._install_dependencies_poetry(websocket, dependencies, prefer_binary)
 
     async def _wait_for_process_with_heartbeat(self, websocket, process, timeout=600.0, heartbeat_interval=30.0):
         """Wait for subprocess with periodic WebSocket heartbeat to prevent disconnection.
@@ -850,10 +1033,33 @@ class AdareVMServer:
             from adarelib.constants import StatusEnum
             
             try:
+                # Clear any previous load failures before importing
+                from adarelib.testset.testfunction import clear_module_load_failures
+                clear_module_load_failures()
+
                 supported_tests = import_basictest_subclasses(directory=self.testfunctions_dir)
-            except Exception as e:
-                log.error(f"Error importing test functions: {e}", exc_info=True)
-                return TestResult.execution_error(e, "Failed to import testfunctions")
+
+                # Check if any modules failed to load
+                from adarelib.testset.testfunction import get_module_load_failures
+                load_failures = get_module_load_failures()
+
+                if load_failures:
+                    log.warning(f"Some testfunction modules failed to load: {list(load_failures.keys())}")
+                    for name, failure in load_failures.items():
+                        log.warning(f"  - {failure.get_user_friendly_message()}")
+                    # Continue execution - the specific test might not need the failed module
+
+            except ModuleNotFoundError as e:
+                log.error(f"Critical error: Missing required module for testfunction loading: {e}", exc_info=True)
+                return TestResult.execution_error(e, "Missing required module for testfunction system")
+
+            except ImportError as e:
+                log.error(f"Critical import error during testfunction loading: {e}", exc_info=True)
+                return TestResult.execution_error(e, "Failed to import testfunction system")
+
+            except (OSError, FileNotFoundError) as e:
+                log.error(f"File system error loading testfunctions: {e}", exc_info=True)
+                return TestResult.execution_error(e, "File system error loading testfunctions")
             
             function_name = resolved_test_data.get('function')
             if not function_name:
@@ -862,7 +1068,41 @@ class AdareVMServer:
             # Get test class using the proper helper function
             test_class = get_testclass_from_testfunction(function_name, supported_tests)
             if not test_class:
-                return TestResult.error([f"Test function '{function_name}' not found"])
+                # Check if this is due to a failed module load
+                from adarelib.testset.testfunction import get_module_load_failures
+
+                if '.' in function_name:
+                    collection_name = function_name.split('.', 1)[0]
+                else:
+                    collection_name = 'standard'
+
+                load_failures = get_module_load_failures()
+                if collection_name in load_failures:
+                    failure = load_failures[collection_name]
+                    error_msg = f"Test function '{function_name}' unavailable: {failure.get_user_friendly_message()}"
+                    log.error(error_msg)
+
+                    # Extract dependency name for hint
+                    hint_lines = [error_msg]
+                    if failure.exception_type == 'ModuleNotFoundError':
+                        import re
+                        match = re.search(r"No module named '([^']+)'", failure.exception_message)
+                        if match:
+                            dep_name = match.group(1)
+                            hint_lines.append(f"Install missing dependency: poetry add {dep_name}")
+                            hint_lines.append(f"Or run experiment with dependency auto-installation enabled")
+
+                    return TestResult.error(hint_lines)
+                else:
+                    available_functions = []
+                    for coll_name, coll_funcs in supported_tests.items():
+                        for func_name in coll_funcs.keys():
+                            available_functions.append(f"{coll_name}.{func_name}")
+
+                    return TestResult.error([
+                        f"Test function '{function_name}' not found",
+                        f"Available: {', '.join(sorted(available_functions)[:10])}{'...' if len(available_functions) > 10 else ''}"
+                    ])
             
             # Create test instance with required arguments
             test_name = resolved_test_data.get('name', 'unknown_test')

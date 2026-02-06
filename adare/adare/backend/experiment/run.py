@@ -589,9 +589,9 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     if not commands.skip_installation:
         log.info(f"Installing adarevm")
 
-        # Use admin for Linux installations (--break-system-packages requires sudo)
-        # Windows uses user site-packages and doesn't need admin
-        needs_admin = context.guest_platform == 'linux'
+        # With --user flag, no admin needed on any platform
+        # Conda installations also don't need admin (isolated environment)
+        needs_admin = False
 
         # Installation can fail if guest agent is temporarily unresponsive
         max_retries = 3
