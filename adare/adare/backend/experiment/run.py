@@ -1674,6 +1674,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             # Print debug flow messages before stopping console
             # flow_console.print_debug_flow_messages()
             flow_console.stop()
+            flow_console.print_final_output()  # Flush all messages to terminal for review
         except Exception as e:
             log.error(f"Error during shutdown: {e}", exc_info=True)
             # Ensure coordinator is stopped even if cleanup fails
