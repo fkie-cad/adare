@@ -124,7 +124,7 @@ class ExperimentFlowConsole:
 
             # Generate and print all messages
             generated_messages = [
-                self._generate_message(identifier, messages_snapshot[identifier], tick_count=0)
+                self._generate_message(identifier, messages_snapshot[identifier], spinner_position=0)
                 for identifier in message_identifiers
             ]
             non_empty_messages = [msg for msg in generated_messages if msg.strip()]
