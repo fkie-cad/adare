@@ -1402,7 +1402,10 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                     virtiofs_shares.append(share)
 
         # Write config.json to run directory with new paths
-        config_data = self._build_config_json(is_windows)
+        config_data = self._build_config_json(
+            is_windows=is_windows,
+            installation_mode=context.config.installation_mode
+        )
         with open(run_dir / 'config.json', 'w') as f:
             json.dump(config_data, f, indent=2)
         log.debug(f"Wrote config.json to {run_dir / 'config.json'}")
@@ -1419,11 +1422,12 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         for share in virtiofs_shares:
             log.debug(f"  {share['tag']}: {share['host_path']} -> {share['guest_mount']}")
 
-    def _build_config_json(self, is_windows: bool) -> Dict[str, Any]:
+    def _build_config_json(self, is_windows: bool, installation_mode: str = "wheel") -> Dict[str, Any]:
         """Build config.json content for adarevm with new mount paths.
 
         Args:
             is_windows: True if guest is Windows
+            installation_mode: "wheel" (pip) or "editable" (Poetry)
 
         Returns:
             Dictionary with config.json contents
@@ -1432,13 +1436,15 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             return {
                 "tools_paths": ["C:\\adare\\project_shared\\tools", "C:\\adare\\shared\\tools"],
                 "data_paths": ["C:\\adare\\project_shared\\data", "C:\\adare\\shared\\data"],
-                "logfile": "C:\\adare\\run\\logs\\adarevm.log"
+                "logfile": "C:\\adare\\run\\logs\\adarevm.log",
+                "installation_mode": installation_mode
             }
         else:
             return {
                 "tools_paths": ["/adare/project_shared/tools", "/adare/shared/tools"],
                 "data_paths": ["/adare/project_shared/data", "/adare/shared/data"],
-                "logfile": "/adare/run/logs/adarevm.log"
+                "logfile": "/adare/run/logs/adarevm.log",
+                "installation_mode": installation_mode
             }
 
     async def setup_networking(self, context):

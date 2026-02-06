@@ -75,13 +75,15 @@ class AgentCommandBuilder(ABC):
         shared_folders: dict,
         websocket_port: int,
         skip_xhost: bool = False,
-        hypervisor_type: str = 'virtualbox'
+        hypervisor_type: str = 'virtualbox',
+        installation_mode: str = "wheel"
     ):
         self.wheels_dir = wheels_dir
         self.shared_folders = shared_folders
         self.websocket_port = websocket_port
         self.skip_xhost = skip_xhost
         self.hypervisor_type = hypervisor_type
+        self.installation_mode = installation_mode
         self.wheels_available = wheels_dir.exists() and bool(list(wheels_dir.glob('*.whl')))
 
     @abstractmethod
@@ -137,7 +139,8 @@ class AgentCommandBuilder(ABC):
         config = {
             "tools_paths": [project_tools, experiment_tools],
             "data_paths": [project_data, experiment_data],
-            "logfile": log_path
+            "logfile": log_path,
+            "installation_mode": self.installation_mode
         }
         return json.dumps(config)
 

@@ -72,7 +72,7 @@ class AdareVMServer:
             # Fallback
             return command.split(" ")
 
-    def __init__(self, host="0.0.0.0", port=18765, tools_paths: List[str] = None, data_paths: List[str] = None):
+    def __init__(self, host="0.0.0.0", port=18765, tools_paths: List[str] = None, data_paths: List[str] = None, installation_mode: str = "wheel"):
         self.host = host
         self.port = port
         self.clients: Set[websockets.WebSocketServerProtocol] = set()
@@ -85,9 +85,14 @@ class AdareVMServer:
         if self.tools_paths:
             log.info(f"AdareVMServer initialized with tools_paths: {self.tools_paths}")
 
+        # Installation mode configuration
+        self.installation_mode = installation_mode
+        log.info(f"Installation mode: {installation_mode}")
+
         # Test management state
         self.testfunctions_dir: Optional[Path] = None
         self.current_variables: Dict[str, Any] = {}
+        self._testfunction_cache: Optional[dict] = None  # Cache discovered testfunctions
 
         # Task management for non-blocking tool execution
         self.running_tasks: Dict[str, asyncio.Task] = {}
@@ -629,12 +634,11 @@ class AdareVMServer:
                 log.info(f"Using conda environment: {conda_exe}")
                 return [str(conda_exe), 'run', '-n', 'pyadare', 'pip', 'install', '--no-cache-dir']
 
-        # Fallback to system pip with --user flag
+        # Fallback to system pip with  flag
         pip_cmd = 'pip' if platform.system() == 'Windows' else 'pip3'
-        cmd = [pip_cmd, 'install', '--user', '--no-cache-dir']
+        cmd = [pip_cmd, 'install', '--no-cache-dir']
 
-        # Note: --user flag eliminates need for --break-system-packages
-        log.info(f"Using system pip with --user: {' '.join(cmd)}")
+        log.info(f"Using system pip: {' '.join(cmd)}")
         return cmd
 
     def _find_project_directory(self) -> str:
@@ -878,24 +882,34 @@ class AdareVMServer:
     async def _install_dependencies(self, websocket, dependencies: List[str], prefer_binary: bool = False):
         """Install Python dependencies using the appropriate package manager.
 
-        Routes to Poetry (editable install) or pip (wheel install) based on installation mode.
+        Routes to Poetry (editable install) or pip (wheel install) based on configured installation mode.
 
         Args:
             websocket: WebSocket connection
             dependencies: List of dependencies to install
             prefer_binary: If True, prefer binary packages
         """
-        # Detect installation mode
-        is_wheel_mode = self._is_wheel_installation()
-
-        if is_wheel_mode:
-            log.info("Using pip for dependency installation (wheel mode)")
+        # Use explicit config (with fallback to auto-detection for backward compat)
+        if self.installation_mode == "editable":
+            log.info("Using Poetry for dependency installation (configured: editable)")
+            await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: Poetry (editable)"})
+            return await self._install_dependencies_poetry(websocket, dependencies, prefer_binary)
+        elif self.installation_mode == "wheel":
+            log.info("Using pip for dependency installation (configured: wheel)")
             await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: pip (wheel-based)"})
             return await self._install_dependencies_pip(websocket, dependencies, prefer_binary)
         else:
-            log.info("Using Poetry for dependency installation (editable mode)")
-            await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: Poetry (editable)"})
-            return await self._install_dependencies_poetry(websocket, dependencies, prefer_binary)
+            # Fallback to auto-detection for unknown/legacy values
+            log.warning(f"Unknown installation_mode: {self.installation_mode}, falling back to auto-detection")
+            is_wheel_mode = self._is_wheel_installation()
+            if is_wheel_mode:
+                log.info("Using pip for dependency installation (auto-detected: wheel mode)")
+                await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: pip (auto-detected)"})
+                return await self._install_dependencies_pip(websocket, dependencies, prefer_binary)
+            else:
+                log.info("Using Poetry for dependency installation (auto-detected: editable mode)")
+                await self.send_event(websocket, EventType.LOG, {"message": "Installation mode: Poetry (auto-detected)"})
+                return await self._install_dependencies_poetry(websocket, dependencies, prefer_binary)
 
     async def _wait_for_process_with_heartbeat(self, websocket, process, timeout=600.0, heartbeat_interval=30.0):
         """Wait for subprocess with periodic WebSocket heartbeat to prevent disconnection.
@@ -1033,21 +1047,35 @@ class AdareVMServer:
             from adarelib.constants import StatusEnum
             
             try:
-                # Clear any previous load failures before importing
-                from adarelib.testset.testfunction import clear_module_load_failures
-                clear_module_load_failures()
+                # Load testfunctions ONCE per server instance (cached after first test)
+                if self._testfunction_cache is None:
+                    log.info("Discovering testfunctions (first test execution)...")
+                    import time
+                    start_time = time.time()
 
-                supported_tests = import_basictest_subclasses(directory=self.testfunctions_dir)
+                    # Clear any previous load failures before importing
+                    from adarelib.testset.testfunction import clear_module_load_failures
+                    clear_module_load_failures()
 
-                # Check if any modules failed to load
-                from adarelib.testset.testfunction import get_module_load_failures
-                load_failures = get_module_load_failures()
+                    self._testfunction_cache = import_basictest_subclasses(directory=self.testfunctions_dir)
 
-                if load_failures:
-                    log.warning(f"Some testfunction modules failed to load: {list(load_failures.keys())}")
-                    for name, failure in load_failures.items():
-                        log.warning(f"  - {failure.get_user_friendly_message()}")
-                    # Continue execution - the specific test might not need the failed module
+                    elapsed = time.time() - start_time
+                    log.info(
+                        f"Loaded {len(self._testfunction_cache)} testfunction modules "
+                        f"in {elapsed:.2f}s (cached for subsequent tests)"
+                    )
+
+                    # Check if any modules failed to load
+                    from adarelib.testset.testfunction import get_module_load_failures
+                    load_failures = get_module_load_failures()
+
+                    if load_failures:
+                        log.warning(f"Some testfunction modules failed to load: {list(load_failures.keys())}")
+                        for name, failure in load_failures.items():
+                            log.warning(f"  - {failure.get_user_friendly_message()}")
+                        # Continue execution - the specific test might not need the failed module
+
+                supported_tests = self._testfunction_cache
 
             except ModuleNotFoundError as e:
                 log.error(f"Critical error: Missing required module for testfunction loading: {e}", exc_info=True)

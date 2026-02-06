@@ -31,6 +31,47 @@ Framework for detecting forensic artifact changes across OS/software versions us
 - ✅ Integrity validation prevents tampering
 - ✅ Scalable for analytics and web interfaces
 
+## Test Execution Performance
+
+### Testfunction Caching (2026-02-06)
+**Problem**: Testfunction discovery ran on every test execution, taking ~32 seconds to load/compile all Python modules.
+
+**Solution**: Instance-level caching in `AdareVMServer._testfunction_cache`
+- First test pays 32s discovery cost (one-time per VM session)
+- Subsequent tests have zero discovery overhead (instant cache lookup)
+- Cache persists for VM lifetime (requires restart to pick up testfunction changes)
+
+**Impact**: Experiments with 20+ tests save ~10 minutes of discovery overhead
+
+### Test Timeouts
+Tests support configurable timeouts via the `timeout` field:
+
+**Default**: 120 seconds (2 minutes) - conservative with testfunction caching
+- Most cached tests complete in <5 seconds
+- Complex operations (Excel parsing, file operations) may need 30-60 seconds
+- Default provides safety margin while catching truly hung operations
+
+**YAML Configuration**:
+```yaml
+tests:
+  - name: test_simple_file
+    function: standard.file_exists
+    # Uses default 120s timeout
+    parameter:
+      dst: /path/to/file
+
+  - name: test_large_excel
+    function: excel.validate_columns
+    timeout: 300  # Override for very large files (5 minutes)
+    parameter:
+      dst: /path/to/huge.xlsx
+```
+
+**Timeout Flow**:
+1. Action timeout (playbook YAML) overrides Test timeout (testfunction default)
+2. WebSocket adds 10-second buffer for communication overhead
+3. VM executes test within timeout limit
+
 ## Testing
 - Manual only (experiment commands, interactive mode) - so never built or perform tests
 
