@@ -358,7 +358,7 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             python_cmd = self._resolve_python_path(vm)
             log.info(f"Using executed python command: {python_cmd}")
 
-            return rf'{python_cmd} -m pip install --ignore-installed @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            return rf'{python_cmd} -m pip install --user --ignore-installed @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
         else:
             # Editable install via Poetry
             return rf'cd {adarevm_path}; poetry install'
@@ -409,7 +409,7 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
 
     async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> List[SetupCommand]:
         """Build Linux setup commands with per-command admin requirements."""
-        return [
+        commands = [
             # Add project-wide tools to PATH (user bashrc, no admin needed)
             SetupCommand(
                 command="grep -qxF 'export PATH=$PATH:/adare/project_shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/project_shared/tools' >> ~/.bashrc; . ~/.bashrc",
@@ -418,6 +418,11 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
             # Add experiment-specific tools to PATH (user bashrc, no admin needed)
             SetupCommand(
                 command="grep -qxF 'export PATH=$PATH:/adare/shared/tools' ~/.bashrc || echo 'export PATH=$PATH:/adare/shared/tools' >> ~/.bashrc; . ~/.bashrc",
+                requires_admin=False
+            ),
+            # Add ~/.local/bin to PATH for --user installations (user bashrc, no admin needed)
+            SetupCommand(
+                command="grep -qxF 'export PATH=\"$HOME/.local/bin:$PATH\"' ~/.bashrc || echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.bashrc; . ~/.bashrc",
                 requires_admin=False
             )
         ]
@@ -459,7 +464,7 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         if self.wheels_available:
             # Use find for reliable wheel discovery (works with QEMU guest agent)
             # --no-cache-dir avoids cache permission issues
-            cmd = 'find /adare/vm/wheels -name "*.whl" -exec pip3 install --break-system-packages --no-cache-dir --ignore-installed {} +'
+            cmd = 'find /adare/vm/wheels -name "*.whl" -exec pip3 install --user --no-cache-dir --ignore-installed {} +'
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd

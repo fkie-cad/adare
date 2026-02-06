@@ -49,19 +49,27 @@ class TestLoader:
 
         dependencies = self._collect_testfunction_dependencies()
         if dependencies:
-            log.info(f"Installing {len(dependencies)} testfunction dependencies in VM...")
+            log.info(f"Installing {len(dependencies)} testfunction dependencies in VM: {dependencies}")
             try:
                 result = await websocket_client.install_testfunction_dependencies(dependencies)
                 if result.get("status") != "success":
-                    log.error(f"Failed to install dependencies: {result.get('message')}")
+                    error_message = result.get('message', 'Unknown error')
+                    log.error(f"Failed to install dependencies: {error_message}")
+                    log.error(f"Dependencies that failed: {dependencies}")
+                    log.warning("Experiment will continue, but tests requiring these dependencies will fail")
                     # Continue anyway - some tests might still work
                 else:
-                    log.info("Successfully installed all testfunction dependencies")
+                    log.info(f"Successfully installed all {len(dependencies)} testfunction dependencies")
+                    log.debug(f"Installed: {dependencies}")
             except (OSError, subprocess.SubprocessError, ConnectionError) as e:
                 log.error(f"Failed to install testfunction dependencies: {e}")
+                log.error(f"Dependencies affected: {dependencies}")
+                log.warning("Experiment will continue, but tests requiring these dependencies will fail")
                 # Continue anyway - some tests might still work
             except Exception as e:
                 log.error(f"Unexpected error installing testfunction dependencies: {e}", exc_info=True)
+                log.error(f"Dependencies affected: {dependencies}")
+                log.warning("Experiment will continue, but tests requiring these dependencies will fail")
                 # Continue anyway - some tests might still work
         else:
             log.debug("No testfunction dependencies to install")

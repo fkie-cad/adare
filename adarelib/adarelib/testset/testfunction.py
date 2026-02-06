@@ -12,6 +12,48 @@ import logging
 log = logging.getLogger(__name__)
 
 
+# Module load failure tracking
+@attrs.define
+class ModuleLoadFailure:
+    """Track failed testfunction module loads with context."""
+    module_name: str
+    file_path: str
+    exception_type: str
+    exception_message: str
+
+    def get_user_friendly_message(self) -> str:
+        """Generate user-friendly error message."""
+        if self.exception_type == 'ModuleNotFoundError':
+            # Extract dependency name from exception message
+            import re
+            match = re.search(r"No module named '([^']+)'", self.exception_message)
+            if match:
+                dep_name = match.group(1)
+                return f"Testfunction '{self.module_name}' requires missing dependency: {dep_name}"
+            return f"Testfunction '{self.module_name}' has missing dependency: {self.exception_message}"
+        elif self.exception_type == 'ImportError':
+            return f"Testfunction '{self.module_name}' import failed: {self.exception_message}"
+        elif self.exception_type == 'SyntaxError':
+            return f"Testfunction '{self.module_name}' has syntax error: {self.exception_message}"
+        else:
+            return f"Testfunction '{self.module_name}' failed to load: {self.exception_type}: {self.exception_message}"
+
+
+# Global registry of failed module loads
+_module_load_failures: dict[str, ModuleLoadFailure] = {}
+
+
+def get_module_load_failures() -> dict[str, ModuleLoadFailure]:
+    """Get registry of all failed module loads."""
+    return _module_load_failures.copy()
+
+
+def clear_module_load_failures():
+    """Clear the module load failure registry."""
+    global _module_load_failures
+    _module_load_failures = {}
+
+
 def import_basictest_subclasses(source=None, directory=None) -> dict:
     """
     Import BasicTest subclasses from either database records or directory scanning.
@@ -42,8 +84,49 @@ def import_basictest_subclasses(source=None, directory=None) -> dict:
                     if isclass(attribute) and issubclass(attribute, BasicTest):
                         globals()[attribute_name] = attribute
                         testdict[name][getattr(attribute, 'testname')] = attribute
-            except Exception as e:
-                log.error(f"Error loading testfunction module {file_path}: {e}")
+
+            except ModuleNotFoundError as e:
+                # Missing dependency (e.g., pandas, openpyxl)
+                log.error(f"Missing dependency loading testfunction '{name}' from {file_path}: {e}")
+                _module_load_failures[name] = ModuleLoadFailure(
+                    module_name=name,
+                    file_path=str(file_path),
+                    exception_type='ModuleNotFoundError',
+                    exception_message=str(e)
+                )
+                continue
+
+            except ImportError as e:
+                # General import failure
+                log.error(f"Import error loading testfunction '{name}' from {file_path}: {e}")
+                _module_load_failures[name] = ModuleLoadFailure(
+                    module_name=name,
+                    file_path=str(file_path),
+                    exception_type='ImportError',
+                    exception_message=str(e)
+                )
+                continue
+
+            except SyntaxError as e:
+                # Code syntax error
+                log.error(f"Syntax error in testfunction '{name}' at {file_path}: {e}")
+                _module_load_failures[name] = ModuleLoadFailure(
+                    module_name=name,
+                    file_path=str(file_path),
+                    exception_type='SyntaxError',
+                    exception_message=str(e)
+                )
+                continue
+
+            except (AttributeError, TypeError) as e:
+                # Attribute or type issues during module inspection
+                log.error(f"Attribute/Type error loading testfunction '{name}' from {file_path}: {e}")
+                _module_load_failures[name] = ModuleLoadFailure(
+                    module_name=name,
+                    file_path=str(file_path),
+                    exception_type=type(e).__name__,
+                    exception_message=str(e)
+                )
                 continue
 
     elif directory:
@@ -70,8 +153,49 @@ def import_basictest_subclasses(source=None, directory=None) -> dict:
                     if isclass(attribute) and issubclass(attribute, BasicTest):
                         globals()[attribute_name] = attribute
                         testdict[file.stem][getattr(attribute, 'testname')] = attribute
-            except Exception as e:
-                log.error(f"Error loading testfunction module {file}: {e}")
+
+            except ModuleNotFoundError as e:
+                # Missing dependency (e.g., pandas, openpyxl)
+                log.error(f"Missing dependency loading testfunction '{file.stem}' from {file}: {e}")
+                _module_load_failures[file.stem] = ModuleLoadFailure(
+                    module_name=file.stem,
+                    file_path=str(file),
+                    exception_type='ModuleNotFoundError',
+                    exception_message=str(e)
+                )
+                continue
+
+            except ImportError as e:
+                # General import failure
+                log.error(f"Import error loading testfunction '{file.stem}' from {file}: {e}")
+                _module_load_failures[file.stem] = ModuleLoadFailure(
+                    module_name=file.stem,
+                    file_path=str(file),
+                    exception_type='ImportError',
+                    exception_message=str(e)
+                )
+                continue
+
+            except SyntaxError as e:
+                # Code syntax error
+                log.error(f"Syntax error in testfunction '{file.stem}' at {file}: {e}")
+                _module_load_failures[file.stem] = ModuleLoadFailure(
+                    module_name=file.stem,
+                    file_path=str(file),
+                    exception_type='SyntaxError',
+                    exception_message=str(e)
+                )
+                continue
+
+            except (AttributeError, TypeError) as e:
+                # Attribute or type issues during module inspection
+                log.error(f"Attribute/Type error loading testfunction '{file.stem}' from {file}: {e}")
+                _module_load_failures[file.stem] = ModuleLoadFailure(
+                    module_name=file.stem,
+                    file_path=str(file),
+                    exception_type=type(e).__name__,
+                    exception_message=str(e)
+                )
                 continue
     else:
         raise ValueError("Either 'source' or 'directory' parameter must be provided")
@@ -80,10 +204,32 @@ def import_basictest_subclasses(source=None, directory=None) -> dict:
 
 
 def get_testclass_from_testfunction(testfunction: str, testfunction_collection: dict):
+    """
+    Get test class from testfunction collection.
+
+    Returns None if testfunction module or function not found.
+    Handles both 'standard.function' and 'function' formats.
+    """
     if '.' not in testfunction:
-        return testfunction_collection['standard'].get(testfunction)
-    testfunction_list, testfunction = testfunction.split('.', 1)
-    return testfunction_collection[testfunction_list].get(testfunction)
+        # No prefix - assume standard collection
+        standard_collection = testfunction_collection.get('standard', {})
+        return standard_collection.get(testfunction)
+
+    # Has prefix - split and lookup
+    testfunction_list, testfunction_name = testfunction.split('.', 1)
+
+    # Defensive lookup - use .get() to avoid KeyError
+    collection = testfunction_collection.get(testfunction_list)
+    if collection is None:
+        # Collection not found - check if it failed to load
+        if testfunction_list in _module_load_failures:
+            failure = _module_load_failures[testfunction_list]
+            log.error(f"Testfunction collection '{testfunction_list}' is unavailable: {failure.get_user_friendly_message()}")
+        else:
+            log.error(f"Testfunction collection '{testfunction_list}' not found in available collections: {list(testfunction_collection.keys())}")
+        return None
+
+    return collection.get(testfunction_name)
 
 
 def get_missing_testfunctions(testset: TestsetFile, testfunction_collection: dict):
