@@ -91,6 +91,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] do we really need qemu detect os since this is already with environment provided data or? 
 - [ ] long step after installing AdareVM which is not part of any Stage
 - [ ] ctrl-c during waiting for vm does not work?!
+- [ ] reliably update the packages on the guest system for all installation methods available!
 
 
 ---

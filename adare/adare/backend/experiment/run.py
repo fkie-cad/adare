@@ -482,7 +482,8 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
                 shared_folders=context.config.shared_directories,
                 websocket_port=context.config.websocket_port,
                 skip_xhost=skip_xhost,
-                hypervisor_type=context.hypervisor_type or 'virtualbox'
+                hypervisor_type=context.hypervisor_type or 'virtualbox',
+                installation_mode=context.config.installation_mode
             )
         else:
             builder = LinuxAgentCommandBuilder(
@@ -490,7 +491,8 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
                 shared_folders=context.config.shared_directories,
                 websocket_port=context.config.websocket_port,
                 skip_xhost=skip_xhost,
-                hypervisor_type=context.hypervisor_type or 'virtualbox'
+                hypervisor_type=context.hypervisor_type or 'virtualbox',
+                installation_mode=context.config.installation_mode
             )
 
         # Step 3: Discover guest PATH to ensure correct environment

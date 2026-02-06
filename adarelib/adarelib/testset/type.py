@@ -18,6 +18,7 @@ class Test:
     parameter: dict = {}
     variables: Optional[VariableRegistry] = None
     expect_to_fail: bool = False
+    timeout: float = 120.0  # Default 2 minutes (conservative with testfunction caching)
 
 
 @attrs.define

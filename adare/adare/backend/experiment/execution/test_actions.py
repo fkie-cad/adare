@@ -98,8 +98,15 @@ class TestActionsExecutor:
                 # VM-SIDE EXECUTION (existing code path)
                 log.debug(f"Test Executor: Routing test '{action.name}' to VM executor")
 
-                # Send resolved test to VM for execution
-                result = await websocket_client.run_test(action.name, resolved_test)
+                # Extract timeout from action or resolved test, default to 120 seconds
+                # Priority: action.timeout > resolved_test['timeout'] > default (120s)
+                test_timeout = action.timeout if action.timeout is not None else resolved_test.get('timeout', 120.0)
+                websocket_timeout = test_timeout + 10.0  # Add 10-second buffer for WebSocket overhead
+
+                log.info(f"Test '{action.name}' timeout: {test_timeout}s (WebSocket timeout: {websocket_timeout}s)")
+
+                # Send resolved test to VM for execution with timeout
+                result = await websocket_client.run_test(action.name, resolved_test, timeout=websocket_timeout)
 
                 # Extract expect_to_fail flag from resolved test
                 expect_to_fail = resolved_test.get('expect_to_fail', False)

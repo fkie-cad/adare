@@ -28,6 +28,7 @@ class ExperimentConfig:
     enable_diff: Optional[bool] = None  # None=use playbook, True/False=override
     diff_mode: str = 'auto'  # 'auto', 'guest', or 'host'
     dev_mode: bool = False  # Track if running in dev mode
+    installation_mode: str = "wheel"  # "wheel" (pip) or "editable" (Poetry)
 
 @dataclass
 class ExperimentRunCtx:

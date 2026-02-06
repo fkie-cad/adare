@@ -258,6 +258,7 @@ class GotoAction:
 class ActionTestAction:
     name: str
     description: str = ''
+    timeout: Optional[float] = None  # Test timeout in seconds (None = use Test default)
 
 @attrs.define
 class CaptureSpec:

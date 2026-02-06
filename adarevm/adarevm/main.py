@@ -64,9 +64,13 @@ def __parse_args():
     return parser.parse_args()
 
 
-async def main(tools_paths: List[str] = None, data_paths: List[str] = None):
+async def main(tools_paths: List[str] = None, data_paths: List[str] = None, installation_mode: str = "wheel"):
     from adarevm.core.server import AdareVMServer
-    server_instance = AdareVMServer(tools_paths=tools_paths, data_paths=data_paths)
+    server_instance = AdareVMServer(
+        tools_paths=tools_paths,
+        data_paths=data_paths,
+        installation_mode=installation_mode
+    )
     log.info("Starting AdareVM server...")
     server = await server_instance.start_server()
     log.info("AdareVM server started successfully.")
@@ -137,9 +141,10 @@ def run():
     # Resolve paths
     tools_paths = args.tools_paths + config.get('tools_paths', [])
     data_paths = args.data_paths + config.get('data_paths', [])
+    installation_mode = config.get('installation_mode', 'wheel')
 
-    log.info(f"adarevm started with tools_paths={tools_paths}, data_paths={data_paths}")
-    asyncio.run(main(tools_paths=tools_paths, data_paths=data_paths))
+    log.info(f"adarevm started with tools_paths={tools_paths}, data_paths={data_paths}, installation_mode={installation_mode}")
+    asyncio.run(main(tools_paths=tools_paths, data_paths=data_paths, installation_mode=installation_mode))
 
 if __name__ == "__main__":
     run()

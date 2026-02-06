@@ -480,13 +480,22 @@ class AdareVMClient:
             "variables": json.dumps(variables)
         })
     
-    async def run_test(self, test_name: str, resolved_test_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Run a test with pre-resolved test data (variables already substituted)."""
+    async def run_test(self, test_name: str, resolved_test_data: Dict[str, Any], timeout: float = 130.0) -> Dict[str, Any]:
+        """Run a test with pre-resolved test data (variables already substituted).
+
+        Args:
+            test_name: Name of the test to run
+            resolved_test_data: Test data with variables already substituted
+            timeout: WebSocket timeout in seconds (default 130s = 120s test + 10s buffer)
+
+        Returns:
+            Test result dictionary
+        """
         params = {
             "test_name": test_name,
             "resolved_test_data": resolved_test_data
         }
-        return await self.call_tool(ToolRegistry.RUN_TEST, params)
+        return await self.call_tool(ToolRegistry.RUN_TEST, params, timeout=timeout)
     
     
     async def execute_shell(self, shell_command: str, cwd: str = None, env: dict = None, timeout: float = None, shell: bool = False, inherit_env: bool = True, admin: bool = False, websocket_timeout: float = None) -> Dict[str, Any]:
