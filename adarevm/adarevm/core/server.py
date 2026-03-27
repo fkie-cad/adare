@@ -703,29 +703,18 @@ class AdareVMServer:
             step_count = "4" if not prefer_binary else "5"
             current_step = 2
 
-            # Step 2: Configure Poetry for binary-only installation (if requested)
+            # Step 2: Configure uv for binary-only installation (if requested)
             if prefer_binary:
-                await self.send_event(websocket, EventType.LOG, {"message": f"Step {current_step}/{step_count}: Configuring Poetry for binary-only installation..."})
-                config_cmd = ["poetry", "config", "--local", "installer.only-binary", ":all:"]
-                log.info(f"Running config command: {' '.join(config_cmd)} in directory: {project_dir}")
-
-                config_process = await asyncio.create_subprocess_exec(
-                    *config_cmd,
-                    cwd=project_dir,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                config_stdout, config_stderr = await config_process.communicate()
-
-                if config_process.returncode != 0:
-                    log.warning(f"Poetry config failed (continuing anyway): {config_stderr.decode('utf-8') if config_stderr else 'unknown error'}")
-                else:
-                    log.info("Poetry configured for binary-only installation")
+                await self.send_event(websocket, EventType.LOG, {"message": f"Step {current_step}/{step_count}: Configuring uv for binary-only installation..."})
+                # uv handles binary preference via --only-binary flag during add
+                log.info("Binary-only preference will be applied during uv add")
                 current_step += 1
 
-            # Step 2/3: Prepare Poetry add command
-            await self.send_event(websocket, EventType.LOG, {"message": f"Step {current_step}/{step_count}: Preparing Poetry command..."})
-            cmd = ["poetry", "add"] + dependencies
+            # Step 2/3: Prepare uv add command
+            await self.send_event(websocket, EventType.LOG, {"message": f"Step {current_step}/{step_count}: Preparing uv command..."})
+            cmd = ["uv", "add"] + dependencies
+            if prefer_binary:
+                cmd.insert(2, "--only-binary")
             log.info(f"Running command: {' '.join(cmd)} in directory: {project_dir}")
             await self.send_event(websocket, EventType.LOG, {"message": f"Command: {' '.join(cmd)}"})
             current_step += 1
@@ -1117,7 +1106,7 @@ class AdareVMServer:
                         match = re.search(r"No module named '([^']+)'", failure.exception_message)
                         if match:
                             dep_name = match.group(1)
-                            hint_lines.append(f"Install missing dependency: poetry add {dep_name}")
+                            hint_lines.append(f"Install missing dependency: uv add {dep_name}")
                             hint_lines.append(f"Or run experiment with dependency auto-installation enabled")
 
                     return TestResult.error(hint_lines)

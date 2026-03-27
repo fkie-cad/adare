@@ -61,35 +61,25 @@ Required Software
 
       python --version
 
-2. **Poetry** (Python package manager)
+2. **uv** (Python package manager)
 
    Install using the official installer:
 
    .. code-block:: bash
 
-      curl -sSL https://install.python-poetry.org | python3 -
+      curl -LsSf https://astral.sh/uv/install.sh | sh
 
-   **Windows: Add Poetry to PATH**
-
-   On Windows, Poetry needs to be added to PATH permanently. Add the following directory to your system PATH:
-
-   .. code-block:: text
-
-      C:\Users\<YourUsername>\AppData\Roaming\Python\Scripts
-
-   To add to PATH using PowerShell (as Administrator):
+   **Windows:**
 
    .. code-block:: powershell
 
-      # Add Poetry to PATH permanently
-      $poetryPath = "$env:APPDATA\Python\Scripts"
-      [Environment]::SetEnvironmentVariable("Path", $env:Path + ";$poetryPath", "User")
+      powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-   After adding to PATH, restart your PowerShell session and verify:
+   After installation, restart your shell and verify:
 
-   .. code-block:: powershell
+   .. code-block:: bash
 
-      poetry --version
+      uv --version
 
 3. **VirtualBox**
 
@@ -155,7 +145,7 @@ Run the installation script:
 This will:
 
 - Set up a Python virtual environment
-- Install all dependencies via Poetry
+- Install all dependencies via uv
 - Install ADARE command-line tools
 - Configure the development environment
 
@@ -201,8 +191,8 @@ ADARE has been tested with the following software versions:
    * - **Python**
      - 3.13.2
      - All platforms
-   * - **Poetry**
-     - 1.8.2
+   * - **uv**
+     - 0.7+
      - All platforms
    * - **VirtualBox**
      - 7.0.26+

@@ -34,5 +34,5 @@ docs: docs-sphinx
 
 docs-sphinx:
 	@echo "Building documentation with Sphinx..."
-	poetry install --with docs
-	poetry run sphinx-build -b html -a -E docsrc/source docs
+	uv sync --group docs
+	uv run sphinx-build -b html -a -E docsrc/source docs

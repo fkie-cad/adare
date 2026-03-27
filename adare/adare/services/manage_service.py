@@ -339,7 +339,7 @@ class ManageService:
             # Build adarelib wheel first (it has no path dependencies)
             log.info("Building adarelib wheel...")
             result = subprocess.run(
-                ["poetry", "build", "-f", "wheel", "--output", str(wheels_dir)],
+                ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
                 cwd=adarelib_target,
                 check=True,
                 capture_output=True
@@ -352,17 +352,17 @@ class ManageService:
             adarevm_pyproject = adarevm_target / 'pyproject.toml'
             original_content = adarevm_pyproject.read_text()
 
-            # Replace path dependency with version dependency
+            # Replace workspace source with version dependency for wheel build
             modified_content = re.sub(
-                r'adarelib\s*=\s*\{path\s*=\s*"[^"]+?"(?:,\s*develop\s*=\s*true)?\}',
-                'adarelib = "^0.1.0"',
+                r'adarelib\s*=\s*\{\s*workspace\s*=\s*true\s*\}',
+                '',
                 original_content
             )
             adarevm_pyproject.write_text(modified_content)
 
             try:
                 subprocess.run(
-                    ["poetry", "build", "-f", "wheel", "--output", str(wheels_dir)],
+                    ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
                     cwd=adarevm_target,
                     check=True,
                     capture_output=True
@@ -392,7 +392,7 @@ class ManageService:
                 code="VmRuntimeBuildError",
                 message=f"Failed to build wheels: {error_msg}",
                 solutions=[
-                    'Ensure poetry is installed',
+                    'Ensure uv is installed',
                     'Check that adarelib and adarevm have valid pyproject.toml files',
                     'Run "adare manage vm-runtime refresh" first to get fresh source files'
                 ]
@@ -406,6 +406,6 @@ class ManageService:
                 message=f"Required file not found: {e}",
                 solutions=[
                     'Run "adare manage vm-runtime refresh" first to copy source files',
-                    'Ensure poetry is installed and in PATH'
+                    'Ensure uv is installed and in PATH'
                 ]
             )

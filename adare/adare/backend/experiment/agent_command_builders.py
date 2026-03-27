@@ -272,7 +272,7 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         if env_info.use_conda and env_info.conda_env_exists:
             return self._build_conda_install_command()
         else:
-            return self._build_poetry_install_command(env_info, vm)
+            return self._build_uv_install_command(env_info, vm)
             
     def _resolve_python_path(self, vm: Any) -> str:
         """Resolve absolute path to python executable from discovered guest PATH."""
@@ -345,7 +345,7 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             # Editable install from shared folder source
             return rf'cd {adarelib_path}; $env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd {adarevm_path}; $env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
 
-    def _build_poetry_install_command(self, env_info: EnvironmentInfo, vm: Any = None) -> str:
+    def _build_uv_install_command(self, env_info: EnvironmentInfo, vm: Any = None) -> str:
         """Build pip installation command (pip is in PATH via user's PATH discovery)."""
         # Use different paths based on hypervisor and mode
         if self.hypervisor_type == 'qemu':
@@ -363,8 +363,8 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
 
             return rf'{python_cmd} -m pip install --force-reinstall @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
         else:
-            # Editable install via Poetry
-            return rf'cd {adarevm_path}; poetry install'
+            # Editable install via uv
+            return rf'cd {adarevm_path}; uv sync'
 
     def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> tuple[str, Optional[str]]:
         """Build Windows run command."""
@@ -394,7 +394,7 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
                 # Wheel: call directly from conda env (no UNC path navigation)
                 return (rf'$env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare adarevm {cli_args}', None)
             else:
-                # Editable: cd to source directory for Poetry context
+                # Editable: cd to source directory for uv context
                 return (rf'cd {adarevm_path}; $env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare adarevm {cli_args}', None)
         else:
             if self.wheels_available:
@@ -403,8 +403,8 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
                 # Just use 'adarevm' if in path, or python -m adarevm
                 return (rf'adarevm {cli_args}', None)
             else:
-                # Editable: poetry run from source directory
-                return (rf'cd {adarevm_path}; poetry run adarevm {cli_args}', None)
+                # Editable: uv run from source directory
+                return (rf'cd {adarevm_path}; uv run adarevm {cli_args}', None)
 
 
 class LinuxAgentCommandBuilder(AgentCommandBuilder):
@@ -445,7 +445,7 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         if env_info.use_conda:
             return self._build_conda_install_command()
         else:
-            return self._build_poetry_install_command()
+            return self._build_uv_install_command()
 
     def _build_conda_install_command(self) -> str:
         """Build Conda installation command."""
@@ -462,8 +462,8 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
 
-    def _build_poetry_install_command(self) -> str:
-        """Build Poetry installation command."""
+    def _build_uv_install_command(self) -> str:
+        """Build uv installation command."""
         if self.wheels_available:
             # Use find for reliable wheel discovery (works with QEMU guest agent)
             # --no-cache-dir avoids cache permission issues
@@ -472,8 +472,8 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
         else:
-            # Editable install via Poetry
-            cmd = 'cd /adare/vm/adarevm && poetry install'
+            # Editable install via uv
+            cmd = 'cd /adare/vm/adarevm && uv sync'
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
@@ -492,8 +492,8 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
                 # Wheels: installed in PATH via pip3, run directly
                 return (f'adarevm {cli_args}', None)
             else:
-                # Editable: poetry run from source directory
-                return (f'poetry run adarevm {cli_args}', '/adare/vm/adarevm')
+                # Editable: uv run from source directory
+                return (f'uv run adarevm {cli_args}', '/adare/vm/adarevm')
 
 
 # Environment Detection Helpers

@@ -14,16 +14,16 @@ Add-PathVariable "{{ path }}"
 checkExitCode "experiment_setup"
 {% endfor %}
 
-# goto the directory of adarevm and install it with poetry
+# goto the directory of adarevm and install it with uv
 cd "{{ adarevm }}"
-poetry install
+uv sync
 checkExitCode "experiment_setup"
 
-poetry update adarelib
+uv sync --upgrade-package adarelib
 checkExitCode "experiment_setup"
 
 # get path to adarevm executable
-$adarevmExecutable = $(poetry run where adarevm | Where-Object { $_ -like "*.cmd" })
+$adarevmExecutable = Join-Path (Get-Location) ".venv\Scripts\adarevm.exe"
 StageMessage "experiment_setup" "adarevm executable: $adarevmExecutable"
 checkExitCode "experiment_setup"
 # add to the PATH of the session

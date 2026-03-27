@@ -1,34 +1,42 @@
-[tool.poetry]
+[project]
 name = "adare-cv-server"
 version = "0.1.0"
 description = "Computer vision and OCR server for Adare framework"
-authors = ["miqsoft <mksaxhandball@gmail.com>"]
+authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
 readme = "README.md"
-packages = [{include = "adare_cv_server"}]
+requires-python = ">=3.13,<3.14"
 
-[tool.poetry.scripts]
+dependencies = [
+    "fastmcp>=2.9.2",
+    "click>=8.1.7",
+    "opencv-python>=4.10.0",
+    "paddleocr>=3.1.0",
+    "paddlepaddle==3.2.2",
+    "numpy>=1.26.0",
+    "scikit-learn>=1.7.2",
+]
+
+[project.scripts]
 adare-cv-server = "adare_cv_server.server:main"
 
-[tool.poetry.dependencies]
-python = ">=3.13,<3.14"
-fastmcp = "^2.9.2"
-click = "^8.1.7"
-opencv-python = "^4.10.0"
-paddleocr = "^3.1.0"
-paddlepaddle = { version = "3.2.2", source = "paddlepaddle" }
-numpy = "^1.26.0"
-scikit-learn = "^1.7.2"
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "black>=24.0.0",
+    "ruff>=0.5.0",
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
-black = "^24.0.0"
-ruff = "^0.5.0"
-
-[[tool.poetry.source]]
+[[tool.uv.index]]
 name = "paddlepaddle"
 url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
-priority = "explicit"
+explicit = true
+
+[tool.uv.sources]
+paddlepaddle = { index = "paddlepaddle" }
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["adare_cv_server"]

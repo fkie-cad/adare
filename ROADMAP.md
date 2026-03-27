@@ -81,7 +81,7 @@ This document tracks ongoing development tasks, planned features, quality-of-lif
 - [ ] add tests for modular code parts; make code more modular where required!
 - [ ] background commands in vm (as installation); when to check for results (move to separate thread?)
 - [ ] command line seems slow responsive; improve
-- [ ] change from poetry to uv
+- [x] change from poetry to uv
 
 ---
 

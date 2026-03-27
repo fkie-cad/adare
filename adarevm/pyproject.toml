@@ -1,26 +1,29 @@
-[tool.poetry]
+[project]
 name = "adarevm"
 version = "0.1.1"
 description = ""
-authors = ["miqsoft <mksaxhandball@gmail.com>"]
+authors = [{name = "miqsoft", email = "mksaxhandball@gmail.com"}]
 readme = "README.md"
+requires-python = ">=3.10"
 
-[tool.poetry.dependencies]
-adarelib = {path = "../adarelib"}
-python = "^3.10"
-pyautogui = "^0.9.54"
-pillow = "^11.3.0"
-websockets = "^15.0"
-cattrs = "^23.2.3"
-attrs = "^24.0.0"
-python-dateutil = "^2.9.0.post0"
-python-ulid = "^2.7.0"
-pytz = "^2025.2"
+dependencies = [
+    "adarelib",
+    "pyautogui>=0.9.54",
+    "pillow>=11.3.0",
+    "websockets>=15.0",
+    "cattrs>=23.2.3",
+    "attrs>=24.0.0",
+    "python-dateutil>=2.9.0.post0",
+    "python-ulid>=2.7.0",
+    "pytz>=2025.2",
+]
 
-
-[tool.poetry.scripts]
+[project.scripts]
 adarevm = "adarevm.main:run"
 
+[tool.uv.sources]
+adarelib = { workspace = true }
+
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
