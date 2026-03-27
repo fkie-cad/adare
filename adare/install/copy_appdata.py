@@ -41,7 +41,7 @@ IGNORE_PATTERNS = [
     '__pycache__',
     '*.pyc',
     '.git',
-    'poetry.lock',
+    'uv.lock',
 ]
 
 

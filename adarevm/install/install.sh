@@ -3,18 +3,18 @@
 # Navigate to the 'adare' directory
 cd adarevm || { echo "Directory 'adarevm' not found. Exiting..."; exit 1; }
 
-# Install dependencies using Poetry
-if command -v poetry >/dev/null 2>&1; then
-    poetry install
+# Install dependencies using uv
+if command -v uv >/dev/null 2>&1; then
+    uv sync
 else
-    echo "Poetry is not installed. Please install Poetry to continue."
+    echo "uv is not installed. Please install uv to continue."
     exit 1
 fi
 
-# Create a symbolic link for the 'adare' executable
-ADARE_EXECUTABLE=$(poetry run which adarevm)
-if [ -z "$ADARE_EXECUTABLE" ]; then
-    echo "The 'adarevm' executable could not be found. Ensure it's available via Poetry."
+# Find the adarevm executable in the virtual environment
+ADARE_EXECUTABLE="$(pwd)/.venv/bin/adarevm"
+if [ ! -f "$ADARE_EXECUTABLE" ]; then
+    echo "The 'adarevm' executable could not be found. Ensure it's available via uv."
     exit 1
 fi
 

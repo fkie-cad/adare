@@ -1055,7 +1055,7 @@ def test(ova_file, platform, verbose, keep_vm, remove_vm):
     This command validates an .ova file by:
     - Importing the VM temporarily 
     - Setting up shared directories and mounting them
-    - Installing poetry dependencies and starting adarevm
+    - Installing dependencies and starting adarevm
     - Establishing WebSocket connection
     - Taking a screenshot and performing a test click
     - Cleaning up all temporary resources

@@ -7,11 +7,11 @@ if (Test-Path $adareDirectory) {
     exit
 }
 
-# Install dependencies using Poetry
-if (Get-Command poetry -ErrorAction SilentlyContinue) {
-    poetry install
+# Install dependencies using uv
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    uv sync
 } else {
-    Write-Host "`nPoetry is not installed. Please install Poetry to continue.`n"
+    Write-Host "`nuv is not installed. Please install uv to continue.`n"
     exit
 }
 
@@ -20,7 +20,7 @@ $windowsAppsPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
 $wrapperScriptPath = Join-Path $windowsAppsPath "adarevm.cmd"
 
 $wrapperScriptContent = '@echo off
-poetry run adarevm %*'
+uv run adarevm %*'
 
 # Check if the script already exists
 if (-not (Test-Path $wrapperScriptPath)) {

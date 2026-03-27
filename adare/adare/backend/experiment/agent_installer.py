@@ -92,8 +92,8 @@ async def check_installed_version(
                 # Wheels: pip is in PATH
                 cmd = f'pip show {package_name}'
             else:
-                # Editable: needs poetry context
-                cmd = f'poetry run pip show {package_name}'
+                # Editable: needs uv context
+                cmd = f'uv run pip show {package_name}'
     else:  # linux
         if use_conda:
             cmd = f'/home/adare/.miniforge3/bin/conda run -n pyadare pip show {package_name}'
@@ -102,8 +102,8 @@ async def check_installed_version(
                 # Wheels: pip3 is in PATH
                 cmd = f'pip3 show {package_name}'
             else:
-                # Editable: needs poetry context
-                cmd = f'poetry run pip show {package_name}'
+                # Editable: needs uv context
+                cmd = f'uv run pip show {package_name}'
 
     try:
         # Prepare run_command kwargs

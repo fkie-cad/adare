@@ -131,7 +131,7 @@ class VMLifecycleManager:
                 log.info("Building adarelib wheel...")
                 import subprocess
                 subprocess.run(
-                    ["poetry", "build", "-f", "wheel", "--output", str(wheels_dir)],
+                    ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
                     cwd=adarelib_target,
                     check=True,
                     capture_output=True
@@ -140,24 +140,23 @@ class VMLifecycleManager:
                 # Build adarevm wheel without path dependency
                 log.info("Building adarevm wheel...")
 
-                # Temporarily modify pyproject.toml to use version dependency instead of path
-                # This is necessary because Poetry embeds absolute paths for path dependencies,
-                # which don't exist in the VM filesystem
+                # Temporarily modify pyproject.toml to remove workspace source
+                # This is necessary because uv workspace sources don't exist in the VM filesystem
                 adarevm_pyproject = adarevm_target / 'pyproject.toml'
                 original_content = adarevm_pyproject.read_text()
 
-                # Replace path dependency with version dependency (handle both with/without develop=true)
+                # Remove workspace source for adarelib
                 import re
                 modified_content = re.sub(
-                    r'adarelib\s*=\s*\{path\s*=\s*"[^"]+?"(?:,\s*develop\s*=\s*true)?\}',
-                    'adarelib = "^0.1.0"',
+                    r'adarelib\s*=\s*\{\s*workspace\s*=\s*true\s*\}',
+                    '',
                     original_content
                 )
                 adarevm_pyproject.write_text(modified_content)
 
                 try:
                     subprocess.run(
-                        ["poetry", "build", "-f", "wheel", "--output", str(wheels_dir)],
+                        ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
                         cwd=adarevm_target,
                         check=True,
                         capture_output=True

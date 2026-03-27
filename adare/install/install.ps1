@@ -7,11 +7,11 @@ if (Test-Path $adareDirectory) {
     exit
 }
 
-# Install dependencies using Poetry
-if (Get-Command poetry -ErrorAction SilentlyContinue) {
-    poetry install
+# Install dependencies using uv
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    uv sync
 } else {
-    Write-Host "`nPoetry is not installed. Please install Poetry to continue.`n"
+    Write-Host "`nuv is not installed. Please install uv to continue.`n"
     exit
 }
 
@@ -20,17 +20,17 @@ Write-Host "`nInstalling adare-cv-server package...`n"
 $mcpServerDirectory = "..\adare-cv-server"
 if (Test-Path $mcpServerDirectory) {
     Set-Location $mcpServerDirectory
-    poetry install
+    uv sync
     Set-Location "..\adare"
 } else {
     Write-Host "`nDirectory 'adare-cv-server' not found. Exiting...`n"
     exit
 }
 
-# Attempt to find the adare CMD executable
-$adareExecutable = $(poetry run where adare | Where-Object { $_ -like "*.cmd" })
-if (-not $adareExecutable) {
-    Write-Host "`nThe 'adare' executable could not be found. Ensure it's available via Poetry.`n"
+# Attempt to find the adare CMD executable in the virtual environment
+$adareExecutable = Join-Path (Get-Location) ".venv\Scripts\adare.exe"
+if (-not (Test-Path $adareExecutable)) {
+    Write-Host "`nThe 'adare' executable could not be found. Ensure it's available via uv.`n"
     exit
 } else {
     Write-Host "`nAdare executable found at: $adareExecutable`n"
@@ -38,16 +38,16 @@ if (-not $adareExecutable) {
 
 # Attempt to find the adare-cv-server CMD executable
 Set-Location $mcpServerDirectory
-$mcpServerExecutable = $(poetry run where adare-cv-server | Where-Object { $_ -like "*.cmd" })
-if (-not $mcpServerExecutable) {
-    Write-Host "`nThe 'adare-cv-server' executable could not be found. Ensure it's available via Poetry.`n"
+$mcpServerExecutable = Join-Path (Get-Location) ".venv\Scripts\adare-cv-server.exe"
+if (-not (Test-Path $mcpServerExecutable)) {
+    Write-Host "`nThe 'adare-cv-server' executable could not be found. Ensure it's available via uv.`n"
     exit
 } else {
     Write-Host "`nAdare MCP Server executable found at: $mcpServerExecutable`n"
 }
 Set-Location "..\adare"
 
-# No need to add individual executables to PATH, instructing to add Poetry's bin if not already included
+# No need to add individual executables to PATH, instructing to add uv's bin if not already included
 $poetryBinPath = Split-Path $adareExecutable
 $mcpServerBinPath = Split-Path $mcpServerExecutable
 $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")

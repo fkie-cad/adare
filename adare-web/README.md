@@ -77,7 +77,7 @@ Before running the frontend, start the ADARE backend:
 
 ```bash
 cd ../adare
-poetry install
+uv sync
 adare webserver start --dev --port 8000
 ```
 

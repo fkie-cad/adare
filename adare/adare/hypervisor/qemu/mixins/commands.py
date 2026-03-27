@@ -463,7 +463,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         ~/.local/bin, ~/.miniforge3/bin, etc.
 
         This solves the problem where hardcoded PATH doesn't include
-        user-installed tools (poetry, conda, etc.) because QEMU guest
+        user-installed tools (uv, conda, etc.) because QEMU guest
         agent executes commands with /bin/sh -c which doesn't source
         user shell configuration files.
 
@@ -562,7 +562,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
     async def _discover_python_scripts_path(self) -> Optional[str]:
         """
         Discover the Scripts directory for the Python installation in the guest.
-        This is where tools like adarevm, pip, poetry are located.
+        This is where tools like adarevm, pip, uv are located.
         """
         if hasattr(self, '_cached_python_scripts_path') and self._cached_python_scripts_path:
             return self._cached_python_scripts_path

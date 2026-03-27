@@ -656,7 +656,7 @@ async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: thread
     # Use cached command or built command
     # If run_cwd is set, we use it
     
-    # TODO: figure out a way to run poetry as sudo in linux
+    # TODO: figure out a way to run uv as sudo in linux
     if context.guest_platform == 'linux':
         result = await vm.run_command(
             commands.run_command,
@@ -924,14 +924,14 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
     """
     with StageCtxManager(PrepareRunEnvironmentStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         # Check application data
-        adarevm_poetry_lock = ADAREVM_DIR / 'poetry.lock'
-        adarelib_poetry_lock = ADARELIB_DIR / 'poetry.lock'
-        if adarevm_poetry_lock.exists():
-            log.info(f'removing {adarevm_poetry_lock} to ensure that adarevm is installed correctly')
-            adarevm_poetry_lock.unlink()
-        if adarelib_poetry_lock.exists():
-            log.info(f'removing {adarelib_poetry_lock} to ensure that adarelib is installed correctly')
-            adarelib_poetry_lock.unlink()
+        adarevm_uv_lock = ADAREVM_DIR / 'uv.lock'
+        adarelib_uv_lock = ADARELIB_DIR / 'uv.lock'
+        if adarevm_uv_lock.exists():
+            log.info(f'removing {adarevm_uv_lock} to ensure that adarevm is installed correctly')
+            adarevm_uv_lock.unlink()
+        if adarelib_uv_lock.exists():
+            log.info(f'removing {adarelib_uv_lock} to ensure that adarelib is installed correctly')
+            adarelib_uv_lock.unlink()
 
         # Create run directory
         run_dir = ExperimentRunDirectory(context.project_directory, context.config.experiment_name)

@@ -165,27 +165,27 @@ async def test_python_availability(context):
         return False
 
 
-async def test_poetry_availability(context):
-    """Test Poetry availability in VM."""
-    poetry_result = await context.vm.run_command("poetry --version", stop_event=context.user_interrupt_event)
-    if poetry_result.returncode == 0:
-        log.info("Poetry is available")
+async def test_uv_availability(context):
+    """Test uv availability in VM."""
+    uv_result = await context.vm.run_command("uv --version", stop_event=context.user_interrupt_event)
+    if uv_result.returncode == 0:
+        log.info("uv is available")
         return True
     else:
-        log.warning(f"Poetry not available. Exit code: {poetry_result.returncode}")
+        log.warning(f"uv not available. Exit code: {uv_result.returncode}")
         return False
 
 
 async def test_adarevm_server_start(context):
     """Test starting the adarevm WebSocket server.
 
-    NOTE: This test requires Poetry-based VMs (does not support wheel-only installations).
-    The test uses 'poetry run' to start the adarevm server from source.
+    NOTE: This test requires uv-based VMs (does not support wheel-only installations).
+    The test uses 'uv run' to start the adarevm server from source.
     """
     try:
         # Start adarevm server in background
-        # NOTE: This requires Poetry - does not work with wheel-only installations
-        start_command = f"cd /adare/vm && python3 -m poetry run python -m adarevm.server --port {context.config.websocket_port} &"
+        # NOTE: This requires uv - does not work with wheel-only installations
+        start_command = f"cd /adare/vm && uv run python -m adarevm.server --port {context.config.websocket_port} &"
 
         start_result = await context.vm.run_command(start_command, stop_event=context.user_interrupt_event)
 
@@ -297,7 +297,7 @@ async def test_vm_compatibility(context, flow_console):
             
         # Test 4: Poetry availability with substage
         async with StageCtxManagerLite(VMPoetryTestStage(), flow_console, level=2):
-            compatibility_results['poetry_available'] = await test_poetry_availability(context)
+            compatibility_results['uv_available'] = await test_uv_availability(context)
             
         # Test 5: Start adarevm WebSocket server with substage
         async with StageCtxManagerLite(VMAdareServerTestStage(), flow_console, level=2):
