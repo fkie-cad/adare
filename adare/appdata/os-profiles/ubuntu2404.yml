@@ -1,0 +1,14 @@
+name: ubuntu2404
+display_name: "Ubuntu 24.04 LTS (Noble Numbat)"
+platform: linux
+distribution: ubuntu
+distribution_label: "Noble Numbat"
+version: "24.04"
+iso_url: "https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso"
+iso_sha256: "d6dab0c3a657988501b4bd76f1297c053df710e06e0c3aece60dead24f270b4d"
+iso_filename: "ubuntu-24.04.2-live-server-amd64.iso"
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0
+kernel_path_in_iso: "/casper/vmlinuz"
+initrd_path_in_iso: "/casper/initrd"

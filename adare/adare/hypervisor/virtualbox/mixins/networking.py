@@ -241,8 +241,8 @@ class NetworkingMixin(AbstractNetworkingMixin):
                 args.append("--readonly")
             
             try:
-                log.info(f"CLAUDE: Adding shared folder '{name}' (host: {host_path}) to VM '{self.vm_name}'")
-                log.debug(f"CLAUDE: VBoxManage command: {' '.join(args)}")
+                log.info(f"Adding shared folder '{name}' (host: {host_path}) to VM '{self.vm_name}'")
+                log.debug(f"VBoxManage command: {' '.join(args)}")
                 return_value, stdout, stderr = await self._execute_streaming_command_async(
                     args,
                     log_file=log_file,
@@ -253,20 +253,20 @@ class NetworkingMixin(AbstractNetworkingMixin):
                 )
 
                 if return_value == 0:
-                    log.info(f"CLAUDE: Shared folder '{name}' added to VM '{self.vm_name}' successfully")
+                    log.info(f"Shared folder '{name}' added to VM '{self.vm_name}' successfully")
                     # NOTE: Verification removed - VBoxManage return code is authoritative
                 else:
-                    log.error(f"CLAUDE: Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
+                    log.error(f"Failed to add shared folder '{name}' to VM '{self.vm_name}': return code {return_value}")
                     if stdout:
-                        log.error(f"CLAUDE: stdout: {stdout}")
+                        log.error(f"stdout: {stdout}")
                     if stderr:
-                        log.error(f"CLAUDE: stderr: {stderr}")
+                        log.error(f"stderr: {stderr}")
 
                 return return_value
             except Exception as e:
-                log.error(f"CLAUDE: Error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
+                log.error(f"Error adding shared folder '{name}' to VM '{self.vm_name}': {e}")
                 import traceback
-                log.debug(f"CLAUDE: Traceback: {traceback.format_exc()}")
+                log.debug(f"Traceback: {traceback.format_exc()}")
                 return 1
         
         return await self.manager.run_async(_add_shared_folder_async)
@@ -415,14 +415,14 @@ class NetworkingMixin(AbstractNetworkingMixin):
 
         for attempt in range(max_retries + 1):  # +1 for initial attempt
             if stop_event and stop_event.is_set():
-                log.info("CLAUDE: Mount operation cancelled by stop event")
+                log.info("Mount operation cancelled by stop event")
                 return False
 
             attempt_label = f"attempt {attempt + 1}/{max_retries + 1}"
             if attempt == 0:
-                log.info(f"CLAUDE: Executing mount command: {description}")
+                log.info(f"Executing mount command: {description}")
             else:
-                log.info(f"CLAUDE: Retrying mount command ({attempt_label}): {description}")
+                log.info(f"Retrying mount command ({attempt_label}): {description}")
 
             # Execute the mount command
             args = self._build_guest_command_args(mount_command)
@@ -434,22 +434,22 @@ class NetworkingMixin(AbstractNetworkingMixin):
             )
 
             if return_value == 0:
-                log.info(f"CLAUDE: Mount succeeded on {attempt_label}: {description}")
+                log.info(f"Mount succeeded on {attempt_label}: {description}")
                 return True
             else:
                 # Mount failed
-                log.warning(f"CLAUDE: Mount failed on {attempt_label}: {description} (return code: {return_value})")
+                log.warning(f"Mount failed on {attempt_label}: {description} (return code: {return_value})")
                 if stderr:
-                    log.debug(f"CLAUDE: Mount error output: {stderr.strip()}")
+                    log.debug(f"Mount error output: {stderr.strip()}")
 
                 # If this wasn't the last attempt, wait before retrying
                 if attempt < max_retries:
                     delay = retry_delays[attempt]
-                    log.info(f"CLAUDE: Waiting {delay}s before retry...")
+                    log.info(f"Waiting {delay}s before retry...")
                     await asyncio.sleep(delay)
 
         # All retries exhausted
-        log.error(f"CLAUDE: Mount failed after {max_retries + 1} attempts: {description}")
+        log.error(f"Mount failed after {max_retries + 1} attempts: {description}")
         return False
 
     async def list_shared_folders(self, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False) -> Dict[str, SharedFolderConfig]:
@@ -645,16 +645,16 @@ class NetworkingMixin(AbstractNetworkingMixin):
                     processed_parents.add(parent_str)
 
             # Execute setup commands
-            log.info("CLAUDE: Executing directory setup commands")
+            log.info("Executing directory setup commands")
             setup_result = await self.execute_queued_commands(ctx_manager, stop_event, log_file, silent, win_noprofile=True)
             if setup_result != 0:
-                log.error(f"CLAUDE: Directory setup failed with return code {setup_result}")
+                log.error(f"Directory setup failed with return code {setup_result}")
                 return setup_result
 
         # Phase 2: Mount commands - with retry logic for Linux
         if is_linux:
             # Execute mount commands individually with retry logic
-            log.info(f"CLAUDE: Mounting {len(folders)} shared folders with retry logic")
+            log.info(f"Mounting {len(folders)} shared folders with retry logic")
             for name, mountpoint in folders.items():
                 # Create mount point
                 mkdir_cmd = f'sudo mkdir -p {mountpoint}'
@@ -663,11 +663,11 @@ class NetworkingMixin(AbstractNetworkingMixin):
                 mount_cmd = f'sudo /sbin/mount.vboxsf -o uid=1000,gid=1000,dmode=775,fmode=664 {name} {mountpoint}'
 
                 # Execute mkdir and umount without retry
-                log.debug(f"CLAUDE: Creating mount point {mountpoint}")
+                log.debug(f"Creating mount point {mountpoint}")
                 args = self._build_guest_command_args(mkdir_cmd)
                 await self._execute_streaming_command_async(args, stop_event=stop_event, silent=True)
 
-                log.debug(f"CLAUDE: Unmounting any existing mount at {mountpoint}")
+                log.debug(f"Unmounting any existing mount at {mountpoint}")
                 args = self._build_guest_command_args(umount_cmd)
                 await self._execute_streaming_command_async(args, stop_event=stop_event, silent=True)
 
@@ -684,11 +684,11 @@ class NetworkingMixin(AbstractNetworkingMixin):
                     from adare.exceptions import LoggedException
                     raise LoggedException(
                         log,
-                        f"CLAUDE: Failed to mount shared folder '{name}' after 3 attempts (initial + 2 retries). "
+                        f"Failed to mount shared folder '{name}' after 3 attempts (initial + 2 retries). "
                         f"This likely indicates VirtualBox shared folder is not properly configured or Guest Additions issue."
                     )
 
-            log.info("CLAUDE: All shared folders mounted successfully")
+            log.info("All shared folders mounted successfully")
             return 0
         else:
             # Windows: use existing queue-based approach (no retry needed for Windows)

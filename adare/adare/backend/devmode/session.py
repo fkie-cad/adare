@@ -432,7 +432,7 @@ class DevModeSession:
 
                 # Store the run directory path in session (will be persisted to DB by service layer)
                 self.run_directory_path = self.experiment_ctx.experiment_run_directory.path
-                log.info(f"CLAUDE: Stored run directory path: {self.run_directory_path}")
+                log.info(f"Stored run directory path: {self.run_directory_path}")
 
                 log.info("Run directory prepared")
 
@@ -1725,11 +1725,11 @@ class DevModeSession:
                     # Check if directory is empty
                     if not any(snapshot_dir.iterdir()):
                         snapshot_dir.rmdir()
-                        log.info(f"CLAUDE: Removed empty snapshot directory: {snapshot_dir}")
+                        log.info(f"Removed empty snapshot directory: {snapshot_dir}")
                     else:
-                        log.warning(f"CLAUDE: Snapshot directory not empty after cleanup: {snapshot_dir}")
+                        log.warning(f"Snapshot directory not empty after cleanup: {snapshot_dir}")
             except Exception as e:
-                log.warning(f"CLAUDE: Failed to remove snapshot directory: {e}")
+                log.warning(f"Failed to remove snapshot directory: {e}")
 
     async def start_recording(self, output_file: Path) -> bool:
         """

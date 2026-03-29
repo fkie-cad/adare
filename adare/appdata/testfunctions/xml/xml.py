@@ -6,7 +6,7 @@ import re
 from typing import ClassVar, Optional, Union, Dict, Any, List
 
 # internal imports
-from adarelib.testset.basictest import BasicTest, Parameter
+from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
 
@@ -26,6 +26,7 @@ class ElementExistsParameter(Parameter):
 class ElementExists(BasicTest):
     testname: ClassVar[str] = 'element_exists'
     testdescription: ClassVar[str] = 'tests if XML element exists at specified XPath'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: ElementExistsParameter
@@ -98,6 +99,7 @@ class ElementTextMatchesParameter(Parameter):
 class ElementTextMatches(BasicTest):
     testname: ClassVar[str] = 'element_text_matches'
     testdescription: ClassVar[str] = 'tests if XML element text content matches expected value with placeholder support for regex and timestamp tolerance'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: ElementTextMatchesParameter
@@ -275,6 +277,7 @@ class AttributeMatchesParameter(Parameter):
 class AttributeMatches(BasicTest):
     testname: ClassVar[str] = 'attribute_matches'
     testdescription: ClassVar[str] = 'tests if XML element attribute matches expected value with regex and timestamp tolerance support'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: AttributeMatchesParameter
@@ -397,6 +400,7 @@ class ElementCountParameter(Parameter):
 class ElementCount(BasicTest):
     testname: ClassVar[str] = 'element_count'
     testdescription: ClassVar[str] = 'tests the number of XML elements matching XPath expression'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: ElementCountParameter
@@ -486,6 +490,7 @@ class XPathResultMatchesParameter(Parameter):
 class XPathResultMatches(BasicTest):
     testname: ClassVar[str] = 'xpath_result_matches'
     testdescription: ClassVar[str] = 'tests if XPath expression result matches expected value (text, number, or boolean)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: XPathResultMatchesParameter
@@ -578,6 +583,7 @@ class NamespaceMatchesParameter(Parameter):
 class NamespaceMatches(BasicTest):
     testname: ClassVar[str] = 'namespace_matches'
     testdescription: ClassVar[str] = 'tests if XML namespace declarations match expected namespaces'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: NamespaceMatchesParameter

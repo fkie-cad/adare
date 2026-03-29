@@ -29,10 +29,10 @@ def exec_webserver_start(arguments):
     host = getattr(arguments, "host", "127.0.0.1")
     dev_mode = getattr(arguments, "dev", False)
 
-    logger.info(f"CLAUDE: Starting ADARE web server at http://{host}:{port}")
+    logger.info(f"Starting ADARE web server at http://{host}:{port}")
 
     if dev_mode:
-        logger.info("CLAUDE: Running in development mode with auto-reload")
+        logger.info("Running in development mode with auto-reload")
 
     # Start uvicorn server
     uvicorn.run(

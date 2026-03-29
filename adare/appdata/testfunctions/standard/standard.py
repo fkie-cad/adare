@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import ClassVar, Optional, Union
 
 # internal imports
-from adarelib.testset.basictest import BasicTest, Parameter
+from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
 from adarelib.event.event import TestResult
 
 # configure logging
@@ -28,6 +28,7 @@ class FileExistsParameter(Parameter):
 class FileExists(BasicTest):
     testname: ClassVar[str] = 'file_exists'
     testdescription: ClassVar[str] = 'tests if file(s) with path destination(dst) exist (supports glob patterns with match_mode)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
 
     name: str
     parameter: FileExistsParameter
@@ -76,6 +77,7 @@ class FileDoesNotExistParameter(Parameter):
 class FileDoesNotExist(BasicTest):
     testname: ClassVar[str] = 'file_does_not_exist'
     testdescription: ClassVar[str] = 'tests if file(s) with path destination(dst) do NOT exist (supports glob patterns with match_mode)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
 
     name: str
     parameter: FileDoesNotExistParameter
@@ -124,6 +126,7 @@ class DirExistsParameter(Parameter):
 class DirExists(BasicTest):
     testname: ClassVar[str] = 'dir_exists'
     testdescription: ClassVar[str] = 'tests if directory(ies) with path destination(dst) exist (supports glob patterns with match_mode)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
 
     name: str
     parameter: DirExistsParameter
@@ -172,6 +175,7 @@ class DirDoesNotExistParameter(Parameter):
 class DirDoesNotExist(BasicTest):
     testname: ClassVar[str] = 'dir_does_not_exist'
     testdescription: ClassVar[str] = 'tests if directory(ies) with path destination(dst) do NOT exist (supports glob patterns with match_mode)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
 
     name: str
     parameter: DirDoesNotExistParameter
@@ -219,6 +223,7 @@ class DirContentParameter(Parameter):
 class DirContent(BasicTest):
     testname: ClassVar[str] = 'dir_content'
     testdescription: ClassVar[str] = 'tests if a directory has the expected files/folders'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
 
     name: str
     parameter: DirContentParameter
@@ -263,6 +268,7 @@ class FileContentMatchesRegexParameter(Parameter):
 class FileContentMatchesRegex(BasicTest):
     testname: ClassVar[str] = 'file_content_matches_regex'
     testdescription: ClassVar[str] = 'tests if file content matches a given regex expression'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
 
     name: str
     parameter: FileContentMatchesRegexParameter
@@ -354,6 +360,7 @@ class FileContentEqualsParameter(Parameter):
 class FileContentEquals(BasicTest):
     testname: ClassVar[str] = 'file_content_equals'
     testdescription: ClassVar[str] = 'tests if file content equals the given content'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
 
     name: str
     parameter: FileContentEqualsParameter
@@ -472,6 +479,7 @@ class FileHashMatchesParameter(Parameter):
 class FileHashMatches(BasicTest):
     testname: ClassVar[str] = 'file_hash_matches'
     testdescription: ClassVar[str] = 'tests if file hash matches expected value'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
 
     name: str
     parameter: FileHashMatchesParameter
@@ -546,6 +554,7 @@ class FileTimestampsParameter(Parameter):
 class FileTimestamps(BasicTest):
     testname: ClassVar[str] = 'file_timestamps'
     testdescription: ClassVar[str] = 'tests file timestamps with various comparison types and formats'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.QGA_PROBE
 
     name: str
     parameter: FileTimestampsParameter
@@ -708,6 +717,7 @@ class FilePermissionsParameter(Parameter):
 class FilePermissions(BasicTest):
     testname: ClassVar[str] = 'file_permissions'
     testdescription: ClassVar[str] = 'tests file permissions, owner, and group'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.QGA_PROBE
 
     name: str
     parameter: FilePermissionsParameter
@@ -829,6 +839,7 @@ class FileContentContainsParameter(Parameter):
 class FileContentContains(BasicTest):
     testname: ClassVar[str] = 'file_content_contains'
     testdescription: ClassVar[str] = 'tests if file content contains specified string or byte pattern'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_BASED
 
     name: str
     parameter: FileContentContainsParameter

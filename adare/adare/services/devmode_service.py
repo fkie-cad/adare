@@ -144,7 +144,7 @@ class DevModeService:
             # Store run directory path (prevents "None" directories on restoration)
             if session.run_directory_path:
                 self._db_api.update_session_run_path(session_id, str(session.run_directory_path))
-                log.info(f"CLAUDE: Stored run directory path for session {session_id}: {session.run_directory_path}")
+                log.info(f"Stored run directory path for session {session_id}: {session.run_directory_path}")
 
             # Store overlay disk path (critical for preventing base disk deletion)
             if session.experiment_ctx.vm and hasattr(session.experiment_ctx.vm, 'config'):

@@ -18,6 +18,30 @@ log = logging.getLogger(__name__)
 
 
 
+def _get_vm(lookup_fn_name: str, lookup_value, fields: list[str] = None) -> Optional[Vm] | dict | None:
+    """
+    Internal helper: lookup a VM by any criterion and optionally extract fields.
+
+    Args:
+        lookup_fn_name: Name of the VmApi method to call (e.g. 'get_vm_by_hash')
+        lookup_value: Value to pass to the lookup method
+        fields: Optional list of fields to extract. If None, returns full object.
+
+    Returns:
+        VM: Full object if fields=None
+        dict: VM data if fields specified
+        None: If VM not found
+    """
+    from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
+
+    with VmApi() as api:
+        fn = getattr(api, lookup_fn_name)
+        vm = fn(lookup_value)
+        if not vm:
+            return None
+        return extract_fields(vm, fields, VM_FIELD_MAP)
+
+
 def get_vm_by_hash(file_hash: str, fields: list[str] = None) -> Optional[Vm] | dict | None:
     """
     Get VM by file hash from global database.
@@ -32,15 +56,7 @@ def get_vm_by_hash(file_hash: str, fields: list[str] = None) -> Optional[Vm] | d
         dict: VM data if fields specified
         None: If VM not found
     """
-    from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
-
-    with VmApi() as api:
-        vm = api.get_vm_by_hash(file_hash)
-        if not vm:
-            return None
-
-        # Use field extraction utility
-        return extract_fields(vm, fields, VM_FIELD_MAP)
+    return _get_vm('get_vm_by_hash', file_hash, fields)
 
 
 def get_vm_by_name(name: str, fields: list[str] = None) -> Optional[Vm] | dict | None:
@@ -56,15 +72,7 @@ def get_vm_by_name(name: str, fields: list[str] = None) -> Optional[Vm] | dict |
         dict: VM data if fields specified
         None: If VM not found
     """
-    from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
-
-    with VmApi() as api:
-        vm = api.get_vm_by_name(name)
-        if not vm:
-            return None
-
-        # Use field extraction utility
-        return extract_fields(vm, fields, VM_FIELD_MAP)
+    return _get_vm('get_vm_by_name', name, fields)
 
 
 def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '',
@@ -175,16 +183,7 @@ def get_vm_by_id(vm_id: str, fields: list[str] = None) -> Optional[Vm] | dict | 
         dict: VM data if fields specified
         None: If VM not found
     """
-    from adare.database.api.vm import VmApi
-    from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
-
-    with VmApi() as api:
-        vm = api.get_vm_by_id(vm_id)
-        if not vm:
-            return None
-
-        # Use field extraction utility
-        return extract_fields(vm, fields, VM_FIELD_MAP)
+    return _get_vm('get_vm_by_id', vm_id, fields)
 
 
 def get_vm_data(vm_id: str = None, name: str = None, file_hash: str = None) -> dict | None:
@@ -560,5 +559,5 @@ def load_vm_from_file(file_path: Path, name: str = None, description: str = '',
         os_version=os_version,
         os_language=os_language,
         os_architecture=os_architecture,
-        quiet=quiet
+        silent=quiet
     )

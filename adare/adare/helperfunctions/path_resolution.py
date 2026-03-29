@@ -41,7 +41,7 @@ def _copy_external_experiment(external_path: Path, experiments_dir: Path) -> tup
 
     # Check if target already exists - return name without copying
     if target_path.exists():
-        log.info(f'CLAUDE: Experiment directory "{experiment_name}" already exists, using existing directory')
+        log.info(f'Experiment directory "{experiment_name}" already exists, using existing directory')
         return experiment_name, False
 
     try:
@@ -50,7 +50,7 @@ def _copy_external_experiment(external_path: Path, experiments_dir: Path) -> tup
 
         # Copy the entire external experiment directory
         shutil.copytree(external_path, target_path)
-        log.info(f'CLAUDE: Copied external experiment from {external_path} to {target_path}')
+        log.info(f'Copied external experiment from {external_path} to {target_path}')
 
         return experiment_name, True
 

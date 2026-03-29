@@ -4,6 +4,7 @@ OS detection utilities for QEMU VMs using guestfish inspection.
 This module provides automatic OS platform detection from disk images,
 enabling proper boot mode selection (UEFI for Windows, BIOS for Linux).
 """
+import shutil
 import subprocess
 from pathlib import Path
 import logging
@@ -39,7 +40,15 @@ def detect_os_from_disk(disk_path: Path) -> Tuple[str, Dict[str, Optional[str]]]
         {'distribution': 'windows', 'version': '11', 'architecture': 'x86_64'}
     """
     try:
-        log.info(f"CLAUDE: Detecting OS from disk: {disk_path}")
+        log.info(f"Detecting OS from disk: {disk_path}")
+
+        # Fallback to filename-based detection when guestfish is unavailable (e.g. macOS)
+        if not shutil.which('guestfish'):
+            log.warning("guestfish not available — using filename-based OS detection")
+            filename_result = detect_os_from_filename(disk_path.name)
+            if filename_result:
+                return (filename_result, {'distribution': filename_result, 'version': None, 'architecture': 'x86_64'})
+            return ('linux', {'distribution': None, 'version': None, 'architecture': 'x86_64'})
 
         # Run inspect-os to find OS root partition
         cmd = ['guestfish', '--ro', '-a', str(disk_path), 'run', ':', 'inspect-os']
@@ -52,27 +61,27 @@ def detect_os_from_disk(disk_path: Path) -> Tuple[str, Dict[str, Optional[str]]]
         )
 
         if result.returncode != 0:
-            log.warning(f"CLAUDE: OS detection failed (guestfish returned {result.returncode})")
-            log.debug(f"CLAUDE: guestfish stderr: {result.stderr}")
+            log.warning(f"OS detection failed (guestfish returned {result.returncode})")
+            log.debug(f"guestfish stderr: {result.stderr}")
             return 'linux', {}  # Safe default
 
         if not result.stdout.strip():
-            log.warning(f"CLAUDE: OS detection found no OS in {disk_path}")
+            log.warning(f"OS detection found no OS in {disk_path}")
             return 'linux', {}  # Safe default
 
         os_root = result.stdout.strip().split('\n')[0]
-        log.debug(f"CLAUDE: Found OS root partition: {os_root}")
+        log.debug(f"Found OS root partition: {os_root}")
 
         # Get OS type (windows, linux, etc.)
         cmd = ['guestfish', '--ro', '-a', str(disk_path), 'run', ':', 'inspect-get-type', os_root]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False)
 
         if result.returncode != 0:
-            log.warning(f"CLAUDE: Failed to get OS type")
+            log.warning(f"Failed to get OS type")
             return 'linux', {}
 
         os_type = result.stdout.strip().lower()
-        log.debug(f"CLAUDE: Detected OS type: {os_type}")
+        log.debug(f"Detected OS type: {os_type}")
 
         # Get distribution name
         distro = None
@@ -81,9 +90,9 @@ def detect_os_from_disk(disk_path: Path) -> Tuple[str, Dict[str, Optional[str]]]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False)
             if result.returncode == 0:
                 distro = result.stdout.strip()
-                log.debug(f"CLAUDE: Detected distribution: {distro}")
-        except Exception as e:
-            log.debug(f"CLAUDE: Could not get distribution: {e}")
+                log.debug(f"Detected distribution: {distro}")
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            log.debug(f"Could not get distribution: {e}")
 
         # Get version (major version number)
         version = None
@@ -92,14 +101,14 @@ def detect_os_from_disk(disk_path: Path) -> Tuple[str, Dict[str, Optional[str]]]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False)
             if result.returncode == 0:
                 version = result.stdout.strip()
-                log.debug(f"CLAUDE: Detected version: {version}")
-        except Exception as e:
-            log.debug(f"CLAUDE: Could not get version: {e}")
+                log.debug(f"Detected version: {version}")
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            log.debug(f"Could not get version: {e}")
 
         # Determine platform
         platform = 'windows' if 'windows' in os_type else 'linux'
 
-        log.info(f"CLAUDE: OS detection complete - platform={platform}, distro={distro}, version={version}")
+        log.info(f"OS detection complete - platform={platform}, distro={distro}, version={version}")
 
         return platform, {
             'distribution': distro if distro else os_type,
@@ -108,14 +117,14 @@ def detect_os_from_disk(disk_path: Path) -> Tuple[str, Dict[str, Optional[str]]]
         }
 
     except subprocess.TimeoutExpired:
-        log.warning(f"CLAUDE: OS detection timed out for {disk_path}")
+        log.warning(f"OS detection timed out for {disk_path}")
         return 'linux', {}
     except FileNotFoundError:
-        log.warning("CLAUDE: guestfish command not found. Install libguestfs-tools.")
+        log.warning("guestfish command not found. Install libguestfs-tools.")
         return 'linux', {}
-    except Exception as e:
-        log.warning(f"CLAUDE: OS detection error for {disk_path}: {e}")
-        log.debug(f"CLAUDE: OS detection exception details:", exc_info=True)
+    except (subprocess.SubprocessError, OSError, ValueError) as e:
+        log.warning(f"OS detection error for {disk_path}: {e}")
+        log.debug(f"OS detection exception details:", exc_info=True)
         return 'linux', {}
 
 
@@ -145,14 +154,14 @@ def detect_os_from_filename(filename: str) -> Optional[str]:
     # Windows indicators
     windows_keywords = ['windows', 'win11', 'win10', 'win7', 'win8', 'winxp', 'vista']
     if any(keyword in filename_lower for keyword in windows_keywords):
-        log.debug(f"CLAUDE: Inferred Windows from filename: {filename}")
+        log.debug(f"Inferred Windows from filename: {filename}")
         return 'windows'
 
     # Linux distribution indicators
     linux_distros = ['ubuntu', 'debian', 'fedora', 'centos', 'rhel', 'arch', 'suse', 'mint', 'kali']
     if any(distro in filename_lower for distro in linux_distros):
-        log.debug(f"CLAUDE: Inferred Linux from filename: {filename}")
+        log.debug(f"Inferred Linux from filename: {filename}")
         return 'linux'
 
-    log.debug(f"CLAUDE: Could not infer OS from filename: {filename}")
+    log.debug(f"Could not infer OS from filename: {filename}")
     return None

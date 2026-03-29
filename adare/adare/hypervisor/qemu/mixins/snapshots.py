@@ -10,11 +10,18 @@ External snapshot approach:
 - Metadata tracked in database (not libvirt)
 - Better reliability and persistence than internal snapshots
 """
+import json
 import logging
 import subprocess
 import os
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional, Tuple
+
+try:
+    import libvirt
+except ImportError:
+    libvirt = None
 
 from adare.hypervisor.base.mixins.snapshots import AbstractSnapshotMixin
 from adare.hypervisor.exceptions import HypervisorException, SnapshotNotFoundException
@@ -53,7 +60,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
         """
         try:
             dir_path.mkdir(parents=True, exist_ok=True)
-            log.debug(f"CLAUDE: Ensured snapshot directory: {dir_path}")
+            log.debug(f"Ensured snapshot directory: {dir_path}")
         except OSError as e:
             raise HypervisorException(f"Failed to create snapshot directory {dir_path}: {e}")
 
@@ -70,13 +77,13 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 # Check if directory is empty
                 if not any(snapshot_dir.iterdir()):
                     snapshot_dir.rmdir()
-                    log.info(f"CLAUDE: Removed empty snapshot directory: {snapshot_dir}")
+                    log.info(f"Removed empty snapshot directory: {snapshot_dir}")
                     return True
                 else:
-                    log.debug(f"CLAUDE: Snapshot directory not empty: {snapshot_dir}")
+                    log.debug(f"Snapshot directory not empty: {snapshot_dir}")
             return False
-        except Exception as e:
-            log.warning(f"CLAUDE: Failed to remove snapshot directory: {e}")
+        except OSError as e:
+            log.warning(f"Failed to remove snapshot directory: {e}")
             return False
 
     def _check_guest_agent(self) -> bool:
@@ -107,9 +114,6 @@ class SnapshotMixin(AbstractSnapshotMixin):
         Returns:
             List of XML strings for attached filesystems
         """
-        import libvirt
-        import xml.etree.ElementTree as ET
-        
         payloads = []
         try:
             # Get current domain XML
@@ -127,11 +131,11 @@ class SnapshotMixin(AbstractSnapshotMixin):
                         payload = ET.tostring(fs, encoding='unicode')
                         payloads.append(payload)
                         
-            log.debug(f"CLAUDE: Found {len(payloads)} attached virtiofs devices")
+            log.debug(f"Found {len(payloads)} attached virtiofs devices")
             return payloads
             
-        except Exception as e:
-            log.error(f"CLAUDE: Failed to get attached virtiofs devices: {e}")
+        except (libvirt.libvirtError, ET.ParseError) as e:
+            log.error(f"Failed to get attached virtiofs devices: {e}")
             return []
 
     def _detach_virtiofs_shares(self, payloads: list) -> bool:
@@ -146,21 +150,20 @@ class SnapshotMixin(AbstractSnapshotMixin):
         """
         if not payloads:
             return True
-            
-        import libvirt
+
         import time
-        
+
         count = len(payloads)
-        log.info(f"CLAUDE: Detaching {count} virtiofs devices for snapshotting...")
+        log.info(f"Detaching {count} virtiofs devices for snapshotting...")
         
         # 1. Request detachment for all devices
         for i, xml in enumerate(payloads):
             try:
                 # Detach device (live config)
                 self._libvirt_domain.detachDevice(xml)
-                log.debug(f"CLAUDE: Requested detach for virtiofs device {i+1}/{count}")
+                log.debug(f"Requested detach for virtiofs device {i+1}/{count}")
             except libvirt.libvirtError as e:
-                log.error(f"CLAUDE: Failed to detach virtiofs device {i+1}: {e}")
+                log.error(f"Failed to detach virtiofs device {i+1}: {e}")
                 return False
 
         # 2. Poll until all virtiofs devices are gone
@@ -171,17 +174,17 @@ class SnapshotMixin(AbstractSnapshotMixin):
         while time.time() - start_time < timeout:
             remaining = self._get_attached_virtiofs_payloads()
             if not remaining:
-                log.info("CLAUDE: All virtiofs devices successfully detached")
+                log.info("All virtiofs devices successfully detached")
                 return True
             
             # Log progress if waiting
             elapsed = time.time() - start_time
             if elapsed > 1.0:
-                 log.debug(f"CLAUDE: Waiting for detachment... ({len(remaining)} remaining)")
+                 log.debug(f"Waiting for detachment... ({len(remaining)} remaining)")
             
             time.sleep(0.5)
             
-        log.error(f"CLAUDE: Timeout waiting for virtiofs detachment. {len(remaining)} devices remaining.")
+        log.error(f"Timeout waiting for virtiofs detachment. {len(remaining)} devices remaining.")
         return False
 
     def _attach_virtiofs_shares(self, payloads: list) -> bool:
@@ -196,20 +199,18 @@ class SnapshotMixin(AbstractSnapshotMixin):
         """
         if not payloads:
             return True
-            
-        import libvirt
-        
+
         count = len(payloads)
-        log.info(f"CLAUDE: Re-attaching {count} virtiofs devices after snapshot...")
+        log.info(f"Re-attaching {count} virtiofs devices after snapshot...")
         
         success = True
         for i, xml in enumerate(payloads):
             try:
                 # Attach device (live config)
                 self._libvirt_domain.attachDevice(xml)
-                log.debug(f"CLAUDE: Attached virtiofs device {i+1}/{count}")
+                log.debug(f"Attached virtiofs device {i+1}/{count}")
             except libvirt.libvirtError as e:
-                log.error(f"CLAUDE: Failed to attach virtiofs device {i+1}: {e}")
+                log.error(f"Failed to attach virtiofs device {i+1}: {e}")
                 success = False
                 
         return success
@@ -226,10 +227,10 @@ class SnapshotMixin(AbstractSnapshotMixin):
         try:
             # Only attempt if guest agent is responsive
             if not self._check_guest_agent():
-                log.warning("CLAUDE: Guest agent not responsive, skipping pre-snapshot unmount")
+                log.warning("Guest agent not responsive, skipping pre-snapshot unmount")
                 return
 
-            log.info("CLAUDE: Preparing guest for snapshot (releasing shared folders)...")
+            log.info("Preparing guest for snapshot (releasing shared folders)...")
             
             # Detect OS
             is_windows = 'windows' in self.guest_os.lower()
@@ -240,9 +241,9 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 cmd = 'taskkill /F /IM virtiofs.exe'
                 try:
                     self._run_guest_agent_command_sync(cmd)
-                    log.debug("CLAUDE: Killed virtiofs.exe processes in guest")
-                except Exception as e:
-                    log.warning(f"CLAUDE: Failed to kill virtiofs.exe (might not be running): {e}")
+                    log.debug("Killed virtiofs.exe processes in guest")
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+                    log.warning(f"Failed to kill virtiofs.exe (might not be running): {e}")
             else:
                 # Linux: Lazy unmount all shares
                 for share in self.config.virtiofs_shares:
@@ -250,11 +251,11 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     cmd = f'umount -l {mount_point}'
                     try:
                         self._run_guest_agent_command_sync(cmd)
-                    except Exception as e:
-                        log.warning(f"CLAUDE: Failed to unmount {mount_point}: {e}")
-                        
-        except Exception as e:
-            log.warning(f"CLAUDE: Error during guest migration preparation: {e}")
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+                        log.warning(f"Failed to unmount {mount_point}: {e}")
+
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+            log.warning(f"Error during guest migration preparation: {e}")
 
     def _refresh_guest_mounts(self) -> None:
         """
@@ -268,10 +269,10 @@ class SnapshotMixin(AbstractSnapshotMixin):
             import time
             time.sleep(2)
             if not self._check_guest_agent():
-                log.warning("CLAUDE: Guest agent not responsive after restore, cannot refresh mounts")
+                log.warning("Guest agent not responsive after restore, cannot refresh mounts")
                 return
 
-            log.info("CLAUDE: Refreshing guest mounts...")
+            log.info("Refreshing guest mounts...")
             
             is_windows = 'windows' in self.guest_os.lower()
             
@@ -294,9 +295,9 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     
                     try:
                         self._run_as_user_windows_sync(mount_cmd)
-                        log.debug(f"CLAUDE: Restarted virtiofs for {tag} (user session)")
-                    except Exception as e:
-                        log.error(f"CLAUDE: Failed to remount {tag}: {e}")
+                        log.debug(f"Restarted virtiofs for {tag} (user session)")
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+                        log.error(f"Failed to remount {tag}: {e}")
             else:
                 # Linux: Remount
                 for share in self.config.virtiofs_shares:
@@ -305,12 +306,12 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     cmd = f'mount -t virtiofs {tag} {mount_point}'
                     try:
                         self._run_guest_agent_command_sync(cmd)
-                        log.debug(f"CLAUDE: Remounted {mount_point}")
-                    except Exception as e:
-                        log.error(f"CLAUDE: Failed to remount {mount_point}: {e}")
-                        
-        except Exception as e:
-            log.error(f"CLAUDE: Error refreshing guest mounts: {e}")
+                        log.debug(f"Remounted {mount_point}")
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+                        log.error(f"Failed to remount {mount_point}: {e}")
+
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+            log.error(f"Error refreshing guest mounts: {e}")
 
     def _run_as_user_windows_sync(self, command: str) -> None:
         """
@@ -394,15 +395,15 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 check=False, capture_output=True
             )
             
-        except Exception as e:
-            log.warning(f"CLAUDE: Failed to run sync guest command: {e}")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+            log.warning(f"Failed to run sync guest command: {e}")
 
     def _sync_guest_filesystem(self) -> None:
         """
         Attempt to sync/flush guest filesystem buffers.
         """
         try:
-            log.info("CLAUDE: Syncing guest filesystem...")
+            log.info("Syncing guest filesystem...")
             # Try to run sync command via guest agent
             if 'windows' in self.guest_os.lower():
                 # No direct 'sync' in Windows, but we can try to wait or run a dummy command
@@ -418,8 +419,8 @@ class SnapshotMixin(AbstractSnapshotMixin):
             import time
             time.sleep(2)
             
-        except Exception as e:
-            log.warning(f"CLAUDE: Failed to sync guest filesystem: {e}")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+            log.warning(f"Failed to sync guest filesystem: {e}")
 
     def create_external_snapshot(
         self,
@@ -449,11 +450,11 @@ class SnapshotMixin(AbstractSnapshotMixin):
         Returns:
             True if snapshot created successfully, False otherwise
         """
-        log.info(f"CLAUDE: Creating consistent live snapshot '{snapshot_name}' for VM '{self.vm_name}'")
+        log.info(f"Creating consistent live snapshot '{snapshot_name}' for VM '{self.vm_name}'")
 
         # Ensure VM is running
         if self.get_state() != "running":
-            log.error("CLAUDE: VM must be running to create live snapshot")
+            log.error("VM must be running to create live snapshot")
             return False
 
         # Ensure snapshot directory exists
@@ -476,9 +477,9 @@ class SnapshotMixin(AbstractSnapshotMixin):
             
             if virtiofs_payloads:
                 if not self._detach_virtiofs_shares(virtiofs_payloads):
-                    log.warning("CLAUDE: Failed to detach some virtiofs devices, snapshot might fail")
+                    log.warning("Failed to detach some virtiofs devices, snapshot might fail")
                     # Abort if detach fails to avoid potential state corruption
-                    log.error("CLAUDE: Aborting snapshot due to detach failure")
+                    log.error("Aborting snapshot due to detach failure")
                     self._attach_virtiofs_shares(virtiofs_payloads)
                     self._refresh_guest_mounts()
                     return False
@@ -495,20 +496,20 @@ class SnapshotMixin(AbstractSnapshotMixin):
   </disks>
 </domainsnapshot>"""
 
-            log.debug(f"CLAUDE: Generated snapshot XML:\n{snapshot_xml}")
+            log.debug(f"Generated snapshot XML:\n{snapshot_xml}")
 
             # 4. Suspend VM (NEW) to ensure disk consistency
             vm_was_suspended = False
             try:
                 if self.get_state() == "running":
-                    log.info("CLAUDE: Suspending VM for snapshot...")
+                    log.info("Suspending VM for snapshot...")
                     self._libvirt_domain.suspend()
                     vm_was_suspended = True
                     # Verify state?
                     import time
                     time.sleep(1) # Give it a moment
-            except Exception as e:
-                log.warning(f"CLAUDE: Failed to suspend VM: {e}")
+            except libvirt.libvirtError as e:
+                log.warning(f"Failed to suspend VM: {e}")
                 # We proceed, but warn
 
             try:
@@ -533,23 +534,23 @@ class SnapshotMixin(AbstractSnapshotMixin):
                          if not vm_was_suspended:
                             cmd.append('--quiesce')
                     
-                    log.info(f"CLAUDE: Executing atomic snapshot creation...")
+                    log.info(f"Executing atomic snapshot creation...")
                     subprocess.run(
                         cmd,
                         check=True, capture_output=True
                     )
 
-                log.info(f"CLAUDE: Checkpoint created successfully.")
+                log.info(f"Checkpoint created successfully.")
                 snapshot_success = True
 
             finally:
                 # 6. Resume VM (NEW)
                 if vm_was_suspended:
                     try:
-                        log.info("CLAUDE: Resuming VM after snapshot...")
+                        log.info("Resuming VM after snapshot...")
                         self._libvirt_domain.resume()
-                    except Exception as e:
-                        log.error(f"CLAUDE: Failed to resume VM: {e}")
+                    except libvirt.libvirtError as e:
+                        log.error(f"Failed to resume VM: {e}")
 
             # 7. Re-attach VirtioFS devices
             if virtiofs_payloads:
@@ -557,14 +558,14 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 self._refresh_guest_mounts()
 
         except subprocess.CalledProcessError as e:
-            log.error(f"CLAUDE: Command failed during snapshot creation: {e.cmd}")
+            log.error(f"Command failed during snapshot creation: {e.cmd}")
             stderr_out = "N/A"
             if hasattr(e, 'stderr'):
                 if isinstance(e.stderr, bytes):
                     stderr_out = e.stderr.decode('utf-8', errors='replace')
                 else:
                     stderr_out = str(e.stderr)
-            log.error(f"CLAUDE: Stderr: {stderr_out}")
+            log.error(f"Stderr: {stderr_out}")
             snapshot_success = False
             
             # Attempt recovery of detached devices
@@ -573,18 +574,20 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     self._attach_virtiofs_shares(virtiofs_payloads)
                     self._refresh_guest_mounts()
                 except Exception:
+                    # Intentional: best-effort recovery must not mask the original error
                     pass
-                    
-        except Exception as e:
-            log.error(f"CLAUDE: Error creating external snapshot: {e}")
+
+        except (HypervisorException, libvirt.libvirtError, OSError) as e:
+            log.error(f"Error creating external snapshot: {e}")
             snapshot_success = False
-            
+
             # Attempt recovery
             if virtiofs_payloads and self.get_state() == "running":
                 try:
                     self._attach_virtiofs_shares(virtiofs_payloads)
                     self._refresh_guest_mounts()
                 except Exception:
+                    # Intentional: best-effort recovery must not mask the original error
                     pass
 
         return snapshot_success
@@ -609,21 +612,21 @@ class SnapshotMixin(AbstractSnapshotMixin):
         Returns:
             True if restoration successful, False otherwise
         """
-        log.info(f"CLAUDE: Restoring external snapshot for VM '{self.vm_name}'")
-        log.debug(f"CLAUDE: Memory file: {memory_path}")
-        log.debug(f"CLAUDE: Disk file: {disk_path}")
+        log.info(f"Restoring external snapshot for VM '{self.vm_name}'")
+        log.debug(f"Memory file: {memory_path}")
+        log.debug(f"Disk file: {disk_path}")
 
         # Verify files exist
         if not os.path.exists(memory_path):
-            log.error(f"CLAUDE: Memory file not found: {memory_path}")
+            log.error(f"Memory file not found: {memory_path}")
             return False
         if not os.path.exists(disk_path):
-            log.error(f"CLAUDE: Disk file not found: {disk_path}")
+            log.error(f"Disk file not found: {disk_path}")
             return False
 
         try:
             # Step 1: Stop VM forcefully
-            log.debug("CLAUDE: Stopping VM")
+            log.debug("Stopping VM")
             destroy_result = subprocess.run(
                 ['virsh', 'destroy', self.vm_name],
                 capture_output=True,
@@ -633,15 +636,14 @@ class SnapshotMixin(AbstractSnapshotMixin):
 
             # It's okay if destroy fails (VM might already be stopped)
             if destroy_result.returncode != 0:
-                log.debug(f"CLAUDE: VM destroy returned non-zero (may already be stopped): {destroy_result.stderr}")
+                log.debug(f"VM destroy returned non-zero (may already be stopped): {destroy_result.stderr}")
 
             # Step 1b: Reset Disk Overlay (NEW)
             # The 'disk_path' file is the overlay that captures writes AFTER the snapshot.
             # To restore the disk state to the snapshot time, we must discard these writes.
             # We do this by deleting the overlay and re-creating it, backed by the same backing file.
-            import json
             try:
-                log.info("CLAUDE: Resetting disk overlay to ensure clean state...")
+                log.info("Resetting disk overlay to ensure clean state...")
                 
                 # Get backing file info
                 info_cmd = ['qemu-img', 'info', '--output=json', disk_path]
@@ -650,18 +652,18 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 
                 backing_file = disk_info.get('backing-filename')
                 if not backing_file:
-                    log.error(f"CLAUDE: Snapshot disk {disk_path} has no backing file! Cannot reset overlay safely.")
+                    log.error(f"Snapshot disk {disk_path} has no backing file! Cannot reset overlay safely.")
                     return False
                     
                 # Ideally get backing format too, but it's optional (qemu-img can probe). 
                 # Should be qcow2 usually.
                 backing_fmt = disk_info.get('backing-filename-format', 'qcow2')
                 
-                log.debug(f"CLAUDE: Found backing file: {backing_file} (fmt: {backing_fmt})")
+                log.debug(f"Found backing file: {backing_file} (fmt: {backing_fmt})")
                 
                 # Delete current dirty overlay
                 os.remove(disk_path)
-                log.debug(f"CLAUDE: Deleted dirty overlay: {disk_path}")
+                log.debug(f"Deleted dirty overlay: {disk_path}")
                 
                 # Re-create fresh overlay
                 create_cmd = [
@@ -672,14 +674,14 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     disk_path
                 ]
                 subprocess.run(create_cmd, check=True, capture_output=True)
-                log.info(f"CLAUDE: Re-created fresh overlay: {disk_path}")
+                log.info(f"Re-created fresh overlay: {disk_path}")
                 
-            except Exception as e:
-                log.error(f"CLAUDE: Failed to reset disk overlay: {e}")
+            except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as e:
+                log.error(f"Failed to reset disk overlay: {e}")
                 return False
 
             # Step 2: Update disk path to snapshot overlay
-            log.debug("CLAUDE: Updating disk path to snapshot overlay")
+            log.debug("Updating disk path to snapshot overlay")
             virt_xml_result = subprocess.run(
                 ['virt-xml', self.vm_name, '--edit', '--disk', f'path={disk_path}'],
                 capture_output=True,
@@ -688,7 +690,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             )
 
             if virt_xml_result.returncode != 0:
-                log.error(f"CLAUDE: Failed to update disk path: {virt_xml_result.stderr}")
+                log.error(f"Failed to update disk path: {virt_xml_result.stderr}")
                 return False
 
             # Step 2b: Get the updated XML with new disk path
@@ -702,7 +704,6 @@ class SnapshotMixin(AbstractSnapshotMixin):
             # The saved state (snapshot) has 0 filesystems because we detached them.
             # We must use restoration XML that matches this state.
             try:
-                import xml.etree.ElementTree as ET
                 root = ET.fromstring(updated_xml)
                 devices = root.find('devices')
                 if devices is not None:
@@ -711,14 +712,14 @@ class SnapshotMixin(AbstractSnapshotMixin):
                         driver = fs.find('driver')
                         if driver is not None and driver.get('type') == 'virtiofs':
                             devices.remove(fs)
-                            log.debug("CLAUDE: Stripped virtiofs device from restore XML")
-                    
+                            log.debug("Stripped virtiofs device from restore XML")
+
                     updated_xml = ET.tostring(root, encoding='unicode')
-            except Exception as e:
-                log.error(f"CLAUDE: Failed to strip filesystems from XML: {e}")
+            except ET.ParseError as e:
+                log.error(f"Failed to strip filesystems from XML: {e}")
 
             # Step 3: Restore memory state (VM will resume immediately)
-            log.debug("CLAUDE: Restoring memory state")
+            log.debug("Restoring memory state")
             
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=True) as tmp_xml:
@@ -733,7 +734,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 )
 
             if restore_result.returncode == 0:
-                log.info(f"CLAUDE: Successfully restored external snapshot for VM '{self.vm_name}'")
+                log.info(f"Successfully restored external snapshot for VM '{self.vm_name}'")
 
                 # RE-INITIALIZE DOMAIN OBJECT
                 # The domain ID changes after restore, and sometimes the existing object becomes invalid/stale.
@@ -741,38 +742,37 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 try:
                     conn = self._get_libvirt_connection()
                     self._libvirt_domain = conn.lookupByName(self.vm_name)
-                    log.debug("CLAUDE: Refreshed libvirt domain object after restore")
+                    log.debug("Refreshed libvirt domain object after restore")
 
                     # NEW: Explicitly resume the VM
                     # Snapshots are taken in 'paused' state, so 'restore' brings it back paused.
                     state = self.get_state() 
                     if state == "paused":
-                        log.info("CLAUDE: Resuming VM from paused state after restore...")
+                        log.info("Resuming VM from paused state after restore...")
                         self._libvirt_domain.resume()
                     elif state != "running":
                          # Just in case it's somehow "shutoff" or something unexpected, try to start/resume
-                         log.warning(f"CLAUDE: VM state after restore is '{state}', attempting resume...")
+                         log.warning(f"VM state after restore is '{state}', attempting resume...")
                          self._libvirt_domain.resume()
 
-                except Exception as e:
-                    log.error(f"CLAUDE: Failed to refresh/resume libvirt domain object: {e}")
+                except libvirt.libvirtError as e:
+                    log.error(f"Failed to refresh/resume libvirt domain object: {e}")
                     # Continue anyway, we might still have a working object or fail later
 
                 # Invalidate PATH cache after snapshot restore
                 self._path_discovery_attempted = False
                 self._cached_guest_path = None
-                log.debug("CLAUDE: PATH cache invalidated after snapshot restore")
+                log.debug("PATH cache invalidated after snapshot restore")
 
                 # Re-attach configured virtiofs shares
                 # When we snapshot, we hot-unplug these devices.
                 # When we restore, they are still missing (because we restored to the unplugged state).
                 # We need to re-attach them now.
                 if self.config.virtiofs_enabled and self.config.virtiofs_shares:
-                    log.info("CLAUDE: Re-attaching virtiofs shares after restore...")
+                    log.info("Re-attaching virtiofs shares after restore...")
                     try:
                         from adare.hypervisor.qemu.libvirt_xml import generate_virtiofs_xml_element
-                        import xml.etree.ElementTree as ET
-                        
+
                         is_q35 = 'q35' in self.machine or (self.config.boot_mode == 'uefi')
                         base_bus = 6
                         base_slot = 7
@@ -787,19 +787,19 @@ class SnapshotMixin(AbstractSnapshotMixin):
                         # NEW: Refresh guest mounts
                         self._refresh_guest_mounts()
                             
-                    except Exception as e:
-                        log.error(f"CLAUDE: Failed to re-attach virtiofs shares after restore: {e}")
+                    except (libvirt.libvirtError, ImportError, OSError) as e:
+                        log.error(f"Failed to re-attach virtiofs shares after restore: {e}")
 
                 return True
             else:
-                log.error(f"CLAUDE: Failed to restore memory state: {restore_result.stderr}")
+                log.error(f"Failed to restore memory state: {restore_result.stderr}")
                 return False
 
         except FileNotFoundError as e:
-            log.error(f"CLAUDE: Required command not found (virsh or virt-xml): {e}")
+            log.error(f"Required command not found (virsh or virt-xml): {e}")
             return False
-        except Exception as e:
-            log.error(f"CLAUDE: Error restoring external snapshot: {e}")
+        except (subprocess.CalledProcessError, OSError, HypervisorException) as e:
+            log.error(f"Error restoring external snapshot: {e}")
             return False
 
     def delete_external_snapshot(
@@ -822,7 +822,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
         Returns:
             True if deletion successful, False otherwise
         """
-        log.info(f"CLAUDE: Deleting external snapshot '{snapshot_name}' for VM '{self.vm_name}'")
+        log.info(f"Deleting external snapshot '{snapshot_name}' for VM '{self.vm_name}'")
 
         success = True
 
@@ -835,24 +835,24 @@ class SnapshotMixin(AbstractSnapshotMixin):
             for attempt in range(3):
                 try:
                     os.remove(memory_path)
-                    log.debug(f"CLAUDE: Deleted memory file: {memory_path}")
+                    log.debug(f"Deleted memory file: {memory_path}")
                     memory_deleted = True
                     break
                 except OSError as e:
                     if attempt < 2:
                         import time
-                        log.debug(f"CLAUDE: Snapshot memory deletion attempt {attempt+1} failed, retrying: {e}")
+                        log.debug(f"Snapshot memory deletion attempt {attempt+1} failed, retrying: {e}")
                         time.sleep(0.5)
                     else:
-                        log.error(f"CLAUDE: Failed to delete snapshot memory file after 3 attempts: {e}")
+                        log.error(f"Failed to delete snapshot memory file after 3 attempts: {e}")
                         success = False
 
             # Verify deletion
             if memory_deleted and os.path.exists(memory_path):
-                log.error(f"CLAUDE: Snapshot memory still exists after deletion: {memory_path}")
+                log.error(f"Snapshot memory still exists after deletion: {memory_path}")
                 success = False
         else:
-            log.debug(f"CLAUDE: Memory file not found (may already be deleted): {memory_path}")
+            log.debug(f"Memory file not found (may already be deleted): {memory_path}")
 
         # Delete disk file with retry logic
         disk_deleted = False
@@ -860,27 +860,27 @@ class SnapshotMixin(AbstractSnapshotMixin):
             for attempt in range(3):
                 try:
                     os.remove(disk_path)
-                    log.debug(f"CLAUDE: Deleted disk file: {disk_path}")
+                    log.debug(f"Deleted disk file: {disk_path}")
                     disk_deleted = True
                     break
                 except OSError as e:
                     if attempt < 2:
                         import time
-                        log.debug(f"CLAUDE: Snapshot disk deletion attempt {attempt+1} failed, retrying: {e}")
+                        log.debug(f"Snapshot disk deletion attempt {attempt+1} failed, retrying: {e}")
                         time.sleep(0.5)
                     else:
-                        log.error(f"CLAUDE: Failed to delete snapshot disk file after 3 attempts: {e}")
+                        log.error(f"Failed to delete snapshot disk file after 3 attempts: {e}")
                         success = False
 
             # Verify deletion
             if disk_deleted and os.path.exists(disk_path):
-                log.error(f"CLAUDE: Snapshot disk still exists after deletion: {disk_path}")
+                log.error(f"Snapshot disk still exists after deletion: {disk_path}")
                 success = False
         else:
-            log.debug(f"CLAUDE: Snapshot disk file not found (may already be deleted): {disk_path}")
+            log.debug(f"Snapshot disk file not found (may already be deleted): {disk_path}")
 
         if success:
-            log.info(f"CLAUDE: Successfully deleted external snapshot files for '{snapshot_name}'")
+            log.info(f"Successfully deleted external snapshot files for '{snapshot_name}'")
 
         return success
 
@@ -904,11 +904,11 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 snapshots = [line.strip() for line in result.stdout.splitlines() if line.strip()]
                 return snapshots
             else:
-                log.warning(f"CLAUDE: Failed to list snapshots: {result.stderr}")
+                log.warning(f"Failed to list snapshots: {result.stderr}")
                 return []
 
-        except Exception as e:
-            log.error(f"CLAUDE: Error listing snapshots: {e}")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            log.error(f"Error listing snapshots: {e}")
             return []
 
     # Legacy methods kept for backward compatibility but deprecated

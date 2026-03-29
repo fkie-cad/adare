@@ -46,22 +46,22 @@ class EventDbApi(ExperimentApi):
         from adare.database.models.project_models import ExperimentRun
 
         projects = get_all_projects()
-        log.debug(f"CLAUDE: Searching for experiment run {experiment_run_ulid} across {len(projects)} projects")
+        log.debug(f"Searching for experiment run {experiment_run_ulid} across {len(projects)} projects")
 
         for project_dict in projects:
             try:
                 project_path = Path(project_dict['path'])
-                log.debug(f"CLAUDE: Checking project: {project_path}")
+                log.debug(f"Checking project: {project_path}")
                 with ExperimentApi(project_path) as api:
                     run = api._session.query(ExperimentRun).filter_by(id=experiment_run_ulid).first()
                     if run:
-                        log.debug(f"CLAUDE: Found experiment run {experiment_run_ulid} in project {project_path}")
+                        log.debug(f"Found experiment run {experiment_run_ulid} in project {project_path}")
                         return project_path
             except Exception as e:
-                log.debug(f"CLAUDE: Error checking project {project_dict.get('path', 'unknown')}: {e}")
+                log.debug(f"Error checking project {project_dict.get('path', 'unknown')}: {e}")
                 continue
 
-        log.error(f"CLAUDE: Could not find project containing experiment run {experiment_run_ulid}")
+        log.error(f"Could not find project containing experiment run {experiment_run_ulid}")
         return None
 
     def get_or_create_test_result(self, test_result_data: dict):

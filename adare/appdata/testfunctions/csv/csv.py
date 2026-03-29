@@ -6,7 +6,7 @@ import sys
 from typing import ClassVar, Optional, List, Tuple
 
 # internal imports
-from adarelib.testset.basictest import BasicTest, Parameter
+from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
 
@@ -333,6 +333,7 @@ class ContainsLineParameter(Parameter):
 class ContainsLine(BasicTest):
     testname: ClassVar[str] = 'contains_line'
     testdescription: ClassVar[str] = 'tests if row in a csv file exists that matches the given entry layout'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: ContainsLineParameter
@@ -443,6 +444,7 @@ class CompareRowsParameter(Parameter):
 class CompareRows(BasicTest):
     testname: ClassVar[str] = 'compare_rows'
     testdescription: ClassVar[str] = 'compares all rows in CSV against embedded reference data'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: CompareRowsParameter
@@ -539,6 +541,7 @@ class CompareFilesParameter(Parameter):
 class CompareFiles(BasicTest):
     testname: ClassVar[str] = 'compare_files'
     testdescription: ClassVar[str] = 'compares two CSV files with full diff reporting'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: CompareFilesParameter

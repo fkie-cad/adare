@@ -101,7 +101,7 @@ class LibvirtStderrRedirect(contextlib.AbstractContextManager):
 
             return self
 
-        except Exception as e:
+        except OSError as e:
             log.warning(f"Failed to redirect stderr: {e}")
             # Clean up on failure
             self._cleanup()

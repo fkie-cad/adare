@@ -10,6 +10,7 @@ dependencies = [
     "adarevm",
     "adare",
     "adarelib",
+    "adare-cv-server",
 ]
 
 [project.scripts]
@@ -19,6 +20,7 @@ mcp_gui = "adare.mcp_gui:main"
 
 [project.optional-dependencies]
 docs = ["sphinx", "furo"]
+qemu = ["adare[qemu]"]
 
 [dependency-groups]
 test = [
@@ -40,6 +42,12 @@ docs = [
 adarevm = { workspace = true }
 adare = { workspace = true }
 adarelib = { workspace = true }
+adare-cv-server = { workspace = true }
+
+[[tool.uv.index]]
+name = "paddlepaddle"
+url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
+explicit = true
 
 [tool.uv.workspace]
 members = ["adare", "adarevm", "adarelib", "adare-cv-server"]

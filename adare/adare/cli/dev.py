@@ -379,7 +379,7 @@ def exec_dev_list(arguments):
 
     if result.success:
         if not result.data:
-            print("CLAUDE: No dev sessions found")
+            print("No dev sessions found")
             print("\nStart a new session with: adare dev start <experiment> -e <environment>")
         else:
             # Use Rich table panel for display
@@ -430,7 +430,7 @@ def exec_dev_state(arguments):
 
     if result.success:
         state = result.data
-        print(f"CLAUDE: Dev Session State: {state.session_id}\n")
+        print(f"Dev Session State: {state.session_id}\n")
         print(f"  Experiment: {state.experiment_name}")
         print(f"  Environment: {state.environment_name}")
         print(f"  VM Running: {state.vm_running}")
@@ -461,7 +461,7 @@ def exec_dev_cleanup(arguments):
 
     if result.success:
         if result.data.sessions_removed == 0:
-            print("CLAUDE: No stale sessions found")
+            print("No stale sessions found")
         else:
             print_success_message(
                 title=f'Cleaned up {result.data.sessions_removed} stale session(s)'
@@ -512,13 +512,13 @@ def exec_dev_action(arguments):
         print_success_message(
             title=f'Action executed successfully'
         )
-        print(f"\nCLAUDE: Success: {action_result.success}")
-        print(f"CLAUDE: Message: {action_result.message}")
-        print(f"CLAUDE: Execution Time: {action_result.execution_time:.2f}s")
+        print(f"\nSuccess: {action_result.success}")
+        print(f"Message: {action_result.message}")
+        print(f"Execution Time: {action_result.execution_time:.2f}s")
         if action_result.coordinates:
-            print(f"CLAUDE: Coordinates: {action_result.coordinates}")
+            print(f"Coordinates: {action_result.coordinates}")
         if action_result.data:
-            print(f"CLAUDE: Data: {action_result.data}")
+            print(f"Data: {action_result.data}")
     else:
         _handle_api_error(result)
 
@@ -720,8 +720,8 @@ def exec_dev_reset_soft(arguments):
         print_success_message(
             title='Soft reset completed'
         )
-        print(f"\nCLAUDE: {reset_result.message}")
-        print(f"CLAUDE: Execution Time: {reset_result.execution_time:.2f}s")
+        print(f"\n{reset_result.message}")
+        print(f"Execution Time: {reset_result.execution_time:.2f}s")
     else:
         _handle_api_error(result)
 
@@ -742,10 +742,10 @@ def exec_dev_reset_hard(arguments):
         print_success_message(
             title='Hard reset completed'
         )
-        print(f"\nCLAUDE: {reset_result.message}")
-        print(f"CLAUDE: Execution Time: {reset_result.execution_time:.2f}s")
-        print("\nCLAUDE: VM has been restored to initial snapshot")
-        print("CLAUDE: All variables have been reset")
+        print(f"\n{reset_result.message}")
+        print(f"Execution Time: {reset_result.execution_time:.2f}s")
+        print("\nVM has been restored to initial snapshot")
+        print("All variables have been reset")
     else:
         _handle_api_error(result)
 
@@ -805,7 +805,7 @@ def exec_dev_checkpoint_list(arguments):
 
     if result.success:
         if not result.data:
-            print(f"CLAUDE: No checkpoints found for session {session_id}")
+            print(f"No checkpoints found for session {session_id}")
             print(f"\nCreate a checkpoint with: adare dev checkpoint-create -s {session_id} <name>")
         else:
             # Use Rich table panel for display
@@ -855,7 +855,7 @@ def exec_dev_checkpoint_delete(arguments):
         print_success_message(
             title=f'Checkpoint "{arguments.name}" deleted'
         )
-        print("\nCLAUDE: Checkpoint and associated snapshot files have been removed")
+        print("\nCheckpoint and associated snapshot files have been removed")
     else:
         _handle_api_error(result)
 

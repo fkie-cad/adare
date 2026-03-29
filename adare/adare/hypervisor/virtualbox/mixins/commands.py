@@ -241,8 +241,8 @@ class CommandExecutionMixin(AbstractCommandMixin):
         import time
         start_time = time.time()
 
-        log.info(f"CLAUDE: Executing {operation_name} for VM '{self.vm_name}' with streaming output (timeout: {timeout}s)")
-        log.info(f"CLAUDE: VBoxManage command: {' '.join([self.vboxmanage_exe] + command_args)}")
+        log.info(f"Executing {operation_name} for VM '{self.vm_name}' with streaming output (timeout: {timeout}s)")
+        log.info(f"VBoxManage command: {' '.join([self.vboxmanage_exe] + command_args)}")
 
         line_queue = queue.Queue()
         return_value = 0
@@ -279,7 +279,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                         # Check for timeout
                         elapsed = time.time() - start_time
                         if elapsed > timeout:
-                            log.error(f"CLAUDE: {operation_name} timed out after {timeout}s for VM '{self.vm_name}'")
+                            log.error(f"{operation_name} timed out after {timeout}s for VM '{self.vm_name}'")
                             if ctx_manager:
                                 from adarelib.constants import StatusEnum
                                 ctx_manager.set_status(StatusEnum.FAILED)
@@ -288,7 +288,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
                         # Check for interruption
                         if stop_event and stop_event.is_set():
-                            log.info(f"CLAUDE: Stop event detected during {operation_name}")
+                            log.info(f"Stop event detected during {operation_name}")
                             if ctx_manager:
                                 from adarelib.constants import StatusEnum
                                 ctx_manager.set_status(StatusEnum.INTERRUPTED)
@@ -306,7 +306,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                         f.flush()
 
         except Exception as e:
-            log.error(f"CLAUDE: Error processing output during {operation_name}: {e}")
+            log.error(f"Error processing output during {operation_name}: {e}")
             return_value = 1
 
         # Wait for stream thread to complete

@@ -36,7 +36,7 @@ class WebSocketManager:
         await websocket.accept()
         async with self._lock:
             self._connections[session_id].append(websocket)
-        logger.info(f"CLAUDE: WebSocket connected for session {session_id}")
+        logger.info(f"WebSocket connected for session {session_id}")
 
     async def disconnect(self, websocket: WebSocket, session_id: str) -> None:
         """
@@ -51,7 +51,7 @@ class WebSocketManager:
                 self._connections[session_id].remove(websocket)
                 if not self._connections[session_id]:
                     del self._connections[session_id]
-        logger.info(f"CLAUDE: WebSocket disconnected for session {session_id}")
+        logger.info(f"WebSocket disconnected for session {session_id}")
 
     async def broadcast(self, session_id: str, message: dict[str, Any]) -> None:
         """
@@ -65,7 +65,7 @@ class WebSocketManager:
             connections = self._connections.get(session_id, []).copy()
 
         if not connections:
-            logger.debug(f"CLAUDE: No WebSocket connections for session {session_id}")
+            logger.debug(f"No WebSocket connections for session {session_id}")
             return
 
         # Send to all connections
@@ -75,7 +75,7 @@ class WebSocketManager:
                 await websocket.send_json(message)
             except RuntimeError as e:
                 logger.warning(
-                    f"CLAUDE: Failed to send to WebSocket for session {session_id}: {e}"
+                    f"Failed to send to WebSocket for session {session_id}: {e}"
                 )
                 dead_connections.append(websocket)
 

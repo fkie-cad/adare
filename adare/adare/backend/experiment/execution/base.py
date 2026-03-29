@@ -13,6 +13,12 @@ class GUIExecutionMode(Enum):
     HOST = "host"    # Direct hypervisor commands (QMP for QEMU)
 
 
+class TestExecutionMode(Enum):
+    """Test execution modes."""
+    AGENT = "agent"  # WebSocket to adarevm agent (tests run inside VM)
+    HOST = "host"    # Tests run on host, files pulled via QGA
+
+
 @dataclass
 class ActionResult:
     """Result of a playbook action execution."""

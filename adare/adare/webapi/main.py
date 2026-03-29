@@ -124,7 +124,7 @@ async def start_session(request: SessionStartRequest):
     Returns:
         Session info on success, error on failure
     """
-    logger.info(f"CLAUDE: Starting session for {request.experiment_name}")
+    logger.info(f"Starting session for {request.experiment_name}")
 
     dto = DevSessionStartRequest(
         project_path=Path(request.project_path),
@@ -164,7 +164,7 @@ async def stop_session(session_id: str, request: SessionStopRequest = SessionSto
     Returns:
         Success indicator
     """
-    logger.info(f"CLAUDE: Stopping session {session_id}")
+    logger.info(f"Stopping session {session_id}")
 
     dto = DevSessionStopRequest(
         session_id=session_id, remove_resources=request.remove_resources
@@ -251,7 +251,7 @@ async def execute_action(session_id: str, request: ActionExecuteRequest):
     Returns:
         Action execution result
     """
-    logger.info(f"CLAUDE: Executing action for session {session_id}")
+    logger.info(f"Executing action for session {session_id}")
 
     # Send action start event
     await ws_manager.send_action_start(
@@ -294,7 +294,7 @@ async def execute_playbook(session_id: str, request: PlaybookExecuteRequest):
     Returns:
         Playbook execution result
     """
-    logger.info(f"CLAUDE: Executing playbook for session {session_id} ({len(request.actions)} actions)")
+    logger.info(f"Executing playbook for session {session_id} ({len(request.actions)} actions)")
 
     # Convert actions and settings to YAML
     import yaml
@@ -340,7 +340,7 @@ async def reset_session(
     Returns:
         Reset result
     """
-    logger.info(f"CLAUDE: Resetting session {session_id} (type={reset_type})")
+    logger.info(f"Resetting session {session_id} (type={reset_type})")
 
     dto = DevResetRequest(session_id=session_id, reset_type=reset_type)
 
@@ -369,7 +369,7 @@ async def create_checkpoint(session_id: str, request: CheckpointCreateRequest):
     Returns:
         Success indicator
     """
-    logger.info(f"CLAUDE: Creating checkpoint '{request.name}' for session {session_id}")
+    logger.info(f"Creating checkpoint '{request.name}' for session {session_id}")
 
     dto = DevCheckpointCreateRequest(
         session_id=session_id, name=request.name, description=request.description
@@ -411,7 +411,7 @@ async def restore_checkpoint(session_id: str, checkpoint_name: str):
     Returns:
         Success indicator
     """
-    logger.info(f"CLAUDE: Restoring checkpoint '{checkpoint_name}' for session {session_id}")
+    logger.info(f"Restoring checkpoint '{checkpoint_name}' for session {session_id}")
 
     dto = DevCheckpointRestoreRequest(session_id=session_id, name=checkpoint_name)
     result = api.devmode.restore_checkpoint(dto)
@@ -430,7 +430,7 @@ async def delete_checkpoint(session_id: str, checkpoint_name: str):
     Returns:
         Success indicator
     """
-    logger.info(f"CLAUDE: Deleting checkpoint '{checkpoint_name}' for session {session_id}")
+    logger.info(f"Deleting checkpoint '{checkpoint_name}' for session {session_id}")
 
     dto = DevCheckpointDeleteRequest(session_id=session_id, name=checkpoint_name)
     result = api.devmode.delete_checkpoint(dto)
@@ -468,7 +468,7 @@ async def save_playbook(request: PlaybookSaveRequest):
     with open(file_path, "w") as f:
         yaml.dump(playbook_dict, f, default_flow_style=False, sort_keys=False)
 
-    logger.info(f"CLAUDE: Saved playbook to {file_path}")
+    logger.info(f"Saved playbook to {file_path}")
 
     return {"success": True, "data": {"file_path": str(file_path)}}
 
@@ -641,7 +641,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             except WebSocketDisconnect:
                 break
             except Exception as e:
-                logger.error(f"CLAUDE: WebSocket error for session {session_id}: {e}")
+                logger.error(f"WebSocket error for session {session_id}: {e}")
                 break
 
     finally:

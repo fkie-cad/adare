@@ -1,0 +1,9 @@
+vm: /Users/miq/.adare/state/vms/ubuntu2510-20260329.qcow2
+os:
+  os: Ubuntu 25.10
+  platform: linux
+  distribution: ubuntu
+  version: '25.10'
+  language: English
+  architecture: aarch64
+hypervisor: qemu

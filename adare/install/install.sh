@@ -1,12 +1,10 @@
 #!/bin/bash
 #
 # ADARE Installation Script
+# Run from the workspace root (via Makefile)
 #
 
-# Navigate to the 'adare' directory
-cd adare || { echo "Directory 'adare' not found. Exiting..."; exit 1; }
-
-# Install dependencies using uv
+# Install dependencies using uv (single sync from workspace root)
 if command -v uv >/dev/null 2>&1; then
     if [[ "$1" == "qemu" ]]; then
         echo "Argument 'qemu' detected. Installing with QEMU extras..."
@@ -21,13 +19,12 @@ else
     exit 1
 fi
 
-# Install adare-cv-server package
-echo "Installing adare-cv-server package..."
-cd ../adare-cv-server || { echo "Directory 'adare-cv-server' not found. Exiting..."; exit 1; }
-uv sync
-cd ../adare
+# Ensure ~/.local/bin exists
+if [ ! -d ~/.local/bin ]; then
+    mkdir -p ~/.local/bin
+fi
 
-# Find the adare executable in the virtual environment
+# Find the adare executable in the workspace root virtual environment
 ADARE_EXECUTABLE="$(pwd)/.venv/bin/adare"
 if [ ! -f "$ADARE_EXECUTABLE" ]; then
     echo "The 'adare' executable could not be found. Ensure it's available via uv."
@@ -36,8 +33,7 @@ fi
 
 ln -sf "$ADARE_EXECUTABLE" ~/.local/bin/adare
 
-# Find the adare-cv-server executable
-cd ../adare-cv-server
+# Find the adare-cv-server executable in the workspace root virtual environment
 ADARE_CV_SERVER_EXECUTABLE="$(pwd)/.venv/bin/adare-cv-server"
 if [ ! -f "$ADARE_CV_SERVER_EXECUTABLE" ]; then
     echo "The 'adare-cv-server' executable could not be found. Ensure it's available via uv."
@@ -45,21 +41,16 @@ if [ ! -f "$ADARE_CV_SERVER_EXECUTABLE" ]; then
 fi
 
 ln -sf "$ADARE_CV_SERVER_EXECUTABLE" ~/.local/bin/adare-cv-server
-cd ../adare
 
-# Ensure ~/.local/bin exists and is in PATH
-if [ ! -d ~/.local/bin ]; then
-    mkdir -p ~/.local/bin
-fi
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
     echo "Warning: $HOME/.local/bin is not in your PATH. Consider adding it to ensure 'adare' can be executed globally."
 fi
 
 # Run the Python script
-if [ -f install/copy_appdata.py ]; then
-    python3 install/copy_appdata.py
+if [ -f adare/install/copy_appdata.py ]; then
+    python3 adare/install/copy_appdata.py
 else
-    echo "The script 'install/copy_appdata.py' does not exist. Exiting..."
+    echo "The script 'adare/install/copy_appdata.py' does not exist. Exiting..."
     exit 1
 fi
 

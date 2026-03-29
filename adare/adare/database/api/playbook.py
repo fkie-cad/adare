@@ -484,19 +484,19 @@ class PlaybookApi(ProjectDatabaseApi):
         params = item.parameters or {}
 
         # CLAUDE: Debug logging to diagnose serialization issues
-        log.debug(f"CLAUDE: Deserializing {action_type} action")
-        log.debug(f"CLAUDE: item.parameters type: {type(item.parameters)}")
-        log.debug(f"CLAUDE: params type: {type(params)}")
+        log.debug(f"Deserializing {action_type} action")
+        log.debug(f"item.parameters type: {type(item.parameters)}")
+        log.debug(f"params type: {type(params)}")
 
         # CLAUDE: Defensive JSON parsing - handle case where SQLAlchemy returns string instead of dict
         if isinstance(params, str):
             import json
-            log.warning(f"CLAUDE: parameters is a string (double-encoding issue), parsing JSON: {params[:100]}...")
+            log.warning(f"parameters is a string (double-encoding issue), parsing JSON: {params[:100]}...")
             try:
                 params = json.loads(params)
-                log.info(f"CLAUDE: Successfully parsed JSON string to dict")
+                log.info(f"Successfully parsed JSON string to dict")
             except json.JSONDecodeError as e:
-                log.error(f"CLAUDE: Failed to parse parameters JSON: {e}")
+                log.error(f"Failed to parse parameters JSON: {e}")
                 raise ValueError(f"Invalid JSON in {action_type} action parameters: {params[:200]}")
 
         if action_type == 'click':
@@ -699,9 +699,9 @@ class PlaybookApi(ProjectDatabaseApi):
             raise ValueError(f"No playbook found for experiment {experiment_id}")
 
         # Reconstruct actions from PlaybookItem database models
-        log.info(f"CLAUDE: Loading playbook from database models (not parsing YAML for actions)")
+        log.info(f"Loading playbook from database models (not parsing YAML for actions)")
         items = self.get_playbook_items(playbook.id)
-        log.info(f"CLAUDE: Reconstructing {len(items)} actions from PlaybookItem database models")
+        log.info(f"Reconstructing {len(items)} actions from PlaybookItem database models")
         actions = [self._playbook_item_to_action(item) for item in items]
 
         # Reconstruct settings from JSON
@@ -711,11 +711,11 @@ class PlaybookApi(ProjectDatabaseApi):
         variables = None
         tests = []
         if playbook.original_yaml_content:
-            log.info(f"CLAUDE: Parsing variables/tests from stored YAML (not re-parsing actions)")
+            log.info(f"Parsing variables/tests from stored YAML (not re-parsing actions)")
             variables, tests = self._load_variables_and_tests_from_yaml(playbook.original_yaml_content)
 
         from adare.types.playbook import Playbook as PlaybookType
-        log.info(f"CLAUDE: Playbook reconstruction complete - {len(actions)} actions, {len(tests)} tests")
+        log.info(f"Playbook reconstruction complete - {len(actions)} actions, {len(tests)} tests")
         return PlaybookType(
             actions=actions,
             settings=settings,

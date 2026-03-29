@@ -14,7 +14,7 @@ import time
 
 # Playbook and test imports
 from adare.types.playbook import (
-    parse_playbook, Playbook, ActionType, ActionTestAction, PullAction, PauseAction, SaveTimestampAction
+    Playbook, ActionType, ActionTestAction, PullAction, PauseAction, SaveTimestampAction
 )
 
 # WebSocket client import
@@ -35,12 +35,27 @@ from adare.backend.events.emitters import emit_action
 # Import playbook analysis utility
 from adare.helperfunctions.playbook_analysis import collect_pull_action_files
 
-# Import filesystem snapshot utilities
-from adare.backend.experiment.filesystem_snapshot import (
-    FilesystemSnapshot, calculate_diff, export_diff_json, export_diff_csv
-)
+# Import filesystem diff manager
+from adare.backend.experiment.filesystem_diff_manager import FilesystemDiffManager
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class PlaybookControllerConfig:
+    """Groups configuration parameters for PlaybookController construction."""
+    experiment_dir: Optional[Path] = None
+    project_dir: Optional[Path] = None
+    mcp_gui_url: str = "http://localhost:13109/mcp"
+    debug_screenshots: bool = False
+    screenshots_dir: Optional[Path] = None
+    experiment_id: Optional[str] = None
+    experiment_run_id: Optional[str] = None
+    experiment_run_directory: Optional[Path] = None
+    vm_os: Optional[str] = None
+    vm_user: Optional[str] = None
+    test_mode: bool = False
+    config: Optional[Any] = None
 
 
 @dataclass
@@ -62,63 +77,103 @@ class PlaybookExecutionResult:
 class PlaybookController:
     """
     Controller for executing YAML playbooks via WebSocket.
-    
+
     This controller orchestrates experiment execution by coordinating between
     specialized modules for different aspects of playbook execution.
+
+    Accepts either a PlaybookControllerConfig or the legacy keyword arguments.
     """
-    
-    def __init__(self, websocket_client: AdareVMClient, experiment_dir: Optional[Path], project_dir: Path,
-                 mcp_gui_url: str = "http://localhost:13109/mcp", debug_screenshots: bool = False,
-                 screenshots_dir: Path = None, playbook: Optional[Playbook] = None,
-                 experiment_id: Optional[str] = None, experiment_run_id: Optional[str] = None,
-                 vm: Optional['VirtualBoxVM'] = None, experiment_run_directory: Optional[Path] = None,
-                 vm_os: Optional[str] = None, vm_user: Optional[str] = None, flow_console = None,
-                 test_mode: bool = False, config = None):
+
+    def __init__(
+        self,
+        websocket_client: AdareVMClient,
+        playbook: Optional[Playbook] = None,
+        vm: Optional[Any] = None,
+        flow_console: Optional[Any] = None,
+        controller_config: Optional[PlaybookControllerConfig] = None,
+        # Legacy kwargs kept for backward compatibility
+        experiment_dir: Optional[Path] = None,
+        project_dir: Optional[Path] = None,
+        mcp_gui_url: str = "http://localhost:13109/mcp",
+        debug_screenshots: bool = False,
+        screenshots_dir: Optional[Path] = None,
+        experiment_id: Optional[str] = None,
+        experiment_run_id: Optional[str] = None,
+        experiment_run_directory: Optional[Path] = None,
+        vm_os: Optional[str] = None,
+        vm_user: Optional[str] = None,
+        test_mode: bool = False,
+        config: Optional[Any] = None,
+    ):
         """
         Initialize the playbook controller.
 
         Args:
             websocket_client: Connected WebSocket client to adarevm
-            experiment_dir: Path to experiment directory (for images/)
-            project_dir: Path to project directory (for testfunctions/)
-            mcp_gui_url: URL of the MCP GUI server for CV/OCR
-            debug_screenshots: Whether to save screenshots for debugging
-            screenshots_dir: Directory to save debug screenshots
-            playbook: Pre-parsed playbook (optional, will parse if not provided)
-            experiment_id: Experiment ID for database linking
-            experiment_run_id: Experiment run ID for execution tracking
+            playbook: Pre-parsed playbook (optional)
+            vm: VM instance for file operations
             flow_console: Flow console for interactive display and input
-            test_mode: Whether running in test mode (affects test action execution)
-            config: ExperimentConfig for accessing CLI overrides
+            controller_config: Grouped config (preferred over legacy kwargs)
+            experiment_dir: (legacy) Path to experiment directory
+            project_dir: (legacy) Path to project directory
+            mcp_gui_url: (legacy) URL of the MCP GUI server
+            debug_screenshots: (legacy) Save screenshots for debugging
+            screenshots_dir: (legacy) Directory to save debug screenshots
+            experiment_id: (legacy) Experiment ID for database linking
+            experiment_run_id: (legacy) Experiment run ID for execution tracking
+            experiment_run_directory: (legacy) Run directory for artifacts
+            vm_os: (legacy) VM OS for automatic variables
+            vm_user: (legacy) VM user for automatic variables
+            test_mode: (legacy) Whether running in test mode
+            config: (legacy) ExperimentConfig for CLI overrides
         """
+        # Build effective config: explicit config wins, then legacy kwargs
+        if controller_config is not None:
+            cfg = controller_config
+        else:
+            cfg = PlaybookControllerConfig(
+                experiment_dir=experiment_dir,
+                project_dir=project_dir,
+                mcp_gui_url=mcp_gui_url,
+                debug_screenshots=debug_screenshots,
+                screenshots_dir=screenshots_dir,
+                experiment_id=experiment_id,
+                experiment_run_id=experiment_run_id,
+                experiment_run_directory=experiment_run_directory,
+                vm_os=vm_os,
+                vm_user=vm_user,
+                test_mode=test_mode,
+                config=config,
+            )
+
         self.client = websocket_client
-        self.experiment_dir = experiment_dir
-        self.project_dir = project_dir
-        self.execution_context = {'config': config} if config else {}
+        self.experiment_dir = cfg.experiment_dir
+        self.project_dir = cfg.project_dir
+        self.execution_context: Dict[str, Any] = {'config': cfg.config} if cfg.config else {}
         self.action_results: List[ActionResult] = []
-        self.debug_screenshots = debug_screenshots
-        self.screenshots_dir = screenshots_dir
+        self.debug_screenshots = cfg.debug_screenshots
+        self.screenshots_dir = cfg.screenshots_dir
         self.playbook = playbook
-        self.vm = vm  # VirtualBox VM instance for file operations
-        self.experiment_run_directory = experiment_run_directory  # Run directory for artifacts
-        self.vm_os = vm_os  # VM OS for automatic variables
-        self.vm_user = vm_user  # VM user for automatic variables
-        self.flow_console = flow_console  # Flow console for interactive actions
-        self.test_mode = test_mode  # Test mode flag
-        
+        self.vm = vm
+        self.experiment_run_directory = cfg.experiment_run_directory
+        self.vm_os = cfg.vm_os
+        self.vm_user = cfg.vm_user
+        self.flow_console = flow_console
+        self.test_mode = cfg.test_mode
+
         # Database integration
-        self.experiment_id = experiment_id
-        self.experiment_run_id = experiment_run_id
-        self.playbook_items_map: Dict[int, str] = {}  # Maps action index to playbook_item_id
-        
+        self.experiment_id = cfg.experiment_id
+        self.experiment_run_id = cfg.experiment_run_id
+        self.playbook_items_map: Dict[int, str] = {}
+
         # Initialize playbook items mapping if experiment tracking enabled
         if self.experiment_id:
             self._initialize_playbook_items_mapping()
-        
+
         # Target resolution using MCP GUI server
-        self.target_resolver = MCPTargetResolver(experiment_dir, mcp_gui_url, experiment_run_id)
+        self.target_resolver = MCPTargetResolver(cfg.experiment_dir, cfg.mcp_gui_url, cfg.experiment_run_id)
         self.condition_checker = MCPConditionChecker(self.target_resolver)
-        
+
         # Initialize specialized modules
         self._initialize_modules()
 
@@ -298,13 +353,19 @@ class PlaybookController:
         log.info(f"Starting experiment execution in {experiment_dir}")
         self.start_time = time.time()
 
-        # Determine if diff should run (CLI override > playbook setting)
-        auto_fs_diff = self._determine_diff_enabled()
-        diff_mode = self._resolve_diff_mode()
+        # Filesystem diff handling via dedicated manager
+        diff_mgr = FilesystemDiffManager(
+            vm=self.vm,
+            execution_context=self.execution_context,
+            experiment_run_directory=self.experiment_run_directory,
+            action_executor=self.action_executor,
+        )
+        auto_fs_diff = diff_mgr.determine_diff_enabled(self.playbook)
+        diff_mode = diff_mgr.resolve_diff_mode()
 
         # Validate diff mode compatibility
         if auto_fs_diff and diff_mode == 'host':
-            self._validate_host_mode_support()
+            diff_mgr.validate_host_mode_support()
 
         # Capture initial snapshot if enabled
         initial_snapshot_ref = None
@@ -314,14 +375,23 @@ class PlaybookController:
                 initial_snapshot_ref = "host_mode"  # Dummy ref for consistency
             else:
                 log.info("Guest-side filesystem diff enabled - capturing initial snapshot")
-                initial_snapshot_ref = await self._capture_automatic_snapshot("_fs_snapshot_initial")
+                initial_snapshot_ref = await diff_mgr.capture_automatic_snapshot("_fs_snapshot_initial")
 
             if not initial_snapshot_ref:
                 log.warning(f"Failed to prepare diff ({diff_mode} mode) - diff will be skipped")
                 auto_fs_diff = False
 
         # 1. Load testfunctions and testset (dependencies should already be installed)
-        await self.test_loader.load_tests(self.client)
+        # In host test mode (no WebSocket), skip upload - testfunctions are loaded locally
+        from adare.backend.experiment.execution.base import TestExecutionMode
+        is_host_test_mode = (
+            hasattr(self.action_executor, 'test_actions') and
+            self.action_executor.test_actions.test_execution_mode == TestExecutionMode.HOST
+        )
+        if is_host_test_mode:
+            log.info("Host test mode: skipping testfunction upload (tests run on host)")
+        else:
+            await self.test_loader.load_tests(self.client)
 
         # 2. Execute playbook actions (can now use loaded tests)
         if experiment_dir:
@@ -331,10 +401,8 @@ class PlaybookController:
                 playbook_result = await self.execute_playbook()
                 if not playbook_result.success:
                     # Even on failure, try to capture final snapshot for partial diff
-                    if auto_fs_diff and initial_snapshot_ref:
-                        # Host mode: Skip here (handled in cleanup phase)
-                        if diff_mode != 'host':
-                            await self._capture_and_export_diff(initial_snapshot_ref, "_fs_snapshot_final")
+                    if auto_fs_diff and initial_snapshot_ref and diff_mode != 'host':
+                        await diff_mgr.capture_and_export_diff(initial_snapshot_ref, "_fs_snapshot_final")
                     return playbook_result
             else:
                 log.warning("No playbook.yml found, skipping GUI actions")
@@ -342,23 +410,19 @@ class PlaybookController:
             log.warning("No experiment directory provided, skipping playbook execution")
 
         # Capture final snapshot and calculate diff if enabled
-        if auto_fs_diff and initial_snapshot_ref:
-            # Host mode: Skip here (handled in cleanup phase)
-            if diff_mode != 'host':
-                log.info("Capturing final guest snapshot and calculating diff")
-                await self._capture_and_export_diff(initial_snapshot_ref, "_fs_snapshot_final")
-
-        # Tests are now executed inline during playbook execution via 'test:' actions
+        if auto_fs_diff and initial_snapshot_ref and diff_mode != 'host':
+            log.info("Capturing final guest snapshot and calculating diff")
+            await diff_mgr.capture_and_export_diff(initial_snapshot_ref, "_fs_snapshot_final")
 
         execution_time = time.time() - self.start_time
         log.info(f"Experiment completed successfully in {execution_time:.2f}s")
-        
+
         # Count test statistics
         test_results = [r for r in self.action_results if self._is_test_action_result(r)]
         total_tests = len(test_results)
         successful_tests = sum(1 for r in test_results if r.success)
         failed_tests = total_tests - successful_tests
-        
+
         # Count only actions that should be included in execution statistics (exclude utility actions)
         countable_results = [r for r in self.action_results if r.data and r.data.get('is_countable', True)]
 
@@ -368,7 +432,7 @@ class PlaybookController:
             successful_actions=sum(1 for r in countable_results if r.success),
             failed_actions=sum(1 for r in countable_results if not r.success),
             execution_time=execution_time,
-            action_results=self.action_results,  # Keep all results for debugging/logging
+            action_results=self.action_results,
             total_tests=total_tests,
             successful_tests=successful_tests,
             failed_tests=failed_tests
@@ -667,166 +731,4 @@ class PlaybookController:
             except Exception as e:
                 log.error(f"Error during auto-pull of {file_path}: {e}", exc_info=True)
 
-    async def _capture_automatic_snapshot(self, variable_name: str) -> Optional[FilesystemSnapshot]:
-        """
-        Capture filesystem snapshot programmatically (for automatic diff).
-
-        Args:
-            variable_name: Variable name to store snapshot (internal, starts with _)
-
-        Returns:
-            FilesystemSnapshot object, or None if capture failed
-        """
-        from adare.types.playbook import SnapshotFilesystemAction
-
-        try:
-            # Create programmatic snapshot action
-            snapshot_action = SnapshotFilesystemAction(
-                variable=variable_name,
-                timeout=300.0,  # 5 minute timeout
-                description=f"Automatic snapshot for filesystem diff"
-            )
-
-            # Execute via simple actions executor
-            result = await self.action_executor.simple_actions.execute_snapshot_filesystem(
-                snapshot_action,
-                parent_event_id=None,
-                event_emitter=None
-            )
-
-            if not result.success:
-                log.error(f"Failed to capture automatic snapshot: {result.message}")
-                return None
-
-            # Retrieve snapshot from execution context
-            snapshot = self.execution_context.get(variable_name)
-            if not snapshot or not isinstance(snapshot, FilesystemSnapshot):
-                log.error(f"Snapshot variable '{variable_name}' not found or invalid type")
-                return None
-
-            return snapshot
-
-        except Exception as e:
-            log.error(f"Error capturing automatic snapshot: {e}", exc_info=True)
-            return None
-
-    async def _capture_and_export_diff(self, initial_snapshot: FilesystemSnapshot, final_variable: str):
-        """
-        Capture final snapshot, calculate diff, and export to files.
-
-        Args:
-            initial_snapshot: Initial snapshot captured at experiment start
-            final_variable: Variable name for final snapshot
-        """
-        try:
-            # Capture final snapshot
-            final_snapshot = await self._capture_automatic_snapshot(final_variable)
-            if not final_snapshot:
-                log.error("Failed to capture final filesystem snapshot - diff export skipped")
-                return
-
-            # Calculate diff
-            log.info("Calculating filesystem diff...")
-            diff = calculate_diff(initial_snapshot, final_snapshot)
-
-            log.info(f"Filesystem changes detected - "
-                    f"Added: {len(diff['added'])}, "
-                    f"Removed: {len(diff['removed'])}, "
-                    f"Modified: {len(diff['modified'])}")
-
-            # Determine output directory (artifacts folder in run directory)
-            if not self.experiment_run_directory:
-                log.warning("No experiment run directory set - cannot export filesystem diff")
-                return
-
-            artifacts_dir = self.experiment_run_directory / 'artifacts'
-            artifacts_dir.mkdir(parents=True, exist_ok=True)
-
-            # Prepare metadata for JSON export
-            tool_name = 'MFTReader' if initial_snapshot.os_type == 'Windows' else 'LinuxFSSnapshot'
-            metadata = {
-                'diff_mode': 'guest',
-                'tool': tool_name,
-                'initial_snapshot_time': initial_snapshot.timestamp,
-                'final_snapshot_time': final_snapshot.timestamp,
-                'os_type': initial_snapshot.os_type,
-                'experiment_run_directory': str(self.experiment_run_directory)
-            }
-
-            # Export JSON
-            json_path = artifacts_dir / 'filesystem_diffs.json'
-            export_diff_json(diff, json_path, metadata)
-
-            # Export CSV
-            csv_path = artifacts_dir / 'filesystem_diffs.csv'
-            export_diff_csv(diff, csv_path)
-
-            log.info(f"Filesystem diff exported to {artifacts_dir}")
-
-        except Exception as e:
-            log.error(f"Error exporting filesystem diff: {e}", exc_info=True)
-
-    def _determine_diff_enabled(self) -> bool:
-        """Determine if filesystem diff should run (CLI > playbook)."""
-        config = self.execution_context.get('config')
-        if config and hasattr(config, 'enable_diff') and config.enable_diff is not None:
-            return config.enable_diff  # CLI override
-
-        # Fall back to playbook setting
-        if hasattr(self.playbook, 'settings') and self.playbook.settings:
-            return self.playbook.settings.enable_filesystem_diff
-
-        return False
-
-    def _resolve_diff_mode(self) -> str:
-        """Resolve diff mode: auto → guest/host based on capabilities."""
-        config = self.execution_context.get('config')
-        requested_mode = getattr(config, 'diff_mode', 'auto') if config else 'auto'
-
-        if requested_mode == 'auto':
-            # Smart selection based on hypervisor and tool availability
-            if self._is_qemu_vm():
-                if self._is_virt_diff_available():
-                    log.info("Auto mode: Using host-side diff (QEMU + virt-diff available)")
-                    return 'host'
-                else:
-                    log.warning("Auto mode: virt-diff not found, falling back to guest-side diff")
-                    log.warning("For faster diffs, install: sudo apt-get install libguestfs-tools")
-                    return 'guest'
-            else:
-                log.debug("Auto mode: Using guest-side diff (non-QEMU hypervisor)")
-                return 'guest'
-
-        return requested_mode
-
-    def _is_qemu_vm(self) -> bool:
-        """Check if VM is QEMU."""
-        if not self.vm:
-            return False
-        return self.vm.__class__.__name__ == 'QEMUVM'
-
-    def _is_virt_diff_available(self) -> bool:
-        """Check if libguestfs virt-diff is installed."""
-        import shutil
-        return shutil.which('guestfish') is not None
-
-    def _validate_host_mode_support(self):
-        """Validate that host mode is supported (QEMU + virt-diff)."""
-        if not self._is_qemu_vm():
-            from adare.exceptions import LoggedException
-            raise LoggedException(
-                log,
-                f"Host-side diff (--diff-mode=host) requires QEMU hypervisor. "
-                f"Current hypervisor: {self.vm.__class__.__name__ if self.vm else 'unknown'}. "
-                f"Use --diff-mode=guest or switch to QEMU environment."
-            )
-
-        if not self._is_virt_diff_available():
-            from adare.exceptions import LoggedException
-            raise LoggedException(
-                log,
-                "Host-side diff requires libguestfs-tools but guestfish not found.\n"
-                "Installation: sudo apt-get install libguestfs-tools\n"
-                "Alternative: Use --diff-mode=guest for VM-based diff."
-            )
 

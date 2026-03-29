@@ -5,14 +5,21 @@ Implements AbstractHypervisorManager for QEMU-specific operations.
 """
 import asyncio
 import logging
+import platform
 import queue
 import shutil
+import subprocess
 import threading
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+try:
+    import libvirt
+except ImportError:
+    libvirt = None
+
 from adare.hypervisor.base.manager import AbstractHypervisorManager
-from adare.hypervisor.exceptions import VMImportException
+from adare.hypervisor.exceptions import HypervisorException, VMImportException
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +34,11 @@ class QEMUManager(AbstractHypervisorManager):
 
         qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
 
+        # Apple Silicon note: aarch64 guests use HVF acceleration.
+        # x86_64 guests on Apple Silicon are blocked in lifecycle.py (per-VM check).
+        if platform.system() == 'Darwin' and platform.machine() == 'arm64':
+            log.info("QEMU on Apple Silicon — HVF acceleration available for aarch64 guests")
+
         # Initialize executable manager (validates executables exist)
         self.executables = ExecutableManager('qemu', qemu_config)
 
@@ -37,9 +49,9 @@ class QEMUManager(AbstractHypervisorManager):
 
         # Check for guestfish CLI tool
         if shutil.which('guestfish'):
-            log.debug("CLAUDE: guestfish CLI tool available.")
+            log.debug("guestfish CLI tool available.")
         else:
-            log.warning("CLAUDE: guestfish command not found. "
+            log.warning("guestfish command not found. "
                        "File operations when VM is stopped will not work. "
                        "Install with: sudo apt install libguestfs-tools")
 
@@ -60,13 +72,13 @@ class QEMUManager(AbstractHypervisorManager):
                     from adare.hypervisor.exceptions import HypervisorException
                     raise HypervisorException(f"Failed to connect to libvirt at {libvirt_uri}")
 
-                log.info(f"CLAUDE: Connected to libvirt ({libvirt_uri})")
+                log.info(f"Connected to libvirt ({libvirt_uri})")
 
                 # Validate virsh executable availability
                 if shutil.which('virsh'):
-                    log.debug("CLAUDE: virsh command available")
+                    log.debug("virsh command available")
                 else:
-                    log.warning("CLAUDE: virsh command not found. Install libvirt-clients package.")
+                    log.warning("virsh command not found. Install libvirt-clients package.")
 
             except ImportError:
                 from adare.hypervisor.exceptions import HypervisorException
@@ -74,25 +86,30 @@ class QEMUManager(AbstractHypervisorManager):
                     "libvirt Python bindings not found. "
                     "Install with: pip install libvirt-python"
                 )
-            except Exception as e:
+            except libvirt.libvirtError as e:
                 from adare.hypervisor.exceptions import HypervisorException
+                if platform.system() == 'Darwin':
+                    raise HypervisorException(
+                        f"Failed to connect to libvirt daemon: {e}. "
+                        f"On macOS, install with: brew install libvirt && brew services start libvirt"
+                    )
                 raise HypervisorException(
                     f"Failed to connect to libvirt daemon: {e}. "
                     f"Ensure libvirtd is running: sudo systemctl start libvirtd"
                 )
         else:
-            log.info("CLAUDE: libvirt integration disabled in config (use_libvirt=False)")
+            log.info("libvirt integration disabled in config (use_libvirt=False)")
 
-        log.info("CLAUDE: Initialized QEMUManager")
+        log.info("Initialized QEMUManager")
 
     def __del__(self):
         """Cleanup: close libvirt connection on manager destruction."""
         if hasattr(self, 'libvirt_conn') and self.libvirt_conn:
             try:
                 self.libvirt_conn.close()
-                log.debug("CLAUDE: Closed libvirt connection")
-            except Exception as e:
-                log.warning(f"CLAUDE: Error closing libvirt connection: {e}")
+                log.debug("Closed libvirt connection")
+            except libvirt.libvirtError as e:
+                log.warning(f"Error closing libvirt connection: {e}")
 
     def _worker_loop(self):
         """Main worker loop for executing queued functions."""
@@ -100,34 +117,36 @@ class QEMUManager(AbstractHypervisorManager):
         while True:
             func, args, kwargs, result_queue = self._cmd_queue.get()
             try:
-                log.debug(f"CLAUDE: Executing function {func.__name__} with args={args} kwargs={kwargs}")
+                log.debug(f"Executing function {func.__name__} with args={args} kwargs={kwargs}")
                 result = func(*args, **kwargs)
                 result_queue.put((result, None))
             except Exception as e:
-                log.error(f"CLAUDE: Exception in worker loop for function {func.__name__}: {e}")
+                # Intentional: worker must catch all exceptions to relay to caller
+                log.error(f"Exception in worker loop for function {func.__name__}: {e}")
                 result_queue.put((None, e))
 
     def run(self, func: Callable, *args, **kwargs) -> Any:
         """Execute a function in the worker thread and return its result."""
-        log.debug(f"CLAUDE: Queueing function {func.__name__} for execution.")
+        log.debug(f"Queueing function {func.__name__} for execution.")
         result_queue = queue.Queue()
         self._cmd_queue.put((func, args, kwargs, result_queue))
         result, error = result_queue.get()
         if error:
-            log.error(f"CLAUDE: Error running function {func.__name__}: {error}")
+            log.error(f"Error running function {func.__name__}: {error}")
             raise error
-        log.debug(f"CLAUDE: Function {func.__name__} executed successfully.")
+        log.debug(f"Function {func.__name__} executed successfully.")
         return result
 
     async def run_async(self, func: Callable, *args, **kwargs) -> Any:
         """Run an async function directly without the worker thread."""
-        log.debug(f"CLAUDE: Executing async function {func.__name__} with args={args} kwargs={kwargs}")
+        log.debug(f"Executing async function {func.__name__} with args={args} kwargs={kwargs}")
         try:
             result = await func(*args, **kwargs)
-            log.debug(f"CLAUDE: Async function {func.__name__} executed successfully.")
+            log.debug(f"Async function {func.__name__} executed successfully.")
             return result
         except Exception as e:
-            log.error(f"CLAUDE: Error running async function {func.__name__}: {e}")
+            # Intentional: async executor must catch all exceptions to log and relay to caller
+            log.error(f"Error running async function {func.__name__}: {e}")
             raise e
 
     async def import_vm_async(self, vm_file_path: Path, vm_name: str, environment_ulid: Optional[str] = None):
@@ -151,7 +170,7 @@ class QEMUManager(AbstractHypervisorManager):
         from adare.hypervisor.qemu.vm import QEMUVM
         from adare.config import get_vm_credentials
 
-        log.info(f"CLAUDE: Importing QEMU VM '{vm_name}' from '{vm_file_path}' (environment: {environment_ulid})")
+        log.info(f"Importing QEMU VM '{vm_name}' from '{vm_file_path}' (environment: {environment_ulid})")
 
         # Detect guest OS from file extension or assume Linux as default
         # This is a simple heuristic - could be enhanced with OVF parsing
@@ -173,16 +192,16 @@ class QEMUManager(AbstractHypervisorManager):
                 vm_file_path,
                 self.executables.qemu_img
             )
-            log.debug(f"CLAUDE: External VM detected, format: {detected_format}")
+            log.debug(f"External VM detected, format: {detected_format}")
 
             if detected_format == 'qcow2':
                 # Use original file directly
                 disk_path = str(vm_file_path.resolve())
-                log.debug(f"CLAUDE: External qcow2 VM - using original: {disk_path}")
+                log.debug(f"External qcow2 VM - using original: {disk_path}")
             else:
                 # Will convert next to original
                 disk_path = str(vm_file_path.parent / f"{vm_file_path.stem}_adare_converted.qcow2")
-                log.debug(f"CLAUDE: External non-qcow2 VM - will convert to: {disk_path}")
+                log.debug(f"External non-qcow2 VM - will convert to: {disk_path}")
 
         # Create QEMUVM instance
         vm = QEMUVM(
@@ -198,7 +217,7 @@ class QEMUManager(AbstractHypervisorManager):
         try:
             # Skip conversion for external qcow2 files
             if is_external and detected_format == 'qcow2':
-                log.info(f"CLAUDE: Skipping conversion for external qcow2: {vm_file_path}")
+                log.info(f"Skipping conversion for external qcow2: {vm_file_path}")
                 vm._save_vm_config()
                 return vm
 
@@ -212,12 +231,12 @@ class QEMUManager(AbstractHypervisorManager):
                 error_msg = f"QEMU VM import failed with return code {return_code}"
                 if stdout:
                     error_msg += f": {stdout}"
-                log.error(f"CLAUDE: {error_msg}")
+                log.error(f"{error_msg}")
                 raise VMImportException(vm_name, error_msg)
 
-            log.info(f"CLAUDE: Successfully imported QEMU VM '{vm_name}' from '{vm_file_path}'")
+            log.info(f"Successfully imported QEMU VM '{vm_name}' from '{vm_file_path}'")
             return vm
 
-        except Exception as e:
-            log.error(f"CLAUDE: Failed to import QEMU VM '{vm_name}' from '{vm_file_path}': {e}")
+        except (VMImportException, HypervisorException, subprocess.CalledProcessError, OSError) as e:
+            log.error(f"Failed to import QEMU VM '{vm_name}' from '{vm_file_path}': {e}")
             raise VMImportException(vm_name, f"QEMU VM import failed: {e}")

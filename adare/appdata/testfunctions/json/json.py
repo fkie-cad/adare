@@ -6,7 +6,7 @@ import re
 from typing import ClassVar, Optional, Union
 
 # internal imports
-from adarelib.testset.basictest import BasicTest, Parameter
+from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
 
@@ -24,6 +24,7 @@ class ContainsKeyParameter(Parameter):
 class ContainsKey(BasicTest):
     testname: ClassVar[str] = 'contains_key'
     testdescription: ClassVar[str] = 'tests if JSON file contains specified key path (supports dot notation like "user.profile.name")'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: ContainsKeyParameter
@@ -87,6 +88,7 @@ class ValueMatchesParameter(Parameter):
 class ValueMatches(BasicTest):
     testname: ClassVar[str] = 'value_matches'
     testdescription: ClassVar[str] = 'tests if JSON value at key path matches expected value using placeholders (supports wildcards [*] and * with any/all modes)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: ValueMatchesParameter
@@ -300,6 +302,7 @@ class ArrayContainsParameter(Parameter):
 class ArrayContains(BasicTest):
     testname: ClassVar[str] = 'array_contains'
     testdescription: ClassVar[str] = 'tests if JSON array at specified path contains expected element'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: ArrayContainsParameter

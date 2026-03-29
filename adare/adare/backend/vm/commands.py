@@ -254,7 +254,7 @@ def load_vm(vm_file: Path, name: str = None, description: str = '',
         os_architecture=os_architecture,
         silent=False
     )
-    
+
     log.info(f"Successfully loaded VM: {vm.name} (ID: {vm.id})")
     return vm.id
 

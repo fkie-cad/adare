@@ -118,6 +118,13 @@ def get_vm_credentials(guest_os: str) -> tuple[str, str]:
 DEFAULT_HYPERVISOR = "virtualbox"
 SUPPORTED_HYPERVISORS = ["virtualbox", "qemu"]
 
+import platform as _platform
+_host_os = _platform.system().lower()
+_host_arch = _platform.machine().lower()
+_is_mac = _host_os == 'darwin'
+_is_apple_silicon = _is_mac and _host_arch in ('arm64', 'aarch64')
+_host_qemu_arch = 'aarch64' if _is_apple_silicon else 'x86_64'
+
 HYPERVISOR_CONFIGS = {
     'virtualbox': {
         'vboxmanage_exe': 'VBoxManage',  # Will be auto-detected based on platform
@@ -125,11 +132,11 @@ HYPERVISOR_CONFIGS = {
         'default_vram': 128
     },
     'qemu': {
-        'architecture': 'x86_64',         # CPU architecture: x86_64, arm64, riscv64, etc.
-        'qemu_system_exe': 'qemu-system-x86_64',
+        'architecture': _host_qemu_arch,
+        'qemu_system_exe': f'qemu-system-{_host_qemu_arch}',
         'qemu_img_exe': 'qemu-img',
         'default_machine': 'pc',
-        'default_accel': 'kvm',
+        'default_accel': 'hvf' if _is_mac else 'kvm',
         'default_drive_format': 'qcow2',
         'default_network': 'user',
         'monitor_socket': True,           # Use QMP socket for control
@@ -138,7 +145,7 @@ HYPERVISOR_CONFIGS = {
         'use_libguestfs': True,           # Use libguestfs for file ops when stopped
         # libvirt integration
         'use_libvirt': True,              # Use libvirt for VM management (makes VMs visible in virsh/virt-manager)
-        'libvirt_uri': 'qemu:///system',  # libvirt connection URI (system mode required for virtiofs)
+        'libvirt_uri': 'qemu:///session' if _host_os == 'darwin' else 'qemu:///system',
         'default_display_enabled': False, # Headless by default (virt-manager can still connect)
         'default_vnc_port': None          # Auto-assign VNC port (None = autoport)
     }

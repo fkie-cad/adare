@@ -7,36 +7,34 @@ import asyncio
 # internal imports
 from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
 import adare.backend.experiment.database as experiment_database
-import adare.backend.project.database as project_database
 import adare.backend.environment.database as environment_database
-from adare.backend.experiment.exceptions import ExperimentIntegrityError, VMSetupError
 from adare.exceptions import LoggedException
 from adare.backend.project.directory import ProjectDirectory
-from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
+from adare.backend.experiment.print import flowconsolemanager
 from adare.backend.experiment.step_runner import ExperimentStepRunner
 from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
-from adare.backend.experiment.agent_installer import should_skip_installation
 from adare.types.stages import (
     # Top-level parent stages
     ExperimentPreparationStage, VirtualMachineSetupStage, SoftwareInstallationStage,
     ExperimentExecutionStage, CleanupShutdownStage,
     # Sub-stages
     SetupExperimentEnvironmentStage, ValidateIntegrityStage, PrepareRunEnvironmentStage, StartComputerVisionServerStage,
-    ExperimentIntegrityCheckStage, ProjectIntegrityCheckStage,
-    VMCreateStage,  # VM creation and preparation stage
     InstallAdareVMStage, ConnectToVMStage, InstallationsStage,
     ExperimentRunStage, SystemInfoCollectionStage,
     FinalizeStage, ShutdownComputerVisionServerStage, ShutdownWebSocketStage,
-    # VM Test stages
-    VMTestSetupStage, VMCompatibilityTestStage, VMTestCleanupStage,
-    # VM Test substages
-    VMResponseTestStage, VMSharedFoldersTestStage, VMPythonTestStage, VMPoetryTestStage,
-    VMAdareServerTestStage, VMWebSocketTestStage, VMScreenshotTestStage, VMClickTestStage,
 )
 from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adarelib.constants import StatusEnum
 from adare.config.configdirectory import ADAREVM_DIR, ADARELIB_DIR
 from adare.backend.experiment.runctx import ExperimentRunCtx, ExperimentConfig
+
+# Extracted modules
+from adare.backend.experiment.integrity_validator import IntegrityValidator
+from adare.backend.experiment.agent_lifecycle import install_and_run_adare_vm
+from adare.backend.experiment.event_listeners import (
+    start_event_listeners,
+    create_and_start_flow_console,
+)
 
 # configure logging
 import logging
@@ -47,27 +45,25 @@ logging.getLogger('mcp.client.streamable_http').setLevel(logging.WARNING)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
 
-
 def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDirectory, copy_existing: bool = True):
     """Ensure a log file exists and copy it to the experiment run directory.
-    
+
     If no log file is currently active (e.g., when --logfile is not specified),
     this function will create a temporary log file in the run directory and
     configure logging to use it, ensuring the experiment run has log output.
-    
-    Args:
+
     Args:
         run_directory: The experiment run directory where the log should be copied
-        copy_existing: Whether to copy the existing log file (default: True). 
+        copy_existing: Whether to copy the existing log file (default: True).
                       Set to False for dev mode/long-running processes to avoid copying history.
     """
     import shutil
     import logging
     from adare.logger.logger import get_current_logfile, FileHandlerFormatter
-    
+
     current_logfile = get_current_logfile()
     target_path = run_directory.log_directory / 'adare.log'
-    
+
     if current_logfile and copy_existing:
         # Copy existing log file
         try:
@@ -86,684 +82,27 @@ def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDire
         file_handler = logging.FileHandler(target_path, mode='a', encoding='utf-8')
         file_handler.setFormatter(FileHandlerFormatter())
         file_handler.setLevel(logging.DEBUG)
-        
+
         # Add handler to root logger to capture all log messages
         root_logger = logging.getLogger()
         root_logger.addHandler(file_handler)
-        
+
         # Ensure root logger level allows DEBUG messages to be captured
         if root_logger.level > logging.DEBUG:
             root_logger.setLevel(logging.DEBUG)
-        
+
         log.info(f'Configured logging to {target_path}')
     except Exception as e:
         log.warning(f'Failed to configure logging to run directory: {e}')
-
-
-def __verify_playbook_testfunction_integrity(project_path: Path, playbook) -> None:
-    """
-    Verify integrity of all testfunctions used in the playbook.
-    This ensures no testfunction has been modified after loading.
-    """
-    from adare.helperfunctions.integrity import verify_testfunction_integrity
-    from adare.backend.testfunction.database import get_testfunction_files_data
-    
-    # Extract testfunction names from playbook tests
-    testfunction_names = set()
-    if hasattr(playbook, 'tests') and playbook.tests:
-        for test in playbook.tests:
-            if hasattr(test, 'testfunction'):
-                testfunction_names.add(test.testfunction)
-    
-    if not testfunction_names:
-        log.info("No testfunctions found in playbook - skipping integrity verification")
-        return
-    
-    log.info(f"Verifying integrity of {len(testfunction_names)} testfunctions used in playbook")
-    
-    try:
-        # Get all testfunction data from database
-        tf_data = get_testfunction_files_data(
-            project_path, 
-            fields=['path', 'requirements_path', 'sha256hash', 'name']
-        )
-        
-        # Create lookup by testfunction directory name
-        tf_lookup = {}
-        for tf in tf_data:
-            tf_path = Path(tf['path'])
-            tf_dir_name = tf_path.parent.name  # e.g., 'standard' from 'testfunctions/standard/standard.py'
-            tf_lookup[tf_dir_name] = tf
-        
-        # Verify integrity of each required testfunction
-        verified_count = 0
-        for tf_name in testfunction_names:
-            if tf_name not in tf_lookup:
-                raise ExperimentIntegrityError(
-                    log,
-                    f"Testfunction '{tf_name}' used in playbook is not loaded in database",
-                    possible_solutions=[
-                        f"Load testfunction with 'adare testfunction load {tf_name}'",
-                        "Check if testfunction directory exists",
-                        "Verify testfunction name spelling in playbook"
-                    ]
-                )
-            
-            tf_info = tf_lookup[tf_name]
-            tf_path = Path(tf_info['path'])
-            req_path = Path(tf_info['requirements_path'])
-            expected_hash = tf_info['sha256hash']
-            
-            verify_testfunction_integrity(tf_path, req_path, expected_hash)
-            verified_count += 1
-            log.debug(f"Testfunction integrity verified: {tf_name}")
-        
-        log.info(f"Testfunction integrity verification completed: {verified_count}/{len(testfunction_names)} verified")
-        
-    except ExperimentIntegrityError:
-        # Re-raise integrity errors with full context
-        raise
-    except ImportError as e:
-        log.warning(f"Integrity verification modules not available: {e}")
-    except (FileNotFoundError, KeyError) as e:
-        log.error(f"Testfunction database access failed: {e}")
-        raise LoggedException(log, f"Failed to access testfunction database for integrity verification: {e}")
-
-
-def __project_integrity_check(project_path: Path, project_directory: ProjectDirectory, environments: list[Path] = None,
-                              testfunctions: list[Path] = None):
-    # Use new integrity module for testfunctions
-    from adare.helperfunctions.integrity import verify_testfunction_integrity
-    
-    testfunctions_changed: list = []
-    hashes: list = project_database.get_global_testfunction_hashes()
-    for hash_dict in hashes:
-        file = hash_dict['file']
-        requirements_file = hash_dict['requirements']
-        hash_value = hash_dict['hash']
-        path = Path(file)
-        requirements_path = Path(requirements_file)
-
-        if testfunctions and path not in testfunctions:
-            continue
-
-        try:
-            verify_testfunction_integrity(path, requirements_path, hash_value)
-            log.info(f'integrity check for testfunction file {path} passed')
-        except ExperimentIntegrityError:
-            testfunctions_changed.append(path)
-            log.info(f'integrity check for testfunction file {path} failed')
-
-    if testfunctions_changed:
-        message = 'to ensure the integrity of a project, testfunctions are not allowed to be changed after they have been loaded\n'
-        testfunctions_changed = [file.name for file in testfunctions_changed]
-        message += f'However, the following testfunctions have been changed: {testfunctions_changed}'
-        solutions = [
-            'if you want to change the testfunctions, you have to remove the testfunction with `adare testfunction remove` and then load the testfunction again with `adare testfunction load`',
-        ]
-        raise ExperimentIntegrityError(
-            log,
-            message,
-            possible_solutions=solutions
-        )
-
-    # Use new integrity module for environments  
-    from adare.helperfunctions.integrity import verify_environment_integrity
-    
-    environments_changed: list = []
-    hashes: dict = project_database.get_global_environment_hashes()
-    for file, hash_value in hashes.items():
-        path = Path(file)
-        if environments and path not in environments:
-            continue
-            
-        try:
-            verify_environment_integrity(path, hash_value)
-            log.info(f'integrity check for environment {path} passed')
-        except ExperimentIntegrityError:
-            environments_changed.append(path)
-            log.info(f'integrity check for environment {path} failed')
-
-    if environments_changed:
-        message = 'to ensure the integrity of a project, environments are not allowed to be changed after they have been loaded\n'
-        environments_changed = ",".join([file.name for file in environments_changed])
-        message += f'However, the following environments have been changed: {environments_changed}'
-        solutions = [
-            'if you want to change the environment, you have to remove the environment with `adare environment remove` and then load the environment again with `adare environment load`',
-        ]
-        raise ExperimentIntegrityError(
-            log,
-            message,
-            possible_solutions=solutions
-        )
 
 def __cleanup_experiment_run(experiment_run_directory: ExperimentRunDirectory):
     if experiment_run_directory is not None:
         experiment_run_directory.clean()
 
-
-def __experiment_integrity_check(project_path: Path, experiment_name: str, environment_name:str, experiment_directory: ExperimentDirectory):
-    experiment_hashes = experiment_database.get_experiment_hashes(project_path, environment_name, experiment_name)
-    experiment_ulid = experiment_database.get_experiment_by_project_and_name(project_path, experiment_name)
-    experiment_run_count = experiment_database.get_experiment_run_count(project_path, experiment_ulid)
-
-    file_changed = []
-    if experiment_directory.sha256_playbook != experiment_hashes['playbook']:
-        file_changed.append('playbook')
-    else:
-        log.info(f'integrity check for playbook file {experiment_directory.playbookfile} passed')
-    
-    # Tests are now integrated into playbook, so no separate testset check needed
-    # if experiment_directory.sha256_metadata != experiment_hashes['metadata']:
-    #     file_changed.append('metadata')
-    # else:
-    #     log.info(f'integrity check for metadata file {experiment_directory.metadatafile} passed')
-
-    message = 'to ensure the integrity of an experiment, experiment related files are not allowed to be changed after the experiment has been loaded\n'
-    message += f'However, the following files have been changed: {", ".join(file_changed)}'
-    solutions = []
-    if experiment_run_count == 0:
-        solutions.append(
-            f'since no experiment runs have been executed yet, you can simply load the experiment again with `adare experiment load {experiment_name}` to overwrite the existing experiment')
-    else:
-        solutions.extend(
-            (
-                'if you want to change the experiment, you have to delete all related experiment runs with `adare experiment remove` and then load the experiment again with `adare experiment load`',
-                'if you want to keep the experiment runs, you have to create a new experiment with a different name and load the new experiment with `adare experiment load`',
-            )
-        )
-
-    if file_changed:
-        raise ExperimentIntegrityError(
-            log,
-            message,
-            possible_solutions=solutions
-        )
-
-async def _verify_guest_agent_readiness(
-    vm,
-    stop_event: threading.Event,
-    max_retries: int = 5,
-    initial_delay: float = 1.0
-) -> bool:
-    """
-    Verify guest agent is responsive before executing commands.
-
-    Performs lightweight connectivity test with exponential backoff retry.
-    This supplements the boot check by catching transient agent disconnections
-    that occur shortly after boot completion.
-
-    Args:
-        vm: VM instance with guest agent support
-        stop_event: Event to signal cancellation
-        max_retries: Maximum number of verification attempts (default: 5)
-        initial_delay: Initial retry delay in seconds (default: 1.0)
-
-    Returns:
-        True if agent is responsive, False if all retries exhausted or cancelled
-    """
-    retry_delay = initial_delay
-
-    for attempt in range(max_retries):
-        # Check for cancellation
-        if stop_event.is_set():
-            log.warning("Guest agent readiness check cancelled by stop event")
-            return False
-
-        log.debug(f"Guest agent readiness check attempt {attempt + 1}/{max_retries}...")
-
-        try:
-            # Execute lightweight echo command to test guest agent connectivity
-            # Use 'echo ready' without quotes to avoid PowerShell parsing issues on Windows
-            # when wrapped in outer quotes/commands by the command builder
-            result = await vm.run_command(
-                'echo ready',
-                stop_event=stop_event,
-                admin=False
-            )
-
-            if result.returncode == 0:
-                log.info(f"Guest agent readiness verified on attempt {attempt + 1}")
-                return True
-
-            # Check if it's a guest agent error (returncode -1) vs other error
-            if result.returncode == -1:
-                if attempt < max_retries - 1:
-                    log.warning(
-                        f"Guest agent not responding (attempt {attempt + 1}/{max_retries}), "
-                        f"retrying in {retry_delay}s..."
-                    )
-                    await asyncio.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
-                else:
-                    log.error("Guest agent not responsive after all retry attempts")
-                    return False
-            else:
-                # Unexpected error - echo command should never fail
-                # Raise immediately so the user sees the actual error (e.g. syntax error)
-                error_msg = f"Unexpected error during readiness check (returncode {result.returncode}): {result.stderr}"
-                log.error(f"{error_msg}")
-                raise VMSetupError(
-                    log, vm.vm_name, "guest agent readiness check",
-                    result.returncode, result.stdout, result.stderr
-                )
-
-        except asyncio.TimeoutError:
-            if attempt < max_retries - 1:
-                log.warning(
-                    f"Guest agent readiness check timed out (attempt {attempt + 1}/{max_retries}), "
-                    f"retrying in {retry_delay}s..."
-                )
-                await asyncio.sleep(retry_delay)
-                retry_delay *= 2
-            else:
-                log.error("Guest agent readiness check timed out after all retry attempts")
-                return False
-
-    return False
-
-async def install_and_run_adare_vm(context: ExperimentRunCtx, stop_event: threading.Event):
-    """Install and run adarevm agent in the VM using appropriate environment.
-
-    This function uses the command builder pattern to construct platform-specific
-    commands for installing and running the adarevm agent. The builders handle
-    the complexity of 8 different execution paths (Windows/Linux × Conda/Poetry × Wheels/Editable).
-    """
-    from .agent_command_builders import (
-        detect_environment,
-        WindowsAgentCommandBuilder,
-        LinuxAgentCommandBuilder,
-        CommandSet, SetupCommand, EnvironmentInfo
-    )
-    from adare.database.api.devmode import DevModeApi
-
-    vm = context.vm
-    wheels_dir = context.project_directory.vm_runtime / 'wheels'
-
-    # Check for cached start command in database (for dev mode restores)
-    # This optimization skips environment detection and installation
-    cached_command_str = None
-    if context.experiment_run_ulid:
-        try:
-            with DevModeApi() as api:
-                session = api.get_session(context.experiment_run_ulid)
-                if session and session.cached_start_command:
-                    cached_command_str = session.cached_start_command
-                    log.info("Using cached adarevm start command from database (skipping detection/install)")
-        except Exception as e:
-            log.warning(f"Failed to check for cached start command: {e}")
-
-    commands = None
-    env_info = None
-
-    if cached_command_str:
-        # Use cached command - bypass detection logic
-        # We construct a synthetic CommandSet with installation skipped
-        # NOTE: We assume Windows/Poetry defaults for now if we don't store env info,
-        # but the run_command is the most important part.
-        # Run CWD is typically None for installed packages or specific for editable
-        # For robustness, we might want to store CWD too, but usually it's None for wheels
-        
-        # Helper: Try to guess run_cwd from command if it has 'cd ...;' prefix
-        run_cwd = None
-        if "cd " in cached_command_str:
-             parts = cached_command_str.split(';')
-             if parts[0].strip().startswith("cd "):
-                 run_cwd = parts[0].strip()[3:].strip()
-                 # Strip 'cd ...; ' from stored command if we want to use cwd arg
-                 # But our CommandSet usage below uses run_command as is.
-                 # Let's keep it simple: run_command contains the full string including 'cd' if needed
-                 # provided run_command is executed with shell=True/via agent that handles it.
-                 # Actually, vm.run_command supports 'cwd' arg.
-                 # If we stored the FULL command string including 'cd', we can just run it.
-        
-        # Check platform from context or VM
-        platform = context.guest_platform or 'windows'
-        
-        commands = CommandSet(
-            setup_commands=[], # Skip setup commands on restore
-            install_command="",
-            run_command=cached_command_str,
-            run_cwd=None, # Already embedded in command string or not needed
-            skip_installation=True
-        )
-        
-        # Create dummy env info
-        env_info = EnvironmentInfo(
-             use_conda=False, conda_env_exists=False, miniforge_path=None, platform=platform
-        )
-        # Note: We still need to do minimal setup like port forwarding/firewall? 
-        # Actually usually persistent changes survive snapshots, but some like
-        # port forwarding are VM configuration (survives). 
-        # Firewall rules in guest survive snapshots.
-        # Shared folder mounts might need remounting.
-        
-        # Perform shared folder mounting (which IS needed after restore)
-        if context.guest_platform == 'windows':
-            shared_folders = {
-                name: paths['vm']
-                for name, paths in context.config.shared_directories.items()
-                if paths.get('vm')
-            }
-            if shared_folders:
-                 # Check/Wait for agent readiness first? 
-                 # install_and_run_adare_vm usually does verify_guest_agent_readiness
-                 # We should probably still do that.
-                 pass
-
-    else:
-        # Step 1: Detect Python environment in the VM
-        env_info = await detect_environment(vm, context.guest_platform, stop_event)
-
-        # Step 1.5: Determine GUI mode and skip_xhost flag
-        from .execution.gui_executor_factory import resolve_gui_execution_mode
-        from .execution.base import GUIExecutionMode
-
-        # Get playbook settings (may have GUI mode preference)
-        playbook_settings = context.playbook.settings if hasattr(context, 'playbook') and context.playbook else None
-
-        # Get CLI override from config
-        cli_override = context.config.gui_mode_override if hasattr(context.config, 'gui_mode_override') else None
-
-        # Resolve GUI execution mode
-        gui_mode = resolve_gui_execution_mode(vm, playbook_settings, cli_override=cli_override)
-        skip_xhost = (gui_mode == GUIExecutionMode.HOST)
-
-        # Store gui_mode in VM instance for environment building
-        vm.adare_gui_mode = gui_mode
-
-        if skip_xhost:
-            log.info("Skipping xhost setup - using host-based GUI automation")
-
-        # Step 2: Create platform-specific command builder
-        if context.guest_platform == 'windows':
-            builder = WindowsAgentCommandBuilder(
-                wheels_dir=wheels_dir,
-                shared_folders=context.config.shared_directories,
-                websocket_port=context.config.websocket_port,
-                skip_xhost=skip_xhost,
-                hypervisor_type=context.hypervisor_type or 'virtualbox',
-                installation_mode=context.config.installation_mode
-            )
-        else:
-            builder = LinuxAgentCommandBuilder(
-                wheels_dir=wheels_dir,
-                shared_folders=context.config.shared_directories,
-                websocket_port=context.config.websocket_port,
-                skip_xhost=skip_xhost,
-                hypervisor_type=context.hypervisor_type or 'virtualbox',
-                installation_mode=context.config.installation_mode
-            )
-
-        # Step 3: Discover guest PATH to ensure correct environment
-        await vm._discover_guest_path()
-
-        # Step 4: Build all commands (setup, install, run)
-        commands = await builder.build_commands(env_info, vm, stop_event)
-
-    # Common path: Verification and Execution
-
-    # Verify guest agent readiness before executing commands
-    log.info("Verifying guest agent readiness...")
-    if not await _verify_guest_agent_readiness(vm, stop_event, max_retries=8):
-        raise VMSetupError(
-            log, vm.vm_name, "pre-flight guest agent check",
-            -1, "", "Guest agent not responsive after boot validation"
-        )
-    log.info("Guest agent verification successful")
-
-    # Step: Execute setup commands (if any)
-    for idx, setup_cmd in enumerate(commands.setup_commands):
-        # Apply retry logic to ALL commands (not just first)
-        max_retries = 3
-        retry_delay = 1.0
-
-        log.info(f"Executing setup command [{idx+1}/{len(commands.setup_commands)}]")
-
-        for attempt in range(max_retries):
-            try:
-                result = await vm.run_command(
-                    setup_cmd.command,
-                    stop_event=stop_event,
-                    admin=setup_cmd.requires_admin
-                )
-
-                if result.returncode == 0:
-                    break  # Success
-
-                # Command failed - distinguish guest agent errors from command errors
-                if result.returncode == -1:
-                    # Guest agent not responding (transient)
-                    if attempt < max_retries - 1:
-                        log.warning(
-                            f"Setup command [{idx+1}] attempt {attempt + 1}/{max_retries} failed "
-                            f"(guest agent not responding), retrying in {retry_delay}s..."
-                        )
-                        await asyncio.sleep(retry_delay)
-                        retry_delay *= 2  # Exponential backoff
-                    else:
-                        # Final attempt failed
-                        log.error(f"Guest agent connectivity error (returncode -1): {result.stderr}")
-                        raise VMSetupError(
-                            log, vm.vm_name, setup_cmd.command,
-                            result.returncode, result.stdout, result.stderr
-                        )
-                else:
-                    # Command executed but returned non-zero (real failure)
-                    # Don't retry - fail fast for legitimate command errors
-                    log.error(f"Command failed with exit code {result.returncode}: {result.stderr}")
-                    raise VMSetupError(
-                        log, vm.vm_name, setup_cmd.command,
-                        result.returncode, result.stdout, result.stderr
-                    )
-
-            except asyncio.TimeoutError as e:
-                if attempt < max_retries - 1:
-                    log.warning(
-                        f"Setup command [{idx+1}] attempt {attempt + 1}/{max_retries} timed out, "
-                        f"retrying in {retry_delay}s..."
-                    )
-                    await asyncio.sleep(retry_delay)
-                    retry_delay *= 2
-                else:
-                    raise VMSetupError(
-                        log, vm.vm_name, setup_cmd.command,
-                        -1, "", f"Timeout after {max_retries} attempts: {e}"
-                    )
-
-    #input("Press Enter to continue after setup commands...")  # Debug pause
-
-    # Step 5: Mount shared folders (Windows only)
-    # Always needed, even with cached commands, as mounts might not persist or we want to ensure them
-    if context.guest_platform == 'windows':
-        shared_folders = {
-            name: paths['vm']
-            for name, paths in context.config.shared_directories.items()
-            if paths.get('vm')
-        }
-        if shared_folders:
-            await vm.mount_multiple_shared_folders(
-                folders=shared_folders,
-                stop_event=stop_event
-            )
-
-    # Step 6: Install adarevm if needed
-    if not commands.skip_installation:
-        log.info(f"Installing adarevm")
-
-        # With --user flag, no admin needed on any platform
-        # Conda installations also don't need admin (isolated environment)
-        needs_admin = False
-
-        # Installation can fail if guest agent is temporarily unresponsive
-        max_retries = 3
-        retry_delay = 1.0
-
-        for attempt in range(max_retries):
-            try:
-                result = await vm.run_command(
-                    commands.install_command,
-                    stop_event=stop_event,
-                    admin=needs_admin
-                )
-
-                if result.returncode == 0:
-                    break  # Success
-
-                # Installation failed - check if it's a guest agent issue
-                if result.returncode == -1:
-                    # Guest agent not responding (transient)
-                    if attempt < max_retries - 1:
-                        log.warning(
-                            f"Installation command attempt {attempt + 1}/{max_retries} failed "
-                            f"(guest agent not responding), retrying in {retry_delay}s..."
-                        )
-                        await asyncio.sleep(retry_delay)
-                        retry_delay *= 2
-                    else:
-                        # Final attempt failed
-                        log.error(f"Guest agent connectivity error during installation (returncode -1): {result.stderr}")
-                        raise VMSetupError(
-                            log, vm.vm_name, commands.install_command,
-                            result.returncode, result.stdout, result.stderr
-                        )
-                else:
-                    # Installation command executed but failed (e.g., pip error)
-                    # Don't retry - fail fast for real installation errors
-                    log.error(f"Installation failed with exit code {result.returncode}: {result.stderr}")
-                    raise VMSetupError(
-                        log, vm.vm_name, commands.install_command,
-                        result.returncode, result.stdout, result.stderr
-                    )
-
-            except asyncio.TimeoutError as e:
-                if attempt < max_retries - 1:
-                    log.warning(
-                        f"Installation command attempt {attempt + 1}/{max_retries} timed out, "
-                        f"retrying in {retry_delay}s..."
-                    )
-                    await asyncio.sleep(retry_delay)
-                    retry_delay *= 2
-                else:
-                    raise VMSetupError(
-                        log, vm.vm_name, commands.install_command,
-                        -1, "", f"Timeout after {max_retries} attempts: {e}"
-                    )
-    else:
-        log.info("Installation skipped")
-
-    # Step 7: Run adarevm as background process
-    # Use cached command or built command
-    # If run_cwd is set, we use it
-    
-    # TODO: figure out a way to run uv as sudo in linux
-    if context.guest_platform == 'linux':
-        result = await vm.run_command(
-            commands.run_command,
-            background=True,
-            stop_event=stop_event,
-            admin=True if env_info.use_conda else False,
-            cwd=commands.run_cwd
-        )
-    else:
-        # Windows execution
-        log_path = r'C:\adare\run\logs'
-
-        result = await vm.run_command(
-            commands.run_command,
-            cwd=commands.run_cwd,
-            admin=True,
-            run_as_user=True,
-            stop_event=stop_event,
-            redirect_stdout=rf'{log_path}\adarevm_stdout.log',
-            redirect_stderr=rf'{log_path}\adarevm_stderr.log'
-        )
-    # Check if command failed
-    if result.returncode != 0:
-        log.error(f"Failed to start adarevm: {result.stderr}")
-        raise VMSetupError(
-            log, vm.vm_name, commands.run_command,
-            result.returncode, result.stdout, result.stderr
-        )
-
-    # Store PID for QEMU process monitoring
-    if context.hypervisor_type == 'qemu' and result.returncode == 0:
-        # For QEMU background processes, extract PID from stdout
-        # Format: "Started with PID {pid}" (see qemu/mixins/commands.py:656)
-        try:
-            import re
-            match = re.search(r'PID (\d+)', result.stdout)
-            if match:
-                context.adarevm_pid = int(match.group(1))
-                log.debug(f"Stored adarevm process PID: {context.adarevm_pid}")
-            else:
-                if context.guest_platform == 'windows':
-                     # Windows uses schtasks which doesn't return the PID of the started process
-                     # This is expected behavior, so just log debug
-                     log.debug("Could not extract PID from background process start (expected on Windows/schtasks)")
-                else:
-                     log.warning("Could not extract PID from background process start")
-                context.adarevm_pid = None
-        except (AttributeError, ValueError) as e:
-            log.warning(f"Failed to parse adarevm PID: {e}")
-            context.adarevm_pid = None
-            
-    # Step 8: Cache the start command in DB if not already cached
-    if not cached_command_str and context.experiment_run_ulid:
-         # Construct cacheable command string
-         # If run_cwd is used, we might want to prepend 'cd {cwd}; ' 
-         # But Windows run_command might handle cwd differently.
-         # For simplicity, if we rely on command string only, we should unify it.
-         # For now, we only cache if run_cwd is None (which is true for Wheel based installs)
-         # or we manually handle it.
-         
-         # If run_cwd is present, prepend it to command for simple storage
-         # This matches logic used in builder.build_run_command for some cases.
-         command_to_cache = commands.run_command
-         if commands.run_cwd:
-              # Simple heuristic: prepend CD. 
-              # Windows: cd /d C:\path & cmd
-              # Linux: cd /path && cmd
-              # This might duplicate if command already has 'cd'
-              if "cd " not in command_to_cache:
-                  if context.guest_platform == 'windows':
-                       command_to_cache = f"cd /d {commands.run_cwd} & {command_to_cache}"
-                  else:
-                       command_to_cache = f"cd {commands.run_cwd} && {command_to_cache}"
-         
-         try:
-            with DevModeApi() as api:
-                # Need to use update_session_cached_command
-                api.update_session_cached_command(context.experiment_run_ulid, command_to_cache)
-                log.info(f"Cached adarevm start command to database")
-         except Exception as e:
-             log.warning(f"Failed to cache command to DB: {e}")
-
-
-def __create_and_start_flow_console(experiment_run_ulid: str, disable_printing: bool, external_stop_event: threading.Event = None):
-    """
-    creates a flow_console and starts it
-    :param experiment_run_ulid: used to reference the console if multiple runs at the same time (can be fake)
-    :param disable_printing: if true, the console will not print anything
-    :param external_stop_event: event to monitor for external interruption (Ctrl-C)
-    :return: the flow_console
-    """
-    # Check if a handler already exists (e.g. TUI widget)
-    existing_handler = flowconsolemanager.get_handler(experiment_run_ulid)
-    if existing_handler:
-        log.info(f"Reusing existing flow console handler for {experiment_run_ulid}")
-        return existing_handler
-        
-    flow_console = ExperimentFlowConsole(disable_printing, external_stop_event)
-    flowconsolemanager.add_handler(experiment_run_ulid, flow_console)
-    flow_console.start()
-    return flow_console
-
-
 def step_initialize(context: ExperimentRunCtx, fake: bool = False, run_ulid: str = None):
     # Initialize experiment run in database (using optional specific ULID if provided)
     context.experiment_run_ulid = experiment_database.initialize_experiment_run(
-        context.config.project_path, 
+        context.config.project_path,
         fake,
         id=run_ulid
     )
@@ -781,7 +120,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
         context.experiment_directory = ExperimentDirectory(context.config.project_path, context.config.experiment_name)
         context.experiment_directory.check_for_missing_files()
         log.info(f'checked experiment directory {context.experiment_directory.path}')
-        
+
         # Set experiment and environment info early to prevent orphaned runs on interruption
         experiment_database.set_experiment_run_base_info(
             context.experiment_run_ulid,
@@ -790,7 +129,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
             context.config.project_path
         )
         log.info(f'set base experiment info for run {context.experiment_run_ulid}')
-        
+
         # Set experiment start timestamp early to ensure it's persisted even if interrupted
         experiment_database.update_experiment_run_start(context.project_directory.path, context.experiment_run_ulid, context.timestamp_start)
         log.info(f'set experiment start timestamp for run {context.experiment_run_ulid}')
@@ -798,7 +137,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
         # Validate playbook
         try:
             experiment_id = experiment_database.get_experiment_by_project_and_name(
-                context.config.project_path, 
+                context.config.project_path,
                 context.config.experiment_name
             )
             if not experiment_id:
@@ -813,7 +152,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                 context.playbook = parse_playbook(playbook_path)
                 log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
                 return
-            
+
             # Load from database (pre-validated)
             from adare.database.api.playbook import PlaybookApi
             with PlaybookApi(context.project_directory.path) as playbook_api:
@@ -832,7 +171,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                         return
                     context.playbook = parse_playbook(playbook_path)
                     log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
-                    
+
         except Exception as e:
             raise LoggedException(log, f"Playbook loading failed: {str(e)}")
 
@@ -840,7 +179,8 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
         # TODO: Re-enable this for production use - currently disabled for testing
         # Temporarily commented out to allow testfunction modifications during testing
         # if hasattr(context, 'playbook') and context.playbook:
-        #     __verify_playbook_testfunction_integrity(context.config.project_path, context.playbook)
+        #     validator = IntegrityValidator(context.config.project_path)
+        #     validator.verify_playbook_testfunctions(context.playbook)
 
         # Resolve environment
         if context.config.environment_name:
@@ -860,14 +200,23 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
         context.guest_platform = environment_database.get_environment_os(context.environment_ulid)
         context.hypervisor_type = environment_database.get_environment_hypervisor(context.environment_ulid)
 
+        # Fetch guest architecture from database (via VM osinfo)
+        env_arch_data = environment_database.get_environment_by_ulid(
+            context.environment_ulid, fields=['vm_architecture']
+        )
+        if env_arch_data and env_arch_data.get('vm_architecture'):
+            context.guest_architecture = env_arch_data['vm_architecture']
+
         # If VM file is not available, get from environment metadata directly
-        if not context.vm_file or not context.guest_platform:
+        if not context.vm_file or not context.guest_platform or not context.guest_architecture:
             from adare.types.environment import parse_environment_file
             environment_metadata = parse_environment_file(context.environment_file)
             if not context.vm_file:
                 context.vm_file = Path(environment_metadata.vm)
             if not context.guest_platform:
                 context.guest_platform = environment_metadata.os.platform
+            if not context.guest_architecture and hasattr(environment_metadata.os, 'architecture'):
+                context.guest_architecture = environment_metadata.os.architecture
 
         log.info(f'found environment {context.config.environment_name} (hypervisor: {context.hypervisor_type})')
 
@@ -880,17 +229,21 @@ def step_validate_integrity(context: ExperimentRunCtx):
             stage_ctx.set_status(stage_ctx.stage.status)
             log.info('Skipping integrity checks - running in test/development mode')
             return
-            
+
+        validator = IntegrityValidator(
+            project_path=context.config.project_path,
+            project_directory=context.project_directory,
+        )
+
         # Check experiment integrity
         stage_ctx.stage.sub_msg = "Checking experiment integrity..."
         stage_ctx.set_status(stage_ctx.stage.status)
-        __experiment_integrity_check(
-            context.config.project_path,
+        validator.check_experiment(
             context.config.experiment_name,
             context.config.environment_name,
-            context.experiment_directory
+            context.experiment_directory,
         )
-        
+
         # Check project integrity
         stage_ctx.stage.sub_msg = "Checking project integrity..."
         stage_ctx.set_status(stage_ctx.stage.status)
@@ -899,13 +252,11 @@ def step_validate_integrity(context: ExperimentRunCtx):
         )
         testfunction_files_names = ",".join([file.name for file in testfunction_files])
         log.info(f'experiment {context.config.experiment_name} uses the following testfunction files: {testfunction_files_names}')
-        __project_integrity_check(
-            context.config.project_path,
-            context.project_directory,
+        validator.check_project(
             environments=[context.environment_file],
-            testfunctions=testfunction_files
+            testfunctions=testfunction_files,
         )
-        
+
         # Clear sub message when done
         stage_ctx.stage.sub_msg = ""
         stage_ctx.set_status(stage_ctx.stage.status)
@@ -950,10 +301,10 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
         # Copy adare log to run directory if runlog is enabled (skip in dev mode)
         if context.config.runlog and not skip_adare_log:
             _ensure_and_copy_adare_log_to_run_directory(run_dir)
-        
+
         # Initialize MCP server with log file
         from adare.backend.experiment.mcp_server_manager import MCPServerManager
-        
+
         # Determine debug output directory
         debug_output_dir = None
         if context.debug_screenshots:
@@ -967,188 +318,54 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
             debug=context.config.dev_mode,
             debug_output_dir=debug_output_dir
         )
-        
 
+def _resolve_and_store_test_execution_mode(context: ExperimentRunCtx):
+    """Resolve the test execution mode and store it in context."""
+    from adare.backend.experiment.execution.test_executor_factory import resolve_test_execution_mode
+
+    if context.vm is None:
+        log.warning("VM not available for test execution mode resolution, defaulting to agent")
+        context.test_execution_mode = 'agent'
+        return
+
+    try:
+        playbook_settings = getattr(context.playbook, 'settings', None) if context.playbook else None
+        mode = resolve_test_execution_mode(
+            vm=context.vm,
+            playbook_settings=playbook_settings,
+            cli_override=context.config.test_mode_override
+        )
+        context.test_execution_mode = mode.value
+        log.info(f"Test execution mode resolved to: {mode.value}")
+    except ValueError as e:
+        log.warning(f"Failed to resolve test execution mode: {e}, defaulting to agent")
+        context.test_execution_mode = 'agent'
+
+async def step_execute_installations_via_qga(context: ExperimentRunCtx):
+    """Execute environment installations via QGA guest-exec (no WebSocket needed)."""
+    from adare.backend.experiment.agent_lifecycle import execute_installations_via_qga
+    with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
+        await execute_installations_via_qga(context, stage_ctx)
 
 async def step_install_and_run_websocket_server(context: ExperimentRunCtx):
     with StageCtxManager(InstallAdareVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         await install_and_run_adare_vm(context, stop_event=context.user_interrupt_event)
 
 async def step_connect_websocket(context: ExperimentRunCtx):
+    from adare.backend.experiment.agent_lifecycle import connect_websocket
     with StageCtxManager(ConnectToVMStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
-        from adare.backend.experiment.websocket_client import AdareVMClient
-        import asyncio
-        from websockets.exceptions import ConnectionClosed, WebSocketException
-
-        # Validate websocket port is set
-        if not context.config.websocket_port:
-            error_msg = "WebSocket port not configured in context - cannot establish connection"
-            log.error(error_msg)
-            raise LoggedException(log, error_msg)
-
-        # QEMU-specific: Check if adarevm process is still alive before attempting connection
-        if context.hypervisor_type == 'qemu' and hasattr(context, 'adarevm_pid') and context.adarevm_pid:
-            log.debug(f"Checking if adarevm process (PID {context.adarevm_pid}) is still running...")
-
-            try:
-                is_running, exit_code, error_msg = await context.vm._check_process_status_via_agent(
-                    context.adarevm_pid,
-                    timeout=5
-                )
-
-                if not is_running:
-                    # Process has already died - fail fast
-                    if exit_code is not None:
-                        error = f"adarevm process (PID {context.adarevm_pid}) has already exited with code {exit_code}. Check logs for startup errors."
-                    else:
-                        error = f"adarevm process (PID {context.adarevm_pid}) is not running. {error_msg}"
-
-                    log.error(f"{error}")
-                    raise LoggedException(log, error)
-                else:
-                    log.debug(f"adarevm process is alive, proceeding with connection attempts")
-            except LoggedException:
-                # Re-raise LoggedException (process died)
-                raise
-            except Exception as e:
-                # If process check fails, log warning but don't block connection attempts
-                # This maintains backward compatibility if the check mechanism has issues
-                log.warning(f"Could not verify adarevm process status: {e}")
-
-        # Create websocket client with host port forwarding
-        context.client = AdareVMClient(host='localhost', port=context.config.websocket_port)
-        
-        # Set up event handlers for logging
-        def log_event_handler(event_type: str, data: dict):
-            message = data.get('message', '')
-            log.info(f"AdareVM Event [{event_type}]: {message}")
-        
-        def error_event_handler(event_type: str, data: dict):
-            error = data.get('error', '')
-            log.error(f"AdareVM Error: {error}")
-        
-        context.client.add_event_handler('log', log_event_handler)
-        context.client.add_event_handler('error', error_event_handler)
-        
-        # Retry delays: 2, 3, 5, 7, 10 seconds (increased initial delay)
-        retry_delays = [2, 3, 5, 7, 10]
-        max_attempts = len(retry_delays) + 1  # +1 for the initial attempt
-        
-        last_error = None
-        for attempt in range(1, max_attempts + 1):
-            if context.stop_event.is_set():
-                log.info("Connection cancelled by stop event")
-                return
-            
-            # Update stage message to show retry attempt
-            if attempt == 1:
-                stage_ctx.stage.sub_msg = f"Attempting connection..."
-            else:
-                stage_ctx.stage.sub_msg = f"Retrying connection (attempt {attempt}/{max_attempts})"
-            stage_ctx.set_status(stage_ctx.stage.status)
-            
-            try:
-                log.info(f"Attempting to connect to AdareVM server (attempt {attempt}/{max_attempts})")
-                connected = await context.client.connect(timeout=60.0)
-                
-                if connected:
-                    stage_ctx.stage.sub_msg = ""  # Clear sub_msg to show default stage message
-                    stage_ctx.set_status(stage_ctx.stage.status)
-                    log.info("Successfully connected to AdareVM WebSocket server")
-                    
-                    # Test the connection with ping
-                    ping_success = await context.client.ping()
-                    if ping_success:
-                        log.info("Ping test successful - WebSocket connection is working")
-                    else:
-                        log.warning("Ping test failed but connection established")
-                    
-                    # Get server status
-                    try:
-                        status = await context.client.get_status()
-                        log.info(f"AdareVM server status: {status}")
-                    except (asyncio.TimeoutError, ConnectionClosed) as e:
-                        log.warning(f"Could not get server status: {e}")
-                    
-                    return  # Success - exit the function
-                else:
-                    raise ConnectionRefusedError("Failed to establish websocket connection")
-                    
-            except (asyncio.TimeoutError, ConnectionClosed, WebSocketException, ConnectionRefusedError, OSError) as e:
-                last_error = e
-                log.warning(f"Connection attempt {attempt}/{max_attempts} failed: {e}")
-                
-                if attempt < max_attempts:
-                    # Not the final attempt - wait and retry
-                    delay = retry_delays[attempt - 1]
-                    stage_ctx.stage.sub_msg = f"Attempt {attempt} failed, retrying in {delay}s..."
-                    stage_ctx.set_status(stage_ctx.stage.status)
-                    
-                    log.info(f"Retrying in {delay} seconds...")
-                    await asyncio.sleep(delay)
-        
-        # All attempts failed
-        stage_ctx.stage.sub_msg = f"All {max_attempts} connection attempts failed"
-        stage_ctx.set_status(stage_ctx.stage.status)
-        log.error(last_error, exc_info=True)
-        raise LoggedException(log, f"Failed to connect to AdareVM server after {max_attempts} attempts: {last_error}") from last_error
+        await connect_websocket(context, stage_ctx)
 
 async def step_execute_installations(context: ExperimentRunCtx):
+    from adare.backend.experiment.agent_lifecycle import execute_installations_via_websocket
     with StageCtxManager(InstallationsStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage_ctx:
-        installations = environment_database.get_environment_installations(context.environment_ulid)
-
-        if not installations:
-            log.info("No installations to execute")
-            return
-
-        log.info(f"Executing {len(installations)} installation(s) from environment")
-
-        for idx, installation in enumerate(installations, 1):
-            installation_name = installation.name if hasattr(installation, 'name') else f"Installation {idx}"
-            installation_cmd = installation.command if hasattr(installation, 'command') else str(installation)
-            installation_desc = installation.description if hasattr(installation, 'description') else ""
-
-            stage_ctx.stage.sub_msg = f"[{idx}/{len(installations)}] {installation_name}"
-            stage_ctx.set_status(stage_ctx.stage.status)
-
-            log.info(f"Executing installation [{idx}/{len(installations)}]: {installation_name}")
-            if installation_desc:
-                log.info(f"Description: {installation_desc}")
-            log.info(f"Command: {installation_cmd}")
-
-            try:
-                # Execute installation command via WebSocket client
-                result = await context.client.execute_shell(
-                    installation_cmd,
-                    shell=True,
-                    timeout=600  # 10 minute timeout for installations
-                )
-
-                if result.get('returncode') == 0:
-                    log.info(f"Installation '{installation_name}' completed successfully")
-                    if result.get('stdout'):
-                        log.debug(f"Installation output: {result['stdout']}")
-                else:
-                    log.error(f"Installation '{installation_name}' failed with return code {result.get('returncode')}")
-                    if result.get('stderr'):
-                        log.error(f"Installation error: {result['stderr']}")
-                    if result.get('stdout'):
-                        log.error(f"Installation output: {result['stdout']}")
-
-                    # Continue with other installations but log the failure
-                    log.warning(f"Continuing with remaining installations despite failure")
-
-            except Exception as e:
-                log.error(f"Failed to execute installation '{installation_name}': {e}", exc_info=True)
-                log.warning(f"Continuing with remaining installations despite error")
-
-        log.info(f"All installations completed")
+        await execute_installations_via_websocket(context, stage_ctx)
 
 async def step_start_mcp_server(context: ExperimentRunCtx):
     """Start the MCP GUI server for target detection."""
     with StageCtxManager(StartComputerVisionServerStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
         log.info("Starting MCP GUI server for target detection...")
-        
+
         success = await context.mcp_server.start()
         if success:
             log.info("MCP GUI server started successfully")
@@ -1156,9 +373,10 @@ async def step_start_mcp_server(context: ExperimentRunCtx):
             from adare.exceptions import LoggedException
             raise LoggedException(log, "MCP GUI server failed to start - cannot proceed without target detection capabilities")
 
-
 async def step_execute_experiment(context: ExperimentRunCtx):
     """Execute the experiment using the playbook controller."""
+
+    is_host_test_mode = context.test_execution_mode == 'host'
 
     # First, install testfunction dependencies in a separate stage
     from adare.types.stages import TestfunctionDependenciesStage
@@ -1166,28 +384,31 @@ async def step_execute_experiment(context: ExperimentRunCtx):
 
     stage_deps = TestfunctionDependenciesStage()
     with StageCtxManager(stage_deps, context.experiment_run_ulid, event=context.user_interrupt_event):
-        # Create test loader with all required parameters
         test_loader = TestLoader(
             experiment_dir=context.experiment_directory.path,
             project_dir=context.project_directory.path,
             playbook=context.playbook,
             variable_resolver=None
         )
-        await test_loader._install_dependencies_only(context.client)
+        if is_host_test_mode:
+            log.info("Host test mode: skipping testfunction dependency installation in VM (dependencies run on host)")
+        else:
+            await test_loader._install_dependencies_only(context.client)
 
     # Then run the actual experiment
     with StageCtxManager(ExperimentRunStage(), context.experiment_run_ulid, event=context.user_interrupt_event) as stage:
         from adare.backend.experiment.playbook_controller import PlaybookController
-        
-        if not context.client:
+
+        # In agent mode, WebSocket client is required
+        if not is_host_test_mode and not context.client:
             log.error("WebSocket client not available for experiment execution")
             return
-        
+
         # Get experiment ID for execution tracking
         experiment_id = None
         try:
             experiment_id = experiment_database.get_experiment_by_project_and_name(
-                context.config.project_path, 
+                context.config.project_path,
                 context.config.experiment_name
             )
             if experiment_id:
@@ -1196,7 +417,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
                 log.warning("No experiment ID found - execution tracking will be disabled")
         except Exception as e:
             log.warning(f"Failed to get experiment ID for execution tracking: {e}")
-        
+
         # Get VM credentials for automatic variables
         from adare.config import get_vm_credentials
         vm_os = context.guest_platform if context.guest_platform else None
@@ -1209,51 +430,101 @@ async def step_execute_experiment(context: ExperimentRunCtx):
 
         # Create playbook controller
         controller = PlaybookController(
-            websocket_client=context.client,
+            websocket_client=context.client,  # May be None in host mode
             experiment_dir=context.experiment_directory.path,
             project_dir=context.project_directory.path,
             debug_screenshots=context.debug_screenshots,
             screenshots_dir=context.experiment_run_directory.screenshots_directory,
-            playbook=context.playbook,  # Pass pre-parsed playbook
+            playbook=context.playbook,
             experiment_id=experiment_id,
             experiment_run_id=context.experiment_run_ulid,
-            vm=context.vm,  # Pass VM for pull operations
-            experiment_run_directory=context.experiment_run_directory.path,  # Pass run directory for artifacts
-            vm_os=vm_os,  # Pass VM OS for automatic variables
-            vm_user=vm_user,  # Pass VM user for automatic variables
-            flow_console=flow_console,  # Pass flow console for interactive actions
-            test_mode=context.test_mode,  # Pass test mode flag
-            config=context.config  # Pass config for GUI mode override
+            vm=context.vm,
+            experiment_run_directory=context.experiment_run_directory.path,
+            vm_os=vm_os,
+            vm_user=vm_user,
+            flow_console=flow_console,
+            test_mode=context.test_mode,
+            config=context.config
         )
-        
+
+        # Set up host-mode test executor if in HOST test mode
+        if is_host_test_mode:
+            _setup_host_mode_test_executor(controller, context, vm_os)
+
         # Execute complete experiment (playbook + tests)
         log.info(f"Starting experiment execution for {context.config.experiment_name}")
         result = await controller.execute_experiment(context.experiment_directory.path)
-        
+
         # Store execution result in context for final message generation
         context.execution_result = result
-        
+
+        # Cleanup host-mode executor temp files
+        if is_host_test_mode and hasattr(controller, '_host_mode_test_executor'):
+            controller._host_mode_test_executor.cleanup()
+
         if result.success:
             log.info(f"Experiment completed successfully: {result.successful_actions}/{result.total_actions} actions succeeded")
         else:
             log.error(f"Experiment failed: {result.error_message}")
             log.error(f"Action results: {result.successful_actions}/{result.total_actions} succeeded")
 
+def _setup_host_mode_test_executor(controller, context: ExperimentRunCtx, vm_os: str):
+    """Set up host-mode test execution on the PlaybookController."""
+    from adare.backend.experiment.execution.base import TestExecutionMode
+    from adare.backend.experiment.host_mode_test_executor import HostModeTestExecutor
+    from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
+    from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
+    from adarelib.testset.testfunction import import_basictest_subclasses
+    from adare.config.configdirectory import STATE_DIR
+
+    guest_os = vm_os or 'linux'
+
+    # Create QGA proxies
+    guest_file = GuestFileProxy(vm=context.vm, guest_os=guest_os)
+    guest_command = GuestCommandProxy(vm=context.vm, guest_os=guest_os)
+
+    # Load testfunctions locally on host
+    global_testfunctions_path = STATE_DIR / 'testfunctions'
+    if global_testfunctions_path.exists():
+        testfunction_collection = import_basictest_subclasses(directory=global_testfunctions_path)
+        log.info(f"Host mode: loaded {sum(len(v) for v in testfunction_collection.values())} testfunctions locally")
+    else:
+        testfunction_collection = {}
+        log.warning("Host mode: no testfunctions directory found")
+
+    # Pre-flight validation: check all playbook tests are host-mode compatible
+    playbook_tests = getattr(context.playbook, 'tests', [])
+    if playbook_tests:
+        ok, issues = HostModeTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
+        if not ok:
+            from adare.exceptions import LoggedException
+            issue_list = '\n  - '.join(issues)
+            raise LoggedException(
+                f"Host-mode test validation failed. The following tests cannot run in host mode:\n  - {issue_list}\n"
+                f"Use --test-mode agent to run these tests via the in-guest agent instead."
+            )
+        log.info(f"Host mode: pre-flight validation passed for {len(playbook_tests)} tests")
+
+    # Create host-mode test executor
+    host_mode_executor = HostModeTestExecutor(
+        guest_file=guest_file,
+        guest_command=guest_command,
+        testfunction_collection=testfunction_collection,
+    )
+
+    # Store for cleanup and wire into the action executor
+    controller._host_mode_test_executor = host_mode_executor
+    controller.action_executor.test_actions.set_test_execution_mode(TestExecutionMode.HOST)
+    controller.action_executor.test_actions.set_host_mode_test_executor(host_mode_executor)
+    log.info("Host mode: HostModeTestExecutor configured")
 
 async def step_collect_system_info(context: ExperimentRunCtx):
     """Collect system information from the guest VM and save to YAML file."""
     with StageCtxManager(SystemInfoCollectionStage(), context.experiment_run_ulid, event=context.user_interrupt_event):
-        from adare.backend.experiment.system_info_collector import collect_system_info
-
         # Check if system info collection is enabled in playbook settings
         collect_enabled = getattr(context.playbook.settings, 'collect_system_info', True)
         if not collect_enabled:
             log.info("System info collection disabled in playbook settings")
-            return
-
-        # Ensure we have required components
-        if not context.client:
-            log.warning("WebSocket client not available - skipping system info collection")
             return
 
         if not context.guest_platform:
@@ -1264,19 +535,33 @@ async def step_collect_system_info(context: ExperimentRunCtx):
             log.warning("Experiment run directory not available - skipping system info collection")
             return
 
-        # Collect system information
         output_file = context.experiment_run_directory.system_info_file
-        success = await collect_system_info(
-            websocket_client=context.client,
-            guest_platform=context.guest_platform,
-            output_file=output_file
-        )
+
+        # Use QGA-based collection in host test mode, WebSocket otherwise
+        is_host_test_mode = context.test_execution_mode == 'host'
+
+        if is_host_test_mode and context.vm:
+            from adare.backend.experiment.system_info_collector import collect_system_info_via_qga
+            success = await collect_system_info_via_qga(
+                vm=context.vm,
+                guest_platform=context.guest_platform,
+                output_file=output_file
+            )
+        elif context.client:
+            from adare.backend.experiment.system_info_collector import collect_system_info
+            success = await collect_system_info(
+                websocket_client=context.client,
+                guest_platform=context.guest_platform,
+                output_file=output_file
+            )
+        else:
+            log.warning("Neither WebSocket client nor VM available - skipping system info collection")
+            return
 
         if success:
             log.info(f"System information collected and saved to {output_file}")
         else:
             log.warning("System information collection failed (experiment continues)")
-
 
 def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
     event = None if post_interrupt else context.user_interrupt_event
@@ -1296,7 +581,6 @@ async def step_shutdown_mcp_server(context: ExperimentRunCtx, post_interrupt: bo
         if context.mcp_server is not None:
             await context.mcp_server.stop(force_external=force)
 
-
 async def step_shutdown_ws(context: ExperimentRunCtx, post_interrupt: bool = False):
     event = None if post_interrupt else context.user_interrupt_event
     with StageCtxManager(ShutdownWebSocketStage(), context.experiment_run_ulid, event=event):
@@ -1304,52 +588,12 @@ async def step_shutdown_ws(context: ExperimentRunCtx, post_interrupt: bool = Fal
         if context.client:
             await context.client.disconnect()
 
-
-
 def step_remove_fake_experiment_run(context: ExperimentRunCtx):
     # todo remove associated stuff as well (e.g. stages/files/...)
     experiment_database.remove_fake_experiment_run(context.project_directory.path, context.experiment_run_ulid)
     log.info(f'fake experiment run {context.experiment_run_ulid} removed')
 
-
-
-def __start_event_listeners(experiment_run_ulid: str):
-    from adare.backend.events.listener import event_listener_db, event_listener_cli
-    from adare.backend.events.coordinator import start_stage_coordinator
-    
-    # Start the stage event coordinator first
-    start_stage_coordinator()
-    log.info("Stage event coordinator started")
-    
-    # Create threading events to signal when listeners are ready
-    cli_ready_event = threading.Event()
-    db_ready_event = threading.Event()
-    
-    def cli_wrapper():
-        cli_ready_event.set()  # Signal that CLI listener is ready
-        event_listener_cli(experiment_run_ulid)
-    
-    def db_wrapper():
-        db_ready_event.set()  # Signal that DB listener is ready
-        event_listener_db(experiment_run_ulid)
-    
-    cli_thread = threading.Thread(target=cli_wrapper, daemon=True)
-    db_thread = threading.Thread(target=db_wrapper, daemon=True)
-
-    cli_thread.start()
-    db_thread.start()
-    
-    # Wait for both listeners to be ready before returning (with timeout to prevent hangs)
-    if not cli_ready_event.wait(timeout=10.0):
-        raise RuntimeError("CLI event listener failed to start within 10 seconds")
-    if not db_ready_event.wait(timeout=10.0):
-        raise RuntimeError("DB event listener failed to start within 10 seconds")
-    log.info("Event listeners are ready")
-
-    return cli_thread, db_thread
-
-
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, diff: bool = None, diff_mode: str = 'auto'):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto'):
     import signal
     import asyncio
 
@@ -1364,7 +608,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         runlog=runlog,
         test_mode=test
     )
-    
+
     # Determine guest platform early to set platform-specific defaults
     # We need to get the environment info to determine the platform
     try:
@@ -1403,7 +647,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if vm_memory is not None:
             config.vm_memory = vm_memory
             log.info(f"Using custom VM memory: {vm_memory}MB")
-    
+
     # Override VM CPU settings if provided via CLI
     if vm_cpus is not None:
         config.vm_cpus = vm_cpus
@@ -1413,6 +657,11 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     if gui_mode is not None:
         config.gui_mode_override = gui_mode
         log.info(f"Using custom GUI mode: {gui_mode}")
+
+    # Override test execution mode if provided via CLI
+    if test_exec_mode is not None:
+        config.test_mode_override = test_exec_mode
+        log.info(f"Using custom test execution mode: {test_exec_mode}")
 
     # Set filesystem diff parameters
     if diff is not None:
@@ -1433,10 +682,10 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
 
     # Create an asyncio Event to signal shutdown.
     stop_event = asyncio.Event()
-    
+
     # Create a separate threading Event specifically for user interruption (Ctrl-C)
     user_interrupt_event = threading.Event()
-    
+
     # Add the user interrupt event to the context so step functions can use it
     experiment_run_context.user_interrupt_event = user_interrupt_event
 
@@ -1452,20 +701,18 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     loop.add_signal_handler(signal.SIGINT, handle_sigint)
 
     # Create and start the flow console.
-    # print(experiment_run_context.experiment_run_ulid)
-    flow_console = __create_and_start_flow_console(experiment_run_context.experiment_run_ulid, disable_printing, user_interrupt_event)
-    
+    flow_console = create_and_start_flow_console(experiment_run_context.experiment_run_ulid, disable_printing, user_interrupt_event)
+
     # Start experiment timer header row
     if not disable_printing:
         flow_console.start_experiment_timer(experiment_name)
-    
+
     # Add small delay to let Rich console settle before starting stages
     await asyncio.sleep(0.1)
     log.debug("Flow console started, proceeding with event listeners")
 
     # Start event listeners BEFORE any stages begin to ensure all events are captured
-    __start_event_listeners(experiment_run_context.experiment_run_ulid)
-
+    start_event_listeners(experiment_run_context.experiment_run_ulid)
 
     # Create step runner to handle execution logic
     step_runner = ExperimentStepRunner(stop_event, user_interrupt_event)
@@ -1497,40 +744,39 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         # Virtual Machine Setup Phase
         if not stop_event.is_set():
             with StageCtxManager(VirtualMachineSetupStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
-                # Create and prepare VM
-                # VirtualBox: VM import (VMImportStage) and snapshot creation (VMSnapshotCreateStage) happen here as child stages
-                # QEMU: Overlay disk creation happens here (no separate stage)
-                # Note: Instance allocation and wheel building also happen here but have no separate stages
                 await step_runner.run_async_step(vm_manager.create_and_prepare_vm, experiment_run_context)
-
-                # File transfer now explicift with its own stage
-                # (VirtualBox: shared folders, QEMU: libguestfs copy to disk)
                 await step_runner.run_async_step(vm_manager.setup_file_transfer, experiment_run_context)
-
-                # Setup networking (port forwarding for agent communication)
-                # QEMU: Adds port forwarding rules to config (applied when libvirt domain is defined)
-                # VirtualBox: Configures port forwarding via VBoxManage
                 await step_runner.run_async_step(vm_manager.setup_networking, experiment_run_context)
-
-                # Start VM
                 await step_runner.run_async_step(vm_manager.start_vm, experiment_run_context)
+
+        # Resolve test execution mode after VM is created
+        if not stop_event.is_set():
+            _resolve_and_store_test_execution_mode(experiment_run_context)
 
         # Software Installation Phase
         if not stop_event.is_set():
+            is_host_test_mode = experiment_run_context.test_execution_mode == 'host'
+            is_host_gui_mode = (experiment_run_context.config.gui_mode_override == 'host' or
+                               (experiment_run_context.config.gui_mode_override is None and
+                                experiment_run_context.hypervisor_type == 'qemu'))
+
+            # In full host mode (both GUI and tests via host), skip agent entirely
+            needs_agent = not (is_host_test_mode and is_host_gui_mode)
+
             with StageCtxManager(SoftwareInstallationStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
-                #input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
-                await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
-                #input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
-                await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
-                await step_runner.run_async_step(step_execute_installations, experiment_run_context)
-                #input("Press Enter to continue after verifying that the AdareVM WebSocket server has started...")
+                if needs_agent:
+                    await step_runner.run_async_step(step_install_and_run_websocket_server, experiment_run_context)
+                    await step_runner.run_async_step(step_connect_websocket, experiment_run_context)
+                    await step_runner.run_async_step(step_execute_installations, experiment_run_context)
+                else:
+                    log.info("Host mode: skipping adarevm agent installation and WebSocket connection")
+                    await step_runner.run_async_step(step_execute_installations_via_qga, experiment_run_context)
 
         # Experiment Execution Phase
         if not stop_event.is_set():
             with StageCtxManager(ExperimentExecutionStage(), experiment_run_context.experiment_run_ulid, event=user_interrupt_event):
                 await step_runner.run_async_step(step_execute_experiment, experiment_run_context)
 
-                #input("Press Enter to continue after verifying that the experiment execution has completed...")
                 # Collect system information after experiment execution (if enabled in playbook settings)
                 await step_runner.run_async_step(step_collect_system_info, experiment_run_context)
 
@@ -1581,7 +827,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         if not stop_event.is_set():
             experiment_run_context.stop_event.set()
             log.info("finally: send stop events")
-        
+
         # Update database status if user interrupted
         if user_interrupt_event.is_set():
             log.info("User interrupt detected - updating experiment run status to INTERRUPTED")
@@ -1593,7 +839,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             # Update experiment timer to show interruption
             if not disable_printing:
                 flow_console.finish_experiment_timer(success=False)
-        
+
         try:
             log.info("Starting cleanup and shutdown...")
             # Wrap cleanup in proper stage context (don't pass interrupt event - we want to show actual cleanup work)
@@ -1601,11 +847,11 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 await step_runner.run_cleanup_step(step_finalize, experiment_run_context, post_interrupt=True)
                 await step_runner.run_cleanup_step(step_shutdown_mcp_server, experiment_run_context, post_interrupt=True)
                 await step_runner.run_cleanup_step(step_shutdown_ws, experiment_run_context, post_interrupt=True)
-                
+
                 if vm_manager:
                     # Determine if force shutdown is needed (Windows on QEMU)
                     force_shutdown = False
-                    if (experiment_run_context.hypervisor_type == 'qemu' and 
+                    if (experiment_run_context.hypervisor_type == 'qemu' and
                         experiment_run_context.guest_platform == 'windows'):
                         force_shutdown = True
                         log.info("Forcing shutdown for Windows VM on QEMU to prevent updates")
@@ -1623,19 +869,17 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             from adare.backend.events.coordinator import stop_stage_coordinator
             stop_stage_coordinator()
             log.info("Stage event coordinator stopped")
-            
+
             # Log enhanced experiment summary before stopping console
             # Get execution results and calculate overall statistics
             execution_result = getattr(experiment_run_context, 'execution_result', None)
 
-            if execution_result:
-                # Calculate total duration from context timestamps
-                total_duration = None
-                if hasattr(experiment_run_context, 'timestamp_start'):
-                    from datetime import datetime, timezone
-                    total_duration = (datetime.now(timezone.utc) - experiment_run_context.timestamp_start).total_seconds()
+            # Calculate total duration (shared by both branches)
+            total_duration = None
+            if hasattr(experiment_run_context, 'timestamp_start'):
+                total_duration = (datetime.now(timezone.utc) - experiment_run_context.timestamp_start).total_seconds()
 
-                # Log comprehensive experiment summary
+            if execution_result:
                 flow_console.log_experiment_summary(
                     ulid=experiment_run_context.experiment_run_ulid,
                     success=execution_result.success,
@@ -1648,28 +892,13 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                     duration=total_duration
                 )
             else:
-                # Enhanced fallback - show what we can determine from the context
-                # Calculate total duration from context timestamps
-                total_duration = None
-                if hasattr(experiment_run_context, 'timestamp_start'):
-                    from datetime import datetime, timezone
-                    total_duration = (datetime.now(timezone.utc) - experiment_run_context.timestamp_start).total_seconds()
-
-                # Check if this was an interruption vs failure
-                was_interrupted = user_interrupt_event.is_set()
-
-                # Show a summary even without execution result
                 flow_console.log_experiment_summary(
                     ulid=experiment_run_context.experiment_run_ulid,
-                    success=False,  # If we're here, something failed or was interrupted
-                    total_actions=0,
-                    successful_actions=0,
-                    failed_actions=0,
-                    total_tests=0,
-                    successful_tests=0,
-                    failed_tests=0,
+                    success=False,
+                    total_actions=0, successful_actions=0, failed_actions=0,
+                    total_tests=0, successful_tests=0, failed_tests=0,
                     duration=total_duration,
-                    was_interrupted=was_interrupted
+                    was_interrupted=user_interrupt_event.is_set()
                 )
 
             if test:
@@ -1736,29 +965,27 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
     # Return both interruption status and actual success status
     return user_interrupt_event.is_set(), experiment_success
 
-
-
 def experiment_test(project_path: Path, experiment_name: str, environment_name: str):
     """Test an experiment in development mode - creates fake run that gets cleaned up.
-    
+
     This function provides a development-friendly way to test experiments without
     creating persistent runs or requiring integrity checks. Perfect for iterative
     development and testing of experiment playbooks.
-    
+
     Args:
         project_path: Path to the project directory
         experiment_name: Name of the experiment to test
         environment_name: Name of the environment to use
     """
     import asyncio
-    
+
     log.info(f'Starting experiment test: {experiment_name} in environment {environment_name}')
-    
+
     # Run experiment in test mode (creates fake run that gets cleaned up)
     asyncio.run(experiment_run(
-        project_path=project_path, 
-        experiment_name=experiment_name, 
-        environment_name=environment_name, 
+        project_path=project_path,
+        experiment_name=experiment_name,
+        environment_name=environment_name,
         disable_printing=False,  # Show output for development feedback
         test=True,  # This creates fake runs that are cleaned up automatically
         debug_screenshots=True,  # Enable debug screenshots for development
