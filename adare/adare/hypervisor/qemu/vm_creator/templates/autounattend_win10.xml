@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+
+  <!-- Windows PE pass - disk partitioning and driver injection -->
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-International-Core-WinPE"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+      <SetupUILanguage>
+        <UILanguage>en-US</UILanguage>
+      </SetupUILanguage>
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UserLocale>en-US</UserLocale>
+    </component>
+
+    <component name="Microsoft-Windows-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+
+      <!-- Load virtio drivers from secondary CD -->
+      <DriverPaths>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="1">
+          <Path>E:\amd64\w10</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="2">
+          <Path>E:\NetKVM\w10\amd64</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="3">
+          <Path>E:\viostor\w10\amd64</Path>
+        </PathAndCredentials>
+      </DriverPaths>
+
+      <DiskConfiguration>
+        <Disk wcm:action="add">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <!-- EFI System Partition -->
+            <CreatePartition wcm:action="add">
+              <Order>1</Order>
+              <Size>260</Size>
+              <Type>EFI</Type>
+            </CreatePartition>
+            <!-- Microsoft Reserved -->
+            <CreatePartition wcm:action="add">
+              <Order>2</Order>
+              <Size>16</Size>
+              <Type>MSR</Type>
+            </CreatePartition>
+            <!-- Windows partition (rest of disk) -->
+            <CreatePartition wcm:action="add">
+              <Order>3</Order>
+              <Extend>true</Extend>
+              <Type>Primary</Type>
+            </CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add">
+              <Order>1</Order>
+              <PartitionID>1</PartitionID>
+              <Format>FAT32</Format>
+              <Label>EFI</Label>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>2</Order>
+              <PartitionID>3</PartitionID>
+              <Format>NTFS</Format>
+              <Label>Windows</Label>
+              <Letter>C</Letter>
+            </ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+
+      <ImageInstall>
+        <OSImage>
+          <InstallTo>
+            <DiskID>0</DiskID>
+            <PartitionID>3</PartitionID>
+          </InstallTo>
+        </OSImage>
+      </ImageInstall>
+
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+        <ProductKey>
+          <WillShowUI>OnError</WillShowUI>
+        </ProductKey>
+      </UserData>
+    </component>
+  </settings>
+
+  <!-- OOBE pass - user account and regional settings -->
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-International-Core"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UserLocale>en-US</UserLocale>
+    </component>
+
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <ProtectYourPC>3</ProtectYourPC>
+      </OOBE>
+
+      <UserAccounts>
+        <LocalAccounts>
+          <LocalAccount wcm:action="add">
+            <Name>adare</Name>
+            <Group>Administrators</Group>
+            <Password>
+              <Value>adare</Value>
+              <PlainText>true</PlainText>
+            </Password>
+          </LocalAccount>
+        </LocalAccounts>
+      </UserAccounts>
+
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <Username>adare</Username>
+        <Password>
+          <Value>adare</Value>
+          <PlainText>true</PlainText>
+        </Password>
+        <LogonCount>999</LogonCount>
+      </AutoLogon>
+
+      <!-- First logon commands - post-install configuration -->
+      <FirstLogonCommands>
+        <!-- Disable UAC -->
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v EnableLUA /t REG_DWORD /d 0 /f</CommandLine>
+          <Description>Disable UAC</Description>
+        </SynchronousCommand>
+        <!-- Disable Windows Update -->
+        <SynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <CommandLine>reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoUpdate /t REG_DWORD /d 1 /f</CommandLine>
+          <Description>Disable Windows Update</Description>
+        </SynchronousCommand>
+        <!-- Disable sleep/hibernate -->
+        <SynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <CommandLine>powercfg /change standby-timeout-ac 0</CommandLine>
+          <Description>Disable sleep</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>4</Order>
+          <CommandLine>powercfg /change monitor-timeout-ac 0</CommandLine>
+          <Description>Disable monitor timeout</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>5</Order>
+          <CommandLine>powercfg /hibernate off</CommandLine>
+          <Description>Disable hibernate</Description>
+        </SynchronousCommand>
+        <!-- Open firewall port 18765 for ADARE guest agent -->
+        <SynchronousCommand wcm:action="add">
+          <Order>6</Order>
+          <CommandLine>netsh advfirewall firewall add rule name="ADARE Guest Agent" dir=in action=allow protocol=tcp localport=18765</CommandLine>
+          <Description>Open ADARE port</Description>
+        </SynchronousCommand>
+        <!-- Install virtio guest agent from secondary CD -->
+        <SynchronousCommand wcm:action="add">
+          <Order>7</Order>
+          <CommandLine>cmd /c if exist E:\virtio-win-guest-tools.exe E:\virtio-win-guest-tools.exe /S</CommandLine>
+          <Description>Install virtio guest tools</Description>
+        </SynchronousCommand>
+        <!-- Shutdown after setup complete -->
+        <SynchronousCommand wcm:action="add">
+          <Order>8</Order>
+          <CommandLine>shutdown /s /t 60 /c "ADARE: Initial setup complete"</CommandLine>
+          <Description>Shutdown after setup</Description>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+  </settings>
+
+</unattend>

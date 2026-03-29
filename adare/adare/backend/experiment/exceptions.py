@@ -3,71 +3,174 @@ from adare.exceptions import LoggedException, LoggedErrorException
 import logging
 
 
-class ExperimentFileCreationError(LoggedErrorException):
+# ---------------------------------------------------------------------------
+# Root exception for all experiment errors
+# ---------------------------------------------------------------------------
+
+class ExperimentException(LoggedErrorException):
+    """Base class for all experiment-related errors."""
     pass
 
 
-class ExperimentDirectoryCreationError(LoggedErrorException):
+# ---------------------------------------------------------------------------
+# File system group
+# ---------------------------------------------------------------------------
+
+class ExperimentFileSystemError(ExperimentException):
+    """Group base for file/directory errors within experiments."""
     pass
 
 
-class ExperimentRemovalError(LoggedErrorException):
+class ExperimentFileCreationError(ExperimentFileSystemError):
     pass
 
 
-class ExperimentDirectoryAlreadyExistsError(LoggedErrorException):
+class ExperimentDirectoryCreationError(ExperimentFileSystemError):
     pass
 
 
-class ExperimentDirectoryDoesNotExistError(LoggedErrorException):
+class ExperimentRemovalError(ExperimentFileSystemError):
     pass
 
 
-class ExperimentFileMissingError(LoggedErrorException):
+class ExperimentDirectoryAlreadyExistsError(ExperimentFileSystemError):
     pass
 
 
-class ExperimentIntegrityError(LoggedErrorException):
+class ExperimentDirectoryDoesNotExistError(ExperimentFileSystemError):
     pass
 
 
-class EnvironmentIntegrityError(LoggedErrorException):
+class ExperimentFileMissingError(ExperimentFileSystemError):
     pass
 
 
-class TestfunctionIntegrityError(LoggedErrorException):
+# ---------------------------------------------------------------------------
+# Integrity group
+# ---------------------------------------------------------------------------
+
+class ExperimentIntegrityError(ExperimentException):
+    """Integrity check failures (hash mismatches, modified files, etc.)."""
+
+    @classmethod
+    def file_modified(cls, log: logging.Logger, file_type: str, file_name: str,
+                      reload_command: str):
+        """For 'file was modified after loading' errors."""
+        return cls(
+            log,
+            f'{file_type} "{file_name}" has been modified after loading into the experiment',
+            possible_solutions=[
+                f'Reload with: {reload_command}',
+                'Check for unauthorized file modifications',
+            ],
+        )
+
+    @classmethod
+    def file_not_found(cls, log: logging.Logger, file_type: str, file_path: str,
+                       is_external: bool = False):
+        """For missing file errors."""
+        solutions = [f'Check that the {file_type} file exists at: {file_path}']
+        if is_external:
+            solutions.append('Verify the external path is accessible')
+        else:
+            solutions.append(
+                f'Ensure the {file_type} was properly loaded into the experiment'
+            )
+        return cls(log, f'{file_type} not found: {file_path}',
+                   possible_solutions=solutions)
+
+    @classmethod
+    def files_changed_after_load(cls, log: logging.Logger, file_type: str,
+                                  changed_files: list, remove_command: str,
+                                  load_command: str):
+        """For 'files changed, need re-load' errors."""
+        files_str = ', '.join(str(f) for f in changed_files[:5])
+        if len(changed_files) > 5:
+            files_str += f' (and {len(changed_files) - 5} more)'
+        return cls(
+            log,
+            f'{file_type} files have changed since they were loaded: {files_str}',
+            possible_solutions=[
+                f'Remove changed files: {remove_command}',
+                f'Reload: {load_command}',
+            ],
+        )
+
+    @classmethod
+    def hash_mismatch(cls, log: logging.Logger, file_type: str, file_name: str):
+        """For integrity hash mismatch errors."""
+        return cls(
+            log,
+            f'{file_type} "{file_name}" integrity check failed - content hash does not match stored hash',
+            possible_solutions=[
+                f'Reload the {file_type} to update the stored hash',
+                'Check for unauthorized modifications to the file',
+            ],
+        )
+
+    @classmethod
+    def vm_integrity_failed(cls, log: logging.Logger, vm_name: str, detail: str):
+        """For VM integrity failures."""
+        return cls(
+            log,
+            f'VM "{vm_name}" integrity check failed: {detail}',
+            possible_solutions=[
+                'Verify the VM file exists and is not corrupted',
+                'Re-import the VM file',
+            ],
+        )
+
+
+class EnvironmentIntegrityError(ExperimentIntegrityError):
     pass
 
 
-class NoEnvironmentError(LoggedErrorException):
+class TestfunctionIntegrityError(ExperimentIntegrityError):
     pass
 
 
-class MultipleEnvironmentsError(LoggedErrorException):
+# ---------------------------------------------------------------------------
+# Config group
+# ---------------------------------------------------------------------------
+
+class ExperimentConfigError(ExperimentException):
+    """Group base for experiment configuration errors."""
     pass
 
 
-class ExperimentAlreadyExistsError(LoggedErrorException):
+class NoEnvironmentError(ExperimentConfigError):
     pass
 
 
-class ExperimentNotChanged(LoggedException):
+class MultipleEnvironmentsError(ExperimentConfigError):
     pass
 
 
-class ExperimentCommandError(LoggedErrorException):
-    def __init__(self, log: logging.Logger, command: str, exit_code: int, stdout: str = '', stderr: str = ''):
-        msg = f'Command "{command}" failed with exit code {exit_code}.\nstdout: {stdout}\nstderr: {stderr}'
+# ---------------------------------------------------------------------------
+# Direct children of ExperimentException (no sub-group)
+# ---------------------------------------------------------------------------
+
+class ExperimentAlreadyExistsError(ExperimentException):
+    pass
+
+
+class ExperimentCommandError(ExperimentException):
+    def __init__(self, log: logging.Logger, command: str, exit_code: int,
+                 stdout: str = '', stderr: str = ''):
+        msg = (f'Command "{command}" failed with exit code {exit_code}.'
+               f'\nstdout: {stdout}\nstderr: {stderr}')
         super().__init__(log, msg)
 
 
-class VMSetupError(LoggedErrorException):
-    def __init__(self, log: logging.Logger, vm_name: str, command: str, exit_code: int, stdout: str = '', stderr: str = ''):
-        msg = f'VM setup failed for "{vm_name}". Command "{command}" failed with exit code {exit_code}.\nstdout: {stdout}\nstderr: {stderr}'
+class VMSetupError(ExperimentException):
+    def __init__(self, log: logging.Logger, vm_name: str, command: str,
+                 exit_code: int, stdout: str = '', stderr: str = ''):
+        msg = (f'VM setup failed for "{vm_name}". Command "{command}" failed '
+               f'with exit code {exit_code}.\nstdout: {stdout}\nstderr: {stderr}')
         super().__init__(log, msg)
 
 
-class AdareVMProcessDiedError(LoggedErrorException):
+class AdareVMProcessDiedError(ExperimentException):
     """Raised when adarevm process dies immediately after launch."""
 
     def __init__(
@@ -144,3 +247,11 @@ class AdareVMProcessDiedError(LoggedErrorException):
         ]
 
         super().__init__(log, message, possible_solutions=solutions)
+
+
+# ---------------------------------------------------------------------------
+# Non-error exception (kept separate from ExperimentException)
+# ---------------------------------------------------------------------------
+
+class ExperimentNotChanged(LoggedException):
+    pass

@@ -32,7 +32,7 @@ class VirtualBoxManager(AbstractHypervisorManager):
         self.default_graphics = vbox_config.get('default_graphics', 'vmsvga')
         self.default_vram = vbox_config.get('default_vram', 128)
 
-        log.info("CLAUDE: Initialized VirtualBoxManager")
+        log.info("Initialized VirtualBoxManager")
 
     def _worker_loop(self):
         """Main worker loop for executing queued functions."""

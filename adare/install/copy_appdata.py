@@ -16,7 +16,7 @@ def __get_default_appdata_directory(create_if_missing: bool = False, program_nam
     if system == 'Windows':
         appdata_path = Path(os.getenv('APPDATA'))
         appdata_path = appdata_path / program_name.lower()
-    elif system == "Linux":
+    elif system in ("Linux", "Darwin"):
         appdata_path = Path(f'~/.{program_name.lower()}/').expanduser()
         if not appdata_path.exists():
             appdata_path.mkdir(parents=False)
@@ -47,7 +47,7 @@ IGNORE_PATTERNS = [
 
 if __name__ == '__main__':
 
-    adare = Path('../')
+    adare = Path('.')
 
     # copy all files and folders from appdata_local to appdata_dir with progress bar and actual file that is copied
     # (if a file or directory already exists, it will be overwritten)

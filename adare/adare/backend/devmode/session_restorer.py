@@ -189,7 +189,7 @@ async def restore_infrastructure_context(
 
             # Verify the directory still exists
             if stored_path.exists():
-                log.info(f"CLAUDE: Restoring run directory from stored path: {stored_path}")
+                log.info(f"Restoring run directory from stored path: {stored_path}")
 
                 # Reconstruct ExperimentRunDirectory using the stored path
                 # We need to create an instance that points to the existing directory
@@ -202,14 +202,14 @@ async def restore_infrastructure_context(
                 session.experiment_ctx.experiment_run_directory = run_dir
                 session.run_directory_path = stored_path
 
-                log.info(f"CLAUDE: Successfully restored run directory: {stored_path}")
+                log.info(f"Successfully restored run directory: {stored_path}")
             else:
-                log.warning(f"CLAUDE: Stored run directory does not exist: {stored_path}, falling back to recreation")
+                log.warning(f"Stored run directory does not exist: {stored_path}, falling back to recreation")
                 # Fall through to recreation logic below
 
         # Fallback: Recreate run directory if no stored path or path doesn't exist
         if not hasattr(session.experiment_ctx, 'experiment_run_directory') or session.experiment_ctx.experiment_run_directory is None:
-            log.info("CLAUDE: Creating new run directory (fallback)")
+            log.info("Creating new run directory (fallback)")
 
             # Ensure experiment_name is never None
             experiment_name = session.experiment_ctx.config.experiment_name or "_dev_session"

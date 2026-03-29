@@ -4,7 +4,7 @@ import platform
 from typing import ClassVar, Optional, Union
 
 # internal imports
-from adarelib.testset.basictest import BasicTest, Parameter
+from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
 from adarelib.event.event import TestResult
 
 # configure logging
@@ -31,6 +31,7 @@ class RegistryKeyExistsParameter(Parameter):
 class RegistryKeyExists(BasicTest):
     testname: ClassVar[str] = 'registry_key_exists'
     testdescription: ClassVar[str] = 'tests if Windows registry key exists (Windows only)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.QGA_PROBE
 
     name: str
     parameter: RegistryKeyExistsParameter
@@ -110,6 +111,7 @@ class RegistryValueMatchesParameter(Parameter):
 class RegistryValueMatches(BasicTest):
     testname: ClassVar[str] = 'registry_value_matches'
     testdescription: ClassVar[str] = 'tests if Windows registry value matches expected value (Windows only)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.QGA_PROBE
 
     name: str
     parameter: RegistryValueMatchesParameter

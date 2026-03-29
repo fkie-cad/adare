@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import ClassVar, Optional, List
 
 # internal imports
-from adarelib.testset.basictest import BasicTest, Parameter
+from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
 from adarelib.event.event import TestResult
 
 # configure logging
@@ -24,6 +24,7 @@ class QueryResultParameter(Parameter):
 class QueryResult(BasicTest):
     testname: ClassVar[str] = 'query_result'
     testdescription: ClassVar[str] = 'executes SQL query against SQLite database and validates result'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: QueryResultParameter

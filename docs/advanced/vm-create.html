@@ -6,10 +6,10 @@
 <link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Architecture" href="../architecture/index.html"><link rel="prev" title="Create your own testfunction set (in development)" href="testfunction-create.html">
         <link rel="prefetch" href="../_static/logo.png" as="image">
 
-    <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.09.25 -->
+    <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.12.19 -->
         <title>Create an ADARE VM - ADARE documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
-    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=580074bf" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d5f4d14b" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -447,20 +447,14 @@ At the moment, ADARE only supports VirtualBox VMs but it is planned to support Q
 <li><p>Ensure Python is added to PATH during installation</p></li>
 </ul>
 </li>
-<li><p><strong>Poetry</strong> (Python package manager)</p>
+<li><p><strong>uv</strong> (Python package manager)</p>
 <p>Install using the official installer:</p>
-<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># Install Poetry</span>
-<span class="p">(</span><span class="nb">Invoke-WebRequest</span> <span class="n">-Uri</span> <span class="n">https</span><span class="p">://</span><span class="n">install</span><span class="p">.</span><span class="n">python-poetry</span><span class="p">.</span><span class="n">org</span> <span class="n">-UseBasicParsing</span><span class="p">).</span><span class="n">Content</span> <span class="p">|</span> <span class="n">python</span> <span class="p">-</span>
-</pre></div>
-</div>
-<p>Add Poetry to PATH permanently:</p>
-<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># Add Poetry to PATH</span>
-<span class="nv">$poetryPath</span> <span class="p">=</span> <span class="s2">&quot;$env:APPDATA\Python\Scripts&quot;</span>
-<span class="no">[Environment]</span><span class="p">::</span><span class="n">SetEnvironmentVariable</span><span class="p">(</span><span class="s2">&quot;Path&quot;</span><span class="p">,</span> <span class="nv">$env:Path</span> <span class="p">+</span> <span class="s2">&quot;;$poetryPath&quot;</span><span class="p">,</span> <span class="s2">&quot;User&quot;</span><span class="p">)</span>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># Install uv</span>
+<span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">ByPass</span> <span class="n">-c</span> <span class="s2">&quot;irm https://astral.sh/uv/install.ps1 | iex&quot;</span>
 </pre></div>
 </div>
 <p>After installation, restart your PowerShell session and verify:</p>
-<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">poetry</span> <span class="p">-</span><span class="n">-version</span>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">uv</span> <span class="p">-</span><span class="n">-version</span>
 </pre></div>
 </div>
 </li>
@@ -556,8 +550,8 @@ At the moment, ADARE only supports VirtualBox VMs but it is planned to support Q
 </pre></div>
 </div>
 </section>
-<section id="windows-with-poetry">
-<h3>Windows with Poetry<a class="headerlink" href="#windows-with-poetry" title="Link to this heading">¶</a></h3>
+<section id="windows-with-pip">
+<h3>Windows with pip<a class="headerlink" href="#windows-with-pip" title="Link to this heading">¶</a></h3>
 <p>Install using system pip:</p>
 <div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># First, mount the shared folder if not already mounted</span>
 <span class="n">net</span> <span class="n">use</span> <span class="n">Z</span><span class="p">:</span> <span class="p">\\</span><span class="n">vboxsvr</span><span class="p">\</span><span class="n">adare</span><span class="p">\</span><span class="n">wheels</span>
@@ -574,8 +568,8 @@ At the moment, ADARE only supports VirtualBox VMs but it is planned to support Q
 </pre></div>
 </div>
 </section>
-<section id="linux-with-poetry">
-<h3>Linux with Poetry<a class="headerlink" href="#linux-with-poetry" title="Link to this heading">¶</a></h3>
+<section id="linux-with-pip">
+<h3>Linux with pip<a class="headerlink" href="#linux-with-pip" title="Link to this heading">¶</a></h3>
 <p>Install using system pip:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>--break-system-packages<span class="w"> </span>/adare/app/wheels/*.whl
 </pre></div>
@@ -596,7 +590,7 @@ This is safe in ADARE’s isolated VM environment.</p>
 <span class="c1"># For Conda (Linux)</span>
 /home/adare/.miniforge3/bin/conda<span class="w"> </span>run<span class="w"> </span>-n<span class="w"> </span>pyadare<span class="w"> </span>pip<span class="w"> </span>show<span class="w"> </span>adarevm<span class="w"> </span>adarelib
 
-<span class="c1"># For Poetry (Windows/Linux)</span>
+<span class="c1"># For pip (Windows/Linux)</span>
 pip<span class="w"> </span>show<span class="w"> </span>adarevm<span class="w"> </span>adarelib
 </pre></div>
 </div>
@@ -707,9 +701,9 @@ Version: 0.1.0
 <li><a class="reference internal" href="#overview">Overview</a></li>
 <li><a class="reference internal" href="#installation-methods">Installation Methods</a><ul>
 <li><a class="reference internal" href="#windows-with-conda-miniforge">Windows with Conda (Miniforge)</a></li>
-<li><a class="reference internal" href="#windows-with-poetry">Windows with Poetry</a></li>
+<li><a class="reference internal" href="#windows-with-pip">Windows with pip</a></li>
 <li><a class="reference internal" href="#linux-with-conda-miniforge">Linux with Conda (Miniforge)</a></li>
-<li><a class="reference internal" href="#linux-with-poetry">Linux with Poetry</a></li>
+<li><a class="reference internal" href="#linux-with-pip">Linux with pip</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#verification">Verification</a></li>

@@ -16,7 +16,7 @@ except ImportError:
     grp = None
 
 # internal imports
-from adarelib.testset.basictest import BasicTest, Parameter
+from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
 from adarelib.event.event import TestResult
 
 # configure logging
@@ -34,6 +34,7 @@ class SystemServiceStatusParameter(Parameter):
 class SystemServiceStatus(BasicTest):
     testname: ClassVar[str] = 'system_service_status'
     testdescription: ClassVar[str] = 'tests if a systemd service has expected status (Linux only)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.QGA_PROBE
 
     name: str
     parameter: SystemServiceStatusParameter
@@ -86,6 +87,7 @@ class ProcessRunningParameter(Parameter):
 class ProcessRunning(BasicTest):
     testname: ClassVar[str] = 'process_running'
     testdescription: ClassVar[str] = 'tests if a process is running with expected number of instances (Linux only)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.QGA_PROBE
 
     name: str
     parameter: ProcessRunningParameter
@@ -142,6 +144,7 @@ class UserExistsParameter(Parameter):
 class UserExists(BasicTest):
     testname: ClassVar[str] = 'user_exists'
     testdescription: ClassVar[str] = 'tests if a user account exists with optional UID and home directory checks (Linux only)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.QGA_PROBE
 
     name: str
     parameter: UserExistsParameter
@@ -198,6 +201,7 @@ class LogEntryExistsParameter(Parameter):
 class LogEntryExists(BasicTest):
     testname: ClassVar[str] = 'log_entry_exists'
     testdescription: ClassVar[str] = 'tests if a log file contains entries matching a pattern (Linux only)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.QGA_PROBE
 
     name: str
     parameter: LogEntryExistsParameter

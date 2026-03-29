@@ -1,7 +1,7 @@
 """
 Executor for test actions.
 
-Handles routing test execution to either VM-side or host-side test executors.
+Handles routing test execution to either VM-side, host-side, or host-mode test executors.
 """
 
 import logging
@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Optional
 
 from adare.types.playbook import ActionTestAction
-from .base import ActionResult
+from .base import ActionResult, TestExecutionMode
 
 log = logging.getLogger(__name__)
 
 
 class TestActionsExecutor:
-    """Handles execution of test actions with host/VM routing."""
+    """Handles execution of test actions with host/VM/host-mode routing."""
 
     def __init__(self, experiment_run_directory: Optional[Path] = None, playbook = None):
         """
@@ -29,16 +29,28 @@ class TestActionsExecutor:
         self.playbook = playbook
         self.test_loader = None
         self.host_test_executor = None
+        self.host_mode_test_executor = None
+        self.test_execution_mode: Optional[TestExecutionMode] = None
 
     def set_test_loader(self, test_loader):
         """Set the test loader after initialization."""
         self.test_loader = test_loader
 
+    def set_test_execution_mode(self, mode: TestExecutionMode):
+        """Set the test execution mode."""
+        self.test_execution_mode = mode
+        log.info(f"Test Executor: test execution mode set to {mode.value}")
+
+    def set_host_mode_test_executor(self, executor):
+        """Set the host-mode test executor (pre-created with QGA proxies)."""
+        self.host_mode_test_executor = executor
+        log.debug("Test Executor: HostModeTestExecutor set")
+
     async def execute_test(self, action: ActionTestAction, websocket_client,
                           target_resolver, parent_event_id: str = None,
                           event_emitter = None, execution_context: dict = None,
                           action_executor = None) -> ActionResult:
-        """Execute individual test action with host/VM routing."""
+        """Execute individual test action with host/VM/host-mode routing."""
         try:
             if not self.test_loader:
                 return ActionResult(success=False, message="Test loader not available")
@@ -54,69 +66,24 @@ class TestActionsExecutor:
                     message=f"Test '{action.name}' not found in playbook tests"
                 )
 
-            # Check if this is a host-side test
+            # Check if this is a host-side test (visual tests with execute_on_host=True)
             test_class = self.test_loader.get_test_class(action.name)
 
             if test_class and getattr(test_class, 'execute_on_host', False):
-                # HOST-SIDE EXECUTION
-                log.debug(f"Test Executor: Routing test '{action.name}' to host executor")
+                # HOST-SIDE EXECUTION (visual tests — unchanged path)
+                return await self._execute_host_side_test(
+                    action, resolved_test, test_class, target_resolver, action_executor
+                )
 
-                # Create host test executor if not exists (lazy init)
-                if not self.host_test_executor:
-                    from adare.backend.experiment.host_test_executor import HostTestExecutor
-
-                    # Get playbook directory
-                    playbook_dir = getattr(self.playbook, 'directory', self.experiment_run_directory)
-
-                    self.host_test_executor = HostTestExecutor(
-                        action_executor=action_executor,
-                        mcp_client=target_resolver.mcp_client,
-                        playbook_dir=playbook_dir,
-                        experiment_dir=self.experiment_run_directory
-                    )
-                    log.debug("Test Executor: Created HostTestExecutor")
-
-                # Structure test instance for host execution
-                test_instance = await self.test_loader.structure_host_test(action.name, resolved_test)
-
-                # Execute on host
-                test_result = await self.host_test_executor.execute_host_test(test_instance)
-
-                # Process result
-                from adare.backend.experiment.test_result_processor import TestResultProcessor
-                expect_to_fail = resolved_test.get('expect_to_fail', False)
-
-                # Convert TestResult to dict format expected by processor
-                result_dict = {
-                    'status': test_result.status,
-                    'details': test_result.details if hasattr(test_result, 'details') else []
-                }
-
-                return TestResultProcessor.process_test_result(action.name, result_dict, expect_to_fail)
+            elif self.test_execution_mode == TestExecutionMode.HOST:
+                # HOST-MODE EXECUTION — all tests via QGA (no agent needed)
+                return await self._execute_host_mode_test(action, resolved_test)
 
             else:
-                # VM-SIDE EXECUTION (existing code path)
-                log.debug(f"Test Executor: Routing test '{action.name}' to VM executor")
-
-                # Extract timeout from action or resolved test, default to 120 seconds
-                # Priority: action.timeout > resolved_test['timeout'] > default (120s)
-                test_timeout = action.timeout if action.timeout is not None else resolved_test.get('timeout', 120.0)
-                websocket_timeout = test_timeout + 10.0  # Add 10-second buffer for WebSocket overhead
-
-                log.info(f"Test '{action.name}' timeout: {test_timeout}s (WebSocket timeout: {websocket_timeout}s)")
-
-                # Send resolved test to VM for execution with timeout
-                result = await websocket_client.run_test(action.name, resolved_test, timeout=websocket_timeout)
-
-                # Extract expect_to_fail flag from resolved test
-                expect_to_fail = resolved_test.get('expect_to_fail', False)
-
-                # Use TestResultProcessor to handle result processing
-                from adare.backend.experiment.test_result_processor import TestResultProcessor
-                return TestResultProcessor.process_test_result(action.name, result, expect_to_fail)
+                # VM-SIDE EXECUTION via WebSocket (existing code path)
+                return await self._execute_vm_side_test(action, resolved_test, websocket_client)
 
         except ValueError as e:
-            # Structuring or validation errors
             log.error(f"Test execution failed: {e}")
             return ActionResult(success=False, message=str(e))
         except Exception as e:
@@ -128,3 +95,79 @@ class TestActionsExecutor:
                 )
             log.error(f"Test execution failed: {e}", exc_info=True)
             return ActionResult(success=False, message=error_msg)
+
+    async def _execute_host_side_test(self, action, resolved_test, test_class,
+                                      target_resolver, action_executor) -> ActionResult:
+        """Route test to existing HostTestExecutor (for visual tests with execute_on_host=True)."""
+        log.debug(f"Test Executor: Routing test '{action.name}' to host executor (execute_on_host)")
+
+        if not self.host_test_executor:
+            from adare.backend.experiment.host_test_executor import HostTestExecutor
+
+            playbook_dir = getattr(self.playbook, 'directory', self.experiment_run_directory)
+
+            self.host_test_executor = HostTestExecutor(
+                action_executor=action_executor,
+                mcp_client=target_resolver.mcp_client,
+                playbook_dir=playbook_dir,
+                experiment_dir=self.experiment_run_directory
+            )
+            log.debug("Test Executor: Created HostTestExecutor")
+
+        test_instance = await self.test_loader.structure_host_test(action.name, resolved_test)
+        test_result = await self.host_test_executor.execute_host_test(test_instance)
+
+        from adare.backend.experiment.test_result_processor import TestResultProcessor
+        expect_to_fail = resolved_test.get('expect_to_fail', False)
+        result_dict = {
+            'status': test_result.status,
+            'details': test_result.details if hasattr(test_result, 'details') else []
+        }
+        return TestResultProcessor.process_test_result(action.name, result_dict, expect_to_fail)
+
+    async def _execute_host_mode_test(self, action, resolved_test) -> ActionResult:
+        """Route test to HostModeTestExecutor (QGA-based, no agent)."""
+        log.debug(f"Test Executor: Routing test '{action.name}' to host-mode executor (QGA)")
+
+        if not self.host_mode_test_executor:
+            return ActionResult(
+                success=False,
+                message=f"Host-mode test executor not available — ensure test_execution_mode=HOST is configured"
+            )
+
+        # Get the test function name from playbook
+        test_function = resolved_test.get('function', '')
+
+        # Structure test instance
+        test_instance = await self.test_loader.structure_host_test(action.name, resolved_test)
+
+        # Execute via host-mode executor
+        test_result = await self.host_mode_test_executor.execute_test(
+            test_name=action.name,
+            test_function=test_function,
+            test_instance=test_instance,
+        )
+
+        from adare.backend.experiment.test_result_processor import TestResultProcessor
+        expect_to_fail = resolved_test.get('expect_to_fail', False)
+        result_dict = {
+            'status': test_result.status,
+            'details': test_result.details if hasattr(test_result, 'details') else []
+        }
+        return TestResultProcessor.process_test_result(action.name, result_dict, expect_to_fail)
+
+    async def _execute_vm_side_test(self, action, resolved_test, websocket_client) -> ActionResult:
+        """Route test to VM via WebSocket (existing agent-based path)."""
+        log.debug(f"Test Executor: Routing test '{action.name}' to VM executor")
+
+        test_timeout = action.timeout if action.timeout is not None else resolved_test.get('timeout', 120.0)
+        websocket_timeout = test_timeout + 10.0
+
+        log.info(f"Test '{action.name}' timeout: {test_timeout}s (WebSocket timeout: {websocket_timeout}s)")
+
+        result = await websocket_client.run_test(action.name, resolved_test, timeout=websocket_timeout)
+
+        expect_to_fail = resolved_test.get('expect_to_fail', False)
+
+        from adare.backend.experiment.test_result_processor import TestResultProcessor
+        return TestResultProcessor.process_test_result(action.name, result, expect_to_fail)

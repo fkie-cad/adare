@@ -1,5 +1,6 @@
 # external imports
 import glob
+from enum import Enum
 from typing import Optional, ClassVar, Dict, Any, List, Tuple, Union
 import attrs
 import re
@@ -12,6 +13,15 @@ from adarelib.common.variables import VariableRegistry
 import logging
 
 log = logging.getLogger(__name__)
+
+
+class HostModeCategory(str, Enum):
+    """How a test should execute in host-mode (no in-guest agent)."""
+    FILE_BASED = "file_based"        # Pull file via QGA, rewrite dst, run test() locally
+    FILE_CONTENT = "file_content"    # Same as FILE_BASED for structured files (JSON, CSV, XML, SQLite)
+    QGA_PROBE = "qga_probe"          # Run probe command on guest via QGA, build TestResult on host
+    HOST_NATIVE = "host_native"      # Already runs on host (e.g., visual tests)
+    AGENT_ONLY = "agent_only"        # Requires in-guest agent; not supported in host mode
 
 
 def resolve_var_in_match_regex(regex_match, variables):
@@ -84,6 +94,7 @@ class BasicTest:
     testname: ClassVar[str] = ''
     testdescription: ClassVar[str] = ''
     execute_on_host: ClassVar[bool] = False  # If True, test executes on host instead of VM
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.AGENT_ONLY
 
     name: str
     parameter: Parameter

@@ -1,0 +1,13 @@
+name: windows10
+display_name: "Windows 10"
+platform: windows
+distribution: windows
+distribution_label: "Home"
+version: "10"
+iso_url: ""
+iso_sha256: ""
+iso_filename: ""
+default_disk_size: "80G"
+default_ram_mb: 16384
+default_cpus: 0
+requires_uefi: true

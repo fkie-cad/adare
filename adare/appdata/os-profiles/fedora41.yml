@@ -1,0 +1,14 @@
+name: fedora41
+display_name: "Fedora 41 Workstation"
+platform: linux
+distribution: fedora
+version: "41"
+install_mode: manual
+architecture: aarch64
+iso_url: ""
+iso_sha256: ""
+iso_filename: ""
+default_disk_size: "60G"
+default_ram_mb: 4096
+default_cpus: 0
+requires_uefi: true

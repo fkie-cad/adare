@@ -189,6 +189,31 @@ def vm_runtime_build():
     args = SimpleNamespace()
     exec_with_error_printing(exec_manage_vm_runtime_build, args)
 
+@manage.group(name='os-profile')
+def os_profile():
+    """Manage OS profiles for VM creation."""
+    pass
+
+@os_profile.command(name='list')
+def os_profile_list():
+    """List all available OS profiles."""
+    from adare.cli.manage_os_profile import exec_os_profile_list
+    exec_with_error_printing(exec_os_profile_list, SimpleNamespace())
+
+@os_profile.command(name='add')
+@click.argument('profile_file', type=click.Path(exists=True))
+def os_profile_add(profile_file):
+    """Add a custom OS profile from a YAML file."""
+    from adare.cli.manage_os_profile import exec_os_profile_add
+    exec_with_error_printing(exec_os_profile_add, SimpleNamespace(profile_file=profile_file))
+
+@os_profile.command(name='remove')
+@click.argument('name')
+def os_profile_remove(name):
+    """Remove a custom OS profile."""
+    from adare.cli.manage_os_profile import exec_os_profile_remove
+    exec_with_error_printing(exec_os_profile_remove, SimpleNamespace(name=name))
+
 
 # ------------------------------
 # Project commands
@@ -370,11 +395,12 @@ def load(experiment, environment, force, project):
 @click.option('--vm-memory', type=int, help='VM RAM in MB (default: 4096 for Linux, 8192 for Windows)')
 @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
 @click.option('--gui-mode', type=click.Choice(['auto', 'agent', 'host']), help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU only)')
+@click.option('--test-mode', type=click.Choice(['auto', 'agent', 'host']), help='Test execution mode: auto (default), agent (WebSocket), or host (QGA for QEMU only)')
 @click.option('--diff/--no-diff', default=None, help='Enable/disable filesystem diff (overrides playbook setting)')
 @click.option('--diff-mode', type=click.Choice(['auto', 'guest', 'host']), default='auto', help='Diff mode: auto (smart selection), guest (VM-based), host (QEMU virt-diff)')
 @click.option('--project', help='Name of the project')
 @click.pass_context
-def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, diff, diff_mode, project):
+def run(ctx, experiment, environment, production, debug_screenshots, preserve_snapshot, no_runlog, vm_memory, vm_cpus, gui_mode, test_mode, diff, diff_mode, project):
     """Run an experiment in a given environment or all environments if none specified.
 
     By default, runs in TEST mode (creates fake runs, skips integrity checks, allows modifications).
@@ -401,6 +427,7 @@ def run(ctx, experiment, environment, production, debug_screenshots, preserve_sn
         vm_memory=vm_memory,
         vm_cpus=vm_cpus,
         gui_mode=gui_mode,
+        test_mode=test_mode,
         diff=diff,
         diff_mode=diff_mode,
         project=project,
@@ -660,17 +687,20 @@ def dev():
 @click.option('--project', '-p', help='Project name/path')
 @click.option('--gui-mode', type=click.Choice(['auto', 'agent', 'host']),
               help='GUI execution mode: auto (default), agent (WebSocket), or host (QMP for QEMU)')
+@click.option('--test-mode', type=click.Choice(['auto', 'agent', 'host']),
+              help='Test execution mode: auto (default), agent (WebSocket), or host (QGA for QEMU)')
 @click.option('--vm-memory', type=int, help='VM RAM in MB (default: 4096 for Linux, 8192 for Windows)')
 @click.option('--vm-cpus', type=int, help='VM CPU count (default: 4)')
 @click.option('--shared-dir', multiple=True, help='Shared directories in format HOST_PATH:VM_PATH')
 @click.option('--debug-screenshots', is_flag=True, help='Save screenshots for debugging')
-def start(environment, project, gui_mode, vm_memory, vm_cpus, shared_dir, debug_screenshots):
+def start(environment, project, gui_mode, test_mode, vm_memory, vm_cpus, shared_dir, debug_screenshots):
     """Start a new dev mode session."""
     from adare.cli.dev import exec_dev_start
     args = SimpleNamespace(
         environment=environment,
         project=project,
         gui_mode=gui_mode,
+        test_mode=test_mode,
         vm_memory=vm_memory,
         vm_cpus=vm_cpus,
         shared_dir=shared_dir,
@@ -1130,6 +1160,35 @@ def remove(instance_id, snapshot_name):
     from adare.cli.vm import exec_vm_delete_snapshot
     args = SimpleNamespace(instance_id=instance_id, snapshot_name=snapshot_name)
     exec_with_error_printing(exec_vm_delete_snapshot, args)
+
+@vm.command(name='create')
+@click.argument('os_name')
+@click.option('--iso', type=click.Path(exists=True), help='Path to OS ISO (required for Windows)')
+@click.option('--name', help='VM name (auto-generated if not set)')
+@click.option('--disk-size', default=None, help='Disk size (default: 60G Linux, 80G Windows)')
+@click.option('--ram', type=int, default=None, help='RAM in MB')
+@click.option('--cpus', type=int, default=None, help='CPU count')
+@click.option('--force', is_flag=True, default=False, help='Overwrite existing VM disk image')
+@click.option('--vm-dir', type=click.Path(), default=None, help='Directory for VM disk image (default: ~/.adare/state/vms/)')
+@click.option('--bare', is_flag=True, default=False, help='Skip ADARE agent software (Miniforge3, qemu-guest-agent)')
+@click.option('--env-name', default=None, help='Environment file name (defaults to VM name)')
+def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, bare, env_name):
+    """Create a new ADARE-ready VM from scratch.
+
+    OS_NAME is the target OS: ubuntu2404, ubuntu2204, windows11, windows10
+
+    \b
+    Examples:
+      adare vm create ubuntu2404
+      adare vm create ubuntu2404 --bare
+      adare vm create windows11 --iso /path/to/Win11.iso
+      adare vm create ubuntu2204 --name my-ubuntu --disk-size 100G --ram 8192
+      adare vm create ubuntu2404 --name my-vm --env-name my-env
+      adare vm create ubuntu2404 --vm-dir /tmp/my-vms
+    """
+    from adare.cli.vm_create import exec_vm_create
+    args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, bare=bare, env_name=env_name)
+    exec_with_error_printing(exec_vm_create, args)
 
 # Add aliases for vm commands
 vm.add_alias('l', 'list')

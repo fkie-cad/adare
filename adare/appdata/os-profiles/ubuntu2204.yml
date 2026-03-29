@@ -1,0 +1,14 @@
+name: ubuntu2204
+display_name: "Ubuntu 22.04 LTS (Jammy Jellyfish)"
+platform: linux
+distribution: ubuntu
+distribution_label: "Jammy Jellyfish"
+version: "22.04"
+iso_url: "https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso"
+iso_sha256: "9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635571d9c954b60"
+iso_filename: "ubuntu-22.04.5-live-server-amd64.iso"
+default_disk_size: "60G"
+default_ram_mb: 8192
+default_cpus: 0
+kernel_path_in_iso: "/casper/vmlinuz"
+initrd_path_in_iso: "/casper/initrd"

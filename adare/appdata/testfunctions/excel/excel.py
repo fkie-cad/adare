@@ -6,7 +6,7 @@ from typing import ClassVar, Optional, List, Tuple, Union
 import re
 
 # internal imports
-from adarelib.testset.basictest import BasicTest, Parameter
+from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
 
@@ -569,6 +569,7 @@ class SheetExistsParameter(Parameter):
 class SheetExists(BasicTest):
     testname: ClassVar[str] = 'sheet_exists'
     testdescription: ClassVar[str] = 'tests if a sheet exists in an Excel file'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: SheetExistsParameter
@@ -651,6 +652,7 @@ class CellValueMatchesParameter(Parameter):
 class CellValueMatches(BasicTest):
     testname: ClassVar[str] = 'cell_value_matches'
     testdescription: ClassVar[str] = 'validates specific cell value with placeholder support'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: CellValueMatchesParameter
@@ -768,6 +770,7 @@ class ContainsRowParameter(Parameter):
 class ContainsRow(BasicTest):
     testname: ClassVar[str] = 'contains_row'
     testdescription: ClassVar[str] = 'finds row matching pattern in Excel sheet'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: ContainsRowParameter
@@ -875,6 +878,7 @@ class ValidateColumnsParameter(Parameter):
 class ValidateColumns(BasicTest):
     testname: ClassVar[str] = 'validate_columns'
     testdescription: ClassVar[str] = 'validates column headers in Excel sheet'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: ValidateColumnsParameter
@@ -977,6 +981,7 @@ class CompareRowsParameter(Parameter):
 class CompareRows(BasicTest):
     testname: ClassVar[str] = 'compare_rows'
     testdescription: ClassVar[str] = 'compares sheet rows against reference data (embedded or external file)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: CompareRowsParameter
@@ -1105,6 +1110,7 @@ class CompareSheetsParameter(Parameter):
 class CompareSheets(BasicTest):
     testname: ClassVar[str] = 'compare_sheets'
     testdescription: ClassVar[str] = 'compares two sheets from same or different files'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: CompareSheetsParameter
@@ -1210,6 +1216,7 @@ class CompareFilesParameter(Parameter):
 class CompareFiles(BasicTest):
     testname: ClassVar[str] = 'compare_files'
     testdescription: ClassVar[str] = 'compares entire Excel files with multi-sheet awareness'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: CompareFilesParameter

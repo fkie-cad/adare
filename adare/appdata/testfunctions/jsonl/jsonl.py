@@ -6,7 +6,7 @@ import re
 from typing import ClassVar, Optional, Union, Dict, Any, List, Tuple
 
 # internal imports
-from adarelib.testset.basictest import BasicTest, Parameter
+from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
 
@@ -131,6 +131,7 @@ class LineMatchesParameter(Parameter):
 class LineMatches(BasicTest):
     testname: ClassVar[str] = 'line_matches'
     testdescription: ClassVar[str] = 'tests if lines in JSONL file match specified conditions (supports any/all modes)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: LineMatchesParameter
@@ -289,6 +290,7 @@ class LineCountParameter(Parameter):
 class LineCount(BasicTest):
     testname: ClassVar[str] = 'line_count'
     testdescription: ClassVar[str] = 'counts lines in JSONL file matching conditions and validates against expected count (if None, requires at least 1 match)'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: LineCountParameter
@@ -443,6 +445,7 @@ class ValueInAnyLineParameter(Parameter):
 class ValueInAnyLine(BasicTest):
     testname: ClassVar[str] = 'value_in_any_line'
     testdescription: ClassVar[str] = 'tests if specified key path with expected value exists in any line of JSONL file'
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
 
     name: str
     parameter: ValueInAnyLineParameter

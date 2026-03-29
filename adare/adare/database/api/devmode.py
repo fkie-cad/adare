@@ -248,7 +248,7 @@ class DevModeApi(EnhancedDatabaseApi):
         self._session.flush()
         self._session.commit()
 
-        log.info(f"CLAUDE: Updated dev session {session_id} run_directory_path to '{run_directory_path}'")
+        log.info(f"Updated dev session {session_id} run_directory_path to '{run_directory_path}'")
         return session
 
     def update_session_cached_command(self, session_id: str, command: str) -> DevSession:

@@ -38,6 +38,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "python-multipart>=0.0.20",
+    "pycdlib>=1.14.0",
 ]
 
 [project.scripts]

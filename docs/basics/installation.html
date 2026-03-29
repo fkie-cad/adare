@@ -6,10 +6,10 @@
 <link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Tutorial" href="tutorial.html"><link rel="prev" title="Welcome to ADARE!" href="../index.html">
         <link rel="prefetch" href="../_static/logo.png" as="image">
 
-    <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.09.25 -->
+    <link rel="shortcut icon" href="../_static/favicon.ico"><!-- Generated with Sphinx 7.4.7 and Furo 2025.12.19 -->
         <title>Installation - ADARE documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
-    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=580074bf" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.0/dist/style.css" />
     <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=d5f4d14b" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -415,24 +415,17 @@
 </pre></div>
 </div>
 </li>
-<li><p><strong>Poetry</strong> (Python package manager)</p>
+<li><p><strong>uv</strong> (Python package manager)</p>
 <p>Install using the official installer:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-sSL<span class="w"> </span>https://install.python-poetry.org<span class="w"> </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-LsSf<span class="w"> </span>https://astral.sh/uv/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 </pre></div>
 </div>
-<p><strong>Windows: Add Poetry to PATH</strong></p>
-<p>On Windows, Poetry needs to be added to PATH permanently. Add the following directory to your system PATH:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>C:\Users\&lt;YourUsername&gt;\AppData\Roaming\Python\Scripts
+<p><strong>Windows:</strong></p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">powershell</span> <span class="n">-ExecutionPolicy</span> <span class="n">ByPass</span> <span class="n">-c</span> <span class="s2">&quot;irm https://astral.sh/uv/install.ps1 | iex&quot;</span>
 </pre></div>
 </div>
-<p>To add to PATH using PowerShell (as Administrator):</p>
-<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># Add Poetry to PATH permanently</span>
-<span class="nv">$poetryPath</span> <span class="p">=</span> <span class="s2">&quot;$env:APPDATA\Python\Scripts&quot;</span>
-<span class="no">[Environment]</span><span class="p">::</span><span class="n">SetEnvironmentVariable</span><span class="p">(</span><span class="s2">&quot;Path&quot;</span><span class="p">,</span> <span class="nv">$env:Path</span> <span class="p">+</span> <span class="s2">&quot;;$poetryPath&quot;</span><span class="p">,</span> <span class="s2">&quot;User&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>After adding to PATH, restart your PowerShell session and verify:</p>
-<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">poetry</span> <span class="p">-</span><span class="n">-version</span>
+<p>After installation, restart your shell and verify:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>--version
 </pre></div>
 </div>
 </li>
@@ -492,7 +485,7 @@ sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> <
 <p>This will:</p>
 <ul class="simple">
 <li><p>Set up a Python virtual environment</p></li>
-<li><p>Install all dependencies via Poetry</p></li>
+<li><p>Install all dependencies via uv</p></li>
 <li><p>Install ADARE command-line tools</p></li>
 <li><p>Configure the development environment</p></li>
 </ul>
@@ -538,8 +531,8 @@ sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> <
 <td><p>3.13.2</p></td>
 <td><p>All platforms</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>Poetry</strong></p></td>
-<td><p>1.8.2</p></td>
+<tr class="row-odd"><td><p><strong>uv</strong></p></td>
+<td><p>0.7+</p></td>
 <td><p>All platforms</p></td>
 </tr>
 <tr class="row-even"><td><p><strong>VirtualBox</strong></p></td>

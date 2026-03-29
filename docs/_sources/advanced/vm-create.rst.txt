@@ -99,28 +99,20 @@ Install the following software:
   - Download and install from `python.org <https://www.python.org/downloads/>`_
   - Ensure Python is added to PATH during installation
 
-- **Poetry** (Python package manager)
+- **uv** (Python package manager)
 
   Install using the official installer:
 
   .. code-block:: powershell
 
-     # Install Poetry
-     (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
-
-  Add Poetry to PATH permanently:
-
-  .. code-block:: powershell
-
-     # Add Poetry to PATH
-     $poetryPath = "$env:APPDATA\Python\Scripts"
-     [Environment]::SetEnvironmentVariable("Path", $env:Path + ";$poetryPath", "User")
+     # Install uv
+     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
   After installation, restart your PowerShell session and verify:
 
   .. code-block:: powershell
 
-     poetry --version
+     uv --version
   
 
 Linux Setup
@@ -210,8 +202,8 @@ Install using pip in the ``pyadare`` conda environment:
    # Install wheels (PowerShell requires explicit wildcard expansion)
    %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem Z:\wheels\*.whl | Select-Object -ExpandProperty FullName)
 
-Windows with Poetry
--------------------
+Windows with pip
+----------------
 
 Install using system pip:
 
@@ -232,8 +224,8 @@ Install using pip in the ``pyadare`` conda environment:
 
    /home/adare/.miniforge3/bin/conda run -n pyadare pip install --break-system-packages /adare/app/wheels/*.whl
 
-Linux with Poetry
------------------
+Linux with pip
+--------------
 
 Install using system pip:
 
@@ -259,7 +251,7 @@ Verify the installation by checking package versions:
    # For Conda (Linux)
    /home/adare/.miniforge3/bin/conda run -n pyadare pip show adarevm adarelib
 
-   # For Poetry (Windows/Linux)
+   # For pip (Windows/Linux)
    pip show adarevm adarelib
 
 Expected output:

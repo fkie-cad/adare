@@ -60,7 +60,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             Tuple of (return_code, stdout, stderr)
         """
         if not silent:
-            log.info(f"CLAUDE: Executing {operation_name}: {' '.join(args)}")
+            log.info(f"Executing {operation_name}: {' '.join(args)}")
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -75,7 +75,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             # Read output with cancellation support
             while True:
                 if stop_event and stop_event.is_set():
-                    log.info(f"CLAUDE: Stop event detected during {operation_name}")
+                    log.info(f"Stop event detected during {operation_name}")
                     proc.kill()
                     await proc.wait()
                     break
@@ -105,12 +105,12 @@ class CommandExecutionMixin(AbstractCommandMixin):
             stderr = '\n'.join(stderr_lines)
 
             if not silent:
-                log.debug(f"CLAUDE: {operation_name} completed with return code {proc.returncode}")
+                log.debug(f"{operation_name} completed with return code {proc.returncode}")
 
             return proc.returncode, stdout, stderr
 
-        except Exception as e:
-            log.error(f"CLAUDE: Error executing {operation_name}: {e}")
+        except (OSError, subprocess.SubprocessError) as e:
+            log.error(f"Error executing {operation_name}: {e}")
             raise HypervisorException(f"Command execution failed: {e}")
 
     def _execute_streaming_command(
@@ -139,7 +139,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             Return code from command execution
         """
         if not silent:
-            log.info(f"CLAUDE: Executing {operation_name}: {' '.join(args)}")
+            log.info(f"Executing {operation_name}: {' '.join(args)}")
 
         try:
             proc = subprocess.Popen(
@@ -152,7 +152,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             output_lines = []
             while True:
                 if stop_event and stop_event.is_set():
-                    log.info(f"CLAUDE: Stop event detected during {operation_name}")
+                    log.info(f"Stop event detected during {operation_name}")
                     proc.terminate()
                     proc.wait(timeout=5)
                     break
@@ -165,7 +165,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 output_lines.append(line_str)
 
                 if not silent:
-                    log.debug(f"CLAUDE: {line_str}")
+                    log.debug(f"{line_str}")
 
                 if log_file:
                     with open(log_file, 'a') as f:
@@ -174,12 +174,12 @@ class CommandExecutionMixin(AbstractCommandMixin):
             proc.wait()
 
             if not silent:
-                log.debug(f"CLAUDE: {operation_name} completed with return code {proc.returncode}")
+                log.debug(f"{operation_name} completed with return code {proc.returncode}")
 
             return proc.returncode
 
-        except Exception as e:
-            log.error(f"CLAUDE: Error executing {operation_name}: {e}")
+        except (OSError, subprocess.SubprocessError) as e:
+            log.error(f"Error executing {operation_name}: {e}")
             raise HypervisorException(f"Command execution failed: {e}")
 
 
@@ -361,14 +361,14 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 path_value = f"{self._cached_guest_path};{system_essentials}"
             else:
                 path_value = self._cached_guest_path
-            log.debug("CLAUDE: Using discovered guest PATH")
+            log.debug("Using discovered guest PATH")
         else:
             # Fallback to hardcoded minimal PATH for compatibility
             if 'windows' in self.guest_os.lower():
                 path_value = "C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0"
             else:
                 path_value = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-            log.debug("CLAUDE: Using hardcoded fallback PATH (discovery not available)")
+            log.debug("Using hardcoded fallback PATH (discovery not available)")
 
         env_vars.append(f"PATH={path_value}")
 
@@ -381,18 +381,18 @@ class CommandExecutionMixin(AbstractCommandMixin):
             # Set XAUTHORITY only if detected (X11 will try default locations otherwise)
             if hasattr(self, '_cached_xauthority') and self._cached_xauthority:
                 env_vars.append(f"XAUTHORITY={self._cached_xauthority}")
-                log.debug(f"CLAUDE: Using DISPLAY=:0 with XAUTHORITY={self._cached_xauthority}")
+                log.debug(f"Using DISPLAY=:0 with XAUTHORITY={self._cached_xauthority}")
             else:
-                log.debug("CLAUDE: Using DISPLAY=:0 without XAUTHORITY (X11 will try default locations)")
+                log.debug("Using DISPLAY=:0 without XAUTHORITY (X11 will try default locations)")
 
             # Add ADARE_GUI_MODE environment variable if host-based GUI
             if hasattr(self, 'adare_gui_mode'):
                 from adare.backend.experiment.execution.base import GUIExecutionMode
                 if self.adare_gui_mode == GUIExecutionMode.HOST:
                     env_vars.append("ADARE_GUI_MODE=host")
-                    log.info("CLAUDE: Setting ADARE_GUI_MODE=host - PyAutoGUI will be skipped in guest")
+                    log.info("Setting ADARE_GUI_MODE=host - PyAutoGUI will be skipped in guest")
 
-        log.debug(f"CLAUDE: Built guest environment: {env_vars}")
+        log.debug(f"Built guest environment: {env_vars}")
         return env_vars
 
     async def _wait_for_user_session(self, timeout: int = 90) -> bool:
@@ -413,7 +413,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             return True
             
         try:
-            log.debug(f"CLAUDE: Waiting for user '{self.username}' session and registry hive...")
+            log.debug(f"Waiting for user '{self.username}' session and registry hive...")
             
             # PowerShell command to check for explorer.exe AND registry hive
             # We need the SID to check the registry key
@@ -438,20 +438,20 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 
                 stdout_str = stdout.strip().lower()
                 if returncode == 0 and 'ready' in stdout_str:
-                    log.info(f"CLAUDE: User session and registry hive for '{self.username}' are ready")
+                    log.info(f"User session and registry hive for '{self.username}' are ready")
                     return True
                 
                 # Log status every few seconds (throttled by the sleep)
                 if 'waiting' in stdout_str or 'error' in stdout_str:
-                    log.debug(f"CLAUDE: Session wait status: {stdout.strip()}")
+                    log.debug(f"Session wait status: {stdout.strip()}")
 
                 await asyncio.sleep(2)
                 
-            log.warning(f"CLAUDE: Timed out waiting for user session after {timeout}s")
+            log.warning(f"Timed out waiting for user session after {timeout}s")
             return False
             
-        except Exception as e:
-            log.warning(f"CLAUDE: Error waiting for user session: {e}")
+        except (HypervisorException, asyncio.TimeoutError, OSError) as e:
+            log.warning(f"Error waiting for user session: {e}")
             return False
 
     async def _discover_guest_path(self) -> Optional[str]:
@@ -478,7 +478,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             return self._cached_guest_path
 
         try:
-            log.debug("CLAUDE: Attempting to discover guest PATH environment")
+            log.debug("Attempting to discover guest PATH environment")
 
             # Wait for user session on Windows to ensure registry is loaded
             if 'windows' in self.guest_os.lower():
@@ -515,13 +515,13 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             if returncode != 0:
                 log.warning(
-                    f"CLAUDE: PATH discovery command failed with exit code {returncode}. "
+                    f"PATH discovery command failed with exit code {returncode}. "
                     f"stderr: {stderr[:100]}"
                 )
                 return None
 
             if not stdout:
-                log.warning("CLAUDE: PATH discovery returned empty output")
+                log.warning("PATH discovery returned empty output")
                 return None
 
             # Validate discovered PATH
@@ -529,7 +529,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 # Windows: PATH should contain at least one drive path (e.g., C:\)
                 if ':\\' not in stdout:
                     log.warning(
-                        f"CLAUDE: Discovered Windows PATH appears invalid "
+                        f"Discovered Windows PATH appears invalid "
                         f"(no drive paths found): {stdout[:100]}"
                     )
                     return None
@@ -537,26 +537,26 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 # Linux: PATH should contain /bin or /usr/bin
                 if '/bin' not in stdout and '/usr/bin' not in stdout:
                     log.warning(
-                        f"CLAUDE: Discovered Linux PATH appears invalid "
+                        f"Discovered Linux PATH appears invalid "
                         f"(missing /bin or /usr/bin): {stdout[:100]}"
                     )
                     return None
 
-            log.info(f"CLAUDE: Successfully discovered guest PATH: {stdout[:150]}...")
+            log.info(f"Successfully discovered guest PATH: {stdout[:150]}...")
             self._cached_guest_path = stdout
             return stdout
 
         except asyncio.TimeoutError:
-            log.warning("CLAUDE: PATH discovery timed out after 10 seconds")
+            log.warning("PATH discovery timed out after 10 seconds")
             return None
         except (OSError, ConnectionError) as e:
-            log.warning(f"CLAUDE: PATH discovery failed due to connection error: {e}")
+            log.warning(f"PATH discovery failed due to connection error: {e}")
             return None
         except json.JSONDecodeError as e:
-            log.warning(f"CLAUDE: PATH discovery failed due to JSON parsing error: {e}")
+            log.warning(f"PATH discovery failed due to JSON parsing error: {e}")
             return None
         except KeyError as e:
-            log.warning(f"CLAUDE: PATH discovery failed due to missing expected key: {e}")
+            log.warning(f"PATH discovery failed due to missing expected key: {e}")
             return None
 
     async def _discover_python_scripts_path(self) -> Optional[str]:
@@ -568,7 +568,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             return self._cached_python_scripts_path
 
         try:
-            log.debug("CLAUDE: Attempting to discover Python Scripts path")
+            log.debug("Attempting to discover Python Scripts path")
             
             # Wait for user session on Windows
             if 'windows' in self.guest_os.lower():
@@ -590,14 +590,14 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 if returncode == 0 and stdout.strip():
                     python_base = stdout.strip()
                     scripts_path = f"{python_base}\\Scripts"
-                    log.info(f"CLAUDE: Found Python Scripts path: {scripts_path}")
+                    log.info(f"Found Python Scripts path: {scripts_path}")
                     self._cached_python_scripts_path = scripts_path
                     return scripts_path
                     
             return None
             
-        except Exception as e:
-            log.warning(f"CLAUDE: Error discovering Python scripts path: {e}")
+        except (HypervisorException, asyncio.TimeoutError, OSError) as e:
+            log.warning(f"Error discovering Python scripts path: {e}")
             return None
 
     async def _resolve_guest_executable_path(self, executable: str) -> Optional[str]:
@@ -622,7 +622,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             )
             
             if returncode == 0 and 'True' in stdout:
-                log.info(f"CLAUDE: Resolved {executable} to {candidate}")
+                log.info(f"Resolved {executable} to {candidate}")
                 setattr(self, cache_attr, candidate)
                 return candidate
                 
@@ -643,7 +643,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             Does not raise - all exceptions are caught and logged as warnings.
         """
         try:
-            log.debug("CLAUDE: Attempting to detect XAUTHORITY file in guest")
+            log.debug("Attempting to detect XAUTHORITY file in guest")
 
             # Optimized detection: check most common locations first (fast path)
             detect_cmd = (
@@ -663,7 +663,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 'exit 1'
             )
 
-            log.debug(f"CLAUDE: Executing XAUTHORITY detection command: {detect_cmd[:100]}...")
+            log.debug(f"Executing XAUTHORITY detection command: {detect_cmd[:100]}...")
 
             # Execute detection command via guest agent
             returncode, stdout, stderr = await self._execute_guest_command_via_agent(
@@ -674,24 +674,24 @@ class CommandExecutionMixin(AbstractCommandMixin):
             if returncode == 0 and stdout.strip():
                 # Successfully found XAUTHORITY file
                 xauthority_path = stdout.strip().splitlines()[0]
-                log.info(f"CLAUDE: Successfully detected XAUTHORITY at: {xauthority_path}")
+                log.info(f"Successfully detected XAUTHORITY at: {xauthority_path}")
                 return xauthority_path
             else:
                 log.warning(
-                    f"CLAUDE: XAUTHORITY detection failed (exit code {returncode}). "
+                    f"XAUTHORITY detection failed (exit code {returncode}). "
                     f"stdout: {stdout.strip()!r}, stderr: {stderr.strip()!r}"
                 )
-                log.debug("CLAUDE: Will set DISPLAY without XAUTHORITY (X11 will try defaults)")
+                log.debug("Will set DISPLAY without XAUTHORITY (X11 will try defaults)")
                 return None
 
         except asyncio.TimeoutError:
-            log.warning("CLAUDE: XAUTHORITY detection timed out after 10 seconds")
+            log.warning("XAUTHORITY detection timed out after 10 seconds")
             return None
         except (OSError, ConnectionError) as e:
-            log.warning(f"CLAUDE: XAUTHORITY detection failed due to connection error: {e}")
+            log.warning(f"XAUTHORITY detection failed due to connection error: {e}")
             return None
         except (json.JSONDecodeError, KeyError) as e:
-            log.warning(f"CLAUDE: XAUTHORITY detection failed due to parsing error: {e}")
+            log.warning(f"XAUTHORITY detection failed due to parsing error: {e}")
             return None
 
     async def _discover_and_cache_xauthority(self) -> Optional[str]:
@@ -708,7 +708,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         """
         # Return cached value if already discovered
         if hasattr(self, '_cached_xauthority'):
-            log.debug(f"CLAUDE: Using cached XAUTHORITY: {self._cached_xauthority}")
+            log.debug(f"Using cached XAUTHORITY: {self._cached_xauthority}")
             return self._cached_xauthority
 
         # Perform discovery
@@ -718,9 +718,9 @@ class CommandExecutionMixin(AbstractCommandMixin):
         self._cached_xauthority = xauthority_path
 
         if xauthority_path:
-            log.info(f"CLAUDE: Cached XAUTHORITY path: {xauthority_path}")
+            log.info(f"Cached XAUTHORITY path: {xauthority_path}")
         else:
-            log.warning("CLAUDE: XAUTHORITY detection failed, X11 environment will not be configured")
+            log.warning("XAUTHORITY detection failed, X11 environment will not be configured")
 
         return xauthority_path
 
@@ -743,17 +743,17 @@ class CommandExecutionMixin(AbstractCommandMixin):
         Returns:
             True if successful, False otherwise
         """
-        log.info(f"CLAUDE: Copying '{guest_path}' from guest to '{host_path}' on host")
+        log.info(f"Copying '{guest_path}' from guest to '{host_path}' on host")
 
         # Check if VM is stopped
         if self.get_state() != "poweroff":
-            log.error("CLAUDE: VM must be stopped to use libguestfs file operations")
+            log.error("VM must be stopped to use libguestfs file operations")
             return False
 
         try:
             import guestfs
         except ImportError:
-            log.error("CLAUDE: libguestfs Python bindings not available. Install python3-guestfs.")
+            log.error("libguestfs Python bindings not available. Install python3-guestfs.")
             return False
 
         try:
@@ -761,30 +761,30 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             # Add the VM disk
             if not hasattr(self, 'config') or not hasattr(self.config, 'disk_path'):
-                log.error("CLAUDE: VM config or disk_path not available")
+                log.error("VM config or disk_path not available")
                 return False
 
             disk_path = self.config.disk_path
             if not os.path.exists(disk_path):
-                log.error(f"CLAUDE: VM disk not found at {disk_path}")
+                log.error(f"VM disk not found at {disk_path}")
                 return False
 
-            log.debug(f"CLAUDE: Adding disk {disk_path} to libguestfs")
+            log.debug(f"Adding disk {disk_path} to libguestfs")
             g.add_drive_opts(disk_path, readonly=1)
 
             # Launch and mount
-            log.debug("CLAUDE: Launching libguestfs")
+            log.debug("Launching libguestfs")
             g.launch()
 
             # Inspect and mount filesystems
             roots = g.inspect_os()
             if not roots:
-                log.error("CLAUDE: No operating system found in VM disk")
+                log.error("No operating system found in VM disk")
                 g.close()
                 return False
 
             root = roots[0]
-            log.debug(f"CLAUDE: Detected OS root: {root}")
+            log.debug(f"Detected OS root: {root}")
 
             # Mount filesystems
             mps = g.inspect_get_mountpoints(root)
@@ -792,10 +792,10 @@ class CommandExecutionMixin(AbstractCommandMixin):
             # Sort mountpoints by length (mount / before /usr, etc.)
             for mountpoint, device in sorted(mps.items(), key=lambda x: len(x[0])):
                 try:
-                    log.debug(f"CLAUDE: Mounting {device} on {mountpoint}")
+                    log.debug(f"Mounting {device} on {mountpoint}")
                     g.mount_ro(device, mountpoint)
                 except RuntimeError as e:
-                    log.warning(f"CLAUDE: Could not mount {device}: {e}")
+                    log.warning(f"Could not mount {device}: {e}")
 
             # Copy file or directory
             host_path_obj = Path(host_path)
@@ -806,26 +806,26 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 try:
                     is_dir = g.is_dir(guest_path)
                 except RuntimeError:
-                    log.error(f"CLAUDE: Guest path '{guest_path}' not found")
+                    log.error(f"Guest path '{guest_path}' not found")
                     g.close()
                     return False
 
                 if is_dir:
-                    log.debug(f"CLAUDE: Copying directory '{guest_path}' recursively")
+                    log.debug(f"Copying directory '{guest_path}' recursively")
                     g.copy_out(guest_path, str(host_path_obj.parent))
                 else:
-                    log.debug(f"CLAUDE: Copying file '{guest_path}'")
+                    log.debug(f"Copying file '{guest_path}'")
                     g.download(guest_path, host_path)
             else:
-                log.debug(f"CLAUDE: Copying file '{guest_path}'")
+                log.debug(f"Copying file '{guest_path}'")
                 g.download(guest_path, host_path)
 
             g.close()
-            log.info(f"CLAUDE: Successfully copied '{guest_path}' to '{host_path}'")
+            log.info(f"Successfully copied '{guest_path}' to '{host_path}'")
             return True
 
-        except Exception as e:
-            log.error(f"CLAUDE: Failed to copy from guest: {e}")
+        except (RuntimeError, OSError) as e:
+            log.error(f"Failed to copy from guest: {e}")
             return False
 
     async def _execute_guest_command_via_agent(
@@ -861,16 +861,16 @@ class CommandExecutionMixin(AbstractCommandMixin):
             Tuple of (returncode, stdout, stderr)
         """
         if self.get_state() != "running":
-            log.error("CLAUDE: VM must be running to execute guest commands")
+            log.error("VM must be running to execute guest commands")
             return -1, "", "VM not running"
 
         if not hasattr(self, 'config') or not self.config.guest_agent_socket_path:
-            log.error("CLAUDE: Guest agent socket not configured")
+            log.error("Guest agent socket not configured")
             return -1, "", "Guest agent not configured"
 
         socket_path = self.config.guest_agent_socket_path
         if not os.path.exists(socket_path):
-            log.error(f"CLAUDE: Guest agent socket not found at {socket_path}")
+            log.error(f"Guest agent socket not found at {socket_path}")
             return -1, "", "Guest agent socket not found"
 
         try:
@@ -921,24 +921,24 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             if 'error' in qga_response:
                 error_msg = qga_response['error'].get('desc', 'Unknown error')
-                log.error(f"CLAUDE: Guest agent error: {error_msg}")
+                log.error(f"Guest agent error: {error_msg}")
                 return -1, "", error_msg
 
             # Get PID from response
             pid = qga_response.get('return', {}).get('pid')
             if not pid:
-                log.error("CLAUDE: No PID returned from guest-exec")
+                log.error("No PID returned from guest-exec")
                 return -1, "", "No PID returned"
 
             if background:
-                log.debug(f"CLAUDE: Command started in background with PID {pid}")
+                log.debug(f"Command started in background with PID {pid}")
                 return 0, f"Started with PID {pid}", ""
 
             # Wait for command to complete and get status
             start_time = time.time()
             while time.time() - start_time < timeout:
                 if stop_event and stop_event.is_set():
-                    log.info("CLAUDE: Stop event detected, abandoning guest command wait")
+                    log.info("Stop event detected, abandoning guest command wait")
                     return -1, "", "Cancelled"
 
                 status_cmd = {
@@ -950,7 +950,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
                 if 'error' in status_response:
                     error_msg = status_response['error'].get('desc', 'Unknown error')
-                    log.error(f"CLAUDE: Guest agent status error: {error_msg}")
+                    log.error(f"Guest agent status error: {error_msg}")
                     return -1, "", error_msg
 
                 status_data = status_response.get('return', {})
@@ -964,26 +964,26 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     stdout = base64.b64decode(stdout_b64).decode('utf-8', errors='replace') if stdout_b64 else ""
                     stderr = base64.b64decode(stderr_b64).decode('utf-8', errors='replace') if stderr_b64 else ""
 
-                    log.debug(f"CLAUDE: Guest command completed with return code {returncode}")
+                    log.debug(f"Guest command completed with return code {returncode}")
                     return returncode, stdout, stderr
 
                 # Sleep briefly before checking again
                 await asyncio.sleep(0.5)
 
-            log.error("CLAUDE: Timeout waiting for guest command to complete")
+            log.error("Timeout waiting for guest command to complete")
             return -1, "", "Timeout"
 
         except asyncio.TimeoutError as e:
-            log.error(f"CLAUDE: Timeout executing guest command '{command}': {e}")
+            log.error(f"Timeout executing guest command '{command}': {e}")
             return -1, "", f"Command execution timeout: {e}"
         except json.JSONDecodeError as e:
-            log.error(f"CLAUDE: Invalid JSON response from guest agent for command '{command}': {e}")
+            log.error(f"Invalid JSON response from guest agent for command '{command}': {e}")
             return -1, "", f"Invalid JSON response: {e}"
         except ConnectionError as e:
-            log.error(f"CLAUDE: Connection error executing guest command '{command}': {e}")
+            log.error(f"Connection error executing guest command '{command}': {e}")
             return -1, "", f"Connection error: {e}"
         except OSError as e:
-            log.error(f"CLAUDE: OS error executing guest command '{command}': {e}")
+            log.error(f"OS error executing guest command '{command}': {e}")
             return -1, "", f"OS error: {e}"
 
     async def _send_qga_command_direct(self, socket_path: str, command: dict) -> dict:
@@ -1007,9 +1007,9 @@ class CommandExecutionMixin(AbstractCommandMixin):
             Response dictionary
         """
         try:
-            log.debug(f"CLAUDE: Attempting to connect to guest agent socket: {socket_path}")
+            log.debug(f"Attempting to connect to guest agent socket: {socket_path}")
             reader, writer = await asyncio.open_unix_connection(socket_path)
-            log.debug(f"CLAUDE: Successfully connected to guest agent socket")
+            log.debug(f"Successfully connected to guest agent socket")
 
             # Step 1: Handle QMP greeting (protocol requirement)
             # The guest agent may send a greeting message on first connection
@@ -1019,11 +1019,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
                 # Check if this is a QMP greeting
                 if 'QMP' in greeting:
-                    log.debug(f"CLAUDE: Received QGA greeting: {greeting}")
+                    log.debug(f"Received QGA greeting: {greeting}")
                     # Greeting received and discarded - proceed with command
                 else:
                     # Not a greeting - this shouldn't happen, but log it
-                    log.warning(f"CLAUDE: Unexpected first message from QGA: {greeting}")
+                    log.warning(f"Unexpected first message from QGA: {greeting}")
                     # Treat it as the actual response (fallback behavior)
                     writer.close()
                     await writer.wait_closed()
@@ -1031,25 +1031,25 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             except asyncio.TimeoutError:
                 # No greeting received - this is fine, some QGA versions don't send it
-                log.debug("CLAUDE: No QGA greeting received (timeout), proceeding with command")
+                log.debug("No QGA greeting received (timeout), proceeding with command")
             except json.JSONDecodeError as e:
                 # Invalid JSON in greeting - log but continue
-                log.warning(f"CLAUDE: Failed to parse QGA greeting: {e}")
+                log.warning(f"Failed to parse QGA greeting: {e}")
 
             # Step 2: Send command as JSON
             cmd_json = json.dumps(command) + '\n'
-            log.debug(f"CLAUDE: Sending QGA command: {command.get('execute', 'unknown')}")
-            log.debug(f"CLAUDE: Command JSON: {cmd_json.strip()}")
+            log.debug(f"Sending QGA command: {command.get('execute', 'unknown')}")
+            log.debug(f"Command JSON: {cmd_json.strip()}")
             writer.write(cmd_json.encode('utf-8'))
-            log.debug(f"CLAUDE: Command written to buffer, flushing...")
+            log.debug(f"Command written to buffer, flushing...")
             await writer.drain()
-            log.debug(f"CLAUDE: Command flushed successfully")
+            log.debug(f"Command flushed successfully")
 
             # Step 3: Read response with timeout to prevent indefinite blocking
             response_line = await asyncio.wait_for(reader.readline(), timeout=5.0)
             response = json.loads(response_line.decode('utf-8'))
 
-            log.debug(f"CLAUDE: QGA response: {response}")
+            log.debug(f"QGA response: {response}")
 
             writer.close()
             await writer.wait_closed()
@@ -1057,26 +1057,26 @@ class CommandExecutionMixin(AbstractCommandMixin):
             return response
 
         except asyncio.TimeoutError as e:
-            log.error(f"CLAUDE: Timeout communicating with guest agent: {e}")
+            log.error(f"Timeout communicating with guest agent: {e}")
             return {"error": {"desc": f"Communication timeout: {e}"}}
         except json.JSONDecodeError as e:
-            log.error(f"CLAUDE: Failed to parse guest agent response: {e}")
+            log.error(f"Failed to parse guest agent response: {e}")
             return {"error": {"desc": f"Invalid JSON response: {e}"}}
         except ConnectionRefusedError as e:
-            log.error(f"CLAUDE: Guest agent connection refused: {e}")
+            log.error(f"Guest agent connection refused: {e}")
             return {"error": {"desc": f"Connection refused: {e}"}}
         except FileNotFoundError as e:
-            log.error(f"CLAUDE: Guest agent socket not found: {e}")
+            log.error(f"Guest agent socket not found: {e}")
             return {"error": {"desc": f"Socket not found: {e}"}}
         except OSError as e:
             # Log detailed error information including errno
             errno_num = getattr(e, 'errno', 'unknown')
-            log.error(f"CLAUDE: OS error communicating with guest agent: {e} (errno={errno_num})")
-            log.error(f"CLAUDE: Socket path: {socket_path}")
-            log.error(f"CLAUDE: Command attempted: {command.get('execute', 'unknown')}")
+            log.error(f"OS error communicating with guest agent: {e} (errno={errno_num})")
+            log.error(f"Socket path: {socket_path}")
+            log.error(f"Command attempted: {command.get('execute', 'unknown')}")
             return {"error": {"desc": f"OS error: {e}"}}
 
-    async def _send_qga_command_via_libvirt(self, command: dict) -> dict:
+    async def _send_qga_command_via_libvirt(self, command: dict, timeout: int = 5) -> dict:
         """
         Send command to QEMU Guest Agent via libvirt API.
 
@@ -1086,6 +1086,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         Args:
             command: QGA command dictionary
+            timeout: Seconds to wait for guest agent response (default 5)
 
         Returns:
             Response dictionary
@@ -1105,9 +1106,9 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     path = args.get('path', '')
                     cmd_args = args.get('arg', [])
                     full_cmd = " ".join([path] + cmd_args)
-                    log.debug(f"CLAUDE: Sending QGA command via libvirt: guest-exec ({full_cmd})")
+                    log.debug(f"Sending QGA command via libvirt: guest-exec ({full_cmd})")
                 else:
-                    log.debug(f"CLAUDE: Sending QGA command via libvirt: {execute_name}")
+                    log.debug(f"Sending QGA command via libvirt: {execute_name}")
 
                 # Get experiment log file for stderr capture
                 log_file = get_experiment_log_file()
@@ -1117,7 +1118,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     result = libvirt_qemu.qemuAgentCommand(
                         self._libvirt_domain,
                         cmd_json,
-                        5,  # timeout in seconds
+                        timeout,  # seconds; callers pass higher values for file I/O
                         0   # flags
                     )
 
@@ -1134,23 +1135,23 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     )
                     
                     if is_running:
-                        log.debug("CLAUDE: QGA command still running")
+                        log.debug("QGA command still running")
                     else:
-                        log.debug(f"CLAUDE: QGA response: {response}")
-                except Exception:
+                        log.debug(f"QGA response: {response}")
+                except (KeyError, TypeError):
                     # Fallback to full logging if check fails
-                    log.debug(f"CLAUDE: QGA response: {response}")
+                    log.debug(f"QGA response: {response}")
                 
                 return response
 
             except libvirt.libvirtError as e:
-                log.error(f"CLAUDE: Libvirt error sending QGA command: {e}")
+                log.error(f"Libvirt error sending QGA command: {e}")
                 return {"error": {"desc": f"Libvirt error: {e}"}}
             except json.JSONDecodeError as e:
-                log.error(f"CLAUDE: Failed to parse QGA response: {e}")
+                log.error(f"Failed to parse QGA response: {e}")
                 return {"error": {"desc": f"Invalid JSON: {e}"}}
-            except Exception as e:
-                log.error(f"CLAUDE: Unexpected error: {e}")
+            except (OSError, AttributeError, TypeError) as e:
+                log.error(f"Unexpected error: {e}")
                 return {"error": {"desc": f"Error: {e}"}}
 
         # Run via manager's async executor
@@ -1191,7 +1192,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             if 'error' in status_response:
                 error_msg = status_response['error'].get('desc', 'Unknown error')
-                log.warning(f"CLAUDE: Failed to check process {pid} status: {error_msg}")
+                log.warning(f"Failed to check process {pid} status: {error_msg}")
                 return False, None, error_msg
 
             status_data = status_response.get('return', {})
@@ -1199,21 +1200,21 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             if exited:
                 exit_code = status_data.get('exitcode', -1)
-                log.debug(f"CLAUDE: Process {pid} has exited with code {exit_code}")
+                log.debug(f"Process {pid} has exited with code {exit_code}")
                 return False, exit_code, ""
             else:
-                log.debug(f"CLAUDE: Process {pid} is still running")
+                log.debug(f"Process {pid} is still running")
                 return True, None, ""
 
         except asyncio.TimeoutError:
             error_msg = "Timeout checking process status"
-            log.warning(f"CLAUDE: {error_msg} for PID {pid}")
+            log.warning(f"{error_msg} for PID {pid}")
             return False, None, error_msg
         except (OSError, ConnectionError) as e:
             error_msg = f"Connection error: {e}"
-            log.warning(f"CLAUDE: {error_msg} while checking PID {pid}")
+            log.warning(f"{error_msg} while checking PID {pid}")
             return False, None, error_msg
         except (json.JSONDecodeError, KeyError) as e:
             error_msg = f"Parsing error: {e}"
-            log.warning(f"CLAUDE: {error_msg} while checking PID {pid}")
+            log.warning(f"{error_msg} while checking PID {pid}")
             return False, None, error_msg

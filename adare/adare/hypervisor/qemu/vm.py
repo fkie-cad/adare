@@ -20,6 +20,11 @@ import uuid
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
+try:
+    import libvirt
+except ImportError:
+    libvirt = None
+
 from adarelib.constants import StatusEnum
 
 from adare.hypervisor.base.vm import AbstractVM
@@ -67,10 +72,12 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         machine: str = 'pc',
         accel: str = 'kvm',
         drive_format: str = 'qcow2',
-        disk_path: Optional[str] = None
+        disk_path: Optional[str] = None,
+        architecture: str = 'x86_64'
     ):
         self.vm_name = vm_name
         self.guest_os = guest_os
+        self.architecture = architecture
         self.username = username
         self.password = password
         self.cpus = cpus
@@ -102,7 +109,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         # Load or create VM config
         self.config = self._load_or_create_vm_config()
 
-        log.debug(f"CLAUDE: Initialized QEMUVM for '{self.vm_name}' ({self.guest_os})")
+        log.debug(f"Initialized QEMUVM for '{self.vm_name}' ({self.guest_os})")
 
     async def create(
         self,
@@ -125,7 +132,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         """
         async def _create_async():
             if not silent:
-                log.debug(f"CLAUDE: Creating QEMU VM '{self.vm_name}' with "
+                log.debug(f"Creating QEMU VM '{self.vm_name}' with "
                         f"{self.cpus} CPUs, {self.ram}MB RAM")
 
             qemu_img_exe = self.executables.qemu_img
@@ -145,11 +152,11 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
             if returncode == 0:
                 if not silent:
-                    log.debug(f"CLAUDE: VM '{self.vm_name}' disk created at {disk_path}")
+                    log.debug(f"VM '{self.vm_name}' disk created at {disk_path}")
                 # Save config
                 self._save_vm_config()
             else:
-                log.error(f"CLAUDE: Failed to create VM disk: {stderr}")
+                log.error(f"Failed to create VM disk: {stderr}")
 
             return returncode
 
@@ -175,9 +182,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 # Create new connection for this QEMUVM instance (thread-safe)
                 # Don't use self.manager.libvirt_conn to avoid shared connection issues
                 self._libvirt_conn = libvirt.open(libvirt_uri)
-                log.debug(f"CLAUDE: Created thread-local libvirt connection for {self.vm_name}")
-            except Exception as e:
-                log.warning(f"CLAUDE: Failed to create libvirt connection: {e}")
+                log.debug(f"Created thread-local libvirt connection for {self.vm_name}")
+            except libvirt.libvirtError as e:
+                log.warning(f"Failed to create libvirt connection: {e}")
                 return None
 
         return self._libvirt_conn
@@ -198,7 +205,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         from adare.hypervisor.qemu.libvirt_xml import generate_domain_xml
         import libvirt
 
-        log.debug(f"CLAUDE: Defining libvirt domain for VM: {self.vm_name}")
+        log.debug(f"Defining libvirt domain for VM: {self.vm_name}")
 
         # Generate XML domain definition
         # Include virtiofs shares if configured AND supported (avoid session mode)
@@ -212,13 +219,13 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         
         if self.config.virtiofs_enabled and self.config.virtiofs_shares:
             if is_session_mode:
-                log.warning(f"CLAUDE: Disabling virtiofs shares for {self.vm_name} "
+                log.warning(f"Disabling virtiofs shares for {self.vm_name} "
                            f"(not supported in session mode: {libvirt_uri}). "
                            f"Falling back to libguestfs file transfer.")
                 virtiofs_shares = None
             else:
                 virtiofs_shares = self.config.virtiofs_shares
-                log.debug(f"CLAUDE: Including {len(virtiofs_shares)} virtio-fs shares in domain")
+                log.debug(f"Including {len(virtiofs_shares)} virtio-fs shares in domain")
 
         xml = generate_domain_xml(
             self.config,
@@ -227,7 +234,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             virtiofs_shares=virtiofs_shares
         )
 
-        log.debug(f"CLAUDE: Generated libvirt XML for {self.vm_name}")
+        log.debug(f"Generated libvirt XML for {self.vm_name}")
 
         # Get libvirt connection
         conn = self._get_libvirt_connection()
@@ -243,22 +250,22 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         try:
             with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
                 existing_domain = conn.lookupByName(self.vm_name)
-                log.debug(f"CLAUDE: Domain '{self.vm_name}' already exists, undefining...")
+                log.debug(f"Domain '{self.vm_name}' already exists, undefining...")
                 # Undefine existing domain (will redefine with new XML)
                 if existing_domain.isActive():
-                    log.warning(f"CLAUDE: Domain '{self.vm_name}' is running, destroying first...")
+                    log.warning(f"Domain '{self.vm_name}' is running, destroying first...")
                     existing_domain.destroy()
                 existing_domain.undefine()
         except libvirt.libvirtError as e:
             # Domain doesn't exist, which is fine
             if 'Domain not found' not in str(e):
-                log.warning(f"CLAUDE: Error checking for existing domain: {e}")
+                log.warning(f"Error checking for existing domain: {e}")
 
         # Define the domain
         try:
             with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
                 domain = conn.defineXML(xml)
-            log.debug(f"CLAUDE: Defined libvirt domain '{self.vm_name}' (visible in virsh/virt-manager)")
+            log.debug(f"Defined libvirt domain '{self.vm_name}' (visible in virsh/virt-manager)")
 
             # Update config with libvirt domain name
             self.config.libvirt_domain_name = self.vm_name
@@ -300,11 +307,11 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         # Add UEFI firmware if boot mode is uefi
         if self.config.boot_mode == 'uefi':
             from adare.hypervisor.qemu.firmware import find_ovmf_firmware, create_nvram_for_vm
-            ovmf_code, _ = find_ovmf_firmware()
+            ovmf_code, _ = find_ovmf_firmware(self.architecture)
 
             # Create/get NVRAM for this VM
             vm_config_dir = Path(self.config.disk_path).parent
-            nvram_path = create_nvram_for_vm(self.vm_name, vm_config_dir)
+            nvram_path = create_nvram_for_vm(self.vm_name, vm_config_dir, architecture=self.architecture)
 
             # Add OVMF firmware drives
             cmd.extend([
@@ -367,7 +374,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         cmd.extend(['-netdev', netdev_args])
         cmd.extend(['-device', 'virtio-net-pci,netdev=net0'])
 
-        log.debug(f"CLAUDE: QEMU command: {' '.join(cmd)}")
+        log.debug(f"QEMU command: {' '.join(cmd)}")
         return cmd
 
     async def start(
@@ -413,9 +420,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 if os.path.exists(socket_path):
                     try:
                         os.remove(socket_path)
-                        log.debug(f"CLAUDE: Removed stale socket: {socket_path}")
+                        log.debug(f"Removed stale socket: {socket_path}")
                     except OSError as e:
-                        log.warning(f"CLAUDE: Could not remove stale socket {socket_path}: {e}")
+                        log.warning(f"Could not remove stale socket {socket_path}: {e}")
 
             # CRITICAL: Always redefine libvirt domain on each start
             # This ensures the domain XML contains the current overlay disk path,
@@ -444,13 +451,13 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     if raise_if_running:
                         raise VMAlreadyRunningException(message)
                     if not silent:
-                        log.debug(f"CLAUDE: {message}")
+                        log.debug(f"{message}")
                     return 0
             except libvirt.libvirtError as e:
-                log.warning(f"CLAUDE: Could not check domain state: {e}")
+                log.warning(f"Could not check domain state: {e}")
 
             if not silent:
-                log.debug(f"CLAUDE: Starting QEMU VM '{self.vm_name}' via libvirt")
+                log.debug(f"Starting QEMU VM '{self.vm_name}' via libvirt")
 
             # Get experiment log file for stderr capture
             log_file = get_experiment_log_file()
@@ -488,7 +495,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     )
 
                 if not silent:
-                    log.debug(f"CLAUDE: VM '{self.vm_name}' started successfully")
+                    log.debug(f"VM '{self.vm_name}' started successfully")
 
                 # Update stage progress: VM started successfully
                 if stage_ctx:
@@ -507,7 +514,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     if raise_if_running:
                         raise VMAlreadyRunningException(message)
                     if not silent:
-                        log.debug(f"CLAUDE: {message}")
+                        log.debug(f"{message}")
                     return 0
                 else:
                     raise VMStartException(self.vm_name, f"Failed to start VM via libvirt: {e}")
@@ -541,7 +548,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             import libvirt
 
             if not silent:
-                log.debug(f"CLAUDE: Stopping QEMU VM '{self.vm_name}' via libvirt")
+                log.debug(f"Stopping QEMU VM '{self.vm_name}' via libvirt")
 
             log_file_path = get_experiment_log_file()
 
@@ -553,7 +560,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                         self._libvirt_domain = conn.lookupByName(self.vm_name)
                 except libvirt.libvirtError:
                     if not silent:
-                        log.debug(f"CLAUDE: VM '{self.vm_name}' is not defined in libvirt")
+                        log.debug(f"VM '{self.vm_name}' is not defined in libvirt")
                     return 0
 
             # Check current state
@@ -562,10 +569,10 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     state, _ = self._libvirt_domain.state()
                 if state == libvirt.VIR_DOMAIN_SHUTOFF:
                     if not silent:
-                        log.debug(f"CLAUDE: VM '{self.vm_name}' is already stopped")
+                        log.debug(f"VM '{self.vm_name}' is already stopped")
                     return 0
             except libvirt.libvirtError as e:
-                log.warning(f"CLAUDE: Could not check domain state: {e}")
+                log.warning(f"Could not check domain state: {e}")
 
             # Stop the domain
             try:
@@ -573,12 +580,12 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     if force:
                         # Force stop (equivalent to virsh destroy)
                         if not silent:
-                            log.debug(f"CLAUDE: Force stopping VM '{self.vm_name}'")
+                            log.debug(f"Force stopping VM '{self.vm_name}'")
                         self._libvirt_domain.destroy()
                     else:
                         # Graceful shutdown (equivalent to virsh shutdown)
                         if not silent:
-                            log.debug(f"CLAUDE: Gracefully shutting down VM '{self.vm_name}'")
+                            log.debug(f"Gracefully shutting down VM '{self.vm_name}'")
                         self._libvirt_domain.shutdown()
 
                         # Wait for VM to stop with timeout
@@ -588,30 +595,30 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                                 state, _ = self._libvirt_domain.state()
                                 if state == libvirt.VIR_DOMAIN_SHUTOFF:
                                     if not silent:
-                                        log.debug(f"CLAUDE: VM '{self.vm_name}' stopped gracefully")
+                                        log.debug(f"VM '{self.vm_name}' stopped gracefully")
                                     return 0
                             except libvirt.libvirtError:
                                 # Domain might have been destroyed
                                 break
 
                         # Timeout - force stop
-                        log.warning("CLAUDE: Graceful shutdown timed out, forcing stop")
+                        log.warning("Graceful shutdown timed out, forcing stop")
                         self._libvirt_domain.destroy()
 
                 if not silent:
-                    log.debug(f"CLAUDE: VM '{self.vm_name}' stopped")
+                    log.debug(f"VM '{self.vm_name}' stopped")
                 return 0
 
             except libvirt.libvirtError as e:
                 if "not running" in str(e).lower() or "not active" in str(e).lower():
                     if not silent:
-                        log.debug(f"CLAUDE: VM '{self.vm_name}' is already stopped")
+                        log.debug(f"VM '{self.vm_name}' is already stopped")
                     return 0
                 else:
-                    log.error(f"CLAUDE: Failed to stop VM via libvirt: {e}")
+                    log.error(f"Failed to stop VM via libvirt: {e}")
                     return 1
-            except Exception as e:
-                log.error(f"CLAUDE: Error stopping VM: {e}")
+            except (HypervisorException, OSError) as e:
+                log.error(f"Error stopping VM: {e}")
                 return 1
 
         return await self.manager.run_async(_stop_async)
@@ -639,14 +646,14 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             import libvirt
 
             if not silent:
-                log.debug(f"CLAUDE: Destroying QEMU VM '{self.vm_name}'")
+                log.debug(f"Destroying QEMU VM '{self.vm_name}'")
 
             # Force stop regardless of reported state (ensure VM is truly stopped)
             try:
                 await self.stop(silent=silent, force=True)
-            except Exception as e:
+            except (HypervisorException, libvirt.libvirtError, OSError) as e:
                 if not silent:
-                    log.debug(f"CLAUDE: Stop failed or VM already stopped: {e}")
+                    log.debug(f"Stop failed or VM already stopped: {e}")
 
             log_file_path = get_experiment_log_file()
 
@@ -665,9 +672,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                             # Fall back to basic undefine if undefineFlags not available
                             self._libvirt_domain.undefine()
                     if not silent:
-                        log.debug(f"CLAUDE: Undefined libvirt domain '{self.vm_name}'")
+                        log.debug(f"Undefined libvirt domain '{self.vm_name}'")
                 except libvirt.libvirtError as e:
-                    log.error(f"CLAUDE: Could not undefine libvirt domain: {e}")
+                    log.error(f"Could not undefine libvirt domain: {e}")
                     raise  # Propagate error instead of just warning
                 self._libvirt_domain = None
             else:
@@ -682,7 +689,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                             # Fall back to basic undefine if undefineFlags not available
                             domain.undefine()
                     if not silent:
-                        log.debug(f"CLAUDE: Undefined libvirt domain '{self.vm_name}'")
+                        log.debug(f"Undefined libvirt domain '{self.vm_name}'")
                 except libvirt.libvirtError:
                     pass  # Domain doesn't exist, which is fine
 
@@ -702,7 +709,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                         f"(containing '-overlay-' or '-dev-') should be deleted.\n"
                         f"This indicates a bug in session restoration or disk path tracking."
                     )
-                    log.error(f"CLAUDE: {error_msg}")
+                    log.error(f"{error_msg}")
                     raise RuntimeError(
                         f"Refusing to delete potential base disk: {disk_name}. "
                         f"Only overlay disks (containing '-overlay-' or '-dev-') should be deleted."
@@ -713,16 +720,16 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     try:
                         os.remove(self.config.disk_path)
                         if not silent:
-                            log.debug(f"CLAUDE: Deleted VM disk: {self.config.disk_path}")
+                            log.debug(f"Deleted VM disk: {self.config.disk_path}")
                         disk_deleted = True
                         break
-                    except Exception as e:
+                    except OSError as e:
                         if attempt < 2:
                             if not silent:
-                                log.debug(f"CLAUDE: Disk deletion attempt {attempt+1} failed, retrying: {e}")
+                                log.debug(f"Disk deletion attempt {attempt+1} failed, retrying: {e}")
                             await asyncio.sleep(0.5)
                         else:
-                            log.error(f"CLAUDE: Failed to delete disk after 3 attempts: {e}")
+                            log.error(f"Failed to delete disk after 3 attempts: {e}")
                             raise  # Propagate error instead of swallowing it
 
                 # Verify deletion
@@ -743,15 +750,15 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                                 if not any(artifact_dir.iterdir()):
                                     artifact_dir.rmdir()
                                     if not silent:
-                                        log.info(f"CLAUDE: Removed empty artifact directory: {artifact_dir}")
+                                        log.info(f"Removed empty artifact directory: {artifact_dir}")
                                 else:
                                     if not silent:
-                                        log.debug(f"CLAUDE: Artifact directory not empty, preserving: {artifact_dir}")
-                        except Exception as e:
+                                        log.debug(f"Artifact directory not empty, preserving: {artifact_dir}")
+                        except OSError as e:
                             # Non-critical error, log and continue
-                            log.debug(f"CLAUDE: Failed to remove artifact directory: {e}")
+                            log.debug(f"Failed to remove artifact directory: {e}")
             elif not silent:
-                log.debug(f"CLAUDE: Disk does not exist: {self.config.disk_path}")
+                log.debug(f"Disk does not exist: {self.config.disk_path}")
 
             # Delete config
             config_path = self._get_vm_config_path()
@@ -759,9 +766,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 try:
                     os.remove(config_path)
                     if not silent:
-                        log.debug(f"CLAUDE: Deleted VM config: {config_path}")
-                except Exception as e:
-                    log.error(f"CLAUDE: Error deleting config: {e}")
+                        log.debug(f"Deleted VM config: {config_path}")
+                except OSError as e:
+                    log.error(f"Error deleting config: {e}")
 
             # Clean up sockets
             for socket_path in [self.config.qmp_socket_path, self.config.guest_agent_socket_path]:
@@ -777,19 +784,19 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
                     conn = self._get_libvirt_connection()
                     domain = conn.lookupByName(self.vm_name)
-                    log.error(f"CLAUDE: Domain '{self.vm_name}' still defined after undefine!")
+                    log.error(f"Domain '{self.vm_name}' still defined after undefine!")
                     return 1
             except libvirt.libvirtError:
                 if not silent:
-                    log.debug("CLAUDE: Verified domain is undefined")
+                    log.debug("Verified domain is undefined")
 
             # Verify disk file deleted
             if os.path.exists(self.config.disk_path):
-                log.error(f"CLAUDE: Disk still exists after deletion: {self.config.disk_path}")
+                log.error(f"Disk still exists after deletion: {self.config.disk_path}")
                 return 1
 
             if not silent:
-                log.debug(f"CLAUDE: VM '{self.vm_name}' destroyed and verified")
+                log.debug(f"VM '{self.vm_name}' destroyed and verified")
 
             return 0
 
@@ -839,10 +846,10 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             return state_map.get(state, 'unknown')
 
         except libvirt.libvirtError as e:
-            log.debug(f"CLAUDE: Could not get VM state from libvirt: {e}")
+            log.debug(f"Could not get VM state from libvirt: {e}")
             return "unknown"
-        except Exception as e:
-            log.warning(f"CLAUDE: Error getting VM state: {e}")
+        except (HypervisorException, OSError) as e:
+            log.warning(f"Error getting VM state: {e}")
             return "unknown"
 
     def vm_exists(self) -> bool:
@@ -900,7 +907,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             CommandResult with returncode, stdout, stderr
         """
         if not silent:
-            log.debug(f"CLAUDE: Executing command in VM '{self.vm_name}': {command}")
+            log.debug(f"Executing command in VM '{self.vm_name}': {command}")
 
         returncode, stdout, stderr = await self._execute_guest_command_via_agent(
             command,
@@ -943,7 +950,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Returns:
             True if VM is booted and ready, False if timeout
         """
-        log.debug(f"CLAUDE: Waiting for VM '{self.vm_name}' to boot (timeout: {timeout}s)")
+        log.debug(f"Waiting for VM '{self.vm_name}' to boot (timeout: {timeout}s)")
 
         start_time = time.time()
         retry_delay = 0.5  # Start with short delay for quick boots
@@ -951,13 +958,13 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
         while time.time() - start_time < timeout:
             if stop_event and stop_event.is_set():
-                log.debug("CLAUDE: Stop event detected")
+                log.debug("Stop event detected")
                 return False
 
             try:
                 # Test command execution with guest-exec
                 # This validates: socket exists, agent is responsive, and commands can execute
-                log.debug("CLAUDE: Testing guest-exec capability (validates socket + agent + execution)")
+                log.debug("Testing guest-exec capability (validates socket + agent + execution)")
 
                 # Determine test command based on guest OS
                 if 'windows' in self.guest_os.lower():
@@ -980,7 +987,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
                 if 'error' in exec_response:
                     error_desc = exec_response.get('error', {}).get('desc', '')
-                    log.debug(f"CLAUDE: guest-exec test failed: {error_desc}")
+                    log.debug(f"guest-exec test failed: {error_desc}")
                     # Treat as retriable - socket might not be fully ready
                     await asyncio.sleep(retry_delay)
                     retry_delay = min(retry_delay * 1.5, max_retry_delay)
@@ -989,7 +996,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 # Get PID from exec response
                 pid = exec_response.get('return', {}).get('pid')
                 if not pid:
-                    log.debug("CLAUDE: guest-exec returned no PID")
+                    log.debug("guest-exec returned no PID")
                     await asyncio.sleep(retry_delay)
                     retry_delay = min(retry_delay * 1.5, max_retry_delay)
                     continue
@@ -1007,7 +1014,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     status_response = await self._send_qga_command_via_libvirt(status_cmd)
 
                     if 'error' in status_response:
-                        log.debug(f"CLAUDE: guest-exec-status failed: {status_response['error']}")
+                        log.debug(f"guest-exec-status failed: {status_response['error']}")
                         break
 
                     status_data = status_response.get('return', {})
@@ -1015,23 +1022,23 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                         returncode = status_data.get('exitcode', -1)
 
                         if returncode == 0:
-                            log.debug(f"CLAUDE: VM '{self.vm_name}' is fully booted and guest-exec is functional")
+                            log.debug(f"VM '{self.vm_name}' is fully booted and guest-exec is functional")
 
                             # Phase 3+4: Discover PATH and X11 in parallel for faster boot
                             discovery_tasks = []
 
                             # Always discover PATH
-                            log.debug("CLAUDE: Discovering guest PATH environment")
+                            log.debug("Discovering guest PATH environment")
                             discovery_tasks.append(self._discover_and_cache_guest_path())
 
                             # Conditionally discover X11 (Linux only, unless skipped)
                             should_discover_x11 = False
                             if skip_x11_discovery:
-                                log.debug("CLAUDE: Skipping X11 discovery - using host-based GUI automation")
+                                log.debug("Skipping X11 discovery - using host-based GUI automation")
                             elif 'windows' in self.guest_os.lower():
-                                log.debug("CLAUDE: Skipping X11 detection for Windows guest")
+                                log.debug("Skipping X11 detection for Windows guest")
                             else:
-                                log.debug("CLAUDE: Discovering X11 authorization for GUI automation")
+                                log.debug("Discovering X11 authorization for GUI automation")
                                 discovery_tasks.append(self._discover_and_cache_xauthority())
                                 should_discover_x11 = True
 
@@ -1042,15 +1049,15 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                             if results:
                                 path_result = results[0]
                                 if isinstance(path_result, Exception):
-                                    log.warning(f"CLAUDE: PATH discovery failed with exception: {path_result}")
+                                    log.warning(f"PATH discovery failed with exception: {path_result}")
 
                             # Check X11 discovery result if it was requested
                             if should_discover_x11:
                                 x11_result = results[1] if len(results) > 1 else None
                                 if isinstance(x11_result, Exception):
-                                    log.warning(f"CLAUDE: X11 discovery failed: {x11_result}")
+                                    log.warning(f"X11 discovery failed: {x11_result}")
                                 elif x11_result:
-                                    log.debug(f"CLAUDE: X11 authorization configured with XAUTHORITY={x11_result}")
+                                    log.debug(f"X11 authorization configured with XAUTHORITY={x11_result}")
                                 else:
                                     raise RuntimeError(
                                         "XAUTHORITY not found - X11 environment required for GUI automation. "
@@ -1059,24 +1066,24 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
                             return True
                         else:
-                            log.warning(f"CLAUDE: guest-exec test returned non-zero: {returncode}")
+                            log.warning(f"guest-exec test returned non-zero: {returncode}")
                             break
 
                     await asyncio.sleep(0.5)
 
                 # Test command didn't complete in time, try again
-                log.debug("CLAUDE: guest-exec test timed out, retrying")
+                log.debug("guest-exec test timed out, retrying")
 
             except asyncio.TimeoutError:
-                log.debug("CLAUDE: Timeout during boot check")
+                log.debug("Timeout during boot check")
             except OSError as e:
-                log.debug(f"CLAUDE: OS error during boot check: {e}")
+                log.debug(f"OS error during boot check: {e}")
             except ConnectionError as e:
-                log.debug(f"CLAUDE: Connection error during boot check: {e}")
+                log.debug(f"Connection error during boot check: {e}")
 
             await asyncio.sleep(2)
 
-        log.warning(f"CLAUDE: Timeout waiting for VM '{self.vm_name}' to boot")
+        log.warning(f"Timeout waiting for VM '{self.vm_name}' to boot")
         return False
 
     async def _discover_and_cache_guest_path(self):
@@ -1101,9 +1108,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
         if discovered_path:
             self._cached_guest_path = discovered_path
-            log.debug(f"CLAUDE: Cached guest PATH: {discovered_path[:100]}...")
+            log.debug(f"Cached guest PATH: {discovered_path[:100]}...")
         else:
-            log.warning("CLAUDE: PATH discovery failed, will use hardcoded fallback")
+            log.warning("PATH discovery failed, will use hardcoded fallback")
 
     async def create_from_ovf_or_ova(
         self,
@@ -1125,7 +1132,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Returns:
             Tuple of (return_code, output_message)
         """
-        log.debug(f"CLAUDE: Importing QEMU VM from {file_path}")
+        log.debug(f"Importing QEMU VM from {file_path}")
 
         qemu_img_exe = self.executables.qemu_img
 
@@ -1152,21 +1159,21 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         # Use base disk path (immutable) instead of regular disk path
         # This ensures the converted disk becomes the base for overlays
         dest_disk = self.get_base_disk_path()
-        log.debug(f"CLAUDE: Conversion target is base disk: {dest_disk}")
+        log.debug(f"Conversion target is base disk: {dest_disk}")
 
         # Detect source disk format for --no-copy optimization
         try:
             source_format = self._detect_disk_format(source_disk)
-            log.debug(f"CLAUDE: Detected source disk format: {source_format}")
+            log.debug(f"Detected source disk format: {source_format}")
         except HypervisorException as e:
-            log.warning(f"CLAUDE: Could not detect source format, will attempt conversion: {e}")
+            log.warning(f"Could not detect source format, will attempt conversion: {e}")
             source_format = 'unknown'
 
         # Check if conversion can be skipped (--no-copy mode with qcow2 source)
         if source_format == 'qcow2' and self._external_disk_path:
             # Check if source and dest are the same file (--no-copy with existing qcow2)
             if Path(source_disk).resolve() == Path(dest_disk).resolve():
-                log.debug(f"CLAUDE: Source is already qcow2 at target location, skipping conversion")
+                log.debug(f"Source is already qcow2 at target location, skipping conversion")
                 self._save_vm_config()
                 return 0, "VM imported successfully (no conversion needed)"
 
@@ -1194,14 +1201,14 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     )
 
         # Convert to qcow2
-        log.debug(f"CLAUDE: Converting {source_format} disk to qcow2 at {dest_disk}")
+        log.debug(f"Converting {source_format} disk to qcow2 at {dest_disk}")
         args = [qemu_img_exe, 'convert', '-O', 'qcow2', str(source_disk), dest_disk]
 
         try:
             result = subprocess.run(args, capture_output=True, text=True, check=False)
 
             if result.returncode == 0:
-                log.debug(f"CLAUDE: Successfully converted disk to {dest_disk}")
+                log.debug(f"Successfully converted disk to {dest_disk}")
                 self._save_vm_config()
                 return 0, f"VM imported successfully"
             else:
@@ -1210,7 +1217,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     error_msg += "\nConsider loading without --no-copy to use managed storage."
                 return result.returncode, error_msg
 
-        except Exception as e:
+        except (subprocess.CalledProcessError, OSError) as e:
             error_msg = f"Conversion error: {str(e)}"
             if self._external_disk_path:
                 error_msg += "\nConsider loading without --no-copy to use managed storage."
@@ -1232,7 +1239,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             command = cmd_info['command']
             result = await self.run_command(command, silent=silent, stop_event=stop_event)
             if result.returncode != 0:
-                log.error(f"CLAUDE: Queued command failed: {command}")
+                log.error(f"Queued command failed: {command}")
 
         self._command_queue.clear()
 
@@ -1261,14 +1268,14 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                         conn = self._get_libvirt_connection()
                         if conn:
                             self._libvirt_domain = conn.lookupByName(self.vm_name)
-                    except Exception as e:
-                        log.warning(f"CLAUDE: Failed to lazy-load domain for QMP: {e}")
+                    except libvirt.libvirtError as e:
+                        log.warning(f"Failed to lazy-load domain for QMP: {e}")
 
                 if not self._libvirt_domain:
                     return {"error": {"desc": "Domain not defined"}}
 
                 cmd_json = json.dumps(command)
-                log.debug(f"CLAUDE: Sending QMP command: {command.get('execute', 'unknown')}")
+                log.debug(f"Sending QMP command: {command.get('execute', 'unknown')}")
 
                 log_file = get_experiment_log_file()
                 with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
@@ -1282,22 +1289,22 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
                 # Log detailed response for debugging
                 if 'error' in response:
-                    log.error(f"CLAUDE: QMP command failed - Command: {command.get('execute')}, Error: {response['error']}")
+                    log.error(f"QMP command failed - Command: {command.get('execute')}, Error: {response['error']}")
                 elif 'return' not in response:
-                    log.warning(f"CLAUDE: QMP response missing 'return' key: {response}")
+                    log.warning(f"QMP response missing 'return' key: {response}")
                 else:
-                    log.debug(f"CLAUDE: QMP response: {response}")
+                    log.debug(f"QMP response: {response}")
 
                 return response
 
             except libvirt.libvirtError as e:
-                log.error(f"CLAUDE: Libvirt error sending QMP command: {e}")
+                log.error(f"Libvirt error sending QMP command: {e}")
                 return {"error": {"desc": f"Libvirt error: {e}"}}
             except json.JSONDecodeError as e:
-                log.error(f"CLAUDE: Failed to parse QMP response: {e}, Raw: {result if 'result' in locals() else 'N/A'}")
+                log.error(f"Failed to parse QMP response: {e}, Raw: {result if 'result' in locals() else 'N/A'}")
                 return {"error": {"desc": f"Invalid JSON: {e}"}}
-            except Exception as e:
-                log.error(f"CLAUDE: Unexpected QMP error: {e}", exc_info=True)
+            except (OSError, AttributeError, TypeError) as e:
+                log.error(f"Unexpected QMP error: {e}", exc_info=True)
                 return {"error": {"desc": f"Error: {e}"}}
 
         return await self.manager.run_async(_qmp_async)
@@ -1362,7 +1369,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         move_response = await self._send_qmp_command(move_command)
 
         if 'error' in move_response:
-            log.error(f"CLAUDE: QMP mouse move failed: {move_response.get('error')}")
+            log.error(f"QMP mouse move failed: {move_response.get('error')}")
             return False
 
         await asyncio.sleep(0.01)
@@ -1379,7 +1386,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         press_response = await self._send_qmp_command(press_command)
 
         if 'error' in press_response:
-            log.error(f"CLAUDE: QMP button press failed: {press_response.get('error')}")
+            log.error(f"QMP button press failed: {press_response.get('error')}")
             return False
 
         await asyncio.sleep(0.05)  # Hold button down briefly
@@ -1396,7 +1403,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         release_response = await self._send_qmp_command(release_command)
 
         if 'error' in release_response:
-            log.error(f"CLAUDE: QMP button release failed: {release_response.get('error')}")
+            log.error(f"QMP button release failed: {release_response.get('error')}")
             return False
 
         return all('return' in r for r in [move_response, press_response, release_response])
@@ -1436,7 +1443,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         }
         response1 = await self._send_qmp_command(move_start_command)
         if 'error' in response1:
-            log.error(f"CLAUDE: QMP drag move to start failed: {response1.get('error')}")
+            log.error(f"QMP drag move to start failed: {response1.get('error')}")
             return False
 
         await asyncio.sleep(0.01)
@@ -1452,7 +1459,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         }
         response2 = await self._send_qmp_command(press_command)
         if 'error' in response2:
-            log.error(f"CLAUDE: QMP drag button press failed: {response2.get('error')}")
+            log.error(f"QMP drag button press failed: {response2.get('error')}")
             return False
 
         await asyncio.sleep(0.01)
@@ -1469,7 +1476,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         }
         response3 = await self._send_qmp_command(move_end_command)
         if 'error' in response3:
-            log.error(f"CLAUDE: QMP drag move to end failed: {response3.get('error')}")
+            log.error(f"QMP drag move to end failed: {response3.get('error')}")
             return False
 
         await asyncio.sleep(0.01)
@@ -1485,7 +1492,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         }
         response4 = await self._send_qmp_command(release_command)
         if 'error' in response4:
-            log.error(f"CLAUDE: QMP drag button release failed: {response4.get('error')}")
+            log.error(f"QMP drag button release failed: {response4.get('error')}")
             return False
 
         return all('return' in r for r in [response1, response2, response3, response4])
@@ -1517,7 +1524,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             response = await self._send_qmp_command(command)
             
             if 'return' not in response:
-                log.error(f"CLAUDE: QMP keyboard batch {i//BATCH_SIZE} failed: {response}")
+                log.error(f"QMP keyboard batch {i//BATCH_SIZE} failed: {response}")
                 success = False
                 # Continue trying to send remaining batches? 
                 # Probably better to try to finish typing even if one chunk fails, 
@@ -1628,7 +1635,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             height: Screen height in pixels
         """
         if self._screen_width != width or self._screen_height != height:
-            log.debug(f"CLAUDE: Screen resolution updated: {width}x{height}")
+            log.debug(f"Screen resolution updated: {width}x{height}")
             self._screen_width = width
             self._screen_height = height
             self._resolution_last_updated = time.time()
@@ -1667,7 +1674,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         normalized_x = max(0, min(32767, normalized_x))
         normalized_y = max(0, min(32767, normalized_y))
 
-        log.debug(f"CLAUDE: Normalized coordinates: ({x}, {y}) -> ({normalized_x}, {normalized_y}) "
+        log.debug(f"Normalized coordinates: ({x}, {y}) -> ({normalized_x}, {normalized_y}) "
                   f"for resolution {self._screen_width}x{self._screen_height}")
 
         return normalized_x, normalized_y

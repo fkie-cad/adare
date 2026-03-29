@@ -65,7 +65,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
             Dict mapping rule names to PortForwardingRule objects
         """
         if not hasattr(self, 'config'):
-            log.warning("CLAUDE: VM config not available")
+            log.warning("VM config not available")
             return {}
 
         rules = {}
@@ -80,7 +80,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
             )
 
         if not silent:
-            log.debug(f"CLAUDE: Found {len(rules)} port forwarding rules")
+            log.debug(f"Found {len(rules)} port forwarding rules")
 
         return rules
 
@@ -118,16 +118,16 @@ class NetworkingMixin(AbstractNetworkingMixin):
             Return code (0 for success, non-zero for failure)
         """
         if not silent:
-            log.info(f"CLAUDE: Adding port forwarding rule '{name}': "
+            log.info(f"Adding port forwarding rule '{name}': "
                     f"{protocol} {host_ip}:{host_port} -> {guest_ip}:{guest_port}")
 
         if not hasattr(self, 'config'):
-            log.error("CLAUDE: VM config not available")
+            log.error("VM config not available")
             return 1
 
         # Check if rule already exists
         if name in self.config.port_forwarding_rules:
-            log.warning(f"CLAUDE: Port forwarding rule '{name}' already exists")
+            log.warning(f"Port forwarding rule '{name}' already exists")
             return 1
 
         # Create rule
@@ -154,9 +154,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
         self._save_vm_config()
 
         if not silent:
-            log.info(f"CLAUDE: Successfully added port forwarding rule '{name}'")
+            log.info(f"Successfully added port forwarding rule '{name}'")
             if self.get_state() == "running":
-                log.warning("CLAUDE: VM is running. Port forwarding changes require VM restart.")
+                log.warning("VM is running. Port forwarding changes require VM restart.")
 
         return 0
 
@@ -182,15 +182,15 @@ class NetworkingMixin(AbstractNetworkingMixin):
             Return code (0 for success, non-zero for failure)
         """
         if not silent:
-            log.info(f"CLAUDE: Removing port forwarding rule '{name}'")
+            log.info(f"Removing port forwarding rule '{name}'")
 
         if not hasattr(self, 'config'):
-            log.error("CLAUDE: VM config not available")
+            log.error("VM config not available")
             return 1
 
         if name not in self.config.port_forwarding_rules:
             if not silent:
-                log.warning(f"CLAUDE: Port forwarding rule '{name}' does not exist")
+                log.warning(f"Port forwarding rule '{name}' does not exist")
             return 0  # Consider success if already gone
 
         # Remove from config
@@ -200,9 +200,9 @@ class NetworkingMixin(AbstractNetworkingMixin):
         self._save_vm_config()
 
         if not silent:
-            log.info(f"CLAUDE: Successfully removed port forwarding rule '{name}'")
+            log.info(f"Successfully removed port forwarding rule '{name}'")
             if self.get_state() == "running":
-                log.warning("CLAUDE: VM is running. Port forwarding changes require VM restart.")
+                log.warning("VM is running. Port forwarding changes require VM restart.")
 
         return 0
 
@@ -254,7 +254,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
             )
 
         if not silent:
-            log.info(f"CLAUDE: Configuring virtio-fs shared folder: {name} -> {host_path}")
+            log.info(f"Configuring virtio-fs shared folder: {name} -> {host_path}")
 
         # Store configuration in VM config
         if hasattr(self, 'config'):
@@ -306,7 +306,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
             True (mounting is handled elsewhere)
         """
         if not silent:
-            log.debug(f"CLAUDE: mount_shared_folder called for '{name}' - handled by lifecycle.py")
+            log.debug(f"mount_shared_folder called for '{name}' - handled by lifecycle.py")
         return True
 
     async def list_shared_folders(
@@ -360,7 +360,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
             if len(self.config.virtiofs_shares) < original_len:
                 self._save_vm_config()
                 if not silent:
-                    log.debug(f"CLAUDE: Removed virtio-fs share '{name}'")
+                    log.debug(f"Removed virtio-fs share '{name}'")
             # Disable virtiofs if no shares left
             if not self.config.virtiofs_shares:
                 self.config.virtiofs_enabled = False
@@ -387,7 +387,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
             self.config.virtiofs_shares = []
             self._save_vm_config()
             if not silent:
-                log.debug("CLAUDE: Cleared all virtio-fs share configurations")
+                log.debug("Cleared all virtio-fs share configurations")
         return 0
 
     def queue_mount_shared_folder(self, name: str, mountpoint: Path):
@@ -397,7 +397,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
         For QEMU, virtio-fs mounting is handled by lifecycle.py during
         VM initialization. This method exists for API compatibility.
         """
-        log.debug(f"CLAUDE: queue_mount_shared_folder for '{name}' - handled by lifecycle.py")
+        log.debug(f"queue_mount_shared_folder for '{name}' - handled by lifecycle.py")
 
     async def mount_multiple_shared_folders(
         self,
@@ -418,5 +418,5 @@ class NetworkingMixin(AbstractNetworkingMixin):
             0 (success, mounting handled elsewhere)
         """
         if not silent:
-            log.debug("CLAUDE: mount_multiple_shared_folders - handled by lifecycle.py")
+            log.debug("mount_multiple_shared_folders - handled by lifecycle.py")
         return 0

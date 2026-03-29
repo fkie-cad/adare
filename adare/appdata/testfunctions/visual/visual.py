@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import ClassVar, Optional
 import logging
 
-from adarelib.testset.basictest import BasicTest, Parameter
+from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
 from adarelib.event.event import TestResult
 
 log = logging.getLogger(__name__)
@@ -50,6 +50,7 @@ class VisualExists(BasicTest):
     testname: ClassVar[str] = 'visual.exists'
     testdescription: ClassVar[str] = 'Check if text or image is visible on screen'
     execute_on_host: ClassVar[bool] = True
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.HOST_NATIVE
 
     name: str
     parameter: VisualExistsParameter
@@ -116,6 +117,7 @@ class VisualNotExists(BasicTest):
     testname: ClassVar[str] = 'visual.not_exists'
     testdescription: ClassVar[str] = 'Check if text or image is NOT visible on screen'
     execute_on_host: ClassVar[bool] = True
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.HOST_NATIVE
 
     name: str
     parameter: VisualExistsParameter
@@ -182,6 +184,7 @@ class VisualCountEquals(BasicTest):
     testname: ClassVar[str] = 'visual.count_equals'
     testdescription: ClassVar[str] = 'Check if text or image appears exactly N times on screen'
     execute_on_host: ClassVar[bool] = True
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.HOST_NATIVE
 
     name: str
     parameter: VisualCountParameter
@@ -259,6 +262,7 @@ class VisualCountMin(BasicTest):
     testname: ClassVar[str] = 'visual.count_min'
     testdescription: ClassVar[str] = 'Check if text or image appears at least N times on screen'
     execute_on_host: ClassVar[bool] = True
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.HOST_NATIVE
 
     name: str
     parameter: VisualCountParameter
@@ -336,6 +340,7 @@ class VisualCountMax(BasicTest):
     testname: ClassVar[str] = 'visual.count_max'
     testdescription: ClassVar[str] = 'Check if text or image appears at most N times on screen'
     execute_on_host: ClassVar[bool] = True
+    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.HOST_NATIVE
 
     name: str
     parameter: VisualCountParameter

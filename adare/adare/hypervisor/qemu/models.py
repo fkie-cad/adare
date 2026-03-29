@@ -107,6 +107,7 @@ class QEMUVMConfig:
     uuid: str
     guest_os: str
     disk_path: str
+    architecture: str = 'x86_64'  # 'x86_64' or 'aarch64'
     cpus: int = 2
     ram: int = 2048  # MB
     machine: str = 'pc'
@@ -148,6 +149,7 @@ class QEMUVMConfig:
             'uuid': self.uuid,
             'guest_os': self.guest_os,
             'disk_path': self.disk_path,
+            'architecture': self.architecture,
             'cpus': self.cpus,
             'ram': self.ram,
             'machine': self.machine,
@@ -183,6 +185,7 @@ class QEMUVMConfig:
         data.setdefault('serial_console_log_path', None)
         data.setdefault('qemu_debug_log_path', None)
         data.setdefault('boot_mode', 'bios')
+        data.setdefault('architecture', 'x86_64')
 
         # virtio-fs defaults and backward compatibility
         data.setdefault('virtiofs_enabled', True)

@@ -84,7 +84,7 @@ def print_testfunction_list(testfunction_file: str = None, formatter=None, outpu
     # Handle case where testfunction_file is the string 'None' instead of None
     if testfunction_file == 'None':
         testfunction_file = None
-        print(f"CLAUDE: Changed testfunction_file to None")
+        print(f"Changed testfunction_file to None")
 
     # Get formatter if not provided
     if formatter is None:

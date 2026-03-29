@@ -24,6 +24,9 @@ venv/
 # potry stuff
 poetry.lock
 
+# uv stuff
+uv.lock
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
@@ -55,6 +58,9 @@ coverage.xml
 
 # PyCharmStuff
 .idea
+
+# Claude Stuff
+.claude
 
 # Sphinx documentation
 docsrc/_build/
