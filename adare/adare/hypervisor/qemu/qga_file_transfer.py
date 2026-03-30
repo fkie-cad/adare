@@ -36,7 +36,7 @@ class QGAFileTransfer:
     transient guest agent unresponsiveness (common right after boot).
     """
 
-    CHUNK_SIZE = 64 * 1024  # 64KB chunks
+    CHUNK_SIZE = 4 * 1024  # 4KB chunks — smaller base64 payloads reduce transport errors
 
     def __init__(self, vm):
         self.vm = vm
@@ -69,12 +69,16 @@ class QGAFileTransfer:
                 return response
 
             last_error = response['error'].get('desc', 'Unknown error')
-            is_timeout = 'timed out' in last_error.lower()
+            error_lower = last_error.lower()
 
-            if attempt < QGA_MAX_RETRIES and is_timeout:
+            permanent_errors = ('not found', 'no such file', 'permission denied',
+                                'invalid argument', 'access denied')
+            is_permanent = any(pe in error_lower for pe in permanent_errors)
+
+            if attempt < QGA_MAX_RETRIES and not is_permanent:
                 log.warning(
-                    f"QGA {operation_desc} timed out (attempt {attempt}/{QGA_MAX_RETRIES}), "
-                    f"retrying in {backoff:.0f}s..."
+                    f"QGA {operation_desc} failed (attempt {attempt}/{QGA_MAX_RETRIES}): "
+                    f"{last_error}, retrying in {backoff:.0f}s..."
                 )
                 await asyncio.sleep(backoff)
                 backoff *= QGA_BACKOFF_MULTIPLIER
@@ -160,13 +164,15 @@ class QGAFileTransfer:
         """Upload single file from host to guest.
 
         Reads host file, opens guest file for writing, writes in chunks, closes.
+        If a chunk write fails, closes the handle and retries the entire file
+        upload from scratch (the old handle is unusable after a timeout).
 
         Args:
             host_path: Path on host to read from
             guest_path: Path on guest to write to
 
         Raises:
-            HypervisorException: If transfer fails
+            HypervisorException: If transfer fails after all retries
         """
         if not host_path.exists():
             raise HypervisorException(f"Source file not found: {host_path}")
@@ -174,20 +180,45 @@ class QGAFileTransfer:
         file_size = host_path.stat().st_size
         log.debug(f"Uploading {host_path.name} ({file_size} bytes) -> {guest_path}")
 
-        handle = await self._guest_file_open(guest_path, mode='wb')
-        try:
-            with open(host_path, 'rb') as f:
-                bytes_written = 0
-                while True:
-                    chunk = f.read(self.CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    written = await self._guest_file_write(handle, chunk)
-                    bytes_written += written
+        last_error = None
+        for attempt in range(1, QGA_MAX_RETRIES + 1):
+            handle = None
+            try:
+                handle = await self._guest_file_open(guest_path, mode='wb')
+                with open(host_path, 'rb') as f:
+                    bytes_written = 0
+                    while True:
+                        chunk = f.read(self.CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        written = await self._guest_file_write(handle, chunk)
+                        bytes_written += written
+                        await asyncio.sleep(0.05)
 
-            log.debug(f"Uploaded {bytes_written} bytes to {guest_path}")
-        finally:
-            await self._guest_file_close(handle)
+                log.debug(f"Uploaded {bytes_written} bytes to {guest_path}")
+                await self._guest_file_close(handle)
+                return  # success
+
+            except HypervisorException as e:
+                last_error = e
+                log.warning(
+                    f"Upload of {host_path.name} failed on attempt {attempt}/{QGA_MAX_RETRIES}: {e}"
+                )
+                # Try to close the broken handle (best-effort)
+                if handle is not None:
+                    try:
+                        await self._guest_file_close(handle)
+                    except HypervisorException:
+                        pass
+
+                if attempt < QGA_MAX_RETRIES:
+                    backoff = QGA_INITIAL_BACKOFF * (QGA_BACKOFF_MULTIPLIER ** (attempt - 1))
+                    log.info(f"Retrying upload of {host_path.name} in {backoff:.0f}s...")
+                    await asyncio.sleep(backoff)
+
+        raise HypervisorException(
+            f"Failed to upload {host_path.name} after {QGA_MAX_RETRIES} attempts: {last_error}"
+        )
 
     async def upload_directory(self, host_path: Path, guest_path: str) -> None:
         """Recursively upload directory from host to guest.

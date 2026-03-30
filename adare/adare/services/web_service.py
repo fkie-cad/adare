@@ -17,6 +17,7 @@ from adare.core.dto.web import (
     DownloadEnvironmentRequest,
     DownloadExperimentRequest,
     DownloadTestfunctionRequest,
+    DownloadBundleRequest,
     DownloadResult,
     SyncRequest,
     SyncResult,
@@ -162,6 +163,10 @@ class WebService:
             Result[DownloadResult] with download status.
         """
         from adare.backend.experiment.commands import experiment_download
+        from adare.webappaccess.exceptions import (
+            NotLoggedInError, DownloadError, MissingDataError,
+            ExperimentWithNameAlreadyExistsError,
+        )
 
         try:
             experiment_download(request.project_path, request.ulid)
@@ -170,7 +175,8 @@ class WebService:
                 message=f"Experiment '{request.ulid}' downloaded successfully"
             ))
 
-        except Exception as e:
+        except (NotLoggedInError, DownloadError, MissingDataError,
+                ExperimentWithNameAlreadyExistsError) as e:
             log.error(f"Failed to download experiment: {e}")
             return Result.fail(
                 code="DownloadError",
@@ -189,20 +195,96 @@ class WebService:
             Result[DownloadResult] with download status.
         """
         from adare.backend.testfunction.commands import testfunction_download
+        from adare.webappaccess.exceptions import (
+            NotLoggedInError, DownloadError, MissingDataError,
+        )
+        from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
 
         try:
-            testfunction_download(request.project_path, request.testfunction_name)
+            testfunction_download(request.project_path, request.testfunction_name, version=request.version)
             return Result.ok(DownloadResult(
                 downloaded=True,
                 message=f"Testfunction '{request.testfunction_name}' downloaded successfully"
             ))
 
-        except Exception as e:
+        except (NotLoggedInError, DownloadError, MissingDataError,
+                TestfunctionMissingFileError) as e:
             log.error(f"Failed to download testfunction: {e}")
             return Result.fail(
                 code="DownloadError",
                 message=f"Failed to download testfunction: {e}",
                 solutions=['Check your internet connection', 'Verify the testfunction name']
+            )
+
+    def download_bundle(self, request: DownloadBundleRequest) -> Result[DownloadResult]:
+        """
+        Download an experiment bundle (experiment + all dependencies).
+
+        Args:
+            request: DownloadBundleRequest with project path, ULID, and flags
+
+        Returns:
+            Result[DownloadResult] with download status.
+        """
+        from adare.webappaccess.download import download_experiment, download_testfunction, download_environment
+        from adare.webappaccess.login import WebappLogin
+        from adare.webappaccess.exceptions import (
+            NotLoggedInError, DownloadError, MissingDataError,
+            ExperimentWithNameAlreadyExistsError,
+        )
+        from adare.backend.project.directory import ProjectDirectory
+        from adare.config.configdirectory import ENVIRONMENTS_DIR
+        import adare.config.server as config_server
+        import requests
+
+        try:
+            webapp = WebappLogin()
+            session = webapp.get_django_session()
+            bundle_url = f"{config_server.API_URL}bundle/experiment_{request.ulid}/"
+
+            response = session.get(bundle_url)
+            if response.status_code != 200:
+                return Result.fail(
+                    code="DownloadError",
+                    message=f"Failed to fetch bundle manifest: {response.status_code}",
+                    solutions=['Verify the experiment ULID']
+                )
+
+            bundle = response.json()
+            project_directory = ProjectDirectory(request.project_path)
+
+            # Download experiment
+            download_experiment(request.ulid, project_directory.experiments)
+            log.info(f"Downloaded experiment {request.ulid}")
+
+            # Download testfunction sets
+            for tfset in bundle.get('testfunction_sets', []):
+                tf_name = tfset['name']
+                tf_dir = project_directory.testfunctions / tf_name
+                if not tf_dir.exists():
+                    download_testfunction(tf_name, tf_dir)
+                    log.info(f"Downloaded testfunction {tf_name}")
+
+            # Download environments
+            for env in bundle.get('environments', []):
+                env_name = env['name']
+                env_file = ENVIRONMENTS_DIR / f'{env_name}.yml'
+                if not env_file.exists():
+                    download_environment(env_name, env_file)
+                    log.info(f"Downloaded environment {env_name}")
+
+            return Result.ok(DownloadResult(
+                downloaded=True,
+                message=f"Bundle for experiment '{request.ulid}' downloaded successfully"
+            ))
+
+        except (NotLoggedInError, DownloadError, MissingDataError,
+                ExperimentWithNameAlreadyExistsError, requests.RequestException) as e:
+            log.error(f"Failed to download bundle: {e}")
+            return Result.fail(
+                code="DownloadError",
+                message=f"Failed to download bundle: {e}",
+                solutions=['Check your internet connection', 'Verify the experiment ULID']
             )
 
     # =========================================================================

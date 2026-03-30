@@ -58,6 +58,7 @@ class DownloadTestfunctionRequest:
     """Request to download a testfunction."""
     project_path: Path
     testfunction_name: str
+    version: Optional[int] = None
 
 
 @dataclass
@@ -139,3 +140,34 @@ class CheckRunResult:
     run_ulid: str
     exists: bool
     status: str = ""  # 'published' or 'not_found'
+
+
+# =============================================================================
+# Submit DTOs
+# =============================================================================
+
+@dataclass
+class SubmitRequest:
+    """Request to submit an entity (experiment/testfunction/environment) as a PR."""
+    project_path: Path
+    name: str
+
+
+@dataclass
+class SubmitResult:
+    """Result of submit operation."""
+    pr_url: str = ""
+    pr_number: int = 0
+    message: str = ""
+
+
+# =============================================================================
+# Bundle Download DTOs
+# =============================================================================
+
+@dataclass
+class DownloadBundleRequest:
+    """Request to download an experiment bundle."""
+    project_path: Path
+    ulid: str
+    include_disk_images: bool = False

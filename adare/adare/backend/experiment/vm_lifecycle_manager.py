@@ -494,17 +494,18 @@ class VMLifecycleManager:
             if context.vm:
                 await context.vm.stop(force=force)
 
-    async def retrieve_artifacts(self, context: ExperimentRunCtx, post_interrupt: bool = False):
+    async def retrieve_artifacts(self, context: ExperimentRunCtx, post_interrupt: bool = False, force_stop: bool = False):
         """
         Retrieve artifacts from VM with proper stage visibility.
 
         Delegates to hypervisor-specific strategy:
         - VirtualBox: No-op (artifacts already on host via shared folders)
-        - QEMU: Stop VM, copy artifacts via libguestfs
+        - QEMU: Strategy-dependent (QGA retrieves while running, libguestfs after stop)
 
         Args:
             context: ExperimentRunCtx
             post_interrupt: If True, don't check interrupt event (for cleanup after interrupt)
+            force_stop: If True, force-stop VM (e.g. Windows on QEMU to prevent updates)
         """
         from adare.types.stages import VMFileTransferRetrievalStage
 
@@ -516,7 +517,7 @@ class VMLifecycleManager:
             context.experiment_run_ulid,
             event=event
         ):
-            await self.strategy.retrieve_artifacts(context)
+            await self.strategy.retrieve_artifacts(context, post_interrupt=post_interrupt, force_stop=force_stop)
 
     async def perform_host_diff(self, context: ExperimentRunCtx, post_interrupt: bool = False):
         """

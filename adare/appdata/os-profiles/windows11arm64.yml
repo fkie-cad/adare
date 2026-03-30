@@ -1,0 +1,13 @@
+name: windows11arm64
+display_name: "Windows 11 (ARM64)"
+platform: windows
+distribution: windows
+distribution_label: "Home"
+version: "11"
+default_disk_size: "80G"
+default_ram_mb: 16384
+default_cpus: 0
+requires_uefi: true
+requires_tpm: true
+architecture: aarch64
+template: autounattend_win11.xml

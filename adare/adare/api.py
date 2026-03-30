@@ -450,6 +450,25 @@ class WebAPI:
         """Check run on web."""
         return self._service.check_run(request)
 
+    def download_bundle(self, request):
+        """Download experiment bundle."""
+        return self._service.download_bundle(request)
+
+    def submit_experiment(self, request):
+        """Submit experiment as PR."""
+        from adare.services.submit_service import SubmitService
+        return SubmitService().submit_experiment(request)
+
+    def submit_testfunction(self, request):
+        """Submit testfunction as PR."""
+        from adare.services.submit_service import SubmitService
+        return SubmitService().submit_testfunction(request)
+
+    def submit_environment(self, request):
+        """Submit environment as PR."""
+        from adare.services.submit_service import SubmitService
+        return SubmitService().submit_environment(request)
+
 
 class AdareAPI:
     """

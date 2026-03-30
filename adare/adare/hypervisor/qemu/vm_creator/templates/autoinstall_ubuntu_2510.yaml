@@ -12,6 +12,8 @@ autoinstall:
     layout:
       name: lvm
       sizing-policy: all
+      match:
+        size: largest
   identity:
     hostname: {{ hostname }}
     username: adare
@@ -55,6 +57,10 @@ autoinstall:
     # Ensure adare user exists in target (cloud-init creates it on first boot, but we need it now)
     - curtin in-target -- id adare || curtin in-target -- useradd -m -u 1000 -G sudo -s /bin/bash adare
     - curtin in-target -- mkdir -p /home/adare
+    - curtin in-target -- bash -c 'echo "adare:adare" | chpasswd'
+    # Disable GNOME initial setup welcome wizard
+    - mkdir -p /target/home/adare/.config
+    - echo "yes" > /target/home/adare/.config/gnome-initial-setup-done
     - chown -R 1000:1000 /target/home/adare
     {% if not bare %}
     # Install Miniforge3 and conda env as root, then fix ownership
@@ -65,7 +71,38 @@ autoinstall:
     - rm -f /target/tmp/miniforge.sh
     - chown -R 1000:1000 /target/home/adare
     {% endif %}
-    # Disable screen blanking and lock for automated GUI testing
-    - curtin in-target -- sudo -u adare dbus-launch gsettings set org.gnome.desktop.session idle-delay 0 || true
-    - curtin in-target -- sudo -u adare dbus-launch gsettings set org.gnome.desktop.screensaver lock-enabled false || true
+    # System-wide dconf overrides for power management, screen lock, and update notifications
+    - mkdir -p /target/etc/dconf/db/local.d
+    - |
+      cat > /target/etc/dconf/db/local.d/00-adare <<'DCONF'
+      [org/gnome/desktop/session]
+      idle-delay=uint32 0
+
+      [org/gnome/desktop/screensaver]
+      lock-enabled=false
+      lock-delay=uint32 0
+
+      [org/gnome/software]
+      download-updates=false
+      download-updates-notify=false
+      allow-updates=false
+      first-run=false
+      DCONF
+    - mkdir -p /target/etc/dconf/db/local.d/locks
+    - |
+      cat > /target/etc/dconf/db/local.d/locks/00-adare <<'LOCKS'
+      /org/gnome/desktop/session/idle-delay
+      /org/gnome/desktop/screensaver/lock-enabled
+      /org/gnome/desktop/screensaver/lock-delay
+      /org/gnome/software/download-updates
+      /org/gnome/software/download-updates-notify
+      LOCKS
+    - curtin in-target -- dconf update || true
+    # Disable GNOME Software background service and update-notifier
+    - mkdir -p /target/etc/xdg/autostart
+    - |
+      if [ -f /target/etc/xdg/autostart/gnome-software-service.desktop ]; then
+        echo "Hidden=true" >> /target/etc/xdg/autostart/gnome-software-service.desktop
+      fi
+    - curtin in-target -- apt-get remove -y update-notifier update-notifier-common || true
   shutdown: poweroff

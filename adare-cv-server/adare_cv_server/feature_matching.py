@@ -16,6 +16,8 @@ log = logging.getLogger(__name__)
 class SIFTMatcher:
     """SIFT-based feature matching for icon detection."""
 
+    SPATIAL_COHERENCE_TOLERANCE = 3  # keypoints must be within 3x icon size
+
     @staticmethod
     def find_icon_locations(
         screenshot_bytes: bytes,
@@ -28,12 +30,11 @@ class SIFTMatcher:
 
         try:
             # Decode images
-            decoded = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
+            screenshot_img, icon_img, alpha_mask = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
         except ImageDecodingError as e:
             log.error(f"SIFT: {e}")
             return FeatureMatchingResult([], [], "sift")
 
-        screenshot_img, icon_img = decoded
         screenshot_gray, icon_gray = ImageDecoder.convert_to_grayscale(screenshot_img, icon_img)
 
         # Extract screenshot shape for bounds checking
@@ -42,8 +43,8 @@ class SIFTMatcher:
         # Initialize SIFT detector
         sift = cv2.SIFT_create()
 
-        # Find keypoints and descriptors
-        kp1, des1 = sift.detectAndCompute(icon_gray, None)
+        # Find keypoints and descriptors (alpha mask excludes transparent pixels)
+        kp1, des1 = sift.detectAndCompute(icon_gray, alpha_mask)
         kp2, des2 = sift.detectAndCompute(screenshot_gray, None)
 
         log.info(f"CLAUDE: Icon keypoints: {len(kp1) if kp1 else 0}, Screenshot keypoints: {len(kp2) if kp2 else 0}")
@@ -67,6 +68,20 @@ class SIFTMatcher:
             # Get matched keypoints
             src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
             dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+
+            # Spatial coherence: reject if keypoints span too large an area
+            dst_flat = dst_pts.reshape(-1, 2)
+            extent_x = float(np.max(dst_flat[:, 0]) - np.min(dst_flat[:, 0]))
+            extent_y = float(np.max(dst_flat[:, 1]) - np.min(dst_flat[:, 1]))
+            icon_h, icon_w = icon_gray.shape
+            max_allowed = max(icon_w, icon_h) * SIFTMatcher.SPATIAL_COHERENCE_TOLERANCE
+
+            if extent_x > max_allowed or extent_y > max_allowed:
+                log.warning(
+                    f"CLAUDE: SIFT rejecting match - keypoints span {extent_x:.0f}x{extent_y:.0f} "
+                    f"but icon is only {icon_w}x{icon_h} (max allowed: {max_allowed:.0f})"
+                )
+                return FeatureMatchingResult([], [], "sift")
 
             # Calculate center using homography
             try:
@@ -109,11 +124,12 @@ class ORBMatcher:
         log.info(f"CLAUDE: ORB detection starting with min_matches={min_matches}, max_matches={max_matches}, distance_threshold={distance_threshold}")
 
         # Decode images
-        decoded = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
-        if decoded is None:
+        try:
+            screenshot_img, icon_img, alpha_mask = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
+        except ImageDecodingError as e:
+            log.error(f"ORB: {e}")
             return FeatureMatchingResult([], [], "orb")
 
-        screenshot_img, icon_img = decoded
         screenshot_gray, icon_gray = ImageDecoder.convert_to_grayscale(screenshot_img, icon_img)
 
         # Extract screenshot shape for bounds checking
@@ -122,8 +138,8 @@ class ORBMatcher:
         # Initialize ORB detector
         orb = ORBMatcher._create_orb_detector()
 
-        # Find keypoints and descriptors
-        kp1, des1 = orb.detectAndCompute(icon_gray, None)
+        # Find keypoints and descriptors (alpha mask excludes transparent pixels)
+        kp1, des1 = orb.detectAndCompute(icon_gray, alpha_mask)
         kp2, des2 = orb.detectAndCompute(screenshot_gray, None)
 
         log.info(f"CLAUDE: Icon keypoints: {len(kp1) if kp1 else 0}, Screenshot keypoints: {len(kp2) if kp2 else 0}")
@@ -233,6 +249,8 @@ class ORBMatcher:
             log.error(f"CLAUDE: Unexpected ORB clustering error: {e}", exc_info=True)
             return [], []
 
+    SPATIAL_COHERENCE_TOLERANCE = 3  # keypoints must be within 3x icon size
+
     @staticmethod
     def _process_cluster(
         cluster_src: np.ndarray,
@@ -242,6 +260,19 @@ class ORBMatcher:
         screenshot_shape: Tuple[int, int]
     ) -> Tuple[Optional[Tuple[int, int]], float]:
         """Process a single cluster to find icon center and similarity."""
+        # Spatial coherence: reject clusters where keypoints span too large an area
+        cluster_extent_x = float(np.max(cluster_dst[:, 0]) - np.min(cluster_dst[:, 0]))
+        cluster_extent_y = float(np.max(cluster_dst[:, 1]) - np.min(cluster_dst[:, 1]))
+        icon_h, icon_w = icon_shape
+        max_allowed = max(icon_w, icon_h) * ORBMatcher.SPATIAL_COHERENCE_TOLERANCE
+
+        if cluster_extent_x > max_allowed or cluster_extent_y > max_allowed:
+            log.warning(
+                f"CLAUDE: Rejecting match - keypoints span {cluster_extent_x:.0f}x{cluster_extent_y:.0f} "
+                f"but icon is only {icon_w}x{icon_h} (max allowed: {max_allowed:.0f})"
+            )
+            return None, 0.0
+
         if len(cluster_src) >= CVConstants.MIN_HOMOGRAPHY_POINTS:
             # Use homography for larger clusters
             center = HomographyCalculator.calculate_center_from_homography(
@@ -277,7 +308,15 @@ class ORBMatcher:
 
 
 class TemplateMatcher:
-    """Template matching for icon detection."""
+    """Multi-scale template matching for icon detection.
+
+    Tries 1x scale first for early exit (common case). Falls back to other
+    scales only if 1x finds nothing. Supports alpha mask for icons with
+    transparency via TM_CCORR_NORMED.
+    """
+
+    SCALES = [1.0, 0.9, 1.1, 0.8, 1.2, 0.75, 1.25, 0.5, 1.5, 2.0]
+    NMS_OVERLAP_THRESHOLD = 0.3
 
     @staticmethod
     def find_icon_locations(
@@ -285,66 +324,119 @@ class TemplateMatcher:
         icon_bytes: bytes,
         threshold: float = CVConstants.DEFAULT_TEMPLATE_THRESHOLD
     ) -> FeatureMatchingResult:
-        """Find icon locations using template matching."""
+        """Find icon locations using multi-scale template matching.
+
+        Tries 1x scale first. If matches are found, returns immediately without
+        trying other scales (early exit optimization). Only falls back to other
+        scales if 1x finds nothing.
+        """
         log.info(f"CLAUDE: Template matching starting with threshold={threshold}")
 
-        # Decode images
-        decoded = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
-        if decoded is None:
+        try:
+            screenshot_img, icon_img, alpha_mask = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
+        except ImageDecodingError as e:
+            log.error(f"Template: {e}")
             return FeatureMatchingResult([], [], "template")
 
-        screenshot_img, icon_img = decoded
-
-        # Get dimensions
         icon_h, icon_w = icon_img.shape[:2]
         screenshot_h, screenshot_w = screenshot_img.shape[:2]
 
         log.info(f"CLAUDE: Template matching - Screenshot: {screenshot_w}x{screenshot_h}, Icon: {icon_w}x{icon_h}")
 
-        # Template matching
-        result = cv2.matchTemplate(screenshot_img, icon_img, cv2.TM_CCOEFF_NORMED)
+        # Determine matching method based on alpha mask presence
+        if alpha_mask is not None:
+            method = cv2.TM_CCORR_NORMED
+            log.info("CLAUDE: Using TM_CCORR_NORMED with alpha mask")
+        else:
+            method = cv2.TM_CCOEFF_NORMED
 
-        # Find best match value for debugging
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-        log.info(f"CLAUDE: Template matching max similarity: {max_val:.3f} at {max_loc}")
+        candidates: List[Tuple[int, int, int, int, float]] = []  # (x, y, w, h, similarity)
 
-        # Find locations above threshold
-        locations = np.where(result >= threshold)
-        points = [(int(x), int(y)) for x, y in zip(locations[1], locations[0])]  # (x, y)
+        for scale in TemplateMatcher.SCALES:
+            scaled_w = max(1, int(icon_w * scale))
+            scaled_h = max(1, int(icon_h * scale))
 
-        log.info(f"CLAUDE: Found {len(points)} points above threshold {threshold}")
+            if scaled_w >= screenshot_w or scaled_h >= screenshot_h:
+                continue
 
-        # Filter and convert to center coordinates
-        valid_points, valid_similarities = TemplateMatcher._filter_valid_matches(
-            points, result, icon_w, icon_h, screenshot_w, screenshot_h
-        )
+            resized_icon = cv2.resize(icon_img, (scaled_w, scaled_h), interpolation=cv2.INTER_AREA)
 
-        log.info(f"CLAUDE: Template matching found {len(valid_points)} valid matches")
+            if alpha_mask is not None:
+                resized_mask = cv2.resize(alpha_mask, (scaled_w, scaled_h), interpolation=cv2.INTER_NEAREST)
+                result = cv2.matchTemplate(screenshot_img, resized_icon, method, mask=resized_mask)
+            else:
+                result = cv2.matchTemplate(screenshot_img, resized_icon, method)
+
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+
+            if max_val >= threshold:
+                log.info(f"CLAUDE: Scale {scale:.2f} - best match: {max_val:.3f} at {max_loc}")
+
+            locations = np.where(result >= threshold)
+            for y, x in zip(locations[0], locations[1]):
+                if x >= 0 and y >= 0 and x + scaled_w <= screenshot_w and y + scaled_h <= screenshot_h:
+                    candidates.append((int(x), int(y), scaled_w, scaled_h, float(result[y, x])))
+
+            # Early exit: if 1x scale found matches, skip remaining scales
+            if scale == 1.0 and candidates:
+                log.info(f"CLAUDE: Found {len(candidates)} matches at 1x scale, skipping other scales")
+                break
+
+        log.info(f"CLAUDE: Total candidates before NMS: {len(candidates)}")
+
+        if not candidates:
+            log.info("CLAUDE: Template matching found no matches")
+            return FeatureMatchingResult([], [], "template")
+
+        # Non-Maximum Suppression to remove duplicate/overlapping matches
+        filtered = TemplateMatcher._non_maximum_suppression(candidates)
+
+        # Convert to center coordinates
+        valid_points = []
+        valid_similarities = []
+        for x, y, w, h, sim in filtered:
+            center_x = x + w // 2
+            center_y = y + h // 2
+            valid_points.append((center_x, center_y))
+            valid_similarities.append(sim)
+            log.info(f"CLAUDE: Valid match at ({center_x}, {center_y}) with similarity {sim:.3f}")
+
+        log.info(f"CLAUDE: Template matching found {len(valid_points)} valid matches after NMS")
         return FeatureMatchingResult(valid_points, valid_similarities, "template")
 
     @staticmethod
-    def _filter_valid_matches(
-        points: List[Tuple[int, int]],
-        result: np.ndarray,
-        icon_w: int,
-        icon_h: int,
-        screenshot_w: int,
-        screenshot_h: int
-    ) -> Tuple[List[Tuple[int, int]], List[float]]:
-        """Filter points to ensure icon fits within bounds and convert to center coordinates."""
-        valid_points = []
-        valid_similarities = []
+    def _non_maximum_suppression(
+        candidates: List[Tuple[int, int, int, int, float]]
+    ) -> List[Tuple[int, int, int, int, float]]:
+        """Remove overlapping matches, keeping highest similarity."""
+        if not candidates:
+            return []
 
-        for x, y in points:
-            # Check if the full icon would fit completely within bounds
-            if x >= 0 and y >= 0 and x + icon_w <= screenshot_w and y + icon_h <= screenshot_h:
-                # Return center coordinates instead of top-left corner
-                center_x = x + icon_w // 2
-                center_y = y + icon_h // 2
-                valid_points.append((center_x, center_y))
-                valid_similarities.append(float(result[y, x]))
-                log.info(f"CLAUDE: Valid match at ({center_x}, {center_y}) with similarity {result[y, x]:.3f}")
-            else:
-                log.info(f"CLAUDE: Filtered out match at ({x}, {y}) - would extend outside bounds")
+        # Sort by similarity descending
+        sorted_candidates = sorted(candidates, key=lambda c: c[4], reverse=True)
+        kept: List[Tuple[int, int, int, int, float]] = []
 
-        return valid_points, valid_similarities
+        for candidate in sorted_candidates:
+            cx, cy, cw, ch, csim = candidate
+            is_duplicate = False
+
+            for kx, ky, kw, kh, ksim in kept:
+                # Calculate IoU (Intersection over Union)
+                ix1 = max(cx, kx)
+                iy1 = max(cy, ky)
+                ix2 = min(cx + cw, kx + kw)
+                iy2 = min(cy + ch, ky + kh)
+
+                if ix1 < ix2 and iy1 < iy2:
+                    intersection = (ix2 - ix1) * (iy2 - iy1)
+                    union = cw * ch + kw * kh - intersection
+                    iou = intersection / union if union > 0 else 0
+
+                    if iou > TemplateMatcher.NMS_OVERLAP_THRESHOLD:
+                        is_duplicate = True
+                        break
+
+            if not is_duplicate:
+                kept.append(candidate)
+
+        return kept

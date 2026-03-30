@@ -5,11 +5,13 @@ from adare.core.dto.web import (
     DownloadEnvironmentRequest,
     DownloadExperimentRequest,
     DownloadTestfunctionRequest,
+    DownloadBundleRequest,
     SyncRequest,
     UploadRunRequest,
     PublishRunRequest,
     CheckExperimentRequest,
     CheckRunRequest,
+    SubmitRequest,
 )
 
 # configure logging
@@ -139,11 +141,30 @@ def exec_download_testfunction(arguments):
     api = AdareAPI()
     result = api.web.download_testfunction(DownloadTestfunctionRequest(
         project_path=project_directory,
-        testfunction_name=testfunction_name
+        testfunction_name=testfunction_name,
+        version=getattr(arguments, 'version', None)
     ))
 
     if not result.success:
         _handle_api_error(result)
+
+
+def exec_download_bundle(arguments):
+    """Download an experiment bundle (experiment + all dependencies)."""
+    project_directory = _get_project_path(arguments)
+    include_disk_images = getattr(arguments, 'include_disk_images', False)
+
+    api = AdareAPI()
+    result = api.web.download_bundle(DownloadBundleRequest(
+        project_path=project_directory,
+        ulid=arguments.ulid,
+        include_disk_images=include_disk_images
+    ))
+
+    if not result.success:
+        _handle_api_error(result)
+    else:
+        print(result.data.message)
 
 
 def exec_web_sync(arguments):
@@ -239,3 +260,58 @@ def exec_web_check_run(arguments):
             print(f'Experiment run {check_result.run_ulid} exists on server.')
         else:
             print(f'Experiment run {check_result.run_ulid} not found on server.')
+
+
+# =========================================================================
+# Submit Operations
+# =========================================================================
+
+def exec_submit_experiment(arguments):
+    """Submit an experiment as a PR to the shared repository."""
+    project_directory = _get_project_path(arguments)
+
+    api = AdareAPI()
+    result = api.web.submit_experiment(SubmitRequest(
+        project_path=project_directory,
+        name=arguments.name
+    ))
+
+    if not result.success:
+        _handle_api_error(result)
+    else:
+        print(result.data.message)
+        print(f'PR URL: {result.data.pr_url}')
+
+
+def exec_submit_testfunction(arguments):
+    """Submit a testfunction as a PR to the shared repository."""
+    project_directory = _get_project_path(arguments)
+
+    api = AdareAPI()
+    result = api.web.submit_testfunction(SubmitRequest(
+        project_path=project_directory,
+        name=arguments.name
+    ))
+
+    if not result.success:
+        _handle_api_error(result)
+    else:
+        print(result.data.message)
+        print(f'PR URL: {result.data.pr_url}')
+
+
+def exec_submit_environment(arguments):
+    """Submit an environment as a PR to the shared repository."""
+    project_directory = _get_project_path(arguments)
+
+    api = AdareAPI()
+    result = api.web.submit_environment(SubmitRequest(
+        project_path=project_directory,
+        name=arguments.name
+    ))
+
+    if not result.success:
+        _handle_api_error(result)
+    else:
+        print(result.data.message)
+        print(f'PR URL: {result.data.pr_url}')

@@ -71,10 +71,10 @@ def resolve_test_execution_mode(vm, playbook_settings, cli_override: Optional[st
         log.info("Using host-based test execution (explicit setting)")
         return TestExecutionMode.HOST
 
-    # Auto mode: decide based on hypervisor type
+    # Auto mode: agent for all hypervisors (host mode requires explicit opt-in)
     if isinstance(vm, QEMUVM):
-        log.info("Using host-based test execution for QEMU (auto mode)")
-        return TestExecutionMode.HOST
+        log.info("Using agent-based test execution for QEMU (auto mode)")
+        return TestExecutionMode.AGENT
     elif isinstance(vm, VirtualBoxVM):
         log.info("Using agent-based test execution for VirtualBox (auto mode)")
         return TestExecutionMode.AGENT

@@ -6,6 +6,7 @@ help:
 	@echo "Available targets:"
 	@echo "  help            Show this help message."
 	@echo "  install         Run the installer (PowerShell on Windows, shell on *nix)."
+	@echo "  install-qemu    Run the installer with QEMU support (*nix only)."
 	@echo "  adare-clean     Reset adare state."
 	@echo "  docs            Build HTML documentation with Sphinx."
 	@echo "  docs-sphinx     Build HTML documentation with Sphinx."

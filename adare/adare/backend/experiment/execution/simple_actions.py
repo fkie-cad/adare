@@ -78,6 +78,23 @@ class SimpleActionsExecutor:
         self.explicit_screenshot_counter = 0  # Counter for explicit screenshot actions
         self.custom_screenshot_counters = {}  # Track counters for custom screenshot names
 
+    def _resolve_pull_mode(self, requested_mode: str) -> str:
+        """Resolve effective pull mode based on VM type and requested mode.
+
+        QEMU's copy_from_guest uses libguestfs which requires a stopped VM,
+        so 'hypervisor' mode can't work during execution. Auto-switch to 'websocket'.
+        VirtualBox's copy_from_guest works on running VMs, so 'hypervisor' is fine.
+        """
+        if requested_mode == 'hypervisor' and self._is_qemu_vm():
+            log.debug("Auto-switching pull mode from 'hypervisor' to 'websocket' (QEMU VM)")
+            return 'websocket'
+        return requested_mode
+
+    def _is_qemu_vm(self) -> bool:
+        """Check if current VM is a QEMU instance."""
+        from adare.hypervisor.qemu.vm import QEMUVM
+        return isinstance(self.vm, QEMUVM)
+
         # Initialize GUI executor based on VM type and playbook settings
         from .gui_executor_factory import resolve_gui_execution_mode, create_gui_executor
         playbook_settings = playbook.settings if playbook and hasattr(playbook, 'settings') else None
@@ -557,7 +574,7 @@ class SimpleActionsExecutor:
             if hasattr(self.playbook, 'variables') and self.playbook.variables:
                 from adarelib.common.variables import Variable, VariableType
                 import datetime
-                timestamp_dt = datetime.datetime.fromtimestamp(current_timestamp, datetime.UTC)
+                timestamp_dt = datetime.datetime.fromtimestamp(current_timestamp, datetime.timezone.utc)
                 timestamp_var = Variable(
                     timestamp_dt,
                     VariableType.TIMESTAMP,
@@ -711,9 +728,11 @@ class SimpleActionsExecutor:
 
             start_time = time.time()
 
+            effective_mode = self._resolve_pull_mode(action.mode)
+
             # Process each source file
             for file_idx, src_path in enumerate(src_paths, start=1):
-                log.info(f"Pull {file_idx}/{total_files}: {src_path} (mode: {action.mode})")
+                log.info(f"Pull {file_idx}/{total_files}: {src_path} (mode: {effective_mode})")
 
                 # Determine destination path
                 dest_path = self._determine_dest_path(
@@ -721,7 +740,7 @@ class SimpleActionsExecutor:
                 )
 
                 # Execute transfer based on mode
-                if action.mode == 'websocket':
+                if effective_mode == 'websocket':
                     file_result = await self._pull_via_websocket(
                         src_path, dest_path, file_idx, total_files, event_emitter
                     )
@@ -740,7 +759,7 @@ class SimpleActionsExecutor:
             success = len(failed_files) == 0
 
             if success:
-                message = f"Successfully pulled {total_files} file(s) via {action.mode}"
+                message = f"Successfully pulled {total_files} file(s) via {effective_mode}"
             else:
                 message = (
                     f"Pulled {total_files - len(failed_files)}/{total_files} files. "
@@ -752,7 +771,7 @@ class SimpleActionsExecutor:
                 message=message,
                 execution_time=execution_time,
                 data={
-                    "mode": action.mode,
+                    "mode": effective_mode,
                     "total_files": total_files,
                     "successful_files": total_files - len(failed_files),
                     "failed_files": failed_files,
@@ -1063,8 +1082,9 @@ class SimpleActionsExecutor:
 
             # 5. Execute transfer based on mode
             start_time = time.time()
+            effective_mode = self._resolve_pull_mode(action.mode)
 
-            if action.mode == 'websocket':
+            if effective_mode == 'websocket':
                 # Use batch chunked transfer
                 result = await self._pull_changed_files_websocket(
                     files_to_pull, dest_dir, event_emitter
@@ -1082,7 +1102,7 @@ class SimpleActionsExecutor:
             if result['failed_count'] == 0:
                 message = (
                     f"Successfully pulled {result['success_count']} changed files "
-                    f"via {action.mode} ({result['total_bytes']} bytes)"
+                    f"via {effective_mode} ({result['total_bytes']} bytes)"
                 )
             else:
                 message = (
@@ -1095,7 +1115,7 @@ class SimpleActionsExecutor:
                 message=message,
                 execution_time=execution_time,
                 data={
-                    'mode': action.mode,
+                    'mode': effective_mode,
                     'snapshot_before': action.snapshot_before,
                     'snapshot_after': action.snapshot_after,
                     'total_files': len(files_to_pull),

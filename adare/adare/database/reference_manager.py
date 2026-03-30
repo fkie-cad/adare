@@ -8,7 +8,7 @@ project databases and global resources (VMs, environments, test functions).
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 import logging
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 import threading
 
 from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
@@ -62,7 +62,7 @@ class ReferenceManager:
         if cache_key not in self._cache_timestamps:
             return False
 
-        age = datetime.now(UTC) - self._cache_timestamps[cache_key]
+        age = datetime.now(timezone.utc) - self._cache_timestamps[cache_key]
         return age < self._cache_ttl
 
     def _cache_get(self, cache_key: str):
@@ -80,7 +80,7 @@ class ReferenceManager:
         """Set cache with timestamp and evict old entries if needed."""
         with self._cache_lock:
             self._cache[cache_key] = value
-            self._cache_timestamps[cache_key] = datetime.now(UTC)
+            self._cache_timestamps[cache_key] = datetime.now(timezone.utc)
 
             # Evict oldest 20% of entries if cache too large
             if len(self._cache) > self._max_cache_size:

@@ -106,6 +106,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         self._screen_height = None  # Current screen height in pixels
         self._resolution_last_updated = None  # Timestamp of last resolution update
 
+        # USB tablet activation tracking (ensures BTN events route to correct device)
+        self._tablet_activated = False
+
         # Load or create VM config
         self.config = self._load_or_create_vm_config()
 
@@ -1331,6 +1334,39 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             error_desc = response.get('error', {}).get('desc', 'Unknown QMP error')
             return False, error_desc
 
+    async def _ensure_tablet_active(self) -> None:
+        """Ensure USB tablet is the active mouse device for correct BTN event routing.
+
+        On macOS/HVF, the virtio mouse may register before the USB tablet,
+        causing BTN events to route to the wrong device. This activates the
+        tablet via HMP 'mouse_set' which moves it to the head of the handler list.
+        """
+        if self._tablet_activated:
+            return
+
+        response = await self._send_qmp_command({
+            "execute": "human-monitor-command",
+            "arguments": {"command-line": "info mice"}
+        })
+        output = response.get('return', '')
+
+        for line in output.strip().split('\n'):
+            if 'tablet' in line.lower():
+                if line.strip().startswith('*'):
+                    self._tablet_activated = True
+                    return
+                idx = line.split('#')[1].split(':')[0].strip()
+                await self._send_qmp_command({
+                    "execute": "human-monitor-command",
+                    "arguments": {"command-line": f"mouse_set {idx}"}
+                })
+                self._tablet_activated = True
+                log.debug(f"Activated USB tablet as primary mouse (index {idx})")
+                return
+
+        log.warning("USB tablet not found in mouse list - clicks may not work correctly")
+        self._tablet_activated = True  # Don't retry every click
+
     async def send_qmp_mouse_click(self, x: int, y: int, button: str = 'left') -> bool:
         """
         Execute mouse click via QMP input-send-event command.
@@ -1349,6 +1385,8 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Raises:
             RuntimeError: If screen resolution is not yet known
         """
+        await self._ensure_tablet_active()
+
         # Normalize coordinates for USB tablet device
         norm_x, norm_y = self._normalize_coordinates(x, y)
 
@@ -1427,6 +1465,8 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Raises:
             RuntimeError: If screen resolution is not yet known
         """
+        await self._ensure_tablet_active()
+
         # Normalize both start and end coordinates
         norm_x1, norm_y1 = self._normalize_coordinates(x1, y1)
         norm_x2, norm_y2 = self._normalize_coordinates(x2, y2)

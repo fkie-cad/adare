@@ -1,54 +1,360 @@
 ********************
-Create an ADARE VM  
+Create an ADARE VM
 ********************
 
+ADARE creates QEMU/KVM virtual machines with automated OS installation. The
+``adare vm create`` command handles ISO download, unattended install, disk
+provisioning, and ADARE agent setup in a single step.
 
-This guide shows you how to set up a virtual machine that's compatible with ADARE. You'll need to create a custom VM if:
 
-- None of the provided VMs have the OS/distribution you need
-- You need specific software pre-installed
-- You want a customized forensic analysis environment
+Quick Start
+===========
 
-Once configured, export the VM as an ``.ova`` or ``.ovf`` file in **OVF 1.0 format**.
-At the moment, ADARE only supports VirtualBox VMs but it is planned to support Qemu/KVM in the future.
+Linux (fully automated)
+-----------------------
 
+.. code-block:: bash
+
+   # Ubuntu 24.04 -- downloads ISO, installs unattended, pre-installs ADARE agent
+   adare vm create ubuntu2404
+
+   # Ubuntu 22.04 with custom name and larger disk
+   adare vm create ubuntu2204 --name my-ubuntu --disk-size 100G --ram 8192
+
+   # Bare install (no Miniforge3 / qemu-guest-agent)
+   adare vm create ubuntu2404 --bare
+
+Windows (user-supplied ISO)
+---------------------------
+
+.. code-block:: bash
+
+   # Windows 11 -- requires a Windows ISO from Microsoft
+   adare vm create windows11 --iso /path/to/Win11.iso
+
+   # Windows 10
+   adare vm create windows10 --iso /path/to/Win10.iso
+
+   # Windows 11 ARM64 on Apple Silicon
+   adare vm create windows11arm64 --iso /path/to/Win11_ARM64.iso
+
+   # Or use --arch to override any profile's architecture
+   adare vm create windows11 --arch aarch64 --iso /path/to/Win11_ARM64.iso
+
+Manual ISO install
+------------------
+
+For OSes without a built-in unattended template, use a custom profile with
+``install_mode: manual`` and pass your ISO:
+
+.. code-block:: bash
+
+   adare vm create my-custom-os --iso /path/to/installer.iso
+
+
+Options
+=======
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Option
+     - Description
+   * - ``--iso PATH``
+     - Path to OS installer ISO (required for Windows and manual profiles)
+   * - ``--name NAME``
+     - VM name (auto-generated as ``<os>-YYYYMMDD`` if omitted)
+   * - ``--disk-size SIZE``
+     - Disk image size, e.g. ``60G``, ``100G`` (default from OS profile)
+   * - ``--ram MB``
+     - RAM in megabytes (default from OS profile)
+   * - ``--cpus N``
+     - CPU core count (default: half of host cores, clamped 2--8)
+   * - ``--bare``
+     - Skip ADARE agent software (Miniforge3, qemu-guest-agent)
+   * - ``--interactive``
+     - Boot the VM after automated install for manual customization
+   * - ``--force``
+     - Overwrite an existing disk image with the same name
+   * - ``--vm-dir DIR``
+     - Directory for the disk image (default: ``~/.adare/state/vms/``)
+   * - ``--arch ARCH``
+     - Override CPU architecture: ``x86_64`` or ``aarch64`` (default from OS profile)
+   * - ``--env-name NAME``
+     - Environment file name (defaults to VM name)
+
+
+Profile System
+==============
+
+ADARE ships with built-in profiles for Ubuntu 22.04, 24.04, 25.10, Windows 10,
+Windows 11, and Windows 11 ARM64. You can add custom profiles for other
+distributions.
+
+Listing profiles
+----------------
+
+.. code-block:: bash
+
+   adare manage os-profile list
+
+Showing profile details
+-----------------------
+
+.. code-block:: bash
+
+   adare manage os-profile show ubuntu2404
+
+Adding a custom profile
+-----------------------
+
+Create a YAML file (e.g. ``my-distro.yml``):
+
+.. code-block:: yaml
+
+   name: my-distro
+   display_name: My Distro 1.0
+   platform: linux              # 'linux' or 'windows'
+   distribution: ubuntu         # distribution family
+   version: '1.0'
+   architecture: x86_64         # 'x86_64' or 'aarch64'
+   install_mode: auto           # 'auto' or 'manual'
+
+   # Optional -- omit for manual installs or when using --iso
+   iso_url: https://example.com/my-distro.iso
+   iso_sha256: abcdef...
+   iso_filename: my-distro.iso
+
+   # Kernel paths inside ISO (required for automated Linux installs)
+   kernel_path_in_iso: /casper/vmlinuz
+   initrd_path_in_iso: /casper/initrd
+
+   # Defaults
+   default_disk_size: 60G
+   default_ram_mb: 8192
+   default_cpus: 4
+
+   # UEFI / TPM
+   requires_uefi: false
+   requires_tpm: false
+
+   # Custom Jinja2 template (see Custom Templates below)
+   template: my_autoinstall.yaml
+
+   # Extra apt packages to install
+   extra_packages:
+     - htop
+     - vim
+
+Then add it:
+
+.. code-block:: bash
+
+   adare manage os-profile add my-distro.yml
+
+Removing a custom profile
+--------------------------
+
+.. code-block:: bash
+
+   adare manage os-profile remove my-distro
+
+YAML field reference
+--------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 10 65
+
+   * - Field
+     - Required
+     - Description
+   * - ``name``
+     - Yes
+     - Unique identifier used on the command line
+   * - ``platform``
+     - Yes
+     - ``linux`` or ``windows``
+   * - ``distribution``
+     - Yes
+     - Distribution family (``ubuntu``, ``windows``, etc.)
+   * - ``version``
+     - Yes
+     - Version string
+   * - ``display_name``
+     - No
+     - Human-readable name (defaults to ``name``)
+   * - ``architecture``
+     - No
+     - ``x86_64`` (default) or ``aarch64``
+   * - ``install_mode``
+     - No
+     - ``auto`` (default) or ``manual``
+   * - ``template``
+     - No
+     - Jinja2 template filename for unattended install (empty = default lookup)
+   * - ``iso_url``
+     - No
+     - Direct download URL for the ISO
+   * - ``iso_sha256``
+     - No
+     - Expected SHA-256 hash of the ISO
+   * - ``iso_filename``
+     - No
+     - Cache filename for the downloaded ISO
+   * - ``kernel_path_in_iso``
+     - No
+     - Path to vmlinuz inside ISO (Linux auto installs)
+   * - ``initrd_path_in_iso``
+     - No
+     - Path to initrd inside ISO (Linux auto installs)
+   * - ``default_disk_size``
+     - No
+     - Default disk size (e.g. ``60G``)
+   * - ``default_ram_mb``
+     - No
+     - Default RAM in MB (default: 4096)
+   * - ``default_cpus``
+     - No
+     - Default CPU count (0 = auto-detect)
+   * - ``requires_uefi``
+     - No
+     - Whether the OS needs UEFI firmware
+   * - ``requires_tpm``
+     - No
+     - Whether the OS needs a TPM device
+   * - ``extra_packages``
+     - No
+     - List of additional packages to install
+
+
+Custom Templates
+================
+
+ADARE uses Jinja2 templates for unattended installation configs:
+
+- **Linux**: autoinstall YAML (Ubuntu cloud-init)
+- **Windows**: Autounattend XML
+
+Template search order
+---------------------
+
+1. User template directory: ``~/.adare/vm-templates/``
+2. Built-in templates (shipped with ADARE)
+
+A file in the user directory with the same name as a built-in template takes
+precedence, allowing you to override defaults without modifying ADARE source.
+
+Available template variables
+----------------------------
+
+**Linux (autoinstall YAML)**:
+
+- ``hostname`` -- sanitized VM name (RFC 1123)
+- ``password_hash`` -- SHA-512 crypt hash for the ``adare`` user
+- ``miniforge_arch`` -- ``x86_64`` or ``aarch64`` (for Miniforge download URL)
+- ``bare`` -- boolean, True when ``--bare`` flag is used
+
+**Windows (Autounattend XML)**:
+
+- ``bare`` -- boolean, True when ``--bare`` flag is used
+- ``proc_arch`` -- ``amd64`` or ``arm64`` (for ``processorArchitecture`` attributes)
+- ``driver_arch`` -- ``amd64`` or ``ARM64`` (for virtio-win driver paths)
+- ``miniforge_arch`` -- ``x86_64`` or ``aarch64`` (for Miniforge download URL)
+
+Writing a custom template
+-------------------------
+
+1. Copy an existing template from the built-in directory as a starting point:
+
+   .. code-block:: bash
+
+      cp $(python -c "import adare.hypervisor.qemu.vm_creator.autoinstall as a; print(a.TEMPLATES_DIR)")/autoinstall_ubuntu_2404.yaml \
+         ~/.adare/vm-templates/my_autoinstall.yaml
+
+2. Edit the template using the Jinja2 variables listed above.
+
+3. Create a profile YAML with the ``template`` field pointing to your file:
+
+   .. code-block:: yaml
+
+      name: my-ubuntu
+      platform: linux
+      distribution: ubuntu
+      version: '24.04'
+      template: my_autoinstall.yaml
+      kernel_path_in_iso: /casper/vmlinuz
+      initrd_path_in_iso: /casper/initrd
+
+4. Add the profile and create the VM:
+
+   .. code-block:: bash
+
+      adare manage os-profile add my-ubuntu.yml
+      adare vm create my-ubuntu
+
+
+Interactive Mode
+================
+
+The ``--interactive`` flag adds a second phase after automated installation:
+the finished VM boots from its disk so you can install additional software or
+configure settings that are not covered by the unattended template.
+
+.. code-block:: bash
+
+   adare vm create ubuntu2404 --interactive
+
+**What happens:**
+
+1. The automated install runs as usual (unattended, ISO + autoinstall).
+2. After the install completes, QEMU boots the VM from the finished disk image.
+3. A native display window opens (Cocoa on macOS, GTK on Linux).
+4. You install software, tweak settings, etc.
+5. When done, shut down from within the VM or press **Enter** in the terminal
+   to send an ACPI shutdown.
+
+**When to use it:**
+
+- You need software that is not available via the unattended template
+  (e.g. commercial tools, GUI applications requiring manual license activation)
+- You want to verify the install before committing to experiment runs
+- You need to configure settings that require a running desktop session
+
+.. note::
+
+   ``--interactive`` is ignored for ``install_mode: manual`` profiles since
+   those already provide a full interactive QEMU session during install.
+
+
+Legacy: Manual VirtualBox Setup
+===============================
+
+The following instructions apply to the older VirtualBox-based workflow.
+For new VMs, the QEMU-based ``adare vm create`` command above is recommended.
 
 General Guideline
-=================
+-----------------
+
 There are two options for creating your own ADARE-compatible VM:
-1. **Start from scratch:** Create a new VM with a minimal OS installation and set it up as explained in TODO.
-2. **Modify an existing VM:** Take one of the provided ADARE VMs and customize it by e.g. installing additional software as explained in TODO
 
+1. **Start from scratch:** Create a new VM with a minimal OS installation.
+2. **Modify an existing VM:** Take one of the provided ADARE VMs and customize it.
 
-
-Extend
-======
-
-VirtualBox
-----------
-
-
-
-
-Create
-======
-
-
-
-
-
+Once configured, export the VM as an ``.ova`` or ``.ovf`` file in **OVF 1.0 format**.
 
 VirtualBox Configuration Requirements
-=====================================
+--------------------------------------
 
-- Disable all that can create popups as far as possible (like update notifications etc., automatic updates, error reporting, etc.)
-- Disable screen lock and sleep mode if possible
+- Disable all that can create popups (update notifications, automatic updates, error reporting, etc.)
+- Disable screen lock and sleep mode
 
 Windows Setup
-=============
+-------------
 
 User Account Configuration
---------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Create a user account with:
 
@@ -58,218 +364,45 @@ User Account Configuration
 - Enable **autologin** so the VM boots directly into the ``adare`` user's desktop.
 
 Additional Configuration
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 1. **Disable User Account Control (UAC):**
 
-   - Go to Control Panel → ``User Accounts`` → ``User Accounts`` → ``Change User Account Control settings``
-   - Set the slider to the bottom (``Never notify``)
+   - Go to Control Panel > User Accounts > User Accounts > Change User Account Control settings
+   - Set the slider to the bottom (Never notify)
 
 2. **Enable Developer Mode:**
 
-   - In Windows Settings, search for ``For Developers``
+   - In Windows Settings, search for "For Developers"
    - Toggle the switch to enable Developer Mode
-   - This is required to set up shared directories properly
 
 3. **Configure Windows Defender Firewall:**
 
    a. Press ``Win + R``, type ``wf.msc``, and press Enter
-   
-   b. In the left panel, right-click **Windows Defender Firewall with Advanced Security on Local Computer** → **Properties**
-   
-   c. For each profile tab (**Domain Profile**, **Private Profile**, and **Public Profile**), configure:
-   
-      - **Inbound connections:** Allow
-      - **Outbound connections:** Allow (default)
-   
-   d. Click **Apply** and then **OK**
+   b. In the left panel, right-click Windows Defender Firewall with Advanced Security > Properties
+   c. For each profile tab (Domain, Private, Public), set Inbound connections to Allow
+   d. Click Apply and OK
 
-4. **Apply Changes:**
+4. Perform a clean shutdown to apply all security changes.
 
-   - Perform a clean shutdown to apply all security changes
+Required Software:
 
-Required Software Installation
-------------------------------
-
-Install the following software:
-
-- **VirtualBox Guest Additions**
-- **Python 3.9**
-
-  - Download and install from `python.org <https://www.python.org/downloads/>`_
-  - Ensure Python is added to PATH during installation
-
-- **uv** (Python package manager)
-
-  Install using the official installer:
-
-  .. code-block:: powershell
-
-     # Install uv
-     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-  After installation, restart your PowerShell session and verify:
-
-  .. code-block:: powershell
-
-     uv --version
-  
+- VirtualBox Guest Additions
+- Python 3.9+ (added to PATH)
+- uv (Python package manager)
 
 Linux Setup
-===========
+-----------
 
-Base Configuration (all environments)
--------------------------------------
+- Create user ``adare`` / ``adare`` with autologin (X11 session, not Wayland)
+- Enable passwordless sudo: ``adare ALL=(ALL) NOPASSWD:ALL``
+- Install Miniforge3, VirtualBox Guest Additions
+- Disable auto-updates: ``sudo systemctl disable unattended-upgrades``
 
-- Create a user account with:
-
-  - **Username:** ``adare``
-  - **Password:** ``adare``
-
-- Enable **autologin** so the VM boots directly into the ``adare`` user's desktop.
-
-  - **Important:** autologin must start an **X11 session** (not Wayland). (e.g sudo nano /etc/gdm3/custom.conf -> uncomment: WaylandEnable=false)
-
-- Enable passwordless sudo for the ``adare`` user by adding the following line to the sudoers file at the end (edit with ``sudo visudo``):
-
-  ``adare ALL=(ALL) NOPASSWD:ALL``
-
-- Install:
-  - Miniforge3
-
-    - Download Install script: ``cd /tmp && wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh``
-    - Install: ``cd /tmp && bash Miniforge3-Linux-x86_64.sh -b -p /home/adare/.miniforge3`` (install into /home/adare/.miniforge3 instead of /home/adare/miniforge3)
-    - Create a conda environment with Python 3.10: ``conda create -n pyadare python=3.10``
-
-  - VirtualBox Guest Additions
-  - to be ready for future updates also install:
-    - for x11: maim (for screenshots)
-    - for wayland: grim (for screenshots) + ydotool (for mouse/keyboard control)
-
-
-Desktop Environment–Specific Setup
-----------------------------------
-
-GNOME/KDE
-~~~~~~~~~
-
-- Install:
-
-  - ``gnome-screenshot``
-
-- Configure Seahorse (keyring) to unlock automatically on login by setting an empty password.
-- Disable Auto Updates/Notifications:
-  - GNOME: ``sudo systemctl stop unattended-upgrades`` and ``sudo systemctl disable unattended-upgrades``
-
-
-Other Desktop Environments
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- Not tested so far. Confirm PyAutoGUI can make screenshots and control the mouse and keyboard.
-
-
-*************************************************
-Installing ADARE Guest Agent (adarevm & adarelib)
-*************************************************
-
-Overview
-========
-
-The ADARE guest agent consists of two packages:
-
-- **adarevm**: Guest agent that runs inside the VM and executes playbook actions
-- **adarelib**: Shared library providing test functions and utilities
-
-.. note::
-
-   **Manual installation is optional.** ADARE automatically installs/updates the agent during experiment runs. Preinstalling saves 10-30 seconds per experiment.
-
-Installation Methods
-====================
-
-Choose the method that matches your VM setup:
-
-Windows with Conda (Miniforge)
--------------------------------
-
-Install using pip in the ``pyadare`` conda environment:
-
-.. code-block:: powershell
-
-   # First, mount the shared folder if not already mounted
-   net use Z: \\vboxsvr\adare\wheels
-
-   # Install wheels (PowerShell requires explicit wildcard expansion)
-   %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem Z:\wheels\*.whl | Select-Object -ExpandProperty FullName)
-
-Windows with pip
-----------------
-
-Install using system pip:
-
-.. code-block:: powershell
-
-   # First, mount the shared folder if not already mounted
-   net use Z: \\vboxsvr\adare\wheels
-
-   # Install wheels (PowerShell requires explicit wildcard expansion)
-   pip install --force-reinstall @(Get-ChildItem Z:\wheels\*.whl | Select-Object -ExpandProperty FullName)
-
-Linux with Conda (Miniforge)
+Installing ADARE Guest Agent
 -----------------------------
 
-Install using pip in the ``pyadare`` conda environment:
-
-.. code-block:: bash
-
-   /home/adare/.miniforge3/bin/conda run -n pyadare pip install --break-system-packages /adare/app/wheels/*.whl
-
-Linux with pip
---------------
-
-Install using system pip:
-
-.. code-block:: bash
-
-   pip install --break-system-packages /adare/app/wheels/*.whl
-
-.. note::
-
-   Ubuntu 24.04+ requires the ``--break-system-packages`` flag due to PEP 668.
-   This is safe in ADARE's isolated VM environment.
-
-Verification
-============
-
-Verify the installation by checking package versions:
-
-.. code-block:: bash
-
-   # For Conda (Windows)
-   %USERPROFILE%\.miniforge3\Scripts\conda.exe run -n pyadare pip show adarevm adarelib
-
-   # For Conda (Linux)
-   /home/adare/.miniforge3/bin/conda run -n pyadare pip show adarevm adarelib
-
-   # For pip (Windows/Linux)
-   pip show adarevm adarelib
-
-Expected output:
-
-.. code-block:: text
-
-   Name: adarevm
-   Version: 0.1.0
-   ...
-
-   Name: adarelib
-   Version: 0.1.0
-   ...
-
-.. important::
-
-   - Wheels are provided automatically by the ADARE host in the shared folder
-   - Windows: Mount as ``Z:\wheels`` using ``net use Z: \\vboxsvr\adare\wheels``
-   - Linux: Automatically available at ``/adare/app/wheels/``
-   - The shared folder is only accessible during experiment runs
-   - ADARE automatically detects version mismatches and reinstalls when needed
+The ADARE guest agent (``adarevm`` + ``adarelib``) is normally installed
+automatically during experiment runs. Manual pre-installation saves 10-30
+seconds per experiment. See the package wheels in the shared folder
+(``/adare/app/wheels/`` on Linux, ``Z:\wheels`` on Windows with VirtualBox).
