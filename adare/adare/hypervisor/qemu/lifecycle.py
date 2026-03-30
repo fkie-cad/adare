@@ -13,6 +13,7 @@ Supported transfer modes (chosen automatically):
 from pathlib import Path
 import logging
 import platform
+import shutil
 import subprocess
 import time
 
@@ -421,7 +422,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         # Stage 3: Post-boot file transfer / mount (strategy handles details)
         await self.file_transfer.post_boot_transfer(context)
 
-    async def retrieve_artifacts(self, context, post_interrupt: bool = False):
+    async def retrieve_artifacts(self, context, post_interrupt: bool = False, force_stop: bool = False):
         """
         Retrieve artifacts and logs from the VM.
 
@@ -432,6 +433,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         Args:
             context: ExperimentRunCtx
             post_interrupt: If True, we're in post-interrupt cleanup
+            force_stop: If True, force-stop the VM (e.g. Windows to prevent updates)
         """
         if not context.vm or not hasattr(context.vm, 'config'):
             log.info(
@@ -443,13 +445,39 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         if self.file_transfer.requires_vm_stop_for_retrieval():
             # libguestfs mode: stop VM first
             log.info("Stopping VM to retrieve artifacts and logs via libguestfs")
-            await context.vm.stop()
+            await context.vm.stop(force=force_stop)
             await self.file_transfer.retrieve_artifacts(context)
         else:
             # virtiofs / QGA: retrieve while running, then stop
             await self.file_transfer.retrieve_artifacts(context)
             log.info("Stopping VM after artifact retrieval")
-            await context.vm.stop()
+            await context.vm.stop(force=force_stop)
+
+        # Collect host-side QEMU logs (common to all strategies)
+        self._collect_host_qemu_logs(context)
+
+    def _collect_host_qemu_logs(self, context):
+        """Copy QEMU host-side logs from /tmp to experiment run log directory."""
+        if not context.vm or not context.experiment_run_directory:
+            return
+
+        vm_name = context.vm.vm_name
+        log_dir = context.experiment_run_directory.log_directory
+
+        log_pairs = [
+            (f"/tmp/adare_serial_{vm_name}.log", log_dir / "serial_console.log"),
+            (f"/tmp/adare_qemu_debug_{vm_name}.log", log_dir / "qemu_debug.log"),
+        ]
+
+        for src, dst in log_pairs:
+            src_path = Path(src)
+            if src_path.exists():
+                try:
+                    shutil.copy2(src_path, dst)
+                    src_path.unlink()
+                    log.debug(f"Collected QEMU log: {src} -> {dst}")
+                except OSError as e:
+                    log.warning(f"Failed to collect QEMU log {src}: {e}")
 
     async def cleanup_vm(self, context, post_interrupt: bool = False):
         """

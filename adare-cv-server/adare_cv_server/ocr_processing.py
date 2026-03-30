@@ -598,6 +598,13 @@ class TextDetector:
                 "locations": []
             }
 
+        # Log all detected text for debugging
+        log.info(f"CLAUDE: OCR detected {len(result)} text elements while searching for '{text}':")
+        for detection in result:
+            box, (text_rec, confidence) = detection
+            center_x, center_y = OCRProcessor.calculate_text_center(box)
+            log.info(f"CLAUDE:   '{text_rec}' (conf: {confidence:.3f}) at ({center_x}, {center_y})")
+
         # Find all detections that match the text using specified mode
         matches = []
         for detection in result:

@@ -101,17 +101,18 @@ class AbstractVMLifecycleStrategy(ABC):
         pass
 
     @abstractmethod
-    async def retrieve_artifacts(self, context, post_interrupt: bool = False):
+    async def retrieve_artifacts(self, context, post_interrupt: bool = False, force_stop: bool = False):
         """
         Retrieve experiment artifacts from VM.
 
         This method handles hypervisor-specific artifact retrieval:
         - VirtualBox: No-op (artifacts already on host via shared folders)
-        - QEMU: stop() -> libguestfs -> copy artifacts -> cleanup
+        - QEMU: Strategy-dependent (QGA while running, libguestfs after stop)
 
         Args:
             context: ExperimentRunCtx containing VM and output directories
             post_interrupt: If True, we're in post-interrupt cleanup (may affect behavior)
+            force_stop: If True, force-stop VM when stopping (e.g. Windows to prevent updates)
 
         Raises:
             VMSetupError: If artifact retrieval fails

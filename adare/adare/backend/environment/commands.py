@@ -363,7 +363,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                     if existing_vm and existing_vm.created_at:
                         # This is a heuristic - if VM was created very recently, it's probably new
                         import datetime
-                        now = datetime.datetime.now(datetime.UTC)
+                        now = datetime.datetime.now(datetime.timezone.utc)
                         creation_time = existing_vm.created_at
                         if isinstance(creation_time, str):
                             creation_time = datetime.datetime.fromisoformat(creation_time.replace('Z', '+00:00'))

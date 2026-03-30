@@ -1,9 +1,10 @@
 """CLI handler for `adare vm create` command."""
 
+from dataclasses import replace
 from pathlib import Path
 
 from adare.console import print_error_message, print_success_message
-from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, get_os_definition
+from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, default_host_cpus, get_os_definition
 from adarelib.helper.yaml import dict_to_yaml
 
 import logging
@@ -53,6 +54,8 @@ def exec_vm_create(arguments):
     vm_dir = Path(vm_dir_raw).resolve() if vm_dir_raw else None
     bare = getattr(arguments, 'bare', False)
     env_name = getattr(arguments, 'env_name', None)
+    interactive = getattr(arguments, 'interactive', False)
+    arch = getattr(arguments, 'arch', None)
 
     # Look up OS definition
     try:
@@ -66,6 +69,10 @@ def exec_vm_create(arguments):
             ],
         )
         return
+
+    # Override architecture if --arch was specified
+    if arch is not None:
+        os_def = replace(os_def, architecture=arch)
 
     iso_path = Path(iso).resolve() if iso else None
 
@@ -134,6 +141,22 @@ def exec_vm_create(arguments):
     else:
         print_error_message(title=f"Unsupported platform: {os_def.platform}")
         return
+
+    # Run interactive post-install session if requested (only for automated installs)
+    if interactive and os_def.install_mode != 'manual':
+        from adare.hypervisor.qemu.vm_creator.interactive import run_post_install_session
+
+        nvram_path = disk_path.with_name(disk_path.stem + '_VARS.fd')
+        if not nvram_path.exists():
+            nvram_path = None
+
+        run_post_install_session(
+            disk_path=disk_path,
+            nvram_path=nvram_path,
+            os_def=os_def,
+            ram_mb=ram or os_def.default_ram_mb,
+            cpus=cpus or os_def.default_cpus or default_host_cpus(),
+        )
 
     final_name = vm_name or disk_path.stem
 

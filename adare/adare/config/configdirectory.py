@@ -39,6 +39,7 @@ def __get_default_appdata_directory(create_if_missing: bool = False, program_nam
         (state_dir / 'environments').mkdir(exist_ok=True, parents=True)
         (state_dir / 'testfunctions').mkdir(exist_ok=True, parents=True)
         (appdata_path / 'os-profiles').mkdir(exist_ok=True, parents=True)
+        (appdata_path / 'vm-templates').mkdir(exist_ok=True, parents=True)
     if not appdata_path.is_dir():
         print(f'the appdata directory ({appdata_path}) of the tool is missing')
         return None
@@ -71,6 +72,9 @@ QEMU_CACHE_DIR: Path = APPDATA_DIR/'qemu'/'cache'
 
 # OS profiles directory for VM creation definitions
 OS_PROFILES_DIR: Path = APPDATA_DIR/'os-profiles'
+
+# User-supplied Jinja2 templates for VM creation (autoinstall, autounattend)
+VM_TEMPLATES_DIR: Path = APPDATA_DIR/'vm-templates'
 
 
 def ensure_directories() -> None:

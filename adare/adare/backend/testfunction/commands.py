@@ -260,7 +260,7 @@ def testfunction_list(testfunction_set: str = None):
         print(f"No testfunctions found{filter_msg}")
 
 
-def testfunction_download(project_path: Path, name: str):
+def testfunction_download(project_path: Path, name: str, version: int = None):
     if not is_logged_in():
         raise NotLoggedInError(log)
     # check if testfunction already exists
@@ -278,5 +278,5 @@ def testfunction_download(project_path: Path, name: str):
         )
     # create testfunction directory
     testfunction_directory.path.mkdir(parents=True, exist_ok=True)
-    download_testfunction(name, testfunction_directory.path)
+    download_testfunction(name, testfunction_directory.path, version=version)
     log.info(f'Testfunction {name} downloaded')

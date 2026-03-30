@@ -43,3 +43,6 @@ PORT_OAUTH2_REDIRECT = [
 ]
 GITEA_CLIENT_ID = '9afe946b-d67f-46ac-8362-4ef479a8e11c'
 GITEA_URL = 'https://adare.seclab-bonn.de/git/'
+GITEA_API_URL = f'{GITEA_URL}api/v1/'
+GITEA_EXPERIMENTS_REPO = 'adareTEST'
+GITEA_EXPERIMENTS_REPO_OWNER = 'miq'

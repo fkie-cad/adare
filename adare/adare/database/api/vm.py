@@ -756,7 +756,7 @@ class VmApi(GlobalDatabaseApi):
         """
         from adare.database.models.global_models import VmInstance
         from sqlalchemy.exc import SQLAlchemyError
-        from datetime import datetime, UTC
+        from datetime import datetime, timezone
 
         instance = VmInstance(
             vm_id=vm_id,
@@ -764,8 +764,8 @@ class VmApi(GlobalDatabaseApi):
             current_experiment_run_id=experiment_run_id,
             websocket_port=websocket_port,
             status=status,
-            created_at=datetime.now(UTC),
-            last_used_at=datetime.now(UTC)
+            created_at=datetime.now(timezone.utc),
+            last_used_at=datetime.now(timezone.utc)
         )
 
         try:

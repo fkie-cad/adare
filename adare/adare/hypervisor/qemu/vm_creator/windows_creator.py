@@ -5,9 +5,9 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
-from adare.config import HYPERVISOR_CONFIGS
 from adare.config.configdirectory import QEMU_CACHE_DIR
 from adare.console import console, print_section, print_step
 from adare.helperfunctions.web.download import download
@@ -19,6 +19,14 @@ from adare.hypervisor.qemu.vm_creator.os_catalog import (
     OsDefinition,
 )
 from adare.hypervisor.qemu.vm_creator.progress import wait_for_qemu_exit
+from adare.hypervisor.qemu.vm_creator.qmp_utils import (
+    qemu_params_for_arch,
+    repeatedly_send_keypress,
+)
+
+from jinja2 import Environment, FileSystemLoader
+
+from adare.config.configdirectory import VM_TEMPLATES_DIR
 
 import logging
 log = logging.getLogger(__name__)
@@ -30,6 +38,32 @@ _AUTOUNATTEND_MAP = {
     'windows11': 'autounattend_win11.xml',
     'windows10': 'autounattend_win10.xml',
 }
+
+
+def _render_autounattend(template_name: str, architecture: str = 'x86_64', bare: bool = False) -> str:
+    """Render an Autounattend XML template with Jinja2.
+
+    Args:
+        template_name: Filename of the template in TEMPLATES_DIR
+        architecture: CPU architecture ('x86_64' or 'aarch64')
+        bare: If True, skip ADARE agent software (Miniforge3, conda env)
+
+    Returns:
+        Rendered XML content as a string
+    """
+    is_arm = architecture == 'aarch64'
+    template_vars = {
+        'bare': bare,
+        'proc_arch': 'arm64' if is_arm else 'amd64',
+        'driver_arch': 'ARM64' if is_arm else 'amd64',
+        'miniforge_arch': 'aarch64' if is_arm else 'x86_64',
+    }
+
+    # Search user templates first, then built-in templates
+    search_paths = [str(VM_TEMPLATES_DIR), str(TEMPLATES_DIR)]
+    env = Environment(loader=FileSystemLoader(search_paths), keep_trailing_newline=True)
+    template = env.get_template(template_name)
+    return template.render(**template_vars)
 
 
 class WindowsVMCreationError(VMCreationError):
@@ -52,8 +86,9 @@ class WindowsVMCreator(BaseVMCreator):
     7. Return path to the finished qcow2 disk image
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, bare: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
+        self.bare = bare
         self._virtio_iso_path: Path | None = None
 
     def _ensure_iso(self) -> None:
@@ -67,11 +102,12 @@ class WindowsVMCreator(BaseVMCreator):
             tmpdir_path = Path(tmpdir)
 
             # Create floppy image with Autounattend.xml
-            floppy_path = _create_autounattend_floppy(self.os_def, tmpdir_path)
+            floppy_path = _create_autounattend_floppy(self.os_def, tmpdir_path, bare=self.bare)
 
             # Boot QEMU and wait for install
             try:
                 _run_windows_installation(
+                    os_def=self.os_def,
                     windows_iso_path=self.iso_path,
                     virtio_iso_path=self._virtio_iso_path,
                     floppy_path=floppy_path,
@@ -109,6 +145,7 @@ def create_windows_vm(
         force=force,
         vm_dir=vm_dir,
         iso_path=iso_path,
+        bare=bare,
     )
     return creator.create()
 
@@ -127,7 +164,7 @@ def _ensure_virtio_win_iso() -> Path:
     return virtio_path
 
 
-def _create_autounattend_floppy(os_def: OsDefinition, tmpdir: Path) -> Path:
+def _create_autounattend_floppy(os_def: OsDefinition, tmpdir: Path, bare: bool = False) -> Path:
     """Create a 1.44MB FAT12 floppy image containing Autounattend.xml.
 
     Windows Setup auto-reads A:\\ for Autounattend.xml during installation.
@@ -136,15 +173,20 @@ def _create_autounattend_floppy(os_def: OsDefinition, tmpdir: Path) -> Path:
     Args:
         os_def: OS definition to select the right template
         tmpdir: Temporary directory for the floppy image
+        bare: If True, skip ADARE agent software (Miniforge3, conda env)
 
     Returns:
         Path to the floppy image
     """
-    template_name = _AUTOUNATTEND_MAP.get(os_def.name)
-    if template_name is None:
-        raise WindowsVMCreationError(f"No Autounattend template for OS '{os_def.name}'")
+    # Resolve template: os_def.template > _AUTOUNATTEND_MAP
+    if os_def.template:
+        template_name = os_def.template
+    else:
+        template_name = _AUTOUNATTEND_MAP.get(os_def.name)
+        if template_name is None:
+            raise WindowsVMCreationError(f"No Autounattend template for OS '{os_def.name}'")
 
-    xml_content = (TEMPLATES_DIR / template_name).read_bytes()
+    xml_content = _render_autounattend(template_name, architecture=os_def.architecture, bare=bare).encode('utf-8')
 
     floppy_path = tmpdir / 'autounattend.img'
     _write_fat12_floppy(floppy_path, {'Autounattend.xml': xml_content})
@@ -281,6 +323,7 @@ def _set_fat12_entry(img: bytearray, fat_start: int, sectors_per_fat: int,
 
 
 def _run_windows_installation(
+    os_def: OsDefinition,
     windows_iso_path: Path,
     virtio_iso_path: Path,
     floppy_path: Path,
@@ -291,42 +334,84 @@ def _run_windows_installation(
     has_tpm: bool = False,
 ) -> None:
     """Boot QEMU with UEFI + Windows ISO + virtio-win + floppy and wait for install."""
-    qemu_exe = HYPERVISOR_CONFIGS['qemu']['qemu_system_exe']
-    accel = HYPERVISOR_CONFIGS['qemu']['default_accel']
+    arch_params = qemu_params_for_arch(os_def)
+    machine = arch_params['machine']
 
-    ovmf_code, _ = find_ovmf_firmware()
+    # aarch64 on HVF: cap RAM at 4 GB for installation (sufficient for Windows
+    # setup; full RAM is used when running the finished VM)
+    if os_def.architecture == 'aarch64':
+        ram_mb = min(ram_mb, 4096)
+
+    ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
 
     cmd = [
-        qemu_exe,
-        '-machine', f'type=q35,accel={accel}',
-        '-cpu', 'max',
+        arch_params['exe'],
+        '-machine', machine,
+        '-cpu', arch_params['cpu'],
         '-m', str(ram_mb),
         '-smp', str(cpus),
-        # UEFI firmware
+    ]
+
+    # UEFI firmware — pflash mode with separate NVRAM for persistent boot vars
+    cmd.extend([
         '-drive', f'if=pflash,format=raw,readonly=on,file={ovmf_code}',
         '-drive', f'if=pflash,format=raw,file={nvram_path}',
+    ])
+
+    cmd.extend([
         # Disk (virtio for performance, requires virtio-win drivers)
         '-drive', f'file={disk_path},format=qcow2,if=virtio,cache=writeback',
-        # Windows ISO as CD-ROM
-        '-drive', f'file={windows_iso_path},media=cdrom,index=0',
-        # Virtio-win drivers ISO as second CD-ROM
-        '-drive', f'file={virtio_iso_path},media=cdrom,index=1',
-        # Floppy with Autounattend.xml
-        '-drive', f'file={floppy_path},format=raw,if=floppy',
         # Network
         '-netdev', 'user,id=net0',
         '-device', 'virtio-net-pci,netdev=net0',
         # Display — show QEMU window so user can watch install progress
         '-display', 'cocoa' if platform.system() == 'Darwin' else 'gtk',
-        '-vga', 'std',
-        # USB tablet for absolute mouse positioning in display window
+        # Display — aarch64 needs virtio-gpu-pci for proper GOP framebuffer
+        # mapping (bare ramfb causes ConvertPages failures in Windows Boot Manager)
+        *arch_params['vga_args'],
+        # USB controller (must come before USB devices)
         '-device', 'qemu-xhci',
         '-device', 'usb-tablet',
+        '-device', 'usb-kbd',
         # Virtio RNG
         '-device', 'virtio-rng-pci',
-    ]
+    ])
+
+    # CD-ROM drives — aarch64 on HVF cannot boot from USB storage;
+    # use virtio-scsi which has built-in edk2 firmware drivers
+    if os_def.architecture == 'aarch64':
+        cmd.extend([
+            '-device', 'virtio-scsi-pci,id=scsi0',
+            '-drive', f'file={windows_iso_path},if=none,id=winiso,media=cdrom,readonly=on',
+            '-device', 'scsi-cd,drive=winiso,bootindex=0',
+            '-drive', f'file={virtio_iso_path},if=none,id=virtioiso,media=cdrom,readonly=on',
+            '-device', 'scsi-cd,drive=virtioiso',
+        ])
+    else:
+        cmd.extend([
+            '-drive', f'file={windows_iso_path},media=cdrom,index=0',
+            '-drive', f'file={virtio_iso_path},media=cdrom,index=1',
+        ])
+
+    # Floppy with Autounattend.xml — aarch64 virt machine has no floppy controller
+    if os_def.architecture == 'aarch64':
+        cmd.extend(['-drive', f'file={floppy_path},format=raw,if=none,id=usbdrive'])
+        cmd.extend(['-device', 'usb-storage,drive=usbdrive'])
+    else:
+        cmd.extend(['-drive', f'file={floppy_path},format=raw,if=floppy'])
+
+    # QMP socket for sending keypresses (needed for "Press any key to boot from CD")
+    qmp_sock = Path(tempfile.gettempdir()) / f'adare-qemu-install-{disk_path.stem}.qmp'
+    if qmp_sock.exists():
+        qmp_sock.unlink()
+    cmd.extend(['-qmp', f'unix:{qmp_sock},server,nowait'])
+
+    # CLAUDE: capture firmware serial output for boot debugging
+    serial_log = Path(tempfile.gettempdir()) / 'adare-qemu-uefi-serial.log'
+    cmd.extend(['-serial', f'file:{serial_log}'])
 
     log.info(f'Starting QEMU Windows installation: {" ".join(cmd)}')
+    log.info(f'CLAUDE: UEFI serial log at {serial_log}')
     print_section('Installation')
     print_step('Starting unattended Windows installation [dim](this may take 30-90 minutes)[/dim]')
 
@@ -335,6 +420,16 @@ def _run_windows_installation(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+
+    # Send repeated keypresses to catch "Press any key to boot from CD or DVD..."
+    # Windows Boot Manager on CD media shows this prompt and times out without input.
+    keypress_thread = threading.Thread(
+        target=repeatedly_send_keypress,
+        args=(qmp_sock,),
+        kwargs={'interval': 1.0, 'duration': 15.0},
+        daemon=True,
+    )
+    keypress_thread.start()
 
     try:
         with console.status(f'  [cyan]{disk_path.stem}[/cyan] installing...', spinner='dots') as status:

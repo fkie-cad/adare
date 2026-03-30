@@ -5,7 +5,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from adare.config import HYPERVISOR_CONFIGS
 from adare.config.configdirectory import QEMU_CACHE_DIR
 from adare.console import console, print_section, print_step
 from adare.helperfunctions.web.download import download
@@ -23,31 +22,10 @@ from adare.hypervisor.qemu.vm_creator.progress import (
     AutoinstallHTTPServer,
     wait_for_qemu_exit,
 )
+from adare.hypervisor.qemu.vm_creator.qmp_utils import qemu_params_for_arch
 
 import logging
 log = logging.getLogger(__name__)
-
-
-def _qemu_params_for_arch(os_def: OsDefinition) -> dict:
-    """Return architecture-specific QEMU parameters for automated install."""
-    host_os = platform.system().lower()
-
-    if os_def.architecture == 'aarch64':
-        accel = 'hvf' if host_os == 'darwin' else 'kvm'
-        return {
-            'exe': 'qemu-system-aarch64',
-            'machine': f'virt,accel={accel}',
-            'cpu': 'host' if accel == 'hvf' else 'max',
-            'vga_args': ['-device', 'virtio-gpu-pci'],
-        }
-    else:  # x86_64
-        accel = HYPERVISOR_CONFIGS['qemu']['default_accel']
-        return {
-            'exe': HYPERVISOR_CONFIGS['qemu']['qemu_system_exe'],
-            'machine': f'type=q35,accel={accel}',
-            'cpu': 'max',
-            'vga_args': ['-vga', 'std'],
-        }
 
 
 class LinuxVMCreationError(VMCreationError):
@@ -218,7 +196,7 @@ def _run_direct_kernel_installation(
     nvram_path: Path | None = None,
 ) -> None:
     """Boot QEMU with direct kernel boot + HTTP-served autoinstall (x86_64)."""
-    arch_params = _qemu_params_for_arch(os_def)
+    arch_params = qemu_params_for_arch(os_def)
     needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
 
     with AutoinstallHTTPServer(autoinstall_dir) as http_server:
@@ -321,7 +299,7 @@ def _run_uefi_installation(
     is delivered via a cidata ISO (NoCloud datasource) instead of HTTP,
     which is more reliable on aarch64 UEFI.
     """
-    arch_params = _qemu_params_for_arch(os_def)
+    arch_params = qemu_params_for_arch(os_def)
 
     ovmf_code, _ = find_ovmf_firmware(os_def.architecture)
 

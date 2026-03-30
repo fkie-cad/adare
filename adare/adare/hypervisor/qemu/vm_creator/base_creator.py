@@ -147,7 +147,7 @@ class BaseVMCreator(ABC):
             if self.force:
                 print_step(f'[yellow]Removing existing disk image[/yellow]: [dim]{disk_path}[/dim]')
                 disk_path.unlink()
-                nvram_file = target_dir / f'{self.vm_name}_VARS.fd'
+                nvram_file = target_dir / f'{self.vm_name}-nvram.fd'
                 if nvram_file.exists():
                     nvram_file.unlink()
             else:

@@ -18,7 +18,8 @@ class OVMFFirmwareNotFoundError(HypervisorException):
             "  Ubuntu/Debian: sudo apt install ovmf\n"
             "  Fedora/RHEL: sudo dnf install edk2-ovmf\n"
             "  Arch: sudo pacman -S edk2-ovmf\n"
-            "  macOS (Homebrew): brew install qemu"
+            "  macOS (Homebrew): brew install qemu\n"
+            "  macOS (MacPorts): sudo port install qemu"
         )
         super().__init__(message)
 
@@ -37,6 +38,8 @@ OVMF_SEARCH_PATHS = [
     ("/usr/share/qemu/ovmf-x86_64-code.bin", "/usr/share/qemu/ovmf-x86_64-vars.bin"),
     # Gentoo
     ("/usr/share/edk2-ovmf/OVMF_CODE.fd", "/usr/share/edk2-ovmf/OVMF_VARS.fd"),
+    # macOS (MacPorts)
+    ("/opt/local/share/qemu/edk2-x86_64-code.fd", "/opt/local/share/qemu/edk2-i386-vars.fd"),
     # macOS (Homebrew - Apple Silicon)
     ("/opt/homebrew/share/qemu/edk2-x86_64-code.fd", "/opt/homebrew/share/qemu/edk2-i386-vars.fd"),
     # macOS (Homebrew - Intel)
@@ -45,6 +48,8 @@ OVMF_SEARCH_PATHS = [
 
 # aarch64 OVMF firmware paths
 AARCH64_OVMF_SEARCH_PATHS = [
+    # macOS MacPorts
+    ("/opt/local/share/qemu/edk2-aarch64-code.fd", "/opt/local/share/qemu/edk2-arm-vars.fd"),
     # macOS Homebrew (Apple Silicon)
     ("/opt/homebrew/share/qemu/edk2-aarch64-code.fd", "/opt/homebrew/share/qemu/edk2-arm-vars.fd"),
     # macOS Homebrew (Intel — cross-arch)

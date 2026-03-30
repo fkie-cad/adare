@@ -17,13 +17,9 @@ from typing import Dict, List, Any, Optional, Set, Tuple, Union
 import time
 import platform
 
-# Import automation modules
-from adarevm.automation.gui import (
-    take_screenshot, take_window_screenshots, click, right_click, double_click,
-    drag, keyboard_action, scroll, move_mouse, idle
-)
+# GUI imports are lazy-loaded inside each method to avoid loading pyautogui/PIL
+# at startup — critical for Wayland VMs running in host-GUI mode.
 from adarevm.automation.shell import execute_on_shell
-from adarevm.testing.testset import TestsetExecutionError
 
 import logging
 log = logging.getLogger(__name__)
@@ -359,11 +355,13 @@ class AdareVMServer:
     
     async def _screenshot(self, websocket, x: int = None, y: int = None, width: int = None, height: int = None):
         """Take a screenshot."""
+        from adarevm.automation.gui import take_screenshot
         await self.send_event(websocket, EventType.LOG, {"message": "Taking screenshot"})
         return take_screenshot(x, y, width, height)
     
     async def _click(self, websocket, x: int, y: int):
         """Simulate a mouse click."""
+        from adarevm.automation.gui import click
         await self.send_event(websocket, EventType.GUI_CLICK, {
             "action": "click", "x": x, "y": y
         })
@@ -371,6 +369,7 @@ class AdareVMServer:
     
     async def _right_click(self, websocket, x: int, y: int):
         """Simulate a right mouse click."""
+        from adarevm.automation.gui import right_click
         await self.send_event(websocket, EventType.GUI_CLICK, {
             "action": "right_click", "x": x, "y": y
         })
@@ -378,6 +377,7 @@ class AdareVMServer:
     
     async def _double_click(self, websocket, x: int, y: int):
         """Simulate a double mouse click."""
+        from adarevm.automation.gui import double_click
         await self.send_event(websocket, EventType.GUI_CLICK, {
             "action": "double_click", "x": x, "y": y
         })
@@ -385,6 +385,7 @@ class AdareVMServer:
     
     async def _drag(self, websocket, x1: int, y1: int, x2: int, y2: int):
         """Simulate a mouse drag."""
+        from adarevm.automation.gui import drag
         await self.send_event(websocket, EventType.GUI_DRAG, {
             "from": {"x": x1, "y": y1}, "to": {"x": x2, "y": y2}
         })
@@ -392,6 +393,7 @@ class AdareVMServer:
     
     async def _keyboard(self, websocket, type: str, key: str):
         """Simulate keyboard actions."""
+        from adarevm.automation.gui import keyboard_action
         await self.send_event(websocket, EventType.GUI_KEYPRESS, {
             "type": type, "key": key
         })
@@ -399,6 +401,7 @@ class AdareVMServer:
     
     async def _scroll(self, websocket, direction: str, amount: int):
         """Simulate scroll action."""
+        from adarevm.automation.gui import scroll
         log.info(f"Scrolling {direction} by {amount}")
         result = scroll(direction, amount)
         await self.send_event(websocket, EventType.LOG, {"message": f"Scrolled {direction} by {amount}"})
@@ -406,6 +409,7 @@ class AdareVMServer:
     
     async def _goto(self, websocket, x: int, y: int):
         """Move mouse to coordinates."""
+        from adarevm.automation.gui import move_mouse
         log.info(f"Moving mouse to ({x}, {y})")
         result = move_mouse(x, y)
         await self.send_event(websocket, EventType.LOG, {"message": f"Mouse moved to ({x}, {y})"})
@@ -419,6 +423,7 @@ class AdareVMServer:
     
     async def _screenshot_window(self, websocket, window: str):
         """Take screenshot of specific window."""
+        from adarevm.automation.gui import take_window_screenshots
         log.info(f"Taking screenshot of window: {window}")
         await self.send_event(websocket, EventType.LOG, {"message": f"Taking screenshot of window: {window}"})
         try:
@@ -1174,6 +1179,7 @@ class AdareVMServer:
     
     async def _run_test(self, websocket, test_name: str, resolved_test_data: dict):
         """Run a test with pre-resolved test data (variables already substituted)."""
+        from adarevm.testing.testset import TestsetExecutionError
         log.info(f"Running test: {test_name}")
         log.debug(f"Test '{test_name}' resolved_test_data: {resolved_test_data}")
         try:

@@ -397,6 +397,51 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
 
 
 # ---------------------------------------------------------------------------
+# WebSocket connection diagnostics
+# ---------------------------------------------------------------------------
+
+async def _diagnose_websocket_connection(vm, guest_platform: str, stop_event, full: bool = False):
+    """Run guest-side diagnostics for WebSocket connection issues.
+
+    Uses the QEMU guest agent (virtio-serial) which works even when networking
+    is broken inside the guest.
+
+    Args:
+        vm: The VM instance (with working guest agent)
+        guest_platform: 'linux' or 'windows'
+        stop_event: Cancellation event
+        full: If True, run extended diagnostics (network interfaces, logs)
+    """
+    if guest_platform != 'linux':
+        return  # Only Linux diagnostics implemented for now
+
+    diagnostics = [
+        ("adarevm process", "pgrep -af adarevm || echo 'adarevm NOT running'"),
+        ("port 18765", "ss -tlnp 2>/dev/null | grep 18765 || netstat -tlnp 2>/dev/null | grep 18765 || echo 'Port 18765 NOT listening'"),
+    ]
+
+    if full:
+        diagnostics.extend([
+            ("network interfaces", "ip addr show"),
+            ("config.json", "cat /adare/run/config.json 2>/dev/null || echo 'NOT FOUND'"),
+            ("adarevm log", "tail -30 /adare/run/logs/adarevm.log 2>/dev/null || echo 'No log file'"),
+            ("local connectivity", "timeout 2 bash -c 'echo > /dev/tcp/localhost/18765' 2>&1 && echo 'Port reachable' || echo 'Port NOT reachable from inside guest'"),
+        ])
+
+    log.info("--- WebSocket Connection Diagnostics ---")
+    for label, cmd in diagnostics:
+        try:
+            result = await vm.run_command(cmd, stop_event=stop_event, timeout=10)
+            output = (result.stdout or '').strip()
+            log.info(f"[{label}]: {output}")
+        except asyncio.TimeoutError:
+            log.warning(f"[{label}]: diagnostic timed out")
+        except OSError as e:
+            log.warning(f"[{label}]: diagnostic failed: {e}")
+    log.info("--- End Diagnostics ---")
+
+
+# ---------------------------------------------------------------------------
 # WebSocket connection
 # ---------------------------------------------------------------------------
 
@@ -441,6 +486,14 @@ async def connect_websocket(context, stage_ctx):
             raise
         except Exception as e:
             log.warning(f"Could not verify adarevm process status: {e}")
+
+    # Pre-flight guest-side diagnostics (uses guest agent, not network)
+    if context.hypervisor_type == 'qemu':
+        log.info("Running pre-flight guest diagnostics (waiting 3s for adarevm startup)...")
+        await asyncio.sleep(3)
+        await _diagnose_websocket_connection(
+            context.vm, context.guest_platform or 'linux', context.stop_event, full=False
+        )
 
     # Create websocket client with host port forwarding
     context.client = AdareVMClient(host='localhost', port=context.config.websocket_port)
@@ -513,7 +566,13 @@ async def connect_websocket(context, stage_ctx):
                 log.info(f"Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
 
-    # All attempts failed
+    # All attempts failed — run full guest-side diagnostics before raising
+    if context.hypervisor_type == 'qemu':
+        log.info("All connection attempts failed. Running full guest diagnostics...")
+        await _diagnose_websocket_connection(
+            context.vm, context.guest_platform or 'linux', context.stop_event, full=True
+        )
+
     stage_ctx.stage.sub_msg = f"All {max_attempts} connection attempts failed"
     stage_ctx.set_status(stage_ctx.stage.status)
     log.error(last_error, exc_info=True)

@@ -144,7 +144,15 @@ def run():
     installation_mode = config.get('installation_mode', 'wheel')
 
     log.info(f"adarevm started with tools_paths={tools_paths}, data_paths={data_paths}, installation_mode={installation_mode}")
-    asyncio.run(main(tools_paths=tools_paths, data_paths=data_paths, installation_mode=installation_mode))
+    try:
+        asyncio.run(main(tools_paths=tools_paths, data_paths=data_paths, installation_mode=installation_mode))
+    except KeyboardInterrupt:
+        log.info("adarevm interrupted by user")
+    except Exception as e:
+        log.critical(f"adarevm crashed: {type(e).__name__}: {e}", exc_info=True)
+        for handler in logging.root.handlers:
+            handler.flush()
+        raise
 
 if __name__ == "__main__":
     run()

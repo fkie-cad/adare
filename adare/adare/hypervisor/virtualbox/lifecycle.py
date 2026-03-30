@@ -223,7 +223,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
                 stop_event=context.user_interrupt_event
             )
 
-    async def retrieve_artifacts(self, context, post_interrupt: bool = False):
+    async def retrieve_artifacts(self, context, post_interrupt: bool = False, force_stop: bool = False):
         """
         Retrieve artifacts and logs from VirtualBox VM.
 
@@ -235,6 +235,7 @@ class VirtualBoxLifecycleStrategy(AbstractVMLifecycleStrategy):
         Args:
             context: ExperimentRunCtx
             post_interrupt: If True, we're in post-interrupt cleanup (ignored for VirtualBox)
+            force_stop: Unused for VirtualBox (VM stop is handled separately)
         """
         # No-op: artifacts and logs already on host via shared folders
         log.debug("VirtualBox: Artifacts and logs already on host via shared folders, no retrieval needed")

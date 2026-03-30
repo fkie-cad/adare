@@ -25,18 +25,15 @@ log = logging.getLogger(__name__)
 
 
 def _use_shared_folder_mode() -> bool:
-    """Check if shared folder mode (virtio-fs) should be used.
-    
-    Returns:
-        True: Use shared folders (default for all modes)
-        False: Use libguestfs (fallback mode if env var set)
+    """Check if shared folder mode (virtio-fs) is actually available.
+
+    Must match the logic in file_transfer/__init__.py:detect_file_transfer_mode().
     """
+    import shutil
     libguestfs_env = os.environ.get('QEMU_LIBGUESTFS', '').lower()
     if libguestfs_env in ('true', '1', 'yes'):
         return False
-
-    # always use shared folders by default
-    return True
+    return bool(shutil.which('virtiofsd'))
 
 
 @dataclass
@@ -440,7 +437,7 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
             
         return commands
 
-    def build_install_command(self, env_info: EnvironmentInfo) -> str:
+    def build_install_command(self, env_info: EnvironmentInfo, vm: Any = None) -> str:
         """Build Linux install command."""
         if env_info.use_conda:
             return self._build_conda_install_command()
@@ -478,7 +475,7 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
 
-    def build_run_command(self, env_info: EnvironmentInfo) -> tuple[str, Optional[str]]:
+    def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> tuple[str, Optional[str]]:
         """Build Linux run command."""
         # Minimal CLI args - relying on default /adare/run and config.json
         cli_args = ""

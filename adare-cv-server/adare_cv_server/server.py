@@ -9,6 +9,7 @@ import cv2
 from typing import Dict, Any, Optional, List, Union
 from .constants import DEFAULT_PORT, DEFAULT_HOST, MCP_PATH, DEFAULT_MAX_RESULTS
 from .feature_matching import SIFTMatcher, ORBMatcher, TemplateMatcher
+from .image_processing import ImageDecoder, RegionValidator, IconSearchDebugger
 from .ocr_processing import TextDetector
 from .exceptions import FeatureMatchingError, ImageDecodingError, OCRProcessingError
 
@@ -39,61 +40,106 @@ async def find_icon(
         screenshot_bytes = base64.b64decode(screenshot_base64)
         icon_bytes = base64.b64decode(icon_base64)
 
-        # Try ORB first if enabled (since it can find multiple matches)
+        # Collect debug candidates throughout the cascade
+        debug_candidates = []
+
+        def _save_debug():
+            IconSearchDebugger.save_search_result(screenshot_bytes, debug_candidates)
+
+        def _make_result(res):
+            res = res.apply_offset(offset_x, offset_y).limit_results(max_results)
+            return {
+                "locations": res.locations,
+                "similarities": res.similarities,
+                "method_used": res.method
+            }
+
+        # 1. Try template matching FIRST (fastest, most reliable for GUI icons)
+        log.info("Trying template matching (primary method)...")
+        result = TemplateMatcher.find_icon_locations(screenshot_bytes, icon_bytes, threshold)
+        if result.success:
+            log.info(f"Template matching found {len(result.locations)} matches")
+            for loc, sim in zip(result.locations, result.similarities):
+                debug_candidates.append({
+                    'method': 'template', 'x': loc[0], 'y': loc[1],
+                    'similarity': sim, 'accepted': True
+                })
+            _save_debug()
+            return _make_result(result)
+        log.info("Template matching found no matches, trying feature-based methods...")
+
+        # Decode images once for region validation (shared by SIFT and ORB)
+        screenshot_img, icon_img, alpha_mask = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
+
+        # 2. Try SIFT (scale-invariant, good for rotated/transformed icons)
+        if use_sift:
+            try:
+                log.info("Trying SIFT feature matching...")
+                result = SIFTMatcher.find_icon_locations(
+                    screenshot_bytes, icon_bytes, sift_min_matches, sift_ratio
+                )
+                if result.success:
+                    validated = RegionValidator.filter_matches(
+                        screenshot_img, icon_img, result, alpha_mask=alpha_mask
+                    )
+                    # Record all candidates with validation status
+                    for loc, sim in zip(result.locations, result.similarities):
+                        accepted = loc in {v for v in validated.locations}
+                        debug_candidates.append({
+                            'method': 'sift', 'x': loc[0], 'y': loc[1],
+                            'similarity': sim, 'accepted': accepted
+                        })
+                    if validated.success:
+                        log.info(f"SIFT found {len(validated.locations)} validated matches")
+                        _save_debug()
+                        return _make_result(validated)
+                    else:
+                        log.info("SIFT matches rejected by region validation")
+                else:
+                    log.info("SIFT found no matches")
+            except (FeatureMatchingError, cv2.error, ValueError) as sift_error:
+                log.warning(f"SIFT failed: {sift_error}, trying ORB...")
+            except Exception as sift_error:
+                log.warning(f"Unexpected SIFT error: {sift_error}, trying ORB...", exc_info=True)
+
+        # 3. Try ORB last (fastest feature method, but most prone to false positives)
         if use_orb:
             try:
-                log.info(f"Trying ORB feature matching...")
+                log.info("Trying ORB feature matching...")
                 result = ORBMatcher.find_icon_locations(
                     screenshot_bytes, icon_bytes,
                     orb_min_matches, orb_max_matches, orb_distance_threshold
                 )
                 if result.success:
-                    log.info(f"ORB found {len(result.locations)} matches")
-                    result = result.apply_offset(offset_x, offset_y).limit_results(max_results)
-                    return {
-                        "locations": result.locations,
-                        "similarities": result.similarities,
-                        "method_used": result.method
-                    }
+                    validated = RegionValidator.filter_matches(
+                        screenshot_img, icon_img, result, alpha_mask=alpha_mask
+                    )
+                    for loc, sim in zip(result.locations, result.similarities):
+                        accepted = loc in {v for v in validated.locations}
+                        debug_candidates.append({
+                            'method': 'orb', 'x': loc[0], 'y': loc[1],
+                            'similarity': sim, 'accepted': accepted
+                        })
+                    if validated.success:
+                        log.info(f"ORB found {len(validated.locations)} validated matches")
+                        _save_debug()
+                        return _make_result(validated)
+                    else:
+                        log.info("ORB matches rejected by region validation")
                 else:
-                    log.info("ORB found no matches, trying other methods...")
+                    log.info("ORB found no matches")
             except (FeatureMatchingError, cv2.error, ValueError) as orb_error:
-                log.warning(f"ORB failed: {orb_error}, trying other methods...")
+                log.warning(f"ORB failed: {orb_error}")
             except Exception as orb_error:
-                log.warning(f"Unexpected ORB error: {orb_error}, trying other methods...", exc_info=True)
+                log.warning(f"Unexpected ORB error: {orb_error}", exc_info=True)
 
-        # Try SIFT if ORB didn't find anything and SIFT is enabled
-        if use_sift:
-            try:
-                log.info(f"Trying SIFT feature matching...")
-                result = SIFTMatcher.find_icon_locations(
-                    screenshot_bytes, icon_bytes, sift_min_matches, sift_ratio
-                )
-                if result.success:
-                    log.info(f"SIFT found {len(result.locations)} matches")
-                    result = result.apply_offset(offset_x, offset_y).limit_results(max_results)
-                    return {
-                        "locations": result.locations,
-                        "similarities": result.similarities,
-                        "method_used": result.method
-                    }
-                else:
-                    log.info("SIFT found no matches, falling back to template matching")
-            except (FeatureMatchingError, cv2.error, ValueError) as sift_error:
-                log.warning(f"SIFT failed: {sift_error}, falling back to template matching")
-            except Exception as sift_error:
-                log.warning(f"Unexpected SIFT error: {sift_error}, falling back to template matching", exc_info=True)
-
-        # Fall back to template matching
-        log.info("Using template matching...")
-        result = TemplateMatcher.find_icon_locations(screenshot_bytes, icon_bytes, threshold)
-        result = result.apply_offset(offset_x, offset_y).limit_results(max_results)
-
-        log.info(f"Found {len(result.locations)} total icon matches using {result.method}")
+        # 4. No match found by any method
+        log.info("No icon matches found by any method")
+        _save_debug()
         return {
-            "locations": result.locations,
-            "similarities": result.similarities,
-            "method_used": result.method
+            "locations": [],
+            "similarities": [],
+            "method_used": "none"
         }
 
     except (ImageDecodingError, base64.binascii.Error, ValueError) as e:
@@ -229,6 +275,7 @@ def main(port: int, host: str, debug: bool, debug_output_dir: str = None) -> Non
         output_path.mkdir(parents=True, exist_ok=True)
         log.info(f"Debug output enabled. Saving images to: {output_path}")
         TextDetector.set_debug_output_dir(output_path)
+        IconSearchDebugger.set_debug_output_dir(output_path)
 
     try:
         # Run FastMCP server

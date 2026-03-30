@@ -306,12 +306,25 @@ class DomainXMLBuilder:
         self._add_virtiofs_filesystems()
 
     def _add_emulator(self) -> None:
-        """Add QEMU emulator path (architecture-aware)."""
+        """Add QEMU emulator path (architecture-aware).
+
+        Search order on macOS: PATH, MacPorts (/opt/local/bin), Homebrew.
+        """
         qemu_exe = f'qemu-system-{self._guest_arch}'
-        if self._is_darwin:
-            qemu_full_path = shutil.which(qemu_exe) or f'/opt/homebrew/bin/{qemu_exe}'
-        else:
-            qemu_full_path = shutil.which(qemu_exe) or f'/usr/bin/{qemu_exe}'
+        qemu_full_path = shutil.which(qemu_exe)
+        if not qemu_full_path:
+            if self._is_darwin:
+                for candidate in [
+                    f'/opt/local/bin/{qemu_exe}',       # MacPorts
+                    f'/opt/homebrew/bin/{qemu_exe}',     # Homebrew (Apple Silicon)
+                    f'/usr/local/bin/{qemu_exe}',        # Homebrew (Intel)
+                ]:
+                    if os.path.isfile(candidate):
+                        qemu_full_path = candidate
+                        break
+            if not qemu_full_path:
+                qemu_full_path = shutil.which(qemu_exe) or f'/usr/bin/{qemu_exe}'
+        log.info(f"Using QEMU emulator: {qemu_full_path}")
         ET.SubElement(self._devices, 'emulator').text = qemu_full_path
 
     def _add_disk(self) -> None:
@@ -406,12 +419,14 @@ class DomainXMLBuilder:
         else:
             self._add_graphics_headless()
 
-    def _add_vnc_graphics(self) -> None:
-        """Add VNC graphics accessible via macOS Screen Sharing.
+    def _add_spice_graphics(self) -> None:
+        """Add SPICE graphics (dirty-region updates, lower latency than VNC)."""
+        graphics = ET.SubElement(self._devices, 'graphics', type='spice', autoport='yes')
+        graphics.set('listen', '127.0.0.1')
+        ET.SubElement(graphics, 'listen', type='address', address='127.0.0.1')
 
-        Sets a known password so macOS `open vnc://:adare@127.0.0.1:<port>`
-        auto-connects without a manual password prompt.
-        """
+    def _add_vnc_graphics(self) -> None:
+        """Add VNC graphics as fallback (e.g. Linux hosts without SPICE client)."""
         attrs = {'type': 'vnc', 'autoport': 'yes', 'passwd': 'adare'}
         if self._vnc_port:
             attrs['port'] = str(self._vnc_port)
@@ -424,11 +439,10 @@ class DomainXMLBuilder:
 
     def _add_graphics_enabled(self) -> None:
         """Add display-enabled graphics configuration."""
-        if self._is_windows and not self._is_darwin:
-            log.info(f"Using SPICE graphics for Windows VM {self._config.vm_name}")
-            graphics = ET.SubElement(self._devices, 'graphics', type='spice', autoport='yes')
-            graphics.set('listen', '127.0.0.1')
-            ET.SubElement(graphics, 'listen', type='address', address='127.0.0.1')
+        if self._is_darwin:
+            self._add_spice_graphics()
+        elif self._is_windows:
+            self._add_spice_graphics()
             ET.SubElement(self._devices, 'graphics', type='egl-headless')
         else:
             self._add_vnc_graphics()
@@ -436,12 +450,11 @@ class DomainXMLBuilder:
         self._add_video_device()
 
     def _add_graphics_headless(self) -> None:
-        """Add headless graphics configuration (on-demand via virt-manager)."""
-        if self._is_windows and not self._is_darwin:
-            log.info(f"Using SPICE graphics for Windows VM {self._config.vm_name} (headless mode)")
-            graphics = ET.SubElement(self._devices, 'graphics', type='spice', autoport='yes')
-            graphics.set('listen', '127.0.0.1')
-            ET.SubElement(graphics, 'listen', type='address', address='127.0.0.1')
+        """Add headless graphics configuration."""
+        if self._is_darwin:
+            self._add_spice_graphics()
+        elif self._is_windows:
+            self._add_spice_graphics()
             ET.SubElement(self._devices, 'graphics', type='egl-headless')
         else:
             self._add_vnc_graphics()
@@ -487,13 +500,24 @@ class DomainXMLBuilder:
         ET.SubElement(console, 'target', type=console_target_type, port='0')
 
     def _add_input_devices(self) -> None:
-        """Add input devices (tablet, mouse, keyboard)."""
+        """Add input devices (tablet, mouse, keyboard).
+
+        On macOS/HVF, the secondary mouse is omitted to prevent BTN event
+        routing conflicts — the USB tablet handles both positioning and clicks.
+        """
+        # IMPORTANT: Tablet MUST be added first. QEMU routes input events to the first
+        # matching handler in its global list. If a secondary mouse (virtio/ps2) registers
+        # before the tablet, BTN (click) events go to the mouse while ABS (position) events
+        # go to the tablet — causing clicks to land on the wrong device. On macOS/HVF the
+        # secondary mouse is omitted entirely to avoid this conflict.
         ET.SubElement(self._devices, 'input', type='tablet', bus='usb')
         if self._is_aarch64:
-            ET.SubElement(self._devices, 'input', type='mouse', bus='virtio')
+            if not self._is_darwin:
+                ET.SubElement(self._devices, 'input', type='mouse', bus='virtio')
             ET.SubElement(self._devices, 'input', type='keyboard', bus='virtio')
         else:
-            ET.SubElement(self._devices, 'input', type='mouse', bus='ps2')
+            if not self._is_darwin:
+                ET.SubElement(self._devices, 'input', type='mouse', bus='ps2')
             ET.SubElement(self._devices, 'input', type='keyboard', bus='ps2')
 
     def _add_memballoon(self) -> None:

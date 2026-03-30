@@ -500,6 +500,7 @@ def _setup_host_mode_test_executor(controller, context: ExperimentRunCtx, vm_os:
             from adare.exceptions import LoggedException
             issue_list = '\n  - '.join(issues)
             raise LoggedException(
+                log,
                 f"Host-mode test validation failed. The following tests cannot run in host mode:\n  - {issue_list}\n"
                 f"Use --test-mode agent to run these tests via the in-guest agent instead."
             )
@@ -856,9 +857,11 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                         force_shutdown = True
                         log.info("Forcing shutdown for Windows VM on QEMU to prevent updates")
 
+                    # Retrieve artifacts BEFORE stopping VM (critical for QGA/VirtioFS which need a running VM)
+                    # The lifecycle strategy handles stop internally in the correct order per transfer mode
+                    await step_runner.run_cleanup_step(vm_manager.retrieve_artifacts, experiment_run_context, post_interrupt=True, force_stop=force_shutdown)
+                    # Safety net: stop VM if retrieve_artifacts didn't already (idempotent)
                     await step_runner.run_cleanup_step(vm_manager.stop_vm, experiment_run_context, post_interrupt=True, force=force_shutdown)
-                    # Retrieve artifacts BEFORE destroying VM (critical for QEMU)
-                    await step_runner.run_cleanup_step(vm_manager.retrieve_artifacts, experiment_run_context, post_interrupt=True)
                     # Perform host-side diff AFTER VM stopped, BEFORE overlay cleanup
                     await step_runner.run_cleanup_step(vm_manager.perform_host_diff, experiment_run_context, post_interrupt=True)
                     await step_runner.run_cleanup_step(vm_manager.cleanup_vm, experiment_run_context, post_interrupt=True)

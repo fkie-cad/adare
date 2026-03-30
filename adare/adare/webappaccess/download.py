@@ -29,11 +29,11 @@ def download_experiment(experiment_ulid: str, location: Path):
     experiment = __download_json(session, download_url)
 
     metadata_file = experiment.get('metadata_file')
-    action_file = experiment.get('action_file')
+    playbook_file = experiment.get('playbook_file')
     if not metadata_file:
         raise MissingDataError(log, f"Experiment {experiment_ulid} has no metadata_file attribute")
-    if not action_file:
-        raise MissingDataError(log, f"Experiment {experiment_ulid} has no action_file attribute")
+    if not playbook_file:
+        raise MissingDataError(log, f"Experiment {experiment_ulid} has no playbook_file attribute")
     # download the files
     session = webapp.get_gitea_session()
     name = experiment.get('name')
@@ -42,15 +42,17 @@ def download_experiment(experiment_ulid: str, location: Path):
     if experiment_dir.exists():
         log.error(f"Experiment {experiment_ulid} already exists in {location}")
         raise ExperimentWithNameAlreadyExistsError(log, f"Experiment {experiment_ulid} already exists in {location}")
-    for file in [metadata_file, action_file]:
+    for file in [metadata_file, playbook_file]:
         path = experiment_dir / Path(file).name
         download_from_session(file, path, session)
     return name
 
 
-def download_testfunction(testfunction_name: str, location: Path):
+def download_testfunction(testfunction_name: str, location: Path, version: int = None):
     webapp = WebappLogin()
     download_url = f"{config_server.DOWNLOAD_API_URL}testfunction_{testfunction_name}/"
+    if version is not None:
+        download_url += f"?version={version}"
 
     session = webapp.get_django_session()
     testfunction = __download_json(session, download_url)

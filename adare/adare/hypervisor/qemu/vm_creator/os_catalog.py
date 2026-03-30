@@ -43,6 +43,7 @@ class OsDefinition:
     extra_packages: list[str] = field(default_factory=list)
     install_mode: str = 'auto'  # 'auto' (unattended) or 'manual' (interactive VNC)
     architecture: str = 'x86_64'  # 'x86_64' or 'aarch64'
+    template: str = ''  # Custom template filename (empty = use default lookup)
 
 
 # Ubuntu 24.04 LTS (Noble Numbat) - Server ISO with autoinstall support
@@ -210,6 +211,7 @@ def _load_yaml_profiles() -> dict[str, OsDefinition]:
                     extra_packages=data.get('extra_packages', []),
                     install_mode=install_mode,
                     architecture=architecture,
+                    template=data.get('template', ''),
                 )
             except (OSError, yaml.YAMLError, TypeError, ValueError) as e:
                 log.warning('Skipping %s: %s', yml_file, e)

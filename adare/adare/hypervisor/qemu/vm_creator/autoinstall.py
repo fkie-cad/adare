@@ -6,6 +6,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
+from adare.config.configdirectory import VM_TEMPLATES_DIR
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 
 import logging
@@ -185,25 +186,30 @@ def generate_user_data(os_def: OsDefinition, vm_name: str, bare: bool = False) -
     Raises:
         KeyError: If no template exists for the given OS
     """
-    template_file = _TEMPLATE_MAP.get(os_def.name)
-    if template_file is None:
-        # Fallback: use latest template matching this distribution
-        distro_templates = {k: v for k, v in _TEMPLATE_MAP.items() if k.startswith(os_def.distribution)}
-        if distro_templates:
-            template_file = distro_templates[max(distro_templates.keys())]
-        else:
-            raise KeyError(f"No autoinstall template for OS '{os_def.name}'")
+    # Resolve template: os_def.template > _TEMPLATE_MAP > distro fallback
+    if os_def.template:
+        template_file = os_def.template
+    else:
+        template_file = _TEMPLATE_MAP.get(os_def.name)
+        if template_file is None:
+            # Fallback: use latest template matching this distribution
+            distro_templates = {k: v for k, v in _TEMPLATE_MAP.items() if k.startswith(os_def.distribution)}
+            if distro_templates:
+                template_file = distro_templates[max(distro_templates.keys())]
+            else:
+                raise KeyError(f"No autoinstall template for OS '{os_def.name}'")
 
     # Sanitize hostname (RFC 1123: lowercase alphanumeric and hyphens)
     hostname = vm_name.lower().replace('_', '-').replace(' ', '-')
     hostname = ''.join(c for c in hostname if c.isalnum() or c == '-')
     hostname = hostname.strip('-')[:63] or 'adare-vm'
 
-    # Static hash of password 'adare' — username: adare, password: adare
-    password_hash = '$6$adareadare$bvmGOA66nnGDihvE/KPie.0dJtQCQI7SqQgLaEA/mywtqEykbm5hjzyZjJ4kIpfToT4LBUcU/KDIw7bVCwiBe.'
+    password_hash = generate_password_hash('adare')
 
+    # Search user templates first, then built-in templates
+    search_paths = [str(VM_TEMPLATES_DIR), str(TEMPLATES_DIR)]
     env = Environment(
-        loader=FileSystemLoader(str(TEMPLATES_DIR)),
+        loader=FileSystemLoader(search_paths),
         keep_trailing_newline=True,
     )
     template = env.get_template(template_file)
