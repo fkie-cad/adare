@@ -78,7 +78,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                                 # Try to read with very short timeout simulation
                                 byte = proc.stdout.read(1)
                                 now = time.time()
-                            except:
+                            except OSError:
                                 # No data available, small sleep to avoid busy waiting
                                 time.sleep(0.01)
                                 byte = None
@@ -88,7 +88,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                             try:
                                 byte = proc.stdout.read(1)
                                 now = time.time()
-                            except:
+                            except OSError:
                                 byte = None
                                 now = time.time()
 

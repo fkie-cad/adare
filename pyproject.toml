@@ -94,6 +94,16 @@ precision = 2
 [tool.coverage.html]
 directory = "htmlcov"
 
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "B", "BLE", "S110", "S112"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/test_*.py" = ["S"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

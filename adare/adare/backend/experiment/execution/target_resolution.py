@@ -132,7 +132,7 @@ class TargetResolutionExecutor:
                 try:
                     img_name = Path(target.image).stem
                     action_context = f"find_img_{img_name}"
-                except:
+                except (TypeError, ValueError):
                     action_context = "find_img"
             elif target.text:
                  # Truncate text for filename safety

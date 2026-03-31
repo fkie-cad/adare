@@ -88,7 +88,7 @@ class ExperimentFlowConsole:
                     try:
                         live.update("Flow console error - please check logs")
                         live.refresh()
-                    except:
+                    except (RuntimeError, ValueError):
                         pass
 
                 time.sleep(0.067)  # ~67ms sleep for 15 FPS

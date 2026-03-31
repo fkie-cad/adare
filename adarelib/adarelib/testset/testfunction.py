@@ -65,6 +65,65 @@ class TestfunctionLoader:
             self._load_failures.clear()
             return self._do_import(source=source, directory=directory)
 
+    def _load_single_module(self, name: str, file_path: Path, testdict: dict) -> None:
+        """
+        Load a single testfunction module and extract BasicTest subclasses.
+
+        On success, populates testdict[name] with {testname: test_class} mappings.
+        On failure, records the error in self._load_failures and logs the issue.
+
+        Caller must hold self._lock.
+
+        Args:
+            name: Logical name for the testfunction module (used as dict key)
+            file_path: Path to the Python file to load
+            testdict: Dictionary to populate with discovered test classes
+        """
+        try:
+            module = import_module_from_pyfile(file_path)
+            testdict[name] = {}
+
+            for attribute_name in dir(module):
+                attribute = getattr(module, attribute_name)
+                if isclass(attribute) and issubclass(attribute, BasicTest):
+                    testdict[name][getattr(attribute, 'testname')] = attribute
+
+        except ModuleNotFoundError as e:
+            log.error(f"Missing dependency loading testfunction '{name}' from {file_path}: {e}")
+            self._load_failures[name] = ModuleLoadFailure(
+                module_name=name,
+                file_path=str(file_path),
+                exception_type='ModuleNotFoundError',
+                exception_message=str(e)
+            )
+
+        except ImportError as e:
+            log.error(f"Import error loading testfunction '{name}' from {file_path}: {e}")
+            self._load_failures[name] = ModuleLoadFailure(
+                module_name=name,
+                file_path=str(file_path),
+                exception_type='ImportError',
+                exception_message=str(e)
+            )
+
+        except SyntaxError as e:
+            log.error(f"Syntax error in testfunction '{name}' at {file_path}: {e}")
+            self._load_failures[name] = ModuleLoadFailure(
+                module_name=name,
+                file_path=str(file_path),
+                exception_type='SyntaxError',
+                exception_message=str(e)
+            )
+
+        except (AttributeError, TypeError) as e:
+            log.error(f"Attribute/Type error loading testfunction '{name}' from {file_path}: {e}")
+            self._load_failures[name] = ModuleLoadFailure(
+                module_name=name,
+                file_path=str(file_path),
+                exception_type=type(e).__name__,
+                exception_message=str(e)
+            )
+
     def _do_import(self, source=None, directory=None) -> dict:
         """Internal import logic. Caller must hold self._lock."""
         testdict = {}
@@ -77,54 +136,7 @@ class TestfunctionLoader:
                     log.warning(f"Testfunction file not found: {file_path}")
                     continue
 
-                try:
-                    module = import_module_from_pyfile(file_path)
-                    testdict[name] = {}
-
-                    for attribute_name in dir(module):
-                        attribute = getattr(module, attribute_name)
-                        if isclass(attribute) and issubclass(attribute, BasicTest):
-                            testdict[name][getattr(attribute, 'testname')] = attribute
-
-                except ModuleNotFoundError as e:
-                    log.error(f"Missing dependency loading testfunction '{name}' from {file_path}: {e}")
-                    self._load_failures[name] = ModuleLoadFailure(
-                        module_name=name,
-                        file_path=str(file_path),
-                        exception_type='ModuleNotFoundError',
-                        exception_message=str(e)
-                    )
-                    continue
-
-                except ImportError as e:
-                    log.error(f"Import error loading testfunction '{name}' from {file_path}: {e}")
-                    self._load_failures[name] = ModuleLoadFailure(
-                        module_name=name,
-                        file_path=str(file_path),
-                        exception_type='ImportError',
-                        exception_message=str(e)
-                    )
-                    continue
-
-                except SyntaxError as e:
-                    log.error(f"Syntax error in testfunction '{name}' at {file_path}: {e}")
-                    self._load_failures[name] = ModuleLoadFailure(
-                        module_name=name,
-                        file_path=str(file_path),
-                        exception_type='SyntaxError',
-                        exception_message=str(e)
-                    )
-                    continue
-
-                except (AttributeError, TypeError) as e:
-                    log.error(f"Attribute/Type error loading testfunction '{name}' from {file_path}: {e}")
-                    self._load_failures[name] = ModuleLoadFailure(
-                        module_name=name,
-                        file_path=str(file_path),
-                        exception_type=type(e).__name__,
-                        exception_message=str(e)
-                    )
-                    continue
+                self._load_single_module(name, file_path, testdict)
 
         elif directory:
             # Filesystem scanning approach (existing logic)
@@ -141,54 +153,8 @@ class TestfunctionLoader:
                 if not file.exists():
                     continue
 
-                try:
-                    module = import_module_from_pyfile(file)
-                    testdict[file.stem] = {}
+                self._load_single_module(file.stem, file, testdict)
 
-                    for attribute_name in dir(module):
-                        attribute = getattr(module, attribute_name)
-                        if isclass(attribute) and issubclass(attribute, BasicTest):
-                            testdict[file.stem][getattr(attribute, 'testname')] = attribute
-
-                except ModuleNotFoundError as e:
-                    log.error(f"Missing dependency loading testfunction '{file.stem}' from {file}: {e}")
-                    self._load_failures[file.stem] = ModuleLoadFailure(
-                        module_name=file.stem,
-                        file_path=str(file),
-                        exception_type='ModuleNotFoundError',
-                        exception_message=str(e)
-                    )
-                    continue
-
-                except ImportError as e:
-                    log.error(f"Import error loading testfunction '{file.stem}' from {file}: {e}")
-                    self._load_failures[file.stem] = ModuleLoadFailure(
-                        module_name=file.stem,
-                        file_path=str(file),
-                        exception_type='ImportError',
-                        exception_message=str(e)
-                    )
-                    continue
-
-                except SyntaxError as e:
-                    log.error(f"Syntax error in testfunction '{file.stem}' at {file}: {e}")
-                    self._load_failures[file.stem] = ModuleLoadFailure(
-                        module_name=file.stem,
-                        file_path=str(file),
-                        exception_type='SyntaxError',
-                        exception_message=str(e)
-                    )
-                    continue
-
-                except (AttributeError, TypeError) as e:
-                    log.error(f"Attribute/Type error loading testfunction '{file.stem}' from {file}: {e}")
-                    self._load_failures[file.stem] = ModuleLoadFailure(
-                        module_name=file.stem,
-                        file_path=str(file),
-                        exception_type=type(e).__name__,
-                        exception_message=str(e)
-                    )
-                    continue
         else:
             raise ValueError("Either 'source' or 'directory' parameter must be provided")
 
@@ -221,7 +187,7 @@ def clear_module_load_failures():
         _default_loader._load_failures.clear()
 
 
-def get_testclass_from_testfunction(testfunction: str, testfunction_collection: dict):
+def get_testclass_from_testfunction(testfunction: str, testfunction_collection: dict) -> type | None:
     """
     Get test class from testfunction collection.
 
@@ -251,7 +217,7 @@ def get_testclass_from_testfunction(testfunction: str, testfunction_collection: 
     return collection.get(testfunction_name)
 
 
-def get_missing_testfunctions(testset: TestsetFile, testfunction_collection: dict):
+def get_missing_testfunctions(testset: TestsetFile, testfunction_collection: dict) -> list:
     missing = []
     for test in testset.tests:
         testclass = get_testclass_from_testfunction(test.function, testfunction_collection)

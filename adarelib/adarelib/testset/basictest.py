@@ -1,4 +1,5 @@
 # external imports
+import functools
 import glob
 from enum import Enum
 from typing import Optional, ClassVar, Dict, Any, List, Tuple, Union
@@ -24,35 +25,24 @@ class HostModeCategory(str, Enum):
     AGENT_ONLY = "agent_only"        # Requires in-guest agent; not supported in host mode
 
 
-def resolve_var_in_match_regex(regex_match, variables):
+def resolve_var_in_match(regex_match, variables: dict, escape: bool = False) -> str:
     """
-    resolve the variable in a regex match (which is a regex expression)
-    :param regex_match: regex match object
-    :param variables: dict with variables
-    :return:
+    Resolve a variable placeholder found by a regex match.
+
+    :param regex_match: regex match object whose group(1) is the variable name
+    :param variables: dict mapping variable names to their values
+    :param escape: if True, apply re.escape() to the value (for use inside regex patterns)
+    :return: the resolved value, or '' if the variable is missing
     """
     key = regex_match.group(1)
-    if key in variables.keys():
-        return re.escape(variables[key])
-    log.error(f'variable {key} can\'t be replaced because it\'s not present in the variable file')
+    value = variables.get(key)
+    if value is not None:
+        return re.escape(value) if escape else value
+    log.error(f'variable {key} cannot be replaced because it is not present in the variable file')
     return ''
 
 
-def resolve_var_in_match_string(regex_match, variables):
-    """
-    resolve the variable in a regex match (which is a simple string)
-    :param regex_match: regex match object
-    :param variables: dict with variables
-    :return:
-    """
-    key = regex_match.group(1)
-    if key in variables.keys():
-        return variables[key]
-    log.error(f'variable {key} can\'t be replaced because it\'s not present in the variable file')
-    return ''
-
-
-def resolve_yamlobj_in_dict(dictionary: dict):
+def resolve_yamlobj_in_dict(dictionary: dict) -> dict:
     """
     resolve all YamlCustomTag objects in a dict with their __repr__ value
     :param dictionary: dict to replace YamlCustomTag objects in

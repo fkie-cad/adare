@@ -170,7 +170,7 @@ class MCPServerManager:
                 # Set timeout to avoid hanging
                 s.settimeout(1.0)
                 return s.connect_ex(('localhost', port)) == 0
-        except:
+        except OSError:
             return False
 
     def _kill_process_on_port(self, port: int) -> bool:

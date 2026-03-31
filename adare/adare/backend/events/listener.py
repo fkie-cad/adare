@@ -418,7 +418,7 @@ def _handle_action_event(event, console, ulid):
             if action_data.get('timestamp'):
                 try:
                     start_time = datetime.fromisoformat(action_data['timestamp'].replace('Z', '+00:00'))
-                except:
+                except (ValueError, TypeError):
                     start_time = datetime.now(timezone.utc)
             else:
                 start_time = datetime.now(timezone.utc)
