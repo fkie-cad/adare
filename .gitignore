@@ -72,4 +72,4 @@ cleanup_package_dir.py
 # nicegui stuff
 .nicegui
 
-MagicMock/
+MagicMock/.worktrees/
