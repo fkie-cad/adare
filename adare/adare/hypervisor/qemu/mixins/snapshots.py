@@ -24,7 +24,7 @@ except ImportError:
     libvirt = None
 
 from adare.hypervisor.base.mixins.snapshots import AbstractSnapshotMixin
-from adare.hypervisor.exceptions import HypervisorException, SnapshotNotFoundException
+from adare.hypervisor.exceptions import HypervisorException
 
 log = logging.getLogger(__name__)
 

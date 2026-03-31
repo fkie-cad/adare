@@ -1,5 +1,4 @@
 # external imports
-import functools
 import glob
 from enum import Enum
 from typing import Optional, ClassVar, Dict, Any, List, Tuple, Union
@@ -8,7 +7,6 @@ import re
 
 # internal imports
 from adarelib.testset.yaml.customtags import YamlCustomTag
-from adarelib.common.variables import VariableRegistry
 
 # configure logging
 import logging

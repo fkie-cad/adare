@@ -14,7 +14,6 @@ from adare.database.api.base import GlobalDatabaseApi
 from adare.database.models.global_models import Vm, OsInfo
 from adare.exceptions import LoggedErrorException
 from adare.helperfunctions.file.hash import file_sha256_with_progress
-from adare.helperfunctions.file.validation import validate_tarfile_with_progress
 from adare.config.configdirectory import VMS_DIR
 from adare.validators.vm_validators import VMValidatorFactory
 
@@ -385,7 +384,6 @@ class VmApi(GlobalDatabaseApi):
         if not vm:
             return False
 
-        from adare.config.configdirectory import VMS_DIR
         vm_path = Path(vm.file)
         try:
             vm_path.resolve().relative_to(VMS_DIR.resolve())

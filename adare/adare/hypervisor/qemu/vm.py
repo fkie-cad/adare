@@ -12,11 +12,9 @@ import json
 import logging
 import os
 import platform
-import re
 import subprocess
 import threading
 import time
-import uuid
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -25,13 +23,10 @@ try:
 except ImportError:
     libvirt = None
 
-from adarelib.constants import StatusEnum
-
 from adare.hypervisor.base.vm import AbstractVM
 from adare.hypervisor.exceptions import (
     VMImportException,
     VMAlreadyRunningException,
-    VMNotFoundException,
     HypervisorException,
     VMStartException
 )
@@ -47,8 +42,6 @@ from adare.hypervisor.qemu.libvirt_stderr_redirect import (
     LibvirtStderrRedirect,
     get_experiment_log_file
 )
-from adare.hypervisor.qemu.utilities.disk_utils import get_boot_mode_for_os
-from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
 
 log = logging.getLogger(__name__)
 
@@ -731,7 +724,6 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             # Delete disk with retry logic (disk might be momentarily in use)
             disk_deleted = False
             if os.path.exists(self.config.disk_path):
-                from pathlib import Path
                 disk_name = Path(self.config.disk_path).name
 
                 # CRITICAL SAFETY CHECK: Ensure we're deleting an overlay, not a base disk
