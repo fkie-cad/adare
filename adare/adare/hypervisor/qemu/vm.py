@@ -114,6 +114,40 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
         log.debug(f"Initialized QEMUVM for '{self.vm_name}' ({self.guest_os})")
 
+    def _ensure_libvirt_domain(self):
+        """
+        Ensure libvirt domain object is available, looking it up if needed.
+
+        This is the single point of lazy initialization for _libvirt_domain.
+        All code paths that need the domain object should call this method
+        instead of performing ad-hoc lookups.
+
+        Returns:
+            libvirt.virDomain: The domain object
+
+        Raises:
+            HypervisorException: If domain cannot be found or connection fails
+        """
+        if self._libvirt_domain:
+            return self._libvirt_domain
+
+        conn = self._get_libvirt_connection()
+        if not conn:
+            raise HypervisorException(
+                f"Cannot look up domain '{self.vm_name}': libvirt connection not available"
+            )
+
+        log_file = get_experiment_log_file()
+        try:
+            with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                self._libvirt_domain = conn.lookupByName(self.vm_name)
+        except libvirt.libvirtError as e:
+            raise HypervisorException(
+                f"Cannot look up domain '{self.vm_name}': {e}"
+            )
+
+        return self._libvirt_domain
+
     async def create(
         self,
         ctx_manager=None,
@@ -558,10 +592,8 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             # Check if domain exists
             if not self._libvirt_domain:
                 try:
-                    with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
-                        conn = self._get_libvirt_connection()
-                        self._libvirt_domain = conn.lookupByName(self.vm_name)
-                except libvirt.libvirtError:
+                    self._ensure_libvirt_domain()
+                except HypervisorException:
                     if not silent:
                         log.debug(f"VM '{self.vm_name}' is not defined in libvirt")
                     return 0
@@ -819,17 +851,11 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
             # Try to get domain state from libvirt
             if not self._libvirt_domain:
-                conn = self._get_libvirt_connection()
-                if conn:
-                    try:
-                        with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
-                            self._libvirt_domain = conn.lookupByName(self.vm_name)
-                    except libvirt.libvirtError:
-                        # Domain not defined in libvirt
-                        return "poweroff"
-                else:
-                    # No libvirt connection
-                    return "unknown"
+                try:
+                    self._ensure_libvirt_domain()
+                except HypervisorException:
+                    # Domain not defined in libvirt or connection unavailable
+                    return "poweroff"
 
             # Get domain state
             with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
@@ -1265,17 +1291,12 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         async def _qmp_async():
             import libvirt_qemu
             try:
-                # Lazy load libvirt domain if needed
-                if not self._libvirt_domain:
-                    try:
-                        conn = self._get_libvirt_connection()
-                        if conn:
-                            self._libvirt_domain = conn.lookupByName(self.vm_name)
-                    except libvirt.libvirtError as e:
-                        log.warning(f"Failed to lazy-load domain for QMP: {e}")
-
-                if not self._libvirt_domain:
-                    return {"error": {"desc": "Domain not defined"}}
+                # Ensure libvirt domain is available
+                try:
+                    self._ensure_libvirt_domain()
+                except HypervisorException as e:
+                    log.warning(f"Failed to look up domain for QMP: {e}")
+                    return {"error": {"desc": f"Domain not defined: {e}"}}
 
                 cmd_json = json.dumps(command)
                 log.debug(f"Sending QMP command: {command.get('execute', 'unknown')}")
