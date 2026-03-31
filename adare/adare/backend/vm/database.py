@@ -245,7 +245,7 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
             try:
                 from adare.backend.environment import database as env_db
                 guest_os = env_db.get_environment_os(environment_ulid) or "Other"
-            except:
+            except (ImportError, ValueError, KeyError):
                 log.debug(f"Could not get OS info from environment {environment_ulid}, using default")
         
         # Create VirtualBoxVM instance and import using the unique name

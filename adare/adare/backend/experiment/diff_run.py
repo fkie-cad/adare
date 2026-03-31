@@ -510,13 +510,13 @@ async def experiment_diff_run(
                 try:
                     from adare.backend.events.coordinator import stop_stage_coordinator
                     stop_stage_coordinator()
-                except:
+                except (ImportError, RuntimeError):
                     pass
                 # Ensure flow console is stopped
                 if flow_console:
                     try:
                         flow_console.stop()
-                    except:
+                    except (RuntimeError, ValueError):
                         pass
 
         execution_time = time.time() - start_time

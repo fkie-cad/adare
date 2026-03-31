@@ -10,9 +10,12 @@ from adarelib.testset.testfunction import (
     ModuleLoadFailure,
     import_basictest_subclasses,
     get_module_load_failures,
+    get_testclass_from_testfunction,
+    get_missing_testfunctions,
     clear_module_load_failures,
     _default_loader,
 )
+from adarelib.testset.type import TestsetFile, Test
 from adarelib.testset import testfunction as testfunction_module
 
 
@@ -361,3 +364,126 @@ class TestNoGlobalsPollution:
         assert "TestDummy" not in testfunction_module.__dict__, (
             "TestDummy leaked into testfunction module namespace via module-level wrapper"
         )
+
+
+# ---------------------------------------------------------------------------
+# get_testclass_from_testfunction
+# ---------------------------------------------------------------------------
+
+class TestGetTestclass:
+    """Tests for get_testclass_from_testfunction lookup."""
+
+    def _make_collection(self):
+        """Build a fake testfunction_collection dict."""
+
+        class FakeFileExists:
+            pass
+
+        class FakeRegCheck:
+            pass
+
+        return {
+            "standard": {"file_exists": FakeFileExists, "dir_exists": FakeFileExists},
+            "registry": {"reg_check": FakeRegCheck},
+        }
+
+    def test_dotted_name_returns_correct_class(self):
+        collection = self._make_collection()
+        cls = get_testclass_from_testfunction("standard.file_exists", collection)
+        assert cls is collection["standard"]["file_exists"]
+
+    def test_bare_name_defaults_to_standard(self):
+        collection = self._make_collection()
+        cls = get_testclass_from_testfunction("file_exists", collection)
+        assert cls is collection["standard"]["file_exists"]
+
+    def test_nonexistent_function_returns_none(self):
+        collection = self._make_collection()
+        result = get_testclass_from_testfunction("standard.no_such_func", collection)
+        assert result is None
+
+    def test_missing_collection_returns_none(self):
+        collection = self._make_collection()
+        result = get_testclass_from_testfunction("fantasy.some_func", collection)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# get_missing_testfunctions
+# ---------------------------------------------------------------------------
+
+class TestGetMissingTestfunctions:
+    """Tests for get_missing_testfunctions."""
+
+    def _make_collection(self):
+
+        class FakeFileExists:
+            pass
+
+        return {
+            "standard": {"file_exists": FakeFileExists},
+        }
+
+    def test_all_present_returns_empty(self):
+        collection = self._make_collection()
+        testset = TestsetFile(
+            name="my_testset",
+            tests=[
+                Test(name="t1", function="standard.file_exists"),
+            ],
+        )
+        missing = get_missing_testfunctions(testset, collection)
+        assert missing == []
+
+    def test_missing_function_returned(self):
+        collection = self._make_collection()
+        testset = TestsetFile(
+            name="my_testset",
+            tests=[
+                Test(name="t1", function="standard.file_exists"),
+                Test(name="t2", function="standard.no_such_func"),
+                Test(name="t3", function="fantasy.another"),
+            ],
+        )
+        missing = get_missing_testfunctions(testset, collection)
+        assert "standard.no_such_func" in missing
+        assert "fantasy.another" in missing
+        assert "standard.file_exists" not in missing
+
+
+# ---------------------------------------------------------------------------
+# _load_single_module (extracted helper)
+# ---------------------------------------------------------------------------
+
+class TestLoadSingleModule:
+    """Tests for TestfunctionLoader._load_single_module."""
+
+    def test_populates_testdict_on_success(self, tmp_path):
+        module_file = _create_valid_test_module(tmp_path)
+        loader = TestfunctionLoader()
+        testdict: dict = {}
+
+        # _load_single_module expects the caller to hold the lock
+        with loader._lock:
+            loader._load_single_module("my_mod", module_file, testdict)
+
+        assert "my_mod" in testdict
+        assert "dummy_test" in testdict["my_mod"]
+        assert isinstance(testdict["my_mod"]["dummy_test"], type)
+        # No failures recorded
+        assert loader.load_failures == {}
+
+    def test_records_failure_on_broken_module(self, tmp_path):
+        broken = _create_broken_import_module(tmp_path)
+        loader = TestfunctionLoader()
+        testdict: dict = {}
+
+        with loader._lock:
+            loader._load_single_module("broken_mod", broken, testdict)
+
+        # testdict should NOT contain the broken module
+        assert "broken_mod" not in testdict
+        # Failure should be recorded
+        failures = loader.load_failures
+        assert "broken_mod" in failures
+        assert failures["broken_mod"].exception_type == "ModuleNotFoundError"

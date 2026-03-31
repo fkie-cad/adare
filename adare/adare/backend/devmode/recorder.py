@@ -305,11 +305,11 @@ class SessionRecorder:
                 self._current_x = value
             elif "axis 1 (y)" in args:
                 self._current_y = value
-        except:
+        except (ValueError, AttributeError):
             pass
 
 
-            
+
     async def _handle_key_event(self, event_name: str, args: str):
         """Handle keyboard event.
         Args: "con 0 qcode 30 (a) down true"

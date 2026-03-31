@@ -778,7 +778,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 if os.path.exists(socket_path):
                     try:
                         os.remove(socket_path)
-                    except:
+                    except OSError:
                         pass
 
             # Post-removal verification

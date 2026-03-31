@@ -360,15 +360,8 @@ class MCPTargetResolver:
                                     confidence=confidence,  # Use actual similarity from CV matching
                                     method='image'
                                 ))
-                                # For icons, we know the size of the icon we looked for
-                                try:
-                                    # Decode icon again to get dimensions if we didn't save them
-                                    # Optimization: do this once before loop
-                                    pass # Logic below
-                                except:
-                                    pass
 
-                            
+
                             # Log all found matches with their actual confidences
                             log.info(f"Found {len(matches)} matches for image '{target.image}':")
                             for i, match in enumerate(matches):
