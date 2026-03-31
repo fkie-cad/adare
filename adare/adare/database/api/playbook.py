@@ -5,12 +5,14 @@ import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
+import cattrs
+import yaml
 
 from adare.database.models.project_models import Playbook, PlaybookItem, ActionExecution, Experiment
 from adare.types.playbook import parse_playbook, Playbook as PlaybookType, ActionType
 from adare.database.api.base import ProjectDatabaseApi
 from datetime import datetime, timezone
-from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -69,9 +71,21 @@ class PlaybookApi(ProjectDatabaseApi):
             log.info(f"Populated playbook for experiment {experiment.name} with {len(config.actions)} actions")
             return playbook
             
-        except Exception as e:
+        except (OSError, IOError) as e:
             self._session.rollback()
-            log.error(f"Failed to populate playbook from {playbook_file_path}: {e}", exc_info=True)
+            log.error(f"Failed to read playbook file {playbook_file_path}: {e}", exc_info=True)
+            raise
+        except yaml.YAMLError as e:
+            self._session.rollback()
+            log.error(f"Failed to parse YAML from {playbook_file_path}: {e}", exc_info=True)
+            raise
+        except (ValueError, cattrs.BaseValidationError) as e:
+            self._session.rollback()
+            log.error(f"Failed to structure playbook data from {playbook_file_path}: {e}", exc_info=True)
+            raise
+        except SQLAlchemyError as e:
+            self._session.rollback()
+            log.error(f"Database error populating playbook from {playbook_file_path}: {e}", exc_info=True)
             raise
     
     def _get_or_create_playbook(self, experiment: Experiment, config: PlaybookType, original_yaml_content: str) -> Playbook:
