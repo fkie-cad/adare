@@ -325,11 +325,19 @@ class VmApi(GlobalDatabaseApi):
             vm_id: VM database ID (template - snapshots don't belong to templates)
             snapshot_type: Filter by snapshot type (optional)
 
-        Returns:
-            Empty list (VMs don't have snapshots, instances do)
+        Raises:
+            NotImplementedError: Always - VMs (templates) don't have snapshots
         """
-        log.warning("get_snapshots_for_vm is deprecated - VMs (templates) don't have snapshots. Use get_snapshots_for_instance instead.")
-        return []
+        import warnings
+        warnings.warn(
+            "get_snapshots_for_vm is deprecated - use get_snapshots_for_instance instead",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        raise NotImplementedError(
+            "get_snapshots_for_vm is deprecated - VMs (templates) don't have snapshots. "
+            "Use get_snapshots_for_instance instead."
+        )
     
     def delete_snapshot_record(self, vm_id: str, snapshot_name: str) -> bool:
         """
@@ -340,11 +348,13 @@ class VmApi(GlobalDatabaseApi):
             vm_id: VM database ID (template - snapshots don't belong to templates)
             snapshot_name: Name of the snapshot to delete
 
-        Returns:
-            False - operation not supported for VM templates
+        Raises:
+            NotImplementedError: Always - snapshots are managed per-instance, not per-template
         """
-        log.error("delete_snapshot_record is deprecated - VMs (templates) don't have snapshots. Use delete_instance_snapshot_record instead.")
-        return False
+        raise NotImplementedError(
+            "delete_snapshot_record is deprecated - VMs (templates) don't have snapshots. "
+            "Snapshots are managed per-instance. Use delete_instance_snapshot_record instead."
+        )
     
     def get_all_vms(self) -> List[Vm]:
         """
@@ -521,7 +531,9 @@ class VmApi(GlobalDatabaseApi):
             
             return target_path
             
-        except Exception as e:
+        except VMLoadError:
+            raise  # Don't re-wrap our own errors
+        except (OSError, IOError) as e:
             raise VMLoadError(log, f"Failed to copy VM file: {e}")
 
     def _is_file_managed(self, file_path: Path) -> bool:
