@@ -976,7 +976,6 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     stderr_b64 = status_data.get('err-data', '')
 
                     # Decode base64 output
-                    import base64
                     stdout = base64.b64decode(stdout_b64).decode('utf-8', errors='replace') if stdout_b64 else ""
                     stderr = base64.b64decode(stderr_b64).decode('utf-8', errors='replace') if stderr_b64 else ""
 

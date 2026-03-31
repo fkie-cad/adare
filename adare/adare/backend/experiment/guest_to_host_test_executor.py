@@ -15,8 +15,6 @@ Strategy:
 import asyncio
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 from adarelib.testset.basictest import BasicTest, HostModeCategory
 from adarelib.event.event import TestResult

@@ -8,7 +8,7 @@ from sklearn.cluster import DBSCAN
 
 from .constants import CVConstants
 from .image_processing import ImageDecoder, FeatureMatchingResult, HomographyCalculator
-from .exceptions import FeatureMatchingError, ImageDecodingError, HomographyCalculationError
+from .exceptions import ImageDecodingError, HomographyCalculationError
 
 log = logging.getLogger(__name__)
 

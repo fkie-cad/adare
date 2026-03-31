@@ -4,7 +4,6 @@ import logging
 import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 import cattrs
 import yaml
@@ -504,7 +503,6 @@ class PlaybookApi(ProjectDatabaseApi):
 
         # CLAUDE: Defensive JSON parsing - handle case where SQLAlchemy returns string instead of dict
         if isinstance(params, str):
-            import json
             log.warning(f"parameters is a string (double-encoding issue), parsing JSON: {params[:100]}...")
             try:
                 params = json.loads(params)
@@ -680,7 +678,6 @@ class PlaybookApi(ProjectDatabaseApi):
 
     def _load_variables_and_tests_from_yaml(self, yaml_content: str):
         """Load variables and tests from YAML content (complex structures)."""
-        import yaml
         from adarelib.testset.yaml.customloader import get_custom_loader
 
         data = yaml.load(yaml_content, Loader=get_custom_loader())

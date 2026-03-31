@@ -13,10 +13,7 @@ import os
 import platform
 import time
 from pathlib import Path
-from typing import Any, Dict, List, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
+from typing import Any, Dict, List
 
 import websockets
 

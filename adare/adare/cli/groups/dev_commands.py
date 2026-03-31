@@ -234,7 +234,6 @@ def register(cli, AliasedGroup, exec_with_error_printing):
         exec_with_error_printing(exec_dev_cleanup, args)
 
     # Add dev command aliases
-    # Add dev command aliases
     dev.add_alias('l', 'list')
     dev.add_alias('res', 'reset')
     dev.add_alias('cp', 'checkpoint')

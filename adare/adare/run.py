@@ -44,7 +44,6 @@ from adare.helperfunctions.output_formatter import get_formatter
 
 def get_formatter_from_context():
     """Get output formatter from current Click context."""
-    import click
     try:
         ctx = click.get_current_context()
         output_format = ctx.obj.output_format
