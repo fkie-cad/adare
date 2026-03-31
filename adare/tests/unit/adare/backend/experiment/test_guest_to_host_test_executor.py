@@ -1,4 +1,4 @@
-"""Tests for HostModeTestExecutor refactored to use HostModeCategory ClassVar."""
+"""Tests for GuestToHostTestExecutor refactored to use HostModeCategory ClassVar."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 from typing import ClassVar, Optional
@@ -9,7 +9,7 @@ import pytest
 from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
-from adare.backend.experiment.host_mode_test_executor import HostModeTestExecutor
+from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
 
 
 # ============================================================================
@@ -113,7 +113,7 @@ class TestGetTestCategory:
     def _make_executor(self):
         guest_file = MagicMock()
         guest_command = MagicMock()
-        return HostModeTestExecutor(
+        return GuestToHostTestExecutor(
             guest_file=guest_file,
             guest_command=guest_command,
             testfunction_collection={},
@@ -167,7 +167,7 @@ class TestExecuteTestDispatch:
     def _make_executor(self):
         guest_file = MagicMock()
         guest_command = MagicMock()
-        return HostModeTestExecutor(
+        return GuestToHostTestExecutor(
             guest_file=guest_file,
             guest_command=guest_command,
             testfunction_collection={},
@@ -264,7 +264,7 @@ class TestValidatePlaybookTests:
             self._make_test_def('t3', 'linux.process_running'),
         ]
 
-        ok, issues = HostModeTestExecutor.validate_playbook_tests(
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
             playbook_tests, testfunction_collection
         )
         assert ok is True
@@ -282,7 +282,7 @@ class TestValidatePlaybookTests:
             self._make_test_def('t_agent', 'custom.custom_agent_test'),
         ]
 
-        ok, issues = HostModeTestExecutor.validate_playbook_tests(
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
             playbook_tests, testfunction_collection
         )
         assert ok is False
@@ -298,7 +298,7 @@ class TestValidatePlaybookTests:
             self._make_test_def('t_unknown', 'custom.nonexistent_func'),
         ]
 
-        ok, issues = HostModeTestExecutor.validate_playbook_tests(
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
             playbook_tests, testfunction_collection
         )
         assert ok is False
@@ -321,7 +321,7 @@ class TestValidatePlaybookTests:
             self._make_test_def('t_bad', 'custom.custom_agent_test'),
         ]
 
-        ok, issues = HostModeTestExecutor.validate_playbook_tests(
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
             playbook_tests, testfunction_collection
         )
         assert ok is False
@@ -340,7 +340,7 @@ class TestValidatePlaybookTests:
             self._make_test_def('t_nocategory', 'misc.no_category'),
         ]
 
-        ok, issues = HostModeTestExecutor.validate_playbook_tests(
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(
             playbook_tests, testfunction_collection
         )
         assert ok is False
@@ -349,6 +349,6 @@ class TestValidatePlaybookTests:
 
     def test_empty_playbook_passes(self):
         """Empty playbook test list passes validation."""
-        ok, issues = HostModeTestExecutor.validate_playbook_tests([], {})
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests([], {})
         assert ok is True
         assert issues == []
