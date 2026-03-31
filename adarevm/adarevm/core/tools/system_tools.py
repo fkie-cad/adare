@@ -132,6 +132,7 @@ class SystemToolsMixin:
         dep_count: int,
         cwd: str | None = None,
         final_step: str = "2/2",
+        install_verb: str = "install",
     ) -> Dict[str, Any]:
         """Run a dependency installation subprocess with heartbeat and error handling.
 
@@ -145,6 +146,7 @@ class SystemToolsMixin:
             dep_count: Number of dependencies being installed (for success message)
             cwd: Working directory for the subprocess (None for current directory)
             final_step: Step label for the final progress message (e.g. "4/4", "2/2")
+            install_verb: Verb for error messages (e.g. "add" for Poetry, "install" for pip)
 
         Returns:
             Result dict with status, message, and installer output
@@ -177,7 +179,7 @@ class SystemToolsMixin:
 
         if process.returncode != 0:
             await self.send_event(websocket, EventType.LOG, {"message": f"Step {final_step}: Installation failed"})
-            error_msg = f"{installer_label} install failed with exit code {process.returncode}"
+            error_msg = f"{installer_label} {install_verb} failed with exit code {process.returncode}"
             if stderr.strip():
                 error_msg += f": {stderr}"
             else:
@@ -243,10 +245,11 @@ class SystemToolsMixin:
             current_step += 1
 
             # Step 3/4: Execute installation via shared method
-            final_step = f"{current_step}/{step_count}"
+            final_step = f"{step_count}/{step_count}"
             return await self._run_install_command(
                 websocket, cmd, "Poetry", len(dependencies),
                 cwd=project_dir, final_step=final_step,
+                install_verb="add",
             )
 
         except asyncio.TimeoutError as e:
