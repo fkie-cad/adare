@@ -465,10 +465,13 @@ class DevModeService:
                 return Result.fail("SESSION_NOT_RUNNING", "Session must be running to record")
                 
             # Start recording
-            success = asyncio.run(session.start_recording(request.output_file))
-            if not success:
-               return Result.fail("RECORD_START_FAILED", "Failed to start recording (check logs)")
-               
+            result = asyncio.run(session.start_recording(request.output_file))
+            if not result.success:
+               return Result.fail(
+                   result.error.code if result.error else "RECORD_START_FAILED",
+                   result.error.message if result.error else "Failed to start recording (check logs)"
+               )
+
             return Result.ok(True)
             
         except Exception as e:
@@ -491,9 +494,12 @@ class DevModeService:
             if not session:
                 return Result.fail("SESSION_NOT_FOUND", "Session not found")
                 
-            success = asyncio.run(session.stop_recording())
-            if not success:
-                return Result.fail("RECORD_STOP_FAILED", "Failed to stop recording")
+            result = asyncio.run(session.stop_recording())
+            if not result.success:
+                return Result.fail(
+                    result.error.code if result.error else "RECORD_STOP_FAILED",
+                    result.error.message if result.error else "Failed to stop recording"
+                )
                 
             return Result.ok(True)
         except Exception as e:
@@ -965,12 +971,12 @@ class DevModeService:
         # Restore to initial checkpoint if requested
         if request.restore_initial:
             log.info("--restore flag set: restoring to initial checkpoint before playbook execution")
-            restore_success = await session.restore_checkpoint('initial')
+            restore_result = await session.restore_checkpoint('initial')
 
-            if not restore_success:
+            if not restore_result.success:
+                error_msg = restore_result.error.message if restore_result.error else "Unknown error"
                 raise RuntimeError(
-                    "Failed to restore initial checkpoint. "
-                    "Checkpoint may not exist or restore operation failed. "
+                    f"Failed to restore initial checkpoint: {error_msg}. "
                     "Aborting playbook execution to avoid running with stale state."
                 )
 
@@ -1094,10 +1100,10 @@ class DevModeService:
 
         # Perform soft reset (in same event loop!)
         start_time = time.time()
-        success = await session.reset_soft()
+        result = await session.reset_soft()
         execution_time = time.time() - start_time
 
-        return success, execution_time
+        return result, execution_time
 
     def reset_soft(self, request: DevResetRequest) -> Result[DevResetResult]:
         """
@@ -1112,11 +1118,11 @@ class DevModeService:
         try:
             # CRITICAL: Execute entire flow in ONE asyncio.run() call
             # This keeps the WebSocket message_handler_task alive throughout execution
-            success, execution_time = asyncio.run(
+            result, execution_time = asyncio.run(
                 self._reset_soft_async(request)
             )
 
-            if success:
+            if result.success:
                 return Result.ok(DevResetResult(
                     success=True,
                     reset_type='soft',
@@ -1125,8 +1131,8 @@ class DevModeService:
                 ))
             else:
                 return Result.fail(
-                    "RESET_FAILED",
-                    "Soft reset failed - no snapshots available",
+                    result.error.code if result.error else "RESET_FAILED",
+                    result.error.message if result.error else "Soft reset failed",
                     ["Try hard reset instead: adare dev reset-hard"]
                 )
 
@@ -1170,10 +1176,10 @@ class DevModeService:
 
         # Perform hard reset (in same event loop!)
         start_time = time.time()
-        success = await session.reset_hard()
+        result = await session.reset_hard()
         execution_time = time.time() - start_time
 
-        return success, execution_time
+        return result, execution_time
 
     def reset_hard(self, request: DevResetRequest) -> Result[DevResetResult]:
         """
@@ -1188,11 +1194,11 @@ class DevModeService:
         try:
             # CRITICAL: Execute entire flow in ONE asyncio.run() call
             # This keeps the WebSocket message_handler_task alive throughout execution
-            success, execution_time = asyncio.run(
+            result, execution_time = asyncio.run(
                 self._reset_hard_async(request)
             )
 
-            if success:
+            if result.success:
                 return Result.ok(DevResetResult(
                     success=True,
                     reset_type='hard',
@@ -1201,8 +1207,8 @@ class DevModeService:
                 ))
             else:
                 return Result.fail(
-                    "RESET_FAILED",
-                    "Hard reset failed - no snapshots available",
+                    result.error.code if result.error else "RESET_FAILED",
+                    result.error.message if result.error else "Hard reset failed",
                     ["Check session state: adare dev state"]
                 )
 
@@ -1252,8 +1258,8 @@ class DevModeService:
             )
 
         # Create checkpoint (in same event loop!)
-        success = await session.create_checkpoint(request.name, request.description)
-        return success
+        result = await session.create_checkpoint(request.name, request.description)
+        return result
 
     def create_checkpoint(self, request: DevCheckpointCreateRequest) -> Result[bool]:
         """
@@ -1268,16 +1274,16 @@ class DevModeService:
         try:
             # CRITICAL: Execute entire flow in ONE asyncio.run() call
             # This keeps the WebSocket message_handler_task alive throughout execution
-            success = asyncio.run(
+            result = asyncio.run(
                 self._create_checkpoint_async(request)
             )
 
-            if success:
+            if result.success:
                 return Result.ok(True)
             else:
                 return Result.fail(
-                    "CHECKPOINT_CREATE_FAILED",
-                    f"Failed to create checkpoint '{request.name}'",
+                    result.error.code if result.error else "CHECKPOINT_CREATE_FAILED",
+                    result.error.message if result.error else f"Failed to create checkpoint '{request.name}'",
                     ["Check hypervisor is running", "Check VM has sufficient disk space"]
                 )
 
@@ -1320,8 +1326,8 @@ class DevModeService:
             )
 
         # Restore checkpoint (in same event loop!)
-        success = await session.restore_checkpoint(request.name)
-        return success
+        result = await session.restore_checkpoint(request.name)
+        return result
 
     def restore_checkpoint(self, request: DevCheckpointRestoreRequest) -> Result[bool]:
         """
@@ -1336,16 +1342,16 @@ class DevModeService:
         try:
             # CRITICAL: Execute entire flow in ONE asyncio.run() call
             # This keeps the WebSocket message_handler_task alive throughout execution
-            success = asyncio.run(
+            result = asyncio.run(
                 self._restore_checkpoint_async(request)
             )
 
-            if success:
+            if result.success:
                 return Result.ok(True)
             else:
                 return Result.fail(
-                    "CHECKPOINT_NOT_FOUND",
-                    f"Checkpoint '{request.name}' not found",
+                    result.error.code if result.error else "CHECKPOINT_NOT_FOUND",
+                    result.error.message if result.error else f"Checkpoint '{request.name}' not found",
                     [
                         f"List available checkpoints with: adare dev checkpoint-list {request.session_id}"
                     ]

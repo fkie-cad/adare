@@ -99,10 +99,11 @@ class DevModeSessionManager:
             shared_directories=shared_directories
         )
 
-        success = await session.start()
-        if not success:
+        result = await session.start()
+        if not result.success:
+            error_msg = result.error.message if result.error else "Unknown error"
             raise RuntimeError(
-                f"Failed to start dev mode session"
+                f"Failed to start dev mode session: {error_msg}"
             )
 
         self._sessions[session_id] = session
@@ -698,7 +699,8 @@ class DevModeSessionManager:
             log.warning(f"Session {session_id} is not running")
             return False
 
-        return await session.reload_testfunctions()
+        result = await session.reload_testfunctions()
+        return result.success
 
     async def restart_mcp_server(
         self,
@@ -726,7 +728,8 @@ class DevModeSessionManager:
             log.warning(f"Session {session_id} is not running")
             return False
 
-        return await session.restart_mcp_server(debug, debug_output_dir)
+        result = await session.restart_mcp_server(debug, debug_output_dir)
+        return result.success
 
     async def stop_mcp_server(self, session_id: str) -> bool:
         """
@@ -747,7 +750,8 @@ class DevModeSessionManager:
             log.warning(f"Session {session_id} is not running")
             return False
 
-        return await session.stop_mcp_server()
+        result = await session.stop_mcp_server()
+        return result.success
 
     async def execute_playbook_batch(
         self,
