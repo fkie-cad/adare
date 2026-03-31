@@ -110,14 +110,19 @@ class SnapshotMixin(AbstractSnapshotMixin):
     def _get_attached_virtiofs_payloads(self) -> list:
         """
         Get XML payloads for all currently attached virtiofs devices.
-        
+
         Returns:
             List of XML strings for attached filesystems
+
+        Raises:
+            HypervisorException: If libvirt domain is not available
         """
         payloads = []
         try:
+            # Ensure domain is available
+            domain = self._ensure_libvirt_domain()
             # Get current domain XML
-            xml_desc = self._libvirt_domain.XMLDesc(0)
+            xml_desc = domain.XMLDesc(0)
             root = ET.fromstring(xml_desc)
             
             # Find all filesystem devices with type='virtiofs' (driver type)
@@ -141,26 +146,30 @@ class SnapshotMixin(AbstractSnapshotMixin):
     def _detach_virtiofs_shares(self, payloads: list) -> bool:
         """
         Hot-unplug virtiofs devices with verification.
-        
+
         Args:
             payloads: List of XML strings for devices to detach
-            
+
         Returns:
             True if all detached successfully
+
+        Raises:
+            HypervisorException: If libvirt domain is not available
         """
         if not payloads:
             return True
 
         import time
 
+        domain = self._ensure_libvirt_domain()
         count = len(payloads)
         log.info(f"Detaching {count} virtiofs devices for snapshotting...")
-        
+
         # 1. Request detachment for all devices
         for i, xml in enumerate(payloads):
             try:
                 # Detach device (live config)
-                self._libvirt_domain.detachDevice(xml)
+                domain.detachDevice(xml)
                 log.debug(f"Requested detach for virtiofs device {i+1}/{count}")
             except libvirt.libvirtError as e:
                 log.error(f"Failed to detach virtiofs device {i+1}: {e}")
@@ -190,24 +199,28 @@ class SnapshotMixin(AbstractSnapshotMixin):
     def _attach_virtiofs_shares(self, payloads: list) -> bool:
         """
         Hot-plug virtiofs devices.
-        
+
         Args:
             payloads: List of XML strings for devices to attach
-            
+
         Returns:
             True if all attached successfully
+
+        Raises:
+            HypervisorException: If libvirt domain is not available
         """
         if not payloads:
             return True
 
+        domain = self._ensure_libvirt_domain()
         count = len(payloads)
         log.info(f"Re-attaching {count} virtiofs devices after snapshot...")
-        
+
         success = True
         for i, xml in enumerate(payloads):
             try:
                 # Attach device (live config)
-                self._libvirt_domain.attachDevice(xml)
+                domain.attachDevice(xml)
                 log.debug(f"Attached virtiofs device {i+1}/{count}")
             except libvirt.libvirtError as e:
                 log.error(f"Failed to attach virtiofs device {i+1}: {e}")
@@ -498,16 +511,16 @@ class SnapshotMixin(AbstractSnapshotMixin):
 
             log.debug(f"Generated snapshot XML:\n{snapshot_xml}")
 
-            # 4. Suspend VM (NEW) to ensure disk consistency
+            # 4. Suspend VM to ensure disk consistency
+            domain = self._ensure_libvirt_domain()
             vm_was_suspended = False
             try:
                 if self.get_state() == "running":
                     log.info("Suspending VM for snapshot...")
-                    self._libvirt_domain.suspend()
+                    domain.suspend()
                     vm_was_suspended = True
-                    # Verify state?
                     import time
-                    time.sleep(1) # Give it a moment
+                    time.sleep(1)  # Give it a moment
             except libvirt.libvirtError as e:
                 log.warning(f"Failed to suspend VM: {e}")
                 # We proceed, but warn
@@ -544,11 +557,11 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 snapshot_success = True
 
             finally:
-                # 6. Resume VM (NEW)
+                # 6. Resume VM
                 if vm_was_suspended:
                     try:
                         log.info("Resuming VM after snapshot...")
-                        self._libvirt_domain.resume()
+                        domain.resume()
                     except libvirt.libvirtError as e:
                         log.error(f"Failed to resume VM: {e}")
 
@@ -740,13 +753,14 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 # The domain ID changes after restore, and sometimes the existing object becomes invalid/stale.
                 # We must refresh it to ensure subsequent operations (like attachDevice) work correctly.
                 try:
-                    conn = self._get_libvirt_connection()
-                    self._libvirt_domain = conn.lookupByName(self.vm_name)
+                    # Force re-lookup by clearing cached domain first
+                    self._libvirt_domain = None
+                    self._ensure_libvirt_domain()
                     log.debug("Refreshed libvirt domain object after restore")
 
-                    # NEW: Explicitly resume the VM
+                    # Explicitly resume the VM
                     # Snapshots are taken in 'paused' state, so 'restore' brings it back paused.
-                    state = self.get_state() 
+                    state = self.get_state()
                     if state == "paused":
                         log.info("Resuming VM from paused state after restore...")
                         self._libvirt_domain.resume()
@@ -755,7 +769,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                          log.warning(f"VM state after restore is '{state}', attempting resume...")
                          self._libvirt_domain.resume()
 
-                except libvirt.libvirtError as e:
+                except (HypervisorException, libvirt.libvirtError) as e:
                     log.error(f"Failed to refresh/resume libvirt domain object: {e}")
                     # Continue anyway, we might still have a working object or fail later
 

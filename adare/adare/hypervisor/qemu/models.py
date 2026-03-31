@@ -133,12 +133,13 @@ class QEMUVMConfig:
     # virtio-fs shared directory configuration
     # When enabled, uses virtio-fs instead of libguestfs for file transfer
     virtiofs_enabled: bool = True  # Default to virtio-fs mode
-    virtiofs_shares: Optional[List[Dict[str, Any]]] = None  # List of share configs
+    virtiofs_shares: List[Dict[str, Any]] = field(default_factory=list)  # List of share configs
 
     def __post_init__(self):
         """Initialize empty collections if None."""
         if self.port_forwarding_rules is None:
             self.port_forwarding_rules = {}
+        # Defensive: ensure virtiofs_shares is never None even if set externally
         if self.virtiofs_shares is None:
             self.virtiofs_shares = []
 
