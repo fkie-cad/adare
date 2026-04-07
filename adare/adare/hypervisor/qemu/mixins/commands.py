@@ -237,7 +237,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         if 'windows' in self.guest_os.lower():
             if run_as_user:
                 rl = "LIMITED" if not admin else "HIGHEST"
-                delay = 10
+                delay = 30
                 task_name = f"adare_task_{int(time.time())}"
                 user = self.username
                 pw = self.password
@@ -247,23 +247,38 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 if redirect_stdout:
                     command = f"{command} 1>>\"{redirect_stdout}\""
 
-                command = (                                                                                                                                 
-                    f"& {{ "                                                                                                                                       
-                    f"$u = '{user}'; $p = '{pw}'; $t = '{task_name}'; "                                                                                 
-                    f"$script = '{script_path}'; "                                                                                                                 
-                    f"$st = (Get-Date).AddMinutes(2).ToString('HH:mm'); "                                                                                                                                                                                                 
-                    f"'{command}' | Out-File -FilePath $script -Encoding ascii; "                                                                                  
-                    f"$c = \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script\"; "                                                                  
-                    f"schtasks /Create /TN $t /TR \"$c\" /SC ONCE /ST $st /RU $u /RP $p /RL {rl} /F; "                                                          
-                    f"schtasks /Run /TN $t; "                                                                                                                      
-                    f"Start-Sleep -Seconds {delay}; "                                                                                                                    
-                    f"$info = schtasks /Query /TN $t /V /FO CSV | ConvertFrom-Csv; "                                                                               
-                    f"$msg = \"Task_Status: $($info.Status) | Exit_Code: $($info.'Last Run Result')\"; "                                                           
-                    f"[Console]::Error.WriteLine($msg); "                                                                                                          
-                    #f"schtasks /Delete /TN $t /F; "                                                                                                                
-                    f"if (Test-Path $script) {{ try {{ Remove-Item $script -Force -ErrorAction SilentlyContinue }} catch {{ }} }}; "                                                                                   
-                    f"exit 0; "
-                    f"}} "                                                                                                                                         
+                command = (
+                    f"& {{ "
+                    f"$u = '{user}'; $p = '{pw}'; $t = '{task_name}'; "
+                    f"$script = '{script_path}'; "
+                    f"$st = (Get-Date).AddMinutes(2).ToString('HH:mm'); "
+                    f"'{command}' | Out-File -FilePath $script -Encoding ascii; "
+                    f"$c = \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script\"; "
+                    f"schtasks /Create /TN $t /TR \"$c\" /SC ONCE /ST $st /RU $u /RP $p /RL {rl} /IT /F; "
+                    f"schtasks /Run /TN $t; "
+                    f"Start-Sleep -Seconds {delay}; "
+                    f"$info = schtasks /Query /TN $t /V /FO CSV | ConvertFrom-Csv; "
+                    f"$status = $info.Status; "
+                    f"$rc = $info.'Last Result'; "
+                    f"$msg = \"Task_Status: $status | Last_Result: $rc\"; "
+                    f"[Console]::Error.WriteLine($msg); "
+                    f"if (Test-Path $script) {{ try {{ Remove-Item $script -Force -ErrorAction SilentlyContinue }} catch {{ }} }}; "
+                    f"$portCheck = netstat -ano | Select-String ':18765.*LISTENING'; "
+                    f"if (-not $portCheck -and $status -ne 'Running') {{ "
+                    f"  [Console]::Error.WriteLine('FATAL: adarevm exited (task_status=$status, rc=$rc) and port 18765 is not listening'); "
+                    f"  if (Test-Path 'C:\\Windows\\Temp\\adarevm_stderr.log') {{ "
+                    f"    [Console]::Error.WriteLine('=== adarevm_stderr.log ==='); "
+                    f"    Get-Content 'C:\\Windows\\Temp\\adarevm_stderr.log' -Tail 50 | ForEach-Object {{ [Console]::Error.WriteLine($_) }} "
+                    f"  }}; "
+                    f"  if (Test-Path 'C:\\Windows\\Temp\\adarevm_stdout.log') {{ "
+                    f"    [Console]::Error.WriteLine('=== adarevm_stdout.log ==='); "
+                    f"    Get-Content 'C:\\Windows\\Temp\\adarevm_stdout.log' -Tail 20 | ForEach-Object {{ [Console]::Error.WriteLine($_) }} "
+                    f"  }}; "
+                    f"  exit 1 "
+                    f"}}; "
+                    f"if ($status -eq 'Running' -or $rc -eq '0' -or $rc -eq '0x00041301' -or $rc -eq '267009') {{ exit 0 }} "
+                    f"else {{ [Console]::Error.WriteLine(\"Scheduled task failed: status=$status result=$rc\"); exit 1 }}; "
+                    f"}} "
                 )
                 log.debug(f"CLAUDE DEBUG: Full Windows guest command (Scheduled Task): {command}")  
             if background and not run_as_user:
@@ -1123,25 +1138,6 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     )
 
                 response = json.loads(result)
-                
-                # Check if it's a status check response and if nothing has exited
-                # We want to reduce log verbosity for polling
-                try:
-                    is_running = (
-                        'return' in response and 
-                        isinstance(response['return'], dict) and 
-                        'exited' in response['return'] and 
-                        response['return']['exited'] is False
-                    )
-                    
-                    if is_running:
-                        log.debug("QGA command still running")
-                    else:
-                        log.debug(f"QGA response: {response}")
-                except (KeyError, TypeError):
-                    # Fallback to full logging if check fails
-                    log.debug(f"QGA response: {response}")
-                
                 return response
 
             except libvirt.libvirtError as e:

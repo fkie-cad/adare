@@ -120,13 +120,9 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
         """
         self.vm = vm
 
-        # Extract debug screenshot settings from target_resolution_executor
-        self.debug_screenshots = False
+        # Used to pick a temp directory for QMP screendump (avoids AppArmor/tmp issues)
         self.screenshots_dir = None
-        self.screenshot_counter = 0
-
         if target_resolution_executor:
-            self.debug_screenshots = target_resolution_executor.debug_screenshots
             self.screenshots_dir = target_resolution_executor.screenshots_dir
 
         # Temp directory for PPM→PNG conversion (always needed for QMP)
@@ -138,7 +134,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
         except Exception as e:
             log.warning(f"Failed to set permissions on {self._temp_screenshot_dir}: {e}")
 
-        log.debug(f"Initialized QEMUHostGUIExecutor (QMP-based, debug_screenshots={self.debug_screenshots})")
+        log.debug("Initialized QEMUHostGUIExecutor (QMP-based)")
 
     async def screenshot(self, region: Optional[dict] = None) -> Dict[str, Any]:
         """
@@ -183,8 +179,8 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             # Convert PPM to PNG and encode as base64
             png_base64 = await self._convert_ppm_to_png_base64(temp_ppm, region)
 
-            # Save debug screenshot if enabled
-            screenshot_path = await self._save_debug_screenshot(png_base64)
+            # Debug screenshots are saved by TargetResolutionExecutor with action context
+            screenshot_path = None
 
             # Cleanup temp file
             try:
@@ -351,45 +347,6 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
             return {'status': 'error', 'message': str(e)}
 
     # Helper methods
-
-    async def _save_debug_screenshot(self, screenshot_base64: str) -> Optional[str]:
-        """
-        Save screenshot to disk for debugging purposes.
-
-        Args:
-            screenshot_base64: Base64 encoded screenshot data
-
-        Returns:
-            Relative path to saved screenshot file, or None if not saved
-        """
-        if not self.debug_screenshots or not self.screenshots_dir:
-            return None
-
-        try:
-            # Create screenshots directory if it doesn't exist
-            self.screenshots_dir.mkdir(parents=True, exist_ok=True)
-
-            # Generate filename with counter (format: action_000.png, action_001.png, etc.)
-            filename = f"action_{self.screenshot_counter:03d}.png"
-            filepath = self.screenshots_dir / filename
-
-            # Increment counter for next screenshot
-            self.screenshot_counter += 1
-
-            # Decode and save the image
-            image_data = base64.b64decode(screenshot_base64)
-            with open(filepath, 'wb') as f:
-                f.write(image_data)
-
-            log.debug(f"Debug screenshot saved: {filepath}")
-
-            # Return relative path (relative to run directory)
-            relative_path = f"reporting/screenshots/{filename}"
-            return relative_path
-
-        except Exception as e:
-            log.error(f"Failed to save debug screenshot: {e}")
-            return None
 
     async def _convert_ppm_to_png_base64(self, ppm_path: Path, region: Optional[dict] = None) -> str:
         """

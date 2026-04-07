@@ -114,8 +114,23 @@ def wait_for_qemu_exit(
             elapsed = time.monotonic() - start
             log.info(f'{label} completed in {elapsed / 60:.1f} minutes (exit code: {retcode})')
 
+            # Capture stderr for diagnostics (non-blocking read of piped output)
+            stderr_output = ''
+            if process.stderr:
+                try:
+                    stderr_output = process.stderr.read().decode(errors='replace').strip()
+                except (OSError, ValueError):
+                    pass
+                if stderr_output:
+                    log.info(f'{label} QEMU stderr: {stderr_output[:2000]}')
+
             if retcode != 0:
-                raise subprocess.CalledProcessError(retcode, process.args)
+                raise subprocess.CalledProcessError(retcode, process.args, stderr=stderr_output)
+            if elapsed < 60:
+                log.warning(
+                    f'{label} completed suspiciously fast ({elapsed:.0f}s). '
+                    f'QEMU may have failed to start.'
+                )
             return retcode
 
         except subprocess.TimeoutExpired:

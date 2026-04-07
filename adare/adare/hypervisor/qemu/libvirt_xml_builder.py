@@ -217,7 +217,6 @@ class DomainXMLBuilder:
             nvram_path = create_nvram_for_vm(self._config.vm_name, vm_config_dir, self._guest_arch)
             nvram_elem = ET.SubElement(os_elem, 'nvram')
             nvram_elem.text = nvram_path
-            nvram_elem.set('template', ovmf_vars)
 
             ET.SubElement(os_elem, 'boot', dev='hd')
         else:
@@ -234,8 +233,9 @@ class DomainXMLBuilder:
             ET.SubElement(features, 'apic')
 
         if self._is_windows:
-            ET.SubElement(features, 'smm', state='on')
-            log.info(f"Enabled SMM for Windows VM {self._config.vm_name}")
+            if not self._is_aarch64:
+                ET.SubElement(features, 'smm', state='on')
+                log.info(f"Enabled SMM for Windows VM {self._config.vm_name}")
 
             # Hyper-V enlightenments (KVM-only, not available on macOS HVF)
             if not self._is_darwin:
@@ -258,8 +258,9 @@ class DomainXMLBuilder:
             if not self._is_darwin:
                 ET.SubElement(features, 'ioapic', driver='kvm')
 
-            # Disable VMware backdoor port (conflicts with Hyper-V)
-            ET.SubElement(features, 'vmport', state='off')
+            # Disable VMware backdoor port (x86-only, conflicts with Hyper-V)
+            if not self._is_aarch64:
+                ET.SubElement(features, 'vmport', state='off')
 
     def _add_cpu_model(self) -> None:
         """Add CPU model and topology."""
@@ -328,7 +329,16 @@ class DomainXMLBuilder:
         ET.SubElement(self._devices, 'emulator').text = qemu_full_path
 
     def _add_disk(self) -> None:
-        """Add virtio disk configuration with iothread."""
+        """Add disk configuration with iothread.
+
+        ARM64 uses NVMe (native Windows driver, matches installation).
+        NVMe is added via qemu:commandline since libvirt has no native NVMe
+        emulation support in <disk> elements.
+        x86_64 uses virtio-blk (viostor loaded by Windows).
+        """
+        if self._is_aarch64:
+            return  # NVMe disk added via qemu:commandline in _add_qemu_commandline()
+
         disk = ET.SubElement(self._devices, 'disk', type='file', device='disk')
         aio_mode = 'threads' if self._is_darwin else 'native'
         ET.SubElement(
@@ -346,8 +356,9 @@ class DomainXMLBuilder:
             ET.SubElement(disk, 'address', **self._pci.address_for('disk'))
 
     def _add_network(self) -> None:
-        """Add network interface (unless port forwarding is via qemu:commandline)."""
-        if self._config.port_forwarding_rules:
+        """Add network interface (unless port forwarding or SMB is via qemu:commandline)."""
+        smb_path = getattr(self._config, 'smb_share_path', None)
+        if self._config.port_forwarding_rules or smb_path:
             return  # Network configured via qemu:commandline instead
 
         if self._is_windows and not self._is_darwin:
@@ -376,8 +387,8 @@ class DomainXMLBuilder:
             ET.SubElement(channel, 'address', type='virtio-serial', controller='0', bus='0', port='1')
 
     def _add_spice_channel(self) -> None:
-        """Add SPICE vdagent channel for Windows VMs (clipboard, resolution)."""
-        if not (self._is_windows and not self._is_darwin):
+        """Add SPICE vdagent channel (clipboard, resolution negotiation)."""
+        if not self._is_windows and not self._is_darwin:
             return
         spice_channel = ET.SubElement(self._devices, 'channel', type='spicevmc')
         ET.SubElement(spice_channel, 'target', type='virtio', name='com.redhat.spice.0')
@@ -406,7 +417,8 @@ class DomainXMLBuilder:
 
     def _add_usb_controller(self) -> None:
         """Add USB controller."""
-        usb = ET.SubElement(self._devices, 'controller', type='usb', index='0', model='qemu-xhci')
+        usb_model = 'qemu-xhci' if self._is_virt else 'nec-usb-xhci'
+        usb = ET.SubElement(self._devices, 'controller', type='usb', index='0', model=usb_model)
         if self._is_virt:
             pass
         elif self._is_q35:
@@ -465,13 +477,19 @@ class DomainXMLBuilder:
         """Add video device with resolution configuration."""
         video = ET.SubElement(self._devices, 'video')
         if self._is_aarch64:
-            model = ET.SubElement(video, 'model', type='virtio', heads='1', primary='yes')
+            # type='none' tells libvirt not to create any video device.
+            # The actual GPU (virtio-gpu-device, MMIO) and boot framebuffer (ramfb)
+            # are added via qemu:commandline in _add_qemu_commandline().
+            # This prevents libvirt's video device from intercepting SPICE display
+            # channels — virtio-gpu-device auto-outputs to SPICE instead.
+            model = ET.SubElement(video, 'model', type='none')
         elif self._is_windows and not self._is_darwin:
             model = ET.SubElement(video, 'model', type='virtio', heads='1', primary='yes', vram='262144')
         else:
             model = ET.SubElement(video, 'model', type='qxl', ram='65536', vram='65536', vgamem='16384', heads='1', primary='yes')
 
-        ET.SubElement(model, 'resolution', x='1920', y='1080')
+        if not self._is_aarch64:  # type='none' doesn't support resolution hints
+            ET.SubElement(model, 'resolution', x='1920', y='1080')
         if self._is_virt:
             pass
         elif self._is_q35:
@@ -514,7 +532,10 @@ class DomainXMLBuilder:
         if self._is_aarch64:
             if not self._is_darwin:
                 ET.SubElement(self._devices, 'input', type='mouse', bus='virtio')
-            ET.SubElement(self._devices, 'input', type='keyboard', bus='virtio')
+            # Virtio keyboard added via qemu:commandline in _add_qemu_commandline()
+            # so it registers before this USB keyboard in QEMU's handler list,
+            # making input-send-event key events route to virtio (works on HVF).
+            ET.SubElement(self._devices, 'input', type='keyboard', bus='usb')
         else:
             if not self._is_darwin:
                 ET.SubElement(self._devices, 'input', type='mouse', bus='ps2')
@@ -547,20 +568,77 @@ class DomainXMLBuilder:
         log.info(f"Added {len(self._virtiofs_shares)} virtio-fs filesystem devices")
 
     def _add_qemu_commandline(self) -> None:
-        """Add QEMU commandline arguments (QMP, HVF, port forwarding)."""
+        """Add QEMU commandline arguments (QMP, HVF, port forwarding, NVMe)."""
         qemu_commandline = ET.SubElement(self._domain, f'{{{QEMU_NAMESPACE}}}commandline')
 
         # QMP monitor socket
         _add_qemu_arg(qemu_commandline, '-qmp')
         _add_qemu_arg(qemu_commandline, f'unix:{self._config.qmp_socket_path},server=on,wait=off')
 
-        # Port forwarding rules
-        if self._config.port_forwarding_rules:
-            self._add_port_forwarding(qemu_commandline)
+        # QEMU debug logging (lifecycle.py sets qemu_debug_log_path but only
+        # vm.py direct-QEMU uses it — add -D/-d so libvirt launches get logs too)
+        if self._config.qemu_debug_log_path:
+            log_path = f"/tmp/adare_qemu_debug_{self._config.vm_name}.log"
+            _add_qemu_arg(qemu_commandline, '-D')
+            _add_qemu_arg(qemu_commandline, log_path)
+            _add_qemu_arg(qemu_commandline, '-d')
+            _add_qemu_arg(qemu_commandline, 'guest_errors,cpu_reset,unimp')
 
-    def _add_port_forwarding(self, qemu_commandline: ET.Element) -> None:
-        """Add network backend with port forwarding via QEMU commandline."""
+        # ARM64 NVMe disk — libvirt has no native NVMe emulation in <disk>,
+        # so we pass raw QEMU args. Matches the installation disk controller.
+        if self._is_aarch64:
+            _add_qemu_arg(qemu_commandline, '-drive')
+            disk_cache = 'writethrough' if self._is_darwin else 'none'
+            _add_qemu_arg(
+                qemu_commandline,
+                f'file={self._config.disk_path},format={self._config.drive_format},'
+                f'if=none,id=hd0,cache={disk_cache},discard=unmap',
+            )
+            _add_qemu_arg(qemu_commandline, '-device')
+            _add_qemu_arg(qemu_commandline, 'nvme,drive=hd0,serial=disk0,bootindex=0,bus=pcie.0,addr=0x1e')
+
+        # ramfb: firmware/boot framebuffer (no SPICE channels, no conflict).
+        # virtio-gpu-device (MMIO variant): auto-outputs to SPICE display channels;
+        # viogpudo from UTM guest tools takes over for resolution negotiation.
+        if self._is_aarch64:
+            _add_qemu_arg(qemu_commandline, '-device')
+            _add_qemu_arg(qemu_commandline, 'ramfb')
+            _add_qemu_arg(qemu_commandline, '-device')
+            _add_qemu_arg(qemu_commandline, 'virtio-gpu-device')
+
+        # Keyboards: qemu:commandline args are placed on the QEMU command line
+        # BEFORE libvirt's own -device args. virtio-keyboard-device here therefore
+        # registers its input handler before the usb-kbd added via <input> in
+        # _add_input_devices(), making input-send-event key events route to virtio
+        # (which works reliably on HVF). usb-kbd stays as a libvirt <input> element
+        # because it needs the USB bus from the xHCI controller (also a libvirt device).
+        if self._is_aarch64:
+            _add_qemu_arg(qemu_commandline, '-device')
+            _add_qemu_arg(qemu_commandline, 'virtio-keyboard-device')
+
+        # aarch64 + HVF: keep device MMIO/ECAM/GIC regions below 4 GB so edk2
+        # firmware can enumerate devices. Fine-grained properties avoid the
+        # ~3 GB RAM cap imposed by blanket highmem=off.
+        if self._is_aarch64 and self._is_darwin:
+            for prop in ('highmem-mmio', 'highmem-ecam', 'highmem-redists'):
+                _add_qemu_arg(qemu_commandline, '-global')
+                _add_qemu_arg(qemu_commandline, f'virt-machine.{prop}=off')
+
+        # Network commandline (port forwarding and/or SMB share)
+        smb_path = getattr(self._config, 'smb_share_path', None)
+        if self._config.port_forwarding_rules or smb_path:
+            self._add_network_commandline(qemu_commandline)
+
+    def _add_network_commandline(self, qemu_commandline: ET.Element) -> None:
+        """Add network backend with port forwarding and/or SMB via QEMU commandline."""
         netdev_args = 'user,id=net0'
+
+        # SMB share (QEMU SLIRP built-in smbd)
+        smb_path = getattr(self._config, 'smb_share_path', None)
+        if smb_path:
+            netdev_args += f',smb={smb_path}'
+
+        # Port forwarding (can coexist with SMB on same netdev)
         for name, rule in self._config.port_forwarding_rules.items():
             protocol = rule['protocol']
             host_port = rule['host_port']

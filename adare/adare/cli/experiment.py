@@ -279,10 +279,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
         env_start_time = datetime.now(timezone.utc)
 
         try:
-            was_interrupted, was_successful = await experiment_run(
-                project_directory,
-                experiment_name,
-                env_name,
+            env_run_kwargs = dict(
                 disable_printing=disable_printing,
                 test=arguments.test,
                 debug_screenshots=arguments.debug_screenshots,
@@ -291,7 +288,17 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                 vm_memory=arguments.vm_memory,
                 vm_cpus=arguments.vm_cpus,
                 diff=getattr(arguments, 'diff', None),
-                diff_mode=getattr(arguments, 'diff_mode', 'auto')
+                diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+            )
+            env_file_log_level = getattr(arguments, 'file_log_level', None)
+            if env_file_log_level is not None:
+                env_run_kwargs['file_log_level'] = env_file_log_level
+
+            was_interrupted, was_successful = await experiment_run(
+                project_directory,
+                experiment_name,
+                env_name,
+                **env_run_kwargs
             )
 
             env_end_time = datetime.now(timezone.utc)
@@ -424,7 +431,7 @@ def exec_experiment_run(arguments):
                 experiment_load(project_directory, experiment_name, force=False, silent=True)
 
             try:
-                summary = asyncio.run(run_batch_experiments(
+                batch_kwargs = dict(
                     project_path=project_directory,
                     experiment_pattern=experiment_name,
                     environment_pattern=environment_pattern,
@@ -438,8 +445,13 @@ def exec_experiment_run(arguments):
                     gui_mode=arguments.gui_mode,
                     test_exec_mode=getattr(arguments, 'test_mode', None),
                     diff=getattr(arguments, 'diff', None),
-                    diff_mode=getattr(arguments, 'diff_mode', 'auto')
-                ))
+                    diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+                )
+                file_log_level = getattr(arguments, 'file_log_level', None)
+                if file_log_level is not None:
+                    batch_kwargs['file_log_level'] = file_log_level
+
+                summary = asyncio.run(run_batch_experiments(**batch_kwargs))
 
                 # Print summary using configured output format
                 from adare.run import get_formatter_from_context
@@ -521,7 +533,25 @@ def exec_experiment_run(arguments):
                     log.warning(f'WARNING: environment "{environment_name}" is not listed in {experiment_name}/metadata.yml')
                     log.warning(f'         Running experiment anyway as explicitly requested via -e flag')
 
-            was_interrupted, was_successful = asyncio.run(experiment_run(project_directory, experiment_name, environment_name, disable_printing=disable_printing, test=arguments.test, debug_screenshots=arguments.debug_screenshots, preserve_snapshot=arguments.preserve_snapshot, runlog=arguments.runlog, vm_memory=arguments.vm_memory, vm_cpus=arguments.vm_cpus, gui_mode=arguments.gui_mode, test_exec_mode=getattr(arguments, 'test_mode', None), diff=getattr(arguments, 'diff', None), diff_mode=getattr(arguments, 'diff_mode', 'auto')))
+            # Build kwargs, including file_log_level if specified
+            run_kwargs = dict(
+                disable_printing=disable_printing,
+                test=arguments.test,
+                debug_screenshots=arguments.debug_screenshots,
+                preserve_snapshot=arguments.preserve_snapshot,
+                runlog=arguments.runlog,
+                vm_memory=arguments.vm_memory,
+                vm_cpus=arguments.vm_cpus,
+                gui_mode=arguments.gui_mode,
+                test_exec_mode=getattr(arguments, 'test_mode', None),
+                diff=getattr(arguments, 'diff', None),
+                diff_mode=getattr(arguments, 'diff_mode', 'auto'),
+            )
+            file_log_level = getattr(arguments, 'file_log_level', None)
+            if file_log_level is not None:
+                run_kwargs['file_log_level'] = file_log_level
+
+            was_interrupted, was_successful = asyncio.run(experiment_run(project_directory, experiment_name, environment_name, **run_kwargs))
 
             # Handle output formatting for single runs
             from adare.run import get_formatter_from_context

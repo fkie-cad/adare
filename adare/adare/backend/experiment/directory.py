@@ -181,6 +181,7 @@ class ExperimentDirectory(Directory):
 
     def __init__(self, project: Path, experiment: str):
         self.experiment = experiment
+        self._cached_playbook = None
         super().__init__(project / 'experiments' / experiment)
         self.img = self.path / 'img'
         self.shared = self.path / 'shared'
@@ -306,11 +307,12 @@ class ExperimentDirectory(Directory):
         from adare.types.playbook import parse_playbook
         from adarelib.testset.type import TestsetFile
 
-        # Parse playbook without automatic variables
-        playbook = parse_playbook(self.playbookfile)
+        # Cache parsed playbook to avoid redundant parsing (and duplicate warnings)
+        if self._cached_playbook is None:
+            self._cached_playbook = parse_playbook(self.playbookfile)
 
         # Return TestsetFile constructed from playbook tests
-        return TestsetFile(name=self.experiment, tests=playbook.tests)
+        return TestsetFile(name=self.experiment, tests=self._cached_playbook.tests)
 
 
 

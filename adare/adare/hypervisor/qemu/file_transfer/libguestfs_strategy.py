@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
+from adare.hypervisor.qemu.file_transfer.shares import build_config_json
 from adare.hypervisor.qemu.guestfish_client import GuestfishClient
 
 log = logging.getLogger(__name__)
@@ -29,6 +30,22 @@ class LibguestfsStrategy(FileTransferStrategy):
     Requires VM to be stopped for both upload and download operations.
     Uses the GuestfishClient for all disk interactions.
     """
+
+    @property
+    def setup_description(self) -> str:
+        return "Copying files to disk via Libguestfs"
+
+    @property
+    def post_boot_description(self) -> str:
+        return ""
+
+    @property
+    def retrieval_description(self) -> str:
+        return "Extracting from disk via Libguestfs"
+
+    @property
+    def has_post_boot_transfer(self) -> bool:
+        return False
 
     def __init__(self, guestfish_client: Optional[GuestfishClient] = None):
         self.guestfish = guestfish_client or GuestfishClient()
@@ -73,6 +90,23 @@ class LibguestfsStrategy(FileTransferStrategy):
         self._validate_overlay_chain(disk_path)
 
         files_to_copy = _build_file_transfer_manifest(context)
+
+        # Write config.json for adarevm (tools/data path discovery)
+        is_windows = 'windows' in context.guest_platform.lower()
+        run_dir = context.experiment_run_directory.path
+        config_data = build_config_json(
+            is_windows=is_windows,
+            installation_mode=context.config.installation_mode,
+        )
+        with open(run_dir / 'config.json', 'w') as f:
+            json_module.dump(config_data, f, indent=2)
+        log.debug(f"Wrote config.json to {run_dir / 'config.json'}")
+
+        files_to_copy.append({
+            'source': str(run_dir / 'config.json'),
+            'dest': 'run/config.json',
+        })
+
         log.info(f"Transferring {len(files_to_copy)} files to VM disk via libguestfs")
 
         self._copy_files_to_disk(

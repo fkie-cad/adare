@@ -446,12 +446,16 @@ class VMLifecycleManager:
         - VirtualBox: Configure shared folders and port forwarding
         - QEMU: Stop VM if needed, copy files via libguestfs
         """
+        log.info("Starting file transfer setup")
         with StageCtxManager(
             VMFileTransferSetupStage(),
             context.experiment_run_ulid,
             event=context.user_interrupt_event
-        ):
+        ) as stage_ctx:
+            if self.hypervisor_type == 'qemu' and hasattr(self.strategy, 'file_transfer'):
+                stage_ctx.stage.sub_msg = self.strategy.file_transfer.setup_description
             await self.strategy.setup_file_transfer(context)
+        log.info("File transfer setup completed")
 
     async def start_vm(self, context: ExperimentRunCtx):
         """
@@ -490,7 +494,7 @@ class VMLifecycleManager:
         """Stop the virtual machine."""
         event = None if post_interrupt else context.user_interrupt_event
         with StageCtxManager(VMStopStage(), context.experiment_run_ulid, event=event):
-            log.info('stopping virtualbox virtual machine')
+            log.info('stopping virtual machine')
             if context.vm:
                 await context.vm.stop(force=force)
 
@@ -516,7 +520,9 @@ class VMLifecycleManager:
             VMFileTransferRetrievalStage(),
             context.experiment_run_ulid,
             event=event
-        ):
+        ) as stage_ctx:
+            if self.hypervisor_type == 'qemu' and hasattr(self.strategy, 'file_transfer'):
+                stage_ctx.stage.sub_msg = self.strategy.file_transfer.retrieval_description
             await self.strategy.retrieve_artifacts(context, post_interrupt=post_interrupt, force_stop=force_stop)
 
     async def perform_host_diff(self, context: ExperimentRunCtx, post_interrupt: bool = False):

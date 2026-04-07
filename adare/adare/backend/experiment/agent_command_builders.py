@@ -180,38 +180,6 @@ class AgentCommandBuilder(ABC):
 class WindowsAgentCommandBuilder(AgentCommandBuilder):
     """Windows-specific command builder."""
 
-    def _build_adarevm_run_command(self, env_info: EnvironmentInfo) -> str:
-        """Build the core adarevm run command string."""
-        cmd_parts = []
-        
-        if env_info.use_conda:
-            # Conda run
-            # Note: We rely on "conda run" to handle activation
-            # Use Miniforge path directly if available from environment detection, or fallback
-            conda_exe = r'$env:USERPROFILE\.miniforge3\Scripts\conda.exe'
-            # Quote arguments to handle spaces in paths
-            cmd_parts.append(f'& "{conda_exe}" run -n pyadare --no-capture-output adarevm start')
-        else:
-            # Standard python
-            # Use resolved Python path or just 'python' if not resolved
-            python_exe = 'python' # Default
-            # Ideally we'd pass the resolved python path here, but for now lets rely on PATH
-            # or if we have it in env_info (we don't easily access vm._cached here without passing it)
-            # But the startup script runs in a fresh powershell process, PATH should be ok if set globally
-            cmd_parts.append(f'python -m adarevm start')
-
-        # Add common flags
-        cmd_parts.append(f'--port {self.websocket_port}')
-        
-        if self.skip_xhost:
-            cmd_parts.append('--gui-mode host')
-            
-        # Join parts
-        base_cmd = " ".join(cmd_parts)
-        
-        # Add error logging for the command execution itself
-        return base_cmd
-
     async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> List[SetupCommand]:
         """Build Windows setup commands with per-command admin requirements."""
         commands = []
@@ -219,7 +187,12 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
 
         # Firewall rule for adarevm WebSocket server (REQUIRES ADMIN)
         # Use single quotes to avoid conflict with outer double quotes in commands.py wrapper
-        firewall_cmd = f"New-NetFirewallRule -DisplayName 'adarevm' -Direction Inbound -Action Allow -Protocol TCP -LocalPort {self.websocket_port}"
+        # Always open guest port 18765 (adarevm default). Port forwarding maps host:websocket_port → guest:18765.
+        # Remove stale rules first to prevent accumulation from previous runs.
+        firewall_cmd = (
+            "Remove-NetFirewallRule -DisplayName 'adarevm' -ErrorAction SilentlyContinue; "
+            "New-NetFirewallRule -DisplayName 'adarevm' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 18765"
+        )
         commands.append(SetupCommand(command=firewall_cmd, requires_admin=True))
 
         # PATH setup for project-wide tools (User-level, no admin needed)
@@ -272,48 +245,59 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             return self._build_uv_install_command(env_info, vm)
             
     def _resolve_python_path(self, vm: Any) -> str:
-        """Resolve absolute path to python executable from discovered guest PATH."""
+        """Resolve absolute path to python executable from discovered guest PATH.
+
+        Matches both user-install paths (AppData\\Local\\Programs\\Python\\Python311)
+        and all-users install paths (C:\\Program Files\\Python311).
+        """
+        import re
         default_python = "python" # Fallback to python as requested by user
-        
+
         if not vm or not hasattr(vm, '_cached_guest_path') or not vm._cached_guest_path:
+            log.warning("Python not found in guest PATH — falling back to bare 'python'. On ARM64 VMs this likely means Python installation failed; recreate the VM to use the updated template.")
             return default_python
-            
+
         # Parse PATH entries
         path_entries = vm._cached_guest_path.split(';')
-        
-        # Look for Python entry (prefer user installation)
-        # Typical pattern: ...\AppData\Local\Programs\Python\Python312\
+
+        # Look for Python root directory entry
+        # Matches: ...\Programs\Python\Python311, C:\Program Files\Python311, etc.
         for entry in path_entries:
-            if 'Programs\\Python\\Python' in entry and 'Scripts' not in entry:
-                # Found python root dir
-                python_exe = f"{entry.rstrip('\\')}\\python.exe"
+            entry_clean = entry.strip().rstrip('\\')
+            if re.search(r'Python3\d+$', entry_clean, re.IGNORECASE) and 'Scripts' not in entry_clean:
+                python_exe = f"{entry_clean}\\python.exe"
                 return f'& "{python_exe}"'
-                
+
         return default_python
 
     def _resolve_adarevm_path(self, vm: Any) -> str:
-        """Resolve absolute path to adarevm executable from discovered guest PATH."""
+        """Resolve absolute path to adarevm executable from discovered guest PATH.
+
+        Matches both user-install paths (AppData\\Local\\Programs\\Python\\Python311\\Scripts)
+        and all-users install paths (C:\\Program Files\\Python311\\Scripts).
+        """
+        import re
         default_adarevm = "adarevm" # Fallback
-        
+
         if not vm or not hasattr(vm, '_cached_guest_path') or not vm._cached_guest_path:
             return default_adarevm
-            
+
         # Parse PATH entries
         path_entries = vm._cached_guest_path.split(';')
-        
+
         # Look for Python Scripts entry
-        # Typical pattern: ...\AppData\Local\Programs\Python\Python312\Scripts\
+        # Matches: ...\Python311\Scripts, C:\Program Files\Python311\Scripts, etc.
         for entry in path_entries:
-            if 'Programs\\Python\\Python' in entry and 'Scripts' in entry:
-                # Found python Scripts dir
-                adarevm_exe = f"{entry.rstrip('\\')}\\adarevm.exe"
+            entry_clean = entry.strip().rstrip('\\')
+            if re.search(r'Python3\d+', entry_clean, re.IGNORECASE) and 'Scripts' in entry_clean:
+                adarevm_exe = f"{entry_clean}\\adarevm.exe"
                 return f'& "{adarevm_exe}"'
-        
-        # Fallback: try to derive from python path if scripts not explicitly in PATH
+
+        # Fallback: derive Scripts from Python root
         for entry in path_entries:
-            if 'Programs\\Python\\Python' in entry and 'Scripts' not in entry:
-                 # Found python root, try appending Scripts
-                adarevm_exe = f"{entry.rstrip('\\')}\\Scripts\\adarevm.exe"
+            entry_clean = entry.strip().rstrip('\\')
+            if re.search(r'Python3\d+$', entry_clean, re.IGNORECASE) and 'Scripts' not in entry_clean:
+                adarevm_exe = f"{entry_clean}\\Scripts\\adarevm.exe"
                 return f'& "{adarevm_exe}"'
 
         return default_adarevm
@@ -337,10 +321,10 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             # PowerShell array expansion: @(Get-ChildItem ...) forces wildcard expansion
             # before pip sees the arguments. PowerShell doesn't expand wildcards in
             # base64-encoded commands, so we must explicitly use Get-ChildItem.
-            return rf'$env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
+            return rf'C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
         else:
             # Editable install from shared folder source
-            return rf'cd {adarelib_path}; $env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd {adarevm_path}; $env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
+            return rf'cd {adarelib_path}; C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd {adarevm_path}; C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
 
     def _build_uv_install_command(self, env_info: EnvironmentInfo, vm: Any = None) -> str:
         """Build pip installation command (pip is in PATH via user's PATH discovery)."""
@@ -387,12 +371,13 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         cli_args = "" 
 
         if env_info.use_conda:
+            conda_exe = rf'{env_info.miniforge_path}\Scripts\conda.exe'
             if self.wheels_available:
                 # Wheel: call directly from conda env (no UNC path navigation)
-                return (rf'$env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare adarevm {cli_args}', None)
+                return (rf'{conda_exe} run -n pyadare adarevm {cli_args}', None)
             else:
                 # Editable: cd to source directory for uv context
-                return (rf'cd {adarevm_path}; $env:USERPROFILE\.miniforge3\Scripts\conda.exe run -n pyadare adarevm {cli_args}', None)
+                return (rf'cd {adarevm_path}; {conda_exe} run -n pyadare adarevm {cli_args}', None)
         else:
             if self.wheels_available:
                 # Wheel: run via python absolute path (reliable)
@@ -534,12 +519,16 @@ async def detect_environment(vm, platform: str, stop_event: threading.Event) -> 
 async def _detect_windows_environment(vm, stop_event: threading.Event) -> EnvironmentInfo:
     """Detect Windows Python environment."""
     # Check for Miniforge installation
-    check_miniforge = r'if (Test-Path "$env:USERPROFILE\.miniforge3") { exit 0 } else { exit 1 }'
+    # Use explicit user home path — $env:USERPROFILE resolves to SYSTEM's profile
+    # when commands run via QEMU Guest Agent (NT AUTHORITY\SYSTEM context)
+    user_home = rf'C:\Users\{vm.username}'
+    miniforge_path = rf'{user_home}\.miniforge3'
+    check_miniforge = rf'if (Test-Path "{miniforge_path}") {{ exit 0 }} else {{ exit 1 }}'
     miniforge_result = await vm.run_command(check_miniforge, stop_event=stop_event)
 
     if miniforge_result.returncode == 0:
         # Check for pyadare conda environment
-        check_conda_env = r'& "$env:USERPROFILE\.miniforge3\Scripts\conda.exe" env list | Select-String "^pyadare " | Out-Null; if ($?) { Write-Output "env_exists" } else { Write-Output "env_not_found" }'
+        check_conda_env = rf'& "{miniforge_path}\Scripts\conda.exe" env list | Select-String "^pyadare " | Out-Null; if ($?) {{ Write-Output "env_exists" }} else {{ Write-Output "env_not_found" }}'
         conda_env_result = await vm.run_command(check_conda_env, stop_event=stop_event)
 
         if 'env_exists' in conda_env_result.stdout:
@@ -547,11 +536,32 @@ async def _detect_windows_environment(vm, stop_event: threading.Event) -> Enviro
             return EnvironmentInfo(
                 use_conda=True,
                 conda_env_exists=True,
-                miniforge_path=r'$env:USERPROFILE\.miniforge3',
+                miniforge_path=miniforge_path,
                 platform='windows'
             )
         else:
-            log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to system Python")
+            # Attempt to create pyadare env as recovery
+            python_version = '3.11' if getattr(vm, 'architecture', None) == 'aarch64' else '3.10'
+            log.warning(
+                f"Miniforge found but 'pyadare' environment missing for VM '{vm.vm_name}'. "
+                f"Attempting to create it with Python {python_version}..."
+            )
+            create_env_cmd = rf'& "{miniforge_path}\Scripts\conda.exe" create -n pyadare python={python_version} -y'
+            create_result = await vm.run_command(create_env_cmd, stop_event=stop_event, timeout=300)
+
+            if create_result.returncode == 0:
+                log.info(f"Successfully created 'pyadare' conda environment for VM '{vm.vm_name}'")
+                return EnvironmentInfo(
+                    use_conda=True,
+                    conda_env_exists=True,
+                    miniforge_path=miniforge_path,
+                    platform='windows'
+                )
+            else:
+                log.error(
+                    f"Failed to create 'pyadare' conda environment for VM '{vm.vm_name}': "
+                    f"{create_result.stderr}"
+                )
 
     # Fallback to system Python (non-conda) - pip/py must be in PATH
     # No pre-check needed - if pip isn't available, install will fail with clear error

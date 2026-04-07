@@ -4,7 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from adare.console import print_error_message, print_success_message
-from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, default_host_cpus, get_os_definition
+from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel, default_host_cpus, get_os_definition
 from adarelib.helper.yaml import dict_to_yaml
 
 import logging
@@ -52,7 +52,7 @@ def exec_vm_create(arguments):
     force = getattr(arguments, 'force', False)
     vm_dir_raw = getattr(arguments, 'vm_dir', None)
     vm_dir = Path(vm_dir_raw).resolve() if vm_dir_raw else None
-    bare = getattr(arguments, 'bare', False)
+    setup_level = SetupLevel[getattr(arguments, 'setup_level', 'full').upper()]
     env_name = getattr(arguments, 'env_name', None)
     interactive = getattr(arguments, 'interactive', False)
     arch = getattr(arguments, 'arch', None)
@@ -98,7 +98,7 @@ def exec_vm_create(arguments):
             cpus=cpus,
             force=force,
             vm_dir=vm_dir,
-            bare=bare,
+            setup_level=setup_level,
         )
     elif os_def.platform == 'linux':
         from adare.hypervisor.qemu.vm_creator.linux_creator import create_linux_vm
@@ -112,7 +112,7 @@ def exec_vm_create(arguments):
             iso_path=iso_path,
             force=force,
             vm_dir=vm_dir,
-            bare=bare,
+            setup_level=setup_level,
         )
     elif os_def.platform == 'windows':
         if iso_path is None:
@@ -136,7 +136,7 @@ def exec_vm_create(arguments):
             cpus=cpus,
             force=force,
             vm_dir=vm_dir,
-            bare=bare,
+            setup_level=setup_level,
         )
     else:
         print_error_message(title=f"Unsupported platform: {os_def.platform}")
@@ -175,10 +175,14 @@ def exec_vm_create(arguments):
 
     if os_def.install_mode == 'manual':
         tip = 'This VM was installed manually. Configure SSH/guest agent access for full ADARE integration.'
-    elif bare:
-        tip = 'The VM has the adare user (password: adare) with desktop autologin. ADARE agent software was skipped (--bare).'
+    elif setup_level == SetupLevel.BARE:
+        tip = 'No guest tools or agent software installed (--setup bare).'
+    elif setup_level == SetupLevel.BASE:
+        tip = 'Guest tools installed. No Python environment (--setup base).'
+    elif setup_level == SetupLevel.AGENT:
+        tip = 'adarevm agent pre-installed. Ready for immediate experiment execution.'
     else:
-        tip = 'The VM has the adare user (password: adare) with desktop autologin and Miniforge3 pre-installed.'
+        tip = 'Python environment pre-installed. Ready for experiments.'
 
     print_success_message(
         title=f'VM "{final_name}" created successfully!',

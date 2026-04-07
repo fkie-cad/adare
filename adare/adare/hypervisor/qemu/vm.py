@@ -322,9 +322,18 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 '-drive', f'if=pflash,format=raw,file={nvram_path}'
             ])
 
-        # Add main disk
+        # Add main disk — ARM64 uses NVMe (native Windows driver, matches install).
+        # x86_64 uses virtio (viostor loaded by Windows).
+        if self.architecture == 'aarch64':
+            cmd.extend([
+                '-drive', f"file={self.config.disk_path},format={self.drive_format},if=none,id=hd0",
+                '-device', 'nvme,drive=hd0,serial=disk0',
+            ])
+        else:
+            cmd.extend([
+                '-drive', f"file={self.config.disk_path},format={self.drive_format},if=virtio",
+            ])
         cmd.extend([
-            '-drive', f"file={self.config.disk_path},format={self.drive_format},if=virtio",
             # '-display', 'none',  # Headless
             '-daemonize',  # Run as daemon
             '-pidfile', self.config.pid_file_path
@@ -460,7 +469,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 log.warning(f"Could not check domain state: {e}")
 
             if not silent:
-                log.debug(f"Starting QEMU VM '{self.vm_name}' via libvirt")
+                log.info(f"Starting QEMU VM '{self.vm_name}' via libvirt")
 
             # Get experiment log file for stderr capture
             log_file = get_experiment_log_file()
@@ -498,7 +507,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     )
 
                 if not silent:
-                    log.debug(f"VM '{self.vm_name}' started successfully")
+                    log.info(f"VM '{self.vm_name}' started successfully")
 
                 # Update stage progress: VM started successfully
                 if stage_ctx:
@@ -953,7 +962,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Returns:
             True if VM is booted and ready, False if timeout
         """
-        log.debug(f"Waiting for VM '{self.vm_name}' to boot (timeout: {timeout}s)")
+        log.info(f"Waiting for VM '{self.vm_name}' to boot (timeout: {timeout}s)")
 
         start_time = time.time()
         retry_delay = 0.5  # Start with short delay for quick boots
@@ -1025,7 +1034,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                         returncode = status_data.get('exitcode', -1)
 
                         if returncode == 0:
-                            log.debug(f"VM '{self.vm_name}' is fully booted and guest-exec is functional")
+                            log.info(f"VM '{self.vm_name}' is fully booted and guest-exec is functional")
 
                             # Phase 3+4: Discover PATH and X11 in parallel for faster boot
                             discovery_tasks = []

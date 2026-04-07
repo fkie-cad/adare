@@ -7,7 +7,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 from adare.config.configdirectory import VM_TEMPLATES_DIR
-from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
+from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
 
 import logging
 log = logging.getLogger(__name__)
@@ -172,13 +172,13 @@ def _sha512_crypt(password: str, salt: str) -> str:
     return f'$6${salt_bytes.decode()}${encoded}'
 
 
-def generate_user_data(os_def: OsDefinition, vm_name: str, bare: bool = False) -> str:
+def generate_user_data(os_def: OsDefinition, vm_name: str, setup_level: int = SetupLevel.FULL) -> str:
     """Generate autoinstall user-data YAML for an Ubuntu installation.
 
     Args:
         os_def: OS definition from the catalog
         vm_name: Name for the VM (used as hostname)
-        bare: If True, skip ADARE agent software (Miniforge3, qemu-guest-agent)
+        setup_level: VM setup level (0=bare, 1=base, 2=full)
 
     Returns:
         Complete user-data YAML content as a string
@@ -221,14 +221,14 @@ def generate_user_data(os_def: OsDefinition, vm_name: str, bare: bool = False) -
         hostname=hostname,
         password_hash=password_hash,
         miniforge_arch=miniforge_arch,
-        bare=bare,
+        setup_level=setup_level,
     )
 
     log.info(f'Generated autoinstall user-data for {os_def.display_name} (hostname: {hostname})')
     return user_data
 
 
-def write_autoinstall_dir(os_def: OsDefinition, vm_name: str, output_dir: Path, bare: bool = False) -> Path:
+def write_autoinstall_dir(os_def: OsDefinition, vm_name: str, output_dir: Path, setup_level: int = SetupLevel.FULL) -> Path:
     """Write autoinstall user-data and meta-data files to a directory.
 
     Creates the directory structure expected by cloud-init nocloud-net:
@@ -240,14 +240,14 @@ def write_autoinstall_dir(os_def: OsDefinition, vm_name: str, output_dir: Path, 
         os_def: OS definition from the catalog
         vm_name: Name for the VM
         output_dir: Directory to write files to
-        bare: If True, skip ADARE agent software (Miniforge3, qemu-guest-agent)
+        setup_level: VM setup level (0=bare, 1=base, 2=full)
 
     Returns:
         Path to the output directory
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    user_data = generate_user_data(os_def, vm_name, bare=bare)
+    user_data = generate_user_data(os_def, vm_name, setup_level=setup_level)
     (output_dir / 'user-data').write_text(user_data)
     (output_dir / 'meta-data').write_text('')
 

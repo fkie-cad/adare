@@ -309,7 +309,7 @@ def resolve_environment_identifier(identifier: str) -> str:
         )
 
 
-def delete_environment(environment_ulid: str, force: bool = False):
+def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: bool = True):
     from adare.database.reference_manager import reference_manager
     from adare.database.api.base import ProjectDatabaseApi
     from adare.database.models.project_models import ExperimentRun, Experiment
@@ -422,7 +422,7 @@ def delete_environment(environment_ulid: str, force: bool = False):
                     log.warning(f'Could not verify environment file path {env_file}: {e}')
 
     # Clean up VM if force is used and VM is not used by other environments
-    if force and vm_id:
+    if force and vm_id and cleanup_vm:
         try:
             # Check if VM is still used by any other environments
             with EnvironmentDbApi() as db:

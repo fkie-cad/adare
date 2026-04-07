@@ -73,23 +73,6 @@ class SimpleActionsExecutor(GUIActionsMixin, DataActionsMixin, FilesystemActions
         self.explicit_screenshot_counter = 0  # Counter for explicit screenshot actions
         self.custom_screenshot_counters = {}  # Track counters for custom screenshot names
 
-    def _resolve_pull_mode(self, requested_mode: str) -> str:
-        """Resolve effective pull mode based on VM type and requested mode.
-
-        QEMU's copy_from_guest uses libguestfs which requires a stopped VM,
-        so 'hypervisor' mode can't work during execution. Auto-switch to 'websocket'.
-        VirtualBox's copy_from_guest works on running VMs, so 'hypervisor' is fine.
-        """
-        if requested_mode == 'hypervisor' and self._is_qemu_vm():
-            log.debug("Auto-switching pull mode from 'hypervisor' to 'websocket' (QEMU VM)")
-            return 'websocket'
-        return requested_mode
-
-    def _is_qemu_vm(self) -> bool:
-        """Check if current VM is a QEMU instance."""
-        from adare.hypervisor.qemu.vm import QEMUVM
-        return isinstance(self.vm, QEMUVM)
-
         # Initialize GUI executor based on VM type and playbook settings
         from .gui_executor_factory import resolve_gui_execution_mode, create_gui_executor
         playbook_settings = playbook.settings if playbook and hasattr(playbook, 'settings') else None
@@ -111,6 +94,23 @@ class SimpleActionsExecutor(GUIActionsMixin, DataActionsMixin, FilesystemActions
             experiment_run_directory=experiment_run_directory
         )
         log.info(f"SimpleActionsExecutor initialized with GUI mode: {gui_mode.value}")
+
+    def _resolve_pull_mode(self, requested_mode: str) -> str:
+        """Resolve effective pull mode based on VM type and requested mode.
+
+        QEMU's copy_from_guest uses libguestfs which requires a stopped VM,
+        so 'hypervisor' mode can't work during execution. Auto-switch to 'websocket'.
+        VirtualBox's copy_from_guest works on running VMs, so 'hypervisor' is fine.
+        """
+        if requested_mode == 'hypervisor' and self._is_qemu_vm():
+            log.debug("Auto-switching pull mode from 'hypervisor' to 'websocket' (QEMU VM)")
+            return 'websocket'
+        return requested_mode
+
+    def _is_qemu_vm(self) -> bool:
+        """Check if current VM is a QEMU instance."""
+        from adare.hypervisor.qemu.vm import QEMUVM
+        return isinstance(self.vm, QEMUVM)
 
     def get_click_handler(self, click_type: str):
         """Get the appropriate click handler based on click type."""

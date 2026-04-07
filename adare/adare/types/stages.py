@@ -228,6 +228,14 @@ class VMFileTransferSetupStage(Stage):
 
 @register_stage
 @attrs.define
+class VMPostBootTransferStage(Stage):
+    name: ClassVar[str] = 'vm_post_boot_transfer'
+    msg: ClassVar[str] = 'Transferring files to VM'
+    description: ClassVar[str] = 'Post-boot file transfer (mount VirtioFS shares or upload files via QGA)'
+    parent: ClassVar[str] = 'vm_setup'
+
+@register_stage
+@attrs.define
 class VMRuntimePreparationStage(Stage):
     name: ClassVar[str] = 'vm_runtime_preparation'
     msg: ClassVar[str] = 'Preparing VM runtime environment'

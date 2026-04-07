@@ -9,6 +9,27 @@ import logging
 log = logging.getLogger(__name__)
 
 
+# UEFI Shell auto-boot script for aarch64 Windows installation.
+# NVRAM is pre-populated with Shell as Boot0000 (see firmware.py), so the
+# firmware auto-launches Shell which then auto-executes this startup.nsh.
+# Strategy: try Windows Boot Manager first (Phase 2 — only on NVMe after install),
+# then generic EFI boot loader (Phase 1 — on Windows ISO).
+# map -r forces device re-enumeration in case USB devices weren't mapped yet.
+_STARTUP_NSH = "\r\n".join([
+    "@echo -off",
+    "map -r",
+    r"FS0:\EFI\Microsoft\Boot\bootmgfw.efi",
+    r"FS1:\EFI\Microsoft\Boot\bootmgfw.efi",
+    r"FS2:\EFI\Microsoft\Boot\bootmgfw.efi",
+    r"FS3:\EFI\Microsoft\Boot\bootmgfw.efi",
+    r"FS0:\EFI\BOOT\BOOTAA64.EFI",
+    r"FS1:\EFI\BOOT\BOOTAA64.EFI",
+    r"FS2:\EFI\BOOT\BOOTAA64.EFI",
+    r"FS3:\EFI\BOOT\BOOTAA64.EFI",
+    "",
+])
+
+
 class ISOExtractionError(HypervisorException):
     """Raised when ISO extraction fails."""
 
@@ -166,6 +187,204 @@ def create_cidata_iso(autoinstall_dir: Path, output_path: Path) -> Path:
 
     log.info(f'Created cidata ISO: {output_path} ({output_path.stat().st_size} bytes)')
     return output_path
+
+
+def create_autounattend_iso(xml_content: bytes, output_path: Path) -> Path:
+    """Create a small ISO9660 image containing Autounattend.xml.
+
+    Used on ARM64 where there's no floppy controller. Windows Setup searches
+    optical media (CD-ROM) for Autounattend.xml, so we attach this ISO as
+    a USB cdrom device.
+
+    Args:
+        xml_content: UTF-8 encoded Autounattend.xml content
+        output_path: Where to write the ISO file
+
+    Returns:
+        Path to the created ISO
+    """
+    import io
+    import pycdlib
+
+    iso = pycdlib.PyCdlib()
+    iso.new(
+        interchange_level=3,
+        sys_ident='LINUX',
+        vol_ident='AAINSTALL',
+        joliet=3,
+        rock_ridge='1.09',
+    )
+    iso.add_fp(
+        fp=io.BytesIO(xml_content),
+        length=len(xml_content),
+        iso_path='/AUTOUNATTEND.XML;1',
+        joliet_path='/Autounattend.xml',
+        rr_name='Autounattend.xml',
+    )
+    iso.write(str(output_path))
+    iso.close()
+
+    log.info(f'Created Autounattend ISO: {output_path} ({output_path.stat().st_size} bytes)')
+    return output_path
+
+
+def create_tools_iso(xml_content: bytes, virtio_iso_path: Path, output_path: Path) -> Path:
+    """Create a combined ISO containing Autounattend.xml and virtio-win guest tools.
+
+    Matches UTM's proven approach for ARM64: bundle the answer file and guest tools
+    into a single ISO, attached as the second USB CD-ROM. This reduces the USB
+    CD-ROM count from 3 to 2, which is critical for Windows Setup to find
+    the Autounattend.xml.
+
+    Uses system ISO tools (hdiutil on macOS, mkisofs/genisoimage on Linux)
+    matching UTM's exact mkisofs flags. Falls back to pycdlib if unavailable.
+
+    Args:
+        xml_content: UTF-8 encoded Autounattend.xml content
+        virtio_iso_path: Path to the virtio-win ISO (to extract guest tools exe)
+        output_path: Where to write the combined ISO
+
+    Returns:
+        Path to the created ISO
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix='adare-toolsiso-') as tmpdir:
+        tools_dir = Path(tmpdir) / 'tools'
+        tools_dir.mkdir()
+
+        (tools_dir / 'Autounattend.xml').write_bytes(xml_content)
+        (tools_dir / 'startup.nsh').write_bytes(_STARTUP_NSH.encode('ascii'))
+
+        # Guest tools exe bundling disabled - causes Windows Setup crash on ARM64
+        # (likely ISO size/format issue with hdiutil). Guest tools installed
+        # separately after first boot instead.
+        # _extract_guest_tools_exe(virtio_iso_path, tools_dir)
+
+        _build_tools_iso(tools_dir, output_path)
+
+    log.info(f'Created tools ISO: {output_path} ({output_path.stat().st_size} bytes)')
+    return output_path
+
+
+def _extract_guest_tools_exe(virtio_iso_path: Path, output_dir: Path) -> None:
+    """Extract virtio-win-guest-tools.exe from the virtio-win ISO.
+
+    Tries Joliet, Rock Ridge, then scans ISO9660 root directory.
+    """
+    import pycdlib
+    from pycdlib.pycdlibexception import PyCdlibException
+
+    exe_name = 'virtio-win-guest-tools.exe'
+    output_file = output_dir / exe_name
+
+    iso = pycdlib.PyCdlib()
+    try:
+        iso.open(str(virtio_iso_path))
+    except PyCdlibException as e:
+        raise ISOExtractionError(str(virtio_iso_path), f'Failed to open: {e}') from e
+
+    try:
+        # Try direct paths: Joliet, Rock Ridge
+        for mode, path in [
+            ('joliet_path', f'/{exe_name}'),
+            ('rr_path', f'/{exe_name}'),
+        ]:
+            try:
+                with open(output_file, 'wb') as f:
+                    iso.get_file_from_iso_fp(f, **{mode: path})
+                log.info(f'Extracted {exe_name} using {mode}')
+                return
+            except PyCdlibException:
+                continue
+
+        # Fallback: scan ISO9660 root directory for the exe
+        # (virtio-win ISO may lack Joliet; ISO9660 names are mangled)
+        for child in iso.list_children(iso_path='/'):
+            ident = child.file_identifier().decode('ascii', errors='replace')
+            if ident in ('.', '..'):
+                continue
+            if 'VIRTIO' in ident.upper() and ident.upper().endswith('.EXE;1'):
+                with open(output_file, 'wb') as f:
+                    iso.get_file_from_iso_fp(f, iso_path=f'/{ident}')
+                log.info(f'Extracted {ident} as {exe_name} (ISO9660 scan)')
+                return
+
+        raise ISOExtractionError(
+            str(virtio_iso_path),
+            f'{exe_name} not found in virtio-win ISO'
+        )
+    finally:
+        iso.close()
+
+
+def _build_tools_iso(source_dir: Path, output_path: Path) -> None:
+    """Build an ISO from a directory using platform-appropriate tools.
+
+    macOS: hdiutil makehybrid (always available)
+    Linux: mkisofs or genisoimage (matching UTM's exact flags)
+    Fallback: pycdlib (pure Python)
+    """
+    import platform
+    import shutil
+    import subprocess
+
+    if platform.system() == 'Darwin':
+        subprocess.run(
+            ['hdiutil', 'makehybrid', '-iso', '-joliet',
+             '-default-volume-name', 'AAINSTALL',
+             '-o', str(output_path), str(source_dir)],
+            check=True, capture_output=True,
+        )
+        return
+
+    for tool in ('mkisofs', 'genisoimage'):
+        if shutil.which(tool):
+            subprocess.run(
+                [tool, '-J', '-rational-rock', '-full-iso9660-filenames',
+                 '-V', 'AAINSTALL', '-quiet',
+                 '-o', str(output_path), str(source_dir)],
+                check=True, capture_output=True,
+            )
+            return
+
+    _build_tools_iso_pycdlib(source_dir, output_path)
+
+
+def _build_tools_iso_pycdlib(source_dir: Path, output_path: Path) -> None:
+    """Build an ISO from a directory using pycdlib (fallback when system tools unavailable)."""
+    import io
+    import pycdlib
+
+    iso = pycdlib.PyCdlib()
+    iso.new(
+        interchange_level=3,
+        sys_ident='LINUX',
+        vol_ident='AAINSTALL',
+        joliet=3,
+        rock_ridge='1.09',
+    )
+
+    for file_path in sorted(source_dir.iterdir()):
+        if not file_path.is_file():
+            continue
+        content = file_path.read_bytes()
+        name = file_path.name
+        iso_name = name.upper().replace('-', '_')
+        if '.' not in iso_name:
+            iso_name += '.;1'
+        else:
+            iso_name += ';1'
+        iso.add_fp(
+            fp=io.BytesIO(content),
+            length=len(content),
+            iso_path=f'/{iso_name}',
+            joliet_path=f'/{name}',
+            rr_name=name,
+        )
+
+    iso.write(str(output_path))
+    iso.close()
 
 
 def verify_iso_hash(iso_path: Path, expected_sha256: str) -> bool:

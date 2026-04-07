@@ -20,6 +20,26 @@ class FileTransferStrategy(ABC):
     3. retrieve_artifacts() - at experiment end (download results)
     """
 
+    @property
+    @abstractmethod
+    def setup_description(self) -> str:
+        """What setup() actually does (e.g. 'Configuring VirtioFS shares')."""
+
+    @property
+    @abstractmethod
+    def post_boot_description(self) -> str:
+        """What post_boot_transfer() does (e.g. 'Mounting VirtioFS shares')."""
+
+    @property
+    @abstractmethod
+    def retrieval_description(self) -> str:
+        """What retrieve_artifacts() does (e.g. 'Downloading via QGA')."""
+
+    @property
+    def has_post_boot_transfer(self) -> bool:
+        """Whether this strategy needs post-boot transfer work."""
+        return True
+
     @abstractmethod
     async def setup(self, context: Any) -> None:
         """Prepare transfer mechanism (before VM boot).

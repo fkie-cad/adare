@@ -4,7 +4,9 @@ Target resolution logic for playbook actions.
 Handles finding targets on screen using image/text matching and screenshot management.
 """
 
+import csv
 import logging
+import re
 import time
 import base64
 from pathlib import Path
@@ -41,6 +43,8 @@ class TargetResolutionExecutor:
         self.screenshots_dir = screenshots_dir
         self.gui_executor = gui_executor
         self.screenshot_counter = 0
+        self.current_action_prefix: Optional[str] = None
+        self._manifest_initialized = False
 
         # Cache for target resolution results: {'target_hash': str, 'result': MatchResult, 'timestamp': float, 'screenshot_path': str}
         self.last_match_cache = {}
@@ -451,9 +455,12 @@ class TargetResolutionExecutor:
             # Create screenshots directory if it doesn't exist
             self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
-            # Generate filename with counter and optional context
-            import re
-            
+            # Prepend action prefix (e.g. "a03") to find-step contexts for playbook-level identification
+            if self.current_action_prefix and action_context:
+                prefix_match = re.match(r'(a\d+)', self.current_action_prefix)
+                if prefix_match and not re.match(r'a\d', action_context):
+                    action_context = f"{prefix_match.group(1)}_{action_context}"
+
             # Format: {counter:03d}_{sanitized_context}.png OR {counter:03d}.png
             context_part = ""
             if action_context:
@@ -463,7 +470,7 @@ class TargetResolutionExecutor:
                 sanitized = re.sub(r'_+', '_', sanitized).strip('_')
                 if sanitized:
                     context_part = f"_{sanitized}"
-            
+
             filename = f"{self.screenshot_counter:03d}{context_part}.png"
             filepath = self.screenshots_dir / filename
 
@@ -477,6 +484,9 @@ class TargetResolutionExecutor:
 
             log.debug(f"Debug screenshot saved: {filepath}")
 
+            # Append row to CSV manifest
+            self._append_manifest_row(filename, action_context)
+
             # Return relative path (relative to run directory)
             relative_path = f"reporting/screenshots/{filename}"
             return relative_path
@@ -484,3 +494,83 @@ class TargetResolutionExecutor:
         except Exception as e:
             log.error(f"Failed to save debug screenshot: {e}")
             return None
+
+    def _append_manifest_row(self, filename: str, action_context: Optional[str] = None) -> None:
+        """Append a row to the screenshot manifest CSV.
+
+        Parses action_index, action_type, detail, and phase from the action_context string
+        and writes them alongside the counter, filename, and timestamp.
+        """
+        if not self.screenshots_dir:
+            return
+
+        manifest_path = self.screenshots_dir / "manifest.csv"
+
+        try:
+            # Write header on first call
+            if not self._manifest_initialized:
+                with open(manifest_path, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["counter", "filename", "action_index", "action_type", "detail", "phase", "timestamp"])
+                self._manifest_initialized = True
+
+            # Parse fields from action_context (e.g. "a03_click_L_img_button" or "a03_find_img_button")
+            action_index = ""
+            action_type = ""
+            detail = ""
+            phase = "post"
+
+            if action_context:
+                # Extract action index (a00, a01, ...)
+                idx_match = re.match(r'a(\d+)_?(.*)', action_context)
+                if idx_match:
+                    action_index = idx_match.group(1).lstrip('0') or "0"
+                    remainder = idx_match.group(2)
+                else:
+                    remainder = action_context
+
+                # Detect phase
+                if remainder.startswith("find_"):
+                    phase = "find"
+                    remainder = remainder[5:]  # strip "find_"
+                elif remainder == "initial":
+                    phase = "initial"
+                    action_type = "initial"
+                    remainder = ""
+
+                # Extract action type and detail from remainder
+                if remainder and action_type != "initial":
+                    # Known type prefixes to split on
+                    type_patterns = [
+                        (r'^(click_[LRD])_?(.*)', None),
+                        (r'^(key_hotkey)_?(.*)', None),
+                        (r'^(key_type)_?(.*)', None),
+                        (r'^(key)_?(.*)', None),
+                        (r'^(scroll)_?(.*)', None),
+                        (r'^(cmd)_?(.*)', None),
+                        (r'^(goto)_?(.*)', None),
+                        (r'^(drag)_?(.*)', None),
+                        # Find-step targets (no action type prefix — use target type)
+                        (r'^(img)_?(.*)', None),
+                        (r'^(text)_?(.*)', None),
+                        (r'^(pos)_?(.*)', None),
+                    ]
+                    matched = False
+                    for pattern, _ in type_patterns:
+                        m = re.match(pattern, remainder)
+                        if m:
+                            action_type = action_type or m.group(1)
+                            detail = m.group(2).strip('_') if m.group(2) else ""
+                            matched = True
+                            break
+                    if not matched:
+                        action_type = action_type or remainder
+                        detail = ""
+
+            counter = self.screenshot_counter - 1  # counter was already incremented
+            with open(manifest_path, 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([counter, filename, action_index, action_type, detail, phase, f"{time.time():.3f}"])
+
+        except Exception as e:
+            log.warning(f"Failed to write manifest row: {e}")
