@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<unattend xmlns="urn:schemas-microsoft-com:unattend">
+<unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
 
   <!-- Windows PE pass - disk partitioning and driver injection -->
   <settings pass="windowsPE">
@@ -23,18 +23,13 @@
                language="neutral"
                versionScope="nonSxS">
 
-      <!-- Load virtio drivers from secondary CD -->
-      <DriverPaths>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="1">
-          <Path>E:\{{ driver_arch }}\w10</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="2">
-          <Path>E:\NetKVM\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-        <PathAndCredentials wcm:action="add" wcm:keyValue="3">
-          <Path>E:\viostor\w10\{{ driver_arch }}</Path>
-        </PathAndCredentials>
-      </DriverPaths>
+      <!-- Bypass CPU check for QEMU's emulated CPU -->
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassCPUCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
 
       <DiskConfiguration>
         <Disk wcm:action="add">
@@ -89,11 +84,74 @@
 
       <UserData>
         <AcceptEula>true</AcceptEula>
+        {% if proc_arch == 'arm64' %}
         <ProductKey>
+          <Key>W269N-WFGWX-YVC9B-4J6C9-T83GX</Key>
           <WillShowUI>OnError</WillShowUI>
         </ProductKey>
+        {% endif %}
       </UserData>
     </component>
+
+    {% if proc_arch != 'arm64' %}
+    <component name="Microsoft-Windows-PnPCustomizationsWinPE"
+               processorArchitecture="{{ proc_arch }}"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+      <DriverPaths>
+        <!-- viostor (critical) - D through J -->
+        <PathAndCredentials wcm:action="add" wcm:keyValue="1">
+          <Path>D:\viostor\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="2">
+          <Path>E:\viostor\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="3">
+          <Path>F:\viostor\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="4">
+          <Path>G:\viostor\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="5">
+          <Path>H:\viostor\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="6">
+          <Path>I:\viostor\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="7">
+          <Path>J:\viostor\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <!-- NetKVM - D through J -->
+        <PathAndCredentials wcm:action="add" wcm:keyValue="8">
+          <Path>D:\NetKVM\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="9">
+          <Path>E:\NetKVM\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="10">
+          <Path>F:\NetKVM\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="11">
+          <Path>G:\NetKVM\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="12">
+          <Path>H:\NetKVM\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="13">
+          <Path>I:\NetKVM\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="14">
+          <Path>J:\NetKVM\w10\{{ driver_arch }}</Path>
+        </PathAndCredentials>
+        <!-- viogpudo intentionally excluded from WinPE DriverPaths.
+             Loading the GPU driver during WinPE causes black screen issues
+             (display driver switch from ramfb to virtio-gpu-pci crashes WinPE).
+             The driver gets installed later via virtio-win guest tools in FirstLogonCommands.
+             Matches UTM's proven approach: https://github.com/utmapp/spice-nsis/blob/main/Autounattend.xml -->
+      </DriverPaths>
+    </component>
+    {% endif %}
   </settings>
 
   <!-- OOBE pass - user account and regional settings -->
@@ -120,6 +178,9 @@
         <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
         <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
         <ProtectYourPC>3</ProtectYourPC>
+        <VMModeOptimizations>
+          <SkipWinREInitialization>true</SkipWinREInitialization>
+        </VMModeOptimizations>
       </OOBE>
 
       <UserAccounts>
@@ -175,6 +236,7 @@
           <CommandLine>powercfg /hibernate off</CommandLine>
           <Description>Disable hibernate</Description>
         </SynchronousCommand>
+        {% if setup_level >= 1 %}
         <!-- Open firewall port 18765 for ADARE guest agent -->
         <SynchronousCommand wcm:action="add">
           <Order>6</Order>
@@ -184,10 +246,11 @@
         <!-- Install virtio guest agent from secondary CD -->
         <SynchronousCommand wcm:action="add">
           <Order>7</Order>
-          <CommandLine>cmd /c if exist E:\virtio-win-guest-tools.exe E:\virtio-win-guest-tools.exe /S</CommandLine>
+          <CommandLine>cmd /c for %d in (D E F) do if exist %d:\virtio-win-guest-tools.exe %d:\virtio-win-guest-tools.exe /S</CommandLine>
           <Description>Install virtio guest tools</Description>
         </SynchronousCommand>
-        {% if not bare %}
+        {% endif %}
+        {% if setup_level >= 2 %}
         <!-- Download Miniforge3 -->
         <SynchronousCommand wcm:action="add">
           <Order>8</Order>
@@ -197,13 +260,13 @@
         <!-- Install Miniforge3 silently -->
         <SynchronousCommand wcm:action="add">
           <Order>9</Order>
-          <CommandLine>C:\Users\adare\miniforge3-installer.exe /InstallationType=JustMe /RegisterPython=0 /S /D=C:\Users\adare\miniforge3</CommandLine>
+          <CommandLine>C:\Users\adare\miniforge3-installer.exe /InstallationType=JustMe /RegisterPython=0 /S /D=C:\Users\adare\.miniforge3</CommandLine>
           <Description>Install Miniforge3</Description>
         </SynchronousCommand>
         <!-- Create pyadare conda environment -->
         <SynchronousCommand wcm:action="add">
           <Order>10</Order>
-          <CommandLine>C:\Users\adare\miniforge3\condabin\conda.bat create -n pyadare python=3.10 -y</CommandLine>
+          <CommandLine>C:\Users\adare\.miniforge3\condabin\conda.bat create -n pyadare python=3.10 -y</CommandLine>
           <Description>Create pyadare conda environment</Description>
         </SynchronousCommand>
         <!-- Clean up installer -->
@@ -215,7 +278,7 @@
         {% endif %}
         <!-- Shutdown after setup complete -->
         <SynchronousCommand wcm:action="add">
-          <Order>{{ 12 if not bare else 8 }}</Order>
+          <Order>{% if setup_level >= 2 %}12{% elif setup_level >= 1 %}8{% else %}6{% endif %}</Order>
           <CommandLine>shutdown /s /t 60 /c "ADARE: Initial setup complete"</CommandLine>
           <Description>Shutdown after setup</Description>
         </SynchronousCommand>

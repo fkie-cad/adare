@@ -35,9 +35,9 @@ class OCRProcessor:
                 use_doc_orientation_classify=False,
                 use_doc_unwarping=False,
                 use_textline_orientation=False,
-                det_db_unclip_ratio=OCRConstants.OCR_DET_UNCLIP_RATIO,
-                det_db_thresh=OCRConstants.OCR_DET_DB_THRESH,
-                det_db_box_thresh=OCRConstants.OCR_DET_BOX_THRESH,
+                text_det_unclip_ratio=OCRConstants.OCR_DET_UNCLIP_RATIO,
+                text_det_thresh=OCRConstants.OCR_DET_DB_THRESH,
+                text_det_box_thresh=OCRConstants.OCR_DET_BOX_THRESH,
                 lang='en' # Explicitly set language
             )
             

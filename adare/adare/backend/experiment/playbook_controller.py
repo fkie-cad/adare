@@ -7,6 +7,7 @@ management, variable resolution, and test loading.
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
@@ -14,7 +15,8 @@ import time
 
 # Playbook and test imports
 from adare.types.playbook import (
-    Playbook, ActionType, ActionTestAction, PullAction, PauseAction, SaveTimestampAction
+    Playbook, ActionType, ActionTestAction, PullAction, PauseAction, SaveTimestampAction,
+    ClickAction, KeyboardAction, ScrollAction, CommandAction, GotoAction, DragAction
 )
 
 # WebSocket client import
@@ -505,6 +507,15 @@ class PlaybookController:
         if indices:
             log.info(f"Selected indices: {indices}")
         
+        # Capture initial baseline screenshot before any actions run
+        if self.action_executor.debug_screenshots:
+            try:
+                await self.action_executor.target_resolution.get_current_screenshot_with_path(
+                    action_context="a00_initial"
+                )
+            except Exception as e:
+                log.warning(f"Failed to capture initial debug screenshot: {e}")
+
         for i, action in enumerate(playbook.actions):
             # i is 0-based, so action index is i+1
             action_index = i + 1
@@ -554,13 +565,17 @@ class PlaybookController:
                 except Exception as e:
                     log.error(f"Failed to emit start event for action {i}: {e}", exc_info=True)
             
+            # Build debug context for screenshot filenames
+            debug_context = self._build_action_debug_context(action_index, action_name, resolved_action)
+
             # Execute the action using action executor
             start_time = time.time()
             result = await self.action_executor.execute_action(
-                action, 
-                parent_event_id=action_id, 
+                action,
+                parent_event_id=action_id,
                 event_emitter=self.event_manager,
-                variable_resolver=self.variable_resolver
+                variable_resolver=self.variable_resolver,
+                action_context=debug_context
             )
             execution_time = time.time() - start_time
             
@@ -699,6 +714,80 @@ class PlaybookController:
             result_data = action_result.data.get('result', {})
             return 'status' in result_data and 'details' in result_data
         return False
+
+    def _build_action_debug_context(self, action_index: int, action_name: str, action: ActionType) -> str:
+        """Build a compact debug context string for screenshot filenames.
+
+        Returns strings like ``a03_click_L_img_button`` or ``a07_key_enter``.
+        """
+        prefix = f"a{action_index:02d}"
+        detail = self._get_action_detail(action)
+
+        if isinstance(action, ClickAction):
+            button = action.type[0].upper()  # L / R / D
+            tag = f"click_{button}"
+        elif isinstance(action, KeyboardAction):
+            if action.combination:
+                tag = "key_hotkey"
+            elif action.text:
+                tag = "key_type"
+            else:
+                tag = "key"
+        elif isinstance(action, ScrollAction):
+            tag = "scroll"
+        elif isinstance(action, CommandAction):
+            tag = "cmd"
+        elif isinstance(action, GotoAction):
+            tag = "goto"
+        elif isinstance(action, DragAction):
+            tag = "drag"
+        else:
+            tag = re.sub(r'Action$', '', action_name).lower()
+
+        parts = [prefix, tag]
+        if detail:
+            parts.append(detail)
+        return "_".join(parts)
+
+    @staticmethod
+    def _get_action_detail(action: ActionType) -> str:
+        """Extract a short detail string from an action for screenshot filenames."""
+        def _sanitize(text: str, max_len: int = 15) -> str:
+            safe = re.sub(r'[^a-zA-Z0-9_\-]', '_', text[:max_len])
+            return re.sub(r'_+', '_', safe).strip('_')
+
+        if isinstance(action, ClickAction):
+            t = action.target
+            if t.image:
+                return _sanitize(Path(t.image).stem)
+            if t.text:
+                return _sanitize(t.text)
+            if t.position:
+                return f"{t.position[0]}_{t.position[1]}"
+            return ""
+        if isinstance(action, KeyboardAction):
+            if action.key:
+                return _sanitize(action.key)
+            if action.text:
+                return _sanitize(action.text)
+            if action.combination:
+                return _sanitize("+".join(action.combination))
+            return ""
+        if isinstance(action, ScrollAction):
+            return _sanitize(action.direction)
+        if isinstance(action, CommandAction):
+            first_word = action.command.split()[0] if action.command else ""
+            return _sanitize(first_word)
+        if isinstance(action, GotoAction):
+            t = action.target
+            if t.image:
+                return _sanitize(Path(t.image).stem)
+            if t.text:
+                return _sanitize(t.text)
+            return ""
+        if isinstance(action, DragAction):
+            return "drag"
+        return ""
 
     async def _execute_auto_pull(self):
         """Execute auto-pull of files mentioned in playbook after test failure."""

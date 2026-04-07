@@ -79,13 +79,8 @@ class LibvirtStderrRedirect(contextlib.AbstractContextManager):
             # Determine redirect target
             if self.log_file and Path(self.log_file).exists():
                 redirect_target = self.log_file
-                log.debug(f"Redirecting libvirt stderr to {redirect_target}")
             else:
                 redirect_target = "/dev/null"
-                if self.log_file:
-                    log.debug(f"Log file {self.log_file} not available, using /dev/null")
-                else:
-                    log.debug("No log file specified, redirecting libvirt stderr to /dev/null")
 
             # Open redirect target for appending
             self._redirect_file = open(redirect_target, 'a', encoding='utf-8')
@@ -136,7 +131,6 @@ class LibvirtStderrRedirect(contextlib.AbstractContextManager):
             if self._saved_stderr_fd is not None:
                 try:
                     os.dup2(self._saved_stderr_fd, 2)
-                    log.debug("Restored original stderr")
                 except OSError as e:
                     log.warning(f"Failed to restore stderr: {e}")
 

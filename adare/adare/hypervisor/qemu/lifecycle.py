@@ -340,7 +340,10 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         Args:
             context: ExperimentRunCtx containing directories and VM
         """
+        strategy_name = type(self.file_transfer).__name__
+        log.info(f"Setting up file transfer via {strategy_name}")
         await self.file_transfer.setup(context)
+        log.info(f"File transfer setup via {strategy_name} completed")
 
     async def setup_networking(self, context):
         """
@@ -352,7 +355,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
         Args:
             context: ExperimentRunCtx containing configuration
         """
-        log.debug("Setting up port forwarding for WebSocket communication")
+        log.info("Setting up port forwarding for WebSocket communication")
 
         # Clean up any existing 'adarevm' port forwarding rule first
         await context.vm.remove_port_forwarding(
@@ -396,7 +399,7 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             context.experiment_run_ulid,
             context.user_interrupt_event
         ) as start_stage:
-            log.debug(f"Starting VM '{context.vm.vm_name}' via libvirt")
+            log.info(f"Starting VM '{context.vm.vm_name}' via libvirt")
             await context.vm.start(stop_event=context.user_interrupt_event, stage_ctx=start_stage)
             log.debug(f"VM visible in virt-manager (use 'Open' button to access display)")
 
@@ -419,8 +422,14 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
             elapsed = time.time() - start_wait
             log.info(f'VM is ready (waited {elapsed:.1f}s)')
 
-        # Stage 3: Post-boot file transfer / mount (strategy handles details)
-        await self.file_transfer.post_boot_transfer(context)
+        # Stage 3: Post-boot file transfer (only if strategy needs it)
+        if self.file_transfer.has_post_boot_transfer:
+            from adare.types.stages import VMPostBootTransferStage
+
+            stage = VMPostBootTransferStage()
+            with StageCtxManager(stage, context.experiment_run_ulid, context.user_interrupt_event):
+                stage.sub_msg = self.file_transfer.post_boot_description
+                await self.file_transfer.post_boot_transfer(context)
 
     async def retrieve_artifacts(self, context, post_interrupt: bool = False, force_stop: bool = False):
         """
@@ -496,6 +505,10 @@ class QEMULifecycleStrategy(AbstractVMLifecycleStrategy):
                 stop_event=event,
                 silent=True
             )
+
+        # Cleanup file transfer resources (e.g. SMB temp directory)
+        if hasattr(self.file_transfer, 'cleanup'):
+            self.file_transfer.cleanup()
 
         log.debug("QEMU VM cleanup completed")
 

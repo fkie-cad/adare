@@ -117,7 +117,6 @@ class QEMUManager(AbstractHypervisorManager):
         while True:
             func, args, kwargs, result_queue = self._cmd_queue.get()
             try:
-                log.debug(f"Executing function {func.__name__} with args={args} kwargs={kwargs}")
                 result = func(*args, **kwargs)
                 result_queue.put((result, None))
             except Exception as e:
@@ -127,22 +126,18 @@ class QEMUManager(AbstractHypervisorManager):
 
     def run(self, func: Callable, *args, **kwargs) -> Any:
         """Execute a function in the worker thread and return its result."""
-        log.debug(f"Queueing function {func.__name__} for execution.")
         result_queue = queue.Queue()
         self._cmd_queue.put((func, args, kwargs, result_queue))
         result, error = result_queue.get()
         if error:
             log.error(f"Error running function {func.__name__}: {error}")
             raise error
-        log.debug(f"Function {func.__name__} executed successfully.")
         return result
 
     async def run_async(self, func: Callable, *args, **kwargs) -> Any:
         """Run an async function directly without the worker thread."""
-        log.debug(f"Executing async function {func.__name__} with args={args} kwargs={kwargs}")
         try:
             result = await func(*args, **kwargs)
-            log.debug(f"Async function {func.__name__} executed successfully.")
             return result
         except Exception as e:
             # Intentional: async executor must catch all exceptions to log and relay to caller

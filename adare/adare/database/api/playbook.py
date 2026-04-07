@@ -21,7 +21,7 @@ class PlaybookApi(ProjectDatabaseApi):
     def __init__(self, project_path: Path):
         super().__init__(project_path)
     
-    def populate_playbook_from_file(self, experiment: Experiment, playbook_file_path: Path) -> Playbook:
+    def populate_playbook_from_file(self, experiment: Experiment, playbook_file_path: Path, parsed_playbook: Optional[PlaybookType] = None) -> Playbook:
         """Parse YAML playbook file and populate database models."""
         try:
             # Read original YAML content for storage
@@ -47,8 +47,8 @@ class PlaybookApi(ProjectDatabaseApi):
                         if vm_os:
                             vm_user, _ = get_vm_credentials(vm_os)
 
-            # Parse YAML file using existing parser (automatic variables added during execution)
-            config = parse_playbook(playbook_file_path)
+            # Use pre-parsed playbook if available, otherwise parse from file
+            config = parsed_playbook if parsed_playbook is not None else parse_playbook(playbook_file_path)
             
             # Create or update playbook record
             playbook = self._get_or_create_playbook(experiment, config, original_yaml_content)

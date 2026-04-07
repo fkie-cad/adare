@@ -2,6 +2,7 @@
 
 import os
 from dataclasses import dataclass, field
+from enum import IntEnum
 from pathlib import Path
 
 import yaml
@@ -10,6 +11,20 @@ from adare.config.configdirectory import OS_PROFILES_DIR
 
 import logging
 log = logging.getLogger(__name__)
+
+
+class SetupLevel(IntEnum):
+    """VM setup level controlling what gets installed during creation.
+
+    BARE:  OS + user + basic config (UAC, sleep, autologin)
+    BASE:  + guest tools (QGA, virtio, UTM, SPICE) + firewall rule
+    FULL:  + Python environment (Miniforge x86_64 / native ARM64)
+    AGENT: + pre-installed adarevm from wheels (deferred)
+    """
+    BARE = 0
+    BASE = 1
+    FULL = 2
+    AGENT = 3
 
 
 def default_host_cpus() -> int:
@@ -139,6 +154,12 @@ WINDOWS_10 = OsDefinition(
 # Virtio-win drivers ISO for Windows guests
 VIRTIO_WIN_ISO_URL = 'https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso'
 VIRTIO_WIN_ISO_FILENAME = 'virtio-win.iso'
+
+# UTM guest tools ISO for ARM64 Windows guests
+# Contains ARM64 virtio drivers, SPICE vdagent, and QEMU guest agent
+# See: https://github.com/utmapp/spice-nsis
+UTM_GUEST_TOOLS_ISO_URL = 'https://getutm.app/downloads/utm-guest-tools-latest.iso'
+UTM_GUEST_TOOLS_ISO_FILENAME = 'utm-guest-tools.iso'
 
 # Built-in OS definitions
 _BUILTIN_CATALOG: dict[str, OsDefinition] = {

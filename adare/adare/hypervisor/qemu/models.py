@@ -135,6 +135,9 @@ class QEMUVMConfig:
     virtiofs_enabled: bool = True  # Default to virtio-fs mode
     virtiofs_shares: Optional[List[Dict[str, Any]]] = None  # List of share configs
 
+    # SMB share path — ephemeral temp dir for QEMU SLIRP SMB sharing (macOS)
+    smb_share_path: Optional[str] = None
+
     def __post_init__(self):
         """Initialize empty collections if None."""
         if self.port_forwarding_rules is None:
@@ -168,7 +171,8 @@ class QEMUVMConfig:
             'serial_console_log_path': self.serial_console_log_path,
             'qemu_debug_log_path': self.qemu_debug_log_path,
             'virtiofs_enabled': self.virtiofs_enabled,
-            'virtiofs_shares': self.virtiofs_shares
+            'virtiofs_shares': self.virtiofs_shares,
+            'smb_share_path': self.smb_share_path,
         }
 
     @classmethod
@@ -204,4 +208,5 @@ class QEMUVMConfig:
                 log.debug(f"Migrated old virtiofs_shared_dir to virtiofs_shares list")
 
         data.setdefault('virtiofs_shares', [])
+        data.setdefault('smb_share_path', None)
         return cls(**data)

@@ -8,7 +8,7 @@ from pathlib import Path
 from adare.console import console, print_section, print_step
 from adare.hypervisor.qemu.firmware import find_ovmf_firmware
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
-from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
+from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
 from adare.hypervisor.qemu.vm_creator.qmp_utils import (
     qemu_params_for_arch,
     wait_for_input_or_exit,
@@ -63,7 +63,7 @@ def create_manual_vm(
     cpus: int | None = None,
     force: bool = False,
     vm_dir: Path | None = None,
-    bare: bool = False,
+    setup_level: SetupLevel = SetupLevel.FULL,
 ) -> Path:
     """Create a VM via interactive installation.
 
@@ -78,6 +78,7 @@ def create_manual_vm(
         force=force,
         vm_dir=vm_dir,
         iso_path=iso_path,
+        setup_level=setup_level,
     )
     return creator.create()
 
@@ -95,12 +96,12 @@ def _run_manual_installation(
     machine = arch_params['machine']
     needs_uefi = os_def.requires_uefi or os_def.architecture == 'aarch64'
 
-    # aarch64 + HVF needs highmem=off for UEFI firmware to enumerate USB boot
-    # devices. highmem=off limits addressing to 32 bits — cap RAM at 3 GB to
-    # leave room for device MMIO regions (sufficient for installation).
+    # aarch64 + HVF: keep device MMIO/ECAM/GIC regions below 4 GB so edk2
+    # firmware can enumerate PCI and USB devices. Fine-grained highmem-*
+    # properties avoid the ~3 GB RAM cap imposed by blanket highmem=off.
     if os_def.architecture == 'aarch64':
-        machine = machine.replace('virt,', 'virt,highmem=off,')
-        ram_mb = min(ram_mb, 3072)
+        machine = machine.replace(
+            'virt,', 'virt,highmem-mmio=off,highmem-ecam=off,highmem-redists=off,')
 
     # QMP socket for ACPI shutdown
     qmp_sock_path = disk_path.parent / f'.{disk_path.stem}-qmp.sock'

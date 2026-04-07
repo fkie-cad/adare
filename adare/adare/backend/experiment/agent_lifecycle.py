@@ -339,9 +339,32 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
             cwd=commands.run_cwd,
         )
     else:
-        log_path = r'C:\adare\run\logs'
+        # Use local temp paths for redirects — SMB-backed paths through junctions
+        # are fragile in the schtasks user session and can crash the .ps1 script
+        log_path = r'C:\Windows\Temp'
+
+        # For SMB mode: the schtasks runs as the "adare" user whose session
+        # has no SMB connection. Junctions (C:\adare\run -> \\10.0.2.4\qemu\run)
+        # can't resolve without an active SMB session for this user.
+        # Steps: enable guest auth (blocked by default on Win10+), establish
+        # the SMB connection, then create the log directory via the junction.
+        run_cmd = commands.run_command
+        if (context.hypervisor_type == 'qemu'
+                and getattr(vm.config, 'smb_share_path', None)):
+            stderr_log = rf'{log_path}\adarevm_stderr.log'
+            run_cmd = (
+                'reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services'
+                '\\LanmanWorkstation\\Parameters" '
+                '/v AllowInsecureGuestAuth /t REG_DWORD /d 1 /f >$null 2>&1; '
+                'Set-SmbClientConfiguration -RequireSecuritySignature $false '
+                '-Force -ErrorAction SilentlyContinue; '
+                f'net use \\\\10.0.2.4\\qemu /persistent:no 2>>"{stderr_log}"; '
+                'cmd /c "mkdir C:\\adare\\run\\logs" 2>nul; '
+                + run_cmd
+            )
+
         result = await vm.run_command(
-            commands.run_command,
+            run_cmd,
             cwd=commands.run_cwd,
             admin=True,
             run_as_user=True,
@@ -356,6 +379,8 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
             log, vm.vm_name, commands.run_command,
             result.returncode, result.stdout, result.stderr,
         )
+    elif result.stderr:
+        log.info(f"adarevm schtasks output: {result.stderr.strip()}")
 
     # Store PID for QEMU process monitoring
     if context.hypervisor_type == 'qemu' and result.returncode == 0:
@@ -364,7 +389,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
             match = re.search(r'PID (\d+)', result.stdout)
             if match:
                 context.adarevm_pid = int(match.group(1))
-                log.debug(f"Stored adarevm process PID: {context.adarevm_pid}")
+                log.info(f"Stored adarevm process PID: {context.adarevm_pid}")
             else:
                 if context.guest_platform == 'windows':
                     log.debug(
@@ -400,7 +425,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
 # WebSocket connection diagnostics
 # ---------------------------------------------------------------------------
 
-async def _diagnose_websocket_connection(vm, guest_platform: str, stop_event, full: bool = False):
+async def _diagnose_websocket_connection(vm, guest_platform: str, stop_event, full: bool = False) -> bool:
     """Run guest-side diagnostics for WebSocket connection issues.
 
     Uses the QEMU guest agent (virtio-serial) which works even when networking
@@ -411,22 +436,52 @@ async def _diagnose_websocket_connection(vm, guest_platform: str, stop_event, fu
         guest_platform: 'linux' or 'windows'
         stop_event: Cancellation event
         full: If True, run extended diagnostics (network interfaces, logs)
+
+    Returns:
+        True if the adarevm process appears to be running, False if definitely dead.
     """
-    if guest_platform != 'linux':
-        return  # Only Linux diagnostics implemented for now
+    if 'windows' in guest_platform.lower():
+        diagnostics = [
+            ("adarevm process",
+             'Get-Process python -ErrorAction SilentlyContinue | '
+             'Select-Object Id,ProcessName | Format-Table; '
+             'if (-not (Get-Process python -ErrorAction SilentlyContinue)) '
+             '{ Write-Output "python NOT running" }'),
+            ("port listening",
+             'netstat -ano | Select-String ":18765" ; '
+             'if (-not ($?)) { Write-Output "Port 18765 NOT listening" }'),
+        ]
+        if full:
+            diagnostics.extend([
+                ("adarevm stdout log (temp)",
+                 'if (Test-Path "C:\\Windows\\Temp\\adarevm_stdout.log") '
+                 '{ Get-Content "C:\\Windows\\Temp\\adarevm_stdout.log" -Tail 30 } '
+                 'else { Write-Output "NOT FOUND" }'),
+                ("adarevm stderr log (temp)",
+                 'if (Test-Path "C:\\Windows\\Temp\\adarevm_stderr.log") '
+                 '{ Get-Content "C:\\Windows\\Temp\\adarevm_stderr.log" -Tail 30 } '
+                 'else { Write-Output "NOT FOUND" }'),
+                ("scheduled tasks",
+                 'schtasks /Query /FO LIST | Select-String "adare"'),
+                ("smb mount", 'net use'),
+                ("adare directory", 'Get-ChildItem C:\\adare -ErrorAction SilentlyContinue'),
+            ])
+    elif guest_platform == 'linux':
+        diagnostics = [
+            ("adarevm process", "pgrep -af adarevm || echo 'adarevm NOT running'"),
+            ("port 18765", "ss -tlnp 2>/dev/null | grep 18765 || netstat -tlnp 2>/dev/null | grep 18765 || echo 'Port 18765 NOT listening'"),
+        ]
+        if full:
+            diagnostics.extend([
+                ("network interfaces", "ip addr show"),
+                ("config.json", "cat /adare/run/config.json 2>/dev/null || echo 'NOT FOUND'"),
+                ("adarevm log", "tail -30 /adare/run/logs/adarevm.log 2>/dev/null || echo 'No log file'"),
+                ("local connectivity", "timeout 2 bash -c 'echo > /dev/tcp/localhost/18765' 2>&1 && echo 'Port reachable' || echo 'Port NOT reachable from inside guest'"),
+            ])
+    else:
+        return True  # Unknown platform — assume alive
 
-    diagnostics = [
-        ("adarevm process", "pgrep -af adarevm || echo 'adarevm NOT running'"),
-        ("port 18765", "ss -tlnp 2>/dev/null | grep 18765 || netstat -tlnp 2>/dev/null | grep 18765 || echo 'Port 18765 NOT listening'"),
-    ]
-
-    if full:
-        diagnostics.extend([
-            ("network interfaces", "ip addr show"),
-            ("config.json", "cat /adare/run/config.json 2>/dev/null || echo 'NOT FOUND'"),
-            ("adarevm log", "tail -30 /adare/run/logs/adarevm.log 2>/dev/null || echo 'No log file'"),
-            ("local connectivity", "timeout 2 bash -c 'echo > /dev/tcp/localhost/18765' 2>&1 && echo 'Port reachable' || echo 'Port NOT reachable from inside guest'"),
-        ])
+    process_alive = True  # Assume alive unless we find evidence otherwise
 
     log.info("--- WebSocket Connection Diagnostics ---")
     for label, cmd in diagnostics:
@@ -434,11 +489,15 @@ async def _diagnose_websocket_connection(vm, guest_platform: str, stop_event, fu
             result = await vm.run_command(cmd, stop_event=stop_event, timeout=10)
             output = (result.stdout or '').strip()
             log.info(f"[{label}]: {output}")
+            if label == "adarevm process" and "NOT running" in output:
+                process_alive = False
         except asyncio.TimeoutError:
             log.warning(f"[{label}]: diagnostic timed out")
         except OSError as e:
             log.warning(f"[{label}]: diagnostic failed: {e}")
     log.info("--- End Diagnostics ---")
+
+    return process_alive
 
 
 # ---------------------------------------------------------------------------
@@ -464,7 +523,7 @@ async def connect_websocket(context, stage_ctx):
 
     # QEMU-specific: Check if adarevm process is still alive before attempting connection
     if context.hypervisor_type == 'qemu' and hasattr(context, 'adarevm_pid') and context.adarevm_pid:
-        log.debug(f"Checking if adarevm process (PID {context.adarevm_pid}) is still running...")
+        log.info(f"Checking if adarevm process (PID {context.adarevm_pid}) is still running...")
 
         try:
             is_running, exit_code, error_msg = await context.vm._check_process_status_via_agent(
@@ -481,7 +540,7 @@ async def connect_websocket(context, stage_ctx):
                 log.error(f"{error}")
                 raise LoggedException(log, error)
             else:
-                log.debug(f"adarevm process is alive, proceeding with connection attempts")
+                log.info(f"adarevm process is alive, proceeding with connection attempts")
         except LoggedException:
             raise
         except Exception as e:
@@ -491,9 +550,21 @@ async def connect_websocket(context, stage_ctx):
     if context.hypervisor_type == 'qemu':
         log.info("Running pre-flight guest diagnostics (waiting 3s for adarevm startup)...")
         await asyncio.sleep(3)
-        await _diagnose_websocket_connection(
+        process_alive = await _diagnose_websocket_connection(
             context.vm, context.guest_platform or 'linux', context.stop_event, full=False
         )
+
+        if not process_alive:
+            log.error("adarevm process is not running — skipping connection retries")
+            log.info("Running full guest diagnostics to determine cause...")
+            await _diagnose_websocket_connection(
+                context.vm, context.guest_platform or 'linux', context.stop_event, full=True
+            )
+            raise LoggedException(
+                log,
+                "adarevm process exited immediately after startup. "
+                "Check diagnostics above for guest-side error logs."
+            )
 
     # Create websocket client with host port forwarding
     context.client = AdareVMClient(host='localhost', port=context.config.websocket_port)

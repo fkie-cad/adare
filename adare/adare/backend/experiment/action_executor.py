@@ -117,7 +117,8 @@ class ActionExecutor:
         self.test_loader = test_loader  # Keep reference for backward compatibility
 
     async def execute_action(self, action: ActionType, parent_event_id: str = None,
-                           event_emitter = None, variable_resolver = None) -> ActionResult:
+                           event_emitter = None, variable_resolver = None,
+                           action_context: str = None) -> ActionResult:
         """
         Execute a single playbook action by delegating to appropriate executor.
 
@@ -126,11 +127,15 @@ class ActionExecutor:
             parent_event_id: Parent event ID for nested actions
             event_emitter: Event emitter instance for creating events
             variable_resolver: Variable resolver for template processing
+            action_context: Debug context string for screenshot filenames (e.g. 'a03_click_L_img_button')
 
         Returns:
             ActionResult with execution details
         """
         try:
+            # Set action prefix for find-step screenshots
+            self.target_resolution.current_action_prefix = action_context
+
             # Resolve variables in action fields first
             if variable_resolver:
                 resolved_action = variable_resolver.resolve_action_variables(action, self.execution_context)
@@ -240,7 +245,7 @@ class ActionExecutor:
                     try:
                         # Capture and save post-execution screenshot
                         # This reuses the existing screenshot infrastructure in target_resolution
-                        await self.target_resolution.get_current_screenshot_with_path()
+                        await self.target_resolution.get_current_screenshot_with_path(action_context=action_context)
                     except Exception as screenshot_error:
                         # Don't fail the action if screenshot capture fails
                         log.warning(f"Failed to capture post-execution debug screenshot: {screenshot_error}")

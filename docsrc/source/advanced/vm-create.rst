@@ -21,8 +21,11 @@ Linux (fully automated)
    # Ubuntu 22.04 with custom name and larger disk
    adare vm create ubuntu2204 --name my-ubuntu --disk-size 100G --ram 8192
 
-   # Bare install (no Miniforge3 / qemu-guest-agent)
-   adare vm create ubuntu2404 --bare
+   # Bare install -- OS only, no guest tools or Python
+   adare vm create ubuntu2404 --setup bare
+
+   # Base install -- guest tools only, no Python environment
+   adare vm create ubuntu2404 --setup base
 
 Windows (user-supplied ISO)
 ---------------------------
@@ -71,8 +74,8 @@ Options
      - RAM in megabytes (default from OS profile)
    * - ``--cpus N``
      - CPU core count (default: half of host cores, clamped 2--8)
-   * - ``--bare``
-     - Skip ADARE agent software (Miniforge3, qemu-guest-agent)
+   * - ``--setup LEVEL``
+     - Setup level: ``bare`` (OS only), ``base`` (+ guest tools), ``full`` (+ Python, default), ``agent`` (+ adarevm, deferred)
    * - ``--interactive``
      - Boot the VM after automated install for manual customization
    * - ``--force``
@@ -83,6 +86,38 @@ Options
      - Override CPU architecture: ``x86_64`` or ``aarch64`` (default from OS profile)
    * - ``--env-name NAME``
      - Environment file name (defaults to VM name)
+
+
+Setup Levels
+============
+
+Each level is cumulative -- it includes everything from the levels below it.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 12 30 58
+
+   * - Level
+     - What it adds
+     - Use case
+   * - ``bare``
+     - OS + user + basic config (autologin, UAC/sleep disabled)
+     - Forensic baselines, custom provisioning
+   * - ``base``
+     - Guest tools (see below)
+     - VMs managed externally without Python
+   * - ``full`` (default)
+     - Python environment (Miniforge3 + ``pyadare`` conda env)
+     - Standard ADARE experiments
+   * - ``agent``
+     - Pre-installed ``adarevm`` guest agent (deferred)
+     - Zero-overhead experiment runs
+
+**Guest tools per platform:**
+
+- **Linux** -- ``qemu-guest-agent``
+- **Windows x86_64** -- ``virtio-win-guest-tools.exe`` (VirtIO drivers, QGA, SPICE) + firewall rule for port 18765
+- **Windows ARM64 (UTM)** -- UTM guest tools + firewall rule for port 18765
 
 
 Profile System
@@ -254,11 +289,11 @@ Available template variables
 - ``hostname`` -- sanitized VM name (RFC 1123)
 - ``password_hash`` -- SHA-512 crypt hash for the ``adare`` user
 - ``miniforge_arch`` -- ``x86_64`` or ``aarch64`` (for Miniforge download URL)
-- ``bare`` -- boolean, True when ``--bare`` flag is used
+- ``setup_level`` -- integer (0=bare, 1=base, 2=full); use ``{% if setup_level >= 1 %}`` conditionals
 
 **Windows (Autounattend XML)**:
 
-- ``bare`` -- boolean, True when ``--bare`` flag is used
+- ``setup_level`` -- integer (0=bare, 1=base, 2=full); use ``{% if setup_level >= 1 %}`` conditionals
 - ``proc_arch`` -- ``amd64`` or ``arm64`` (for ``processorArchitecture`` attributes)
 - ``driver_arch`` -- ``amd64`` or ``ARM64`` (for virtio-win driver paths)
 - ``miniforge_arch`` -- ``x86_64`` or ``aarch64`` (for Miniforge download URL)

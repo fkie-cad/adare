@@ -17,11 +17,13 @@ autoinstall:
     allow-pw: true
   packages:
     - ubuntu-desktop-minimal
-    {% if not bare %}
+    {% if setup_level >= 1 %}
+    - qemu-guest-agent
+    {% endif %}
+    {% if setup_level >= 2 %}
     - gnome-screenshot
     - maim
     - xdotool
-    - qemu-guest-agent
     - python3-pip
     - python3-tk
     {% endif %}
@@ -53,7 +55,7 @@ autoinstall:
     - mkdir -p /target/etc/snap
     - 'echo "refresh.hold: forever" > /target/etc/snap/snapd.conf || true'
     - curtin in-target -- snap set system refresh.hold="$(date -d '+100 years' +%Y-%m-%dT%H:%M:%S%:z)" || true
-    {% if not bare %}
+    {% if setup_level >= 1 %}
     # Enable QEMU Guest Agent
     - curtin in-target -- systemctl enable qemu-guest-agent
     {% endif %}
@@ -61,7 +63,7 @@ autoinstall:
     - curtin in-target -- id adare || curtin in-target -- useradd -m -u 1000 -G sudo -s /bin/bash adare
     - curtin in-target -- mkdir -p /home/adare
     - chown -R 1000:1000 /target/home/adare
-    {% if not bare %}
+    {% if setup_level >= 2 %}
     # Install Miniforge3 and conda env as root, then fix ownership
     - curtin in-target -- wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-{{ miniforge_arch }}.sh -O /tmp/miniforge.sh
     - curtin in-target -- chmod +x /tmp/miniforge.sh

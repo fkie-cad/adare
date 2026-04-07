@@ -13,7 +13,7 @@ from adare.console import console, print_section, print_step, print_vm_config_pa
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.firmware import create_nvram_for_vm
 from adare.hypervisor.qemu.vm_creator.disk_helpers import create_qcow2_disk
-from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, default_host_cpus
+from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel, default_host_cpus
 from adare.hypervisor.qemu.vm_creator.prerequisites import check_prerequisites
 
 import logging
@@ -54,6 +54,7 @@ class BaseVMCreator(ABC):
         force: bool = False,
         vm_dir: Path | None = None,
         iso_path: Path | None = None,
+        setup_level: SetupLevel = SetupLevel.FULL,
     ):
         self.os_def = os_def
         self.vm_name = vm_name or self._default_vm_name()
@@ -63,6 +64,7 @@ class BaseVMCreator(ABC):
         self.force = force
         self.vm_dir = vm_dir
         self.iso_path = iso_path
+        self.setup_level = setup_level
 
     # ── Template method ──────────────────────────────────────────────
 
@@ -81,6 +83,7 @@ class BaseVMCreator(ABC):
         except (KeyboardInterrupt, HypervisorException):
             self._cleanup_on_failure(disk_path, nvram_path)
             raise
+        self._validate_disk_after_install(disk_path)
         self._print_success(disk_path)
         return disk_path
 
@@ -167,6 +170,25 @@ class BaseVMCreator(ABC):
             ))
 
         return disk_path, nvram_path
+
+    def _validate_disk_after_install(self, disk_path: Path) -> None:
+        """Verify the disk image exists and was written to after installation.
+
+        Catches cases where the disk file was deleted externally during the
+        QEMU process (Unix open-fd semantics allow the process to continue
+        but the file is gone after exit).
+        """
+        if not disk_path.exists():
+            raise VMCreationError(
+                f'Disk image vanished during installation: {disk_path}\n'
+                f'The file was deleted by an external process while QEMU was running.'
+            )
+        size = disk_path.stat().st_size
+        if size < 1_000_000:  # < 1MB means QEMU never wrote to it
+            raise VMCreationError(
+                f'Disk image appears empty after installation ({size} bytes): {disk_path}\n'
+                f'QEMU may have failed to start or the installation did not complete.'
+            )
 
     def _cleanup_on_failure(self, disk_path: Path, nvram_path: Path | None) -> None:
         """Remove disk and NVRAM files after a failed installation."""

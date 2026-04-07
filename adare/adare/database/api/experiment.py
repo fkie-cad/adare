@@ -171,7 +171,7 @@ class ExperimentApi(ProjectDatabaseApi):
             playbook_api._engine = self._engine    # Reuse the current engine
 
             try:
-                playbook_api.populate_playbook_from_file(experiment, experiment_directory.playbookfile)
+                playbook_api.populate_playbook_from_file(experiment, experiment_directory.playbookfile, parsed_playbook=experiment_directory._cached_playbook)
                 log.debug(f'populated playbook models for experiment {experiment.id}')
             except (SQLAlchemyError, OSError, IOError) as e:
                 log.error(f'failed to populate playbook models for experiment {experiment.id}: {e}')

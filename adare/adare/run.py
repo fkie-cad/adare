@@ -427,6 +427,20 @@ def run(ctx, experiment, environment, production, debug_screenshots, preserve_sn
     - Relative path: ./environments/ubuntu24.yaml
     """
     from adare.cli.experiment import exec_experiment_run
+
+    # Resolve --log-level to a file_log_level int for the experiment run
+    file_log_level = None
+    if ctx.obj.log_level:
+        from adare.config import ABBREV_DEBUG, ABBREV_INFO, ABBREV_WARNING, ABBREV_ERROR, ABBREV_CRITICAL
+        level_mapping = {
+            **{level: logging.DEBUG for level in ABBREV_DEBUG},
+            **{level: logging.INFO for level in ABBREV_INFO},
+            **{level: logging.WARNING for level in ABBREV_WARNING},
+            **{level: logging.ERROR for level in ABBREV_ERROR},
+            **{level: logging.CRITICAL for level in ABBREV_CRITICAL},
+        }
+        file_log_level = level_mapping.get(ctx.obj.log_level.strip().lower())
+
     args = SimpleNamespace(
         experiment=experiment,
         environment=environment,
@@ -442,7 +456,8 @@ def run(ctx, experiment, environment, production, debug_screenshots, preserve_sn
         diff_mode=diff_mode,
         project=project,
         verbose=ctx.obj.verbose,
-        very_verbose=ctx.obj.very_verbose
+        very_verbose=ctx.obj.very_verbose,
+        file_log_level=file_log_level
     )
     exec_with_error_printing(exec_experiment_run, args)
 
@@ -1137,11 +1152,12 @@ def remove(instance_id, snapshot_name):
 @click.option('--cpus', type=int, default=None, help='CPU count')
 @click.option('--force', is_flag=True, default=False, help='Overwrite existing VM disk image')
 @click.option('--vm-dir', type=click.Path(), default=None, help='Directory for VM disk image (default: ~/.adare/state/vms/)')
-@click.option('--bare', is_flag=True, default=False, help='Skip ADARE agent software (Miniforge3, qemu-guest-agent)')
+@click.option('--setup', type=click.Choice(['bare', 'base', 'full', 'agent'], case_sensitive=False),
+              default='full', help='Setup level: bare (OS only), base (+ guest tools), full (+ Python, default), agent (+ adarevm, deferred)')
 @click.option('--env-name', default=None, help='Environment file name (defaults to VM name)')
 @click.option('--interactive', is_flag=True, default=False, help='Boot VM after install for manual software installation')
 @click.option('--arch', type=click.Choice(['x86_64', 'aarch64']), default=None, help='Override CPU architecture (default: from OS profile)')
-def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, bare, env_name, interactive, arch):
+def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, setup, env_name, interactive, arch):
     """Create a new ADARE-ready VM from scratch.
 
     OS_NAME is the target OS: ubuntu2404, ubuntu2204, windows11, windows11arm64, windows10
@@ -1149,7 +1165,8 @@ def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, bare, env
     \b
     Examples:
       adare vm create ubuntu2404
-      adare vm create ubuntu2404 --bare
+      adare vm create ubuntu2404 --setup bare
+      adare vm create ubuntu2404 --setup base
       adare vm create ubuntu2404 --interactive
       adare vm create windows11 --iso /path/to/Win11.iso
       adare vm create windows11arm64 --iso /path/to/Win11_ARM64.iso
@@ -1159,7 +1176,7 @@ def vm_create(os_name, iso, name, disk_size, ram, cpus, force, vm_dir, bare, env
       adare vm create ubuntu2404 --vm-dir /tmp/my-vms
     """
     from adare.cli.vm_create import exec_vm_create
-    args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, bare=bare, env_name=env_name, interactive=interactive, arch=arch)
+    args = SimpleNamespace(os_name=os_name, iso=iso, name=name, disk_size=disk_size, ram=ram, cpus=cpus, force=force, vm_dir=vm_dir, setup_level=setup, env_name=env_name, interactive=interactive, arch=arch)
     exec_with_error_printing(exec_vm_create, args)
 
 @vm.command(name='reset')

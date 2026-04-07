@@ -30,7 +30,9 @@ def qemu_params_for_arch(os_def: OsDefinition) -> dict:
             'exe': 'qemu-system-aarch64',
             'machine': f'virt,accel={accel}',
             'cpu': 'host' if accel == 'hvf' else 'max',
-            'vga_args': ['-device', 'ramfb', '-device', 'virtio-gpu-pci'],
+            # ramfb for UEFI boot + virtio-gpu-device for viogpudo (UTM guest tools driver).
+            # Note: virtio-gpu-PCI causes BSOD — must use virtio-gpu-device (MMIO variant).
+            'vga_args': ['-device', 'ramfb', '-device', 'virtio-gpu-device'],
         }
     else:  # x86_64
         accel = HYPERVISOR_CONFIGS['qemu']['default_accel']

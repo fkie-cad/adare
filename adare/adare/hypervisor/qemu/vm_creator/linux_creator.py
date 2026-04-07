@@ -17,7 +17,7 @@ from adare.hypervisor.qemu.vm_creator.iso_utils import (
     extract_kernel_and_initrd,
     verify_iso_hash,
 )
-from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
+from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
 from adare.hypervisor.qemu.vm_creator.progress import (
     AutoinstallHTTPServer,
     wait_for_qemu_exit,
@@ -49,9 +49,8 @@ class LinuxVMCreator(BaseVMCreator):
     8. Return path to the finished qcow2 disk image
     """
 
-    def __init__(self, *args, bare: bool = False, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.bare = bare
 
     def _ensure_iso(self) -> None:
         """Download or locate the cached ISO, verify its hash."""
@@ -77,7 +76,7 @@ class LinuxVMCreator(BaseVMCreator):
                 os_def=self.os_def,
                 vm_name=self.vm_name,
                 output_dir=tmpdir_path / 'autoinstall',
-                bare=self.bare,
+                setup_level=self.setup_level,
             )
 
             # Extract kernel and initrd (needed for direct kernel boot)
@@ -138,7 +137,7 @@ def create_linux_vm(
     iso_path: Path | None = None,
     force: bool = False,
     vm_dir: Path | None = None,
-    bare: bool = False,
+    setup_level: SetupLevel = SetupLevel.FULL,
 ) -> Path:
     """Create a fully configured Linux VM from an Ubuntu Server ISO.
 
@@ -153,7 +152,7 @@ def create_linux_vm(
         force=force,
         vm_dir=vm_dir,
         iso_path=iso_path,
-        bare=bare,
+        setup_level=setup_level,
     )
     return creator.create()
 

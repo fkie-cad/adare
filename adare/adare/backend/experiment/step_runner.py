@@ -49,6 +49,11 @@ class ExperimentStepRunner:
                 # Check if step_task completed with exception
                 for task in done:
                     if task.exception():
+                        log.error(
+                            f"Step '{step_func.__name__}' failed with: "
+                            f"{task.exception()!r}",
+                            exc_info=task.exception(),
+                        )
                         # Use result() to properly re-raise exception with chain
                         task.result()
                         

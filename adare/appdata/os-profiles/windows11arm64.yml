@@ -10,4 +10,4 @@ default_cpus: 0
 requires_uefi: true
 requires_tpm: true
 architecture: aarch64
-template: autounattend_win11.xml
+template: autounattend_win11_arm64.xml

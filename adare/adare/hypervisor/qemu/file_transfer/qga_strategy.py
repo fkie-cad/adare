@@ -9,12 +9,15 @@ Files are transferred after boot (QGA requires a running VM) and
 artifacts are retrieved before VM shutdown.
 """
 import asyncio
+import json
 import logging
+import tarfile
 from pathlib import Path
 from typing import Any
 
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
+from adare.hypervisor.qemu.file_transfer.shares import build_config_json
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +28,18 @@ class QGAStrategy(FileTransferStrategy):
     QGA requires a running VM, so setup only builds the manifest and
     disables virtiofs config. Actual upload happens in post_boot_transfer().
     """
+
+    @property
+    def setup_description(self) -> str:
+        return "Preparing QGA file manifest"
+
+    @property
+    def post_boot_description(self) -> str:
+        return "Uploading files via QGA"
+
+    @property
+    def retrieval_description(self) -> str:
+        return "Downloading via QGA"
 
     async def setup(self, context: Any) -> None:
         """Prepare for deferred QGA file transfer.
@@ -49,12 +64,29 @@ class QGAStrategy(FileTransferStrategy):
         (run_dir / 'logs').mkdir(parents=True, exist_ok=True)
         (run_dir / 'artifacts').mkdir(parents=True, exist_ok=True)
 
+        # Write config.json for adarevm (tools/data path discovery)
+        is_windows = 'windows' in context.guest_platform.lower()
+        config_data = build_config_json(
+            is_windows=is_windows,
+            installation_mode=context.config.installation_mode,
+        )
+        with open(run_dir / 'config.json', 'w') as f:
+            json.dump(config_data, f, indent=2)
+        log.debug(f"Wrote config.json to {run_dir / 'config.json'}")
+
         # Build manifest and store on context for post-boot transfer
         from adare.hypervisor.qemu.file_transfer.libguestfs_strategy import (
             _build_file_transfer_manifest,
         )
 
         context._qga_file_manifest = _build_file_transfer_manifest(context)
+
+        # Add config.json to manifest so it gets transferred to guest
+        context._qga_file_manifest.append({
+            'source': str(run_dir / 'config.json'),
+            'dest': 'run/config.json',
+        })
+
         log.info(
             f"Built QGA file transfer manifest: "
             f"{len(context._qga_file_manifest)} items "
@@ -64,81 +96,87 @@ class QGAStrategy(FileTransferStrategy):
     async def post_boot_transfer(self, context: Any) -> None:
         """Upload files to running VM via QGA guest-file-* operations.
 
-        Iterates over the manifest built in setup() and uploads each
-        file/directory via QGAFileTransfer.
+        Attempts tar-based bulk transfer first (single file upload + extract).
+        Falls back to file-by-file transfer if tar is unavailable or fails.
 
         Args:
             context: ExperimentRunCtx containing VM
         """
         from adare.hypervisor.qemu.qga_file_transfer import QGAFileTransfer
-        from adare.types.stages import VMFileTransferSetupStage
-        from adare.backend.experiment.stagectxmanager import StageCtxManager
 
-        with StageCtxManager(
-            VMFileTransferSetupStage(),
-            context.experiment_run_ulid,
-            context.user_interrupt_event,
-        ):
-            # Wait for guest OS to stabilize after boot — the boot readiness
-            # check only verifies guest-exec works, but services/disk I/O may
-            # still be settling, causing file operations to time out.
-            stabilization_delay = 5
-            log.info(
-                f"Waiting {stabilization_delay}s for guest OS to stabilize "
-                f"before QGA file transfer..."
-            )
-            await asyncio.sleep(stabilization_delay)
+        # Wait for guest OS to stabilize after boot — the boot readiness
+        # check only verifies guest-exec works, but services/disk I/O may
+        # still be settling, causing file operations to time out.
+        stabilization_delay = 5
+        log.info(
+            f"Waiting {stabilization_delay}s for guest OS to stabilize "
+            f"before QGA file transfer..."
+        )
+        await asyncio.sleep(stabilization_delay)
 
-            is_windows = 'windows' in context.guest_platform.lower()
-            transferor = QGAFileTransfer(context.vm)
-            manifest = getattr(context, '_qga_file_manifest', [])
-            base = 'C:\\adare' if is_windows else '/adare'
+        is_windows = 'windows' in context.guest_platform.lower()
+        transferor = QGAFileTransfer(context.vm)
+        manifest = getattr(context, '_qga_file_manifest', [])
+        base = 'C:\\adare' if is_windows else '/adare'
 
-            log.info(f"Transferring {len(manifest)} items to VM via QGA")
+        log.info(f"Transferring {len(manifest)} items to VM via QGA")
 
-            # Create base directories
-            await transferor.mkdir_p(base)
-            await transferor.mkdir_p(
-                f"{base}\\run\\logs" if is_windows else f"{base}/run/logs"
-            )
-            await transferor.mkdir_p(
-                f"{base}\\run\\artifacts" if is_windows
-                else f"{base}/run/artifacts"
-            )
-            await transferor.mkdir_p(
-                f"{base}\\vm" if is_windows else f"{base}/vm"
-            )
+        # Create base directory structure (needed for both tar and file-by-file)
+        await transferor.mkdir_p(base)
+        await transferor.mkdir_p(
+            f"{base}\\run\\logs" if is_windows else f"{base}/run/logs"
+        )
+        await transferor.mkdir_p(
+            f"{base}\\run\\artifacts" if is_windows
+            else f"{base}/run/artifacts"
+        )
+        await transferor.mkdir_p(
+            f"{base}\\vm" if is_windows else f"{base}/vm"
+        )
 
-            for item in manifest:
-                source = Path(item['source'])
-                dest_relative = item['dest']
+        # Try tar-based bulk transfer first
+        if manifest and await transferor._check_tar_available():
+            try:
+                await transferor.upload_tar(manifest, base)
+                log.info("QGA file transfer completed (tar mode)")
+                return
+            except (HypervisorException, tarfile.TarError, OSError) as e:
+                log.warning(
+                    f"Tar-based transfer failed, falling back to "
+                    f"file-by-file: {e}"
+                )
 
+        # Fallback: file-by-file transfer
+        for item in manifest:
+            source = Path(item['source'])
+            dest_relative = item['dest']
+
+            if is_windows:
+                guest_dest = (
+                    f"{base}\\{dest_relative.replace('/', '\\')}"
+                )
+            else:
+                guest_dest = f"{base}/{dest_relative}"
+
+            if source.is_dir():
+                log.info(
+                    f"Uploading directory {source.name} -> {guest_dest}"
+                )
+                await transferor.upload_directory(source, guest_dest)
+            else:
                 if is_windows:
-                    guest_dest = (
-                        f"{base}\\{dest_relative.replace('/', '\\')}"
+                    parent = '\\'.join(
+                        guest_dest.replace('/', '\\').split('\\')[:-1]
                     )
                 else:
-                    guest_dest = f"{base}/{dest_relative}"
+                    parent = str(Path(guest_dest).parent)
+                await transferor.mkdir_p(parent)
+                log.info(
+                    f"Uploading file {source.name} -> {guest_dest}"
+                )
+                await transferor.upload_file(source, guest_dest)
 
-                if source.is_dir():
-                    log.info(
-                        f"Uploading directory {source.name} -> {guest_dest}"
-                    )
-                    await transferor.upload_directory(source, guest_dest)
-                else:
-                    if is_windows:
-                        parent = '\\'.join(
-                            guest_dest.replace('/', '\\').split('\\')[:-1]
-                        )
-                    else:
-                        parent = str(Path(guest_dest).parent)
-                    await transferor.mkdir_p(parent)
-                    log.info(
-                        f"Uploading file {source.name} -> {guest_dest}"
-                    )
-                    await transferor.upload_file(source, guest_dest)
-
-            log.info("QGA file transfer completed")
+        log.info("QGA file transfer completed")
 
     async def retrieve_artifacts(self, context: Any) -> None:
         """Retrieve artifacts and logs from running VM via QGA.

@@ -15,6 +15,9 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 import asyncio
 import base64
 import logging
+import tarfile
+import tempfile
+import time
 
 from adare.hypervisor.exceptions import HypervisorException
 
@@ -36,11 +39,12 @@ class QGAFileTransfer:
     transient guest agent unresponsiveness (common right after boot).
     """
 
-    CHUNK_SIZE = 4 * 1024  # 4KB chunks — smaller base64 payloads reduce transport errors
+    CHUNK_SIZE = 64 * 1024  # 64KB chunks — base64 expands to ~85KB, balanced throughput vs JSON overhead
 
     def __init__(self, vm):
         self.vm = vm
         self.is_windows = 'windows' in vm.guest_os.lower()
+        self._tar_available: bool | None = None
 
     async def _send_qga_with_retry(self, cmd: dict, operation_desc: str) -> dict:
         """Send a QGA command with retry and exponential backoff.
@@ -185,6 +189,7 @@ class QGAFileTransfer:
             handle = None
             try:
                 handle = await self._guest_file_open(guest_path, mode='wb')
+                t0 = time.monotonic()
                 with open(host_path, 'rb') as f:
                     bytes_written = 0
                     while True:
@@ -193,10 +198,15 @@ class QGAFileTransfer:
                             break
                         written = await self._guest_file_write(handle, chunk)
                         bytes_written += written
-                        await asyncio.sleep(0.05)
 
-                log.debug(f"Uploaded {bytes_written} bytes to {guest_path}")
                 await self._guest_file_close(handle)
+                elapsed = time.monotonic() - t0
+                if elapsed > 0 and bytes_written > 0:
+                    throughput_kb = (bytes_written / 1024) / elapsed
+                    log.info(
+                        f"Uploaded {host_path.name}: {bytes_written} bytes "
+                        f"in {elapsed:.1f}s ({throughput_kb:.0f} KB/s)"
+                    )
                 return  # success
 
             except HypervisorException as e:
@@ -324,6 +334,88 @@ class QGAFileTransfer:
                 await self.download_file(guest_file, host_file)
             except HypervisorException as e:
                 log.warning(f"Failed to download {guest_file}: {e}")
+
+    async def _check_tar_available(self) -> bool:
+        """Check if tar is available on the guest. Result is cached."""
+        if self._tar_available is not None:
+            return self._tar_available
+
+        if self.is_windows:
+            cmd = 'where tar.exe'
+        else:
+            cmd = 'which tar'
+
+        result = await self.vm.run_command(cmd, silent=True)
+        self._tar_available = result.returncode == 0
+        if self._tar_available:
+            log.debug("tar is available on guest")
+        else:
+            log.debug("tar is not available on guest, will use file-by-file transfer")
+        return self._tar_available
+
+    async def upload_tar(self, manifest: list[dict], guest_base: str) -> None:
+        """Pack manifest items into a tar.gz, upload single file, extract on guest.
+
+        Args:
+            manifest: List of dicts with 'source' and 'dest' keys
+            guest_base: Base directory on guest (e.g. '/adare' or 'C:\\adare')
+
+        Raises:
+            HypervisorException: If upload or extraction fails
+            tarfile.TarError: If tar creation fails on host
+            OSError: If temp file operations fail on host
+        """
+        if self.is_windows:
+            guest_tar = 'C:\\Windows\\Temp\\adare_transfer.tar.gz'
+        else:
+            guest_tar = '/tmp/adare_transfer.tar.gz'
+
+        tmp_tar_path = None
+        try:
+            # Create tar.gz on host
+            with tempfile.NamedTemporaryFile(suffix='.tar.gz', delete=False) as tmp:
+                tmp_tar_path = Path(tmp.name)
+
+            with tarfile.open(tmp_tar_path, 'w:gz') as tar:
+                for item in manifest:
+                    source = Path(item['source'])
+                    dest_relative = item['dest']
+                    if source.is_dir():
+                        tar.add(str(source), arcname=dest_relative)
+                    elif source.is_file():
+                        tar.add(str(source), arcname=dest_relative)
+                    else:
+                        log.warning(f"Skipping missing manifest item: {source}")
+
+            tar_size = tmp_tar_path.stat().st_size
+            log.info(f"Created tar.gz ({tar_size} bytes) for {len(manifest)} manifest items")
+
+            # Upload single tar file to guest
+            await self.upload_file(tmp_tar_path, guest_tar)
+
+            # Extract on guest
+            if self.is_windows:
+                extract_cmd = (
+                    f'tar.exe -xzf "{guest_tar}" -C "{guest_base}"; '
+                    f'Remove-Item "{guest_tar}"'
+                )
+            else:
+                extract_cmd = (
+                    f"sudo tar xzf '{guest_tar}' -C '{guest_base}' && "
+                    f"rm '{guest_tar}'"
+                )
+
+            result = await self.vm.run_command(extract_cmd, silent=True)
+            if result.returncode != 0:
+                raise HypervisorException(
+                    f"Tar extraction failed on guest (rc={result.returncode}): {result.stderr}"
+                )
+
+            log.info("Tar-based bulk transfer completed successfully")
+
+        finally:
+            if tmp_tar_path and tmp_tar_path.exists():
+                tmp_tar_path.unlink()
 
     async def file_exists(self, guest_path: str) -> bool:
         """Check if path exists on guest via guest-exec.

@@ -45,7 +45,7 @@ logging.getLogger('mcp.client.streamable_http').setLevel(logging.WARNING)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
 
-def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDirectory, copy_existing: bool = True):
+def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDirectory, copy_existing: bool = True, file_log_level: int = logging.INFO):
     """Ensure a log file exists and copy it to the experiment run directory.
 
     If no log file is currently active (e.g., when --logfile is not specified),
@@ -56,6 +56,7 @@ def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDire
         run_directory: The experiment run directory where the log should be copied
         copy_existing: Whether to copy the existing log file (default: True).
                       Set to False for dev mode/long-running processes to avoid copying history.
+        file_log_level: Logging level for the file handler (default: logging.INFO).
     """
     import shutil
     import logging
@@ -81,17 +82,23 @@ def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDire
         # Create the log file handler (append mode to preserve copied content)
         file_handler = logging.FileHandler(target_path, mode='a', encoding='utf-8')
         file_handler.setFormatter(FileHandlerFormatter())
-        file_handler.setLevel(logging.DEBUG)
+        file_handler.setLevel(file_log_level)
 
         # Add handler to root logger to capture all log messages
         root_logger = logging.getLogger()
         root_logger.addHandler(file_handler)
 
-        # Ensure root logger level allows DEBUG messages to be captured
-        if root_logger.level > logging.DEBUG:
-            root_logger.setLevel(logging.DEBUG)
+        # Unconditionally ensure root logger level is low enough for the file handler.
+        # Without this, the root logger may stay at WARNING (the console default),
+        # silently dropping INFO messages before they ever reach the file handler.
+        previous_level = root_logger.level
+        root_logger.setLevel(min(root_logger.level, file_log_level) if root_logger.level > 0 else file_log_level)
 
-        log.info(f'Configured logging to {target_path}')
+        log.info(
+            f'Configured logging to {target_path} '
+            f'(root level: {logging.getLevelName(previous_level)} -> {logging.getLevelName(root_logger.level)}, '
+            f'handlers: {len(root_logger.handlers)})'
+        )
     except Exception as e:
         log.warning(f'Failed to configure logging to run directory: {e}')
 
@@ -300,7 +307,7 @@ def step_prepare_run_environment(context: ExperimentRunCtx, skip_adare_log: bool
 
         # Copy adare log to run directory if runlog is enabled (skip in dev mode)
         if context.config.runlog and not skip_adare_log:
-            _ensure_and_copy_adare_log_to_run_directory(run_dir)
+            _ensure_and_copy_adare_log_to_run_directory(run_dir, file_log_level=context.config.file_log_level)
 
         # Initialize MCP server with log file
         from adare.backend.experiment.mcp_server_manager import MCPServerManager
@@ -594,7 +601,7 @@ def step_remove_fake_experiment_run(context: ExperimentRunCtx):
     experiment_database.remove_fake_experiment_run(context.project_directory.path, context.experiment_run_ulid)
     log.info(f'fake experiment run {context.experiment_run_ulid} removed')
 
-async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto'):
+async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', file_log_level: int = logging.INFO):
     import signal
     import asyncio
 
@@ -607,7 +614,8 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         environment_name=environment_name,
         preserve_snapshot=preserve_snapshot,
         runlog=runlog,
-        test_mode=test
+        test_mode=test,
+        file_log_level=file_log_level
     )
 
     # Determine guest platform early to set platform-specific defaults

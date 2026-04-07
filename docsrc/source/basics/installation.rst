@@ -25,7 +25,7 @@ System Requirements
    * - **CPU**
      - 6+ cores with virtualization support
    * - **OS**
-     - Ubuntu, Windows 10+
+     - Ubuntu, Windows 10+, macOS 13+
 
 
 Required Software
@@ -114,6 +114,28 @@ Required Software
    .. code-block:: bash
 
       sudo pacman -S qemu python-guestfs libguestfs
+
+   **macOS (Apple Silicon / ARM):**
+
+   .. code-block:: bash
+
+      brew install qemu samba
+
+   QEMU on macOS (Homebrew) has the smbd path hardcoded to ``/opt/local/sbin/smbd``
+   (a MacPorts path). You must create a symlink so QEMU can find Homebrew's samba:
+
+   .. code-block:: bash
+
+      sudo mkdir -p /opt/local/sbin
+      sudo ln -s /opt/homebrew/opt/samba/sbin/samba-dot-org-smbd /opt/local/sbin/smbd
+
+   .. note::
+      On macOS, virtiofsd is not available. ADARE uses QEMU's built-in SMB sharing
+      (via ``samba``) to mount host directories in the guest VM. This provides the
+      same shared-directory experience as virtiofs on Linux. If ``samba`` is not
+      installed or the symlink above is missing, ADARE falls back to QGA file
+      transfer (slower, but functional). ADARE will detect the mismatch and print
+      the exact symlink command needed.
 
    .. note::
       The libguestfs tools are required for file operations with stopped QEMU VMs.

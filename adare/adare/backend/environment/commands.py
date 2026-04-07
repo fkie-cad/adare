@@ -231,7 +231,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
         else:
             log.info(f"Environment '{environment_name}' already exists, but force=True. Deleting old environment to prevent conflicts...")
             try:
-                environment_database.delete_environment(existing_ulid, force=True)
+                environment_database.delete_environment(existing_ulid, force=True, cleanup_vm=False)
                 log.info(f"Successfully deleted previous version of '{environment_name}'")
             except Exception as e:
                 log.warning(f"Failed to delete existing environment '{environment_name}': {e}")
