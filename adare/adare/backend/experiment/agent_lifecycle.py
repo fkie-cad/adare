@@ -575,7 +575,7 @@ async def connect_websocket(context, stage_ctx):
         log.info(f"AdareVM Event [{event_type}]: {message}")
 
     def error_event_handler(event_type: str, data: dict):
-        error = data.get('error', '')
+        error = data.get('message', '') or data.get('error', '')
         log.error(f"AdareVM Error: {error}")
 
     context.client.add_event_handler('log', log_event_handler)

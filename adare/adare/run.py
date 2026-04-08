@@ -519,6 +519,30 @@ def clean(experiment, project):
 
 @experiment.command()
 @click.argument('experiment', type=click.Path(exists=False))
+@click.option('-e', '--environment', type=click.Path(exists=False), help='Environment to check compatibility with')
+@click.option('--project', '-p', help='Name of the project')
+def validate(experiment, environment, project):
+    """Validate experiment configuration and integrity without starting a VM.
+
+    Performs fast pre-flight checks: directory structure, YAML schema,
+    variable references, test references, environment compatibility,
+    and integrity hashes.
+
+    EXPERIMENT can be:
+    - Simple name: test_csv
+    - Relative path: experiments/test_csv
+    """
+    from adare.cli.experiment import exec_experiment_validate
+    args = SimpleNamespace(
+        experiment=experiment,
+        environment=environment,
+        project=project
+    )
+    exec_with_error_printing(exec_experiment_validate, args)
+
+
+@experiment.command()
+@click.argument('experiment', type=click.Path(exists=False))
 @click.option('--project', '-p', help='Name of the project')
 @click.option('--force', '-f', is_flag=True, help='Force removal even if experiment has productive runs')
 @click.option('--keep-files', is_flag=True, help='Keep experiment directory on filesystem (only remove from database)')

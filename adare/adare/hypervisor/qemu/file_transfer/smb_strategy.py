@@ -359,6 +359,34 @@ class SMBStrategy(FileTransferStrategy):
                 f"Failed to create directory junctions: {result.stderr}"
             )
 
+        # Copy tools locally — Windows CreateProcess cannot execute .exe files
+        # through directory junctions that point to SMB/UNC paths.
+        # Prepend local paths in config.json so the agent finds local copies first.
+        local_copy_cmd = (
+            '$localBase = "C:\\adare_local"; '
+            'foreach ($name in @("shared", "project_shared")) { '
+            '  $src = "C:\\adare\\$name\\tools"; '
+            '  $dst = "$localBase\\$name\\tools"; '
+            '  if (Test-Path $src) { '
+            '    New-Item -ItemType Directory -Path $dst -Force | Out-Null; '
+            '    Copy-Item "$src\\*" $dst -Recurse -Force -ErrorAction SilentlyContinue '
+            '  } '
+            '}; '
+            '$cfgPath = "C:\\adare\\run\\config.json"; '
+            'if (Test-Path $cfgPath) { '
+            '  $cfg = Get-Content $cfgPath | ConvertFrom-Json; '
+            '  $localPaths = @("C:\\adare_local\\project_shared\\tools", '
+            '                  "C:\\adare_local\\shared\\tools"); '
+            '  $cfg.tools_paths = $localPaths + @($cfg.tools_paths); '
+            '  $cfg | ConvertTo-Json -Depth 10 | Set-Content $cfgPath '
+            '}'
+        )
+        await context.vm.run_command(
+            local_copy_cmd,
+            stop_event=context.user_interrupt_event,
+        )
+        log.info("Copied tools locally to C:\\adare_local and updated config.json tools_paths")
+
         log.info("SMB share mounted successfully on Windows guest at C:\\adare")
 
     async def _fallback_to_qga(self, context: Any) -> None:

@@ -23,6 +23,7 @@ from adare.backend.experiment.commands import (
     experiment_add_environments as backend_experiment_add_environments,
     experiment_remove_environments as backend_experiment_remove_environments,
     experiment_example as backend_experiment_example,
+    experiment_validate as backend_experiment_validate,
 )
 from adare.backend.experiment.run import experiment_test as backend_experiment_test
 from adare.backend.experiment.directory import ExperimentDirectory
@@ -41,11 +42,13 @@ from adare.core.dto.experiment import (
     ExperimentCloneRequest,
     ExperimentRemoveRequest,
     ExperimentEnvModifyRequest,
+    ExperimentValidateRequest,
     ExperimentInfo,
     ExperimentListItem,
     ExperimentCleanResult,
     ExperimentRemoveResult,
     ExperimentEnvModifyResult,
+    ExperimentValidateResult,
 )
 
 log = logging.getLogger(__name__)
@@ -295,6 +298,31 @@ class ExperimentService:
             return Result.ok(None)
 
         except ExperimentDirectoryDoesNotExistError as e:
+            return Result.from_exception(e)
+
+    def validate(self, request: ExperimentValidateRequest) -> Result[ExperimentValidateResult]:
+        """
+        Validate experiment configuration and integrity without starting a VM.
+
+        Args:
+            request: ExperimentValidateRequest with project path, name, and optional environment
+
+        Returns:
+            Result[ExperimentValidateResult] with validation check results.
+        """
+        try:
+            checks = backend_experiment_validate(
+                request.project_path,
+                request.name,
+                environment_name=request.environment,
+            )
+
+            return Result.ok(ExperimentValidateResult(
+                name=request.name,
+                checks=checks,
+            ))
+
+        except (ExperimentDirectoryDoesNotExistError, ExperimentIntegrityError) as e:
             return Result.from_exception(e)
 
     # =========================================================================

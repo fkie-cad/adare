@@ -450,6 +450,298 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
 
 
 
+def experiment_validate(project_path: Path, experiment_name: str, environment_name: str = None):
+    """Validate experiment configuration and integrity without starting a VM.
+
+    Performs the following checks in order:
+    1. Experiment structure (directory exists, required files present)
+    2. YAML schema validation (playbook parses correctly)
+    3. Variable validation (all references resolve)
+    4. Test reference validation (testfunctions available)
+    5. Environment compatibility (if environment specified)
+    6. Integrity validation (hashes match stored values, if loaded in DB)
+
+    Args:
+        project_path: Path to the project directory
+        experiment_name: Name of the experiment to validate
+        environment_name: Optional environment name to check compatibility
+
+    Returns:
+        list of ValidationCheckResult DTOs
+    """
+    import yaml
+    import cattrs
+    from adare.core.dto.experiment import ValidationCheckResult
+    from adare.parsers import parse_metadata_file
+
+    checks: list[ValidationCheckResult] = []
+
+    # --- 1. Experiment structure ---
+    experiment_directory = ExperimentDirectory(project_path, experiment_name)
+    if not experiment_directory.exists():
+        checks.append(ValidationCheckResult(
+            name='Experiment structure',
+            passed=False,
+            message=f'Experiment directory does not exist: {experiment_directory.path}',
+        ))
+        return checks  # Cannot continue without directory
+
+    missing_files = []
+    if not experiment_directory.playbookfile.exists():
+        missing_files.append('playbook.yml')
+    if not experiment_directory.metadatafile.exists():
+        missing_files.append('metadata.yml')
+
+    if missing_files:
+        checks.append(ValidationCheckResult(
+            name='Experiment structure',
+            passed=False,
+            message=f'Missing required files: {", ".join(missing_files)}',
+        ))
+        return checks  # Cannot continue without required files
+    checks.append(ValidationCheckResult(
+        name='Experiment structure',
+        passed=True,
+        message='Experiment directory and required files exist',
+    ))
+
+    # --- 2. Metadata validation ---
+    try:
+        metadata = parse_metadata_file(experiment_directory.metadatafile)
+        checks.append(ValidationCheckResult(
+            name='Metadata validation',
+            passed=True,
+            message='metadata.yml parsed successfully',
+        ))
+    except (ValueError, LoggedException) as e:
+        checks.append(ValidationCheckResult(
+            name='Metadata validation',
+            passed=False,
+            message=f'metadata.yml parsing failed: {e}',
+        ))
+
+    # --- 3. YAML schema validation ---
+    playbook = None
+    try:
+        from adare.types.playbook import parse_playbook
+        playbook = parse_playbook(experiment_directory.playbookfile)
+        checks.append(ValidationCheckResult(
+            name='YAML schema validation',
+            passed=True,
+            message=f'playbook.yml parsed successfully ({len(playbook.actions)} actions, {len(playbook.tests)} tests)',
+        ))
+    except (ValueError, TypeError) as e:
+        checks.append(ValidationCheckResult(
+            name='YAML schema validation',
+            passed=False,
+            message=f'Playbook validation failed: {e}',
+        ))
+    except (yaml.YAMLError, cattrs.BaseValidationError, KeyError, AttributeError) as e:
+        checks.append(ValidationCheckResult(
+            name='YAML schema validation',
+            passed=False,
+            message=f'Playbook parsing failed: {e}',
+        ))
+
+    # --- 4. Variable validation (only if playbook parsed) ---
+    if playbook is not None:
+        try:
+            from adare.types.playbook_validators import (
+                VariableUsageValidator,
+                DuplicateVariableValidator,
+                VariableDefinitionValidator,
+                FilterValidator,
+                ValidationResult,
+            )
+            usage_validator = VariableUsageValidator()
+            duplicate_validator = DuplicateVariableValidator()
+            definition_validator = VariableDefinitionValidator(usage_validator)
+            filter_validator = FilterValidator(usage_validator)
+
+            combined = ValidationResult()
+            for validator in [usage_validator, duplicate_validator, definition_validator, filter_validator]:
+                combined.merge(validator.validate(playbook))
+
+            if combined.is_valid:
+                checks.append(ValidationCheckResult(
+                    name='Variable validation',
+                    passed=True,
+                    message='All variable references resolve correctly',
+                ))
+            else:
+                error_msgs = [str(err) for err in combined.errors]
+                checks.append(ValidationCheckResult(
+                    name='Variable validation',
+                    passed=False,
+                    message='\n'.join(error_msgs),
+                ))
+            for warning in combined.warnings:
+                checks.append(ValidationCheckResult(
+                    name='Variable validation',
+                    passed=True,
+                    message=warning,
+                    is_warning=True,
+                ))
+        except ImportError as e:
+            checks.append(ValidationCheckResult(
+                name='Variable validation',
+                passed=True,
+                message=f'Variable validation modules not available: {e}',
+                is_warning=True,
+            ))
+
+    # --- 5. Test reference validation ---
+    if playbook is not None and playbook.tests:
+        try:
+            from adare.config.configdirectory import STATE_DIR
+            testfunctions_dir = STATE_DIR / 'testfunctions'
+
+            if not testfunctions_dir.exists():
+                checks.append(ValidationCheckResult(
+                    name='Test reference validation',
+                    passed=True,
+                    message='Global testfunctions directory not found — skipping (load testfunctions first)',
+                    is_warning=True,
+                ))
+            else:
+                # Try database-driven approach first
+                supported_tests = None
+                try:
+                    testfunction_source = _get_testfunction_data_from_database()
+                    if testfunction_source:
+                        from adarelib.testset.testfunction import import_basictest_subclasses
+                        supported_tests = import_basictest_subclasses(source=testfunction_source)
+                except (ImportError, OSError, KeyError):
+                    pass
+
+                if not supported_tests:
+                    from adarelib.testset.testfunction import import_basictest_subclasses
+                    supported_tests = import_basictest_subclasses(directory=testfunctions_dir)
+
+                # Check which test functions are missing
+                from adarelib.testset.testfunction import get_missing_testfunctions
+                testset = experiment_directory.load_testset()
+                missing = get_missing_testfunctions(testset, supported_tests)
+
+                if missing:
+                    checks.append(ValidationCheckResult(
+                        name='Test reference validation',
+                        passed=False,
+                        message=f'Missing testfunctions: {missing}',
+                    ))
+                else:
+                    checks.append(ValidationCheckResult(
+                        name='Test reference validation',
+                        passed=True,
+                        message=f'All {len(playbook.tests)} test references are valid',
+                    ))
+        except ImportError as e:
+            checks.append(ValidationCheckResult(
+                name='Test reference validation',
+                passed=True,
+                message=f'Testfunction validation modules not available: {e}',
+                is_warning=True,
+            ))
+        except (ExperimentIntegrityError, LoggedException) as e:
+            checks.append(ValidationCheckResult(
+                name='Test reference validation',
+                passed=False,
+                message=f'Test reference validation failed: {e}',
+            ))
+    elif playbook is not None:
+        checks.append(ValidationCheckResult(
+            name='Test reference validation',
+            passed=True,
+            message='No tests defined in playbook — skipping',
+            is_warning=True,
+        ))
+
+    # --- 6. Environment compatibility ---
+    if environment_name:
+        try:
+            from adare.database.api.experiment import ExperimentApi
+            with ExperimentApi(project_path) as api:
+                environment = api.get_environment(environment_name, project_path.name)
+                if environment is None:
+                    checks.append(ValidationCheckResult(
+                        name='Environment compatibility',
+                        passed=False,
+                        message=f'Environment "{environment_name}" not found in project',
+                    ))
+                else:
+                    # Check if environment is listed in experiment metadata
+                    try:
+                        metadata = experiment_directory.load_metadata()
+                        if environment_name in metadata.environments:
+                            checks.append(ValidationCheckResult(
+                                name='Environment compatibility',
+                                passed=True,
+                                message=f'Environment "{environment_name}" is compatible with experiment',
+                            ))
+                        else:
+                            checks.append(ValidationCheckResult(
+                                name='Environment compatibility',
+                                passed=True,
+                                message=f'Environment "{environment_name}" is not listed in metadata.yml '
+                                        f'(listed: {", ".join(metadata.environments) or "none"})',
+                                is_warning=True,
+                            ))
+                    except (ValueError, LoggedException, OSError) as e:
+                        checks.append(ValidationCheckResult(
+                            name='Environment compatibility',
+                            passed=True,
+                            message=f'Environment "{environment_name}" exists but metadata could not be checked: {e}',
+                            is_warning=True,
+                        ))
+        except (ValueError, LoggedException, OSError) as e:
+            checks.append(ValidationCheckResult(
+                name='Environment compatibility',
+                passed=False,
+                message=f'Environment check failed: {e}',
+            ))
+
+    # --- 7. Integrity validation ---
+    experiment_ulid = experiment_database.get_experiment_by_project_and_name(
+        project_path, experiment_name, trigger_error=False
+    )
+    if not experiment_ulid:
+        checks.append(ValidationCheckResult(
+            name='Integrity validation',
+            passed=True,
+            message='Experiment not loaded in database — integrity check skipped (load first)',
+            is_warning=True,
+        ))
+    else:
+        try:
+            # Compare playbook hash with stored value
+            hashes = experiment_database.get_experiment_hashes(
+                project_path, environment_name or experiment_name, experiment_name
+            )
+            current_hash = experiment_directory.sha256_playbook
+            stored_hash = hashes.get('playbook', '')
+            if current_hash == stored_hash:
+                checks.append(ValidationCheckResult(
+                    name='Integrity validation',
+                    passed=True,
+                    message='Playbook hash matches database — no modifications detected',
+                ))
+            else:
+                checks.append(ValidationCheckResult(
+                    name='Integrity validation',
+                    passed=False,
+                    message='Playbook has been modified since last load',
+                ))
+        except (ValueError, KeyError) as e:
+            checks.append(ValidationCheckResult(
+                name='Integrity validation',
+                passed=True,
+                message=f'Integrity check could not complete: {e}',
+                is_warning=True,
+            ))
+
+    return checks
+
+
 def experiment_download(project: Path, experiment_ulid: str):
     if not is_logged_in():
         raise NotLoggedInError(log)
