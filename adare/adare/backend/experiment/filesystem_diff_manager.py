@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 from adare.backend.experiment.filesystem_snapshot import (
-    FilesystemSnapshot, calculate_diff, export_diff_json, export_diff_csv
+    FilesystemSnapshot, calculate_diff, export_diff_json, export_diff_csv, export_diff_bodyfile
 )
 
 log = logging.getLogger(__name__)
@@ -220,6 +220,10 @@ class FilesystemDiffManager:
             # Export CSV
             csv_path = artifacts_dir / 'filesystem_diffs.csv'
             export_diff_csv(diff, csv_path)
+
+            # Export bodyfile (mactime format for forensic tools)
+            bodyfile_path = artifacts_dir / 'filesystem_diffs.bodyfile'
+            export_diff_bodyfile(diff, bodyfile_path, initial_snapshot, final_snapshot)
 
             log.info(f"Filesystem diff exported to {artifacts_dir}")
 

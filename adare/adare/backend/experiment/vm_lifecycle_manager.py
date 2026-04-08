@@ -616,12 +616,14 @@ class VMLifecycleManager:
                     }
 
                     # Export to JSON and CSV formats
-                    from adare.backend.experiment.filesystem_snapshot import export_diff_json, export_diff_csv
+                    from adare.backend.experiment.filesystem_snapshot import export_diff_json, export_diff_csv, export_diff_bodyfile
                     json_path = diff_dir / 'filesystem_diffs.json'
                     csv_path = diff_dir / 'filesystem_diffs.csv'
+                    bodyfile_path = diff_dir / 'filesystem_diffs.bodyfile'
 
                     export_diff_json(diff_results, json_path, metadata)
                     export_diff_csv(diff_results, csv_path)
+                    export_diff_bodyfile(diff_results, bodyfile_path)
 
                     log.info(f"Host-side diff exported to {diff_dir}")
                     log.info(f"Filesystem changes - "

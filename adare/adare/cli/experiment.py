@@ -9,6 +9,7 @@ from adare.core.dto.experiment import (
     ExperimentRemoveRequest,
     ExperimentEnvModifyRequest,
     ExperimentLoadRequest,
+    ExperimentValidateRequest,
 )
 from adare.console import print_success_message, print_error_message
 
@@ -751,3 +752,58 @@ def exec_experiment_clone(arguments):
         )
     else:
         _handle_api_error(result)
+
+
+def exec_experiment_validate(arguments):
+    """Validate experiment configuration and integrity without starting a VM."""
+    from rich.console import Console
+
+    project_directory = _get_project_path(arguments)
+    experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
+    environment_name = None
+    if hasattr(arguments, 'environment') and arguments.environment:
+        environment_name = resolve_environment_path(arguments.environment, project_directory)
+
+    api = AdareAPI()
+    result = api.experiment.validate(ExperimentValidateRequest(
+        project_path=project_directory,
+        name=experiment_name,
+        environment=environment_name,
+    ))
+
+    if not result.success:
+        _handle_api_error(result)
+        return
+
+    console = Console()
+    data = result.data
+
+    console.print()
+    console.print(f'Validating experiment: [bold]{data.name}[/bold]')
+    console.print()
+
+    for check in data.checks:
+        if check.is_warning:
+            console.print(f'  [yellow]⚠[/yellow]  {check.name}: {check.message}', style='yellow')
+        elif check.passed:
+            console.print(f'  [green]✓[/green]  {check.name}: {check.message}')
+        else:
+            console.print(f'  [red]✗[/red]  {check.name}: {check.message}', style='red')
+
+    console.print()
+    summary_parts = []
+    if data.passed_count > 0:
+        summary_parts.append(f'[green]{data.passed_count} passed[/green]')
+    if data.failed_count > 0:
+        summary_parts.append(f'[red]{data.failed_count} failed[/red]')
+    if data.warning_count > 0:
+        summary_parts.append(f'[yellow]{data.warning_count} warnings[/yellow]')
+    console.print(f'  {", ".join(summary_parts)}')
+    console.print()
+
+    if data.is_valid:
+        console.print('  [bold green]Validation passed[/bold green]')
+    else:
+        import sys
+        console.print('  [bold red]Validation failed[/bold red]')
+        sys.exit(1)

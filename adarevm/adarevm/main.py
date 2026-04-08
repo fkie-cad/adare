@@ -88,6 +88,7 @@ def load_config(run_dir: str) -> dict:
     """Load configuration from config.json in run directory."""
     config_path = Path(run_dir) / "config.json"
     if not config_path.exists():
+        log.warning(f"Config file not found: {config_path}")
         return {}
     
     try:

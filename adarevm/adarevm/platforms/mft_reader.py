@@ -1,20 +1,19 @@
 """
 Windows MFT (Master File Table) reader for forensic filesystem snapshots.
 
-Provides direct NTFS MFT parsing to efficiently capture all 4 NTFS timestamps
-(Created, Modified, Accessed, MFT Modified) along with file paths and sizes.
+Reads MFT entries directly from the NTFS volume using Win32 API (ctypes),
+eliminating the broken PowerShell extraction approach. Parses all 4 NTFS
+timestamps (Created, Modified, Accessed, MFT Modified) along with file
+paths and sizes.
 
-This module uses custom minimal NTFS parsing without external dependencies,
-reading MFT entries directly from the filesystem for maximum performance.
+Uses CreateFileW/ReadFile to open \\.\C: and stream MFT records directly,
+handling MFT fragmentation via data run parsing.
 """
 
+import sys
 import struct
 import logging
-import subprocess
 import platform
-import tempfile
-import json
-from pathlib import Path
 from typing import Dict, Optional, Tuple, Any
 
 log = logging.getLogger(__name__)
@@ -26,10 +25,10 @@ FILE_SIGNATURE = b'FILE'  # MFT entry signature
 # Attribute types
 ATTR_STANDARD_INFORMATION = 0x10  # Contains 4 timestamps
 ATTR_FILE_NAME = 0x30  # Contains filename and parent reference
+ATTR_DATA = 0x80  # Data attribute (contains data runs for non-resident)
 ATTR_END = 0xFFFFFFFF  # End of attributes marker
 
 # Windows FILETIME epoch (1601-01-01) to Unix epoch (1970-01-01)
-# Difference in seconds
 FILETIME_TO_UNIX_OFFSET = 11644473600
 
 # MFT flags
@@ -38,6 +37,14 @@ MFT_RECORD_IS_DIRECTORY = 0x0002
 
 # Root directory MFT record number
 MFT_ROOT_RECORD = 5
+
+# Filename namespace priority: Win32 > Win32+DOS > POSIX > DOS
+# Win32 (1) = long name, DOS (2) = 8.3 short name, Win32+DOS (3) = both,
+# POSIX (0) = case-sensitive
+NAMESPACE_PRIORITY = {1: 4, 3: 3, 0: 2, 2: 1}
+
+# Read buffer size for streaming MFT parsing (1MB = ~1024 MFT entries)
+READ_BUFFER_SIZE = 1024 * 1024
 
 
 class MFTReaderException(Exception):
@@ -51,13 +58,214 @@ class PrivilegeError(MFTReaderException):
 
 
 class MFTExtractionError(MFTReaderException):
-    """MFT file extraction failed."""
+    """MFT volume reading failed."""
     pass
 
 
 class MFTParsingError(MFTReaderException):
-    """MFT file parsing failed."""
+    """MFT parsing failed."""
     pass
+
+
+class NTFSVolumeReader:
+    """Read raw data from an NTFS volume via Win32 API (ctypes).
+
+    Opens the volume device (e.g. \\\\.\\C:) using CreateFileW with
+    GENERIC_READ access, then provides seek+read via SetFilePointerEx
+    and ReadFile. Must be used as a context manager.
+
+    Requires Administrator privileges.
+    """
+
+    def __init__(self, volume: str = "C:"):
+        import ctypes
+        import ctypes.wintypes
+
+        self._ctypes = ctypes
+        self._kernel32 = ctypes.windll.kernel32
+        self._handle = None
+
+        device_path = f"\\\\.\\{volume}"
+        log.info(f"CLAUDE: Opening volume device: {device_path}")
+
+        GENERIC_READ = 0x80000000
+        FILE_SHARE_READ = 0x00000001
+        FILE_SHARE_WRITE = 0x00000002
+        OPEN_EXISTING = 3
+        INVALID_HANDLE_VALUE = ctypes.wintypes.HANDLE(-1).value
+
+        handle = self._kernel32.CreateFileW(
+            device_path,
+            GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            None,
+            OPEN_EXISTING,
+            0,
+            None,
+        )
+
+        if handle == INVALID_HANDLE_VALUE:
+            error_code = self._kernel32.GetLastError()
+            raise MFTExtractionError(
+                f"Failed to open volume {device_path}: "
+                f"Win32 error {error_code}"
+            )
+
+        self._handle = handle
+
+    def read_at(self, offset: int, size: int) -> bytes:
+        """Read `size` bytes from the volume at `offset`."""
+        ctypes = self._ctypes
+
+        # Seek to offset
+        new_pos = ctypes.c_longlong(0)
+        success = self._kernel32.SetFilePointerEx(
+            self._handle,
+            ctypes.c_longlong(offset),
+            ctypes.byref(new_pos),
+            0,  # FILE_BEGIN
+        )
+        if not success:
+            error_code = self._kernel32.GetLastError()
+            raise MFTExtractionError(
+                f"SetFilePointerEx failed at offset {offset}: "
+                f"Win32 error {error_code}"
+            )
+
+        # Read data
+        buf = ctypes.create_string_buffer(size)
+        bytes_read = ctypes.wintypes.DWORD(0)
+        success = self._kernel32.ReadFile(
+            self._handle,
+            buf,
+            size,
+            ctypes.byref(bytes_read),
+            None,
+        )
+        if not success:
+            error_code = self._kernel32.GetLastError()
+            raise MFTExtractionError(
+                f"ReadFile failed at offset {offset}: "
+                f"Win32 error {error_code}"
+            )
+
+        return buf.raw[:bytes_read.value]
+
+    def close(self):
+        """Close the volume handle."""
+        if self._handle is not None:
+            self._kernel32.CloseHandle(self._handle)
+            self._handle = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
+
+class NTFSBootSector:
+    """Parse the NTFS boot sector (first 512 bytes of the volume).
+
+    Extracts:
+    - bytes_per_sector (offset 0x0B, 2 bytes)
+    - sectors_per_cluster (offset 0x0D, 1 byte)
+    - mft_cluster_number (offset 0x30, 8 bytes) — MFT start cluster
+    - mft_record_size — decoded from offset 0x40
+    """
+
+    def __init__(self, boot_data: bytes):
+        if len(boot_data) < 512:
+            raise MFTParsingError(
+                f"Boot sector too short: {len(boot_data)} bytes"
+            )
+
+        # Verify NTFS signature at offset 0x03
+        oem_id = boot_data[0x03:0x0B]
+        if b'NTFS' not in oem_id:
+            raise MFTParsingError(
+                f"Not an NTFS volume (OEM ID: {oem_id!r})"
+            )
+
+        self.bytes_per_sector = struct.unpack('<H', boot_data[0x0B:0x0D])[0]
+        self.sectors_per_cluster = struct.unpack('<B', boot_data[0x0D:0x0E])[0]
+        self.mft_cluster_number = struct.unpack('<Q', boot_data[0x30:0x38])[0]
+
+        # MFT record size: offset 0x40, 1 signed byte
+        # If positive: size in clusters. If negative: size is 2^|value| bytes.
+        raw = struct.unpack('<b', boot_data[0x40:0x41])[0]
+        if raw > 0:
+            self.mft_record_size = (
+                raw * self.sectors_per_cluster * self.bytes_per_sector
+            )
+        else:
+            self.mft_record_size = 1 << (-raw)
+
+        self.cluster_size = self.bytes_per_sector * self.sectors_per_cluster
+        self.mft_offset = self.mft_cluster_number * self.cluster_size
+
+        log.info(
+            f"CLAUDE: NTFS boot sector parsed — "
+            f"bytes/sector={self.bytes_per_sector}, "
+            f"sectors/cluster={self.sectors_per_cluster}, "
+            f"cluster_size={self.cluster_size}, "
+            f"MFT cluster={self.mft_cluster_number}, "
+            f"MFT offset={self.mft_offset}, "
+            f"record_size={self.mft_record_size}"
+        )
+
+
+def parse_data_runs(run_data: bytes) -> list:
+    """Parse NTFS data runs from a non-resident $DATA attribute.
+
+    Each data run is encoded as:
+    - 1 byte header: low nibble = length field size, high nibble = offset field size
+    - N bytes: run length in clusters (unsigned)
+    - M bytes: run offset delta in clusters (signed, relative to previous)
+
+    A header byte of 0x00 terminates the list.
+
+    Returns:
+        List of (absolute_cluster_offset, cluster_count) tuples.
+    """
+    runs = []
+    pos = 0
+    prev_offset = 0
+
+    while pos < len(run_data):
+        header = run_data[pos]
+        if header == 0x00:
+            break
+        pos += 1
+
+        length_size = header & 0x0F
+        offset_size = (header >> 4) & 0x0F
+
+        if length_size == 0 or pos + length_size + offset_size > len(run_data):
+            break
+
+        # Parse run length (unsigned)
+        length_bytes = run_data[pos:pos + length_size]
+        run_length = int.from_bytes(length_bytes, byteorder='little', signed=False)
+        pos += length_size
+
+        # Parse run offset delta (signed)
+        if offset_size > 0:
+            offset_bytes = run_data[pos:pos + offset_size]
+            offset_delta = int.from_bytes(offset_bytes, byteorder='little', signed=True)
+            pos += offset_size
+        else:
+            # Sparse run (no physical clusters)
+            offset_delta = 0
+
+        absolute_offset = prev_offset + offset_delta
+        prev_offset = absolute_offset
+
+        if run_length > 0 and offset_size > 0:
+            runs.append((absolute_offset, run_length))
+
+    return runs
 
 
 class MFTRecord:
@@ -90,43 +298,27 @@ class MFTParser:
 
         FILETIME: 100-nanosecond intervals since 1601-01-01 00:00:00
         Unix epoch: seconds since 1970-01-01 00:00:00
-
-        Args:
-            filetime: Windows FILETIME value
-
-        Returns:
-            Unix epoch timestamp as float
         """
         if filetime == 0:
             return 0.0
-
-        seconds = filetime / 10000000.0  # Convert to seconds
-        return seconds - FILETIME_TO_UNIX_OFFSET  # Adjust epoch
+        seconds = filetime / 10000000.0
+        return seconds - FILETIME_TO_UNIX_OFFSET
 
     @staticmethod
     def parse_standard_information(attr_data: bytes) -> Dict[str, float]:
         """Parse $STANDARD_INFORMATION attribute (0x10).
 
-        Structure (resident attribute):
         Offset  Size  Description
         0       8     Created timestamp (FILETIME)
         8       8     Modified timestamp (FILETIME)
         16      8     MFT modified timestamp (FILETIME)
         24      8     Accessed timestamp (FILETIME)
-        32      4     File attributes (flags)
-
-        Args:
-            attr_data: Attribute content bytes
-
-        Returns:
-            Dict with 'created', 'modified', 'accessed', 'mft_modified' as Unix epoch
         """
         if len(attr_data) < 32:
             log.warning("$STANDARD_INFORMATION too short, skipping")
             return {}
 
         try:
-            # Parse 4 FILETIME timestamps (8 bytes each, little-endian)
             created_ft = struct.unpack('<Q', attr_data[0:8])[0]
             modified_ft = struct.unpack('<Q', attr_data[8:16])[0]
             mft_modified_ft = struct.unpack('<Q', attr_data[16:24])[0]
@@ -136,7 +328,7 @@ class MFTParser:
                 'created': MFTParser.filetime_to_unix(created_ft),
                 'modified': MFTParser.filetime_to_unix(modified_ft),
                 'accessed': MFTParser.filetime_to_unix(accessed_ft),
-                'mft_modified': MFTParser.filetime_to_unix(mft_modified_ft)
+                'mft_modified': MFTParser.filetime_to_unix(mft_modified_ft),
             }
         except struct.error as e:
             log.warning(f"Failed to parse $STANDARD_INFORMATION: {e}")
@@ -146,25 +338,6 @@ class MFTParser:
     def parse_file_name(attr_data: bytes) -> Tuple[Optional[int], Optional[str], bool]:
         """Parse $FILE_NAME attribute (0x30).
 
-        Structure (resident attribute):
-        Offset  Size  Description
-        0       6     Parent directory reference (MFT record number in first 48 bits)
-        6       2     Sequence number
-        8       8     Created time
-        16      8     Modified time
-        24      8     MFT modified time
-        32      8     Accessed time
-        40      8     Allocated size
-        48      8     Real size
-        56      4     Flags
-        60      4     Reparse value
-        64      1     Filename length (Unicode characters)
-        65      1     Namespace (0=POSIX, 1=Win32, 2=DOS, 3=Win32+DOS)
-        66      2*N   Filename (UTF-16LE)
-
-        Args:
-            attr_data: Attribute content bytes
-
         Returns:
             (parent_ref, filename, is_directory)
         """
@@ -173,35 +346,23 @@ class MFTParser:
             return (None, None, False)
 
         try:
-            # Parse parent directory reference (6 bytes = 48 bits)
-            # MFT record number is in lower 48 bits
-            parent_ref_bytes = attr_data[0:6] + b'\x00\x00'  # Pad to 8 bytes
+            parent_ref_bytes = attr_data[0:6] + b'\x00\x00'
             parent_ref = struct.unpack('<Q', parent_ref_bytes)[0]
 
-            # Parse file size (real size)
             file_size = struct.unpack('<Q', attr_data[48:56])[0]
 
-            # Parse flags to detect directory
             flags = struct.unpack('<I', attr_data[56:60])[0]
-            is_directory = (flags & 0x10000000) != 0  # FILE_ATTRIBUTE_DIRECTORY
+            is_directory = (flags & 0x10000000) != 0
 
-            # Parse filename length (in Unicode characters)
             filename_length = struct.unpack('<B', attr_data[64:65])[0]
-
-            # Parse namespace
             namespace = struct.unpack('<B', attr_data[65:66])[0]
 
-            # Parse filename (UTF-16LE)
             if len(attr_data) < 66 + (filename_length * 2):
                 log.warning("Filename truncated in $FILE_NAME")
                 return (parent_ref, None, is_directory)
 
             filename_bytes = attr_data[66:66 + (filename_length * 2)]
             filename = filename_bytes.decode('utf-16le', errors='replace')
-
-            # Prefer Win32 namespace (1) over DOS (2) or POSIX (0)
-            # DOS names are short 8.3 names like "PROGRA~1"
-            # We'll return all but let caller filter
 
             return (parent_ref, filename, is_directory)
 
@@ -210,122 +371,92 @@ class MFTParser:
             return (None, None, False)
 
     @staticmethod
-    def apply_fixup(data: bytes, update_seq_offset: int, update_seq_size: int) -> bytes:
+    def apply_fixup(data: bytes, update_seq_offset: int,
+                    update_seq_size: int) -> bytes:
         """Apply NTFS update sequence (fixup array) to restore original data.
 
-        NTFS stores a fixup array to detect corruption. The last 2 bytes of each
-        512-byte sector are replaced with an update sequence number. This function
-        restores the original bytes.
-
-        Args:
-            data: MFT entry data (1024 bytes)
-            update_seq_offset: Offset to update sequence array
-            update_seq_size: Size of update sequence array (in 16-bit words)
-
-        Returns:
-            Fixed data with original bytes restored
+        The last 2 bytes of each 512-byte sector are replaced with an update
+        sequence number by NTFS. This restores the original bytes.
         """
         if update_seq_size < 2:
-            return data  # No fixup needed
+            return data
 
         try:
-            # Read update sequence number (2 bytes)
             update_seq_num = data[update_seq_offset:update_seq_offset + 2]
 
-            # Read update sequence array (update_seq_size-1 entries, each 2 bytes)
             update_seq_array = []
             for i in range(1, update_seq_size):
                 offset = update_seq_offset + (i * 2)
                 update_seq_array.append(data[offset:offset + 2])
 
-            # Apply fixup to each 512-byte sector
             data_bytearray = bytearray(data)
             for i, fixup_value in enumerate(update_seq_array):
-                # Replace last 2 bytes of each sector (at offset 510, 1022)
                 sector_offset = (i + 1) * 512 - 2
 
                 if sector_offset + 2 <= len(data_bytearray):
-                    # Verify update sequence number matches
                     if data_bytearray[sector_offset:sector_offset + 2] != update_seq_num:
                         log.warning(f"Update sequence mismatch at sector {i}")
-
-                    # Replace with original bytes
                     data_bytearray[sector_offset:sector_offset + 2] = fixup_value
 
             return bytes(data_bytearray)
 
         except (struct.error, IndexError) as e:
             log.warning(f"Failed to apply fixup: {e}")
-            return data  # Return original data if fixup fails
+            return data
 
     @staticmethod
     def parse_mft_entry(data: bytes, record_number: int) -> Optional[MFTRecord]:
-        """Parse a single MFT entry (1024 bytes).
+        """Parse a single 1024-byte MFT entry.
 
-        Steps:
-        1. Validate FILE signature
-        2. Parse fixup array (update sequence)
-        3. Iterate through attributes
-        4. Extract $STANDARD_INFORMATION timestamps
-        5. Extract $FILE_NAME (filename + parent reference)
-
-        Args:
-            data: 1024 bytes of MFT entry
-            record_number: MFT record number
-
-        Returns:
-            MFTRecord or None if invalid/deleted
+        Returns MFTRecord or None if invalid/deleted.
         """
         if len(data) < MFT_RECORD_SIZE:
             return None
 
         try:
-            # Validate signature
             signature = data[0:4]
             if signature != FILE_SIGNATURE:
-                return None  # Not a valid MFT entry
+                return None
 
-            # Parse MFT entry header
             update_seq_offset = struct.unpack('<H', data[4:6])[0]
             update_seq_size = struct.unpack('<H', data[6:8])[0]
             flags = struct.unpack('<H', data[22:24])[0]
             used_size = struct.unpack('<I', data[24:28])[0]
             first_attr_offset = struct.unpack('<H', data[20:22])[0]
 
-            # Check if entry is in use
             if not (flags & MFT_RECORD_IN_USE):
-                return None  # Deleted entry, skip
+                return None
 
-            # Apply fixup array
             data = MFTParser.apply_fixup(data, update_seq_offset, update_seq_size)
 
-            # Create record object
             record = MFTRecord(record_number)
             record.is_directory = (flags & MFT_RECORD_IS_DIRECTORY) != 0
 
-            # Parse attributes
             attr_offset = first_attr_offset
             timestamps_found = False
             filename_found = False
-            file_size = 0
+            current_namespace_priority = -1
 
-            while attr_offset + 16 <= used_size:  # Need at least 16 bytes for header
-                # Parse attribute header
+            while attr_offset + 16 <= used_size:
                 attr_type = struct.unpack('<I', data[attr_offset:attr_offset + 4])[0]
 
                 if attr_type == ATTR_END:
-                    break  # End of attributes
+                    break
 
                 attr_length = struct.unpack('<I', data[attr_offset + 4:attr_offset + 8])[0]
 
                 if attr_length == 0 or attr_offset + attr_length > used_size:
-                    break  # Invalid attribute length
+                    break
 
                 non_resident = struct.unpack('<B', data[attr_offset + 8:attr_offset + 9])[0]
 
                 if non_resident == 0:  # Resident attribute
-                    content_length = struct.unpack('<I', data[attr_offset + 16:attr_offset + 20])[0]
-                    content_offset = struct.unpack('<H', data[attr_offset + 20:attr_offset + 22])[0]
+                    content_length = struct.unpack(
+                        '<I', data[attr_offset + 16:attr_offset + 20]
+                    )[0]
+                    content_offset = struct.unpack(
+                        '<H', data[attr_offset + 20:attr_offset + 22]
+                    )[0]
 
                     content_start = attr_offset + content_offset
                     content_end = content_start + content_length
@@ -333,8 +464,11 @@ class MFTParser:
                     if content_end <= used_size:
                         attr_content = data[content_start:content_end]
 
-                        if attr_type == ATTR_STANDARD_INFORMATION and not timestamps_found:
-                            timestamps = MFTParser.parse_standard_information(attr_content)
+                        if (attr_type == ATTR_STANDARD_INFORMATION
+                                and not timestamps_found):
+                            timestamps = MFTParser.parse_standard_information(
+                                attr_content
+                            )
                             if timestamps:
                                 record.created = timestamps.get('created')
                                 record.modified = timestamps.get('modified')
@@ -343,183 +477,342 @@ class MFTParser:
                                 timestamps_found = True
 
                         elif attr_type == ATTR_FILE_NAME:
-                            parent_ref, filename, is_dir = MFTParser.parse_file_name(attr_content)
+                            parent_ref, filename, is_dir = (
+                                MFTParser.parse_file_name(attr_content)
+                            )
 
-                            # Parse file size from $FILE_NAME
                             if len(attr_content) >= 56:
-                                file_size = struct.unpack('<Q', attr_content[48:56])[0]
+                                file_size = struct.unpack(
+                                    '<Q', attr_content[48:56]
+                                )[0]
+                            else:
+                                file_size = 0
 
                             if parent_ref is not None and filename:
-                                # Prefer Win32 namespace (namespace byte at offset 65)
-                                namespace = attr_content[65] if len(attr_content) > 65 else 0
+                                namespace = (
+                                    attr_content[65]
+                                    if len(attr_content) > 65
+                                    else 0
+                                )
+                                new_priority = NAMESPACE_PRIORITY.get(
+                                    namespace, 0
+                                )
 
-                                # Only use this filename if we haven't found a better one
-                                # Prefer Win32 (1) over DOS (2) or POSIX (0)
-                                if not filename_found or namespace == 1:
+                                if new_priority > current_namespace_priority:
                                     record.parent_ref = parent_ref
                                     record.filename = filename
                                     record.is_directory = is_dir
                                     record.file_size = file_size
+                                    current_namespace_priority = new_priority
                                     filename_found = True
 
-                # Move to next attribute
                 attr_offset += attr_length
 
-            # Return record only if we found essential data
             if timestamps_found and filename_found:
                 return record
-            else:
-                return None  # Incomplete record
+            return None
 
         except (struct.error, IndexError, ValueError) as e:
             log.debug(f"Failed to parse MFT entry {record_number}: {e}")
             return None
 
     @staticmethod
-    def reconstruct_paths(records: Dict[int, MFTRecord],
-                         root_path_filter: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
-        """Reconstruct full file paths from parent references.
+    def parse_mft_entry_data_runs(data: bytes) -> list:
+        """Parse MFT entry 0 to extract the $DATA attribute's data runs.
 
-        Algorithm:
-        1. For each record, walk parent chain to root (record 5)
-        2. Build path string: C:\\parent\\child\\file.txt
-        3. Apply path filter if specified
-        4. Format into output dict
-
-        Args:
-            records: Dict of record_number -> MFTRecord
-            root_path_filter: Optional filter (e.g., C:\\Windows)
+        MFT entry 0 is the $MFT file's own record. Its $DATA attribute
+        is non-resident and contains data runs describing where the MFT
+        is stored on disk (potentially fragmented).
 
         Returns:
-            Dict mapping full paths to metadata
+            List of (cluster_offset, cluster_count) tuples.
         """
-        result = {}
+        if len(data) < MFT_RECORD_SIZE:
+            raise MFTParsingError("MFT entry 0 too short")
 
-        for record_num, record in records.items():
-            if not record.filename:
-                continue
+        signature = data[0:4]
+        if signature != FILE_SIGNATURE:
+            raise MFTParsingError(
+                f"MFT entry 0 has invalid signature: {signature!r}"
+            )
 
-            # Build path by walking parent chain
-            path_components = []
-            current_record = record
-            visited = set()
+        update_seq_offset = struct.unpack('<H', data[4:6])[0]
+        update_seq_size = struct.unpack('<H', data[6:8])[0]
+        used_size = struct.unpack('<I', data[24:28])[0]
+        first_attr_offset = struct.unpack('<H', data[20:22])[0]
 
-            while current_record:
-                # Prevent infinite loops
-                if current_record.record_number in visited:
-                    log.warning(f"Circular parent reference detected for record {record_num}")
-                    break
+        data = MFTParser.apply_fixup(data, update_seq_offset, update_seq_size)
 
-                visited.add(current_record.record_number)
+        attr_offset = first_attr_offset
+        while attr_offset + 16 <= used_size:
+            attr_type = struct.unpack('<I', data[attr_offset:attr_offset + 4])[0]
 
-                # Add filename to path
-                path_components.insert(0, current_record.filename)
+            if attr_type == ATTR_END:
+                break
 
-                # Stop at root
-                if current_record.record_number == MFT_ROOT_RECORD:
-                    break
+            attr_length = struct.unpack(
+                '<I', data[attr_offset + 4:attr_offset + 8]
+            )[0]
+            if attr_length == 0 or attr_offset + attr_length > used_size:
+                break
 
-                # Move to parent
-                parent_ref = current_record.parent_ref
-                if parent_ref is None or parent_ref not in records:
-                    break
+            non_resident = struct.unpack(
+                '<B', data[attr_offset + 8:attr_offset + 9]
+            )[0]
 
-                current_record = records[parent_ref]
+            if attr_type == ATTR_DATA and non_resident == 1:
+                # Non-resident $DATA attribute
+                # Data runs offset is at attribute offset + 0x20
+                run_offset_in_attr = struct.unpack(
+                    '<H', data[attr_offset + 0x20:attr_offset + 0x22]
+                )[0]
+                run_data_start = attr_offset + run_offset_in_attr
+                run_data_end = attr_offset + attr_length
+                run_data = data[run_data_start:run_data_end]
 
-            # Build full path
-            if not path_components:
-                continue
+                runs = parse_data_runs(run_data)
+                if runs:
+                    log.info(
+                        f"CLAUDE: Parsed {len(runs)} data run(s) from "
+                        f"MFT entry 0"
+                    )
+                    return runs
 
-            # Skip root directory itself (record 5 with filename ".")
-            if len(path_components) == 1 and path_components[0] == '.':
-                continue
+            attr_offset += attr_length
 
-            # Build Windows path
-            if path_components[0] == '.':
-                path_components[0] = 'C:'
-
-            full_path = '\\'.join(path_components)
-
-            # Ensure path starts with C:
-            if not full_path.startswith('C:'):
-                full_path = f"C:\\{full_path}"
-
-            # Apply path filter
-            if root_path_filter:
-                # Normalize filter path
-                filter_normalized = root_path_filter.replace('/', '\\')
-                if not filter_normalized.endswith('\\'):
-                    filter_normalized += '\\'
-
-                # Check if path starts with filter
-                if not full_path.upper().startswith(filter_normalized.upper()):
-                    continue
-
-            # Add to result (common format with nested timestamps)
-            result[full_path] = {
-                'size': record.file_size,
-                'mtime': record.modified or 0.0,
-                'timestamps': {
-                    'modified': record.modified or 0.0,
-                    'accessed': record.accessed or 0.0,
-                    'created': record.created or 0.0,
-                    'mft_modified': record.mft_modified or 0.0
-                }
-            }
-
-        return result
+        raise MFTParsingError(
+            "No non-resident $DATA attribute found in MFT entry 0"
+        )
 
     @staticmethod
-    def parse_mft_file(mft_file_path: Path,
-                      root_path_filter: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
-        """Parse MFT file and return file metadata dict.
+    def parse_mft_from_volume(
+        volume_reader: 'NTFSVolumeReader',
+        boot_sector: 'NTFSBootSector',
+    ) -> Dict[int, MFTRecord]:
+        """Stream-parse all MFT entries directly from the volume.
 
-        Two-pass algorithm:
-        1. First pass: Build record_number -> MFTRecord mapping
-        2. Second pass: Reconstruct full paths from parent references
-
-        Args:
-            mft_file_path: Path to extracted MFT file
-            root_path_filter: Optional path filter (e.g., C:\\Windows)
+        1. Read MFT entry 0 at the boot sector offset
+        2. Parse its $DATA data runs (handles MFT fragmentation)
+        3. Iterate through all data runs, reading in 1MB chunks
+        4. Parse each 1024-byte entry
 
         Returns:
-            Dict mapping full paths to file metadata
+            Dict of record_number -> MFTRecord
         """
-        log.info(f"CLAUDE: Parsing MFT file: {mft_file_path}")
+        record_size = boot_sector.mft_record_size
+        cluster_size = boot_sector.cluster_size
+        mft_offset = boot_sector.mft_offset
+
+        # Step 1: Read MFT entry 0 to get data runs
+        entry0_data = volume_reader.read_at(mft_offset, record_size)
+        data_runs = MFTParser.parse_mft_entry_data_runs(entry0_data)
+
+        # Calculate total MFT size from data runs
+        total_clusters = sum(count for _, count in data_runs)
+        total_bytes = total_clusters * cluster_size
+        total_entries = total_bytes // record_size
+        log.info(
+            f"CLAUDE: MFT spans {total_clusters} clusters "
+            f"({total_bytes / (1024*1024):.1f} MB), "
+            f"~{total_entries} entries across {len(data_runs)} run(s)"
+        )
+
+        # Step 2: Stream through data runs, parsing entries
         records = {}
+        record_number = 0
+        entries_per_buffer = READ_BUFFER_SIZE // record_size
 
-        try:
-            with open(mft_file_path, 'rb') as f:
-                record_number = 0
+        for run_idx, (cluster_offset, cluster_count) in enumerate(data_runs):
+            run_byte_offset = cluster_offset * cluster_size
+            run_byte_length = cluster_count * cluster_size
+            bytes_read_in_run = 0
 
-                while True:
-                    data = f.read(MFT_RECORD_SIZE)
-                    if len(data) < MFT_RECORD_SIZE:
-                        break
+            while bytes_read_in_run < run_byte_length:
+                # Read up to 1MB at a time
+                remaining = run_byte_length - bytes_read_in_run
+                chunk_size = min(READ_BUFFER_SIZE, remaining)
+                # Align to record size
+                chunk_size = (chunk_size // record_size) * record_size
+                if chunk_size == 0:
+                    break
 
-                    record = MFTParser.parse_mft_entry(data, record_number)
+                read_offset = run_byte_offset + bytes_read_in_run
+                chunk = volume_reader.read_at(read_offset, chunk_size)
+
+                if len(chunk) < record_size:
+                    break
+
+                # Parse each entry in the chunk
+                entries_in_chunk = len(chunk) // record_size
+                for i in range(entries_in_chunk):
+                    entry_data = chunk[i * record_size:(i + 1) * record_size]
+                    record = MFTParser.parse_mft_entry(entry_data, record_number)
                     if record:
                         records[record_number] = record
-
                     record_number += 1
 
-                    # Progress logging every 50k records
-                    if record_number % 50000 == 0:
-                        log.info(f"CLAUDE: Processed {record_number} MFT records, "
-                                f"{len(records)} valid")
+                bytes_read_in_run += len(chunk)
 
-            log.info(f"CLAUDE: MFT parsing complete. Total records: {record_number}, "
-                    f"Valid: {len(records)}")
+            if record_number % 50000 > 0 and run_idx == len(data_runs) - 1:
+                log.info(
+                    f"CLAUDE: Processed {record_number} MFT records, "
+                    f"{len(records)} valid"
+                )
 
-            # Second pass: Reconstruct paths
-            log.info("CLAUDE: Reconstructing file paths...")
-            result = MFTParser.reconstruct_paths(records, root_path_filter)
-            log.info(f"CLAUDE: Path reconstruction complete. Total files: {len(result)}")
+            # Progress logging after each run
+            if len(data_runs) > 1:
+                log.info(
+                    f"CLAUDE: Completed data run {run_idx + 1}/{len(data_runs)}"
+                )
 
-            return result
+        log.info(
+            f"CLAUDE: MFT parsing complete. Total records: {record_number}, "
+            f"Valid: {len(records)}"
+        )
+        return records
 
-        except OSError as e:
-            raise MFTParsingError(f"Failed to read MFT file: {e}")
+
+def reconstruct_paths_memoized(
+    records: Dict[int, MFTRecord],
+    root_path_filter: Optional[str] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Reconstruct full file paths from parent references with memoization.
+
+    Uses a path cache so each record's path is computed at most once,
+    giving O(N) total work instead of O(N*D) where D is average depth.
+
+    Args:
+        records: Dict of record_number -> MFTRecord
+        root_path_filter: Optional filter (e.g., C:\\Windows)
+
+    Returns:
+        Dict mapping full paths to metadata
+    """
+    path_cache: Dict[int, Optional[str]] = {}
+
+    # Guard against very deep directory trees
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(old_limit, 10000))
+
+    def get_path(record_num: int, depth: int = 0) -> Optional[str]:
+        if record_num in path_cache:
+            return path_cache[record_num]
+
+        if record_num not in records:
+            path_cache[record_num] = None
+            return None
+
+        record = records[record_num]
+
+        # Root directory
+        if record.record_number == MFT_ROOT_RECORD:
+            path_cache[record_num] = "C:"
+            return "C:"
+
+        # Iterative fallback for very deep paths
+        if depth > 5000:
+            return _get_path_iterative(record_num, records, path_cache)
+
+        parent_ref = record.parent_ref
+        if parent_ref is None:
+            full_path = f"C:\\{record.filename}"
+            path_cache[record_num] = full_path
+            return full_path
+
+        parent_path = get_path(parent_ref, depth + 1)
+        if parent_path is None:
+            full_path = f"C:\\{record.filename}"
+        else:
+            full_path = f"{parent_path}\\{record.filename}"
+
+        path_cache[record_num] = full_path
+        return full_path
+
+    # Normalize filter
+    filter_normalized = None
+    if root_path_filter:
+        filter_normalized = root_path_filter.replace('/', '\\')
+        if not filter_normalized.endswith('\\'):
+            filter_normalized += '\\'
+
+    result = {}
+    for record_num, record in records.items():
+        if not record.filename:
+            continue
+
+        # Skip root directory itself
+        if record.record_number == MFT_ROOT_RECORD:
+            continue
+
+        full_path = get_path(record_num)
+        if full_path is None:
+            continue
+
+        # Apply path filter
+        if filter_normalized:
+            if not full_path.upper().startswith(filter_normalized.upper()):
+                continue
+
+        result[full_path] = {
+            'size': record.file_size,
+            'mtime': record.modified or 0.0,
+            'timestamps': {
+                'modified': record.modified or 0.0,
+                'accessed': record.accessed or 0.0,
+                'created': record.created or 0.0,
+                'mft_modified': record.mft_modified or 0.0,
+            },
+        }
+
+    # Restore recursion limit
+    sys.setrecursionlimit(old_limit)
+
+    log.info(f"CLAUDE: Path reconstruction complete. Total files: {len(result)}")
+    return result
+
+
+def _get_path_iterative(
+    record_num: int,
+    records: Dict[int, MFTRecord],
+    path_cache: Dict[int, Optional[str]],
+) -> Optional[str]:
+    """Iterative fallback for very deep directory trees."""
+    chain = []
+    current = record_num
+    visited = set()
+
+    while current is not None and current not in path_cache:
+        if current in visited:
+            log.warning(f"Circular parent ref detected at record {current}")
+            break
+        visited.add(current)
+
+        if current not in records:
+            break
+
+        rec = records[current]
+        chain.append(current)
+
+        if rec.record_number == MFT_ROOT_RECORD:
+            break
+
+        current = rec.parent_ref
+
+    # Build paths from deepest known point
+    base_path = path_cache.get(current) if current is not None else None
+
+    for rec_num in reversed(chain):
+        rec = records[rec_num]
+        if rec.record_number == MFT_ROOT_RECORD:
+            path_cache[rec_num] = "C:"
+        elif base_path is None:
+            base_path = f"C:\\{rec.filename}"
+            path_cache[rec_num] = base_path
+        else:
+            base_path = f"{base_path}\\{rec.filename}"
+            path_cache[rec_num] = base_path
+
+    return path_cache.get(record_num)
 
 
 class MFTReader:
@@ -533,7 +826,7 @@ class MFTReader:
             (is_admin: bool, error_message: str)
         """
         if platform.system().lower() != 'windows':
-            return (True, "")  # Not Windows, privilege check not applicable
+            return (True, "")
 
         try:
             import ctypes
@@ -546,69 +839,27 @@ class MFTReader:
                 )
                 return (False, error_msg)
 
-            log.info("CLAUDE: Running with Administrator privileges - MFT access enabled")
+            log.info(
+                "CLAUDE: Running with Administrator privileges — "
+                "MFT access enabled"
+            )
             return (True, "")
 
-        except Exception as e:
+        except (AttributeError, OSError) as e:
             error_msg = f"Failed to check admin privileges: {e}"
             log.error(f"CLAUDE: {error_msg}")
             return (False, error_msg)
 
     @staticmethod
-    def extract_mft_to_file(output_path: Path, volume: str = "C:") -> Path:
-        """Extract raw MFT file from volume to disk.
+    def get_mft_snapshot(
+        volume: str = "C:",
+        root_path: Optional[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Get filesystem snapshot by parsing MFT directly from the volume.
 
-        Uses PowerShell command to copy $MFT file.
-
-        Args:
-            volume: Volume letter (default: C:)
-            output_path: Where to save extracted MFT
-
-        Returns:
-            Path to extracted MFT file
-        """
-        log.info(f"CLAUDE: Extracting MFT from volume {volume}...")
-
-        # PowerShell command to read raw MFT file
-        # Note: Device path format is \\.\C:$MFT (no backslash before $MFT)
-        ps_cmd = f"""
-$bytes = [System.IO.File]::ReadAllBytes("\\\\.\\{volume}$MFT")
-[System.IO.File]::WriteAllBytes("{output_path}", $bytes)
-"""
-
-        try:
-            result = subprocess.run(
-                ['powershell', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
-                capture_output=True,
-                text=True,
-                timeout=300  # 5 minutes timeout
-            )
-
-            if result.returncode != 0:
-                stderr = result.stderr.strip()
-                raise MFTExtractionError(
-                    f"PowerShell MFT extraction failed (exit code {result.returncode}): {stderr}"
-                )
-
-            if not output_path.exists():
-                raise MFTExtractionError(f"MFT file was not created at {output_path}")
-
-            file_size_mb = output_path.stat().st_size / (1024 * 1024)
-            log.info(f"CLAUDE: MFT extracted successfully ({file_size_mb:.2f} MB)")
-
-            return output_path
-
-        except subprocess.TimeoutExpired:
-            raise MFTExtractionError("MFT extraction timed out after 5 minutes")
-        except OSError as e:
-            raise MFTExtractionError(f"Failed to execute PowerShell: {e}")
-
-    @staticmethod
-    def get_mft_snapshot(volume: str = "C:",
-                        root_path: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
-        """Get filesystem snapshot by parsing MFT.
-
-        Main entry point for MFT-based filesystem snapshots.
+        Reads MFT entries by opening the raw volume device via Win32 API,
+        parsing the NTFS boot sector to locate the MFT, then streaming
+        through all MFT records following data runs.
 
         Args:
             volume: Volume to scan (default: C:)
@@ -626,25 +877,17 @@ $bytes = [System.IO.File]::ReadAllBytes("\\\\.\\{volume}$MFT")
         if not is_admin:
             raise PrivilegeError(error_msg)
 
-        # Step 2: Extract MFT to temp file
-        temp_mft = None
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mft') as f:
-                temp_mft = Path(f.name)
+        # Step 2: Open volume and parse boot sector
+        with NTFSVolumeReader(volume) as reader:
+            boot_data = reader.read_at(0, 512)
+            boot_sector = NTFSBootSector(boot_data)
 
-            MFTReader.extract_mft_to_file(temp_mft, volume)
+            # Step 3: Stream-parse all MFT entries
+            records = MFTParser.parse_mft_from_volume(reader, boot_sector)
 
-            # Step 3: Parse MFT file
-            result = MFTParser.parse_mft_file(temp_mft, root_path)
+        # Step 4: Reconstruct paths with memoization
+        log.info("CLAUDE: Reconstructing file paths...")
+        result = reconstruct_paths_memoized(records, root_path)
 
-            log.info(f"CLAUDE: MFT snapshot complete. Total files: {len(result)}")
-            return result
-
-        finally:
-            # Step 4: Clean up temp file
-            if temp_mft and temp_mft.exists():
-                try:
-                    temp_mft.unlink()
-                    log.info("CLAUDE: Cleaned up temporary MFT file")
-                except OSError as e:
-                    log.warning(f"CLAUDE: Failed to delete temp MFT file: {e}")
+        log.info(f"CLAUDE: MFT snapshot complete. Total files: {len(result)}")
+        return result

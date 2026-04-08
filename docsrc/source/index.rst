@@ -137,6 +137,7 @@ Documentation Structure
 
    advanced/cli
    advanced/playbook-patterns
+   advanced/filesystem-diffing
    advanced/output-formats
    advanced/testfunction-create
    advanced/vm-create

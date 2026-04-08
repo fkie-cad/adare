@@ -58,9 +58,10 @@ The snapshot captures for each file/directory:
 
 - Full path
 - File size
-- Modification time
-- File type (file/directory/symlink)
-- Permissions (on supported systems)
+- **Windows (NTFS/MFT):** created, modified, accessed, and mft_modified timestamps
+- **Linux:** modified, accessed, and changed timestamps
+
+All timestamps are stored as Unix epoch seconds for precise comparison.
 
 Notes
 -----
@@ -75,3 +76,4 @@ See Also
 
 - :doc:`pull_changed_files` for pulling files that changed between snapshots
 - :doc:`pull` for transferring specific files
+- :doc:`../../../advanced/filesystem-diffing` for diff export formats and forensic timeline integration

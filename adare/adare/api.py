@@ -180,6 +180,10 @@ class ExperimentAPI:
         """List all experiments."""
         return self._service.list_all(project_path)
 
+    def validate(self, request):
+        """Validate experiment configuration and integrity."""
+        return self._service.validate(request)
+
     def get_by_name(self, project_path, name):
         """Get experiment by name."""
         return self._service.get_by_name(project_path, name)

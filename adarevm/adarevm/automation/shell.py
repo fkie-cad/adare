@@ -3,9 +3,8 @@ from subprocess import Popen, PIPE, TimeoutExpired
 import platform
 import ctypes
 import os
-import base64
-
 import logging
+import uuid
 
 log = logging.getLogger(__name__)
 
@@ -61,15 +60,38 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     if admin:
         # Elevate privileges
         if is_windows:
-            # Use Start-Process with RunAs for elevation
-            # Use Base64 encoding to avoid quote escaping issues
-            # Encode the command in UTF-16LE (PowerShell's expected encoding for -EncodedCommand)
-            encoded_bytes = command_str.encode('utf-16le')
-            encoded_command = base64.b64encode(encoded_bytes).decode('ascii')
-            # Use -EncodedCommand to avoid any quote escaping issues
-            admin_wrapped = f"Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand','{encoded_command}' -Verb RunAs -Wait -WindowStyle Hidden"
-            command_str = admin_wrapped
-            log.info(f"Running command with elevated privileges (Windows RunAs)")
+            if is_running_elevated:
+                # Already Administrator — no wrapper needed, command runs with
+                # the caller's original shell/powershell settings.
+                log.info("Already running as Administrator, executing admin command directly")
+            else:
+                # Not elevated — use Start-Process -Verb RunAs with temp file output capture.
+                # ShellExecute can't pipe output, so redirect to UUID-based temp files.
+                temp_id = uuid.uuid4().hex[:8]
+                stdout_file = f'adare_admin_stdout_{temp_id}.txt'
+                stderr_file = f'adare_admin_stderr_{temp_id}.txt'
+
+                cmd_inner = f'({command_str}) > "%TEMP%\\{stdout_file}" 2> "%TEMP%\\{stderr_file}"'
+                cmd_inner_escaped = cmd_inner.replace("'", "''")
+
+                admin_wrapped = (
+                    f"$p = Start-Process cmd.exe "
+                    f"-ArgumentList '/c {cmd_inner_escaped}' "
+                    f"-Verb RunAs -Wait -PassThru -WindowStyle Hidden; "
+                    f"$stdoutFile = Join-Path $env:TEMP '{stdout_file}'; "
+                    f"$stderrFile = Join-Path $env:TEMP '{stderr_file}'; "
+                    f"if (Test-Path $stdoutFile) {{ "
+                    f"Get-Content $stdoutFile -Raw; "
+                    f"Remove-Item $stdoutFile -Force -ErrorAction SilentlyContinue }}; "
+                    f"if (Test-Path $stderrFile) {{ "
+                    f"$e = Get-Content $stderrFile -Raw; "
+                    f"if ($e) {{ [Console]::Error.Write($e) }}; "
+                    f"Remove-Item $stderrFile -Force -ErrorAction SilentlyContinue }}; "
+                    f"exit $p.ExitCode"
+                )
+                command_str = admin_wrapped
+                shell = True  # Admin wrapper is a PowerShell command, must use shell
+                log.info("Running command with elevated privileges (Windows RunAs via cmd.exe)")
         else:
             # Use sudo on Linux
             command_str = f"sudo {command_str}"
@@ -113,10 +135,12 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
         import shlex
 
         search_path = None
-        if env and 'PATH' in env:
-             search_path = env['PATH']
-        elif inherit_env:
-             search_path = os.environ.get('PATH')
+        if env:
+            _path_key = next((k for k in env if k.upper() == 'PATH'), None)
+            if _path_key:
+                search_path = env[_path_key]
+        if search_path is None and inherit_env:
+            search_path = os.environ.get('PATH')
 
         if isinstance(command, str):
             # Parse the command string to get the executable
@@ -132,7 +156,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
                         # Note: This is a bit risky if arguments were part of the string but
                         # shlex.split should yield the executable as first item.
                         # Ideally, users should pass list for shell=False
-                        log.debug(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
+                        log.info(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
                         
                         # Replace the first part of the original string? 
                         # Or just switch to list mode? subprocess handles list better for shell=False
@@ -149,7 +173,7 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
              exe_name = command[0]
              resolved_exe = shutil.which(exe_name, path=search_path)
              if resolved_exe:
-                 log.debug(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
+                 log.info(f"Resolved executable '{exe_name}' to '{resolved_exe}'")
                  command[0] = resolved_exe
              else:
                  log.debug(f"Could not resolve executable '{exe_name}' in custom PATH")
@@ -181,10 +205,46 @@ def execute_on_shell(command, cwd: Path = None, shell: bool = False, powershell:
     start_time = time.time()
     log.debug(f"Starting process at {start_time}")
     
-    if cwd:
-        proc = Popen(command, stdout=PIPE, stderr=PIPE, cwd=cwd, shell=shell, env=process_env)
-    else:
-        proc = Popen(command, stdout=PIPE, stderr=PIPE, shell=shell, env=process_env)
+    try:
+        if cwd:
+            proc = Popen(command, stdout=PIPE, stderr=PIPE, cwd=cwd, shell=shell, env=process_env)
+        else:
+            proc = Popen(command, stdout=PIPE, stderr=PIPE, shell=shell, env=process_env)
+    except PermissionError as e:
+        if is_windows and not shell:
+            # Windows CreateProcess cannot execute .exe files accessed through
+            # junctions/symlinks to SMB/UNC paths. Copy the executable and its
+            # sibling files (.NET runtime DLLs, configs) to a local temp dir
+            # and retry. File I/O over SMB works fine — only execution fails.
+            import shutil
+            import tempfile
+            import shlex
+
+            log.warning(f"Direct execution failed ({e}), copying to local temp for retry")
+
+            exe_path = Path(command[0] if isinstance(command, list) else shlex.split(command_str, posix=False)[0])
+            local_cache = Path(tempfile.gettempdir()) / 'adare_local_tools' / exe_path.parent.name
+
+            if not (local_cache / exe_path.name).exists():
+                local_cache.mkdir(parents=True, exist_ok=True)
+                for f in exe_path.parent.iterdir():
+                    if f.is_file():
+                        shutil.copy2(f, local_cache / f.name)
+                log.info(f"Copied {exe_path.parent} contents to {local_cache}")
+
+            local_exe = str(local_cache / exe_path.name)
+            if isinstance(command, list):
+                command = [local_exe] + command[1:]
+            else:
+                command = local_exe
+
+            log.info(f"Retrying execution with local copy: {local_exe}")
+            if cwd:
+                proc = Popen(command, stdout=PIPE, stderr=PIPE, cwd=cwd, shell=shell, env=process_env)
+            else:
+                proc = Popen(command, stdout=PIPE, stderr=PIPE, shell=shell, env=process_env)
+        else:
+            raise
     
     log.debug(f"Process started with PID: {proc.pid}")
 

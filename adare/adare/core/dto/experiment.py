@@ -71,6 +71,14 @@ class ExperimentEnvModifyRequest:
     force: bool = False
 
 
+@dataclass
+class ExperimentValidateRequest:
+    """Request to validate an experiment configuration and integrity."""
+    project_path: Path
+    name: str
+    environment: Optional[str] = None
+
+
 # =============================================================================
 # Experiment Response DTOs
 # =============================================================================
@@ -175,6 +183,38 @@ class BatchRunResultItem:
     duration: timedelta
     error_message: Optional[str] = None
     run_id: Optional[str] = None
+
+
+@dataclass
+class ValidationCheckResult:
+    """Result of a single validation check."""
+    name: str
+    passed: bool
+    message: str
+    is_warning: bool = False
+
+
+@dataclass
+class ExperimentValidateResult:
+    """Result of validating an experiment."""
+    name: str
+    checks: List[ValidationCheckResult] = field(default_factory=list)
+
+    @property
+    def passed_count(self) -> int:
+        return sum(1 for c in self.checks if c.passed and not c.is_warning)
+
+    @property
+    def failed_count(self) -> int:
+        return sum(1 for c in self.checks if not c.passed and not c.is_warning)
+
+    @property
+    def warning_count(self) -> int:
+        return sum(1 for c in self.checks if c.is_warning)
+
+    @property
+    def is_valid(self) -> bool:
+        return self.failed_count == 0
 
 
 @dataclass

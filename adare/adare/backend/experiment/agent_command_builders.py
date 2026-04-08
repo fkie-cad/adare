@@ -367,8 +367,9 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             # VirtualBox uses UNC path for source code access
             adarevm_path = r'\\vboxsvr\adare\adarevm'
 
-        # Minimal CLI args - we rely on default run dir and config.json
-        cli_args = "" 
+        # Pass tools_paths as CLI args so adarevm has them even if config.json
+        # can't be read (e.g. SMB junction not ready at startup)
+        cli_args = f'--tools-path "{project_tools}" --tools-path "{experiment_tools}"'
 
         if env_info.use_conda:
             conda_exe = rf'{env_info.miniforge_path}\Scripts\conda.exe'
