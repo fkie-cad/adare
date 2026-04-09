@@ -76,6 +76,8 @@ cleanup_package_dir.py
 MagicMock/.worktrees/
 MagicMock/
 
+.DS_Store
+
 CLAUDE.md
 .worktrees
 NOTES.md
