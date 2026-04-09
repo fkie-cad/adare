@@ -22,6 +22,13 @@ class EnvironmentCreateBody(BaseModel):
     vm_path: str | None = None
 
 
+class EnvironmentLoadBody(BaseModel):
+    """Request body for loading an environment from YAML."""
+    environment: str
+    force: bool = False
+    no_copy: bool = False
+
+
 # ---- Helpers ----
 
 def _api():
@@ -56,6 +63,20 @@ async def create_environment(body: EnvironmentCreateBody):
         vm_path=Path(body.vm_path) if body.vm_path else None,
     )
     result = _api().environment.create(dto)
+    return result_to_response(result)
+
+
+@router.post("/load")
+async def load_environment(body: EnvironmentLoadBody):
+    """Load an environment from YAML file."""
+    from adare.core.dto.environment import EnvironmentLoadRequest
+
+    dto = EnvironmentLoadRequest(
+        environment=body.environment,
+        force=body.force,
+        no_copy=body.no_copy,
+    )
+    result = _api().environment.load(dto)
     return result_to_response(result)
 
 

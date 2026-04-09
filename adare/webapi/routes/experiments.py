@@ -41,6 +41,31 @@ class ExperimentValidateBody(BaseModel):
     environment: str | None = None
 
 
+class ExperimentLoadBody(BaseModel):
+    """Request body for loading an experiment from files."""
+    project_path: str
+    force: bool = False
+    silent: bool = False
+
+
+class ExperimentProjectBody(BaseModel):
+    """Request body with just a project path."""
+    project_path: str
+
+
+class ExperimentTestBody(BaseModel):
+    """Request body for testing an experiment."""
+    project_path: str
+    environment_name: str
+
+
+class ExperimentEnvModifyBody(BaseModel):
+    """Request body for adding/removing environments."""
+    project_path: str
+    environments: list[str]
+    force: bool = False
+
+
 # ---- Helpers ----
 
 def _api():
@@ -119,4 +144,70 @@ async def validate_experiment(name: str, body: ExperimentValidateBody):
         environment=body.environment,
     )
     result = _api().experiment.validate(dto)
+    return result_to_response(result)
+
+
+@router.post("/{name}/load")
+async def load_experiment(name: str, body: ExperimentLoadBody):
+    """Load an experiment from files."""
+    from adare.core.dto.experiment import ExperimentLoadRequest
+
+    dto = ExperimentLoadRequest(
+        project_path=Path(body.project_path),
+        name=name,
+        force=body.force,
+        silent=body.silent,
+    )
+    result = _api().experiment.load(dto)
+    return result_to_response(result)
+
+
+@router.post("/{name}/clean")
+async def clean_experiment(name: str, body: ExperimentProjectBody):
+    """Clean fake runs from an experiment."""
+    result = _api().experiment.clean(Path(body.project_path), name)
+    return result_to_response(result)
+
+
+@router.post("/{name}/example")
+async def create_example_experiment(name: str, body: ExperimentProjectBody):
+    """Create an example experiment."""
+    result = _api().experiment.example(Path(body.project_path), name)
+    return result_to_response(result)
+
+
+@router.post("/{name}/test")
+async def test_experiment(name: str, body: ExperimentTestBody):
+    """Test (dry-run) an experiment."""
+    result = _api().experiment.test(Path(body.project_path), name, body.environment_name)
+    return result_to_response(result)
+
+
+@router.post("/{name}/environments/add")
+async def add_environments(name: str, body: ExperimentEnvModifyBody):
+    """Add environments to an experiment."""
+    from adare.core.dto.experiment import ExperimentEnvModifyRequest
+
+    dto = ExperimentEnvModifyRequest(
+        project_path=Path(body.project_path),
+        experiment_pattern=name,
+        environments=body.environments,
+        force=body.force,
+    )
+    result = _api().experiment.add_environments(dto)
+    return result_to_response(result)
+
+
+@router.post("/{name}/environments/remove")
+async def remove_environments(name: str, body: ExperimentEnvModifyBody):
+    """Remove environments from an experiment."""
+    from adare.core.dto.experiment import ExperimentEnvModifyRequest
+
+    dto = ExperimentEnvModifyRequest(
+        project_path=Path(body.project_path),
+        experiment_pattern=name,
+        environments=body.environments,
+        force=body.force,
+    )
+    result = _api().experiment.remove_environments(dto)
     return result_to_response(result)
