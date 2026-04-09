@@ -487,7 +487,7 @@ run.add_alias('rm', 'remove')
 # Web interface commands (extracted to cli/groups/web_commands.py)
 # ------------------------------
 from adare.cli.groups.web_commands import register as register_web_commands
-register_web_commands(cli, AliasedGroup, exec_with_error_printing)
+web = register_web_commands(cli, AliasedGroup, exec_with_error_printing)
 
 # Web UI commands (start, build, services)
 from adare.cli.web_cmd import web_start, web_build, web_services

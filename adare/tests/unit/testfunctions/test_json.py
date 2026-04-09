@@ -20,15 +20,15 @@ from adare.helperfunctions.module import import_module_from_pyfile
 
 # Load JSON testfunctions module
 json_module_path = PROJECT_ROOT / "appdata" / "testfunctions" / "json" / "json.py"
-json_module = import_module_from_pyfile(json_module_path)
+json_tf_module = import_module_from_pyfile(json_module_path)
 
-# Extract testfunctions from module
-ContainsKey = json_module.ContainsKey
-ContainsKeyParameter = json_module.ContainsKeyParameter
-ValueMatches = json_module.ValueMatches
-ValueMatchesParameter = json_module.ValueMatchesParameter
-ArrayContains = json_module.ArrayContains
-ArrayContainsParameter = json_module.ArrayContainsParameter
+# Extract testfunctions from module (decorator-based)
+ContainsKey = json_tf_module.contains_key._test_class
+ContainsKeyParameter = json_tf_module.contains_key._parameter_class
+ValueMatches = json_tf_module.value_matches._test_class
+ValueMatchesParameter = json_tf_module.value_matches._parameter_class
+ArrayContains = json_tf_module.array_contains._test_class
+ArrayContainsParameter = json_tf_module.array_contains._parameter_class
 
 # Import test helpers
 import importlib.util

@@ -28,29 +28,29 @@ from adare.helperfunctions.module import import_module_from_pyfile
 standard_module_path = PROJECT_ROOT / "appdata" / "testfunctions" / "standard" / "standard.py"
 standard_module = import_module_from_pyfile(standard_module_path)
 
-# Extract testfunctions from module
-FileExists = standard_module.FileExists
-FileExistsParameter = standard_module.FileExistsParameter
-FileDoesNotExist = standard_module.FileDoesNotExist
-FileDoesNotExistParameter = standard_module.FileDoesNotExistParameter
-DirExists = standard_module.DirExists
-DirExistsParameter = standard_module.DirExistsParameter
-DirDoesNotExist = standard_module.DirDoesNotExist
-DirDoesNotExistParameter = standard_module.DirDoesNotExistParameter
-DirContent = standard_module.DirContent
-DirContentParameter = standard_module.DirContentParameter
-FileContentMatchesRegex = standard_module.FileContentMatchesRegex
-FileContentMatchesRegexParameter = standard_module.FileContentMatchesRegexParameter
-FileContentEquals = standard_module.FileContentEquals
-FileContentEqualsParameter = standard_module.FileContentEqualsParameter
-FileHashMatches = standard_module.FileHashMatches
-FileHashMatchesParameter = standard_module.FileHashMatchesParameter
-FileTimestamps = standard_module.FileTimestamps
-FileTimestampsParameter = standard_module.FileTimestampsParameter
-FilePermissions = standard_module.FilePermissions
-FilePermissionsParameter = standard_module.FilePermissionsParameter
-FileContentContains = standard_module.FileContentContains
-FileContentContainsParameter = standard_module.FileContentContainsParameter
+# Extract testfunctions from module (decorator pattern: ._test_class / ._parameter_class)
+FileExists = standard_module.file_exists._test_class
+FileExistsParameter = standard_module.file_exists._parameter_class
+FileDoesNotExist = standard_module.file_does_not_exist._test_class
+FileDoesNotExistParameter = standard_module.file_does_not_exist._parameter_class
+DirExists = standard_module.dir_exists._test_class
+DirExistsParameter = standard_module.dir_exists._parameter_class
+DirDoesNotExist = standard_module.dir_does_not_exist._test_class
+DirDoesNotExistParameter = standard_module.dir_does_not_exist._parameter_class
+DirContent = standard_module.dir_content._test_class
+DirContentParameter = standard_module.dir_content._parameter_class
+FileContentMatchesRegex = standard_module.file_content_matches_regex._test_class
+FileContentMatchesRegexParameter = standard_module.file_content_matches_regex._parameter_class
+FileContentEquals = standard_module.file_content_equals._test_class
+FileContentEqualsParameter = standard_module.file_content_equals._parameter_class
+FileHashMatches = standard_module.file_hash_matches._test_class
+FileHashMatchesParameter = standard_module.file_hash_matches._parameter_class
+FileTimestamps = standard_module.file_timestamps._test_class
+FileTimestampsParameter = standard_module.file_timestamps._parameter_class
+FilePermissions = standard_module.file_permissions._test_class
+FilePermissionsParameter = standard_module.file_permissions._parameter_class
+FileContentContains = standard_module.file_content_contains._test_class
+FileContentContainsParameter = standard_module.file_content_contains._parameter_class
 
 # Import test helpers (use direct path import)
 helpers_path = Path(__file__).parent / "helpers.py"

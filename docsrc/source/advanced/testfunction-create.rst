@@ -1,21 +1,260 @@
 ********************************************************
-Create your own testfunction set (in development)
+Create your own testfunction set
 ********************************************************
 
 This guide explains how to create custom test functions for ADARE to extend its testing capabilities beyond the built-in test function collections.
 
-Architecture Overview
-======================
+Quick Start
+============
 
-Test Function Structure
------------------------
+The fastest way to create a test function is with the ``@testfunction`` decorator:
 
-Every test function consists of:
+.. code-block:: python
 
-1. **Parameter Class**: Defines input fields using attrs
-2. **Test Class**: Inherits from BasicTest, implements the test logic
-3. **Class Variables**: ``testname`` and ``testdescription`` for identification
-4. **test() Method**: Core logic returning a TestResult
+   # /path/to/your/testfunctions/mycollection/mycollection.py
+   from adarelib.testset import testfunction
+   from adarelib.testset.basictest import HostModeCategory
+
+   @testfunction(
+       name='file_contains_word',
+       description='tests if file content contains specified word',
+       category=HostModeCategory.FILE_BASED,
+   )
+   def file_contains_word(ctx, dst: str, word: str, case_sensitive: bool = True):
+       dst_path, status = ctx.resolve_globfilepath(dst)
+       ctx.error_if(not dst_path, f'File {dst} not found ({status})')
+
+       with open(dst_path, 'r', encoding='utf-8') as f:
+           content = f.read()
+
+       search_word = word
+       if not case_sensitive:
+           content = content.lower()
+           search_word = word.lower()
+
+       ctx.fail_if(search_word not in content, f'Word "{word}" not found in file')
+       return f'Word "{word}" found in file'
+
+That's it. The decorator automatically generates the Parameter class and BasicTest subclass from the function signature. Parameters are extracted from the function arguments (excluding ``ctx``), with type annotations used for validation.
+
+Loading and Using Custom Test Functions
+---------------------------------------
+
+Create your test function collection in a directory:
+
+.. code-block:: bash
+
+   mkdir /path/to/your/testfunctions/mycollection
+   touch /path/to/your/testfunctions/mycollection/mycollection.py
+   touch /path/to/your/testfunctions/mycollection/requirements.txt
+
+Load into ADARE:
+
+.. code-block:: bash
+
+   adare testfunction load /path/to/your/testfunctions
+
+Use in a playbook:
+
+.. code-block:: yaml
+
+   tests:
+     - name: check_for_keyword
+       function: mycollection.file_contains_word
+       parameter:
+         dst: "/evidence/logfile.txt"
+         word: "ERROR"
+         case_sensitive: false
+
+
+Core Concepts
+==============
+
+TestContext (ctx)
+-----------------
+
+Every decorated test function receives ``ctx`` as its first argument. This is a ``TestContext`` instance that provides:
+
+**Assertion methods:**
+
+- ``ctx.fail_if(condition, message)`` — Fail the test if condition is truthy
+- ``ctx.error_if(condition, message)`` — Error the test if a precondition/setup fails
+
+**File resolution:**
+
+- ``ctx.resolve_globfilepath(path, match_mode="single", return_list=False)`` — Resolve glob patterns to file paths
+
+**Placeholder/variable support:**
+
+- ``ctx.has_placeholders(text)`` — Check if text contains ``{{PLACEHOLDER}}`` variables
+- ``ctx.get_placeholders(text)`` — Extract placeholder names from text
+- ``ctx.resolve_variables(text)`` — Resolve placeholder variables in text
+- ``ctx.compare_with_placeholder(name, actual)`` — Compare actual value against placeholder (supports regex, timestamp tolerance)
+- ``ctx.handle_placeholders_comparison(actual, template)`` — Full template comparison with multiple placeholders
+
+**Metadata:**
+
+- ``ctx.variable_metadata`` — Access the variable metadata dict
+- ``ctx.get_placeholder_metadata(name)`` — Get metadata for a specific placeholder
+- ``ctx.has_tolerance_metadata(name)`` — Check if placeholder has tolerance settings
+
+Return Values
+-------------
+
+Test functions can return values in several ways:
+
+.. code-block:: python
+
+   # Return None → TestResult.success([])
+   def my_test(ctx, dst: str):
+       pass
+
+   # Return a string → TestResult.success([string])
+   def my_test(ctx, dst: str):
+       return 'file found'
+
+   # Return a list → TestResult.success(list)
+   def my_test(ctx, dst: str):
+       return ['found 3 files', 'all valid']
+
+   # Return TestResult directly → passed through
+   def my_test(ctx, dst: str):
+       return TestResult.success(['custom result'])
+
+Use ``ctx.fail_if()`` and ``ctx.error_if()`` for failure/error conditions — they raise exceptions that the decorator catches and converts to the appropriate ``TestResult``.
+
+Uncaught exceptions are automatically converted to ``TestResult.execution_error()``.
+
+Parameters
+----------
+
+Parameters are derived from the function signature:
+
+.. code-block:: python
+
+   @testfunction(name='my_test', description='example')
+   def my_test(ctx, path: str, count: int = 5, regex: bool = False):
+       ...
+
+This generates a parameter class with fields: ``path`` (required str), ``count`` (optional int, default 5), ``regex`` (optional bool, default False).
+
+Type annotations are used for cattrs structuring from YAML playbooks. Always annotate your parameters.
+
+Category
+--------
+
+The ``category`` argument to ``@testfunction`` indicates where the test executes:
+
+- ``HostModeCategory.FILE_BASED`` — Tests files on the analyzed system
+- ``HostModeCategory.FILE_CONTENT`` — Tests file contents
+- ``HostModeCategory.QGA_PROBE`` — Tests via QEMU Guest Agent
+- ``HostModeCategory.AGENT_ONLY`` — Tests that run only in the agent (default)
+- ``HostModeCategory.HOST_NATIVE`` — Tests that execute on the host machine
+
+
+Host-Based Tests
+=================
+
+Some tests execute on the host machine rather than the analyzed system — for example, visual tests that take screenshots and perform image recognition. These use ``async def`` and access host services through ``ctx.host``.
+
+.. code-block:: python
+
+   from adarelib.testset import testfunction
+   from adarelib.testset.basictest import HostModeCategory
+
+   @testfunction(
+       name='visual.exists',
+       description='Check if text or image is visible on screen',
+       category=HostModeCategory.HOST_NATIVE,
+       execute_on_host=True,
+   )
+   async def visual_exists(ctx, text: str = None, image: str = None, window: str = None):
+       ctx.error_if(not text and not image, "Either text or image parameter required")
+
+       screenshot = await ctx.host.screenshot.take(window=window)
+
+       if text:
+           locations = await ctx.host.cv.find_text(text, screenshot)
+       else:
+           image_path = Path(image)
+           locations = await ctx.host.cv.find_icon(image_path, screenshot)
+
+       ctx.fail_if(not locations, f'target not found on screen')
+
+Key differences from regular tests:
+
+- Use ``async def`` for the test function
+- Set ``execute_on_host=True`` in the decorator
+- Access host services via ``ctx.host`` (provides ``screenshot``, ``cv``, ``playbook_dir``, ``vm_file``)
+- The decorator auto-detects async functions and generates the appropriate ``async def test()`` method
+
+
+Advanced
+=========
+
+Module-Level Helper Functions
+-----------------------------
+
+For shared logic across multiple test functions, extract helpers as module-level functions:
+
+.. code-block:: python
+
+   def _parse_xml(filepath):
+       """Parse XML file and return root element."""
+       tree = ET.parse(filepath)
+       return tree.getroot()
+
+   def _compare_values(ctx, actual, expected, regex_match=False):
+       """Compare values with placeholder/regex support."""
+       if ctx.has_placeholders(str(expected)):
+           placeholders = ctx.get_placeholders(str(expected))
+           return ctx.compare_with_placeholder(placeholders[0], str(actual))
+       elif regex_match:
+           pattern = re.compile(expected)
+           return pattern.search(str(actual)) is not None, f'regex {"matched" if match else "no match"}'
+       else:
+           return actual == expected, f'{"matched" if actual == expected else "mismatch"}'
+
+   @testfunction(name='element_exists', description='...', category=HostModeCategory.FILE_CONTENT)
+   def element_exists(ctx, dst: str, xpath: str):
+       root = _parse_xml(dst)
+       ...
+
+   @testfunction(name='element_text', description='...', category=HostModeCategory.FILE_CONTENT)
+   def element_text(ctx, dst: str, xpath: str, expected: str, regex_match: bool = False):
+       root = _parse_xml(dst)
+       ...
+       is_match, message = _compare_values(ctx, actual_text, expected, regex_match)
+       ...
+
+Helpers that need placeholder/variable support receive ``ctx`` as their first argument. Pure computation helpers (parsing, formatting) don't need ``ctx``.
+
+Placeholder and Variable Support
+---------------------------------
+
+ADARE supports dynamic values through the placeholder system. Placeholders like ``{{TIMESTAMP}}`` in expected values are resolved using variable metadata:
+
+.. code-block:: python
+
+   @testfunction(name='check_value', description='...', category=HostModeCategory.FILE_CONTENT)
+   def check_value(ctx, dst: str, expected: str):
+       actual = read_value_from_file(dst)
+
+       if ctx.has_placeholders(expected):
+           placeholders = ctx.get_placeholders(expected)
+           if len(placeholders) == 1:
+               success, message = ctx.compare_with_placeholder(placeholders[0], actual)
+               ctx.fail_if(not success, message)
+           else:
+               success, message = ctx.handle_placeholders_comparison(actual, expected)
+               ctx.fail_if(not success, message)
+       else:
+           ctx.fail_if(actual != expected, f'Expected "{expected}", got "{actual}"')
+
+Legacy Class-Based Approach
+----------------------------
+
+For advanced use cases, you can still create test functions using the traditional class-based pattern:
 
 .. code-block:: python
 
@@ -41,247 +280,23 @@ Every test function consists of:
        variable_metadata: Optional[dict] = None
 
        def test(self):
-           # Implementation here
+           # self.parameter.input_field, self.resolve_globfilepath(), etc.
            return TestResult.success()
 
-Core Concepts
--------------
+The decorator approach is preferred for new test functions as it eliminates boilerplate while providing the same capabilities.
 
-**BasicTest Class**
-  Base class providing file resolution, variable handling, and placeholder comparison
-
-**Parameter Classes**
-  Attrs-decorated classes defining input parameters for test functions
-
-**TestResult System**
-  Standardized result objects: ``success()``, ``failed()``, ``execution_error()``
-
-**Module Organization**
-  Test functions grouped in collections (standard, json, xml, windows, etc.)
-
-Step-by-Step Development
-========================
-
-1. Create the Module Structure
-------------------------------
-
-Create a new directory anywhere on your system for your test collection. You can organize it as follows:
-
-.. code-block:: bash
-
-   mkdir /path/to/your/testfunctions/mycollection
-   touch /path/to/your/testfunctions/mycollection/mycollection.py
-   touch /path/to/your/testfunctions/mycollection/requirements.txt
-
-Then load your custom test functions using:
-
-.. code-block:: bash
-
-   adare testfunction load /path/to/your/testfunctions
-
-2. Define Parameter Classes
----------------------------
-
-Start with simple parameter definitions using attrs:
-
-.. code-block:: python
-
-   # /path/to/your/testfunctions/mycollection/mycollection.py
-   import attrs
-   from pathlib import Path
-   from typing import ClassVar, Optional
-
-   from adarelib.testset.basictest import BasicTest, Parameter
-   from adarelib.event.event import TestResult
-
-   @attrs.define
-   class FileContentContainsWordParameter(Parameter):
-       dst: str               # File path (supports glob patterns)
-       word: str             # Word to search for
-       case_sensitive: Optional[bool] = True
-
-3. Implement the Test Class
----------------------------
-
-Create the test class with proper error handling:
-
-.. code-block:: python
-
-   @attrs.define
-   class FileContentContainsWord(BasicTest):
-       testname: ClassVar[str] = 'file_content_contains_word'
-       testdescription: ClassVar[str] = 'tests if file content contains specified word'
-
-       name: str
-       parameter: FileContentContainsWordParameter
-       description: Optional[str] = ''
-       variable_metadata: Optional[dict] = None
-
-       def test(self):
-           try:
-               # Use resolve_globfilepath for file resolution
-               dst, status = self.resolve_globfilepath(self.parameter.dst)
-               if not dst:
-                   return TestResult.error([f'File {self.parameter.dst} not found ({status})'])
-
-               # Read file with proper error handling
-               try:
-                   with open(dst, 'r', encoding='utf-8') as f:
-                       content = f.read()
-               except FileNotFoundError:
-                   return TestResult.failed([f'File {dst} does not exist'])
-               except (PermissionError, OSError) as e:
-                   return TestResult.execution_error(e, f"Cannot read file {dst}")
-
-               # Perform the test logic
-               word = self.parameter.word
-               if not self.parameter.case_sensitive:
-                   content = content.lower()
-                   word = word.lower()
-
-               if word in content:
-                   return TestResult.success([f'Word "{self.parameter.word}" found in file'])
-               else:
-                   return TestResult.failed([f'Word "{self.parameter.word}" not found in file'])
-
-           except Exception as e:
-               return TestResult.execution_error(e, "Unexpected error in word search test")
-
-Core BasicTest Methods
-======================
-
-File Resolution
----------------
-
-Use ``resolve_globfilepath()`` for all file operations:
-
-.. code-block:: python
-
-   # Handles both exact paths and glob patterns
-   dst, status = self.resolve_globfilepath(self.parameter.dst)
-   if not dst:
-       return TestResult.error([f'File resolution failed: {status}'])
-
-Variable and Placeholder Handling
----------------------------------
-
-For advanced template support with variables:
-
-.. code-block:: python
-
-   expected_content = self.parameter.expected_content
-
-   # Check if content has placeholder variables
-   if self.has_placeholders(expected_content):
-       # Use placeholder comparison system
-       success, message = self._handle_placeholders_comparison(actual_content, expected_content)
-       if success:
-           return TestResult.success([message])
-       else:
-           return TestResult.failed([message])
-   else:
-       # Direct comparison
-       if actual_content == expected_content:
-           return TestResult.success(['Content matches'])
-       else:
-           return TestResult.failed(['Content does not match'])
-
-Advanced Features
-=================
-
-Timestamp Tolerance
--------------------
-
-For timestamp validation with tolerance ranges:
-
-.. code-block:: python
-
-   # In your parameter class
-   @attrs.define
-   class TimestampTestParameter(Parameter):
-       dst: str
-       expected_timestamp: str
-       tolerance_seconds: Optional[int] = 5
-
-   # In your test method
-   if self.has_placeholders(expected_timestamp):
-       # Extract placeholder name and use tolerance comparison
-       placeholders = self.get_placeholders(expected_timestamp)
-       if len(placeholders) == 1:
-           success, message = self.compare_with_placeholder(placeholders[0], actual_timestamp)
-           return TestResult.success([message]) if success else TestResult.failed([message])
-
-Regex Pattern Matching
------------------------
-
-For regex-based validation:
-
-.. code-block:: python
-
-   import re
-
-   def _validate_pattern(self, actual_value, pattern):
-       try:
-           compiled_pattern = re.compile(pattern)
-           if compiled_pattern.search(actual_value):
-               return True, f'Value matches pattern: {pattern}'
-           else:
-               return False, f'Value does not match pattern: {pattern}'
-       except re.error as e:
-           return False, f'Invalid regex pattern: {pattern} - {e}'
-
-Error Handling Patterns
-=======================
-
-Standard Error Types
---------------------
-
-Use consistent error handling for common scenarios:
-
-.. code-block:: python
-
-   try:
-       # File operations
-       with open(file_path, 'r') as f:
-           data = f.read()
-   except FileNotFoundError:
-       return TestResult.failed([f'File {file_path} does not exist'])
-   except (PermissionError, OSError) as e:
-       return TestResult.execution_error(e, f"Cannot access file {file_path}")
-   except UnicodeDecodeError as e:
-       return TestResult.execution_error(e, f"Cannot decode file {file_path}")
-
-Test Result Guidelines
-----------------------
-
-- **TestResult.success()**: Test passed, condition met
-- **TestResult.failed()**: Test ran but condition not met (expected behavior)
-- **TestResult.execution_error()**: Test couldn't run due to errors (unexpected)
-
-.. code-block:: python
-
-   # Success with details
-   return TestResult.success([f'Found {count} matching entries'])
-
-   # Failure with explanation
-   return TestResult.failed([f'Expected value {expected}, got {actual}'])
-
-   # Error with context
-   return TestResult.execution_error(exception, "Database connection failed")
 
 Module Organization
-===================
+====================
 
 Directory Structure
 -------------------
-
-Organize your test functions in logical collections anywhere on your system:
 
 .. code-block::
 
    /path/to/your/testfunctions/
    ├── mycollection/
-   │   ├── mycollection.py      # Main test functions
+   │   ├── mycollection.py      # Test functions
    │   └── requirements.txt     # Python dependencies
    └── anothercollection/
        ├── anothercollection.py
@@ -290,7 +305,7 @@ Organize your test functions in logical collections anywhere on your system:
 Dependencies
 ------------
 
-List any additional Python packages in ``requirements.txt``:
+List additional Python packages in ``requirements.txt``:
 
 .. code-block:: text
 
@@ -298,119 +313,66 @@ List any additional Python packages in ``requirements.txt``:
    lxml>=4.9.0
    requests>=2.28.0
 
-Loading Custom Test Functions
------------------------------
-
-Load your custom test functions into ADARE:
-
-.. code-block:: bash
-
-   # Load from any directory
-   adare testfunction load /path/to/your/testfunctions
-
-   # Verify loaded functions
-   adare testfunction list
 
 Real-World Example
-==================
+===================
 
-Complete Custom Test Function
------------------------------
-
-Here's a complete example testing JSON API responses:
+Here's a complete example testing a JSON API response:
 
 .. code-block:: python
 
    # /path/to/your/testfunctions/api/api.py
-   import attrs
    import requests
    import json
-   from typing import ClassVar, Optional
-
-   from adarelib.testset.basictest import BasicTest, Parameter
+   from adarelib.testset import testfunction
+   from adarelib.testset.basictest import HostModeCategory
    from adarelib.event.event import TestResult
 
-   @attrs.define
-   class ApiResponseParameter(Parameter):
-       url: str
-       expected_status: int = 200
-       expected_json_key: Optional[str] = None
-       expected_json_value: Optional[str] = None
-       timeout_seconds: Optional[int] = 30
+   @testfunction(
+       name='api_response',
+       description='tests API endpoint response and JSON content',
+       category=HostModeCategory.AGENT_ONLY,
+   )
+   def api_response(ctx, url: str, expected_status: int = 200,
+                    expected_json_key: str = None, expected_json_value: str = None,
+                    timeout_seconds: int = 30):
+       try:
+           response = requests.get(url, timeout=timeout_seconds)
+       except requests.RequestException as e:
+           return TestResult.execution_error(e, f"HTTP request failed for {url}")
 
-   @attrs.define
-   class ApiResponse(BasicTest):
-       testname: ClassVar[str] = 'api_response'
-       testdescription: ClassVar[str] = 'tests API endpoint response and JSON content'
+       ctx.fail_if(
+           response.status_code != expected_status,
+           f'HTTP status mismatch. Expected: {expected_status}, Got: {response.status_code}'
+       )
 
-       name: str
-       parameter: ApiResponseParameter
-       description: Optional[str] = ''
-       variable_metadata: Optional[dict] = None
-
-       def test(self):
+       if expected_json_key:
            try:
-               url = self.parameter.url
-               expected_status = self.parameter.expected_status
-               timeout = self.parameter.timeout_seconds
+               json_data = response.json()
+           except json.JSONDecodeError as e:
+               return TestResult.execution_error(e, "Response is not valid JSON")
 
-               # Make HTTP request
-               try:
-                   response = requests.get(url, timeout=timeout)
-               except requests.RequestException as e:
-                   return TestResult.execution_error(e, f"HTTP request failed for {url}")
+           ctx.fail_if(
+               expected_json_key not in json_data,
+               f'JSON key "{expected_json_key}" not found'
+           )
 
-               # Check status code
-               if response.status_code != expected_status:
-                   return TestResult.failed([
-                       f'HTTP status mismatch. Expected: {expected_status}, Got: {response.status_code}'
-                   ])
+           if expected_json_value:
+               actual = str(json_data[expected_json_key])
+               if ctx.has_placeholders(expected_json_value):
+                   success, message = ctx.handle_placeholders_comparison(actual, expected_json_value)
+                   ctx.fail_if(not success, f'JSON value comparison failed: {message}')
+               else:
+                   ctx.fail_if(actual != expected_json_value,
+                               f'JSON value mismatch. Expected: {expected_json_value}, Got: {actual}')
 
-               # Check JSON content if specified
-               if self.parameter.expected_json_key:
-                   try:
-                       json_data = response.json()
-                   except json.JSONDecodeError as e:
-                       return TestResult.execution_error(e, "Response is not valid JSON")
+       return [f'API response valid: HTTP {response.status_code}',
+               f'Response size: {len(response.content)} bytes']
 
-                   if self.parameter.expected_json_key not in json_data:
-                       return TestResult.failed([
-                           f'JSON key "{self.parameter.expected_json_key}" not found'
-                       ])
-
-                   if self.parameter.expected_json_value:
-                       actual_value = json_data[self.parameter.expected_json_key]
-                       expected_value = self.parameter.expected_json_value
-
-                       # Support placeholder comparison for dynamic values
-                       if self.has_placeholders(expected_value):
-                           success, message = self._handle_placeholders_comparison(
-                               str(actual_value), expected_value
-                           )
-                           if not success:
-                               return TestResult.failed([f'JSON value comparison failed: {message}'])
-                       else:
-                           if str(actual_value) != expected_value:
-                               return TestResult.failed([
-                                   f'JSON value mismatch. Expected: {expected_value}, Got: {actual_value}'
-                               ])
-
-               return TestResult.success([
-                   f'API response valid: HTTP {response.status_code}',
-                   f'Response size: {len(response.content)} bytes'
-               ])
-
-           except Exception as e:
-               return TestResult.execution_error(e, "Unexpected error in API response test")
-
-Usage in Playbooks
-------------------
-
-Use your custom test function in experiment playbooks:
+Usage in playbook:
 
 .. code-block:: yaml
 
-   # experiment/playbook.yml
    tests:
      - name: check_api_status
        function: api.api_response
@@ -421,126 +383,15 @@ Use your custom test function in experiment playbooks:
          expected_json_value: "healthy"
          timeout_seconds: 10
 
+
 Best Practices
-==============
-
-Performance Considerations
---------------------------
-
-- **Minimize file I/O**: Cache file contents when testing multiple aspects
-- **Efficient patterns**: Use appropriate data structures for large datasets
-- **Resource cleanup**: Close files and connections properly
-- **Timeout handling**: Set reasonable timeouts for network operations
-
-Logging Guidelines
-------------------
-
-Use structured logging for debugging:
-
-.. code-block:: python
-
-   import logging
-   log = logging.getLogger(__name__)
-
-   def test(self):
-       log.debug(f'Starting test {self.name} with parameter: {self.parameter.dst}')
-
-       # Test implementation
-       result = self._perform_test()
-
-       log.info(f'Test {self.name} completed with status: {result.status}')
-       return result
-
-Cross-Platform Considerations
------------------------------
-
-Handle platform differences gracefully:
-
-.. code-block:: python
-
-   import platform
-
-   def test(self):
-       if platform.system() == 'Windows':
-           # Windows-specific logic
-           return self._test_windows()
-       elif platform.system() == 'Linux':
-           # Linux-specific logic
-           return self._test_linux()
-       else:
-           return TestResult.execution_error(
-               None, f"Unsupported platform: {platform.system()}"
-           )
-
-Testing Your Test Functions
-===========================
-
-Unit Testing
-------------
-
-Create unit tests for your test functions:
-
-.. code-block:: python
-
-   # tests/test_mycollection.py
-   import unittest
-   from adarelib.testset.basictest import TestResult
-   from mycollection.mycollection import (
-       FileContentContainsWord, FileContentContainsWordParameter
-   )
-
-   class TestFileContentContainsWord(unittest.TestCase):
-       def test_word_found(self):
-           # Create test instance
-           test_instance = FileContentContainsWord(
-               name="test_word_search",
-               parameter=FileContentContainsWordParameter(
-                   dst="/path/to/test/file.txt",
-                   word="hello",
-                   case_sensitive=True
-               )
-           )
-
-           # Mock file content and test
-           # ... test implementation
-
-Integration Testing
---------------------
-
-Test with actual playbooks in controlled environments:
-
-.. code-block:: yaml
-
-   tests:
-     - name: test_custom_function
-       function: mycollection.file_content_contains_word
-       parameter:
-         dst: "/tmp/test_file.txt"
-         word: "test_content"
-         case_sensitive: false
-
-Common Pitfalls
 ===============
 
-- **Forgetting glob resolution**: Always use ``resolve_globfilepath()`` for file paths
-- **Inconsistent error handling**: Use the three-tier result system consistently
-- **Missing variable support**: Consider placeholder integration for dynamic content
-- **Platform assumptions**: Test on target operating systems
-- **Resource leaks**: Properly close files and network connections
-- **Overly complex tests**: Keep test functions focused and single-purpose
-
-Sharing Your Test Functions
-===========================
-
-Once you've created useful test functions that could benefit the ADARE community, consider sharing them!
-
-Create a pull request to the `ADARE Web repository <https://github.com/adareweb/adareweb>`_ to make your test functions available to other users. This helps build a comprehensive library of test functions for various forensic analysis scenarios.
-
-When submitting your test functions:
-
-- Include comprehensive documentation
-- Provide example usage in playbooks
-- Test across multiple platforms if applicable
-- Follow the coding standards outlined in this guide
-
-This comprehensive guide provides the foundation for creating robust, maintainable test functions that integrate seamlessly with the ADARE framework. Start with simple examples and gradually incorporate advanced features as needed.
+- **Use** ``ctx.fail_if()`` **and** ``ctx.error_if()`` for clean assertion-style logic
+- **Always use** ``ctx.resolve_globfilepath()`` for file paths
+- **Consider placeholder support** for values that may be dynamic
+- **Keep test functions focused** — one test, one purpose
+- **Use module-level helpers** for shared logic across tests
+- **Handle platform differences** gracefully with ``platform.system()`` checks
+- **Set reasonable timeouts** for network operations
+- **Use structured logging** via ``logging.getLogger(__name__)``

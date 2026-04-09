@@ -5,7 +5,7 @@ Advanced Playbook Patterns
 This guide covers advanced playbook patterns and complex syntax for experienced ADARE users. These patterns demonstrate sophisticated control flow, error handling, and dynamic behavior that goes beyond basic playbook concepts.
 
 .. note::
-   If you're new to ADARE playbooks, start with :doc:`../basics/actions` for basic conditional flow control examples.
+   If you're new to ADARE playbooks, start with :doc:`/reference/actions` for basic conditional flow control examples.
 
 Conditional Flow Control
 ************************

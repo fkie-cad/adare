@@ -22,19 +22,19 @@ from adare.helperfunctions.module import import_module_from_pyfile
 xml_module_path = PROJECT_ROOT / "appdata" / "testfunctions" / "xml" / "xml.py"
 xml_module = import_module_from_pyfile(xml_module_path)
 
-# Extract testfunctions from module
-ElementExists = xml_module.ElementExists
-ElementExistsParameter = xml_module.ElementExistsParameter
-ElementTextMatches = xml_module.ElementTextMatches
-ElementTextMatchesParameter = xml_module.ElementTextMatchesParameter
-AttributeMatches = xml_module.AttributeMatches
-AttributeMatchesParameter = xml_module.AttributeMatchesParameter
-ElementCount = xml_module.ElementCount
-ElementCountParameter = xml_module.ElementCountParameter
-XPathResultMatches = xml_module.XPathResultMatches
-XPathResultMatchesParameter = xml_module.XPathResultMatchesParameter
-NamespaceMatches = xml_module.NamespaceMatches
-NamespaceMatchesParameter = xml_module.NamespaceMatchesParameter
+# Extract testfunctions from module (decorator pattern)
+ElementExists = xml_module.element_exists._test_class
+ElementExistsParameter = xml_module.element_exists._parameter_class
+ElementTextMatches = xml_module.element_text_matches._test_class
+ElementTextMatchesParameter = xml_module.element_text_matches._parameter_class
+AttributeMatches = xml_module.attribute_matches._test_class
+AttributeMatchesParameter = xml_module.attribute_matches._parameter_class
+ElementCount = xml_module.element_count._test_class
+ElementCountParameter = xml_module.element_count._parameter_class
+XPathResultMatches = xml_module.xpath_result_matches._test_class
+XPathResultMatchesParameter = xml_module.xpath_result_matches._parameter_class
+NamespaceMatches = xml_module.namespace_matches._test_class
+NamespaceMatchesParameter = xml_module.namespace_matches._parameter_class
 
 # Import test helpers
 import importlib.util
