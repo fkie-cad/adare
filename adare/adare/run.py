@@ -489,6 +489,12 @@ run.add_alias('rm', 'remove')
 from adare.cli.groups.web_commands import register as register_web_commands
 register_web_commands(cli, AliasedGroup, exec_with_error_printing)
 
+# Web UI commands (start, build, services)
+from adare.cli.web_cmd import web_start, web_build, web_services
+web.add_command(web_start, "start")
+web.add_command(web_build, "build")
+web.add_command(web_services, "services")
+
 
 # ------------------------------
 # CV Server testing commands (was: dev mcp)
@@ -627,7 +633,7 @@ def server():
     pass
 
 @server.command()
-@click.option('--port', type=int, default=8000, help='Server port (default: 8000)')
+@click.option('--port', type=int, default=8089, help='Server port (default: 8089)')
 @click.option('--host', default='127.0.0.1', help='Server host (default: 127.0.0.1)')
 @click.option('--dev', is_flag=True, help='Run in development mode with auto-reload')
 def start(port, host, dev):

@@ -5,7 +5,7 @@ This service handles data retrieval operations for display and returns Result[T]
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Callable
 
 import logging
 
@@ -24,6 +24,7 @@ from adare.core.dto.show import (
     TestfunctionListItem,
     TestfunctionDetail,
 )
+from adare.config.database import get_project_database_location
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +37,31 @@ class ShowService:
     across different frontends.
     """
 
+    def _query_across_projects(self, query_fn: Callable) -> List:
+        """Run a StructuredDataApi query across all project databases, aggregating results."""
+        from adare.database.api.structured_data import StructuredDataApi
+
+        all_results = []
+        with StructuredDataApi() as global_api:
+            projects = global_api.get_projects_structured()
+
+        for project in projects:
+            project_path = Path(project.path) if project.path else None
+            if not project_path:
+                continue
+            db_path = get_project_database_location(project_path)
+            if not db_path.exists():
+                continue
+            try:
+                with StructuredDataApi(db_path=db_path) as project_api:
+                    all_results.extend(query_fn(project_api, project.name))
+            except FileNotFoundError:
+                log.warning(f"Project database not found for {project.name}")
+            except OSError as e:
+                log.warning(f"Failed to query project {project.name}: {e}")
+
+        return all_results
+
     # =========================================================================
     # Run Operations
     # =========================================================================
@@ -44,25 +70,25 @@ class ShowService:
         """
         List runs with optional filtering.
 
+        Queries across all project databases to aggregate runs.
+
         Args:
             request: Optional filters for project, environment, experiment
 
         Returns:
             Result[List[RunListItem]] with list of runs.
         """
-        from adare.database.api.structured_data import StructuredDataApi
-
         try:
-            project = request.project if request else None
-            environment = request.environment if request else None
-            experiment = request.experiment if request else None
+            project_filter = request.project if request else None
+            environment_filter = request.environment if request else None
+            experiment_filter = request.experiment if request else None
 
-            with StructuredDataApi() as api:
-                runs = api.get_runs_structured(
-                    project_name=project,
-                    environment_name=environment,
-                    experiment_name=experiment
+            runs = self._query_across_projects(
+                lambda api, name: api.get_runs_structured(
+                    project_name=name,
+                    experiment_name=experiment_filter,
                 )
+            )
 
             items = [
                 RunListItem(
@@ -83,9 +109,22 @@ class ShowService:
                 for run in runs
             ]
 
+            # Apply remaining filters after aggregation
+            if project_filter:
+                items = [item for item in items if item.project_name == project_filter]
+            if environment_filter:
+                items = [item for item in items if item.environment_name == environment_filter]
+
             return Result.ok(items)
 
-        except Exception as e:
+        except FileNotFoundError as e:
+            log.error(f"Failed to list runs: {e}")
+            return Result.fail(
+                code="RunListError",
+                message=f"Failed to list runs: {e}",
+                solutions=['Check database connection']
+            )
+        except OSError as e:
             log.error(f"Failed to list runs: {e}")
             return Result.fail(
                 code="RunListError",
@@ -96,6 +135,8 @@ class ShowService:
     def get_run(self, ulid: str = None, latest_in_project: bool = False, project_path: Path = None) -> Result[RunDetail]:
         """
         Get detailed information about a specific run.
+
+        Searches across all project databases when looking up by ULID.
 
         Args:
             ulid: Run ULID to retrieve
@@ -108,8 +149,8 @@ class ShowService:
         from adare.database.api.frontend import DataRetrievalApi
 
         try:
-            with DataRetrievalApi() as api:
-                if latest_in_project:
+            if latest_in_project:
+                with DataRetrievalApi() as api:
                     latest_run_data = api.get_latest_run_in_project()
                     if latest_run_data is None or latest_run_data.empty:
                         return Result.fail(
@@ -119,34 +160,45 @@ class ShowService:
                         )
                     ulid = latest_run_data['id'].iloc[0]
 
-                run_data = api.get_run(ulid)
-                if run_data is None or run_data.empty:
-                    return Result.fail(
-                        code="RunNotFoundError",
-                        message=f"Run with ULID {ulid} not found",
-                        solutions=['Use `adare show runs` to find valid run ULIDs']
-                    )
+            # Search across all project databases for the run
+            all_runs = self._query_across_projects(
+                lambda api, name: api.get_runs_structured(project_name=name)
+            )
 
-                row = run_data.iloc[0]
-                detail = RunDetail(
-                    ulid=row.get('id', ulid),
-                    experiment_name=row.get('experiment_dotnotation', ''),
-                    experiment_ulid=row.get('experiment_id', ''),
-                    environment_name=row.get('environment_name', ''),
-                    environment_ulid=row.get('environment_id', ''),
-                    project_name=row.get('project_name', ''),
-                    start_time=row.get('start_time'),
-                    end_time=row.get('end_time'),
-                    duration_seconds=row.get('duration', 0) if row.get('duration') else 0,
-                    status=row.get('status', ''),
-                    result_status=row.get('result_status', ''),
-                    published=row.get('published', False),
-                    fake=row.get('fake', False),
+            run = next((r for r in all_runs if r.ulid == ulid), None)
+            if not run:
+                return Result.fail(
+                    code="RunNotFoundError",
+                    message=f"Run with ULID {ulid} not found",
+                    solutions=['Use `adare show runs` to find valid run ULIDs']
                 )
 
-                return Result.ok(detail)
+            detail = RunDetail(
+                ulid=run.ulid,
+                experiment_name=run.experiment_name,
+                experiment_ulid=run.experiment_ulid,
+                environment_name=run.environment_name,
+                environment_ulid=run.environment_ulid,
+                project_name=run.project_name,
+                start_time=run.start_time,
+                end_time=run.end_time,
+                duration_seconds=run.duration_seconds,
+                status=run.status,
+                result_status=run.overall_result,
+                published=run.published,
+                fake=run.fake,
+            )
 
-        except Exception as e:
+            return Result.ok(detail)
+
+        except FileNotFoundError as e:
+            log.error(f"Failed to get run {ulid}: {e}")
+            return Result.fail(
+                code="RunRetrievalError",
+                message=f"Failed to get run: {e}",
+                solutions=['Check database connection', 'Verify the ULID is correct']
+            )
+        except OSError as e:
             log.error(f"Failed to get run {ulid}: {e}")
             return Result.fail(
                 code="RunRetrievalError",
@@ -367,18 +419,22 @@ class ShowService:
     # Experiment Operations
     # =========================================================================
 
-    def list_experiments(self) -> Result[List[ExperimentListItem]]:
+    def list_experiments(self, tags: Optional[List[str]] = None) -> Result[List[ExperimentListItem]]:
         """
-        List all experiments.
+        List all experiments, optionally filtered by tags.
+
+        Queries across all project databases to aggregate experiments.
+
+        Args:
+            tags: Optional list of tag names to filter by (AND matching)
 
         Returns:
             Result[List[ExperimentListItem]] with list of experiments.
         """
-        from adare.database.api.structured_data import StructuredDataApi
-
         try:
-            with StructuredDataApi() as api:
-                experiments = api.get_experiments_structured()
+            experiments = self._query_across_projects(
+                lambda api, name: api.get_experiments_structured(project_name=name)
+            )
 
             items = [
                 ExperimentListItem(
@@ -400,9 +456,27 @@ class ShowService:
                 for exp in experiments
             ]
 
+            if tags:
+                from adare.database.api.tag import TagApi
+                with TagApi() as tag_api:
+                    result = tag_api.get_entities_by_tags(
+                        tag_names=tags,
+                        entity_type='experiments',
+                        match_all=True,
+                    )
+                matching_ids = {exp.id for exp in result.get('experiments', [])}
+                items = [item for item in items if item.ulid in matching_ids]
+
             return Result.ok(items)
 
-        except Exception as e:
+        except FileNotFoundError as e:
+            log.error(f"Failed to list experiments: {e}")
+            return Result.fail(
+                code="ExperimentListError",
+                message=f"Failed to list experiments: {e}",
+                solutions=['Check database connection']
+            )
+        except OSError as e:
             log.error(f"Failed to list experiments: {e}")
             return Result.fail(
                 code="ExperimentListError",
@@ -414,6 +488,8 @@ class ShowService:
         """
         Get detailed information about a specific experiment.
 
+        Searches across all project databases.
+
         Args:
             name: Experiment name to retrieve
             ulid: Experiment ULID to retrieve
@@ -422,11 +498,10 @@ class ShowService:
         Returns:
             Result[ExperimentDetail] with experiment details.
         """
-        from adare.database.api.structured_data import StructuredDataApi
-
         try:
-            with StructuredDataApi() as api:
-                experiments = api.get_experiments_structured()
+            experiments = self._query_across_projects(
+                lambda api, proj_name: api.get_experiments_structured(project_name=proj_name)
+            )
 
             # Find the experiment by name, ulid, or dotnotation
             exp = None
@@ -464,7 +539,14 @@ class ShowService:
 
             return Result.ok(detail)
 
-        except Exception as e:
+        except FileNotFoundError as e:
+            log.error(f"Failed to get experiment: {e}")
+            return Result.fail(
+                code="ExperimentRetrievalError",
+                message=f"Failed to get experiment: {e}",
+                solutions=['Check database connection']
+            )
+        except OSError as e:
             log.error(f"Failed to get experiment: {e}")
             return Result.fail(
                 code="ExperimentRetrievalError",

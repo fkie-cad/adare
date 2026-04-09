@@ -244,8 +244,13 @@ def exec_show_experiments(arguments):
     api = AdareAPI()
     formatter, output_file, dual_output = get_formatter_from_context()
 
+    # Parse optional --tags filter
+    tag_list = None
+    if hasattr(arguments, 'tags') and arguments.tags:
+        tag_list = [t.strip() for t in arguments.tags.split(',')]
+
     # Get experiments from API
-    result = api.show.list_experiments()
+    result = api.show.list_experiments(tags=tag_list)
 
     if not result.success:
         _handle_api_error(result)
@@ -265,6 +270,7 @@ def exec_show_experiments(arguments):
                 'ulid': exp.ulid,
                 'environments_names': ', '.join(exp.environments),
                 'description': exp.description,
+                'tags': ', '.join(exp.tags),
                 'published': str(exp.published),
                 'in_request': str(exp.in_request),
             } for exp in experiments]

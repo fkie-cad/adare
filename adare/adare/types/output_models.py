@@ -13,6 +13,7 @@ class ProjectInfo:
     """Project information for structured output."""
     name: str
     description: str = ""
+    path: str = ""
     created_at: Optional[datetime] = None
     experiment_count: int = 0
     environment_count: int = 0
@@ -22,6 +23,7 @@ class ProjectInfo:
         return {
             'name': self.name,
             'description': self.description,
+            'path': self.path,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'experiment_count': self.experiment_count,
             'environment_count': self.environment_count,

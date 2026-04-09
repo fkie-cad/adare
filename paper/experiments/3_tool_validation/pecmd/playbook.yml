@@ -1,0 +1,163 @@
+settings:
+  # Default pause between actions (seconds) -> make this also configurable to be randomized in a specific range
+  idle: 1.0
+  
+  # Overall timeout for the experiment (seconds)
+  timeout: 6000
+  
+  # Default screenshot settings
+  screenshot:
+    format: "png"
+    quality: 95
+
+
+variables:
+  username: 
+    type: string
+    value: "adare"
+
+  prefetch_dir:
+    type: path
+    value: "c:/windows/prefetch"
+
+  regedit_prefetch: 
+    type: path
+    value: "{{prefetch_dir}}/REGEDIT.EXE-DAB4D60B.pf"  
+    #value: "{{prefetch_dir}}/REGEDIT*.pf"
+  
+  pecmd_output_file:
+    type: path
+    value: "prefetch.json"
+
+  pecmd_output_dir:
+    type: path
+    value: "c:/users/{{username}}/Documents"
+  
+  abs_pecmd_output_file:
+    type: path
+    value: "{{pecmd_output_dir}}/{{pecmd_output_file}}"
+
+
+
+actions:
+
+  - command:
+      name: "Rm old pf file"
+      command: "rm {{regedit_prefetch}}"
+      shell: true
+      admin: true
+  
+  - test: check_regedit_pf_does_not_exists 
+
+  - keyboard:
+      combination: ["win", "r"]
+  - keyboard:
+      text: "regedit"
+  - keyboard:
+      key: "enter"
+  - idle:
+      duration: 10
+
+  - test: check_regedit_pf_exists
+
+  - idle:
+      duration: 10
+
+  - command:
+      name: "pecmd"
+      tool: PECmd.exe
+      command: 'PECmd.exe -q -d {{prefetch_dir}} --json {{pecmd_output_dir}} --jsonf {{pecmd_output_file}}; Start-Sleep -Seconds 15.0'
+      timeout: 200
+      admin: true
+      shell: true
+  - idle:
+      duration: 10.0
+
+  - test: check_pecmd_output_file_exists
+  - test: check_prefetch_run_count_1
+
+  - loop:
+      times: 9
+      actions:
+        - keyboard:
+            combination: ["win", "r"]
+        - keyboard:
+            text: "regedit"
+        - keyboard:
+            key: "enter"
+        - save_timestamp:
+            variable: 'timestamp_{{index}}'
+        - idle:
+            duration: 10
+
+  - command:
+      name: "pecmd"
+      tool: PECmd.exe
+      command: 'PECmd.exe -q -d {{prefetch_dir}} --json {{pecmd_output_dir}} --jsonf {{pecmd_output_file}}; Start-Sleep -Seconds 15.0'
+      timeout: 200
+      admin: true
+      shell: true
+  - idle:
+      duration: 10.0
+
+  - pull:
+      src: "{{abs_pecmd_output_file}}"
+  - idle:
+      duration: 10.0
+
+  - test: check_prefetch_run_count_10
+  - idle:
+      duration: 10.0
+
+  - test: check_prefetch_last_run
+  - idle:
+      duration: 10.0
+
+
+
+tests:
+  - name: check_regedit_pf_exists
+    function: file_exists
+    parameter:
+      dst: '{{regedit_prefetch}}'
+  
+  - name: check_regedit_pf_does_not_exists
+    function: file_does_not_exist
+    parameter:
+      dst: '{{regedit_prefetch}}' 
+
+  - name: check_pecmd_output_file_exists
+    function: file_exists
+    parameter:
+      # dst: "c:\\windows\\prefetch\\POWERSHELL.EXE-022A1004.pf"
+      dst: '{{abs_pecmd_output_file}}'
+
+  - name: check_prefetch_run_count_1
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{abs_pecmd_output_file}}'
+      conditions:
+        ExecutableName: "REGEDIT.EXE"  
+        RunCount: "1"
+      match_mode: "any"    
+
+  - name: check_prefetch_run_count_10
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{abs_pecmd_output_file}}'
+      conditions:
+        ExecutableName: "REGEDIT.EXE"  
+        RunCount: "10"
+      match_mode: "any"    
+
+  - name: check_prefetch_last_run
+    function: jsonl.line_matches
+    parameter:
+      dst: '{{abs_pecmd_output_file}}'
+      conditions:
+        ExecutableName: "REGEDIT.EXE"  
+        LastRun: '{{timestamp_8}}'
+        tolerance: 5
+      match_mode: "any"    
+
+

@@ -1,0 +1,151 @@
+settings:
+  idle: 2.0
+  timeout: 600
+  screenshot:
+    format: "png"
+    quality: 95
+variables:
+  autopsy_version: 4.19.1
+  case_name: "TestCase"
+  case_directory: r"C:\Users\adare\Documents\{{ case_name }}"
+actions:
+  # launch autopsy and create case for test image
+  - command:
+      command: r"$s=(New-Object -ComObject WScript.Shell).CreateShortcut("C:\Users\Public\Desktop\Autopsy {{ autopsy_version }}.lnk"); $s.Arguments='--userdir "' + $env:LOCALAPPDATA + '\autopsycustom"'; $s.Save()"
+      shell: true
+      admin: true
+    description: "Adjust the userdir to avoid issues due to different versions being installed on the system"
+  - click:
+      type: double
+      target:
+        text: "{{ autopsy_version }}"
+  - wait_until:
+      initial_delay: 15
+      check_interval: 15
+      condition:
+        exists:
+          text: "Central Repository"
+      timeout: 120
+  - click:
+      target:
+        text: "Central Repository"
+  - keyboard:
+      key: "enter"
+  - wait_until:
+      condition:
+        exists:
+          text: "New Case"
+      skip:
+        idle: 5
+        pixel_change:
+          below: 20
+  - click:
+      target:
+        image: "case.png"
+        strategy:
+          ClosestToStrategy:
+            text: "New Case"
+  - keyboard:
+      text: "{{ case_name }}"
+  - keyboard:
+      key: "tab"
+  - keyboard:
+      text: "{{ adare_user_documents | win_path }}"
+  - keyboard:
+      key: "tab"
+  - keyboard:
+      key: "tab"
+  - keyboard:
+      key: "enter"
+    description: "Case Information: Next"
+  - keyboard:
+      key: "enter"
+    description: "Optional Information: Next"
+  - wait_until:
+      initial_delay: 30
+      check_interval: 10
+      condition:
+        exists:
+          text: "Hosts are used"
+      timeout: 90
+  - keyboard:
+      key: "enter"
+    description: "Select Host"
+  - keyboard:
+      key: "enter"
+    description: "Select Data Source Type Disk Image"
+  - keyboard:
+      text: r"{{ adare_shared_data | win_path }}\2020JimmyWilson.E01"
+  - idle:
+      duration: 5
+    description: "Wait till Next Button becomes clickable"
+  - keyboard:
+      key: "enter"
+    description: "Select Data Source: Next"
+  - click:
+      target:
+        text: "Deselect All"
+  - click:
+      target:
+        text: "Recent Activity"
+    description: "Toggle Recent Activity"
+  - keyboard:
+      combination: ["shift", "tab"]
+    description: "Toggle Recent Activity"
+  - keyboard:
+      combination: ["shift", "tab"]
+    description: "Toggle Recent Activity"
+  - keyboard:
+      key: "space"
+    description: "Toggle Recent Activity"
+  - click:
+      target:
+        text: "Next"
+  - wait_until:
+      condition:
+        exists:
+          text: "View Log"
+      initial_delay: 30
+      check_interval: 10
+  - click:
+      target:
+        text: "Finish"
+  # generate report
+  - click:
+      target:
+        text: "Help"
+        offset:
+          x: 30
+          y: 0
+          base: "center-right"
+  - keyboard:
+      combination: ["win", "up"]
+    description: "Maximize the windows"
+  - wait_until:
+      condition:
+        exists:
+          text: "Web History"
+      timeout: 180
+  - click:
+      target:
+        image: "generate_report.png"
+  - click:
+      target:
+        text: "Excel"
+  - keyboard:
+      key: "enter"
+    description: "Select and Configure Report Modules: Next"
+  - keyboard:
+      key: "enter"
+    description: "Select which data source(s) to include: Next"
+  - keyboard:
+      key: "enter"
+    description: "Configure Report: Finish"
+  # copy report
+  - idle:
+      duration: 30
+    description: "Wait for report generation to complete"
+  - command:
+      command: r"Get-Item "{{ case_directory | win_path }}\Reports\*\Excel.xlsx" | Copy-Item -Destination "{{ adare_shared_data | win_path }}\Report_{{ autopsy_version }}.xlsx""
+      shell: true
+  
