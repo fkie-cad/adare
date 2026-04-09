@@ -50,7 +50,7 @@ class StructuredDataApi(DatabaseApi):
             project_info = ProjectInfo(
                 name=project.name,
                 description=project.description or "",
-                created_at=project.created_at,
+                path=project.path or "",
             )
             result.append(project_info)
 
@@ -96,7 +96,7 @@ class StructuredDataApi(DatabaseApi):
 
         return result
 
-    def get_experiments_structured(self) -> List[ExperimentInfo]:
+    def get_experiments_structured(self, project_name: str = None) -> List[ExperimentInfo]:
         """Get all experiments as structured ExperimentInfo objects."""
         # Use eager loading to prevent N+1 queries
         experiments = safe_query_all(self._session.query(Experiment).options(
@@ -104,8 +104,8 @@ class StructuredDataApi(DatabaseApi):
         ))
         result = []
 
-        # Get current project name from context (experiments are stored per-project)
-        project_name = get_current_project_name() or ""
+        # Use explicitly passed project_name first, fall back to CWD detection
+        project_name = project_name or get_current_project_name() or ""
 
         for exp in experiments:
             # Use utility functions for cleaner, reusable code
@@ -243,7 +243,7 @@ class StructuredDataApi(DatabaseApi):
         result = []
 
         # Get current project name from context (experiments are stored per-project)
-        current_project_name = get_current_project_name() or project_name or ""
+        current_project_name = project_name or get_current_project_name() or ""
 
         for run in runs:
             # Experiment and environment info are now eagerly loaded

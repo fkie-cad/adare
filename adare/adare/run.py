@@ -474,10 +474,11 @@ def example(name, project):
     exec_with_error_printing(exec_experiment_example, args)
 
 @experiment.command(name='list')
-def list_experiments():
+@click.option('--tags', '-t', help='Filter by tags (comma-separated, e.g. tool:Autopsy,goal:tool-test)')
+def list_experiments(tags):
     """List all experiments in an environment."""
     from adare.cli.show import exec_show_experiments
-    args = SimpleNamespace()
+    args = SimpleNamespace(tags=tags)
     exec_with_error_printing(exec_show_experiments, args)
 
 @experiment.command()
@@ -1398,6 +1399,12 @@ def submit_environment(name, project):
     args = SimpleNamespace(name=name, project=project)
     exec_with_error_printing(exec_submit_environment, args)
 
+# Web UI commands (start, build, services)
+from adare.cli.web_cmd import web_start, web_build, web_services
+web.add_command(web_start, "start")
+web.add_command(web_build, "build")
+web.add_command(web_services, "services")
+
 
 # ------------------------------
 # CV Server testing commands (was: dev mcp)
@@ -1536,7 +1543,7 @@ def server():
     pass
 
 @server.command()
-@click.option('--port', type=int, default=8000, help='Server port (default: 8000)')
+@click.option('--port', type=int, default=8089, help='Server port (default: 8089)')
 @click.option('--host', default='127.0.0.1', help='Server host (default: 127.0.0.1)')
 @click.option('--dev', is_flag=True, help='Run in development mode with auto-reload')
 def start(port, host, dev):
