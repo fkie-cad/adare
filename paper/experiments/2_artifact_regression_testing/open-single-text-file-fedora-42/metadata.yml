@@ -1,0 +1,6 @@
+name: "open-single-text-file-fedora-42"
+description: "Open a single text file"
+
+environments:
+  - "fedora-42"
+

@@ -324,9 +324,9 @@ class ShowAPI:
         """Get environment details."""
         return self._service.get_environment(name)
 
-    def list_experiments(self):
-        """List all experiments."""
-        return self._service.list_experiments()
+    def list_experiments(self, tags=None):
+        """List all experiments, optionally filtered by tags."""
+        return self._service.list_experiments(tags=tags)
 
     def get_experiment(self, name=None, ulid=None, dotnotation=None):
         """Get experiment details."""

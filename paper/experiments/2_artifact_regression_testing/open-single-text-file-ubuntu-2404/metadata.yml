@@ -1,0 +1,6 @@
+name: "open-single-text-file-ubuntu-2404"
+description: "Open a single text file"
+
+environments:
+  - ubuntu-2404
+

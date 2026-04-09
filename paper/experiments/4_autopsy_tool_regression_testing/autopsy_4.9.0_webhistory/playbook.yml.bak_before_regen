@@ -1,0 +1,613 @@
+settings:
+  idle: 2.0
+  timeout: 600
+  screenshot:
+    format: "png"
+    quality: 95
+variables:
+  autopsy_version: 4.9.0
+  case_name: "TestCase"
+  case_directory: r"C:\Users\adare\Documents\{{ case_name }}"
+tests:
+  # ==========================================================================
+  # TIER 1: FILE EXISTENCE
+  # ==========================================================================
+
+  - name: test_report_file_exists
+    description: "Verify the Excel report file was generated"
+    function: standard.file_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+
+  # ==========================================================================
+  # TIER 2: SHEET STRUCTURE VALIDATION (Detect new/removed sheets)
+  # ==========================================================================
+
+  - name: test_sheet_data_source_usage_exists
+    description: "Verify Data Source Usage sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Data Source Usage"
+
+  - name: test_sheet_installed_programs_exists
+    description: "Verify Installed Programs sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Installed Programs"
+
+  - name: test_sheet_operating_system_information_exists
+    description: "Verify Operating System Information sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Operating System Information"
+
+  - name: test_sheet_recent_documents_exists
+    description: "Verify Recent Documents sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Recent Documents"
+
+  - name: test_sheet_recycle_bin_exists
+    description: "Verify Recycle Bin sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Recycle Bin"
+
+  - name: test_sheet_run_programs_exists
+    description: "Verify Run Programs sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Run Programs"
+
+  - name: test_sheet_shell_bags_exists
+    description: "Verify Shell Bags sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Shell Bags"
+
+  - name: test_sheet_summary_exists
+    description: "Verify Summary sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Summary"
+
+  - name: test_sheet_tagged_files_exists
+    description: "Verify Tagged Files sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Tagged Files"
+
+  - name: test_sheet_tagged_results_exists
+    description: "Verify Tagged Results sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Tagged Results"
+
+  - name: test_sheet_usb_device_attached_exists
+    description: "Verify USB Device Attached sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "USB Device Attached"
+
+  - name: test_sheet_web_bookmarks_exists
+    description: "Verify Web Bookmarks sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Web Bookmarks"
+
+  - name: test_sheet_web_categories_exists
+    description: "Verify Web Categories sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Web Categories"
+
+  - name: test_sheet_web_cookies_exists
+    description: "Verify Web Cookies sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Web Cookies"
+
+  - name: test_sheet_web_history_exists
+    description: "Verify Web History sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Web History"
+
+  - name: test_sheet_web_search_exists
+    description: "Verify Web Search sheet exists"
+    function: excel.sheet_exists
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet_name: "Web Search"
+
+  # ==========================================================================
+  # TIER 3: COLUMN SCHEMA VALIDATION (Detect added/removed/renamed columns)
+  # ==========================================================================
+
+  - name: test_columns_recent_documents
+    description: "Validate Recent Documents sheet column headers"
+    function: excel.validate_columns
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Recent Documents"
+      expected_columns: ["Path", "Date/Time", "Path ID", "Source File", "Tags"]
+      column_row: 0
+      allow_extra_columns: false
+      allow_missing_columns: false
+      ignore_order: false
+
+  - name: test_columns_tagged_files
+    description: "Validate Tagged Files sheet column headers"
+    function: excel.validate_columns
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Tagged Files"
+      expected_columns: ["Tag", "File", "Comment", "Modified Time", "Changed Time", "Accessed Time", "Created Time", "Size (Bytes)", "Hash"]
+      column_row: 0
+      allow_extra_columns: false
+      allow_missing_columns: false
+      ignore_order: false
+
+  - name: test_columns_tagged_results
+    description: "Validate Tagged Results sheet column headers"
+    function: excel.validate_columns
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Tagged Results"
+      expected_columns: ["Result Type", "Tag", "Comment", "Source File"]
+      column_row: 0
+      allow_extra_columns: false
+      allow_missing_columns: false
+      ignore_order: false
+
+  - name: test_columns_web_bookmarks
+    description: "Validate Web Bookmarks sheet column headers"
+    function: excel.validate_columns
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Web Bookmarks"
+      expected_columns: ["URL", "Title", "Date Created", "Program", "Domain", "Source File", "Tags"]
+      column_row: 0
+      allow_extra_columns: false
+      allow_missing_columns: false
+      ignore_order: false
+
+  - name: test_columns_web_cookies
+    description: "Validate Web Cookies sheet column headers"
+    function: excel.validate_columns
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Web Cookies"
+      expected_columns: ["URL", "Date/Time", "Name", "Value", "Program", "Date Created", "Domain", "Source File", "Tags"]
+      column_row: 0
+      allow_extra_columns: false
+      allow_missing_columns: false
+      ignore_order: false
+
+  - name: test_columns_web_history
+    description: "Validate Web History sheet column headers"
+    function: excel.validate_columns
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Web History"
+      expected_columns: ["URL", "Date Accessed", "Referrer", "Title", "Program", "URL Domain", "Domain", "Source File", "Tags"]
+      column_row: 0
+      allow_extra_columns: false
+      allow_missing_columns: false
+      ignore_order: false
+
+  - name: test_columns_web_search
+    description: "Validate Web Search sheet column headers"
+    function: excel.validate_columns
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Web Search"
+      expected_columns: ["Text", "Domain", "Date Accessed", "Program Name", "Source File", "Tags"]
+      column_row: 0
+      allow_extra_columns: false
+      allow_missing_columns: false
+      ignore_order: false
+
+  # ==========================================================================
+  # TIER 4: CONTENT COMPARISON (Detect added/removed rows and cell changes)
+  # ==========================================================================
+
+  - name: test_content_data_source_usage
+    description: "Compare Data Source Usage sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Data Source Usage"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Data Source Usage"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_installed_programs
+    description: "Compare Installed Programs sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Installed Programs"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Installed Programs"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_operating_system_information
+    description: "Compare Operating System Information sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Operating System Information"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Operating System Information"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_recent_documents
+    description: "Compare Recent Documents sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Recent Documents"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Recent Documents"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_recycle_bin
+    description: "Compare Recycle Bin sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Recycle Bin"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Recycle Bin"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_run_programs
+    description: "Compare Run Programs sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Run Programs"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Run Programs"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_shell_bags
+    description: "Compare Shell Bags sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Shell Bags"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Shell Bags"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_summary
+    description: "Compare Summary sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Summary"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Summary"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_tagged_files
+    description: "Compare Tagged Files sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Tagged Files"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Tagged Files"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_tagged_results
+    description: "Compare Tagged Results sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Tagged Results"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Tagged Results"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_usb_device_attached
+    description: "Compare USB Device Attached sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "USB Device Attached"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "USB Device Attached"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_web_bookmarks
+    description: "Compare Web Bookmarks sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Web Bookmarks"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Web Bookmarks"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_web_categories
+    description: "Compare Web Categories sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Web Categories"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Web Categories"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_web_cookies
+    description: "Compare Web Cookies sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Web Cookies"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Web Cookies"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_web_history
+    description: "Compare Web History sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Web History"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Web History"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+  - name: test_content_web_search
+    description: "Compare Web Search sheet data - flexible row matching"
+    function: excel.compare_rows
+    parameter:
+      dst: "{{ case_directory }}/Reports/*/Excel.xlsx"
+      sheet: "Web Search"
+      reference_file: "{{ adare_shared_data }}/Report_{{ autopsy_version }}_reference.xlsx"
+      reference_sheet: "Web Search"
+      header_row: 1
+      ignore_order: true
+      allow_extra_rows: true
+      allow_missing_rows: true
+
+actions:
+  # launch autopsy and create case for test image
+  - command:
+      command: r"$s=(New-Object -ComObject WScript.Shell).CreateShortcut("C:\Users\Public\Desktop\Autopsy {{ autopsy_version }}.lnk"); $s.Arguments='--userdir "' + $env:LOCALAPPDATA + '\autopsycustom"'; $s.Save()"
+      shell: true
+      admin: true
+    description: "Adjust the userdir to avoid issues due to different versions being installed on the system"
+  - click:
+      type: double
+      target:
+        text: "{{ autopsy_version }}"
+        text_match:                                                                                                                                                                                                                                          
+          mode: fuzzy                                                                                                                                                                                                                                        
+          allow_missing_chars: [".", "0"]                                                                                                                                                                                                                          
+  - wait_until:
+      condition:
+        exists:
+          text: "New Case"
+      skip:
+        idle: 5
+        pixel_change:
+          below: 20
+  - click:
+      target:
+        image: "case.png"
+        strategy:
+          ClosestToStrategy:
+            text: "New Case"
+  - wait_until:
+      timeout: 180
+      initial_delay: 40
+      check_interval: 20
+      condition:
+        exists:
+          text: "Case Information"
+  - keyboard:
+      text: "{{ case_name }}"
+  - keyboard:
+      key: "tab"
+  - keyboard:
+      text: "{{ adare_user_documents | win_path }}"
+  - keyboard:
+      key: "tab"
+  - keyboard:
+      key: "tab"
+  - keyboard:
+      key: "enter"
+    description: "Case Information: Next"
+  - keyboard:
+      key: "enter"
+    description: "Optional Information: Next"
+  - wait_until:
+      initial_delay: 30
+      check_interval: 10
+      condition:
+        exists:
+          text: "Select Type"
+      timeout: 90
+  - keyboard:
+      key: "enter"
+    description: "Select Data Source Type Disk Image"
+  - keyboard:
+      text: r"{{ adare_project_shared | win_path }}\data\2020JimmyWilson.E01"
+  - idle:
+      duration: 5
+    description: "Wait till Next Button becomes clickable"
+  - keyboard:
+      key: "enter"
+    description: "Select Data Source: Next"
+  - click:
+      target:
+        text: "Deselect All"
+  - click:
+      target:
+        text: "Recent Activity"
+    description: "Toggle Recent Activity"
+  - keyboard:
+      combination: ["shift", "tab"]
+    description: "Toggle Recent Activity"
+  - keyboard:
+      combination: ["shift", "tab"]
+    description: "Toggle Recent Activity"
+  - keyboard:
+      key: "space"
+    description: "Toggle Recent Activity"
+  - click:
+      target:
+        text: "Next"
+  - wait_until:
+      condition:
+        exists:
+          text: "View Log"
+      initial_delay: 30
+      check_interval: 10
+  - click:
+      target:
+        text: "Finish"
+  # generate report
+  - click:
+      target:
+        text: "Help"
+        offset:
+          x: 30
+          y: 0
+          base: "center-right"
+  - keyboard:
+      combination: ["win", "up"]
+    description: "Maximize the windows"
+  - wait_until:
+      condition:
+        exists:
+          text: "Web History"
+      timeout: 180
+  - click:
+      target:
+        image: "generate_report.png"
+  - click:
+      target:
+        text: "Excel"
+  - keyboard:
+      key: "enter"
+    description: "Select and Configure Report Modules: Next"
+  - keyboard:
+      key: "enter"
+    description: "Configure Report: Finish"
+  # copy report
+  - idle:
+      duration: 30
+    description: "Wait for report generation to complete"
+  - command:
+      command: r"Get-Item "{{ case_directory | win_path }}\Reports\*\Excel.xlsx" | Copy-Item -Destination "{{ adare_shared_data | win_path }}\Report_{{ autopsy_version }}.xlsx""
+      shell: true
+  # Execute tests
+  - test: test_report_file_exists
+
+  - test: test_sheet_data_source_usage_exists
+  - test: test_sheet_installed_programs_exists
+  - test: test_sheet_operating_system_information_exists
+  - test: test_sheet_recent_documents_exists
+  - test: test_sheet_recycle_bin_exists
+  - test: test_sheet_run_programs_exists
+  - test: test_sheet_shell_bags_exists
+  - test: test_sheet_summary_exists
+  - test: test_sheet_tagged_files_exists
+  - test: test_sheet_tagged_results_exists
+  - test: test_sheet_usb_device_attached_exists
+  - test: test_sheet_web_bookmarks_exists
+  - test: test_sheet_web_categories_exists
+  - test: test_sheet_web_cookies_exists
+  - test: test_sheet_web_history_exists
+  - test: test_sheet_web_search_exists
+
+  - test: test_columns_recent_documents
+  - test: test_columns_tagged_files
+  - test: test_columns_tagged_results
+  - test: test_columns_web_bookmarks
+  - test: test_columns_web_cookies
+  - test: test_columns_web_history
+  - test: test_columns_web_search
+
+  - test: test_content_data_source_usage
+  - test: test_content_installed_programs
+  - test: test_content_operating_system_information
+  - test: test_content_recent_documents
+  - test: test_content_recycle_bin
+  - test: test_content_run_programs
+  - test: test_content_shell_bags
+  - test: test_content_summary
+  - test: test_content_tagged_files
+  - test: test_content_tagged_results
+  - test: test_content_usb_device_attached
+  - test: test_content_web_bookmarks
+  - test: test_content_web_categories
+  - test: test_content_web_cookies
+  - test: test_content_web_history
+  - test: test_content_web_search

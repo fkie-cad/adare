@@ -1,0 +1,103 @@
+settings:
+  idle: 2.0
+  timeout: 600
+  screenshot:
+    format: "png"
+    quality: 95
+
+variables:
+  filename:
+    type: string
+    value: "testfile.txt"
+    description: "Name of the file to be created and deleted"
+
+  filepath:
+    type: path
+    value: "{{ adare_user_documents }}/{{ filename }}"
+    description: "Full path to the test file"
+  
+  trashbin_path:
+    type: path  
+    value: "{{ adare_user_home }}/.local/share/Trash"
+    description: "Path to user's trash bin"
+
+  icon_filemanager_taskbar:
+    type: string
+    value: "nautilus_taskbar.png"
+    description: "name of the file manager icon file"
+
+
+
+tests:
+  - name: testfile_created
+    description: 'Verify test file does exist before experiment'
+    function: file_exists
+    parameter:
+      dst: '{{filepath}}'
+  - name: testfile_deleted
+    description: 'Verify test file was deleted successfully'
+    function: file_does_not_exist
+    parameter:
+      dst: '{{filepath}}'
+  - name: trashbin_check_file
+    description: 'check if file exists in trashbin'
+    function: file_exists
+    parameter:
+      dst: '{{trashbin_path}}/files/{{ filename }}'
+  - name: trahsbin_check_info_file
+    description: 'check if info file exists in trashbin'
+    function: file_exists
+    parameter:
+      dst: '{{trashbin_path}}/info/{{ filename }}.trashinfo'
+  - name: trashbin_check_info_date
+    description: 'check if deletion date in info file is correct'
+    function: file_content_equals
+    parameter:
+      dst: '{{trashbin_path}}/info/{{ filename }}.trashinfo'
+      content: |
+        [Trash Info]
+        Path={{ filepath }}
+        DeletionDate={{ deletion_timestamp | localtime | format('%Y-%m-%dT%H:%M:%S') | tolerance(5, -5) }}
+
+
+actions:
+  - command:
+      name: "Create Test File"
+      description: "create the to deleted file"
+      command: "echo 'This is a test file.' > {{ filepath }}"
+      shell: true
+  - test: testfile_created
+  - click:
+      target:
+        image: "{{ icon_filemanager_taskbar }}"
+      description: "Open Ubuntu File Explorer"
+  - idle:
+      duration: 2.0
+      description: "Wait additional time for File Explorer to open since some systems are slow"
+  - click:
+      target:
+        text: "Documents"
+        strategy:
+          SweepStrategy:
+            index: 2
+      description: "Navigate to Documents folder"
+  - click:
+      type: "right"
+      target:
+        text: "{{ filename }}"
+      description: "Right-click on the test file"
+  - click:
+      target:
+        text: "Move to Trash"
+      description: "Select 'Move to Trash' from context menu"
+  - save_timestamp:
+      description: "Save the timestamp of file deletion for later verification"
+      variable: deletion_timestamp
+  - idle:
+      duration: 1.0
+      description: "Wait for file deletion to complete"
+  - test: testfile_deleted
+  - test: trashbin_check_file
+  - test: trahsbin_check_info_file
+  - test: trashbin_check_info_date
+  
