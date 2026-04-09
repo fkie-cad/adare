@@ -12,11 +12,9 @@ import json
 import logging
 import os
 import platform
-import re
 import subprocess
 import threading
 import time
-import uuid
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -25,13 +23,10 @@ try:
 except ImportError:
     libvirt = None
 
-from adarelib.constants import StatusEnum
-
 from adare.hypervisor.base.vm import AbstractVM
 from adare.hypervisor.exceptions import (
     VMImportException,
     VMAlreadyRunningException,
-    VMNotFoundException,
     HypervisorException,
     VMStartException
 )
@@ -47,8 +42,6 @@ from adare.hypervisor.qemu.libvirt_stderr_redirect import (
     LibvirtStderrRedirect,
     get_experiment_log_file
 )
-from adare.hypervisor.qemu.utilities.disk_utils import get_boot_mode_for_os
-from adare.hypervisor.qemu.utilities.uuid_registry import QEMUVMRegistry
 
 log = logging.getLogger(__name__)
 
@@ -113,6 +106,40 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         self.config = self._load_or_create_vm_config()
 
         log.debug(f"Initialized QEMUVM for '{self.vm_name}' ({self.guest_os})")
+
+    def _ensure_libvirt_domain(self):
+        """
+        Ensure libvirt domain object is available, looking it up if needed.
+
+        This is the single point of lazy initialization for _libvirt_domain.
+        All code paths that need the domain object should call this method
+        instead of performing ad-hoc lookups.
+
+        Returns:
+            libvirt.virDomain: The domain object
+
+        Raises:
+            HypervisorException: If domain cannot be found or connection fails
+        """
+        if self._libvirt_domain:
+            return self._libvirt_domain
+
+        conn = self._get_libvirt_connection()
+        if not conn:
+            raise HypervisorException(
+                f"Cannot look up domain '{self.vm_name}': libvirt connection not available"
+            )
+
+        log_file = get_experiment_log_file()
+        try:
+            with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
+                self._libvirt_domain = conn.lookupByName(self.vm_name)
+        except libvirt.libvirtError as e:
+            raise HypervisorException(
+                f"Cannot look up domain '{self.vm_name}': {e}"
+            )
+
+        return self._libvirt_domain
 
     async def create(
         self,
@@ -567,10 +594,8 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             # Check if domain exists
             if not self._libvirt_domain:
                 try:
-                    with LibvirtStderrRedirect(log_file=log_file_path, suppress_console=True):
-                        conn = self._get_libvirt_connection()
-                        self._libvirt_domain = conn.lookupByName(self.vm_name)
-                except libvirt.libvirtError:
+                    self._ensure_libvirt_domain()
+                except HypervisorException:
                     if not silent:
                         log.debug(f"VM '{self.vm_name}' is not defined in libvirt")
                     return 0
@@ -708,7 +733,6 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             # Delete disk with retry logic (disk might be momentarily in use)
             disk_deleted = False
             if os.path.exists(self.config.disk_path):
-                from pathlib import Path
                 disk_name = Path(self.config.disk_path).name
 
                 # CRITICAL SAFETY CHECK: Ensure we're deleting an overlay, not a base disk
@@ -828,17 +852,11 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
             # Try to get domain state from libvirt
             if not self._libvirt_domain:
-                conn = self._get_libvirt_connection()
-                if conn:
-                    try:
-                        with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
-                            self._libvirt_domain = conn.lookupByName(self.vm_name)
-                    except libvirt.libvirtError:
-                        # Domain not defined in libvirt
-                        return "poweroff"
-                else:
-                    # No libvirt connection
-                    return "unknown"
+                try:
+                    self._ensure_libvirt_domain()
+                except HypervisorException:
+                    # Domain not defined in libvirt or connection unavailable
+                    return "poweroff"
 
             # Get domain state
             with LibvirtStderrRedirect(log_file=log_file, suppress_console=True):
@@ -1274,17 +1292,12 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         async def _qmp_async():
             import libvirt_qemu
             try:
-                # Lazy load libvirt domain if needed
-                if not self._libvirt_domain:
-                    try:
-                        conn = self._get_libvirt_connection()
-                        if conn:
-                            self._libvirt_domain = conn.lookupByName(self.vm_name)
-                    except libvirt.libvirtError as e:
-                        log.warning(f"Failed to lazy-load domain for QMP: {e}")
-
-                if not self._libvirt_domain:
-                    return {"error": {"desc": "Domain not defined"}}
+                # Ensure libvirt domain is available
+                try:
+                    self._ensure_libvirt_domain()
+                except HypervisorException as e:
+                    log.warning(f"Failed to look up domain for QMP: {e}")
+                    return {"error": {"desc": f"Domain not defined: {e}"}}
 
                 cmd_json = json.dumps(command)
                 log.debug(f"Sending QMP command: {command.get('execute', 'unknown')}")

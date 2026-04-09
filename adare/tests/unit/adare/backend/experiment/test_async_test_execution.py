@@ -1,4 +1,4 @@
-"""Tests for HostModeTestExecutor._run_test() async/sync handling.
+"""Tests for GuestToHostTestExecutor._run_test() async/sync handling.
 
 Verifies that _run_test() correctly handles both sync and async test() methods
 without triggering 'RuntimeError: This event loop is already running'.
@@ -11,7 +11,7 @@ import pytest
 from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
 
-from adare.backend.experiment.host_mode_test_executor import HostModeTestExecutor
+from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
 
 
 # ============================================================================
@@ -46,12 +46,12 @@ class AsyncFailingTestInstance:
 
 @pytest.fixture
 def executor():
-    """Create a HostModeTestExecutor with mocked dependencies.
+    """Create a GuestToHostTestExecutor with mocked dependencies.
 
     Only _run_test() is under test, so the proxies are irrelevant.
     """
     from unittest.mock import MagicMock
-    return HostModeTestExecutor(
+    return GuestToHostTestExecutor(
         guest_file=MagicMock(),
         guest_command=MagicMock(),
         testfunction_collection={},
