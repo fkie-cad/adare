@@ -456,7 +456,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
 
         # Set up host-mode test executor if in HOST test mode
         if is_host_test_mode:
-            _setup_host_mode_test_executor(controller, context, vm_os)
+            _setup_guest_to_host_test_executor(controller, context, vm_os)
 
         # Execute complete experiment (playbook + tests)
         log.info(f"Starting experiment execution for {context.config.experiment_name}")
@@ -466,8 +466,8 @@ async def step_execute_experiment(context: ExperimentRunCtx):
         context.execution_result = result
 
         # Cleanup host-mode executor temp files
-        if is_host_test_mode and hasattr(controller, '_host_mode_test_executor'):
-            controller._host_mode_test_executor.cleanup()
+        if is_host_test_mode and hasattr(controller, '_guest_to_host_test_executor'):
+            controller._guest_to_host_test_executor.cleanup()
 
         if result.success:
             log.info(f"Experiment completed successfully: {result.successful_actions}/{result.total_actions} actions succeeded")
@@ -475,10 +475,10 @@ async def step_execute_experiment(context: ExperimentRunCtx):
             log.error(f"Experiment failed: {result.error_message}")
             log.error(f"Action results: {result.successful_actions}/{result.total_actions} succeeded")
 
-def _setup_host_mode_test_executor(controller, context: ExperimentRunCtx, vm_os: str):
+def _setup_guest_to_host_test_executor(controller, context: ExperimentRunCtx, vm_os: str):
     """Set up host-mode test execution on the PlaybookController."""
     from adare.backend.experiment.execution.base import TestExecutionMode
-    from adare.backend.experiment.host_mode_test_executor import HostModeTestExecutor
+    from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
     from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
     from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
     from adarelib.testset.testfunction import import_basictest_subclasses
@@ -502,7 +502,7 @@ def _setup_host_mode_test_executor(controller, context: ExperimentRunCtx, vm_os:
     # Pre-flight validation: check all playbook tests are host-mode compatible
     playbook_tests = getattr(context.playbook, 'tests', [])
     if playbook_tests:
-        ok, issues = HostModeTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
+        ok, issues = GuestToHostTestExecutor.validate_playbook_tests(playbook_tests, testfunction_collection)
         if not ok:
             from adare.exceptions import LoggedException
             issue_list = '\n  - '.join(issues)
@@ -514,17 +514,17 @@ def _setup_host_mode_test_executor(controller, context: ExperimentRunCtx, vm_os:
         log.info(f"Host mode: pre-flight validation passed for {len(playbook_tests)} tests")
 
     # Create host-mode test executor
-    host_mode_executor = HostModeTestExecutor(
+    guest_to_host_executor = GuestToHostTestExecutor(
         guest_file=guest_file,
         guest_command=guest_command,
         testfunction_collection=testfunction_collection,
     )
 
     # Store for cleanup and wire into the action executor
-    controller._host_mode_test_executor = host_mode_executor
+    controller._guest_to_host_test_executor = guest_to_host_executor
     controller.action_executor.test_actions.set_test_execution_mode(TestExecutionMode.HOST)
-    controller.action_executor.test_actions.set_host_mode_test_executor(host_mode_executor)
-    log.info("Host mode: HostModeTestExecutor configured")
+    controller.action_executor.test_actions.set_guest_to_host_test_executor(guest_to_host_executor)
+    log.info("Host mode: GuestToHostTestExecutor configured")
 
 async def step_collect_system_info(context: ExperimentRunCtx):
     """Collect system information from the guest VM and save to YAML file."""

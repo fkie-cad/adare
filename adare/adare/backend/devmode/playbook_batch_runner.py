@@ -287,10 +287,11 @@ class PlaybookBatchRunner:
                     # Delete from database
                     api.delete_checkpoint(self.session.session_id, checkpoint_name)
 
-            success = await self.session.create_checkpoint(checkpoint_name, "Base checkpoint for batch execution")
-            if not success:
+            checkpoint_result = await self.session.create_checkpoint(checkpoint_name, "Base checkpoint for batch execution")
+            if not checkpoint_result.success:
+                error_msg = checkpoint_result.error.message if checkpoint_result.error else "Unknown error"
                 raise RuntimeError(
-                    f"Failed to create base checkpoint '{checkpoint_name}'. "
+                    f"Failed to create base checkpoint '{checkpoint_name}': {error_msg}. "
                     "Check VM state and disk space."
                 )
         except Exception as e:
@@ -322,10 +323,11 @@ class PlaybookBatchRunner:
             if idx < len(playbook_paths):  # Don't restore after last playbook
                 console.print(f"  [dim]Restoring checkpoint '{checkpoint_name}'...[/dim]")
                 try:
-                    restore_success = await self.session.restore_checkpoint(checkpoint_name)
-                    if not restore_success:
+                    restore_result = await self.session.restore_checkpoint(checkpoint_name)
+                    if not restore_result.success:
+                        error_msg = restore_result.error.message if restore_result.error else "Unknown error"
                         raise RuntimeError(
-                            f"Failed to restore checkpoint '{checkpoint_name}' after playbook {idx}. "
+                            f"Failed to restore checkpoint '{checkpoint_name}' after playbook {idx}: {error_msg}. "
                             f"Stopping batch to prevent state corruption. "
                             f"Results: {len(results)}/{len(playbook_paths)} playbooks completed."
                         )

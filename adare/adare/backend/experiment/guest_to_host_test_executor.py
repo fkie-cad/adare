@@ -1,9 +1,10 @@
 """
-Host-Mode Test Executor for ADARE.
+Guest-to-Host Test Executor for ADARE.
 
-Executes tests on the host by pulling files from the guest VM via QGA
-and running testfunctions locally. This eliminates the need for the
-in-guest adarevm agent for test execution.
+Runs inside the VM guest context and bridges test execution to the host
+by pulling files from the guest VM via QGA and running testfunctions
+locally. This eliminates the need for the in-guest adarevm agent for
+test execution.
 
 Strategy:
 - File-based tests: Pull target files via QGA, rewrite dst param, run test() locally
@@ -14,8 +15,6 @@ Strategy:
 import asyncio
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 from adarelib.testset.basictest import BasicTest, HostModeCategory
 from adarelib.event.event import TestResult
@@ -25,7 +24,7 @@ from adare.backend.experiment.host_services.guest_command_proxy import GuestComm
 log = logging.getLogger(__name__)
 
 
-class HostModeTestExecutor:
+class GuestToHostTestExecutor:
     """
     Executes tests on the host machine using QGA for guest file/command access.
 
@@ -138,7 +137,7 @@ class HostModeTestExecutor:
             TestResult from test execution
         """
         category = self._get_test_category(test_function, test_instance)
-        log.info(f"HostModeTestExecutor: executing '{test_name}' (function={test_function}, category={category.value})")
+        log.info(f"GuestToHostTestExecutor: executing '{test_name}' (function={test_function}, category={category.value})")
 
         try:
             if category == HostModeCategory.QGA_PROBE:
@@ -158,7 +157,7 @@ class HostModeTestExecutor:
                 else:
                     return TestResult.error([f"Unknown test category for '{test_function}' in host mode"])
         except Exception as e:
-            log.error(f"HostModeTestExecutor: test '{test_name}' failed: {e}", exc_info=True)
+            log.error(f"GuestToHostTestExecutor: test '{test_name}' failed: {e}", exc_info=True)
             return TestResult.execution_error(e, f"Host-mode test execution failed for '{test_name}'")
 
     async def _execute_file_based_test(
@@ -180,7 +179,7 @@ class HostModeTestExecutor:
             return TestResult.error([f"Test '{test_name}' has no parameter.dst — cannot run in host mode"])
 
         original_dst = test_instance.parameter.dst
-        log.debug(f"HostModeTestExecutor: original dst='{original_dst}'")
+        log.debug(f"GuestToHostTestExecutor: original dst='{original_dst}'")
 
         # Check for glob patterns
         has_glob = any(c in original_dst for c in ['*', '?', '[', ']'])
@@ -201,7 +200,7 @@ class HostModeTestExecutor:
                 try:
                     await self.guest_file.pull_file(guest_path)
                 except RuntimeError as e:
-                    log.warning(f"HostModeTestExecutor: failed to pull {guest_path}: {e}")
+                    log.warning(f"GuestToHostTestExecutor: failed to pull {guest_path}: {e}")
 
             # Rewrite dst to local glob pattern
             local_dst = str(self.guest_file._guest_path_to_local(original_dst))
@@ -219,7 +218,7 @@ class HostModeTestExecutor:
                 elif func_name in ('file_exists', 'dir_exists'):
                     return TestResult.failed([f'{original_dst} does not exist on guest: {e}'])
                 else:
-                    log.warning(f"HostModeTestExecutor: could not pull {original_dst}: {e}")
+                    log.warning(f"GuestToHostTestExecutor: could not pull {original_dst}: {e}")
                     local_dst = str(self.guest_file._guest_path_to_local(original_dst))
 
         # Rewrite dst and run test

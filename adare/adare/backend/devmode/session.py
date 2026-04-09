@@ -16,11 +16,15 @@ from contextlib import contextmanager
 
 from adare.backend.experiment.runctx import ExperimentRunCtx, ExperimentConfig
 from adare.backend.experiment.playbook_controller import PlaybookController
-from adare.backend.experiment.playbook_controller import PlaybookController
 from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
 from adare.backend.experiment.mcp_server_manager import MCPServerManager
+from adare.backend.experiment.websocket_client import WebSocketTimeoutError
+from adare.backend.experiment.exceptions import ExperimentException
 from adare.types.playbook import ActionType, Playbook
-from adare.hypervisor.exceptions import HypervisorException
+from adare.hypervisor.exceptions import HypervisorException, SnapshotOperationException
+from adare.exceptions import LoggedErrorException
+from adare.database.exceptions import DatabaseError
+from adare.core.result import Result
 from adare.types.stages import (
     Stage,
     ExperimentPreparationStage,
@@ -300,7 +304,7 @@ class DevModeSession:
             event=self.experiment_ctx.user_interrupt_event
         )
 
-    async def start(self) -> bool:
+    async def start(self) -> Result[None]:
         """
         Start dev mode session by initializing VM and controllers.
 
@@ -308,7 +312,7 @@ class DevModeSession:
         The VM stays running and ready for interactive actions.
 
         Returns:
-            True if session started successfully, False otherwise
+            Result[None] with success or error information
         """
         try:
             log.info(f"Starting dev mode session {self.session_id}")
@@ -514,32 +518,44 @@ class DevModeSession:
                         log.info(f"Stored VM instance ID for cleanup: {self.vm_instance_id}")
                     else:
                         log.warning("No VM instance ID found in fake experiment run")
-            except Exception as e:
+            except (DatabaseError, LoggedErrorException) as e:
                 log.error(f"Failed to retrieve VM instance ID: {e}")
 
             self.started_at = datetime.now()
             self.is_running = True
             log.info(f"Dev mode session {self.session_id} started successfully")
-            return True
+            return Result.ok(None)
 
-        except Exception as e:
+        except HypervisorException as e:
             log.error(f"Failed to start dev mode session: {e}", exc_info=True)
             await self.stop()  # Cleanup on failure
-            return False
+            return Result.fail("VM_OPERATION_FAILED", f"Failed to start dev mode session: {e}")
+        except (WebSocketTimeoutError, ConnectionError, OSError) as e:
+            log.error(f"Failed to start dev mode session: {e}", exc_info=True)
+            await self.stop()  # Cleanup on failure
+            return Result.fail("CONNECTION_FAILED", f"Failed to start dev mode session: {e}")
+        except (DatabaseError, ExperimentException) as e:
+            log.error(f"Failed to start dev mode session: {e}", exc_info=True)
+            await self.stop()  # Cleanup on failure
+            return Result.fail("SETUP_FAILED", f"Failed to start dev mode session: {e}")
+        except LoggedErrorException as e:
+            log.error(f"Failed to start dev mode session: {e}", exc_info=True)
+            await self.stop()  # Cleanup on failure
+            return Result.fail("SESSION_START_FAILED", f"Failed to start dev mode session: {e}")
 
-    async def _ensure_playbook_controller(self) -> bool:
+    async def _ensure_playbook_controller(self) -> Result[None]:
         """
         Lazily initialize the PlaybookController if it doesn't exist.
-        
+
         Returns:
-            True if controller is ready, False otherwise
+            Result[None] with success or error information
         """
         if self.playbook_controller:
-            return True
-            
+            return Result.ok(None)
+
         try:
             log.info("Initializing PlaybookController lazily...")
-            
+
             # Get VM credentials for automatic variables
             from adare.config import get_vm_credentials
             vm_os = self.experiment_ctx.guest_platform if self.experiment_ctx.guest_platform else None
@@ -551,7 +567,7 @@ class DevModeSession:
             experiment_dir = None
             if self.experiment_ctx.experiment_directory:
                 experiment_dir = self.experiment_ctx.experiment_directory.path
-            
+
             self.playbook_controller = PlaybookController(
                 websocket_client=self.experiment_ctx.client,
                 experiment_dir=experiment_dir,
@@ -572,12 +588,15 @@ class DevModeSession:
             # Store initial variables if not already done
             if not self.initial_variables and self.experiment_ctx.playbook and self.experiment_ctx.playbook.variables:
                 self.initial_variables = self.playbook_controller.execution_context.copy()
-                
-            return True
-            
-        except Exception as e:
+
+            return Result.ok(None)
+
+        except (AttributeError, TypeError) as e:
             log.error(f"Failed to initialize PlaybookController: {e}", exc_info=True)
-            return False
+            return Result.fail("CONTROLLER_INIT_FAILED", f"Failed to initialize PlaybookController: {e}")
+        except LoggedErrorException as e:
+            log.error(f"Failed to initialize PlaybookController: {e}", exc_info=True)
+            return Result.fail("CONTROLLER_INIT_FAILED", f"Failed to initialize PlaybookController: {e}")
 
     async def execute_action(self, action: ActionType) -> 'ActionResult':
         """
@@ -595,11 +614,12 @@ class DevModeSession:
         if not self.is_running:
             from adare.backend.experiment.execution.base import ActionResult
             return ActionResult(success=False, message="Session not running")
-            
+
         # Ensure controller is initialized
-        if not await self._ensure_playbook_controller():
+        controller_result = await self._ensure_playbook_controller()
+        if not controller_result.success:
             from adare.backend.experiment.execution.base import ActionResult
-            return ActionResult(success=False, message="Failed to initialize playbook controller")
+            return ActionResult(success=False, message=controller_result.error.message)
 
         try:
             log.debug(f"Executing action: {action.__class__.__name__}")
@@ -609,7 +629,7 @@ class DevModeSession:
             # - Variable resolution via VariableResolver
             # - Target resolution via MCPTargetResolver
             # - Action-specific execution logic
-            
+
             # Wrap in command logger
             action_name = action.__class__.__name__
             with self._command_logger(action_name):
@@ -628,7 +648,15 @@ class DevModeSession:
 
             return result
 
-        except Exception as e:
+        except (HypervisorException, ExperimentException) as e:
+            log.error(f"Action execution failed: {e}", exc_info=True)
+            from adare.backend.experiment.execution.base import ActionResult
+            return ActionResult(success=False, message=str(e))
+        except (WebSocketTimeoutError, ConnectionError, OSError) as e:
+            log.error(f"Action execution failed: {e}", exc_info=True)
+            from adare.backend.experiment.execution.base import ActionResult
+            return ActionResult(success=False, message=str(e))
+        except LoggedErrorException as e:
             log.error(f"Action execution failed: {e}", exc_info=True)
             from adare.backend.experiment.execution.base import ActionResult
             return ActionResult(success=False, message=str(e))
@@ -649,10 +677,11 @@ class DevModeSession:
         """
         if not self.is_running:
             raise RuntimeError("Session not running")
-            
+
         # Ensure controller is initialized
-        if not await self._ensure_playbook_controller():
-            raise RuntimeError("Failed to initialize playbook controller")
+        controller_result = await self._ensure_playbook_controller()
+        if not controller_result.success:
+            raise RuntimeError(f"Failed to initialize playbook controller: {controller_result.error.message}")
 
         # Update experiment directory if provided (crucial for bare sessions)
         if experiment_dir and self.playbook_controller:
@@ -682,91 +711,74 @@ class DevModeSession:
 
         return result
 
-    async def reload_testfunctions(self) -> bool:
+    async def reload_testfunctions(self) -> Result[None]:
         """
         Reload test functions from host to VM to enable dynamic updates.
-        
+
         This packages the current test files from the host and uploads them to the VM again.
         The adarevm agent will extract them to a new temporary directory and use them for subsequent tests.
         """
         if not self.is_running:
             log.warning("Cannot reload test functions: Session not running")
-            return False
+            return Result.fail("SESSION_NOT_RUNNING", "Cannot reload test functions: Session not running")
 
         with self._command_logger("reload_testfunctions"):
-            if not await self._ensure_playbook_controller():
+            controller_result = await self._ensure_playbook_controller()
+            if not controller_result.success:
                 log.warning("Cannot reload test functions: Failed to ensure playbook controller")
-                return False
+                return Result.fail("CONTROLLER_INIT_FAILED", controller_result.error.message)
 
             if not self.experiment_ctx.client:
                 log.warning("Cannot reload test functions: WebSocket client not connected")
-                return False
+                return Result.fail("CONNECTION_FAILED", "Cannot reload test functions: WebSocket client not connected")
 
             log.info("Reloading test functions from host...")
             try:
-                # Re-run loading process (packages and uploads test functions)
-                # Note: load_tests determines which tests to load based on the CURRENT playbook
-                # If no playbook is loaded yet, it might default to loading nothing or all?
-                # Actually TestLoader.load_tests checks playbook used testfunctions.
-                # If we are in dev mode, we might want to reload ALL test functions or just the ones
-                # relevant to the session. 
-                # PlaybookController.test_loader.load_tests() inspects self.playbook.
-                # If no playbook is loaded in the controller, it might fail or do nothing.
-                
-                # However, in dev mode, we often run single actions or new playbooks.
-                # If we want to update the code for *currently defined* test functions, this works.
-                # But if we added a new test function to the playbook, we might need the playbook to be updated first.
-                
-                # Check how load_tests works: it uses self.playbook if available. 
-                # If we just want to push the files, maybe we need to be careful.
-                # But typically dev session involves iterating on a playbook.
-                
-                # Let's assume the user has a playbook or wants to refresh the environment for the next action.
                 await self.playbook_controller.test_loader.load_tests(self.experiment_ctx.client)
-                
-                log.info("Test functions reloaded successfully")
-                return True
-            except Exception as e:
-                log.error(f"Failed to reload test functions: {e}", exc_info=True)
-                return False
 
-    async def restart_mcp_server(self, debug: Optional[bool] = None, debug_output_dir: Optional[Path] = None) -> bool:
+                log.info("Test functions reloaded successfully")
+                return Result.ok(None)
+            except (WebSocketTimeoutError, ConnectionError, OSError) as e:
+                log.error(f"Failed to reload test functions: {e}", exc_info=True)
+                return Result.fail("CONNECTION_FAILED", f"Failed to reload test functions: {e}")
+            except LoggedErrorException as e:
+                log.error(f"Failed to reload test functions: {e}", exc_info=True)
+                return Result.fail("RELOAD_FAILED", f"Failed to reload test functions: {e}")
+
+    async def restart_mcp_server(self, debug: Optional[bool] = None, debug_output_dir: Optional[Path] = None) -> Result[None]:
         """
         Restart the MCP GUI server with updated logging options.
 
         Args:
             debug: Enable debug logging (True/False). If None, keeps current setting.
-            debug_output_dir: Directory for debug output. If None and debug=True, 
+            debug_output_dir: Directory for debug output. If None and debug=True,
                               tries to allow existing or creates new.
 
         Returns:
-            True if restarted successfully, False otherwise
+            Result[None] with success or error information
         """
         if not self.experiment_ctx:
             log.error("Cannot restart MCP server: context not initialized")
-            return False
+            return Result.fail("CONTEXT_NOT_INITIALIZED", "Cannot restart MCP server: context not initialized")
 
         with self._command_logger("restart_mcp_server"):
             log.info("Restarting MCP GUI server...")
-            
+
             # 1. Stop existing server
             if self.experiment_ctx.mcp_server:
                 log.info("Stopping existing MCP server...")
                 await self.experiment_ctx.mcp_server.stop(force_external=True)
-                
+
                 # Wait for port to be released
-                # Explicit sleep to allow OS to release port if process shutdown was async
-                # TODO: More robust port check would be better, but simple delay works for now
-                import asyncio
                 await asyncio.sleep(1.0)
-            
+
             # 2. Determine configuration
             # Use provided values or fall back to existing config
             current_server = self.experiment_ctx.mcp_server
-            
+
             # Debug flag
             new_debug = debug if debug is not None else (current_server.debug if current_server else False)
-            
+
             # Debug output dir
             new_debug_output_dir = debug_output_dir
             if new_debug_output_dir is None:
@@ -789,57 +801,47 @@ class DevModeSession:
                 debug=new_debug,
                 debug_output_dir=new_debug_output_dir
             )
-            
+
             # 4. Start new server
             try:
-                success = await new_manager.start(allow_existing=False) # Should be fresh start since we stopped it
+                success = await new_manager.start(allow_existing=False)
                 if success:
                     self.experiment_ctx.mcp_server = new_manager
                     log.info("MCP GUI server restarted successfully")
-                    return True
+                    return Result.ok(None)
                 else:
                     log.error("Failed to start new MCP server")
-                    # Restore old one? Might be hard if it's already stopped.
-                    return False
-            except Exception as e:
+                    return Result.fail("MCP_START_FAILED", "Failed to start new MCP server")
+            except (OSError, RuntimeError) as e:
                 log.error(f"Error restarting MCP server: {e}", exc_info=True)
-                return False
+                return Result.fail("MCP_RESTART_FAILED", f"Error restarting MCP server: {e}")
 
-            except Exception as e:
-                log.error(f"Error restarting MCP server: {e}", exc_info=True)
-                return False
-
-    async def stop_mcp_server(self) -> bool:
+    async def stop_mcp_server(self) -> Result[None]:
         """
         Stop the MCP GUI server.
 
         Returns:
-            True if stopped successfully (or wasn't running), False otherwise
+            Result[None] with success or error information
         """
         if not self.experiment_ctx:
             log.error("Cannot stop MCP server: context not initialized")
-            return False
+            return Result.fail("CONTEXT_NOT_INITIALIZED", "Cannot stop MCP server: context not initialized")
 
         with self._command_logger("stop_mcp_server"):
             if not self.experiment_ctx.mcp_server:
                 log.info("MCP server not running")
-                return True
-                
+                return Result.ok(None)
+
             log.info("Stopping MCP GUI server...")
             try:
                 await self.experiment_ctx.mcp_server.stop(force_external=True)
-                # We can either set it to None or keep the manager instance.
-                # Setting to None is cleaner if we consider it "gone", 
-                # but might lose config if we want to restart later without args.
-                # However, restart_mcp_server handles None check.
-                # Let's keep the object but ensure it knows it's stopped (MCPServerManager tracks state).
                 log.info("MCP GUI server stopped")
-                return True
-            except Exception as e:
+                return Result.ok(None)
+            except (OSError, RuntimeError) as e:
                 log.error(f"Error stopping MCP server: {e}", exc_info=True)
-                return False
+                return Result.fail("MCP_STOP_FAILED", f"Error stopping MCP server: {e}")
 
-    async def reset_soft(self) -> bool:
+    async def reset_soft(self) -> Result[None]:
         """
         Soft reset: Restore VM to initial external snapshot (no full OS reboot).
 
@@ -847,20 +849,20 @@ class DevModeSession:
         For VirtualBox: Only resets variables (fast, <1 second)
 
         Returns:
-            True if reset successful, False otherwise
+            Result[None] with success or error information
         """
         with self._command_logger("reset_soft"):
             try:
                 # Ensure controller is initialized (needed for variable reset)
-                await self._ensure_playbook_controller()
+                controller_result = await self._ensure_playbook_controller()
 
-                if not self.playbook_controller:
-                    return False
+                if not controller_result.success:
+                    return controller_result
 
                 # Get initial snapshot (first in list)
                 if not self.snapshots:
                     log.warning("No snapshots available for soft reset")
-                    return False
+                    return Result.fail("NO_SNAPSHOTS", "No snapshots available for soft reset")
 
                 initial_snapshot = self.snapshots[0]
                 vm = self.experiment_ctx.vm
@@ -892,6 +894,7 @@ class DevModeSession:
                             from adare.backend.experiment.run import (
                                 step_connect_websocket,
                             )
+                            stage_ulid = self.console_ulid or self.experiment_ctx.experiment_run_ulid
                             with StageCtxManager(
                                 SoftwareInstallationStage(),
                                 stage_ulid,
@@ -900,7 +903,10 @@ class DevModeSession:
                                 await step_connect_websocket(self.experiment_ctx)
                                 log.debug("WebSocket reconnected")
 
-                    except Exception as e:
+                    except (HypervisorException, SnapshotOperationException) as e:
+                        log.error(f"External snapshot restore failed: {e}", exc_info=True)
+                        log.info("Falling back to variable-only reset")
+                    except (WebSocketTimeoutError, ConnectionError, OSError) as e:
                         log.error(f"External snapshot restore failed: {e}", exc_info=True)
                         log.info("Falling back to variable-only reset")
 
@@ -915,13 +921,19 @@ class DevModeSession:
                 self.actions_executed = 0
 
                 log.info("Soft reset completed successfully")
-                return True
+                return Result.ok(None)
 
-            except Exception as e:
+            except HypervisorException as e:
                 log.error(f"Soft reset failed: {e}", exc_info=True)
-                return False
+                return Result.fail("VM_OPERATION_FAILED", f"Soft reset failed: {e}")
+            except (WebSocketTimeoutError, ConnectionError, OSError) as e:
+                log.error(f"Soft reset failed: {e}", exc_info=True)
+                return Result.fail("CONNECTION_FAILED", f"Soft reset failed: {e}")
+            except LoggedErrorException as e:
+                log.error(f"Soft reset failed: {e}", exc_info=True)
+                return Result.fail("RESET_FAILED", f"Soft reset failed: {e}")
 
-    async def reset_hard(self) -> bool:
+    async def reset_hard(self) -> Result[None]:
         """
         Hard reset: Restore VM to initial snapshot, reset all state.
 
@@ -929,13 +941,13 @@ class DevModeSession:
         All VM state (files, registry, memory) is restored to initial snapshot.
 
         Returns:
-            True if reset successful, False otherwise
+            Result[None] with success or error information
         """
         with self._command_logger("reset_hard"):
             try:
                 if not self.snapshots:
                     log.error("No snapshots available for hard reset")
-                    return False
+                    return Result.fail("NO_SNAPSHOTS", "No snapshots available for hard reset")
 
                 initial_snapshot = self.snapshots[0]
                 log.info(f"Starting hard reset to snapshot: {initial_snapshot.snapshot_name}")
@@ -983,13 +995,19 @@ class DevModeSession:
                 self.actions_executed = 0
 
                 log.info("Hard reset completed successfully")
-                return True
+                return Result.ok(None)
 
-            except Exception as e:
+            except HypervisorException as e:
                 log.error(f"Hard reset failed: {e}", exc_info=True)
-                return False
+                return Result.fail("VM_OPERATION_FAILED", f"Hard reset failed: {e}")
+            except (WebSocketTimeoutError, ConnectionError, OSError) as e:
+                log.error(f"Hard reset failed: {e}", exc_info=True)
+                return Result.fail("CONNECTION_FAILED", f"Hard reset connection failed: {e}")
+            except LoggedErrorException as e:
+                log.error(f"Hard reset failed: {e}", exc_info=True)
+                return Result.fail("RESET_FAILED", f"Hard reset failed: {e}")
 
-    async def create_checkpoint(self, name: str, description: str = "") -> bool:
+    async def create_checkpoint(self, name: str, description: str = "") -> Result[None]:
         """
         Create a named snapshot for later restoration.
 
@@ -998,15 +1016,21 @@ class DevModeSession:
             description: Optional description
 
         Returns:
-            True if checkpoint created successfully, False otherwise
+            Result[None] with success or error information
         """
         with self._command_logger(f"checkpoint_create_{name}"):
             try:
                 await self._create_dev_snapshot(name, description)
-                return True
-            except Exception as e:
+                return Result.ok(None)
+            except (HypervisorException, SnapshotOperationException) as e:
                 log.error(f"Failed to create checkpoint: {e}", exc_info=True)
-                return False
+                return Result.fail("SNAPSHOT_FAILED", f"Failed to create checkpoint: {e}")
+            except (WebSocketTimeoutError, ConnectionError, OSError) as e:
+                log.error(f"Failed to create checkpoint: {e}", exc_info=True)
+                return Result.fail("CONNECTION_FAILED", f"Failed to create checkpoint: {e}")
+            except (DatabaseError, LoggedErrorException) as e:
+                log.error(f"Failed to create checkpoint: {e}", exc_info=True)
+                return Result.fail("CHECKPOINT_FAILED", f"Failed to create checkpoint: {e}")
 
     async def _wait_for_vm_ready_after_restore(self, context: ExperimentRunCtx, timeout: int = 60):
         """
@@ -1057,7 +1081,7 @@ class DevModeSession:
             await asyncio.sleep(5)
             log.info("VM stabilization wait completed")
 
-    async def restore_checkpoint(self, name: str) -> bool:
+    async def restore_checkpoint(self, name: str) -> Result[None]:
         """
         Restore to a named checkpoint using external snapshot.
 
@@ -1067,7 +1091,7 @@ class DevModeSession:
             name: Name of the checkpoint to restore
 
         Returns:
-            True if restore successful, False otherwise
+            Result[None] with success or error information
         """
         with self._command_logger(f"checkpoint_restore_{name}"):
             try:
@@ -1079,7 +1103,7 @@ class DevModeSession:
 
                 if not checkpoint:
                     log.error(f"Checkpoint '{name}' not found in database")
-                    return False
+                    return Result.fail("CHECKPOINT_NOT_FOUND", f"Checkpoint '{name}' not found in database")
 
                 log.info(f"Restoring checkpoint: {checkpoint.name}")
 
@@ -1117,7 +1141,7 @@ class DevModeSession:
 
                     if not success:
                         log.error(f"Failed to restore external snapshot for checkpoint '{name}'")
-                        return False
+                        return Result.fail("SNAPSHOT_RESTORE_FAILED", f"Failed to restore external snapshot for checkpoint '{name}'")
 
                     # Wait for VM to be ready after memory restore
                     # The VM is running after virsh restore, but guest OS needs time to initialize
@@ -1127,7 +1151,7 @@ class DevModeSession:
                     # Verify websocket port is set (should be from session restore)
                     if not self.experiment_ctx.config.websocket_port:
                         log.error("WebSocket port not set in context - cannot reconnect")
-                        return False
+                        return Result.fail("CONNECTION_FAILED", "WebSocket port not set in context - cannot reconnect")
 
                     # Restart agent and reconnect to WebSocket server
                     # (Required because shared directory issues may kill the agent during restore)
@@ -1182,11 +1206,17 @@ class DevModeSession:
                 self.actions_executed = 0
 
                 log.info(f"Checkpoint '{name}' restored successfully")
-                return True
+                return Result.ok(None)
 
-            except Exception as e:
+            except (HypervisorException, SnapshotOperationException) as e:
                 log.error(f"Failed to restore checkpoint: {e}", exc_info=True)
-                return False
+                return Result.fail("SNAPSHOT_RESTORE_FAILED", f"Failed to restore checkpoint: {e}")
+            except (WebSocketTimeoutError, ConnectionError, OSError) as e:
+                log.error(f"Failed to restore checkpoint: {e}", exc_info=True)
+                return Result.fail("CONNECTION_FAILED", f"Failed to restore checkpoint: {e}")
+            except (DatabaseError, LoggedErrorException) as e:
+                log.error(f"Failed to restore checkpoint: {e}", exc_info=True)
+                return Result.fail("CHECKPOINT_RESTORE_FAILED", f"Failed to restore checkpoint: {e}")
 
     def get_state(self) -> DevModeState:
         """
@@ -1491,16 +1521,12 @@ class DevModeSession:
             if self.experiment_ctx.client:
                 try:
                     await self.experiment_ctx.client.disconnect()
-                except Exception as e:
+                except (WebSocketTimeoutError, ConnectionError, OSError) as e:
                     log.warning(f"Error disconnecting client before snapshot: {e}")
 
             # 2. Kill adarevm process in VM
             try:
                 if self.experiment_ctx.guest_platform == 'windows':
-                    # Windows: Force kill adarevm (and python wrappers if needed)
-                    # We use taskkill /F /IM adarevm.exe and potentially python processes if we can distinguish them
-                    # But simpler to target adarevm.exe or use the stored PID if available (but PID is QEMU specific in context)
-                    # Let's try basic taskkill first.
                     stop_cmd = "taskkill /F /IM adarevm.exe"
                 else:
                     # Linux: pkill
@@ -1509,7 +1535,7 @@ class DevModeSession:
                 # Run stop command (ignore errors if not running)
                 # We use a short timeout
                 await vm.run_command(stop_cmd, timeout=10)
-            except Exception as e:
+            except (HypervisorException, OSError, TimeoutError) as e:
                 log.warning(f"Failed to stop adarevm agent in VM (might not be running): {e}")
 
             # Wait a moment for process to die and file handles to close
@@ -1630,7 +1656,7 @@ class DevModeSession:
                     # Restore disk snapshot (qemu-img)
                     success = vm.restore_snapshot(disk_snapshot_name, silent=False)
                     if not success:
-                        raise Exception("Disk snapshot restore failed")
+                        raise HypervisorException("Disk snapshot restore failed")
                     log.info("Disk snapshot restored")
                 else:
                     # Fall back to overlay recreation if snapshot doesn't exist
@@ -1652,7 +1678,7 @@ class DevModeSession:
                     vm.config.disk_path = new_overlay
                     log.info("QEMU overlay reset complete")
 
-            except Exception as e:
+            except (HypervisorException, OSError) as e:
                 log.error(f"Hard reset disk restoration failed: {e}", exc_info=True)
                 raise
 
@@ -1731,50 +1757,50 @@ class DevModeSession:
             except Exception as e:
                 log.warning(f"Failed to remove snapshot directory: {e}")
 
-    async def start_recording(self, output_file: Path) -> bool:
+    async def start_recording(self, output_file: Path) -> Result[None]:
         """
         Start recording user interactions to a playbook file.
-        
+
         Args:
             output_file: Path to save the recording (playbook YAML)
-            
+
         Returns:
-            True if started successfully
+            Result[None] with success or error information
         """
         if self.recorder and self.recorder.is_recording:
             log.warning("Recording already in progress")
-            return False
-            
+            return Result.fail("ALREADY_RECORDING", "Recording already in progress")
+
         if self.experiment_ctx.hypervisor_type != 'qemu':
             log.error("Recording is currently only supported for QEMU")
-            return False
-            
+            return Result.fail("UNSUPPORTED", "Recording is currently only supported for QEMU")
+
         try:
             from adare.backend.devmode.recorder import SessionRecorder
-            
+
             self.recorder = SessionRecorder(self.experiment_ctx.vm, output_file)
             await self.recorder.start()
-            return True
-            
-        except Exception as e:
-            log.error(f"Failed to start recording: {e}", exc_info=True)
-            return False
+            return Result.ok(None)
 
-    async def stop_recording(self) -> bool:
+        except (OSError, RuntimeError) as e:
+            log.error(f"Failed to start recording: {e}", exc_info=True)
+            return Result.fail("RECORDING_START_FAILED", f"Failed to start recording: {e}")
+
+    async def stop_recording(self) -> Result[None]:
         """
         Stop current recording session.
-        
+
         Returns:
-            True if stopped successfully
+            Result[None] with success or error information
         """
         if not self.recorder or not self.recorder.is_recording:
             log.warning("No active recording to stop")
-            return False
-            
+            return Result.fail("NO_RECORDING", "No active recording to stop")
+
         try:
             await self.recorder.stop()
             self.recorder = None
-            return True
-        except Exception as e:
+            return Result.ok(None)
+        except (OSError, RuntimeError) as e:
             log.error(f"Failed to stop recording: {e}", exc_info=True)
-            return False
+            return Result.fail("RECORDING_STOP_FAILED", f"Failed to stop recording: {e}")

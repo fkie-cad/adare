@@ -1,5 +1,4 @@
 # external imports
-import functools
 import glob
 from enum import Enum
 from typing import Optional, ClassVar, Dict, Any, List, Tuple, Union
@@ -8,7 +7,6 @@ import re
 
 # internal imports
 from adarelib.testset.yaml.customtags import YamlCustomTag
-from adarelib.common.variables import VariableRegistry
 
 # configure logging
 import logging
@@ -210,8 +208,8 @@ class BasicTest:
 
     def _compare_timestamp_with_tolerance(self, metadata: dict, actual_value: str) -> Tuple[bool, str]:
         """Compare timestamp values with tolerance."""
-        log.info(f"CLAUDE: Starting tolerance comparison - metadata: {metadata}")
-        log.info(f"CLAUDE: VM file timestamp: '{actual_value}'")
+        log.debug(f"Starting tolerance comparison - metadata: {metadata}")
+        log.debug(f"VM file timestamp: '{actual_value}'")
         
         if 'tolerance' not in metadata or not metadata['tolerance']:
             # No tolerance - do exact comparison  
@@ -225,44 +223,33 @@ class BasicTest:
             
             # Parse actual timestamp using format metadata if available
             actual_dt = self._parse_timestamp_with_format(actual_value, metadata)
-            log.info(f"CLAUDE: Parsed VM timestamp: {actual_dt}")
-            
+            log.debug(f"Parsed VM timestamp: {actual_dt}")
+
             # Parse original timestamp (raw_value should be in ISO format)
             raw_value = metadata.get('raw_value', '')
-            log.info(f"CLAUDE: Raw timestamp value: '{raw_value}'")
+            log.debug(f"Raw timestamp value: '{raw_value}'")
             
             # Check if timestamp needs runtime resolution
             if metadata.get('needs_runtime_resolution', False) and '{{' in raw_value and '}}' in raw_value:
-                log.info(f"CLAUDE: Template '{raw_value}' marked for runtime resolution")
-                
-                # Runtime resolution will be handled by the test execution system
-                # The test execution context should have the updated variables
-                # For now, we need to get the resolved timestamp from somewhere else
-                
-                # This is a limitation - we can't easily get the execution context here
-                # But the test system should re-resolve templates with current context
+                log.debug(f"Template '{raw_value}' marked for runtime resolution")
                 log.warning(f"Template '{raw_value}' requires runtime resolution but execution context not available in test function")
-                
-                # Try to extract variable name and use it if available from test parameter resolution
-                # This is a workaround - ideally test resolution should happen after all variables are set
+
                 import re
                 template_match = re.search(r'\{\{\s*(\w+)\s*\}\}', raw_value)
                 if template_match:
                     var_name = template_match.group(1)
-                    log.info(f"CLAUDE: Extracted variable name '{var_name}' from template")
-                    # The template should have been resolved during test processing
-                    # If we're still seeing the template here, it means the variable was empty during test resolution
-            
+                    log.debug(f"Extracted variable name '{var_name}' from template")
+
             # Use resolved_value instead of raw_value for comparison - this should contain the properly resolved timestamp
             comparison_value = metadata.get('resolved_value', raw_value)
-            log.info(f"CLAUDE: Host expected timestamp: '{comparison_value}'")
+            log.debug(f"Host expected timestamp: '{comparison_value}'")
 
             original_dt = self._parse_timestamp_with_format(comparison_value, metadata, is_expected=True)
-            log.info(f"CLAUDE: Parsed host timestamp: {original_dt}")
-            
+            log.debug(f"Parsed host timestamp: {original_dt}")
+
             # Get tolerance range - handle both single value and array
             tolerance = metadata.get('tolerance', 0)
-            log.info(f"CLAUDE: Tolerance from metadata: {tolerance}")
+            log.debug(f"Tolerance from metadata: {tolerance}")
             
             if isinstance(tolerance, (int, float)):
                 # Single value: create symmetric range around original timestamp
@@ -281,15 +268,15 @@ class BasicTest:
                 lower_tolerance = 0
                 upper_tolerance = 0
                 
-            log.info(f"CLAUDE: Calculated tolerance range: {lower_tolerance}s to {upper_tolerance}s")
-            
+            log.debug(f"Calculated tolerance range: {lower_tolerance}s to {upper_tolerance}s")
+
             # Calculate difference
             diff_seconds = (original_dt - actual_dt).total_seconds()
-            log.info(f"CLAUDE: Time difference: {diff_seconds}s")
-            
+            log.debug(f"Time difference: {diff_seconds}s")
+
             # Check if within tolerance
             within_range = lower_tolerance <= diff_seconds <= upper_tolerance
-            log.info(f"CLAUDE: Within tolerance? {within_range} ({lower_tolerance} <= {diff_seconds} <= {upper_tolerance})")
+            log.debug(f"Within tolerance? {within_range} ({lower_tolerance} <= {diff_seconds} <= {upper_tolerance})")
             
             if within_range:
                 return True, f"Within tolerance: {diff_seconds}s difference (range: {lower_tolerance}s to {upper_tolerance}s)"
@@ -334,11 +321,11 @@ class BasicTest:
                     if metadata.get('localtime', False):
                         # If localtime=True, treat as local time
                         dt = dt.replace(tzinfo=_SYSTEM_TZ)
-                        log.debug(f"CLAUDE: _finalize applied local timezone to expected timestamp")
+                        log.debug("Applied local timezone to expected timestamp")
                     else:
                         # Default: treat as UTC (original behavior)
                         dt = dt.replace(tzinfo=datetime.timezone.utc)
-                        log.debug(f"CLAUDE: _finalize applied UTC timezone to expected timestamp")
+                        log.debug("Applied UTC timezone to expected timestamp")
                 return dt
 
             # Actual (VM-side): apply interpretation rules.
@@ -347,15 +334,15 @@ class BasicTest:
             if 'localtime' in metadata:
                 # Explicit localtime flag takes precedence
                 treat_as_local = metadata['localtime']
-                log.debug(f"CLAUDE: Using explicit localtime={treat_as_local}")
+                log.debug(f"Using explicit localtime={treat_as_local}")
             elif metadata.get('timezone') == 'utc':
                 # timezone=utc means treat as UTC
                 treat_as_local = False
-                log.debug(f"CLAUDE: Using UTC (timezone=utc)")
+                log.debug("Using UTC (timezone=utc)")
             else:
                 # Default to UTC if nothing specified (for consistency with UTC Unix timestamps)
                 treat_as_local = False
-                log.debug(f"CLAUDE: Using UTC (default)")
+                log.debug("Using UTC (default)")
 
             if treat_as_local:
                 # Naive actuals are LOCAL wall time → label as local (no shift).
@@ -389,7 +376,7 @@ class BasicTest:
                 if is_expected and localtime_flag:
                     # Convert UTC to local time
                     dt = dt.replace(tzinfo=datetime.timezone.utc).astimezone(_SYSTEM_TZ).replace(tzinfo=None)
-                    log.info(f"CLAUDE: Applied localtime conversion to expected Unix timestamp: {dt}")
+                    log.debug(f"Applied localtime conversion to expected Unix timestamp: {dt}")
 
                 # Apply format if specified
                 if fmt:
