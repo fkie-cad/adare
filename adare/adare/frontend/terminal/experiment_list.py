@@ -25,6 +25,7 @@ class ExperimentTablePanel:
         table.add_column("ulid", style="cyan", no_wrap=True)
         table.add_column("environments", style="cyan", no_wrap=True)
         table.add_column("description", style="cyan", no_wrap=True)
+        table.add_column("tags", style="magenta", no_wrap=False)
         table.add_column("web status", style="cyan", no_wrap=True)
 
         for i, row in self.experiments.iterrows():
@@ -36,11 +37,14 @@ class ExperimentTablePanel:
             if in_request:
                 web_status = 'in request'
 
+            tags = row.get('tags', '') if 'tags' in row.index else ''
+
             table.add_row(
                 row['display_name'],
                 row['ulid'],
                 row['environments_names'],
                 row['description'],
+                tags,
                 web_status,
             )
         return Panel(table, title="[b gold3]experiments[/b gold3]", border_style="blue", title_align="left")

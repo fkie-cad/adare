@@ -96,17 +96,24 @@ Getting Started
 
 Ready to start?
 
-1. **Install ADARE** → :doc:`basics/installation`
-2. **Quick Tutorial** → :doc:`basics/tutorial`
+1. **Install ADARE** → :doc:`getting-started/installation`
+2. **Quick Tutorial** → :doc:`getting-started/tutorial`
+3. **Core Concepts** → :doc:`getting-started/concepts`
 
 Documentation Structure
 -----------------------
 
-**📚 Basics**
-  :doc:`basics/installation` - Complete guide for daily ADARE usage - from installation to creating experiments
+**🚀 Getting Started**
+  :doc:`getting-started/installation` - Installation, tutorial, and core concepts
+
+**📖 User Guide**
+  :doc:`guide/projects` - Workflow-oriented guides for projects, experiments, and analysis techniques
+
+**📚 Reference**
+  :doc:`reference/actions` - Actions, test functions, CLI, and output formats
 
 **⚡ Advanced**
-  :doc:`advanced/cli` - CLI reference and advanced topics
+  :doc:`advanced/playbook-patterns` - Advanced playbook patterns and custom testfunctions
 
 **🏗️ Architecture**
   :doc:`architecture/index` - Understanding how ADARE works internally
@@ -120,27 +127,43 @@ Documentation Structure
 .. toctree::
    :hidden:
    :maxdepth: 2
-   :caption: Basics
+   :caption: Getting Started
 
-   basics/installation
-   basics/tutorial
-   basics/projects
-   basics/environments
-   basics/experiments
-   basics/actions
-   basics/testfunctions/index
+   getting-started/installation
+   getting-started/tutorial
+   getting-started/concepts
+
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: User Guide
+
+   guide/projects
+   guide/environments
+   guide/experiments
+   guide/test-driven-analysis
+   guide/diff-analysis
+   guide/vm-image-creation
+   guide/dev-mode
+   guide/sharing
+
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: Reference
+
+   reference/actions
+   reference/testfunctions/index
+   reference/cli
+   reference/output-formats
 
 .. toctree::
    :hidden:
    :maxdepth: 2
    :caption: Advanced
 
-   advanced/cli
    advanced/playbook-patterns
-   advanced/filesystem-diffing
-   advanced/output-formats
    advanced/testfunction-create
-   advanced/vm-create
 
 .. toctree::
    :hidden:
@@ -148,3 +171,7 @@ Documentation Structure
    :caption: Architecture
 
    architecture/index
+   architecture/hypervisors
+   architecture/file-sharing
+   architecture/guest-agent
+   architecture/cv-server

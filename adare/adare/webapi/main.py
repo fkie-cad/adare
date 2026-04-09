@@ -660,8 +660,46 @@ async def health_check():
 
 
 # =============================================================================
-# Static File Serving (for production)
+# REST API Routes (Phase 3 - unified web frontend)
 # =============================================================================
 
-# Mount static files (built frontend) - will be added after frontend is built
-# app.mount("/", StaticFiles(directory="adare-web/dist", html=True), name="static")
+from adare.webapi.routes.projects import router as projects_router
+from adare.webapi.routes.experiments import router as experiments_router
+from adare.webapi.routes.environments import router as environments_router
+from adare.webapi.routes.runs import router as runs_router
+from adare.webapi.routes.testfunctions import router as testfunctions_router
+from adare.webapi.routes.local_vms import router as local_vms_router
+from adare.webapi.routes.web_sync import router as web_sync_router
+from adare.webapi.routes.manage import router as manage_router
+from adare.webapi.vm_proxy import router as vm_proxy_router
+
+app.include_router(projects_router)
+app.include_router(experiments_router)
+app.include_router(environments_router)
+app.include_router(runs_router)
+app.include_router(testfunctions_router)
+app.include_router(local_vms_router)
+app.include_router(web_sync_router)
+app.include_router(manage_router)
+app.include_router(vm_proxy_router)
+
+
+# =============================================================================
+# SPA Fallback (serve built frontend static files)
+# =============================================================================
+
+_frontend_dist = Path(__file__).resolve().parent.parent.parent.parent.parent / "adare-web" / "dist"
+
+
+@app.get("/{path:path}")
+async def spa_fallback(path: str):
+    """Serve static files from the built frontend, with SPA index.html fallback."""
+    if not _frontend_dist.is_dir():
+        raise HTTPException(status_code=404, detail="Frontend not built. Run: pnpm build")
+    file_path = (_frontend_dist / path).resolve()
+    # Prevent path traversal
+    if not str(file_path).startswith(str(_frontend_dist)):
+        raise HTTPException(status_code=404)
+    if file_path.is_file():
+        return FileResponse(file_path)
+    return FileResponse(_frontend_dist / "index.html")

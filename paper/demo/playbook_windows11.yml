@@ -1,0 +1,93 @@
+# Variables that can be used throughout the playbook
+settings:
+  idle: 2.0
+variables:
+  username:
+    type: string
+    value: "adare"
+    description: "Username for the target system"
+  
+  filepath:
+    type: path
+    value: "C:/Users/{{username}}/Documents/testfile.txt"
+    description: "Full path to the test file"
+  
+  trashbin_csv:
+    type: path
+    value: "C:/Users/{{username}}/Documents/trashbin/*.csv"
+    description: "Path pattern for trashbin CSV files"
+
+# Test definitions
+tests:
+  - name: testfile_created
+    description: 'Verify test file exists before experiment'
+    function: file_exists
+    parameter:
+      dst: '{{filepath}}'
+  - name: testfile_deleted
+    description: 'Verify test file was deleted successfully'
+    function: file_does_not_exist
+    parameter:
+      dst: '{{filepath}}'
+  - name: trashbin_check
+    description: 'check if file metadata exists in CSV with correct timestamp'
+    function: csv.contains_line
+    parameter:
+      dst: '{{trashbin_csv}}'
+      entry:
+        - !re '.*'  # Any value in first column
+        - '$I'      # Recycle bin identifier
+        - 'C:\Users\{{username}}\Documents\testfile.txt' 
+        - !re '.*'  # Any value in fourth column 
+        - !timestamp
+          timestamp: '{{deletion_timestamp}}'
+          tolerance: 5
+          timezone: 'utc'
+          format: '%Y-%m-%d %H:%M:%S'
+
+# Main playbook actions
+actions:
+  - command:
+      name: "Create Test File"
+      description: "create the to deleted file"
+      command: "echo 'This is a test file.' > {{ filepath }}"
+      shell: true
+  - test: testfile_created
+  - click:
+      target:
+        image: "explorer.png"
+      description: "Open File Explorer"
+  - idle:
+      duration: 5.0
+      description: "Wait additional time for File Explorer to open since some systems are slow"
+  - click:
+      target:
+        text: "Documents"
+        strategy:
+          SweepStrategy:
+            index: 2
+      description: "Navigate to Documents folder"
+  - click:
+      target:
+        text: "testfile"
+      description: "Select the test file to delete it with shortcut"
+  - keyboard:
+      combination: ["delete"]
+      description: "Delete the test file using keyboard shortcut"
+  - save_timestamp:
+      description: "Save the timestamp of file deletion for later verification"
+      variable: deletion_timestamp
+  - idle:
+      duration: 5.0
+      description: "Wait for file deletion to complete"
+  - test: testfile_deleted
+  - block:
+      description: "Check if file metadata exists in trash bin"
+      actions:
+        - command:
+            name: "RBCmd"
+            description: "Run RBCmd.exe to check file metadata"
+            tool: RBCmd.exe
+            command: 'RBCmd.exe -d C:\$recycle.bin --csv C:/Users/{{username}}/Documents/trashbin'
+            timeout: 180
+        - test: trashbin_check

@@ -1,0 +1,61 @@
+actions:
+  - command:
+      name: "Ensure recently-used.xbel is absent"
+      command: "rm -f /home/adare/.local/share/recently-used.xbel"
+
+  - command:
+      name: "Create text file to be opened"
+      command: "echo 'This is test text' > {{ text_file }}"
+      shell: true
+
+  - click:
+      target:
+        image: "org.gnome.Nautilus.png"
+
+  - wait_until:
+      condition:
+        exists:
+          text: "Documents"
+
+  - click:
+      target:
+        text: "Documents"
+        strategy:
+          SweepStrategy:
+            index: 2
+      description: "Click on the Documents folder"
+ 
+  - wait_until:
+      condition:
+        exists:
+          text: "adare.txt"
+
+  - click:
+      type: "double"
+      target:
+        text: "adare.txt"
+      description: "Click on the adare.txt file"
+
+  - idle:
+      duration: 5
+
+  - test: "recently_used_xbel_exists"
+
+  - pull:
+      name: "pull the recently-used.xbel"
+      src: "/home/adare/.local/share/recently-used.xbel"
+      dst: "recently-used.xbel"
+
+tests:
+  - name: "recently_used_xbel_exists"
+    description: "Test if the recently-used.xbel exists"
+    function: "file_exists"
+    parameter:
+      dst: "/home/adare/.local/share/recently-used.xbel"
+
+
+variables:
+  text_file:
+    type: "path"
+    value: "/home/adare/Documents/adare.txt"
+
