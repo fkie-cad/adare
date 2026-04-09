@@ -1,0 +1,17 @@
+export const endpoints = {
+  sessions: '/sessions',
+  sessionState: (id: string) => `/sessions/${id}/state`,
+  sessionStart: '/sessions/start',
+  sessionStop: (id: string) => `/sessions/${id}/stop`,
+  sessionReset: (id: string, type: string) => `/sessions/${id}/reset?type=${type}`,
+  sessionCleanup: '/sessions/cleanup',
+  checkpoints: (id: string) => `/sessions/${id}/checkpoints`,
+  checkpointRestore: (id: string, name: string) => `/sessions/${id}/checkpoints/${name}/restore`,
+  checkpointDelete: (id: string, name: string) => `/sessions/${id}/checkpoints/${name}`,
+  actionExecute: (id: string) => `/sessions/${id}/actions/execute`,
+  playbookExecute: (id: string) => `/sessions/${id}/playbooks/execute`,
+  actionTypes: '/actions/types',
+  playbookSave: '/playbooks/save',
+  playbookLoad: (name: string) => `/playbooks/${name}`,
+  health: '/health',
+} as const
