@@ -23,14 +23,18 @@ from adare.helperfunctions.module import import_module_from_pyfile
 visual_module_path = PROJECT_ROOT / "appdata" / "testfunctions" / "visual" / "visual.py"
 visual_module = import_module_from_pyfile(visual_module_path)
 
-# Extract testfunctions from module
-VisualExists = visual_module.VisualExists
-VisualExistsParameter = visual_module.VisualExistsParameter
-VisualNotExists = visual_module.VisualNotExists
-VisualCountEquals = visual_module.VisualCountEquals
-VisualCountParameter = visual_module.VisualCountParameter
-VisualCountMin = visual_module.VisualCountMin
-VisualCountMax = visual_module.VisualCountMax
+# Extract testfunctions from module (decorator pattern: access generated classes via decorated function)
+VisualExists = visual_module.visual_exists._test_class
+VisualExistsParameter = visual_module.visual_exists._parameter_class
+VisualNotExists = visual_module.visual_not_exists._test_class
+VisualNotExistsParameter = visual_module.visual_not_exists._parameter_class
+VisualCountEquals = visual_module.visual_count_equals._test_class
+VisualCountEqualsParameter = visual_module.visual_count_equals._parameter_class
+VisualCountMin = visual_module.visual_count_min._test_class
+VisualCountMinParameter = visual_module.visual_count_min._parameter_class
+VisualCountMax = visual_module.visual_count_max._test_class
+VisualCountMaxParameter = visual_module.visual_count_max._parameter_class
+
 
 # Import test helpers
 import importlib.util
@@ -172,8 +176,8 @@ class TestVisualExists:
         )
         result = await test.test(mock_visual_context)
 
-        assert_test_execution_error(result)
-        assert "Invalid parameters" in result.details[0]
+        assert_test_error(result)
+        assert "Either text or image parameter required" in result.details[0]
 
     @pytest.mark.asyncio
     async def test_visual_exists_with_window_parameter(self, mock_visual_context):
@@ -204,7 +208,7 @@ class TestVisualNotExists:
 
         test = VisualNotExists(
             name="test_text_not_exists",
-            parameter=VisualExistsParameter(text="Should Not Exist")
+            parameter=VisualNotExistsParameter(text="Should Not Exist")
         )
         result = await test.test(mock_visual_context)
 
@@ -217,7 +221,7 @@ class TestVisualNotExists:
 
         test = VisualNotExists(
             name="test_text_not_exists",
-            parameter=VisualExistsParameter(text="Found Text")
+            parameter=VisualNotExistsParameter(text="Found Text")
         )
         result = await test.test(mock_visual_context)
 
@@ -232,7 +236,7 @@ class TestVisualNotExists:
 
         test = VisualNotExists(
             name="test_text_not_exists",
-            parameter=VisualExistsParameter(text="Multiple")
+            parameter=VisualNotExistsParameter(text="Multiple")
         )
         result = await test.test(mock_visual_context)
 
@@ -250,7 +254,7 @@ class TestVisualNotExists:
 
         test = VisualNotExists(
             name="test_image_not_exists",
-            parameter=VisualExistsParameter(image="icon.png")
+            parameter=VisualNotExistsParameter(image="icon.png")
         )
         result = await test.test(mock_visual_context)
 
@@ -267,7 +271,7 @@ class TestVisualNotExists:
 
         test = VisualNotExists(
             name="test_image_not_exists",
-            parameter=VisualExistsParameter(image="icon.png")
+            parameter=VisualNotExistsParameter(image="icon.png")
         )
         result = await test.test(mock_visual_context)
 
@@ -277,15 +281,15 @@ class TestVisualNotExists:
 
     @pytest.mark.asyncio
     async def test_visual_not_exists_no_parameters_error(self, mock_visual_context):
-        """Test execution error when neither text nor image provided."""
+        """Test error when neither text nor image provided."""
         test = VisualNotExists(
             name="test_invalid",
-            parameter=VisualExistsParameter()
+            parameter=VisualNotExistsParameter()
         )
         result = await test.test(mock_visual_context)
 
-        assert_test_execution_error(result)
-        assert "Invalid parameters" in result.details[0]
+        assert_test_error(result)
+        assert "Either text or image parameter required" in result.details[0]
 
     @pytest.mark.asyncio
     async def test_visual_not_exists_with_window_parameter(self, mock_visual_context):
@@ -295,7 +299,7 @@ class TestVisualNotExists:
 
         test = VisualNotExists(
             name="test_window",
-            parameter=VisualExistsParameter(image="button.png", window="Chrome")
+            parameter=VisualNotExistsParameter(image="button.png", window="Chrome")
         )
         result = await test.test(mock_visual_context)
 
@@ -317,7 +321,7 @@ class TestVisualCountEquals:
 
         test = VisualCountEquals(
             name="test_count_equals",
-            parameter=VisualCountParameter(text="Item", n=3)
+            parameter=VisualCountEqualsParameter(text="Item", n=3)
         )
         result = await test.test(mock_visual_context)
 
@@ -330,7 +334,7 @@ class TestVisualCountEquals:
 
         test = VisualCountEquals(
             name="test_count_equals",
-            parameter=VisualCountParameter(text="None", n=0)
+            parameter=VisualCountEqualsParameter(text="None", n=0)
         )
         result = await test.test(mock_visual_context)
 
@@ -343,7 +347,7 @@ class TestVisualCountEquals:
 
         test = VisualCountEquals(
             name="test_count_equals",
-            parameter=VisualCountParameter(text="Item", n=3)
+            parameter=VisualCountEqualsParameter(text="Item", n=3)
         )
         result = await test.test(mock_visual_context)
 
@@ -358,7 +362,7 @@ class TestVisualCountEquals:
 
         test = VisualCountEquals(
             name="test_count_equals",
-            parameter=VisualCountParameter(text="Item", n=2)
+            parameter=VisualCountEqualsParameter(text="Item", n=2)
         )
         result = await test.test(mock_visual_context)
 
@@ -377,7 +381,7 @@ class TestVisualCountEquals:
 
         test = VisualCountEquals(
             name="test_count_equals",
-            parameter=VisualCountParameter(image="icon.png", n=2)
+            parameter=VisualCountEqualsParameter(image="icon.png", n=2)
         )
         result = await test.test(mock_visual_context)
 
@@ -394,7 +398,7 @@ class TestVisualCountEquals:
 
         test = VisualCountEquals(
             name="test_count_equals",
-            parameter=VisualCountParameter(image="icon.png", n=5)
+            parameter=VisualCountEqualsParameter(image="icon.png", n=5)
         )
         result = await test.test(mock_visual_context)
 
@@ -404,27 +408,27 @@ class TestVisualCountEquals:
 
     @pytest.mark.asyncio
     async def test_visual_count_equals_no_n_parameter_error(self, mock_visual_context):
-        """Test execution error when 'n' parameter not provided."""
+        """Test error when 'n' parameter not provided."""
         test = VisualCountEquals(
             name="test_invalid",
-            parameter=VisualCountParameter(text="Item")
+            parameter=VisualCountEqualsParameter(text="Item")
         )
         result = await test.test(mock_visual_context)
 
-        assert_test_execution_error(result)
+        assert_test_error(result)
         assert "Parameter 'n' required" in result.details[0]
 
     @pytest.mark.asyncio
     async def test_visual_count_equals_no_search_param_error(self, mock_visual_context):
-        """Test execution error when neither text nor image provided."""
+        """Test error when neither text nor image provided."""
         test = VisualCountEquals(
             name="test_invalid",
-            parameter=VisualCountParameter(n=5)
+            parameter=VisualCountEqualsParameter(n=5)
         )
         result = await test.test(mock_visual_context)
 
-        assert_test_execution_error(result)
-        assert "Invalid parameters" in result.details[0]
+        assert_test_error(result)
+        assert "Either text or image parameter required" in result.details[0]
 
 
 # ============================================================================
@@ -441,7 +445,7 @@ class TestVisualCountMin:
 
         test = VisualCountMin(
             name="test_count_min",
-            parameter=VisualCountParameter(text="Item", min=2)
+            parameter=VisualCountMinParameter(text="Item", min=2)
         )
         result = await test.test(mock_visual_context)
 
@@ -454,7 +458,7 @@ class TestVisualCountMin:
 
         test = VisualCountMin(
             name="test_count_min",
-            parameter=VisualCountParameter(text="Item", min=2)
+            parameter=VisualCountMinParameter(text="Item", min=2)
         )
         result = await test.test(mock_visual_context)
 
@@ -467,7 +471,7 @@ class TestVisualCountMin:
 
         test = VisualCountMin(
             name="test_count_min",
-            parameter=VisualCountParameter(text="Item", min=0)
+            parameter=VisualCountMinParameter(text="Item", min=0)
         )
         result = await test.test(mock_visual_context)
 
@@ -480,7 +484,7 @@ class TestVisualCountMin:
 
         test = VisualCountMin(
             name="test_count_min",
-            parameter=VisualCountParameter(text="Item", min=3)
+            parameter=VisualCountMinParameter(text="Item", min=3)
         )
         result = await test.test(mock_visual_context)
 
@@ -495,7 +499,7 @@ class TestVisualCountMin:
 
         test = VisualCountMin(
             name="test_count_min",
-            parameter=VisualCountParameter(text="Item", min=1)
+            parameter=VisualCountMinParameter(text="Item", min=1)
         )
         result = await test.test(mock_visual_context)
 
@@ -514,7 +518,7 @@ class TestVisualCountMin:
 
         test = VisualCountMin(
             name="test_count_min",
-            parameter=VisualCountParameter(image="icon.png", min=2)
+            parameter=VisualCountMinParameter(image="icon.png", min=2)
         )
         result = await test.test(mock_visual_context)
 
@@ -531,7 +535,7 @@ class TestVisualCountMin:
 
         test = VisualCountMin(
             name="test_count_min",
-            parameter=VisualCountParameter(image="icon.png", min=4)
+            parameter=VisualCountMinParameter(image="icon.png", min=4)
         )
         result = await test.test(mock_visual_context)
 
@@ -540,14 +544,14 @@ class TestVisualCountMin:
 
     @pytest.mark.asyncio
     async def test_visual_count_min_no_min_parameter_error(self, mock_visual_context):
-        """Test execution error when 'min' parameter not provided."""
+        """Test error when 'min' parameter not provided."""
         test = VisualCountMin(
             name="test_invalid",
-            parameter=VisualCountParameter(text="Item")
+            parameter=VisualCountMinParameter(text="Item")
         )
         result = await test.test(mock_visual_context)
 
-        assert_test_execution_error(result)
+        assert_test_error(result)
         assert "Parameter 'min' required" in result.details[0]
 
 
@@ -565,7 +569,7 @@ class TestVisualCountMax:
 
         test = VisualCountMax(
             name="test_count_max",
-            parameter=VisualCountParameter(text="Item", max=2)
+            parameter=VisualCountMaxParameter(text="Item", max=2)
         )
         result = await test.test(mock_visual_context)
 
@@ -578,7 +582,7 @@ class TestVisualCountMax:
 
         test = VisualCountMax(
             name="test_count_max",
-            parameter=VisualCountParameter(text="Item", max=5)
+            parameter=VisualCountMaxParameter(text="Item", max=5)
         )
         result = await test.test(mock_visual_context)
 
@@ -591,7 +595,7 @@ class TestVisualCountMax:
 
         test = VisualCountMax(
             name="test_count_max",
-            parameter=VisualCountParameter(text="Item", max=3)
+            parameter=VisualCountMaxParameter(text="Item", max=3)
         )
         result = await test.test(mock_visual_context)
 
@@ -604,7 +608,7 @@ class TestVisualCountMax:
 
         test = VisualCountMax(
             name="test_count_max",
-            parameter=VisualCountParameter(text="Item", max=0)
+            parameter=VisualCountMaxParameter(text="Item", max=0)
         )
         result = await test.test(mock_visual_context)
 
@@ -617,7 +621,7 @@ class TestVisualCountMax:
 
         test = VisualCountMax(
             name="test_count_max",
-            parameter=VisualCountParameter(text="Item", max=2)
+            parameter=VisualCountMaxParameter(text="Item", max=2)
         )
         result = await test.test(mock_visual_context)
 
@@ -632,7 +636,7 @@ class TestVisualCountMax:
 
         test = VisualCountMax(
             name="test_count_max",
-            parameter=VisualCountParameter(text="Item", max=0)
+            parameter=VisualCountMaxParameter(text="Item", max=0)
         )
         result = await test.test(mock_visual_context)
 
@@ -651,7 +655,7 @@ class TestVisualCountMax:
 
         test = VisualCountMax(
             name="test_count_max",
-            parameter=VisualCountParameter(image="icon.png", max=5)
+            parameter=VisualCountMaxParameter(image="icon.png", max=5)
         )
         result = await test.test(mock_visual_context)
 
@@ -668,7 +672,7 @@ class TestVisualCountMax:
 
         test = VisualCountMax(
             name="test_count_max",
-            parameter=VisualCountParameter(image="icon.png", max=1)
+            parameter=VisualCountMaxParameter(image="icon.png", max=1)
         )
         result = await test.test(mock_visual_context)
 
@@ -677,27 +681,27 @@ class TestVisualCountMax:
 
     @pytest.mark.asyncio
     async def test_visual_count_max_no_max_parameter_error(self, mock_visual_context):
-        """Test execution error when 'max' parameter not provided."""
+        """Test error when 'max' parameter not provided."""
         test = VisualCountMax(
             name="test_invalid",
-            parameter=VisualCountParameter(text="Item")
+            parameter=VisualCountMaxParameter(text="Item")
         )
         result = await test.test(mock_visual_context)
 
-        assert_test_execution_error(result)
+        assert_test_error(result)
         assert "Parameter 'max' required" in result.details[0]
 
     @pytest.mark.asyncio
     async def test_visual_count_max_no_search_param_error(self, mock_visual_context):
-        """Test execution error when neither text nor image provided."""
+        """Test error when neither text nor image provided."""
         test = VisualCountMax(
             name="test_invalid",
-            parameter=VisualCountParameter(max=5)
+            parameter=VisualCountMaxParameter(max=5)
         )
         result = await test.test(mock_visual_context)
 
-        assert_test_execution_error(result)
-        assert "Invalid parameters" in result.details[0]
+        assert_test_error(result)
+        assert "Either text or image parameter required" in result.details[0]
 
 
 # ============================================================================
@@ -750,7 +754,7 @@ class TestVisualEdgeCases:
         result = await test.test(mock_visual_context)
 
         assert_test_execution_error(result)
-        assert "Visual test execution failed" in result.details[0]
+        assert "Error in testfunction 'visual.exists'" in result.details[0]
 
     @pytest.mark.asyncio
     async def test_visual_count_large_numbers(self, mock_visual_context):
@@ -761,7 +765,7 @@ class TestVisualEdgeCases:
 
         test = VisualCountEquals(
             name="test_large_count",
-            parameter=VisualCountParameter(text="Item", n=100)
+            parameter=VisualCountEqualsParameter(text="Item", n=100)
         )
         result = await test.test(mock_visual_context)
 
@@ -803,7 +807,7 @@ class TestVisualEdgeCases:
         result = await test.test(mock_visual_context)
 
         assert_test_execution_error(result)
-        assert "Invalid search params" in result.details[0]
+        assert "Error in testfunction 'visual.exists'" in result.details[0]
 
     @pytest.mark.asyncio
     async def test_visual_relative_image_path_resolution(self, mock_visual_context, tmp_path):
@@ -836,7 +840,7 @@ class TestVisualEdgeCases:
         # Test VisualCountEquals
         test_equals = VisualCountEquals(
             name="test_equals_window",
-            parameter=VisualCountParameter(text="Item", n=2, window="TestWindow")
+            parameter=VisualCountEqualsParameter(text="Item", n=2, window="TestWindow")
         )
         result = await test_equals.test(mock_visual_context)
         assert_test_success(result)
@@ -848,7 +852,7 @@ class TestVisualEdgeCases:
         # Test VisualCountMin
         test_min = VisualCountMin(
             name="test_min_window",
-            parameter=VisualCountParameter(text="Item", min=1, window="MinWindow")
+            parameter=VisualCountMinParameter(text="Item", min=1, window="MinWindow")
         )
         result = await test_min.test(mock_visual_context)
         assert_test_success(result)
@@ -860,7 +864,7 @@ class TestVisualEdgeCases:
         # Test VisualCountMax
         test_max = VisualCountMax(
             name="test_max_window",
-            parameter=VisualCountParameter(text="Item", max=5, window="MaxWindow")
+            parameter=VisualCountMaxParameter(text="Item", max=5, window="MaxWindow")
         )
         result = await test_max.test(mock_visual_context)
         assert_test_success(result)
