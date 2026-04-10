@@ -1,0 +1,40 @@
+variables:
+  filename:
+    type: string
+    value: "secret.txt"
+  filepath:
+    type: path
+    value: "{{ adare_user_documents }}/{{ filename }}"
+  trashbin:
+    type: path
+    value: "{{ adare_user_home }}/.local/share/Trash"
+
+tests:
+  - name: file_in_trash
+    function: file_exists
+    parameter:
+      dst: "{{ trashbin }}/files/{{ filename }}"
+  - name: trashinfo_exists
+    function: file_exists
+    parameter:
+      dst: "{{ trashbin }}/info/{{ filename }}.trashinfo"
+
+actions:
+  - command:
+      command: "echo 'secret' > {{ filepath }}"
+      shell: true
+  - click:
+      target:
+        image: "nautilus_taskbar.png"
+  - click:
+      target:
+        text: "Documents"
+  - click:
+      type: "right"
+      target:
+        text: "{{ filename }}"
+  - click:
+      target:
+        text: "Move to Trash"
+  - test: file_in_trash
+  - test: trashinfo_exists
