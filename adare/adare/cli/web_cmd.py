@@ -127,8 +127,24 @@ def web_build():
 
     console.print(f"[blue]Building frontend in {web_dir}...[/blue]")
 
+    # Ensure dependencies are installed before building.
+    # --ignore-workspace: a pnpm-workspace.yaml may exist in an ancestor directory
+    # (e.g. the legacy sibling layout). Without this flag, pnpm would install into
+    # the outer workspace root instead of adare-web/node_modules, and tsc/vite
+    # would not be found on PATH during the build step.
+    if not os.path.isdir(os.path.join(web_dir, "node_modules")):
+        console.print("[yellow]node_modules not found. Running pnpm install...[/yellow]")
+        install_result = subprocess.run(
+            ["pnpm", "install", "--ignore-workspace"],
+            cwd=web_dir,
+            capture_output=False,
+        )
+        if install_result.returncode != 0:
+            console.print("[red]pnpm install failed.[/red]")
+            sys.exit(1)
+
     result = subprocess.run(
-        ["pnpm", "run", "build"],
+        ["pnpm", "--ignore-workspace", "run", "build"],
         cwd=web_dir,
         capture_output=False,
     )
