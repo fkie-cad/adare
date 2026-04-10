@@ -241,6 +241,7 @@ class StructuredDataApi(DatabaseApi):
 
         runs = safe_query_all(query)
         result = []
+        orphaned_run_ids: list[str] = []
 
         # Get current project name from context (experiments are stored per-project)
         current_project_name = project_name or get_current_project_name() or ""
@@ -248,6 +249,9 @@ class StructuredDataApi(DatabaseApi):
         for run in runs:
             # Experiment and environment info are now eagerly loaded
             experiment = run.experiment
+            if experiment is None:
+                orphaned_run_ids.append(run.id)
+                continue
             env = experiment.environments[0] if experiment.environments else None
 
             # Calculate duration
@@ -275,5 +279,15 @@ class StructuredDataApi(DatabaseApi):
                 overall_result=run.result_status or ""
             )
             result.append(run_info)
+
+        if orphaned_run_ids:
+            preview = ", ".join(orphaned_run_ids[:5])
+            more = f" (+{len(orphaned_run_ids) - 5} more)" if len(orphaned_run_ids) > 5 else ""
+            log.warning(
+                "Skipped %d orphaned run(s) with dangling experiment_id: %s%s",
+                len(orphaned_run_ids),
+                preview,
+                more,
+            )
 
         return result
