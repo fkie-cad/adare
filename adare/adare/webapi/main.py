@@ -687,7 +687,13 @@ app.include_router(vm_proxy_router)
 # SPA Fallback (serve built frontend static files)
 # =============================================================================
 
-_frontend_dist = Path(__file__).resolve().parent.parent.parent.parent.parent / "adare-web" / "dist"
+_this_file = Path(__file__).resolve()
+_project_dir = _this_file.parent.parent.parent.parent  # adare repo root
+_frontend_dist_candidates = [
+    _project_dir / "adare-web" / "dist",            # in-repo (preferred)
+    _project_dir.parent / "adare-web" / "dist",     # sibling fallback (legacy)
+]
+_frontend_dist = next((p for p in _frontend_dist_candidates if p.is_dir()), _frontend_dist_candidates[0])
 
 
 @app.get("/{path:path}")
