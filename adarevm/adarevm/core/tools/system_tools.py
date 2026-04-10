@@ -13,10 +13,7 @@ import os
 import platform
 import time
 from pathlib import Path
-from typing import Any, Dict, List, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
+from typing import Any, Dict, List
 
 import websockets
 
@@ -124,13 +121,94 @@ class SystemToolsMixin:
     # Dependency installation
     # ------------------------------------------------------------------ #
 
+    async def _run_install_command(
+        self,
+        websocket,
+        cmd: List[str],
+        installer_label: str,
+        dep_count: int,
+        cwd: str | None = None,
+        final_step: str = "2/2",
+        install_verb: str = "install",
+    ) -> Dict[str, Any]:
+        """Run a dependency installation subprocess with heartbeat and error handling.
+
+        Shared logic for both Poetry/uv and pip installers. Handles subprocess
+        creation, heartbeat-based waiting, output decoding, and result reporting.
+
+        Args:
+            websocket: WebSocket connection
+            cmd: Full command list to execute
+            installer_label: Human-readable installer name for log messages (e.g. "Poetry", "Pip")
+            dep_count: Number of dependencies being installed (for success message)
+            cwd: Working directory for the subprocess (None for current directory)
+            final_step: Step label for the final progress message (e.g. "4/4", "2/2")
+            install_verb: Verb for error messages (e.g. "add" for Poetry, "install" for pip)
+
+        Returns:
+            Result dict with status, message, and installer output
+        """
+        log.info(f"Running command: {' '.join(cmd)}" + (f" in directory: {cwd}" if cwd else ""))
+        await self.send_event(websocket, EventType.LOG, {"message": f"Command: {' '.join(cmd)}"})
+
+        await self.send_event(websocket, EventType.LOG, {
+            "message": f"Step {final_step}: Installing dependencies (this may take several minutes)..."
+        })
+
+        # Use asyncio subprocess to avoid blocking the event loop
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        # Wait for process with periodic heartbeat to keep WebSocket alive
+        stdout_bytes, stderr_bytes = await self._wait_for_process_with_heartbeat(
+            websocket, process, timeout=600.0
+        )
+
+        # Decode bytes to string
+        stdout = stdout_bytes.decode('utf-8') if stdout_bytes else ""
+        stderr = stderr_bytes.decode('utf-8') if stderr_bytes else ""
+
+        output_key = f"{installer_label.lower()}_output"
+
+        if process.returncode != 0:
+            await self.send_event(websocket, EventType.LOG, {"message": f"Step {final_step}: Installation failed"})
+            error_msg = f"{installer_label} {install_verb} failed with exit code {process.returncode}"
+            if stderr.strip():
+                error_msg += f": {stderr}"
+            else:
+                error_msg += " (no error output)"
+            if stdout.strip():
+                error_msg += f"\nStdout: {stdout}"
+
+            log.error(error_msg)
+            log.error(f"{installer_label} command details - Exit code: {process.returncode}, Stderr: '{stderr}', Stdout: '{stdout}'")
+            await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
+            return {"status": "error", "message": error_msg}
+
+        await self.send_event(websocket, EventType.LOG, {"message": f"Step {final_step}: Installation completed successfully"})
+        success_msg = f"Successfully installed all {dep_count} dependencies with {installer_label}"
+        log.info(success_msg)
+        log.debug(f"{installer_label} output: {stdout}")
+        await self.send_event(websocket, EventType.LOG, {"message": success_msg})
+
+        return {
+            "status": "success",
+            "message": success_msg,
+            "installed_count": dep_count,
+            output_key: stdout
+        }
+
     async def _install_dependencies_poetry(self, websocket, dependencies: List[str], prefer_binary: bool = False):
-        """Install Python dependencies using Poetry (for editable/development installs).
+        """Install Python dependencies using Poetry/uv (for editable/development installs).
 
         Args:
             websocket: WebSocket connection
             dependencies: List of dependencies to install
-            prefer_binary: If True, configure Poetry to only use binary packages (avoid compilation)
+            prefer_binary: If True, configure uv for binary-only packages (avoid compilation)
         """
         await self.send_event(websocket, EventType.LOG, {"message": f"Starting dependency installation: {len(dependencies)} packages"})
 
@@ -161,57 +239,15 @@ class SystemToolsMixin:
             cmd = ["uv", "add"] + dependencies
             if prefer_binary:
                 cmd.insert(2, "--only-binary")
-            log.info(f"Running command: {' '.join(cmd)} in directory: {project_dir}")
-            await self.send_event(websocket, EventType.LOG, {"message": f"Command: {' '.join(cmd)}"})
             current_step += 1
 
-            # Step 3/4: Execute installation
-            await self.send_event(websocket, EventType.LOG, {"message": f"Step {current_step}/{step_count}: Installing dependencies (this may take several minutes)..."})
-
-            # Use asyncio subprocess to avoid blocking the event loop
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                cwd=project_dir,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+            # Step 3/4: Execute installation via shared method
+            final_step = f"{step_count}/{step_count}"
+            return await self._run_install_command(
+                websocket, cmd, "Poetry", len(dependencies),
+                cwd=project_dir, final_step=final_step,
+                install_verb="add",
             )
-
-            # Wait for process with periodic heartbeat to keep WebSocket alive
-            stdout, stderr = await self._wait_for_process_with_heartbeat(
-                websocket, process, timeout=600.0
-            )
-
-            # Decode bytes to string
-            stdout = stdout.decode('utf-8') if stdout else ""
-            stderr = stderr.decode('utf-8') if stderr else ""
-
-            if process.returncode != 0:
-                await self.send_event(websocket, EventType.LOG, {"message": f"Step {step_count}/{step_count}: Installation failed"})
-                error_msg = f"Poetry add failed with exit code {process.returncode}"
-                if stderr.strip():
-                    error_msg += f": {stderr}"
-                else:
-                    error_msg += " (no error output)"
-                if stdout.strip():
-                    error_msg += f"\nStdout: {stdout}"
-
-                log.error(error_msg)
-                log.error(f"CLAUDE: Poetry command details - Exit code: {process.returncode}, Stderr: '{stderr}', Stdout: '{stdout}'")
-                await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
-                return {"status": "error", "message": error_msg}
-            else:
-                await self.send_event(websocket, EventType.LOG, {"message": f"Step {step_count}/{step_count}: Installation completed successfully"})
-                success_msg = f"Successfully installed all {len(dependencies)} dependencies with Poetry"
-                log.info(success_msg)
-                log.debug(f"Poetry output: {stdout}")
-                await self.send_event(websocket, EventType.LOG, {"message": success_msg})
-
-                return {
-                    "status": "success",
-                    "message": success_msg,
-                    "installed_count": len(dependencies),
-                    "poetry_output": stdout
-                }
 
         except asyncio.TimeoutError as e:
             error_msg = f"Poetry dependency installation timed out: {e}"
@@ -253,55 +289,11 @@ class SystemToolsMixin:
             # Add dependencies
             cmd = pip_cmd + dependencies
 
-            log.info(f"Running command: {' '.join(cmd)}")
-            await self.send_event(websocket, EventType.LOG, {"message": f"Command: {' '.join(cmd)}"})
-
-            # Step 2: Execute installation
-            await self.send_event(websocket, EventType.LOG, {"message": "Step 2/2: Installing dependencies (this may take several minutes)..."})
-
-            # Use asyncio subprocess to avoid blocking the event loop
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+            # Step 2: Execute installation via shared method
+            return await self._run_install_command(
+                websocket, cmd, "Pip", len(dependencies),
+                final_step="2/2",
             )
-
-            # Wait for process with periodic heartbeat to keep WebSocket alive
-            stdout, stderr = await self._wait_for_process_with_heartbeat(
-                websocket, process, timeout=600.0
-            )
-
-            # Decode bytes to string
-            stdout = stdout.decode('utf-8') if stdout else ""
-            stderr = stderr.decode('utf-8') if stderr else ""
-
-            if process.returncode != 0:
-                await self.send_event(websocket, EventType.LOG, {"message": "Step 2/2: Installation failed"})
-                error_msg = f"Pip install failed with exit code {process.returncode}"
-                if stderr.strip():
-                    error_msg += f": {stderr}"
-                else:
-                    error_msg += " (no error output)"
-                if stdout.strip():
-                    error_msg += f"\nStdout: {stdout}"
-
-                log.error(error_msg)
-                log.error(f"CLAUDE: Pip command details - Exit code: {process.returncode}, Stderr: '{stderr}', Stdout: '{stdout}'")
-                await self.send_event(websocket, EventType.ERROR, {"message": error_msg})
-                return {"status": "error", "message": error_msg}
-            else:
-                await self.send_event(websocket, EventType.LOG, {"message": "Step 2/2: Installation completed successfully"})
-                success_msg = f"Successfully installed all {len(dependencies)} dependencies with pip"
-                log.info(success_msg)
-                log.debug(f"Pip output: {stdout}")
-                await self.send_event(websocket, EventType.LOG, {"message": success_msg})
-
-                return {
-                    "status": "success",
-                    "message": success_msg,
-                    "installed_count": len(dependencies),
-                    "pip_output": stdout
-                }
 
         except asyncio.TimeoutError as e:
             error_msg = f"Pip dependency installation timed out: {e}"

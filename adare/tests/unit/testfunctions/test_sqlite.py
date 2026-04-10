@@ -22,9 +22,9 @@ from adare.helperfunctions.module import import_module_from_pyfile
 sqlite_module_path = PROJECT_ROOT / "appdata" / "testfunctions" / "sqlite" / "sqlite.py"
 sqlite_module = import_module_from_pyfile(sqlite_module_path)
 
-# Extract testfunctions from module
-QueryResult = sqlite_module.QueryResult
-QueryResultParameter = sqlite_module.QueryResultParameter
+# Extract testfunctions from module (decorator pattern: access generated classes via decorated function)
+QueryResult = sqlite_module.query_result._test_class
+QueryResultParameter = sqlite_module.query_result._parameter_class
 
 # Import test helpers
 import importlib.util

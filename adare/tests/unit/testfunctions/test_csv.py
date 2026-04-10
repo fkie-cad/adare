@@ -22,13 +22,13 @@ from adare.helperfunctions.module import import_module_from_pyfile
 csv_module_path = PROJECT_ROOT / "appdata" / "testfunctions" / "csv" / "csv.py"
 csv_module = import_module_from_pyfile(csv_module_path)
 
-# Extract testfunctions from module
-ContainsLine = csv_module.ContainsLine
-ContainsLineParameter = csv_module.ContainsLineParameter
-CompareRows = csv_module.CompareRows
-CompareRowsParameter = csv_module.CompareRowsParameter
-CompareFiles = csv_module.CompareFiles
-CompareFilesParameter = csv_module.CompareFilesParameter
+# Extract testfunctions from module (decorator pattern: classes are on the function object)
+ContainsLine = csv_module.contains_line._test_class
+ContainsLineParameter = csv_module.contains_line._parameter_class
+CompareRows = csv_module.compare_rows._test_class
+CompareRowsParameter = csv_module.compare_rows._parameter_class
+CompareFiles = csv_module.compare_files._test_class
+CompareFilesParameter = csv_module.compare_files._parameter_class
 
 # Import test helpers
 import importlib.util

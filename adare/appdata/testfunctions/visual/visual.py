@@ -5,407 +5,185 @@ These test functions execute on the HOST (not VM) and use the CV server
 to perform visual analysis of screenshots for text/icon detection.
 """
 
-import attrs
 from pathlib import Path
-from typing import ClassVar, Optional
 import logging
 
-from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
+from adarelib.testset import testfunction
+from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
 
 log = logging.getLogger(__name__)
 
 
 # =============================================================================
-# Parameter Classes
+# Helper: find visual element (text or image) in a screenshot
 # =============================================================================
 
-@attrs.define
-class VisualExistsParameter(Parameter):
-    """Parameters for visual existence checks."""
-    text: Optional[str] = None
-    image: Optional[str] = None
-    window: Optional[str] = None
+async def _find_visual_element(ctx, text, image, window):
+    """
+    Take a screenshot and search for a text or image element.
 
+    Returns:
+        (locations, target_desc) - list of match locations and a human-readable description.
 
-@attrs.define
-class VisualCountParameter(Parameter):
-    """Parameters for visual count checks."""
-    text: Optional[str] = None
-    image: Optional[str] = None
-    window: Optional[str] = None
-    n: Optional[int] = None  # For count_equals
-    min: Optional[int] = None  # For count_min
-    max: Optional[int] = None  # For count_max
+    Raises:
+        FileNotFoundError with a specific message when the image file cannot be found.
+    """
+    screenshot = await ctx.host.screenshot.take(window=window)
+
+    if text:
+        log.debug(f"Visual test: Searching for text '{text}'")
+        locations = await ctx.host.cv.find_text(text, screenshot)
+        target_desc = f"text '{text}'"
+    else:
+        image_path = Path(image)
+        if not image_path.is_absolute():
+            image_path = ctx.host.playbook_dir / image_path
+
+        log.debug(f"Visual test: Searching for image '{image_path.name}'")
+        try:
+            locations = await ctx.host.cv.find_icon(image_path, screenshot)
+        except FileNotFoundError:
+            return TestResult.execution_error(
+                FileNotFoundError(f"Image file not found: {image}"),
+                f"Image file not found: {image}",
+            )
+        target_desc = f"image '{image}'"
+
+    return locations, target_desc
 
 
 # =============================================================================
 # Visual Test Functions
 # =============================================================================
 
-@attrs.define
-class VisualExists(BasicTest):
-    """Test if text or image is visible on screen."""
-
-    testname: ClassVar[str] = 'visual.exists'
-    testdescription: ClassVar[str] = 'Check if text or image is visible on screen'
-    execute_on_host: ClassVar[bool] = True
-    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.HOST_NATIVE
-
-    name: str
-    parameter: VisualExistsParameter
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
-
-    async def test(self, context) -> TestResult:
-        """
-        Execute visual existence check.
-
-        Args:
-            context: HostTestContext with cv, screenshot, vm_file services
-
-        Returns:
-            TestResult indicating success or failure
-        """
-        try:
-            # Validate parameters
-            if not self.parameter.text and not self.parameter.image:
-                return TestResult.execution_error(
-                    ValueError("Either text or image parameter required"),
-                    "Invalid parameters"
-                )
-
-            # Take screenshot
-            screenshot = await context.screenshot.take(window=self.parameter.window)
-
-            # Search for visual element
-            if self.parameter.text:
-                log.debug(f"Visual test '{self.name}': Searching for text '{self.parameter.text}'")
-                locations = await context.cv.find_text(self.parameter.text, screenshot)
-                target_desc = f"text '{self.parameter.text}'"
-            else:
-                # Image search
-                image_path = Path(self.parameter.image)
-                if not image_path.is_absolute():
-                    image_path = context.playbook_dir / image_path
-
-                log.debug(f"Visual test '{self.name}': Searching for image '{image_path.name}'")
-                locations = await context.cv.find_icon(image_path, screenshot)
-                target_desc = f"image '{self.parameter.image}'"
-
-            # Check result
-            if locations:
-                log.debug(f"Visual test '{self.name}': Found {len(locations)} matches")
-                return TestResult.success()
-            else:
-                log.debug(f"Visual test '{self.name}': No matches found")
-                return TestResult.failed([f"Visual element not found: {target_desc}"])
-
-        except FileNotFoundError as e:
-            return TestResult.execution_error(e, f"Image file not found: {self.parameter.image}")
-        except ValueError as e:
-            return TestResult.execution_error(e, str(e))
-        except Exception as e:
-            log.error(f"Visual test '{self.name}' failed with error: {e}", exc_info=True)
-            return TestResult.execution_error(e, f"Visual test execution failed: {e}")
-
-
-@attrs.define
-class VisualNotExists(BasicTest):
-    """Test if text or image is NOT visible on screen."""
-
-    testname: ClassVar[str] = 'visual.not_exists'
-    testdescription: ClassVar[str] = 'Check if text or image is NOT visible on screen'
-    execute_on_host: ClassVar[bool] = True
-    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.HOST_NATIVE
-
-    name: str
-    parameter: VisualExistsParameter
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
-
-    async def test(self, context) -> TestResult:
-        """
-        Execute visual non-existence check.
-
-        Args:
-            context: HostTestContext with cv, screenshot, vm_file services
-
-        Returns:
-            TestResult indicating success or failure
-        """
-        try:
-            # Validate parameters
-            if not self.parameter.text and not self.parameter.image:
-                return TestResult.execution_error(
-                    ValueError("Either text or image parameter required"),
-                    "Invalid parameters"
-                )
-
-            # Take screenshot
-            screenshot = await context.screenshot.take(window=self.parameter.window)
-
-            # Search for visual element
-            if self.parameter.text:
-                log.debug(f"Visual test '{self.name}': Checking text '{self.parameter.text}' is not present")
-                locations = await context.cv.find_text(self.parameter.text, screenshot)
-                target_desc = f"text '{self.parameter.text}'"
-            else:
-                # Image search
-                image_path = Path(self.parameter.image)
-                if not image_path.is_absolute():
-                    image_path = context.playbook_dir / image_path
-
-                log.debug(f"Visual test '{self.name}': Checking image '{image_path.name}' is not present")
-                locations = await context.cv.find_icon(image_path, screenshot)
-                target_desc = f"image '{self.parameter.image}'"
-
-            # Check result (inverted logic)
-            if not locations:
-                log.debug(f"Visual test '{self.name}': Confirmed element not present")
-                return TestResult.success()
-            else:
-                log.debug(f"Visual test '{self.name}': Found {len(locations)} unexpected matches")
-                return TestResult.failed([f"Visual element should not exist but was found: {target_desc}"])
-
-        except FileNotFoundError as e:
-            return TestResult.execution_error(e, f"Image file not found: {self.parameter.image}")
-        except ValueError as e:
-            return TestResult.execution_error(e, str(e))
-        except Exception as e:
-            log.error(f"Visual test '{self.name}' failed with error: {e}", exc_info=True)
-            return TestResult.execution_error(e, f"Visual test execution failed: {e}")
-
-
-@attrs.define
-class VisualCountEquals(BasicTest):
-    """Test if text or image appears exactly N times on screen."""
-
-    testname: ClassVar[str] = 'visual.count_equals'
-    testdescription: ClassVar[str] = 'Check if text or image appears exactly N times on screen'
-    execute_on_host: ClassVar[bool] = True
-    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.HOST_NATIVE
-
-    name: str
-    parameter: VisualCountParameter
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
-
-    async def test(self, context) -> TestResult:
-        """
-        Execute visual count equals check.
-
-        Args:
-            context: HostTestContext with cv, screenshot, vm_file services
-
-        Returns:
-            TestResult indicating success or failure
-        """
-        try:
-            # Validate parameters
-            if not self.parameter.text and not self.parameter.image:
-                return TestResult.execution_error(
-                    ValueError("Either text or image parameter required"),
-                    "Invalid parameters"
-                )
-            if self.parameter.n is None:
-                return TestResult.execution_error(
-                    ValueError("Parameter 'n' required for count_equals test"),
-                    "Invalid parameters"
-                )
-
-            # Take screenshot
-            screenshot = await context.screenshot.take(window=self.parameter.window)
-
-            # Search for visual element
-            if self.parameter.text:
-                log.debug(f"Visual test '{self.name}': Counting text '{self.parameter.text}'")
-                locations = await context.cv.find_text(self.parameter.text, screenshot)
-                target_desc = f"text '{self.parameter.text}'"
-            else:
-                # Image search
-                image_path = Path(self.parameter.image)
-                if not image_path.is_absolute():
-                    image_path = context.playbook_dir / image_path
-
-                log.debug(f"Visual test '{self.name}': Counting image '{image_path.name}'")
-                locations = await context.cv.find_icon(image_path, screenshot)
-                target_desc = f"image '{self.parameter.image}'"
-
-            # Check count
-            actual_count = len(locations)
-            expected_count = self.parameter.n
-
-            log.debug(f"Visual test '{self.name}': Expected {expected_count}, found {actual_count}")
-
-            if actual_count == expected_count:
-                return TestResult.success()
-            else:
-                return TestResult.failed([
-                    f"Visual element count mismatch for {target_desc}: "
-                    f"expected {expected_count}, found {actual_count}"
-                ])
-
-        except FileNotFoundError as e:
-            return TestResult.execution_error(e, f"Image file not found: {self.parameter.image}")
-        except ValueError as e:
-            return TestResult.execution_error(e, str(e))
-        except Exception as e:
-            log.error(f"Visual test '{self.name}' failed with error: {e}", exc_info=True)
-            return TestResult.execution_error(e, f"Visual test execution failed: {e}")
-
-
-@attrs.define
-class VisualCountMin(BasicTest):
-    """Test if text or image appears at least N times on screen."""
-
-    testname: ClassVar[str] = 'visual.count_min'
-    testdescription: ClassVar[str] = 'Check if text or image appears at least N times on screen'
-    execute_on_host: ClassVar[bool] = True
-    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.HOST_NATIVE
-
-    name: str
-    parameter: VisualCountParameter
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
-
-    async def test(self, context) -> TestResult:
-        """
-        Execute visual minimum count check.
-
-        Args:
-            context: HostTestContext with cv, screenshot, vm_file services
-
-        Returns:
-            TestResult indicating success or failure
-        """
-        try:
-            # Validate parameters
-            if not self.parameter.text and not self.parameter.image:
-                return TestResult.execution_error(
-                    ValueError("Either text or image parameter required"),
-                    "Invalid parameters"
-                )
-            if self.parameter.min is None:
-                return TestResult.execution_error(
-                    ValueError("Parameter 'min' required for count_min test"),
-                    "Invalid parameters"
-                )
-
-            # Take screenshot
-            screenshot = await context.screenshot.take(window=self.parameter.window)
-
-            # Search for visual element
-            if self.parameter.text:
-                log.debug(f"Visual test '{self.name}': Counting text '{self.parameter.text}'")
-                locations = await context.cv.find_text(self.parameter.text, screenshot)
-                target_desc = f"text '{self.parameter.text}'"
-            else:
-                # Image search
-                image_path = Path(self.parameter.image)
-                if not image_path.is_absolute():
-                    image_path = context.playbook_dir / image_path
-
-                log.debug(f"Visual test '{self.name}': Counting image '{image_path.name}'")
-                locations = await context.cv.find_icon(image_path, screenshot)
-                target_desc = f"image '{self.parameter.image}'"
-
-            # Check minimum count
-            actual_count = len(locations)
-            min_count = self.parameter.min
-
-            log.debug(f"Visual test '{self.name}': Expected >= {min_count}, found {actual_count}")
-
-            if actual_count >= min_count:
-                return TestResult.success()
-            else:
-                return TestResult.failed([
-                    f"Visual element count below minimum for {target_desc}: "
-                    f"expected >= {min_count}, found {actual_count}"
-                ])
-
-        except FileNotFoundError as e:
-            return TestResult.execution_error(e, f"Image file not found: {self.parameter.image}")
-        except ValueError as e:
-            return TestResult.execution_error(e, str(e))
-        except Exception as e:
-            log.error(f"Visual test '{self.name}' failed with error: {e}", exc_info=True)
-            return TestResult.execution_error(e, f"Visual test execution failed: {e}")
-
-
-@attrs.define
-class VisualCountMax(BasicTest):
-    """Test if text or image appears at most N times on screen."""
-
-    testname: ClassVar[str] = 'visual.count_max'
-    testdescription: ClassVar[str] = 'Check if text or image appears at most N times on screen'
-    execute_on_host: ClassVar[bool] = True
-    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.HOST_NATIVE
-
-    name: str
-    parameter: VisualCountParameter
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
-
-    async def test(self, context) -> TestResult:
-        """
-        Execute visual maximum count check.
-
-        Args:
-            context: HostTestContext with cv, screenshot, vm_file services
-
-        Returns:
-            TestResult indicating success or failure
-        """
-        try:
-            # Validate parameters
-            if not self.parameter.text and not self.parameter.image:
-                return TestResult.execution_error(
-                    ValueError("Either text or image parameter required"),
-                    "Invalid parameters"
-                )
-            if self.parameter.max is None:
-                return TestResult.execution_error(
-                    ValueError("Parameter 'max' required for count_max test"),
-                    "Invalid parameters"
-                )
-
-            # Take screenshot
-            screenshot = await context.screenshot.take(window=self.parameter.window)
-
-            # Search for visual element
-            if self.parameter.text:
-                log.debug(f"Visual test '{self.name}': Counting text '{self.parameter.text}'")
-                locations = await context.cv.find_text(self.parameter.text, screenshot)
-                target_desc = f"text '{self.parameter.text}'"
-            else:
-                # Image search
-                image_path = Path(self.parameter.image)
-                if not image_path.is_absolute():
-                    image_path = context.playbook_dir / image_path
-
-                log.debug(f"Visual test '{self.name}': Counting image '{image_path.name}'")
-                locations = await context.cv.find_icon(image_path, screenshot)
-                target_desc = f"image '{self.parameter.image}'"
-
-            # Check maximum count
-            actual_count = len(locations)
-            max_count = self.parameter.max
-
-            log.debug(f"Visual test '{self.name}': Expected <= {max_count}, found {actual_count}")
-
-            if actual_count <= max_count:
-                return TestResult.success()
-            else:
-                return TestResult.failed([
-                    f"Visual element count exceeds maximum for {target_desc}: "
-                    f"expected <= {max_count}, found {actual_count}"
-                ])
-
-        except FileNotFoundError as e:
-            return TestResult.execution_error(e, f"Image file not found: {self.parameter.image}")
-        except ValueError as e:
-            return TestResult.execution_error(e, str(e))
-        except Exception as e:
-            log.error(f"Visual test '{self.name}' failed with error: {e}", exc_info=True)
-            return TestResult.execution_error(e, f"Visual test execution failed: {e}")
+@testfunction(
+    name='visual.exists',
+    description='Check if text or image is visible on screen',
+    category=HostModeCategory.HOST_NATIVE,
+    execute_on_host=True,
+)
+async def visual_exists(ctx, text: str = None, image: str = None, window: str = None):
+    ctx.error_if(not text and not image, "Either text or image parameter required")
+
+    result = await _find_visual_element(ctx, text, image, window)
+
+    # _find_visual_element returns TestResult on FileNotFoundError
+    if isinstance(result, TestResult):
+        return result
+
+    locations, target_desc = result
+
+    if locations:
+        log.debug(f"Visual test: Found {len(locations)} matches")
+    else:
+        log.debug("Visual test: No matches found")
+
+    ctx.fail_if(not locations, f"Visual element not found: {target_desc}")
+    return TestResult.success()
+
+
+@testfunction(
+    name='visual.not_exists',
+    description='Check if text or image is NOT visible on screen',
+    category=HostModeCategory.HOST_NATIVE,
+    execute_on_host=True,
+)
+async def visual_not_exists(ctx, text: str = None, image: str = None, window: str = None):
+    ctx.error_if(not text and not image, "Either text or image parameter required")
+
+    result = await _find_visual_element(ctx, text, image, window)
+
+    if isinstance(result, TestResult):
+        return result
+
+    locations, target_desc = result
+
+    if not locations:
+        log.debug("Visual test: Confirmed element not present")
+    else:
+        log.debug(f"Visual test: Found {len(locations)} unexpected matches")
+
+    ctx.fail_if(locations, f"Visual element should not exist but was found: {target_desc}")
+    return TestResult.success()
+
+
+@testfunction(
+    name='visual.count_equals',
+    description='Check if text or image appears exactly N times on screen',
+    category=HostModeCategory.HOST_NATIVE,
+    execute_on_host=True,
+)
+async def visual_count_equals(ctx, text: str = None, image: str = None, window: str = None, n: int = None):
+    ctx.error_if(not text and not image, "Either text or image parameter required")
+    ctx.error_if(n is None, "Parameter 'n' required for count_equals test")
+
+    result = await _find_visual_element(ctx, text, image, window)
+
+    if isinstance(result, TestResult):
+        return result
+
+    locations, target_desc = result
+    actual_count = len(locations)
+
+    log.debug(f"Visual test: Expected {n}, found {actual_count}")
+
+    ctx.fail_if(
+        actual_count != n,
+        f"Visual element count mismatch for {target_desc}: expected {n}, found {actual_count}",
+    )
+    return TestResult.success()
+
+
+@testfunction(
+    name='visual.count_min',
+    description='Check if text or image appears at least N times on screen',
+    category=HostModeCategory.HOST_NATIVE,
+    execute_on_host=True,
+)
+async def visual_count_min(ctx, text: str = None, image: str = None, window: str = None, min: int = None):
+    ctx.error_if(not text and not image, "Either text or image parameter required")
+    ctx.error_if(min is None, "Parameter 'min' required for count_min test")
+
+    result = await _find_visual_element(ctx, text, image, window)
+
+    if isinstance(result, TestResult):
+        return result
+
+    locations, target_desc = result
+    actual_count = len(locations)
+
+    log.debug(f"Visual test: Expected >= {min}, found {actual_count}")
+
+    ctx.fail_if(
+        actual_count < min,
+        f"Visual element count below minimum for {target_desc}: expected >= {min}, found {actual_count}",
+    )
+    return TestResult.success()
+
+
+@testfunction(
+    name='visual.count_max',
+    description='Check if text or image appears at most N times on screen',
+    category=HostModeCategory.HOST_NATIVE,
+    execute_on_host=True,
+)
+async def visual_count_max(ctx, text: str = None, image: str = None, window: str = None, max: int = None):
+    ctx.error_if(not text and not image, "Either text or image parameter required")
+    ctx.error_if(max is None, "Parameter 'max' required for count_max test")
+
+    result = await _find_visual_element(ctx, text, image, window)
+
+    if isinstance(result, TestResult):
+        return result
+
+    locations, target_desc = result
+    actual_count = len(locations)
+
+    log.debug(f"Visual test: Expected <= {max}, found {actual_count}")
+
+    ctx.fail_if(
+        actual_count > max,
+        f"Visual element count exceeds maximum for {target_desc}: expected <= {max}, found {actual_count}",
+    )
+    return TestResult.success()

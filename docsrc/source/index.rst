@@ -15,13 +15,9 @@ Welcome to ADARE!
 
 ADARE is a powerful framework designed for **forensic artifact analysis** and **digital forensics research**. It automates desktop interactions within virtual machines to detect and analyze changes in forensic artifacts across different software and operating system versions.
 
-.. raw:: html
+.. tip::
 
-   <!-- Placeholder for demo video/gif -->
-   <div style="text-align: center; margin: 30px 0; padding: 20px; border: 2px dashed #ccc; background-color: #f9f9f9;">
-     <p style="margin: 0; color: #666; font-size: 16px;">📹 <strong>Demo Video Coming Soon!</strong></p>
-     <p style="margin: 5px 0 0 0; color: #888; font-size: 14px;">A short video demonstration showing ADARE in action</p>
-   </div>
+   Watch ADARE in action! See :doc:`paper/demos` for demo videos showing file deletion experiments on Ubuntu 22.04 and Windows 11 with full playbooks.
 
 What makes ADARE unique?
 ------------------------
@@ -175,3 +171,10 @@ Documentation Structure
    architecture/file-sharing
    architecture/guest-agent
    architecture/cv-server
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Paper
+
+   paper/demos

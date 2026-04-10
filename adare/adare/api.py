@@ -397,6 +397,14 @@ class VMAPI:
         """Get VM instance usage."""
         return self._service.get_instance_usage()
 
+    def list_snapshots(self, instance_id=None):
+        """List VM snapshots."""
+        return self._service.list_snapshots(instance_id=instance_id)
+
+    def delete_snapshot(self, instance_id, snapshot_name):
+        """Delete a VM snapshot."""
+        return self._service.delete_snapshot(instance_id, snapshot_name)
+
     async def test_ova(self, request):
         """Test an OVA file (async)."""
         return await self._service.test_ova(request)
