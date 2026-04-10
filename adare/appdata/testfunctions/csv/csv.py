@@ -1,14 +1,13 @@
 # external imports
-import attrs
 from pathlib import Path
 import csv
 import sys
-from typing import ClassVar, Optional, List, Tuple
+from typing import Optional, List, Tuple
 
 # internal imports
-from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
+from adarelib.testset.api import testfunction, TestContext
+from adarelib.testset.basictest import HostModeCategory
 from adarelib.event.event import TestResult
-from adarelib.constants import StatusEnum
 
 # configure logging
 import logging
@@ -323,312 +322,264 @@ def _format_diff_report(
     return details
 
 
-@attrs.define
-class ContainsLineParameter(Parameter):
-    dst: str
-    entry: list
-
-
-@attrs.define
-class ContainsLine(BasicTest):
-    testname: ClassVar[str] = 'contains_line'
-    testdescription: ClassVar[str] = 'tests if row in a csv file exists that matches the given entry layout'
-    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
-
-    name: str
-    parameter: ContainsLineParameter
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
-
-    def test(self):
-        try:
-            dst, status = self.resolve_globfilepath(self.parameter.dst)
-            if not dst:
-                # List files in directory to help with debugging
-                try:
-                    from pathlib import Path
-                    search_path = Path(self.parameter.dst).parent if '/' in self.parameter.dst or '\\' in self.parameter.dst else Path('.')
-                    available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-                    files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-                except (OSError, PermissionError, FileNotFoundError) as e:
-                    files_info = f"Could not list directory contents: {e}"
-
-                return TestResult.failed([f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'])
-
-            log.debug(f'dst file {dst} will be used for test {self.name}')
-
-            # The entry pattern will be used directly with the placeholder system
-            entry_pattern = self.parameter.entry
-
+@testfunction(
+    name='contains_line',
+    description='tests if row in a csv file exists that matches the given entry layout',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def contains_line(ctx: TestContext, dst: str, entry: list = None):
+    try:
+        dst_resolved, status = ctx.resolve_globfilepath(dst)
+        if not dst_resolved:
+            # List files in directory to help with debugging
             try:
-                # Increase CSV field size limit to handle large fields (e.g., prefetch data)
-                try:
-                    csv.field_size_limit(sys.maxsize)
-                except OverflowError:
-                    # Fallback for systems where maxsize is too large
-                    csv.field_size_limit(10485760)  # 10MB
+                search_path = Path(dst).parent if '/' in dst or '\\' in dst else Path('.')
+                available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
+                files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
+            except (OSError, PermissionError, FileNotFoundError) as e:
+                files_info = f"Could not list directory contents: {e}"
 
-                with open(dst, 'r') as f:
-                    reader = csv.reader(f)
-                    rows = list(reader)
+            return TestResult.failed([f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'])
 
-                    # Track best matching rows for detailed error reporting
-                    match_results = []
+        log.debug(f'dst file {dst_resolved} will be used for test contains_line')
 
-                    for i, row in enumerate(rows):
-                        is_match, failed_columns, column_count_match = _row_matches_pattern(self, row, entry_pattern)
-                        if is_match:
-                            return TestResult.success()
+        # The entry pattern will be used directly with the placeholder system
+        entry_pattern = entry
 
-                        # Store match details for error reporting
-                        match_results.append({
-                            'row_index': i,
-                            'row': row,
-                            'failed_columns': failed_columns,
-                            'column_count_match': column_count_match,
-                            'failure_count': len(failed_columns)
-                        })
+        try:
+            # Increase CSV field size limit to handle large fields (e.g., prefetch data)
+            try:
+                csv.field_size_limit(sys.maxsize)
+            except OverflowError:
+                # Fallback for systems where maxsize is too large
+                csv.field_size_limit(10485760)  # 10MB
 
-                # Log file contents for debugging when test fails
-                log.info(f"CSV file '{dst}' contents for failed test '{self.name}':")
+            with open(dst_resolved, 'r') as f:
+                reader = csv.reader(f)
+                rows = list(reader)
+
+                # Track best matching rows for detailed error reporting
+                match_results = []
+
                 for i, row in enumerate(rows):
-                    log.info(f"  Row {i}: {row}")
-                log.info(f"Expected entry pattern: {entry_pattern}")
+                    is_match, failed_columns, column_count_match = _row_matches_pattern(ctx, row, entry_pattern)
+                    if is_match:
+                        return TestResult.success()
 
-                # Find the best matching rows (least number of failed columns)
-                if match_results:
-                    # Sort by failure count (ascending), then by whether column count matches
-                    best_matches = sorted(match_results, key=lambda x: (x['failure_count'], not x['column_count_match']))
+                    # Store match details for error reporting
+                    match_results.append({
+                        'row_index': i,
+                        'row': row,
+                        'failed_columns': failed_columns,
+                        'column_count_match': column_count_match,
+                        'failure_count': len(failed_columns)
+                    })
 
-                    # Build structured failure details
-                    failure_details = [
-                        f'no matching row found for pattern: {entry_pattern}',
-                        f'analyzed {len(rows)} rows in CSV file'
-                    ]
+            # Log file contents for debugging when test fails
+            log.info(f"CSV file '{dst_resolved}' contents for failed test 'contains_line':")
+            for i, row in enumerate(rows):
+                log.info(f"  Row {i}: {row}")
+            log.info(f"Expected entry pattern: {entry_pattern}")
 
-                    # Add up to 3 best matching rows with detailed failures
-                    failure_details.append('closest matches:')
-                    for i, match in enumerate(best_matches[:3]):
-                        failure_details.append(f'  [{i+1}] row {match["row_index"]}: {match["row"]}')
-                        failure_details.append(f'      failures: {", ".join(match["failed_columns"])}')
+            # Find the best matching rows (least number of failed columns)
+            if match_results:
+                # Sort by failure count (ascending), then by whether column count matches
+                best_matches = sorted(match_results, key=lambda x: (x['failure_count'], not x['column_count_match']))
 
-                    return TestResult.failed(failure_details)
-                else:
-                    return TestResult.failed([
-                        f'no matching row found for pattern: {entry_pattern}',
-                        'no rows found in CSV file to analyze'
-                    ])
-            except FileNotFoundError:
-                return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
-            except (PermissionError, OSError) as e:
-                return TestResult.execution_error(e, f"Cannot read CSV file {dst}")
-            except csv.Error as e:
-                return TestResult.failed([f"CSV parsing error in file {dst}: {e}"])
+                # Build structured failure details
+                failure_details = [
+                    f'no matching row found for pattern: {entry_pattern}',
+                    f'analyzed {len(rows)} rows in CSV file'
+                ]
 
-        except Exception as e:
-            log.error(f"Unexpected error in CSV line matching test: {e}", exc_info=True)
-            return TestResult.execution_error(e, "Unexpected error in CSV line matching test")
+                # Add up to 3 best matching rows with detailed failures
+                failure_details.append('closest matches:')
+                for i, match in enumerate(best_matches[:3]):
+                    failure_details.append(f'  [{i+1}] row {match["row_index"]}: {match["row"]}')
+                    failure_details.append(f'      failures: {", ".join(match["failed_columns"])}')
+
+                return TestResult.failed(failure_details)
+            else:
+                return TestResult.failed([
+                    f'no matching row found for pattern: {entry_pattern}',
+                    'no rows found in CSV file to analyze'
+                ])
+        except FileNotFoundError:
+            return TestResult.failed([f'file with path {dst} does not exist'])
+        except (PermissionError, OSError) as e:
+            return TestResult.execution_error(e, f"Cannot read CSV file {dst_resolved}")
+        except csv.Error as e:
+            return TestResult.failed([f"CSV parsing error in file {dst_resolved}: {e}"])
+
+    except Exception as e:
+        log.error(f"Unexpected error in CSV line matching test: {e}", exc_info=True)
+        return TestResult.execution_error(e, "Unexpected error in CSV line matching test")
 
 
-@attrs.define
-class CompareRowsParameter(Parameter):
-    dst: str
-    reference_rows: List[List[str]]
-    columns: Optional[List[int]] = None
-    ignore_order: bool = False
-    allow_extra_rows: bool = False
-    allow_missing_rows: bool = False
-
-
-@attrs.define
-class CompareRows(BasicTest):
-    testname: ClassVar[str] = 'compare_rows'
-    testdescription: ClassVar[str] = 'compares all rows in CSV against embedded reference data'
-    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
-
-    name: str
-    parameter: CompareRowsParameter
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
-
-    def test(self):
-        try:
-            # Resolve file path
-            dst, status = self.resolve_globfilepath(self.parameter.dst)
-            if not dst:
-                try:
-                    from pathlib import Path
-                    search_path = Path(self.parameter.dst).parent if '/' in self.parameter.dst or '\\' in self.parameter.dst else Path('.')
-                    available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-                    files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-                except (OSError, PermissionError, FileNotFoundError) as e:
-                    files_info = f"Could not list directory contents: {e}"
-
-                return TestResult.failed([f'file with path {self.parameter.dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'])
-
-            log.debug(f'dst file {dst} will be used for test {self.name}')
-
-            # Validate reference_rows structure
-            if not isinstance(self.parameter.reference_rows, list):
-                return TestResult.failed(['reference_rows must be a list of rows'])
-
-            if not self.parameter.reference_rows:
-                return TestResult.failed(['reference_rows cannot be empty'])
-
-            for i, row in enumerate(self.parameter.reference_rows):
-                if not isinstance(row, list):
-                    return TestResult.failed([f'reference_rows[{i}] must be a list, got {type(row).__name__}'])
-
+@testfunction(
+    name='compare_rows',
+    description='compares all rows in CSV against embedded reference data',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def compare_rows(ctx: TestContext, dst: str, reference_rows: List[List[str]] = None, columns: List[int] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False):
+    try:
+        # Resolve file path
+        dst_resolved, status = ctx.resolve_globfilepath(dst)
+        if not dst_resolved:
             try:
-                # Increase CSV field size limit to handle large fields
-                try:
-                    csv.field_size_limit(sys.maxsize)
-                except OverflowError:
-                    csv.field_size_limit(10485760)  # 10MB
+                search_path = Path(dst).parent if '/' in dst or '\\' in dst else Path('.')
+                available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
+                files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
+            except (OSError, PermissionError, FileNotFoundError) as e:
+                files_info = f"Could not list directory contents: {e}"
 
-                # Read actual CSV
-                with open(dst, 'r') as f:
-                    reader = csv.reader(f)
-                    actual_rows = list(reader)
+            return TestResult.failed([f'file with path {dst} can\'t be used, because no unambiguous file could be identified (because {status}). {files_info}'])
 
-                # Log file contents for debugging
-                log.debug(f"CSV file '{dst}' contains {len(actual_rows)} rows")
-                log.debug(f"Reference data contains {len(self.parameter.reference_rows)} rows")
+        log.debug(f'dst file {dst_resolved} will be used for test compare_rows')
 
-                # Choose comparison algorithm based on ignore_order
-                if self.parameter.ignore_order:
-                    return _compare_row_sets(
-                        test_instance=self,
-                        actual_rows=actual_rows,
-                        reference_rows=self.parameter.reference_rows,
-                        columns=self.parameter.columns,
-                        allow_extra=self.parameter.allow_extra_rows,
-                        allow_missing=self.parameter.allow_missing_rows
-                    )
-                else:
-                    return _compare_row_sequences(
-                        test_instance=self,
-                        actual_rows=actual_rows,
-                        reference_rows=self.parameter.reference_rows,
-                        columns=self.parameter.columns,
-                        allow_extra=self.parameter.allow_extra_rows,
-                        allow_missing=self.parameter.allow_missing_rows
-                    )
+        # Validate reference_rows structure
+        if not isinstance(reference_rows, list):
+            return TestResult.failed(['reference_rows must be a list of rows'])
 
-            except FileNotFoundError:
-                return TestResult.failed([f'file with path {self.parameter.dst} does not exist'])
-            except (PermissionError, OSError) as e:
-                return TestResult.execution_error(e, f"Cannot read CSV file {dst}")
-            except csv.Error as e:
-                return TestResult.failed([f"CSV parsing error in file {dst}: {e}"])
+        if not reference_rows:
+            return TestResult.failed(['reference_rows cannot be empty'])
 
-        except Exception as e:
-            log.error(f"Unexpected error in CSV compare_rows test: {e}", exc_info=True)
-            return TestResult.execution_error(e, "Unexpected error in CSV compare_rows test")
+        for i, row in enumerate(reference_rows):
+            if not isinstance(row, list):
+                return TestResult.failed([f'reference_rows[{i}] must be a list, got {type(row).__name__}'])
 
-
-@attrs.define
-class CompareFilesParameter(Parameter):
-    actual: str
-    reference: str
-    columns: Optional[List[int]] = None
-    ignore_order: bool = False
-    allow_extra_rows: bool = False
-    allow_missing_rows: bool = False
-
-
-@attrs.define
-class CompareFiles(BasicTest):
-    testname: ClassVar[str] = 'compare_files'
-    testdescription: ClassVar[str] = 'compares two CSV files with full diff reporting'
-    host_mode_category: ClassVar[HostModeCategory] = HostModeCategory.FILE_CONTENT
-
-    name: str
-    parameter: CompareFilesParameter
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
-
-    def test(self):
         try:
-            # Resolve actual file path
-            actual_path, actual_status = self.resolve_globfilepath(self.parameter.actual)
-            if not actual_path:
-                try:
-                    from pathlib import Path
-                    search_path = Path(self.parameter.actual).parent if '/' in self.parameter.actual or '\\' in self.parameter.actual else Path('.')
-                    available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-                    files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-                except (OSError, PermissionError, FileNotFoundError) as e:
-                    files_info = f"Could not list directory contents: {e}"
-
-                return TestResult.failed([f'actual file with path {self.parameter.actual} can\'t be used, because no unambiguous file could be identified (because {actual_status}). {files_info}'])
-
-            # Resolve reference file path
-            reference_path, reference_status = self.resolve_globfilepath(self.parameter.reference)
-            if not reference_path:
-                try:
-                    from pathlib import Path
-                    search_path = Path(self.parameter.reference).parent if '/' in self.parameter.reference or '\\' in self.parameter.reference else Path('.')
-                    available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
-                    files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
-                except (OSError, PermissionError, FileNotFoundError) as e:
-                    files_info = f"Could not list directory contents: {e}"
-
-                return TestResult.failed([f'reference file with path {self.parameter.reference} can\'t be used, because no unambiguous file could be identified (because {reference_status}). {files_info}'])
-
-            log.debug(f'actual file {actual_path} will be compared against reference file {reference_path} for test {self.name}')
-
+            # Increase CSV field size limit to handle large fields
             try:
-                # Increase CSV field size limit to handle large fields
-                try:
-                    csv.field_size_limit(sys.maxsize)
-                except OverflowError:
-                    csv.field_size_limit(10485760)  # 10MB
+                csv.field_size_limit(sys.maxsize)
+            except OverflowError:
+                csv.field_size_limit(10485760)  # 10MB
 
-                # Read actual CSV
-                with open(actual_path, 'r') as f:
-                    reader = csv.reader(f)
-                    actual_rows = list(reader)
+            # Read actual CSV
+            with open(dst_resolved, 'r') as f:
+                reader = csv.reader(f)
+                actual_rows = list(reader)
 
-                # Read reference CSV
-                with open(reference_path, 'r') as f:
-                    reader = csv.reader(f)
-                    reference_rows = list(reader)
+            # Log file contents for debugging
+            log.debug(f"CSV file '{dst_resolved}' contains {len(actual_rows)} rows")
+            log.debug(f"Reference data contains {len(reference_rows)} rows")
 
-                # Log file contents for debugging
-                log.debug(f"Actual CSV file '{actual_path}' contains {len(actual_rows)} rows")
-                log.debug(f"Reference CSV file '{reference_path}' contains {len(reference_rows)} rows")
+            # Choose comparison algorithm based on ignore_order
+            if ignore_order:
+                return _compare_row_sets(
+                    test_instance=ctx,
+                    actual_rows=actual_rows,
+                    reference_rows=reference_rows,
+                    columns=columns,
+                    allow_extra=allow_extra_rows,
+                    allow_missing=allow_missing_rows
+                )
+            else:
+                return _compare_row_sequences(
+                    test_instance=ctx,
+                    actual_rows=actual_rows,
+                    reference_rows=reference_rows,
+                    columns=columns,
+                    allow_extra=allow_extra_rows,
+                    allow_missing=allow_missing_rows
+                )
 
-                # Choose comparison algorithm based on ignore_order
-                if self.parameter.ignore_order:
-                    return _compare_row_sets(
-                        test_instance=self,
-                        actual_rows=actual_rows,
-                        reference_rows=reference_rows,
-                        columns=self.parameter.columns,
-                        allow_extra=self.parameter.allow_extra_rows,
-                        allow_missing=self.parameter.allow_missing_rows
-                    )
-                else:
-                    return _compare_row_sequences(
-                        test_instance=self,
-                        actual_rows=actual_rows,
-                        reference_rows=reference_rows,
-                        columns=self.parameter.columns,
-                        allow_extra=self.parameter.allow_extra_rows,
-                        allow_missing=self.parameter.allow_missing_rows
-                    )
+        except FileNotFoundError:
+            return TestResult.failed([f'file with path {dst} does not exist'])
+        except (PermissionError, OSError) as e:
+            return TestResult.execution_error(e, f"Cannot read CSV file {dst_resolved}")
+        except csv.Error as e:
+            return TestResult.failed([f"CSV parsing error in file {dst_resolved}: {e}"])
 
-            except FileNotFoundError as e:
-                if str(e).find(actual_path) >= 0 or str(e).find(self.parameter.actual) >= 0:
-                    return TestResult.failed([f'actual file with path {self.parameter.actual} does not exist'])
-                else:
-                    return TestResult.failed([f'reference file with path {self.parameter.reference} does not exist'])
-            except (PermissionError, OSError) as e:
-                return TestResult.execution_error(e, f"Cannot read CSV files")
-            except csv.Error as e:
-                return TestResult.failed([f"CSV parsing error: {e}"])
+    except Exception as e:
+        log.error(f"Unexpected error in CSV compare_rows test: {e}", exc_info=True)
+        return TestResult.execution_error(e, "Unexpected error in CSV compare_rows test")
 
-        except Exception as e:
-            log.error(f"Unexpected error in CSV compare_files test: {e}", exc_info=True)
-            return TestResult.execution_error(e, "Unexpected error in CSV compare_files test")
+
+@testfunction(
+    name='compare_files',
+    description='compares two CSV files with full diff reporting',
+    category=HostModeCategory.FILE_CONTENT,
+)
+def compare_files(ctx: TestContext, actual: str = '', reference: str = '', columns: List[int] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False):
+    try:
+        # Resolve actual file path
+        actual_path, actual_status = ctx.resolve_globfilepath(actual)
+        if not actual_path:
+            try:
+                search_path = Path(actual).parent if '/' in actual or '\\' in actual else Path('.')
+                available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
+                files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
+            except (OSError, PermissionError, FileNotFoundError) as e:
+                files_info = f"Could not list directory contents: {e}"
+
+            return TestResult.failed([f'actual file with path {actual} can\'t be used, because no unambiguous file could be identified (because {actual_status}). {files_info}'])
+
+        # Resolve reference file path
+        reference_path, reference_status = ctx.resolve_globfilepath(reference)
+        if not reference_path:
+            try:
+                search_path = Path(reference).parent if '/' in reference or '\\' in reference else Path('.')
+                available_files = [str(p.name) for p in search_path.iterdir() if p.is_file()]
+                files_info = f"Available files in directory: {available_files}" if available_files else "No files found in directory"
+            except (OSError, PermissionError, FileNotFoundError) as e:
+                files_info = f"Could not list directory contents: {e}"
+
+            return TestResult.failed([f'reference file with path {reference} can\'t be used, because no unambiguous file could be identified (because {reference_status}). {files_info}'])
+
+        log.debug(f'actual file {actual_path} will be compared against reference file {reference_path} for test compare_files')
+
+        try:
+            # Increase CSV field size limit to handle large fields
+            try:
+                csv.field_size_limit(sys.maxsize)
+            except OverflowError:
+                csv.field_size_limit(10485760)  # 10MB
+
+            # Read actual CSV
+            with open(actual_path, 'r') as f:
+                reader = csv.reader(f)
+                actual_rows = list(reader)
+
+            # Read reference CSV
+            with open(reference_path, 'r') as f:
+                reader = csv.reader(f)
+                reference_rows = list(reader)
+
+            # Log file contents for debugging
+            log.debug(f"Actual CSV file '{actual_path}' contains {len(actual_rows)} rows")
+            log.debug(f"Reference CSV file '{reference_path}' contains {len(reference_rows)} rows")
+
+            # Choose comparison algorithm based on ignore_order
+            if ignore_order:
+                return _compare_row_sets(
+                    test_instance=ctx,
+                    actual_rows=actual_rows,
+                    reference_rows=reference_rows,
+                    columns=columns,
+                    allow_extra=allow_extra_rows,
+                    allow_missing=allow_missing_rows
+                )
+            else:
+                return _compare_row_sequences(
+                    test_instance=ctx,
+                    actual_rows=actual_rows,
+                    reference_rows=reference_rows,
+                    columns=columns,
+                    allow_extra=allow_extra_rows,
+                    allow_missing=allow_missing_rows
+                )
+
+        except FileNotFoundError as e:
+            if str(e).find(actual_path) >= 0 or str(e).find(actual) >= 0:
+                return TestResult.failed([f'actual file with path {actual} does not exist'])
+            else:
+                return TestResult.failed([f'reference file with path {reference} does not exist'])
+        except (PermissionError, OSError) as e:
+            return TestResult.execution_error(e, f"Cannot read CSV files")
+        except csv.Error as e:
+            return TestResult.failed([f"CSV parsing error: {e}"])
+
+    except Exception as e:
+        log.error(f"Unexpected error in CSV compare_files test: {e}", exc_info=True)
+        return TestResult.execution_error(e, "Unexpected error in CSV compare_files test")

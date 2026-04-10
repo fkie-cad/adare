@@ -37,3 +37,7 @@ docs-sphinx:
 	@echo "Building documentation with Sphinx..."
 	uv sync --group docs
 	uv run sphinx-build -b html -a -E docsrc/source docs
+	@echo "Copying demo assets..."
+	mkdir -p docs/demo
+	cp paper/demo/*.mp4 docs/demo/
+	touch docs/.nojekyll

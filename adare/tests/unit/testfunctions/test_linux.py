@@ -24,15 +24,15 @@ from adare.helperfunctions.module import import_module_from_pyfile
 linux_module_path = PROJECT_ROOT / "appdata" / "testfunctions" / "linux" / "linux.py"
 linux_module = import_module_from_pyfile(linux_module_path)
 
-# Extract testfunctions from module
-SystemServiceStatus = linux_module.SystemServiceStatus
-SystemServiceStatusParameter = linux_module.SystemServiceStatusParameter
-ProcessRunning = linux_module.ProcessRunning
-ProcessRunningParameter = linux_module.ProcessRunningParameter
-UserExists = linux_module.UserExists
-UserExistsParameter = linux_module.UserExistsParameter
-LogEntryExists = linux_module.LogEntryExists
-LogEntryExistsParameter = linux_module.LogEntryExistsParameter
+# Extract testfunctions from module (decorator pattern: access generated classes via decorated function)
+SystemServiceStatus = linux_module.system_service_status._test_class
+SystemServiceStatusParameter = linux_module.system_service_status._parameter_class
+ProcessRunning = linux_module.process_running._test_class
+ProcessRunningParameter = linux_module.process_running._parameter_class
+UserExists = linux_module.user_exists._test_class
+UserExistsParameter = linux_module.user_exists._parameter_class
+LogEntryExists = linux_module.log_entry_exists._test_class
+LogEntryExistsParameter = linux_module.log_entry_exists._parameter_class
 
 # Import test helpers
 import importlib.util

@@ -304,7 +304,16 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 command = " ".join(command)
 
             if inject_user_path and not run_as_user:
-                # TODO: This should be set dynamically somehow and not here?! Unsure how to do that while maintaining code quality.
+                # Attempt lazy PATH discovery if not yet attempted
+                if not self._cached_guest_path and not self._path_discovery_attempted:
+                    log.debug("PATH not yet discovered, will use fallback for inject_user_path")
+
+                if self._path_discovery_attempted and not self._cached_guest_path:
+                    log.warning(
+                        "PATH discovery was attempted but failed - "
+                        "inject_user_path will use fallback paths only"
+                    )
+
                 base_path = self._cached_guest_path or ""
 
                 custom_path_dirs = [
@@ -314,7 +323,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
                 # Join only the items that aren't empty
                 paths = base_path + ";".join(custom_path_dirs)
-                log.debug(f"CLAUDE DEBUG: Injecting user PATH dirs: {paths}")
+                log.debug(f"Injecting user PATH dirs: {paths}")
                 #command = f'$env:Path = "{path_dirs_str};$env:Path"; {command}'
                 if background:
                     command = f'$env:Path += ";{paths}"; {command}'
@@ -369,7 +378,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             env_vars.append(f"USER={self.username}")
 
         # Set PATH - use discovered PATH from guest if available, otherwise fallback to hardcoded
-        if hasattr(self, '_cached_guest_path') and self._cached_guest_path:
+        if self._cached_guest_path:
             # Combine discovered PATH with essential system paths
             if 'windows' in self.guest_os.lower():
                 system_essentials = "C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0"
@@ -383,7 +392,14 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 path_value = "C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0"
             else:
                 path_value = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-            log.debug("Using hardcoded fallback PATH (discovery not available)")
+
+            if self._path_discovery_attempted:
+                log.warning(
+                    "Using hardcoded fallback PATH (discovery was attempted but failed). "
+                    "Some user-installed tools may not be available."
+                )
+            else:
+                log.debug("Using hardcoded fallback PATH (discovery not yet attempted)")
 
         env_vars.append(f"PATH={path_value}")
 
@@ -975,7 +991,6 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     stderr_b64 = status_data.get('err-data', '')
 
                     # Decode base64 output
-                    import base64
                     stdout = base64.b64decode(stdout_b64).decode('utf-8', errors='replace') if stdout_b64 else ""
                     stderr = base64.b64decode(stderr_b64).decode('utf-8', errors='replace') if stderr_b64 else ""
 
@@ -1109,9 +1124,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
         async def _qga_async():
             import libvirt
             try:
-                # Get libvirt domain
-                if not self._libvirt_domain:
-                    return {"error": {"desc": "Domain not defined"}}
+                # Ensure libvirt domain is available
+                try:
+                    self._ensure_libvirt_domain()
+                except HypervisorException as e:
+                    return {"error": {"desc": f"Domain not available: {e}"}}
 
                 # Send command via libvirt API
                 cmd_json = json.dumps(command)

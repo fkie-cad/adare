@@ -29,7 +29,7 @@ class TestActionsExecutor:
         self.playbook = playbook
         self.test_loader = None
         self.host_test_executor = None
-        self.host_mode_test_executor = None
+        self.guest_to_host_test_executor = None
         self.test_execution_mode: Optional[TestExecutionMode] = None
 
     def set_test_loader(self, test_loader):
@@ -41,10 +41,10 @@ class TestActionsExecutor:
         self.test_execution_mode = mode
         log.info(f"Test Executor: test execution mode set to {mode.value}")
 
-    def set_host_mode_test_executor(self, executor):
+    def set_guest_to_host_test_executor(self, executor):
         """Set the host-mode test executor (pre-created with QGA proxies)."""
-        self.host_mode_test_executor = executor
-        log.debug("Test Executor: HostModeTestExecutor set")
+        self.guest_to_host_test_executor = executor
+        log.debug("Test Executor: GuestToHostTestExecutor set")
 
     async def execute_test(self, action: ActionTestAction, websocket_client,
                           target_resolver, parent_event_id: str = None,
@@ -126,10 +126,10 @@ class TestActionsExecutor:
         return TestResultProcessor.process_test_result(action.name, result_dict, expect_to_fail)
 
     async def _execute_host_mode_test(self, action, resolved_test) -> ActionResult:
-        """Route test to HostModeTestExecutor (QGA-based, no agent)."""
+        """Route test to GuestToHostTestExecutor (QGA-based, no agent)."""
         log.debug(f"Test Executor: Routing test '{action.name}' to host-mode executor (QGA)")
 
-        if not self.host_mode_test_executor:
+        if not self.guest_to_host_test_executor:
             return ActionResult(
                 success=False,
                 message=f"Host-mode test executor not available — ensure test_execution_mode=HOST is configured"
@@ -142,7 +142,7 @@ class TestActionsExecutor:
         test_instance = await self.test_loader.structure_host_test(action.name, resolved_test)
 
         # Execute via host-mode executor
-        test_result = await self.host_mode_test_executor.execute_test(
+        test_result = await self.guest_to_host_test_executor.execute_test(
             test_name=action.name,
             test_function=test_function,
             test_instance=test_instance,

@@ -239,6 +239,61 @@ async def cleanup_sessions(project_path: Optional[str] = None):
     return result_to_response(result)
 
 
+@app.post("/api/sessions/{session_id}/resume")
+async def resume_session(session_id: str):
+    """
+    Resume a stopped dev mode session.
+
+    Args:
+        session_id: Session ID to resume
+
+    Returns:
+        Session info on success
+    """
+    logger.info(f"Resuming session {session_id}")
+
+    result = api.devmode.resume_session(session_id)
+
+    if result.is_success():
+        await ws_manager.send_session_state(
+            session_id,
+            {
+                "status": "resumed",
+                "vm_running": result.value.vm_running,
+            },
+        )
+
+    return result_to_response(result)
+
+
+@app.post("/api/sessions/resume-recent")
+async def resume_most_recent(project_path: str = Query(...)):
+    """
+    Resume the most recently stopped dev mode session.
+
+    Args:
+        project_path: Project path to find the most recent session
+
+    Returns:
+        Session info on success
+    """
+    logger.info(f"Resuming most recent session for {project_path}")
+
+    result = api.devmode.resume_most_recent(Path(project_path))
+
+    if result.is_success():
+        session_id = result.value.session_id
+        await ws_manager.send_session_state(
+            session_id,
+            {
+                "status": "resumed",
+                "vm_running": result.value.vm_running,
+            },
+        )
+
+    return result_to_response(result)
+
+
 # =============================================================================
 # Action Execution Endpoints
 # =============================================================================

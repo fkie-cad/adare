@@ -24,20 +24,20 @@ excel_module_path = PROJECT_ROOT / "appdata" / "testfunctions" / "excel" / "exce
 excel_module = import_module_from_pyfile(excel_module_path)
 
 # Extract testfunctions from module
-SheetExists = excel_module.SheetExists
-SheetExistsParameter = excel_module.SheetExistsParameter
-CellValueMatches = excel_module.CellValueMatches
-CellValueMatchesParameter = excel_module.CellValueMatchesParameter
-ContainsRow = excel_module.ContainsRow
-ContainsRowParameter = excel_module.ContainsRowParameter
-ValidateColumns = excel_module.ValidateColumns
-ValidateColumnsParameter = excel_module.ValidateColumnsParameter
-CompareRows = excel_module.CompareRows
-CompareRowsParameter = excel_module.CompareRowsParameter
-CompareSheets = excel_module.CompareSheets
-CompareSheetsParameter = excel_module.CompareSheetsParameter
-CompareFiles = excel_module.CompareFiles
-CompareFilesParameter = excel_module.CompareFilesParameter
+SheetExists = excel_module.sheet_exists._test_class
+SheetExistsParameter = excel_module.sheet_exists._parameter_class
+CellValueMatches = excel_module.cell_value_matches._test_class
+CellValueMatchesParameter = excel_module.cell_value_matches._parameter_class
+ContainsRow = excel_module.contains_row._test_class
+ContainsRowParameter = excel_module.contains_row._parameter_class
+ValidateColumns = excel_module.validate_columns._test_class
+ValidateColumnsParameter = excel_module.validate_columns._parameter_class
+CompareRows = excel_module.compare_rows._test_class
+CompareRowsParameter = excel_module.compare_rows._parameter_class
+CompareSheets = excel_module.compare_sheets._test_class
+CompareSheetsParameter = excel_module.compare_sheets._parameter_class
+CompareFiles = excel_module.compare_files._test_class
+CompareFilesParameter = excel_module.compare_files._parameter_class
 
 # Import test helpers
 import importlib.util

@@ -23,13 +23,13 @@ from adare.helperfunctions.module import import_module_from_pyfile
 jsonl_module_path = PROJECT_ROOT / "appdata" / "testfunctions" / "jsonl" / "jsonl.py"
 jsonl_module = import_module_from_pyfile(jsonl_module_path)
 
-# Extract testfunctions from module
-LineMatches = jsonl_module.LineMatches
-LineMatchesParameter = jsonl_module.LineMatchesParameter
-LineCount = jsonl_module.LineCount
-LineCountParameter = jsonl_module.LineCountParameter
-ValueInAnyLine = jsonl_module.ValueInAnyLine
-ValueInAnyLineParameter = jsonl_module.ValueInAnyLineParameter
+# Extract testfunctions from module (decorator pattern: access generated classes via decorated function)
+LineMatches = jsonl_module.line_matches._test_class
+LineMatchesParameter = jsonl_module.line_matches._parameter_class
+LineCount = jsonl_module.line_count._test_class
+LineCountParameter = jsonl_module.line_count._parameter_class
+ValueInAnyLine = jsonl_module.value_in_any_line._test_class
+ValueInAnyLineParameter = jsonl_module.value_in_any_line._parameter_class
 
 # Import test helpers
 import importlib.util

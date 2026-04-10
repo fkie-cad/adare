@@ -23,11 +23,11 @@ from adare.helperfunctions.module import import_module_from_pyfile
 windows_module_path = PROJECT_ROOT / "appdata" / "testfunctions" / "windows" / "windows.py"
 windows_module = import_module_from_pyfile(windows_module_path)
 
-# Extract testfunctions from module
-RegistryKeyExists = windows_module.RegistryKeyExists
-RegistryKeyExistsParameter = windows_module.RegistryKeyExistsParameter
-RegistryValueMatches = windows_module.RegistryValueMatches
-RegistryValueMatchesParameter = windows_module.RegistryValueMatchesParameter
+# Extract testfunctions from module (decorator-based: classes attached to function objects)
+RegistryKeyExists = windows_module.registry_key_exists._test_class
+RegistryKeyExistsParameter = windows_module.registry_key_exists._parameter_class
+RegistryValueMatches = windows_module.registry_value_matches._test_class
+RegistryValueMatchesParameter = windows_module.registry_value_matches._parameter_class
 
 # Import test helpers
 import importlib.util

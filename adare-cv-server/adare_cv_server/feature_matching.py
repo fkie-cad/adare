@@ -8,7 +8,7 @@ from sklearn.cluster import DBSCAN
 
 from .constants import CVConstants
 from .image_processing import ImageDecoder, FeatureMatchingResult, HomographyCalculator
-from .exceptions import FeatureMatchingError, ImageDecodingError, HomographyCalculationError
+from .exceptions import ImageDecodingError, HomographyCalculationError
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class SIFTMatcher:
         ratio_threshold: float = CVConstants.SIFT_RATIO_THRESHOLD
     ) -> FeatureMatchingResult:
         """Find icon locations using SIFT feature matching - scale invariant."""
-        log.info(f"CLAUDE: SIFT detection starting with min_matches={min_matches}, ratio_threshold={ratio_threshold}")
+        log.debug(f"SIFT detection starting with min_matches={min_matches}, ratio_threshold={ratio_threshold}")
 
         try:
             # Decode images
@@ -47,22 +47,22 @@ class SIFTMatcher:
         kp1, des1 = sift.detectAndCompute(icon_gray, alpha_mask)
         kp2, des2 = sift.detectAndCompute(screenshot_gray, None)
 
-        log.info(f"CLAUDE: Icon keypoints: {len(kp1) if kp1 else 0}, Screenshot keypoints: {len(kp2) if kp2 else 0}")
+        log.debug(f"SIFT icon keypoints: {len(kp1) if kp1 else 0}, screenshot keypoints: {len(kp2) if kp2 else 0}")
 
         if des1 is None or des2 is None:
-            log.warning("CLAUDE: No descriptors found - images may be too simple or uniform")
+            log.warning("SIFT: No descriptors found - images may be too simple or uniform")
             return FeatureMatchingResult([], [], "sift")
 
         # Match features
         matcher = cv2.BFMatcher()
         matches = matcher.knnMatch(des1, des2, k=2)
 
-        log.info(f"CLAUDE: Initial matches found: {len(matches)}")
+        log.debug(f"SIFT initial matches found: {len(matches)}")
 
         # Apply Lowe's ratio test
         good_matches = SIFTMatcher._apply_ratio_test(matches, ratio_threshold)
 
-        log.info(f"CLAUDE: Good matches after ratio test: {len(good_matches)} (need >= {min_matches})")
+        log.debug(f"SIFT good matches after ratio test: {len(good_matches)} (need >= {min_matches})")
 
         if len(good_matches) >= min_matches:
             # Get matched keypoints
@@ -78,7 +78,7 @@ class SIFTMatcher:
 
             if extent_x > max_allowed or extent_y > max_allowed:
                 log.warning(
-                    f"CLAUDE: SIFT rejecting match - keypoints span {extent_x:.0f}x{extent_y:.0f} "
+                    f"SIFT rejecting match - keypoints span {extent_x:.0f}x{extent_y:.0f} "
                     f"but icon is only {icon_w}x{icon_h} (max allowed: {max_allowed:.0f})"
                 )
                 return FeatureMatchingResult([], [], "sift")
@@ -88,12 +88,12 @@ class SIFTMatcher:
                 center = HomographyCalculator.calculate_center_from_homography(
                     src_pts, dst_pts, icon_gray.shape, screenshot_shape=screenshot_shape
                 )
-                log.info(f"CLAUDE: SIFT match found at center: {center}")
+                log.debug(f"SIFT match found at center: {center}")
                 return FeatureMatchingResult([center], [float(len(good_matches))], "sift")
             except HomographyCalculationError as e:
-                log.warning(f"CLAUDE: {e}")
+                log.warning(f"SIFT homography failed: {e}")
         else:
-            log.info("CLAUDE: Not enough good matches for reliable detection")
+            log.debug("SIFT: Not enough good matches for reliable detection")
 
         return FeatureMatchingResult([], [], "sift")
 
@@ -121,7 +121,7 @@ class ORBMatcher:
         distance_threshold: float = CVConstants.ORB_DISTANCE_THRESHOLD
     ) -> FeatureMatchingResult:
         """Find multiple icon locations using ORB feature matching."""
-        log.info(f"CLAUDE: ORB detection starting with min_matches={min_matches}, max_matches={max_matches}, distance_threshold={distance_threshold}")
+        log.debug(f"ORB detection starting with min_matches={min_matches}, max_matches={max_matches}, distance_threshold={distance_threshold}")
 
         # Decode images
         try:
@@ -142,19 +142,19 @@ class ORBMatcher:
         kp1, des1 = orb.detectAndCompute(icon_gray, alpha_mask)
         kp2, des2 = orb.detectAndCompute(screenshot_gray, None)
 
-        log.info(f"CLAUDE: Icon keypoints: {len(kp1) if kp1 else 0}, Screenshot keypoints: {len(kp2) if kp2 else 0}")
+        log.debug(f"ORB icon keypoints: {len(kp1) if kp1 else 0}, screenshot keypoints: {len(kp2) if kp2 else 0}")
 
         if des1 is None or des2 is None:
-            log.warning("CLAUDE: No descriptors found - images may be too simple or uniform")
+            log.warning("ORB: No descriptors found - images may be too simple or uniform")
             return FeatureMatchingResult([], [], "orb")
 
         # Match and filter features
         good_matches = ORBMatcher._match_and_filter_features(des1, des2, distance_threshold)
 
-        log.info(f"CLAUDE: Good matches after distance filter: {len(good_matches)}")
+        log.debug(f"ORB good matches after distance filter: {len(good_matches)}")
 
         if len(good_matches) < min_matches:
-            log.info(f"CLAUDE: Not enough good matches ({len(good_matches)} < {min_matches})")
+            log.debug(f"ORB: Not enough good matches ({len(good_matches)} < {min_matches})")
             return FeatureMatchingResult([], [], "orb")
 
         # Extract matched keypoint coordinates
@@ -166,7 +166,7 @@ class ORBMatcher:
             src_pts, dst_pts, good_matches, icon_gray.shape, min_matches, max_matches, screenshot_shape
         )
 
-        log.info(f"CLAUDE: ORB found {len(locations)} valid matches")
+        log.debug(f"ORB found {len(locations)} valid matches")
         return FeatureMatchingResult(locations, similarities, "orb")
 
     @staticmethod
@@ -204,7 +204,7 @@ class ORBMatcher:
         try:
             # Determine clustering strategy
             if len(dst_pts) <= CVConstants.SMALL_CLUSTER_SIZE:
-                log.info("CLAUDE: Few matches found, skipping clustering - treating as single icon")
+                log.debug("ORB: Few matches found, skipping clustering - treating as single icon")
                 labels = np.zeros(len(dst_pts))
             else:
                 clustering = DBSCAN(eps=CVConstants.ORB_CLUSTERING_EPS, min_samples=min_matches).fit(dst_pts)
@@ -214,7 +214,7 @@ class ORBMatcher:
             if -1 in unique_labels:
                 unique_labels.remove(-1)  # Remove noise cluster
 
-            log.info(f"CLAUDE: Found {len(unique_labels)} potential clusters")
+            log.debug(f"ORB found {len(unique_labels)} potential clusters")
 
             valid_matches = []
             valid_similarities = []
@@ -243,10 +243,10 @@ class ORBMatcher:
             return [], []
 
         except (ValueError, AttributeError, IndexError) as e:
-            log.error(f"CLAUDE: ORB clustering failed: {e}")
+            log.error(f"ORB clustering failed: {e}")
             return [], []
         except Exception as e:
-            log.error(f"CLAUDE: Unexpected ORB clustering error: {e}", exc_info=True)
+            log.error(f"Unexpected ORB clustering error: {e}", exc_info=True)
             return [], []
 
     SPATIAL_COHERENCE_TOLERANCE = 3  # keypoints must be within 3x icon size
@@ -268,7 +268,7 @@ class ORBMatcher:
 
         if cluster_extent_x > max_allowed or cluster_extent_y > max_allowed:
             log.warning(
-                f"CLAUDE: Rejecting match - keypoints span {cluster_extent_x:.0f}x{cluster_extent_y:.0f} "
+                f"ORB rejecting match - keypoints span {cluster_extent_x:.0f}x{cluster_extent_y:.0f} "
                 f"but icon is only {icon_w}x{icon_h} (max allowed: {max_allowed:.0f})"
             )
             return None, 0.0
@@ -286,7 +286,7 @@ class ORBMatcher:
             if center is not None:
                 avg_distance = float(np.mean([m.distance for m in cluster_matches]))
                 similarity = max(0.0, 1.0 - (avg_distance / CVConstants.ORB_MAX_DISTANCE_NORMALIZE))
-                log.info(f"CLAUDE: ORB cluster match at {center} with {len(cluster_src)} features, similarity: {similarity:.3f}")
+                log.debug(f"ORB cluster match at {center} with {len(cluster_src)} features, similarity: {similarity:.3f}")
                 return center, similarity
 
         elif len(cluster_src) >= 2:
@@ -296,12 +296,12 @@ class ORBMatcher:
             # Validate centroid is within bounds
             screenshot_h, screenshot_w = screenshot_shape
             if not (0 <= center[0] < screenshot_w and 0 <= center[1] < screenshot_h):
-                log.warning(f"CLAUDE: Rejecting centroid at {center} - outside bounds (0-{screenshot_w}, 0-{screenshot_h})")
+                log.warning(f"ORB rejecting centroid at {center} - outside bounds (0-{screenshot_w}, 0-{screenshot_h})")
                 return None, 0.0
 
             avg_distance = float(np.mean([m.distance for m in cluster_matches]))
             similarity = max(0.0, 1.0 - (avg_distance / CVConstants.ORB_MAX_DISTANCE_NORMALIZE))
-            log.info(f"CLAUDE: ORB centroid match at {center} with {len(cluster_src)} features, similarity: {similarity:.3f}")
+            log.debug(f"ORB centroid match at {center} with {len(cluster_src)} features, similarity: {similarity:.3f}")
             return center, similarity
 
         return None, 0.0
@@ -330,7 +330,7 @@ class TemplateMatcher:
         trying other scales (early exit optimization). Only falls back to other
         scales if 1x finds nothing.
         """
-        log.info(f"CLAUDE: Template matching starting with threshold={threshold}")
+        log.debug(f"Template matching starting with threshold={threshold}")
 
         try:
             screenshot_img, icon_img, alpha_mask = ImageDecoder.decode_images(screenshot_bytes, icon_bytes)
@@ -341,12 +341,12 @@ class TemplateMatcher:
         icon_h, icon_w = icon_img.shape[:2]
         screenshot_h, screenshot_w = screenshot_img.shape[:2]
 
-        log.info(f"CLAUDE: Template matching - Screenshot: {screenshot_w}x{screenshot_h}, Icon: {icon_w}x{icon_h}")
+        log.debug(f"Template matching - screenshot: {screenshot_w}x{screenshot_h}, icon: {icon_w}x{icon_h}")
 
         # Determine matching method based on alpha mask presence
         if alpha_mask is not None:
             method = cv2.TM_CCORR_NORMED
-            log.info("CLAUDE: Using TM_CCORR_NORMED with alpha mask")
+            log.debug("Using TM_CCORR_NORMED with alpha mask")
         else:
             method = cv2.TM_CCOEFF_NORMED
 
@@ -370,7 +370,7 @@ class TemplateMatcher:
             min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
 
             if max_val >= threshold:
-                log.info(f"CLAUDE: Scale {scale:.2f} - best match: {max_val:.3f} at {max_loc}")
+                log.debug(f"Template scale {scale:.2f} - best match: {max_val:.3f} at {max_loc}")
 
             locations = np.where(result >= threshold)
             for y, x in zip(locations[0], locations[1]):
@@ -379,13 +379,13 @@ class TemplateMatcher:
 
             # Early exit: if 1x scale found matches, skip remaining scales
             if scale == 1.0 and candidates:
-                log.info(f"CLAUDE: Found {len(candidates)} matches at 1x scale, skipping other scales")
+                log.debug(f"Template found {len(candidates)} matches at 1x scale, skipping other scales")
                 break
 
-        log.info(f"CLAUDE: Total candidates before NMS: {len(candidates)}")
+        log.debug(f"Template total candidates before NMS: {len(candidates)}")
 
         if not candidates:
-            log.info("CLAUDE: Template matching found no matches")
+            log.debug("Template matching found no matches")
             return FeatureMatchingResult([], [], "template")
 
         # Non-Maximum Suppression to remove duplicate/overlapping matches
@@ -399,9 +399,9 @@ class TemplateMatcher:
             center_y = y + h // 2
             valid_points.append((center_x, center_y))
             valid_similarities.append(sim)
-            log.info(f"CLAUDE: Valid match at ({center_x}, {center_y}) with similarity {sim:.3f}")
+            log.debug(f"Template valid match at ({center_x}, {center_y}) with similarity {sim:.3f}")
 
-        log.info(f"CLAUDE: Template matching found {len(valid_points)} valid matches after NMS")
+        log.debug(f"Template matching found {len(valid_points)} valid matches after NMS")
         return FeatureMatchingResult(valid_points, valid_similarities, "template")
 
     @staticmethod
