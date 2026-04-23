@@ -5,15 +5,13 @@ This module provides functions to initialize, validate, and manage
 both global and project-specific databases in the new architecture.
 """
 
-from pathlib import Path
-from typing import Optional, Dict, Any
 import logging
+from pathlib import Path
+from typing import Any
 
-from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
-from adare.database.models.global_models import GlobalBase
-from adare.database.models.project_models import ProjectBase
+from adare.config.configdirectory import ENVIRONMENTS_DIR, VMS_DIR
 from adare.config.database import get_global_database_location, get_project_database_location
-from adare.config.configdirectory import VMS_DIR, ENVIRONMENTS_DIR
+from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
 from adare.database.exceptions import DatabaseError
 from adare.database.fixtures import fixture_stages, fixture_status
 
@@ -99,7 +97,7 @@ def ensure_project_database_exists(project_path: Path) -> bool:
         raise DatabaseInitializationError(log, f"Cannot initialize project database: {e}")
 
 
-def initialize_database_system() -> Dict[str, Any]:
+def initialize_database_system() -> dict[str, Any]:
     """
     Initialize the complete database system (global + ensure directory structure).
 
@@ -123,7 +121,7 @@ def initialize_database_system() -> Dict[str, Any]:
 
         if ensure_global_database_exists():
             results['global_db_initialized'] = True
-            log.info(f"Database system initialized successfully")
+            log.info("Database system initialized successfully")
         else:
             results['errors'].append("Failed to initialize global database")
 
@@ -135,7 +133,7 @@ def initialize_database_system() -> Dict[str, Any]:
     return results
 
 
-def validate_database_integrity() -> Dict[str, Any]:
+def validate_database_integrity() -> dict[str, Any]:
     """
     Validate the integrity of the database system.
 
@@ -179,7 +177,7 @@ def validate_database_integrity() -> Dict[str, Any]:
     return results
 
 
-def validate_project_database(project_path: Path) -> Dict[str, Any]:
+def validate_project_database(project_path: Path) -> dict[str, Any]:
     """
     Validate a specific project database.
 
@@ -230,7 +228,7 @@ def validate_project_database(project_path: Path) -> Dict[str, Any]:
     return results
 
 
-def get_database_status() -> Dict[str, Any]:
+def get_database_status() -> dict[str, Any]:
     """
     Get comprehensive status of the database system.
 
@@ -264,7 +262,7 @@ def get_database_status() -> Dict[str, Any]:
     return status
 
 
-def repair_database_system() -> Dict[str, Any]:
+def repair_database_system() -> dict[str, Any]:
     """
     Attempt to repair the database system by reinitializing components.
 
@@ -306,7 +304,7 @@ def repair_database_system() -> Dict[str, Any]:
     return results
 
 
-def clean_install_database_system() -> Dict[str, Any]:
+def clean_install_database_system() -> dict[str, Any]:
     """
     Perform a clean installation of the database system.
 

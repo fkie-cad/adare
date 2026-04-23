@@ -11,7 +11,6 @@ from adarelib.event.ws import (
     EXEC,
     EXPERIMENT,
     LOG,
-    SimpleStringMessage,
     StatusMessage,
     WsCommand,
 )

@@ -1,24 +1,22 @@
 # external imports
+# configure logging
+import logging
 from pathlib import Path
-import pandas as pd
 
 # internal imports
 import adare.backend.testfunction.database as testfunction_database
 from adare.backend.testfunction.directory import TestfunctionDirectory
 from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
-from adare.helperfunctions.cli import print_df
+from adare.exceptions import NotLoggedInError
 from adare.webappaccess.download import download_testfunction, sync
 from adare.webappaccess.login import is_logged_in
-from adare.exceptions import NotLoggedInError
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
 def testfunction_sync(testfunction_id: int):
     if not is_logged_in():
-        log.info(f'sync is not possible because user is not logged in')
+        log.info('sync is not possible because user is not logged in')
         return
     # get testfunction from database
     sha256 = testfunction_database.get_testfunction_file_hash(testfunction_id)
@@ -51,20 +49,20 @@ def testfunction_remove(name: str):
 
     # Display what will be deleted
     print(f'\n⚠️  About to delete testfunction: "{name}"')
-    print(f'   This action cannot be undone!\n')
+    print('   This action cannot be undone!\n')
 
     if usage['projects_affected']:
-        print(f'   📊 Usage Statistics:')
+        print('   📊 Usage Statistics:')
         print(f'      • Used in {len(usage["projects_affected"])} project(s)')
         print(f'      • {len(usage["experiments"])} experiment(s) use this testfunction')
         print(f'      • {len(usage["runs"])} experiment run(s) will be affected\n')
 
-        print(f'   📁 Projects affected:')
+        print('   📁 Projects affected:')
         for proj in usage['projects_affected']:
             print(f'      • {proj["name"]}')
 
         if usage['experiments']:
-            print(f'\n   🧪 Experiments using this testfunction:')
+            print('\n   🧪 Experiments using this testfunction:')
             for exp in usage['experiments'][:10]:  # Show first 10
                 print(f'      • {exp["project"]}.{exp["name"]}')
             if len(usage['experiments']) > 10:
@@ -75,7 +73,7 @@ def testfunction_remove(name: str):
 
         print()
     else:
-        print(f'   ✓ Testfunction is not used in any projects\n')
+        print('   ✓ Testfunction is not used in any projects\n')
 
     # Ask for confirmation
     response = input(f'Are you sure you want to delete testfunction "{name}"? (y/N): ').strip().lower()
@@ -168,25 +166,24 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
     if usage['exists'] and not usage['can_safely_delete']:
         if not force:
             log.info(f'Testfunction "{testfunction_name}" is currently used by {len(usage["experiments"])} experiments with {len(usage["runs"])} runs')
-            log.info(f'Use --force to overwrite and delete associated experiment runs')
+            log.info('Use --force to overwrite and delete associated experiment runs')
             log.info(f'Experiments affected: {", ".join([exp["name"] for exp in usage["experiments"]])}')
             return usage['testfunction_file_id']  # Return existing ID without updating
-        else:
-            # Force mode - ask for confirmation
-            print(f'\n⚠️  WARNING: Testfunction "{testfunction_name}" is currently in use!')
-            print(f'   • Used by {len(usage["experiments"])} experiments: {", ".join([exp["name"] for exp in usage["experiments"]])}')
-            print(f'   • Would delete {len(usage["runs"])} experiment runs')
-            print(f'   • This action cannot be undone!')
+        # Force mode - ask for confirmation
+        print(f'\n⚠️  WARNING: Testfunction "{testfunction_name}" is currently in use!')
+        print(f'   • Used by {len(usage["experiments"])} experiments: {", ".join([exp["name"] for exp in usage["experiments"]])}')
+        print(f'   • Would delete {len(usage["runs"])} experiment runs')
+        print('   • This action cannot be undone!')
 
-            response = input('\nContinue and delete all associated experiment runs? (y/N): ').strip().lower()
+        response = input('\nContinue and delete all associated experiment runs? (y/N): ').strip().lower()
 
-            if response != 'y':
-                log.info('Operation cancelled by user')
-                return usage['testfunction_file_id']
+        if response != 'y':
+            log.info('Operation cancelled by user')
+            return usage['testfunction_file_id']
 
-            # Delete associated experiment runs
-            deleted_count = testfunction_database.delete_experiment_runs_for_testfunction(testfunction_name)
-            log.info(f'Deleted {deleted_count} experiment runs for testfunction "{testfunction_name}"')
+        # Delete associated experiment runs
+        deleted_count = testfunction_database.delete_experiment_runs_for_testfunction(testfunction_name)
+        log.info(f'Deleted {deleted_count} experiment runs for testfunction "{testfunction_name}"')
 
     # Use TestfunctionManager to install to global directory
     from adare.backend.testfunction.manager import TestfunctionManager
@@ -216,10 +213,11 @@ def testfunction_load_global(testfunction_path: Path, force: bool = False):
 
 
 def testfunction_list(testfunction_set: str = None):
-    from adare.frontend.terminal.testfunction_list import TestfunctionListPanel
-    from adare.frontend.terminal.console import DefaultConsole
-    from adare.database.api.frontend import DataRetrievalApi
     from rich.layout import Layout
+
+    from adare.database.api.frontend import DataRetrievalApi
+    from adare.frontend.terminal.console import DefaultConsole
+    from adare.frontend.terminal.testfunction_list import TestfunctionListPanel
 
     # Use the same data source as the working testfunction show command
     with DataRetrievalApi() as api:

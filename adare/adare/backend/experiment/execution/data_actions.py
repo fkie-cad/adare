@@ -7,11 +7,15 @@ Includes: command, save_timestamp, save_variable, pull, and related helpers.
 import logging
 import time
 from pathlib import Path
-from typing import Any, Optional, Dict
+from typing import Any
 
 from adare.types.playbook import (
-    CommandAction, SaveTimestampAction, SaveVariableAction, PullAction,
+    CommandAction,
+    PullAction,
+    SaveTimestampAction,
+    SaveVariableAction,
 )
+
 from .base import ActionResult
 
 log = logging.getLogger(__name__)
@@ -121,9 +125,10 @@ class DataActionsMixin:
 
             # Also save to variable registry if available for metadata support
             if hasattr(self.playbook, 'variables') and self.playbook.variables:
-                from adarelib.common.variables import Variable, VariableType
                 import datetime
-                timestamp_dt = datetime.datetime.fromtimestamp(current_timestamp, datetime.timezone.utc)
+
+                from adarelib.common.variables import Variable, VariableType
+                timestamp_dt = datetime.datetime.fromtimestamp(current_timestamp, datetime.UTC)
                 timestamp_var = Variable(
                     timestamp_dt,
                     VariableType.TIMESTAMP,
@@ -359,30 +364,29 @@ class DataActionsMixin:
         # Execute using the existing execute_pull logic
         return await self.execute_pull(pull_action, parent_event_id=None, event_emitter=None)
 
-    def _determine_dest_path(self, src_path: str, custom_dst: Optional[str],
+    def _determine_dest_path(self, src_path: str, custom_dst: str | None,
                             artifacts_dir: Path, total_files: int,
                             file_idx: int) -> Path:
         """Determine destination path for a file."""
         if custom_dst and total_files == 1:
             # Single file with custom destination
             return artifacts_dir / custom_dst
-        elif custom_dst and total_files > 1:
+        if custom_dst and total_files > 1:
             # Multiple files with custom destination prefix
             filename = Path(src_path).name
             return artifacts_dir / custom_dst / filename
-        else:
-            # Preserve guest path structure
-            guest_path = src_path
-            if ':' in guest_path:  # Windows path
-                guest_path_cleaned = guest_path.split(':', 1)[1].lstrip('\\').lstrip('/')
-                return artifacts_dir / guest_path_cleaned.replace('\\', '/')
-            else:  # Unix path
-                guest_path_cleaned = guest_path.lstrip('/')
-                return artifacts_dir / guest_path_cleaned
+        # Preserve guest path structure
+        guest_path = src_path
+        if ':' in guest_path:  # Windows path
+            guest_path_cleaned = guest_path.split(':', 1)[1].lstrip('\\').lstrip('/')
+            return artifacts_dir / guest_path_cleaned.replace('\\', '/')
+        # Unix path
+        guest_path_cleaned = guest_path.lstrip('/')
+        return artifacts_dir / guest_path_cleaned
 
     async def _pull_via_websocket(self, src_path: str, dest_path: Path,
                                   file_idx: int, total_files: int,
-                                  event_emitter) -> Dict[str, Any]:
+                                  event_emitter) -> dict[str, Any]:
         """Pull file via WebSocket with chunked transfer."""
         try:
             # Progress callback for logging
@@ -417,7 +421,7 @@ class DataActionsMixin:
                 "error": str(e)
             }
 
-    async def _pull_via_hypervisor(self, src_path: str, dest_path: Path) -> Dict[str, Any]:
+    async def _pull_via_hypervisor(self, src_path: str, dest_path: Path) -> dict[str, Any]:
         """Pull file via VBoxManage (existing method)."""
         try:
             dest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -436,12 +440,11 @@ class DataActionsMixin:
                     "destination": str(dest_path),
                     "file_size": file_size
                 }
-            else:
-                return {
-                    "success": False,
-                    "source": src_path,
-                    "error": "VBoxManage copy_from_guest returned False"
-                }
+            return {
+                "success": False,
+                "source": src_path,
+                "error": "VBoxManage copy_from_guest returned False"
+            }
 
         except Exception as e:
             log.error(f"Hypervisor pull failed for {src_path}: {e}")

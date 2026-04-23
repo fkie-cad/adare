@@ -1,17 +1,18 @@
 # external imports
-from datetime import datetime
-import aiohttp
 import asyncio
+
+# configure logging
+import logging
+from datetime import datetime
+
+import aiohttp
 import requests
 
 # internal imports
 import adare.config.server as config_server
 from adare.database.api.usersession import UserSessionApi
-from adare.webappaccess.webapp import check_webserver_availability
 from adare.webappaccess.exceptions import NotLoggedInError
-
-# configure logging
-import logging
+from adare.webappaccess.webapp import check_webserver_availability
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class WebappLogin:
                 req_session.headers.update({'X-CSRFToken': csrf})
                 log.info(f'CSRF token {csrf} received')
                 return csrf
-        except asyncio.exceptions.TimeoutError as e:
+        except asyncio.exceptions.TimeoutError:
             log.error("CSRF token request failed due to timeout")
             # close the session to prevent errors
             return None
@@ -58,13 +59,12 @@ class WebappLogin:
                 user_session = user_session_api.get_user_session(username=username)
             if not user_session:
                 return None
-            else:
-                # expunge the user session from the sqlalchemy session to prevent errors
-                user_session_api._session.expunge(user_session)
-                return {
-                    'django_token': user_session.django_token.token,
-                    'gitea_token': user_session.gitea_token.token,
-                }
+            # expunge the user session from the sqlalchemy session to prevent errors
+            user_session_api._session.expunge(user_session)
+            return {
+                'django_token': user_session.django_token.token,
+                'gitea_token': user_session.gitea_token.token,
+            }
 
     async def login(self, username, password):
         req_session = aiohttp.ClientSession()
@@ -88,12 +88,11 @@ class WebappLogin:
                     log.debug("Login successful")
                     await req_session.close()
                     return True, ''
-                else:
-                    log.error("Login failed")
-                    await req_session.close()
-                    return False, 'login failed due to wrong username or password'
+                log.error("Login failed")
+                await req_session.close()
+                return False, 'login failed due to wrong username or password'
         except aiohttp.ClientConnectionError as e:
-            log.error(f"Login failed most likely the server is not running")
+            log.error("Login failed most likely the server is not running")
             log.debug(e, exc_info=True)
             await req_session.close()
             return False, 'server is not running'
@@ -115,10 +114,9 @@ class WebappLogin:
                 self.__remove_user_session(username)
                 await req_session.close()
                 return True
-            else:
-                log.error("Logout failed")
-                await req_session.close()
-                return False
+            log.error("Logout failed")
+            await req_session.close()
+            return False
 
     def get_django_authenticated_request_header(self):
         user_session = self.get_user_session()

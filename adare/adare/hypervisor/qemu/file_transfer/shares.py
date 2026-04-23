@@ -7,7 +7,7 @@ Libguestfs, QGA).
 """
 import logging
 import shutil
-from typing import Any, Dict, List
+from typing import Any
 
 from adare.hypervisor.exceptions import HypervisorException
 
@@ -18,7 +18,7 @@ def build_share_list(
     context: Any,
     is_windows: bool,
     base_mount: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Build the list of share specifications for host→guest directory mapping.
 
     Used by VirtioFS (virtio-fs tags) and SMB (symlink dirs) strategies.
@@ -31,7 +31,7 @@ def build_share_list(
     Returns:
         List of share dicts with tag, host_path, guest_mount, readonly keys
     """
-    shares: List[Dict[str, Any]] = []
+    shares: list[dict[str, Any]] = []
 
     # 1. Run directory -- experiment run artifacts and logs
     run_dir = context.experiment_run_directory.path
@@ -133,7 +133,7 @@ def build_share_list(
 def build_config_json(
     is_windows: bool,
     installation_mode: str = "wheel",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build config.json content for adarevm with mount paths.
 
     This file tells adarevm where to find tools, data, and where to write

@@ -5,34 +5,35 @@ This module provides the core DevModeSession class that wraps the existing
 experiment run infrastructure to enable interactive playbook development.
 """
 
-from dataclasses import dataclass, field, is_dataclass, asdict
-from datetime import datetime
-from pathlib import Path
-from typing import Optional, Dict, Any, List
 import asyncio
 import logging
-import ulid
 from contextlib import contextmanager
+from dataclasses import asdict, dataclass, is_dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
-from adare.backend.experiment.runctx import ExperimentRunCtx, ExperimentConfig
-from adare.backend.experiment.playbook_controller import PlaybookController
-from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
-from adare.backend.experiment.mcp_server_manager import MCPServerManager
-from adare.backend.experiment.websocket_client import WebSocketTimeoutError
+import ulid
+
 from adare.backend.experiment.exceptions import ExperimentException
-from adare.types.playbook import ActionType, Playbook
-from adare.hypervisor.exceptions import HypervisorException, SnapshotOperationException
-from adare.exceptions import LoggedErrorException
-from adare.database.exceptions import DatabaseError
-from adare.core.result import Result
-from adare.types.stages import (
-    Stage,
-    ExperimentPreparationStage,
-    CleanupShutdownStage,
-    SoftwareInstallationStage,
-    VirtualMachineSetupStage
-)
+from adare.backend.experiment.mcp_server_manager import MCPServerManager
+from adare.backend.experiment.playbook_controller import PlaybookController
+from adare.backend.experiment.runctx import ExperimentConfig, ExperimentRunCtx
 from adare.backend.experiment.stagectxmanager import StageCtxManager
+from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
+from adare.backend.experiment.websocket_client import WebSocketTimeoutError
+from adare.core.result import Result
+from adare.database.exceptions import DatabaseError
+from adare.exceptions import LoggedErrorException
+from adare.hypervisor.exceptions import HypervisorException, SnapshotOperationException
+from adare.types.playbook import ActionType, Playbook
+from adare.types.stages import (
+    CleanupShutdownStage,
+    ExperimentPreparationStage,
+    SoftwareInstallationStage,
+    Stage,
+    VirtualMachineSetupStage,
+)
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class DevModeSnapshot:
     """
     snapshot_name: str
     created_at: datetime
-    variable_state: Dict[str, Any]
+    variable_state: dict[str, Any]
     description: str = ""
     memory_file_path: str = ""
     disk_file_path: str = ""
@@ -78,9 +79,9 @@ class DevModeState:
     vm_running: bool
     environment_name: str
     actions_executed: int
-    current_variables: Dict[str, Any]
-    available_snapshots: List[DevModeSnapshot]
-    experiment_name: Optional[str] = None
+    current_variables: dict[str, Any]
+    available_snapshots: list[DevModeSnapshot]
+    experiment_name: str | None = None
 
 
 class DevModeSession:
@@ -108,13 +109,13 @@ class DevModeSession:
         session_id: str,
         project_path: Path,
         environment_name: str,
-        gui_mode: Optional[str] = None,
-        vm_memory: Optional[int] = None,
-        vm_cpus: Optional[int] = None,
+        gui_mode: str | None = None,
+        vm_memory: int | None = None,
+        vm_cpus: int | None = None,
         debug_screenshots: bool = False,
-        console_ulid: Optional[str] = None,
-        experiment_name: Optional[str] = None,
-        shared_directories: Optional[Dict[str, Dict[str, Path]]] = None
+        console_ulid: str | None = None,
+        experiment_name: str | None = None,
+        shared_directories: dict[str, dict[str, Path]] | None = None
     ):
         """
         Initialize dev mode session (does not start VM).
@@ -143,34 +144,34 @@ class DevModeSession:
         self.shared_directories = shared_directories or {}
 
         # Core components (initialized in start())
-        self.experiment_ctx: Optional[ExperimentRunCtx] = None
-        self.playbook_controller: Optional[PlaybookController] = None
-        self.vm_manager: Optional[VMLifecycleManager] = None
-        self.vm_instance_id: Optional[str] = None  # Track VM instance for cleanup
+        self.experiment_ctx: ExperimentRunCtx | None = None
+        self.playbook_controller: PlaybookController | None = None
+        self.vm_manager: VMLifecycleManager | None = None
+        self.vm_instance_id: str | None = None  # Track VM instance for cleanup
 
         # Dev mode specific state
-        self.snapshots: List[DevModeSnapshot] = []
+        self.snapshots: list[DevModeSnapshot] = []
         self.actions_executed: int = 0
-        self.started_at: Optional[datetime] = None
+        self.started_at: datetime | None = None
         self.is_running: bool = False
-        self.run_directory_path: Optional[Path] = None  # Stored after run dir creation
+        self.run_directory_path: Path | None = None  # Stored after run dir creation
 
         # Store initial variable state for reset operations
-        self.initial_variables: Dict[str, Any] = {}
+        self.initial_variables: dict[str, Any] = {}
 
         # Session-level log handler
-        self.session_log_handler: Optional[logging.Handler] = None
+        self.session_log_handler: logging.Handler | None = None
 
         # Recording state
-        self.recorder: Optional[any] = None # SessionRecorder instance
+        self.recorder: any | None = None # SessionRecorder instance
 
     @contextmanager
     def _command_logger(self, command_name: str):
         """
         Context manager to capture logs for a specific command execution.
-        
+
         Creates a new log file: logs/{timestamp}_{command_name}.log
-        
+
         Args:
             command_name: Name of the command (e.g., ActionClassName, playbook_run)
         """
@@ -183,7 +184,7 @@ class DevModeSession:
         safe_name = "".join(c for c in command_name if c.isalnum() or c in ('_', '-'))
         log_filename = f"{timestamp}_{safe_name}.log"
         log_path = self.experiment_ctx.experiment_run_directory.log_directory / log_filename
-        
+
         handler = None
         try:
             # Create handler
@@ -191,20 +192,20 @@ class DevModeSession:
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             handler.setFormatter(formatter)
             handler.setLevel(logging.DEBUG)
-            
+
             # Add to root logger to capture everything
             root_logger = logging.getLogger()
             root_logger.addHandler(handler)
-            
+
 
             log.info(f"Started command logging to {log_filename}")
-            
+
             # Save current root logger level and force to DEBUG to ensure all logs are captured
             previous_level = root_logger.level
             root_logger.setLevel(logging.DEBUG)
-            
+
             yield
-            
+
         except Exception as e:
             log.warning(f"Failed to setup command logger: {e}")
             yield
@@ -212,11 +213,11 @@ class DevModeSession:
             if handler:
                 root_logger = logging.getLogger()
                 root_logger.removeHandler(handler)
-                
+
                 # Restore previous level
                 if 'previous_level' in locals():
                     root_logger.setLevel(previous_level)
-                    
+
                 handler.close()
                 log.info(f"Stopped command logging to {log_filename}")
 
@@ -264,7 +265,7 @@ class DevModeSession:
     def _make_json_serializable(obj):
         """
         Recursively convert objects to JSON-serializable formats.
-        
+
         Handles:
         - dataclasses -> dict
         - Path -> str
@@ -326,11 +327,11 @@ class DevModeSession:
 
             # Import required modules
             from adare.backend.experiment.run import (
-                step_initialize,
-                step_setup_experiment_environment,
-                step_prepare_run_environment,
-                step_install_and_run_websocket_server,
                 step_connect_websocket,
+                step_initialize,
+                step_install_and_run_websocket_server,
+                step_prepare_run_environment,
+                step_setup_experiment_environment,
                 step_start_mcp_server,
             )
 
@@ -354,7 +355,7 @@ class DevModeSession:
             self.experiment_ctx = ExperimentRunCtx(config=config)
             self.experiment_ctx.test_mode = True
             self.experiment_ctx.debug_screenshots = self.debug_screenshots
-            
+
             # Use session_id as experiment_run_ulid to ensure persistent linking
             # This fixes issues where checkpoint restoration expects a specific ID format
             # or where we need to find the run later by session ID
@@ -377,14 +378,13 @@ class DevModeSession:
                     log.info("Experiment environment setup complete")
                 else:
                     # 3. Manual setup for bare session (no experiment)
-                    from adare.backend.project.directory import ProjectDirectory
-                    from adare.backend.experiment.directory import ExperimentRunDirectory
                     from adare.backend.environment import database as environment_database
                     from adare.backend.experiment import database as experiment_database
+                    from adare.backend.project.directory import ProjectDirectory
 
                     # Setup ProjectDirectory
                     self.experiment_ctx.project_directory = ProjectDirectory(self.project_path)
-                    
+
                     # Set experiment name to None to avoid validation errors
                     self.experiment_ctx.config.experiment_name = None
 
@@ -398,8 +398,8 @@ class DevModeSession:
 
                     # Update start timestamp
                     experiment_database.update_experiment_run_start(
-                        self.experiment_ctx.project_directory.path, 
-                        self.experiment_ctx.experiment_run_ulid, 
+                        self.experiment_ctx.project_directory.path,
+                        self.experiment_ctx.experiment_run_ulid,
                         self.experiment_ctx.timestamp_start
                     )
 
@@ -424,7 +424,7 @@ class DevModeSession:
                             self.experiment_ctx.vm_file = Path(env_meta.vm)
                         if not self.experiment_ctx.guest_platform:
                             self.experiment_ctx.guest_platform = env_meta.os.platform
-                    
+
                     log.info(f"Manual environment setup complete: {self.environment_name}")
 
                 # 4. Prepare run directory
@@ -661,7 +661,7 @@ class DevModeSession:
             from adare.backend.experiment.execution.base import ActionResult
             return ActionResult(success=False, message=str(e))
 
-    async def execute_playbook(self, playbook: Playbook, experiment_dir: Optional[Path] = None, indices: Optional[List[int]] = None) -> 'PlaybookExecutionResult':
+    async def execute_playbook(self, playbook: Playbook, experiment_dir: Path | None = None, indices: list[int] | None = None) -> 'PlaybookExecutionResult':
         """
         Execute a full playbook (for testing sequences).
 
@@ -745,7 +745,7 @@ class DevModeSession:
                 log.error(f"Failed to reload test functions: {e}", exc_info=True)
                 return Result.fail("RELOAD_FAILED", f"Failed to reload test functions: {e}")
 
-    async def restart_mcp_server(self, debug: Optional[bool] = None, debug_output_dir: Optional[Path] = None) -> Result[None]:
+    async def restart_mcp_server(self, debug: bool | None = None, debug_output_dir: Path | None = None) -> Result[None]:
         """
         Restart the MCP GUI server with updated logging options.
 
@@ -809,9 +809,8 @@ class DevModeSession:
                     self.experiment_ctx.mcp_server = new_manager
                     log.info("MCP GUI server restarted successfully")
                     return Result.ok(None)
-                else:
-                    log.error("Failed to start new MCP server")
-                    return Result.fail("MCP_START_FAILED", "Failed to start new MCP server")
+                log.error("Failed to start new MCP server")
+                return Result.fail("MCP_START_FAILED", "Failed to start new MCP server")
             except (OSError, RuntimeError) as e:
                 log.error(f"Error restarting MCP server: {e}", exc_info=True)
                 return Result.fail("MCP_RESTART_FAILED", f"Error restarting MCP server: {e}")
@@ -972,8 +971,8 @@ class DevModeSession:
 
                 # 5. Install and reconnect to WebSocket
                 from adare.backend.experiment.run import (
-                    step_install_and_run_websocket_server,
                     step_connect_websocket,
+                    step_install_and_run_websocket_server,
                 )
                 with StageCtxManager(
                     SoftwareInstallationStage(),
@@ -1048,7 +1047,7 @@ class DevModeSession:
         """
         import asyncio
         import time
-        from adare.exceptions import LoggedException
+
 
         log.info("Waiting for VM to be ready after snapshot restore...")
         start_time = time.time()
@@ -1157,7 +1156,7 @@ class DevModeSession:
                     # (Required because shared directory issues may kill the agent during restore)
                     from adare.backend.experiment.run import (
                         step_connect_websocket,
-                        step_install_and_run_websocket_server
+                        step_install_and_run_websocket_server,
                     )
                     with StageCtxManager(
                         SoftwareInstallationStage(),
@@ -1185,8 +1184,8 @@ class DevModeSession:
 
                     # Reconnect WebSocket
                     from adare.backend.experiment.run import (
-                        step_install_and_run_websocket_server,
                         step_connect_websocket,
+                        step_install_and_run_websocket_server,
                     )
                     with StageCtxManager(
                         SoftwareInstallationStage(),
@@ -1253,8 +1252,8 @@ class DevModeSession:
 
             if self.experiment_ctx:
                 from adare.backend.experiment.run import (
-                    step_shutdown_ws,
                     step_shutdown_mcp_server,
+                    step_shutdown_ws,
                 )
 
                 stage_ulid = self.console_ulid or self.experiment_ctx.experiment_run_ulid
@@ -1270,7 +1269,7 @@ class DevModeSession:
                             log.debug("WebSocket shut down")
                         except Exception as e:
                             log.warning(f"Failed to shutdown WebSocket: {e}")
-                    
+
                     # 2. Shutdown MCP server (only if no other sessions are using it)
                     if self.experiment_ctx.mcp_server:
                         try:
@@ -1280,7 +1279,7 @@ class DevModeSession:
                                 running_sessions = api.list_running_sessions()
                                 # Filter out current session (active or already marked stopped)
                                 other_active_sessions = [
-                                    s for s in running_sessions 
+                                    s for s in running_sessions
                                     if s.session_id != self.session_id
                                 ]
 
@@ -1339,9 +1338,9 @@ class DevModeSession:
 
             if self.experiment_ctx:
                 from adare.backend.experiment.run import (
-                    step_shutdown_ws,
-                    step_shutdown_mcp_server,
                     step_remove_fake_experiment_run,
+                    step_shutdown_mcp_server,
+                    step_shutdown_ws,
                 )
 
                 stage_ulid = self.console_ulid or self.experiment_ctx.experiment_run_ulid
@@ -1367,7 +1366,7 @@ class DevModeSession:
                                 running_sessions = api.list_running_sessions()
                                 # Filter out current session
                                 other_active_sessions = [
-                                    s for s in running_sessions 
+                                    s for s in running_sessions
                                     if s.session_id != self.session_id
                                 ]
 
@@ -1566,12 +1565,9 @@ class DevModeSession:
             # Restart agent and reconnect
             # (Required because shared directory issues may kill the agent during snapshot creation)
             log.info("Restarting AdareVM agent after snapshot creation")
-            
-            from adare.backend.experiment.run import (
-                step_install_and_run_websocket_server,
-                step_connect_websocket
-            )
-            
+
+            from adare.backend.experiment.run import step_connect_websocket, step_install_and_run_websocket_server
+
             with StageCtxManager(
                 SoftwareInstallationStage(),
                 self.experiment_ctx.experiment_run_ulid,

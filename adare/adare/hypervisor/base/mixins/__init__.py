@@ -2,8 +2,8 @@
 Abstract mixins for hypervisor implementations.
 """
 from .commands import AbstractCommandMixin
-from .snapshots import AbstractSnapshotMixin
 from .networking import AbstractNetworkingMixin
+from .snapshots import AbstractSnapshotMixin
 
 __all__ = [
     'AbstractCommandMixin',

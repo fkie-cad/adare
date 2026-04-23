@@ -16,7 +16,6 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
 
 try:
     import libvirt
@@ -25,23 +24,19 @@ except ImportError:
 
 from adare.hypervisor.base.vm import AbstractVM
 from adare.hypervisor.exceptions import (
-    VMImportException,
-    VMAlreadyRunningException,
     HypervisorException,
-    VMStartException
+    VMAlreadyRunningException,
+    VMStartException,
 )
+from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
 from adare.hypervisor.qemu.manager import QEMUManager
+from adare.hypervisor.qemu.mixins.commands import CommandExecutionMixin
 from adare.hypervisor.qemu.mixins.configuration import ConfigurationMixin
 from adare.hypervisor.qemu.mixins.disk import DiskManagementMixin
-from adare.hypervisor.qemu.mixins.commands import CommandExecutionMixin
-from adare.hypervisor.qemu.mixins.snapshots import SnapshotMixin
 from adare.hypervisor.qemu.mixins.networking import NetworkingMixin
 from adare.hypervisor.qemu.mixins.registry import RegistryMixin
-from adare.hypervisor.qemu.models import QEMUVMConfig, CommandResult
-from adare.hypervisor.qemu.libvirt_stderr_redirect import (
-    LibvirtStderrRedirect,
-    get_experiment_log_file
-)
+from adare.hypervisor.qemu.mixins.snapshots import SnapshotMixin
+from adare.hypervisor.qemu.models import CommandResult
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +60,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         machine: str = 'pc',
         accel: str = 'kvm',
         drive_format: str = 'qcow2',
-        disk_path: Optional[str] = None,
+        disk_path: str | None = None,
         architecture: str = 'x86_64'
     ):
         self.vm_name = vm_name
@@ -145,7 +140,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         self,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> int:
         """
@@ -204,6 +199,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         if not self._libvirt_conn:
             try:
                 import libvirt
+
                 from adare.config import HYPERVISOR_CONFIGS
 
                 qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
@@ -232,21 +228,22 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         Raises:
             HypervisorException: If domain definition fails
         """
-        from adare.hypervisor.qemu.libvirt_xml import generate_domain_xml
         import libvirt
+
+        from adare.hypervisor.qemu.libvirt_xml import generate_domain_xml
 
         log.debug(f"Defining libvirt domain for VM: {self.vm_name}")
 
         # Generate XML domain definition
         # Include virtiofs shares if configured AND supported (avoid session mode)
         virtiofs_shares = None
-        
+
         # Check if virtiofs is supported (requires system mode, not session)
         from adare.config import HYPERVISOR_CONFIGS
         qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
         libvirt_uri = qemu_config.get('libvirt_uri', 'qemu:///session')
         is_session_mode = 'session' in libvirt_uri
-        
+
         if self.config.virtiofs_enabled and self.config.virtiofs_shares:
             if is_session_mode:
                 log.warning(f"Disabling virtiofs shares for {self.vm_name} "
@@ -308,7 +305,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 f"Failed to define libvirt domain '{self.vm_name}': {e}"
             )
 
-    def _build_qemu_command(self) -> List[str]:
+    def _build_qemu_command(self) -> list[str]:
         """
         Build QEMU command line for starting VM.
 
@@ -336,7 +333,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
         # Add UEFI firmware if boot mode is uefi
         if self.config.boot_mode == 'uefi':
-            from adare.hypervisor.qemu.firmware import find_ovmf_firmware, create_nvram_for_vm
+            from adare.hypervisor.qemu.firmware import create_nvram_for_vm, find_ovmf_firmware
             ovmf_code, _ = find_ovmf_firmware(self.architecture)
 
             # Create/get NVRAM for this VM
@@ -366,8 +363,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             '-pidfile', self.config.pid_file_path
         ])
 
-        from adare.config import HYPERVISOR_CONFIGS
-        
+
         # Always redirect QEMU debug/serial logs to /tmp to avoid permission issues
         # (QEMU process user vs Experiment runner user)
         # This is safer than relying on config checks or permission inheritance
@@ -397,7 +393,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         ])
 
         # Add network with port forwarding
-        netdev_args = f"user,id=net0"
+        netdev_args = "user,id=net0"
 
         # Add port forwarding rules
         for name, rule in self.config.port_forwarding_rules.items():
@@ -421,7 +417,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         ctx_manager=None,
         raise_if_running: bool = False,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False,
         stage_ctx=None
     ) -> int:
@@ -555,8 +551,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     if not silent:
                         log.debug(f"{message}")
                     return 0
-                else:
-                    raise VMStartException(self.vm_name, f"Failed to start VM via libvirt: {e}")
+                raise VMStartException(self.vm_name, f"Failed to start VM via libvirt: {e}")
             except OSError as e:
                 raise VMStartException(self.vm_name, f"OS error during VM start: {e}")
 
@@ -565,7 +560,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
     async def stop(
         self,
         ctx_manager=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False,
         force: bool = False,
         timeout: int = 60
@@ -651,9 +646,8 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     if not silent:
                         log.debug(f"VM '{self.vm_name}' is already stopped")
                     return 0
-                else:
-                    log.error(f"Failed to stop VM via libvirt: {e}")
-                    return 1
+                log.error(f"Failed to stop VM via libvirt: {e}")
+                return 1
             except (HypervisorException, OSError) as e:
                 log.error(f"Error stopping VM: {e}")
                 return 1
@@ -664,7 +658,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         self,
         ctx_manager=None,
         stop_event=None,
-        log_file: Optional[Path] = None,
+        log_file: Path | None = None,
         silent: bool = False
     ) -> int:
         """
@@ -906,8 +900,8 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         command: str,
         background: bool = False,
         silent: bool = False,
-        stop_event: Optional[threading.Event] = None,
-        cwd: Optional[str] = None,
+        stop_event: threading.Event | None = None,
+        cwd: str | None = None,
         admin: bool = False,
         binary_is_filepath: bool = False,
         run_as_user: bool = False,
@@ -1095,16 +1089,15 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                                     )
 
                             return True
-                        else:
-                            log.warning(f"guest-exec test returned non-zero: {returncode}")
-                            break
+                        log.warning(f"guest-exec test returned non-zero: {returncode}")
+                        break
 
                     await asyncio.sleep(0.5)
 
                 # Test command didn't complete in time, try again
                 log.debug("guest-exec test timed out, retrying")
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 log.debug("Timeout during boot check")
             except OSError as e:
                 log.debug(f"OS error during boot check: {e}")
@@ -1147,7 +1140,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         file_path: Path,
         silent: bool = False,
         try_extract: bool = True
-    ) -> Tuple[int, str]:
+    ) -> tuple[int, str]:
         """
         Create VM from OVF/OVA file by converting disk to qcow2.
 
@@ -1203,7 +1196,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         if source_format == 'qcow2' and self._external_disk_path:
             # Check if source and dest are the same file (--no-copy with existing qcow2)
             if Path(source_disk).resolve() == Path(dest_disk).resolve():
-                log.debug(f"Source is already qcow2 at target location, skipping conversion")
+                log.debug("Source is already qcow2 at target location, skipping conversion")
                 self._save_vm_config()
                 return 0, "VM imported successfully (no conversion needed)"
 
@@ -1240,12 +1233,11 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             if result.returncode == 0:
                 log.debug(f"Successfully converted disk to {dest_disk}")
                 self._save_vm_config()
-                return 0, f"VM imported successfully"
-            else:
-                error_msg = f"Failed to convert {source_format} to qcow2: {result.stderr}"
-                if self._external_disk_path:
-                    error_msg += "\nConsider loading without --no-copy to use managed storage."
-                return result.returncode, error_msg
+                return 0, "VM imported successfully"
+            error_msg = f"Failed to convert {source_format} to qcow2: {result.stderr}"
+            if self._external_disk_path:
+                error_msg += "\nConsider loading without --no-copy to use managed storage."
+            return result.returncode, error_msg
 
         except (subprocess.CalledProcessError, OSError) as e:
             error_msg = f"Conversion error: {str(e)}"
@@ -1334,7 +1326,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
         return await self.manager.run_async(_qmp_async)
 
-    async def send_qmp_screenshot(self, output_path: str) -> Tuple[bool, Optional[str]]:
+    async def send_qmp_screenshot(self, output_path: str) -> tuple[bool, str | None]:
         """
         Capture screenshot via QMP screendump command.
 
@@ -1349,12 +1341,11 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             "arguments": {"filename": output_path}
         }
         response = await self._send_qmp_command(command)
-        
+
         if 'return' in response:
             return True, None
-        else:
-            error_desc = response.get('error', {}).get('desc', 'Unknown QMP error')
-            return False, error_desc
+        error_desc = response.get('error', {}).get('desc', 'Unknown QMP error')
+        return False, error_desc
 
     async def _ensure_tablet_active(self) -> None:
         """Ensure USB tablet is the active mouse device for correct BTN event routing.
@@ -1559,7 +1550,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
         return all('return' in r for r in [response1, response2, response3, response4])
 
-    async def send_qmp_keyboard(self, events: List[dict]) -> bool:
+    async def send_qmp_keyboard(self, events: list[dict]) -> bool:
         """
         Send keyboard events via QMP input-send-event command.
 
@@ -1577,20 +1568,20 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
 
         for i in range(0, len(events), BATCH_SIZE):
             batch = events[i:i + BATCH_SIZE]
-            
+
             command = {
                 "execute": "input-send-event",
                 "arguments": {"events": batch}
             }
-            
+
             response = await self._send_qmp_command(command)
-            
+
             if 'return' not in response:
                 log.error(f"QMP keyboard batch {i//BATCH_SIZE} failed: {response}")
                 success = False
-                # Continue trying to send remaining batches? 
-                # Probably better to try to finish typing even if one chunk fails, 
-                # though state might be inconsistent. 
+                # Continue trying to send remaining batches?
+                # Probably better to try to finish typing even if one chunk fails,
+                # though state might be inconsistent.
                 # For now, we'll mark as failure but continue.
 
             # Small delay to ensure QEMU processes the batch
@@ -1644,7 +1635,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
     async def enable_input_tracing(self) -> bool:
         """
         Enable QEMU tracing for input events.
-        
+
         Enables:
         - input_event_key_number
         - input_event_key_qcode
@@ -1656,16 +1647,16 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             "input_event_key*",
             "input_event_btn",
             "input_event_abs",
-            "input_event_rel", 
+            "input_event_rel",
             "ps2_put_keycode" # Fallback/additional info
         ]
-        
+
         success = True
         for pattern in patterns:
             if not await self.send_qmp_trace_event_set_state(pattern, True):
                 log.warning(f"Failed to enable trace pattern: {pattern}")
                 success = False
-                
+
         return success
 
     async def disable_input_tracing(self) -> bool:
@@ -1677,11 +1668,11 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             "input_event_rel",
             "ps2_put_keycode"
         ]
-        
+
         success = True
         for pattern in patterns:
             await self.send_qmp_trace_event_set_state(pattern, False)
-            
+
         return success
 
     def update_screen_resolution(self, width: int, height: int) -> None:

@@ -7,25 +7,22 @@ Implements AbstractCommandMixin for QEMU-specific command execution using:
 """
 import asyncio
 import json
+
 try:
     import libvirt_qemu
 except ImportError:
     libvirt_qemu = None
+import base64
 import logging
 import os
 import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
-import base64
 
 from adare.hypervisor.base.mixins.commands import AbstractCommandMixin
 from adare.hypervisor.exceptions import HypervisorException
-from adare.hypervisor.qemu.libvirt_stderr_redirect import (
-    LibvirtStderrRedirect,
-    get_experiment_log_file
-)
+from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
 
 log = logging.getLogger(__name__)
 
@@ -35,13 +32,13 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
     async def _execute_streaming_command_async(
         self,
-        args: List[str],
-        log_file: Optional[Path] = None,
-        stop_event: Optional[threading.Event] = None,
+        args: list[str],
+        log_file: Path | None = None,
+        stop_event: threading.Event | None = None,
         silent: bool = False,
         ctx_manager=None,
         operation_name: str = "command execution"
-    ) -> Tuple[int, str, str]:
+    ) -> tuple[int, str, str]:
         """
         Execute a QEMU command asynchronously with streaming output.
 
@@ -89,7 +86,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     if not silent and log_file:
                         with open(log_file, 'a') as f:
                             f.write(line_str + '\n')
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     if proc.returncode is not None:
                         break
                     continue
@@ -115,13 +112,13 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
     def _execute_streaming_command(
         self,
-        args: List[str],
-        log_file: Optional[Path] = None,
-        stop_event: Optional[threading.Event] = None,
+        args: list[str],
+        log_file: Path | None = None,
+        stop_event: threading.Event | None = None,
         silent: bool = False,
         ctx_manager=None,
         operation_name: str = "command execution",
-        timeout: Optional[int] = None
+        timeout: int | None = None
     ) -> int:
         """
         Execute a QEMU command synchronously with streaming output.
@@ -187,7 +184,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         self,
         command: str,
         background: bool = False,
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
         admin: bool = False,
         run_as_user: bool = False,
         # VirtualBox-specific (limited support)
@@ -199,7 +196,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         redirect_stdout: str = "",
         hidden_window: bool = True,
         inject_user_path: bool = False,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Build guest command arguments for QEMU guest agent execution.
 
@@ -241,7 +238,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 task_name = f"adare_task_{int(time.time())}"
                 user = self.username
                 pw = self.password
-                script_path = f"C:\\Windows\\Temp\\adare.ps1"
+                script_path = "C:\\Windows\\Temp\\adare.ps1"
                 if redirect_stderr:
                     command = f"{command} 2>>\"{redirect_stderr}\""
                 if redirect_stdout:
@@ -280,7 +277,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     f"else {{ [Console]::Error.WriteLine(\"Scheduled task failed: status=$status result=$rc\"); exit 1 }}; "
                     f"}} "
                 )
-                log.debug(f"CLAUDE DEBUG: Full Windows guest command (Scheduled Task): {command}")  
+                log.debug(f"CLAUDE DEBUG: Full Windows guest command (Scheduled Task): {command}")
             if background and not run_as_user:
                 import shlex
                 command_components = shlex.split(command, posix=False)
@@ -300,7 +297,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 if redirect_stdout:
                     command += [f" -RedirectStandardOutput {redirect_stdout}"]
                 if hidden_window:
-                    command += [f" -WindowStyle Hidden"]
+                    command += [" -WindowStyle Hidden"]
                 command = " ".join(command)
 
             if inject_user_path and not run_as_user:
@@ -333,28 +330,27 @@ class CommandExecutionMixin(AbstractCommandMixin):
             command_base64 = base64.b64encode(command.encode('utf-16le')).decode('utf-8')
             log.info(f"CLAUDE DEBUG: Full Windows guest command: {command}")
             return ["powershell.exe", "-EncodedCommand", command_base64]
-        else:
-            if redirect_stderr:
-                stderr_redirect = f" 2>>{redirect_stderr}"
-                command = f"{command}{stderr_redirect}"
-            if redirect_stdout:
-                stdout_redirect = f" 1>>{redirect_stdout}"
-                command = f"{command}{stdout_redirect}"
+        if redirect_stderr:
+            stderr_redirect = f" 2>>{redirect_stderr}"
+            command = f"{command}{stderr_redirect}"
+        if redirect_stdout:
+            stdout_redirect = f" 1>>{redirect_stdout}"
+            command = f"{command}{stdout_redirect}"
 
-            # Use bash instead of sh for proper glob expansion (Ubuntu uses dash as /bin/sh)
-            shell = ['/bin/bash', '-c']
+        # Use bash instead of sh for proper glob expansion (Ubuntu uses dash as /bin/sh)
+        shell = ['/bin/bash', '-c']
 
-            # Apply sudo with environment preservation if admin requested
-            if admin:
-                # Preserve PATH, DISPLAY, XAUTHORITY for pip and GUI automation
-                # Match VirtualBox pattern (virtualbox/mixins/commands.py:481, 488)
-                escaped_cmd = command.replace("'", "'\"'\"'")
-                command = f'sudo env "PATH=$PATH" "DISPLAY=$DISPLAY" "XAUTHORITY=$XAUTHORITY" bash -c \'{escaped_cmd}\''
+        # Apply sudo with environment preservation if admin requested
+        if admin:
+            # Preserve PATH, DISPLAY, XAUTHORITY for pip and GUI automation
+            # Match VirtualBox pattern (virtualbox/mixins/commands.py:481, 488)
+            escaped_cmd = command.replace("'", "'\"'\"'")
+            command = f'sudo env "PATH=$PATH" "DISPLAY=$DISPLAY" "XAUTHORITY=$XAUTHORITY" bash -c \'{escaped_cmd}\''
 
-            # Return shell command that guest agent will execute
-            return shell + [command]
+        # Return shell command that guest agent will execute
+        return shell + [command]
 
-    def _build_guest_environment(self) -> List[str]:
+    def _build_guest_environment(self) -> list[str]:
         """
         Build environment variables for QEMU Guest Agent command execution.
 
@@ -429,23 +425,23 @@ class CommandExecutionMixin(AbstractCommandMixin):
     async def _wait_for_user_session(self, timeout: int = 90) -> bool:
         """
         Wait for user session to be fully initialized (Windows only).
-        
+
         Checks for:
         1. explorer.exe running as the target user (indicates login)
         2. User's registry hive (HKEY_USERS\\<SID>\\Environment) is loaded
-        
+
         Args:
             timeout: Maximum seconds to wait (default 90s)
-            
+
         Returns:
             True if session is ready, False if timed out or check failed
         """
         if 'windows' not in self.guest_os.lower():
             return True
-            
+
         try:
             log.debug(f"Waiting for user '{self.username}' session and registry hive...")
-            
+
             # PowerShell command to check for explorer.exe AND registry hive
             # We need the SID to check the registry key
             check_cmd = (
@@ -458,34 +454,34 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 f'if ($proc -and $hiveLoaded) {{ "ready" }} else {{ "waiting: proc=" + [bool]$proc + ", hive=" + $hiveLoaded }} '
                 f'}} catch {{ "error: " + $_ }}'
             )
-            
+
             start_time = time.time()
             while time.time() - start_time < timeout:
                 # Use short timeout for the check itself
                 returncode, stdout, _ = await self._execute_guest_command_via_agent(
-                    check_cmd, 
+                    check_cmd,
                     timeout=10
                 )
-                
+
                 stdout_str = stdout.strip().lower()
                 if returncode == 0 and 'ready' in stdout_str:
                     log.info(f"User session and registry hive for '{self.username}' are ready")
                     return True
-                
+
                 # Log status every few seconds (throttled by the sleep)
                 if 'waiting' in stdout_str or 'error' in stdout_str:
                     log.debug(f"Session wait status: {stdout.strip()}")
 
                 await asyncio.sleep(2)
-                
+
             log.warning(f"Timed out waiting for user session after {timeout}s")
             return False
-            
-        except (HypervisorException, asyncio.TimeoutError, OSError) as e:
+
+        except (TimeoutError, HypervisorException, OSError) as e:
             log.warning(f"Error waiting for user session: {e}")
             return False
 
-    async def _discover_guest_path(self) -> Optional[str]:
+    async def _discover_guest_path(self) -> str | None:
         """
         Discover actual PATH environment variable from guest OS.
 
@@ -577,7 +573,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             self._cached_guest_path = stdout
             return stdout
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning("PATH discovery timed out after 10 seconds")
             return None
         except (OSError, ConnectionError) as e:
@@ -590,7 +586,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             log.warning(f"PATH discovery failed due to missing expected key: {e}")
             return None
 
-    async def _discover_python_scripts_path(self) -> Optional[str]:
+    async def _discover_python_scripts_path(self) -> str | None:
         """
         Discover the Scripts directory for the Python installation in the guest.
         This is where tools like adarevm, pip, uv are located.
@@ -600,11 +596,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         try:
             log.debug("Attempting to discover Python Scripts path")
-            
+
             # Wait for user session on Windows
             if 'windows' in self.guest_os.lower():
                 await self._wait_for_user_session()
-                
+
                 # Check for Python in standard AppData location
                 # We prioritize the User installation
                 check_cmd = (
@@ -612,26 +608,26 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     f'-Filter "Python*" -Directory -ErrorAction SilentlyContinue | '
                     f'Select-Object -First 1 -ExpandProperty FullName'
                 )
-                
+
                 returncode, stdout, _ = await self._execute_guest_command_via_agent(
                     command=check_cmd,
                     timeout=30
                 )
-                
+
                 if returncode == 0 and stdout.strip():
                     python_base = stdout.strip()
                     scripts_path = f"{python_base}\\Scripts"
                     log.info(f"Found Python Scripts path: {scripts_path}")
                     self._cached_python_scripts_path = scripts_path
                     return scripts_path
-                    
+
             return None
-            
-        except (HypervisorException, asyncio.TimeoutError, OSError) as e:
+
+        except (TimeoutError, HypervisorException, OSError) as e:
             log.warning(f"Error discovering Python scripts path: {e}")
             return None
 
-    async def _resolve_guest_executable_path(self, executable: str) -> Optional[str]:
+    async def _resolve_guest_executable_path(self, executable: str) -> str | None:
         """
         Resolve the absolute path for a guest executable (like adarevm).
         """
@@ -639,27 +635,27 @@ class CommandExecutionMixin(AbstractCommandMixin):
         cache_attr = f'_cached_path_{executable}'
         if hasattr(self, cache_attr):
             return getattr(self, cache_attr)
-            
+
         scripts_path = await self._discover_python_scripts_path()
         if scripts_path:
             # Construct candidate path
             candidate = f"{scripts_path}\\{executable}.exe"
-            
+
             # Verify it exists
             check_cmd = f'Test-Path "{candidate}"'
             returncode, stdout, _ = await self._execute_guest_command_via_agent(
                 command=check_cmd,
                 timeout=10
             )
-            
+
             if returncode == 0 and 'True' in stdout:
                 log.info(f"Resolved {executable} to {candidate}")
                 setattr(self, cache_attr, candidate)
                 return candidate
-                
+
         return None
 
-    async def _detect_xauthority(self) -> Optional[str]:
+    async def _detect_xauthority(self) -> str | None:
         """
         Detect XAUTHORITY file location in Linux guest VM.
 
@@ -707,15 +703,14 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 xauthority_path = stdout.strip().splitlines()[0]
                 log.info(f"Successfully detected XAUTHORITY at: {xauthority_path}")
                 return xauthority_path
-            else:
-                log.warning(
-                    f"XAUTHORITY detection failed (exit code {returncode}). "
-                    f"stdout: {stdout.strip()!r}, stderr: {stderr.strip()!r}"
-                )
-                log.debug("Will set DISPLAY without XAUTHORITY (X11 will try defaults)")
-                return None
+            log.warning(
+                f"XAUTHORITY detection failed (exit code {returncode}). "
+                f"stdout: {stdout.strip()!r}, stderr: {stderr.strip()!r}"
+            )
+            log.debug("Will set DISPLAY without XAUTHORITY (X11 will try defaults)")
+            return None
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning("XAUTHORITY detection timed out after 10 seconds")
             return None
         except (OSError, ConnectionError) as e:
@@ -725,7 +720,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             log.warning(f"XAUTHORITY detection failed due to parsing error: {e}")
             return None
 
-    async def _discover_and_cache_xauthority(self) -> Optional[str]:
+    async def _discover_and_cache_xauthority(self) -> str | None:
         """
         Discover and cache XAUTHORITY file path for X11 authorization.
 
@@ -863,16 +858,16 @@ class CommandExecutionMixin(AbstractCommandMixin):
         self,
         command: str,
         background: bool = False,
-        stop_event: Optional[threading.Event] = None,
+        stop_event: threading.Event | None = None,
         timeout: int = 300,
         admin: bool = False,
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
         redirect_stderr: str = "",
         redirect_stdout: str = "",
         binary_is_filepath: bool = False,
         run_as_user: bool = False,
         inject_user_path: bool = False,
-    ) -> Tuple[int, str, str]:
+    ) -> tuple[int, str, str]:
         """
         Execute command in guest via QEMU Guest Agent.
 
@@ -1003,7 +998,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
             log.error("Timeout waiting for guest command to complete")
             return -1, "", "Timeout"
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             log.error(f"Timeout executing guest command '{command}': {e}")
             return -1, "", f"Command execution timeout: {e}"
         except json.JSONDecodeError as e:
@@ -1039,7 +1034,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         try:
             log.debug(f"Attempting to connect to guest agent socket: {socket_path}")
             reader, writer = await asyncio.open_unix_connection(socket_path)
-            log.debug(f"Successfully connected to guest agent socket")
+            log.debug("Successfully connected to guest agent socket")
 
             # Step 1: Handle QMP greeting (protocol requirement)
             # The guest agent may send a greeting message on first connection
@@ -1059,7 +1054,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     await writer.wait_closed()
                     return greeting
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # No greeting received - this is fine, some QGA versions don't send it
                 log.debug("No QGA greeting received (timeout), proceeding with command")
             except json.JSONDecodeError as e:
@@ -1071,9 +1066,9 @@ class CommandExecutionMixin(AbstractCommandMixin):
             log.debug(f"Sending QGA command: {command.get('execute', 'unknown')}")
             log.debug(f"Command JSON: {cmd_json.strip()}")
             writer.write(cmd_json.encode('utf-8'))
-            log.debug(f"Command written to buffer, flushing...")
+            log.debug("Command written to buffer, flushing...")
             await writer.drain()
-            log.debug(f"Command flushed successfully")
+            log.debug("Command flushed successfully")
 
             # Step 3: Read response with timeout to prevent indefinite blocking
             response_line = await asyncio.wait_for(reader.readline(), timeout=5.0)
@@ -1086,7 +1081,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
             return response
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             log.error(f"Timeout communicating with guest agent: {e}")
             return {"error": {"desc": f"Communication timeout: {e}"}}
         except json.JSONDecodeError as e:
@@ -1174,7 +1169,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         self,
         pid: int,
         timeout: int = 5
-    ) -> Tuple[bool, Optional[int], str]:
+    ) -> tuple[bool, int | None, str]:
         """
         Check if a process is still running via QEMU Guest Agent.
 
@@ -1215,11 +1210,10 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 exit_code = status_data.get('exitcode', -1)
                 log.debug(f"Process {pid} has exited with code {exit_code}")
                 return False, exit_code, ""
-            else:
-                log.debug(f"Process {pid} is still running")
-                return True, None, ""
+            log.debug(f"Process {pid} is still running")
+            return True, None, ""
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             error_msg = "Timeout checking process status"
             log.warning(f"{error_msg} for PID {pid}")
             return False, None, error_msg

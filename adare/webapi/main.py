@@ -6,28 +6,27 @@ Provides REST and WebSocket endpoints for dev mode session control.
 
 import logging
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Literal
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from adare.api import AdareAPI
 from adare.core.dto.devmode import (
-    DevSessionStartRequest,
-    DevSessionStopRequest,
     DevActionExecuteRequest,
-    DevPlaybookExecuteRequest,
-    DevResetRequest,
     DevCheckpointCreateRequest,
     DevCheckpointDeleteRequest,
-    DevCheckpointRestoreRequest,
     DevCheckpointListRequest,
-    DevSessionListRequest,
-    DevSessionStateRequest,
+    DevCheckpointRestoreRequest,
+    DevPlaybookExecuteRequest,
+    DevResetRequest,
     DevSessionCleanupRequest,
+    DevSessionListRequest,
+    DevSessionStartRequest,
+    DevSessionStateRequest,
+    DevSessionStopRequest,
 )
 from adare.webapi.adapters import result_to_response
 from adare.webapi.websocket_manager import ws_manager
@@ -70,9 +69,9 @@ class SessionStartRequest(BaseModel):
     project_path: str
     experiment_name: str
     environment_name: str
-    gui_mode: Optional[str] = None
-    vm_memory: Optional[int] = None
-    vm_cpus: Optional[int] = None
+    gui_mode: str | None = None
+    vm_memory: int | None = None
+    vm_cpus: int | None = None
     debug_screenshots: bool = False
 
 
@@ -186,7 +185,7 @@ async def stop_session(session_id: str, request: SessionStopRequest = SessionSto
 
 
 @app.get("/api/sessions")
-async def list_sessions(project_path: Optional[str] = None):
+async def list_sessions(project_path: str | None = None):
     """
     List all active dev mode sessions.
 
@@ -221,7 +220,7 @@ async def get_session_state(session_id: str):
 
 
 @app.post("/api/sessions/cleanup")
-async def cleanup_sessions(project_path: Optional[str] = None):
+async def cleanup_sessions(project_path: str | None = None):
     """
     Cleanup stale sessions.
 
@@ -569,7 +568,7 @@ async def load_playbook(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Playbook '{filename}' not found")
 
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         playbook_dict = yaml.safe_load(f)
 
     return {
@@ -807,14 +806,14 @@ async def health_check():
 # REST API Routes (Phase 3 - unified web frontend)
 # =============================================================================
 
-from adare.webapi.routes.projects import router as projects_router
-from adare.webapi.routes.experiments import router as experiments_router
 from adare.webapi.routes.environments import router as environments_router
+from adare.webapi.routes.experiments import router as experiments_router
+from adare.webapi.routes.local_vms import router as local_vms_router
+from adare.webapi.routes.manage import router as manage_router
+from adare.webapi.routes.projects import router as projects_router
 from adare.webapi.routes.runs import router as runs_router
 from adare.webapi.routes.testfunctions import router as testfunctions_router
-from adare.webapi.routes.local_vms import router as local_vms_router
 from adare.webapi.routes.web_sync import router as web_sync_router
-from adare.webapi.routes.manage import router as manage_router
 from adare.webapi.vm_proxy import router as vm_proxy_router
 
 app.include_router(projects_router)
@@ -832,7 +831,6 @@ app.include_router(vm_proxy_router)
 # SPA Fallback (serve built frontend static files)
 # =============================================================================
 
-from pathlib import Path
 
 _frontend_dist = Path(__file__).resolve().parent.parent.parent.parent.parent / "adare-web" / "dist"
 

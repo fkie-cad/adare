@@ -1,29 +1,40 @@
 """Tests for StructuredDataApi — the structured data retrieval layer."""
 
-import pytest
 from datetime import datetime, timedelta
-from pathlib import Path
-from unittest.mock import patch, PropertyMock
+from unittest.mock import patch
 
+import pytest
 import ulid
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from adare.database.api.structured_data import StructuredDataApi
 from adare.database.models.global_models import (
-    GlobalBase, Project, Environment, Vm, OsInfo, SyncMetadata,
-    TestFunction, TestFunctionFile, TestParameter,
+    Environment,
+    GlobalBase,
+    OsInfo,
+    Project,
+    SyncMetadata,
+    TestFunction,
+    TestFunctionFile,
+    TestParameter,
+    Vm,
     mapping_testfunction_testparameter,
 )
 from adare.database.models.project_models import (
-    ProjectBase, Experiment, ExperimentRun, Tag,
-    mapping_experiment_tag,
+    Experiment,
+    ExperimentRun,
+    ProjectBase,
+    Tag,
 )
-from adare.database.api.structured_data import StructuredDataApi
 from adare.database.utils.error_handling import DataRetrievalError
 from adare.types.output_models import (
-    ProjectInfo, EnvironmentInfo, ExperimentInfo, TestFunctionInfo, RunInfo,
+    EnvironmentInfo,
+    ExperimentInfo,
+    ProjectInfo,
+    RunInfo,
+    TestFunctionInfo,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers — generate model instances with sensible defaults

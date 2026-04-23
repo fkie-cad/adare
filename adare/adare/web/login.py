@@ -1,21 +1,21 @@
 import base64
-import hashlib
-import os
-import requests
-import http.server
-import urllib.parse
-from urllib.parse import parse_qs, urlparse
-import secrets
 import datetime
-import webbrowser
-
-from adare.helperfunctions.port import is_localhost_port_free
-from adare.config.server import GITEA_URL, GITEA_CLIENT_ID, PORT_OAUTH2_REDIRECT, WEBSERVER_URL
-from adare.web.exceptions import LoginFailedError, AlreadyLoggedIn, NoUserLoggedIn
-from adare.database.api.usersession import UserSessionApi
-from adare.console import console_print, log_print
-
+import hashlib
+import http.server
 import logging
+import os
+import secrets
+import urllib.parse
+import webbrowser
+from urllib.parse import parse_qs, urlparse
+
+import requests
+
+from adare.config.server import GITEA_CLIENT_ID, GITEA_URL, PORT_OAUTH2_REDIRECT, WEBSERVER_URL
+from adare.console import console_print, log_print
+from adare.database.api.usersession import UserSessionApi
+from adare.helperfunctions.port import is_localhost_port_free
+from adare.web.exceptions import AlreadyLoggedIn, LoginFailedError, NoUserLoggedIn
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class RedirectHandler(http.server.SimpleHTTPRequestHandler):
         # Shut down the HTTP server
         resp = exchange_code_for_token(GITEA_CLIENT_ID, authorization_code, self.code_verifier, self.redirect_uri)
         self.server.gitea_access_token = resp['access_token']
-        self.server.gitea_access_token_expiry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=resp['expires_in'])
+        self.server.gitea_access_token_expiry = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=resp['expires_in'])
         self.server.gitea_refresh_token = resp.get('refresh_token', None)
         log.info("Received access token")
 
@@ -63,7 +63,7 @@ class LoginHTTPServer(http.server.HTTPServer):
         super().__init__(server_address, RequestHandlerClass)
         self.server_activate()
         self.gitea_access_token = ''
-        self.gitea_access_token_expiry = datetime.datetime.now(datetime.timezone.utc)
+        self.gitea_access_token_expiry = datetime.datetime.now(datetime.UTC)
         self.gitea_refresh_token = ''
 
 

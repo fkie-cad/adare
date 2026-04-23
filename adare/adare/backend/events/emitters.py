@@ -1,8 +1,9 @@
-from adare.backend.events.coordinator import get_stage_coordinator
-from adare.types.stages import Stage
-from adare.types.actions import ActionEvent
-
 import logging
+
+from adare.backend.events.coordinator import get_stage_coordinator
+from adare.types.actions import ActionEvent
+from adare.types.stages import Stage
+
 log = logging.getLogger(__name__)
 
 def emit_stage(ulid: str, stage: Stage, stage_id: str) -> None:

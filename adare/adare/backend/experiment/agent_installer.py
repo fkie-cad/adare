@@ -6,16 +6,15 @@ in guest VMs. Optimizes experiment runs by skipping installation when correct ve
 are already present.
 """
 
-from pathlib import Path
-from typing import Optional
-import threading
 import logging
 import re
+import threading
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 
-def get_expected_version_from_wheels(wheels_dir: Path) -> Optional[str]:
+def get_expected_version_from_wheels(wheels_dir: Path) -> str | None:
     """Extract expected version from adarevm wheel filename.
 
     Parses the version number from wheel files in the format:
@@ -59,7 +58,7 @@ async def check_installed_version(
     stop_event: threading.Event,
     wheels_available: bool = False,
     inject_user_path: bool = False
-) -> Optional[str]:
+) -> str | None:
     """Check if package is installed in VM and return its version.
 
     Executes 'pip show <package>' in the VM and parses the output to extract
@@ -108,7 +107,7 @@ async def check_installed_version(
     try:
         # Prepare run_command kwargs
         run_kwargs = {}
-        
+
         # Safely pass inject_user_path only to QEMU VMs which support it
         # We use a local import to avoid circular dependencies and proper type checking
         if inject_user_path and platform == 'windows':
@@ -196,7 +195,7 @@ async def should_skip_installation(
 
     # Check installed versions of both packages
     # Pass wheels_available=True since this function already verified wheels exist (line 155)
-    
+
     # Special case for Windows QEMU: Try to check adarevm with inject_user_path
     # This helps find adarevm when it's in a user-local path not in system PATH
     vm_is_qemu = False
@@ -205,19 +204,19 @@ async def should_skip_installation(
         vm_is_qemu = isinstance(vm, QEMUVM)
     except ImportError:
         pass
-    
+
     adarevm_version = None
     if platform == 'windows' and vm_is_qemu:
         log.debug("Using injected user PATH to check adarevm version on Windows QEMU")
         adarevm_version = await check_installed_version(
-            'adarevm', vm, use_conda, platform, stop_event, 
+            'adarevm', vm, use_conda, platform, stop_event,
             wheels_available=True, inject_user_path=True
         )
         adarelib_version = await check_installed_version(
-            'adarelib', vm, use_conda, platform, stop_event, 
+            'adarelib', vm, use_conda, platform, stop_event,
             wheels_available=True, inject_user_path=True
         )
-        
+
     # Standard check (fallback or non-Windows-QEMU)
     if adarevm_version is None:
         adarevm_version = await check_installed_version('adarevm', vm, use_conda, platform, stop_event, wheels_available=True)

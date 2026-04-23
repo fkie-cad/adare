@@ -1,14 +1,14 @@
 # external imports
 import ast
+
+# configure logging
+import logging
 from pathlib import Path
-from typing import Optional
 
 # internal imports
 from adare.helperfunctions.pyfileanalyze.load import load_as_ast_module
 from adare.helperfunctions.pyfileanalyze.pyclassanalyzer import PyClassAnalyzer
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -100,7 +100,7 @@ class PyDecoratedFunctionAnalyzer:
             return 'description' in self._kwargs
         return False
 
-    def get_attribute(self, attr_name: str) -> Optional[PyDecoratedAttributeAdapter]:
+    def get_attribute(self, attr_name: str) -> PyDecoratedAttributeAdapter | None:
         if attr_name == 'testname':
             value = self._kwargs.get('name', '')
             return PyDecoratedAttributeAdapter(value=value)
@@ -111,7 +111,7 @@ class PyDecoratedFunctionAnalyzer:
             return PyDecoratedAttributeAdapter(type_name=self._param_analyzer.name)
         return None
 
-    def get_method(self, method_name: str) -> Optional[ast.FunctionDef]:
+    def get_method(self, method_name: str) -> ast.FunctionDef | None:
         if method_name == 'test':
             return self._func_node
         return None
@@ -174,7 +174,7 @@ class PyModuleAnalyzer:
         classes = self.get_classes()
         return class_name in [cl.name for cl in classes]
 
-    def get_class(self, class_name: str) -> Optional[PyClassAnalyzer]:
+    def get_class(self, class_name: str) -> PyClassAnalyzer | None:
         classes = self.get_classes()
         result = next((cl for cl in classes if cl.name == class_name), None)
         if result:

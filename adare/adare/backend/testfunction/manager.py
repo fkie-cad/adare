@@ -5,13 +5,12 @@ Handles copying and managing testfunctions in the global STATE_DIR/testfunctions
 Provides clean separation between file operations and database operations.
 """
 
-import shutil
 import logging
+import shutil
 from pathlib import Path
-from typing import Tuple, Optional
 
-from adare.config.configdirectory import STATE_DIR
 from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
+from adare.config.configdirectory import STATE_DIR
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class TestfunctionManager:
     def __init__(self):
         self.global_testfunctions_dir = STATE_DIR / 'testfunctions'
 
-    def install_testfunction(self, source_python_file: Path, source_requirements_file: Path, name: str) -> Tuple[Path, Path]:
+    def install_testfunction(self, source_python_file: Path, source_requirements_file: Path, name: str) -> tuple[Path, Path]:
         """
         Install a testfunction to the global directory.
 
@@ -96,7 +95,7 @@ class TestfunctionManager:
         python_files = list(target_dir.glob('*.py'))
         return len(python_files) > 0
 
-    def get_testfunction_paths(self, name: str) -> Tuple[Optional[Path], Optional[Path]]:
+    def get_testfunction_paths(self, name: str) -> tuple[Path | None, Path | None]:
         """
         Get the paths for a testfunction in the global directory.
 

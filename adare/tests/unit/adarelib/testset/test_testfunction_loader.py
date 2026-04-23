@@ -1,23 +1,20 @@
 """Tests for TestfunctionLoader thread-safe module loading."""
 import threading
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
+from adarelib.testset import testfunction as testfunction_module
 from adarelib.testset.testfunction import (
-    TestfunctionLoader,
     ModuleLoadFailure,
-    import_basictest_subclasses,
+    TestfunctionLoader,
+    clear_module_load_failures,
+    get_missing_testfunctions,
     get_module_load_failures,
     get_testclass_from_testfunction,
-    get_missing_testfunctions,
-    clear_module_load_failures,
-    _default_loader,
+    import_basictest_subclasses,
 )
-from adarelib.testset.type import TestsetFile, Test
-from adarelib.testset import testfunction as testfunction_module
-
+from adarelib.testset.type import Test, TestsetFile
 
 # ---------------------------------------------------------------------------
 # Helpers

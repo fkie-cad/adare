@@ -6,9 +6,9 @@ Handles routing test execution to either VM-side, host-side, or host-mode test e
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from adare.types.playbook import ActionTestAction
+
 from .base import ActionResult, TestExecutionMode
 
 log = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 class TestActionsExecutor:
     """Handles execution of test actions with host/VM/host-mode routing."""
 
-    def __init__(self, experiment_run_directory: Optional[Path] = None, playbook = None):
+    def __init__(self, experiment_run_directory: Path | None = None, playbook = None):
         """
         Initialize test actions executor.
 
@@ -30,7 +30,7 @@ class TestActionsExecutor:
         self.test_loader = None
         self.host_test_executor = None
         self.guest_to_host_test_executor = None
-        self.test_execution_mode: Optional[TestExecutionMode] = None
+        self.test_execution_mode: TestExecutionMode | None = None
 
     def set_test_loader(self, test_loader):
         """Set the test loader after initialization."""
@@ -75,13 +75,12 @@ class TestActionsExecutor:
                     action, resolved_test, test_class, target_resolver, action_executor
                 )
 
-            elif self.test_execution_mode == TestExecutionMode.HOST:
+            if self.test_execution_mode == TestExecutionMode.HOST:
                 # HOST-MODE EXECUTION — all tests via QGA (no agent needed)
                 return await self._execute_host_mode_test(action, resolved_test)
 
-            else:
-                # VM-SIDE EXECUTION via WebSocket (existing code path)
-                return await self._execute_vm_side_test(action, resolved_test, websocket_client)
+            # VM-SIDE EXECUTION via WebSocket (existing code path)
+            return await self._execute_vm_side_test(action, resolved_test, websocket_client)
 
         except ValueError as e:
             log.error(f"Test execution failed: {e}")
@@ -91,7 +90,7 @@ class TestActionsExecutor:
             if "No testset loaded" in error_msg or "testset" in error_msg.lower():
                 return ActionResult(
                     success=False,
-                    message=f"No tests loaded - ensure playbook.yml contains tests section and loads successfully before test actions"
+                    message="No tests loaded - ensure playbook.yml contains tests section and loads successfully before test actions"
                 )
             log.error(f"Test execution failed: {e}", exc_info=True)
             return ActionResult(success=False, message=error_msg)
@@ -132,7 +131,7 @@ class TestActionsExecutor:
         if not self.guest_to_host_test_executor:
             return ActionResult(
                 success=False,
-                message=f"Host-mode test executor not available — ensure test_execution_mode=HOST is configured"
+                message="Host-mode test executor not available — ensure test_execution_mode=HOST is configured"
             )
 
         # Get the test function name from playbook

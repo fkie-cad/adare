@@ -8,37 +8,47 @@ management, variable resolution, and test loading.
 
 import logging
 import re
-from pathlib import Path
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass
 import time
-
-# Playbook and test imports
-from adare.types.playbook import (
-    Playbook, ActionType, ActionTestAction, PullAction, PauseAction, SaveTimestampAction,
-    ClickAction, KeyboardAction, ScrollAction, CommandAction, GotoAction, DragAction
-)
-
-# WebSocket client import
-from adare.backend.experiment.websocket_client import AdareVMClient
-
-# Target resolution using MCP GUI server
-from adare.backend.experiment.target_resolver import MCPTargetResolver, MCPConditionChecker
-
-# Specialized modules for clean separation of concerns
-from adare.backend.experiment.action_executor import ActionExecutor, ActionResult
-from adare.backend.experiment.event_manager import EventManager
-from adare.backend.experiment.variable_resolver import VariableResolver
-from adare.backend.experiment.test_loader import TestLoader
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 # Action event imports for flow console display
 from adare.backend.events.emitters import emit_action
 
-# Import playbook analysis utility
-from adare.helperfunctions.playbook_analysis import collect_pull_action_files
+# Specialized modules for clean separation of concerns
+from adare.backend.experiment.action_executor import ActionExecutor, ActionResult
+from adare.backend.experiment.event_manager import EventManager
 
 # Import filesystem diff manager
 from adare.backend.experiment.filesystem_diff_manager import FilesystemDiffManager
+
+# Target resolution using MCP GUI server
+from adare.backend.experiment.target_resolver import MCPConditionChecker, MCPTargetResolver
+from adare.backend.experiment.test_loader import TestLoader
+from adare.backend.experiment.variable_resolver import VariableResolver
+
+# WebSocket client import
+from adare.backend.experiment.websocket_client import AdareVMClient
+
+# Import playbook analysis utility
+from adare.helperfunctions.playbook_analysis import collect_pull_action_files
+
+# Playbook and test imports
+from adare.types.playbook import (
+    ActionTestAction,
+    ActionType,
+    ClickAction,
+    CommandAction,
+    DragAction,
+    GotoAction,
+    KeyboardAction,
+    PauseAction,
+    Playbook,
+    PullAction,
+    SaveTimestampAction,
+    ScrollAction,
+)
 
 log = logging.getLogger(__name__)
 
@@ -46,18 +56,18 @@ log = logging.getLogger(__name__)
 @dataclass
 class PlaybookControllerConfig:
     """Groups configuration parameters for PlaybookController construction."""
-    experiment_dir: Optional[Path] = None
-    project_dir: Optional[Path] = None
+    experiment_dir: Path | None = None
+    project_dir: Path | None = None
     mcp_gui_url: str = "http://localhost:13109/mcp"
     debug_screenshots: bool = False
-    screenshots_dir: Optional[Path] = None
-    experiment_id: Optional[str] = None
-    experiment_run_id: Optional[str] = None
-    experiment_run_directory: Optional[Path] = None
-    vm_os: Optional[str] = None
-    vm_user: Optional[str] = None
+    screenshots_dir: Path | None = None
+    experiment_id: str | None = None
+    experiment_run_id: str | None = None
+    experiment_run_directory: Path | None = None
+    vm_os: str | None = None
+    vm_user: str | None = None
     test_mode: bool = False
-    config: Optional[Any] = None
+    config: Any | None = None
 
 
 @dataclass
@@ -68,8 +78,8 @@ class PlaybookExecutionResult:
     successful_actions: int
     failed_actions: int
     execution_time: float
-    action_results: List[ActionResult]
-    error_message: Optional[str] = None
+    action_results: list[ActionResult]
+    error_message: str | None = None
     # Test statistics
     total_tests: int = 0
     successful_tests: int = 0
@@ -89,23 +99,23 @@ class PlaybookController:
     def __init__(
         self,
         websocket_client: AdareVMClient,
-        playbook: Optional[Playbook] = None,
-        vm: Optional[Any] = None,
-        flow_console: Optional[Any] = None,
-        controller_config: Optional[PlaybookControllerConfig] = None,
+        playbook: Playbook | None = None,
+        vm: Any | None = None,
+        flow_console: Any | None = None,
+        controller_config: PlaybookControllerConfig | None = None,
         # Legacy kwargs kept for backward compatibility
-        experiment_dir: Optional[Path] = None,
-        project_dir: Optional[Path] = None,
+        experiment_dir: Path | None = None,
+        project_dir: Path | None = None,
         mcp_gui_url: str = "http://localhost:13109/mcp",
         debug_screenshots: bool = False,
-        screenshots_dir: Optional[Path] = None,
-        experiment_id: Optional[str] = None,
-        experiment_run_id: Optional[str] = None,
-        experiment_run_directory: Optional[Path] = None,
-        vm_os: Optional[str] = None,
-        vm_user: Optional[str] = None,
+        screenshots_dir: Path | None = None,
+        experiment_id: str | None = None,
+        experiment_run_id: str | None = None,
+        experiment_run_directory: Path | None = None,
+        vm_os: str | None = None,
+        vm_user: str | None = None,
         test_mode: bool = False,
-        config: Optional[Any] = None,
+        config: Any | None = None,
     ):
         """
         Initialize the playbook controller.
@@ -151,8 +161,8 @@ class PlaybookController:
         self.client = websocket_client
         self.experiment_dir = cfg.experiment_dir
         self.project_dir = cfg.project_dir
-        self.execution_context: Dict[str, Any] = {'config': cfg.config} if cfg.config else {}
-        self.action_results: List[ActionResult] = []
+        self.execution_context: dict[str, Any] = {'config': cfg.config} if cfg.config else {}
+        self.action_results: list[ActionResult] = []
         self.debug_screenshots = cfg.debug_screenshots
         self.screenshots_dir = cfg.screenshots_dir
         self.playbook = playbook
@@ -166,7 +176,7 @@ class PlaybookController:
         # Database integration
         self.experiment_id = cfg.experiment_id
         self.experiment_run_id = cfg.experiment_run_id
-        self.playbook_items_map: Dict[int, str] = {}
+        self.playbook_items_map: dict[int, str] = {}
 
         # Initialize playbook items mapping if experiment tracking enabled
         if self.experiment_id:
@@ -180,13 +190,13 @@ class PlaybookController:
         self._initialize_modules()
 
         # Performance tracking
-        self.start_time: Optional[float] = None
-        self.action_timings: Dict[str, float] = {}
+        self.start_time: float | None = None
+        self.action_timings: dict[str, float] = {}
 
         # Auto-pull on test failure tracking
-        self._auto_pull_files: List[str] = []
+        self._auto_pull_files: list[str] = []
         self._auto_pull_executed: bool = False
-    
+
     def _initialize_modules(self):
         """Initialize specialized modules for clean separation of concerns."""
         # Get variable registry from playbook and add automatic variables
@@ -213,13 +223,13 @@ class PlaybookController:
             variable_registry=variable_registry,
             jinja_env=self._create_jinja_environment()
         )
-        
+
         # Event manager for action event creation and emission
         self.event_manager = EventManager(
             experiment_run_id=self.experiment_run_id,
             playbook_items_map=self.playbook_items_map
         )
-        
+
         # Action executor for individual action execution
         self.action_executor = ActionExecutor(
             websocket_client=self.client,
@@ -234,7 +244,7 @@ class PlaybookController:
             experiment_run_directory=self.experiment_run_directory,
             flow_console=self.flow_console
         )
-        
+
         # Test loader for test loading and resolution
         self.test_loader = TestLoader(
             experiment_dir=self.experiment_dir,
@@ -249,25 +259,25 @@ class PlaybookController:
     def update_experiment_directory(self, experiment_dir: Path):
         """
         Update the experiment directory mid-session.
-        
+
         This is useful when running a playbook from a specific location in dev mode,
         ensuring that relative paths (images, etc.) are resolved correctly against
         that playbook's location.
-        
+
         Args:
             experiment_dir: New experiment directory path
         """
         log.info(f"Updating experiment directory to: {experiment_dir}")
         self.experiment_dir = experiment_dir
-        
+
         # Update components that rely on experiment_dir
-        
+
         # 1. Target Resolver (for images/)
         if self.target_resolver:
             self.target_resolver.experiment_dir = experiment_dir
             self.target_resolver.images_dir = experiment_dir / "img"
             log.debug(f"Updated TargetResolver images dir to: {self.target_resolver.images_dir}")
-            
+
         # 2. Test Loader (for testfunctions)
         if self.test_loader:
             self.test_loader.experiment_dir = experiment_dir
@@ -301,46 +311,46 @@ class PlaybookController:
     def _create_jinja_environment(self):
         """Create Jinja environment with all necessary filters."""
         import jinja2
-        
+
         # Get filters from variable registry if available
         filters = {}
         if hasattr(self.playbook, 'variables') and self.playbook.variables:
             from adarelib.common.variables import TimestampMetadata
             metadata = TimestampMetadata()  # Create temp metadata object
             filters.update(metadata.get_jinja_filters(self.playbook.variables))
-        
+
         env = jinja2.Environment()
         env.filters.update(filters)
         log.debug(f"Created Jinja environment with filters: {list(filters.keys())}")
         return env
-    
+
     def _initialize_playbook_items_mapping(self):
         """Initialize mapping from action index to playbook_item_id."""
         if not self.experiment_id:
             return
-        
+
         try:
             from adare.database.api.playbook import PlaybookApi
-            
+
             with PlaybookApi(self.project_dir) as playbook_api:
                 # Get playbook from database
                 playbook = playbook_api.get_playbook_by_experiment_id(self.experiment_id)
                 if not playbook:
                     log.warning(f"No playbook found for experiment {self.experiment_id}")
                     return
-                
+
                 # Get playbook items ordered by sequence
                 items = playbook_api.get_playbook_items(playbook.id)
-                
+
                 # Map action index to playbook_item_id
                 for item in items:
                     self.playbook_items_map[item.sequence_order] = item.id
-                    
+
                 log.debug(f"Initialized playbook items mapping: {len(self.playbook_items_map)} items")
-            
+
         except Exception as e:
             log.error(f"Failed to initialize playbook items mapping: {e}")
-    
+
     async def execute_experiment(self, experiment_dir: Path) -> PlaybookExecutionResult:
         """
         Execute complete experiment: playbook actions + tests.
@@ -439,8 +449,8 @@ class PlaybookController:
             successful_tests=successful_tests,
             failed_tests=failed_tests
         )
-    
-    async def execute_playbook(self, indices: Optional[List[int]] = None) -> PlaybookExecutionResult:
+
+    async def execute_playbook(self, indices: list[int] | None = None) -> PlaybookExecutionResult:
         """
         Execute YAML playbook actions in order.
 
@@ -487,7 +497,7 @@ class PlaybookController:
             log.info(f"Variables in execution context: {list(var_dict.keys())}")
             self.execution_context.update(var_dict)
             log.debug(f"Loaded {len(playbook.variables.variables)} variables into execution context")
-        
+
         # Collect files to auto-pull on test failure if setting is enabled
         if hasattr(playbook, 'settings') and playbook.settings and playbook.settings.auto_pull_on_test_failure:
             self._auto_pull_files = collect_pull_action_files(playbook)
@@ -498,15 +508,15 @@ class PlaybookController:
 
         # Execute actions sequentially
         total_actions = len(playbook.actions)
-        
+
         # Filter actions?
         # Note: We iterate over all actions to preserve 'i' matching the original playbook index
         execution_count = len(indices) if indices else total_actions
-        
+
         log.info(f"Executing {execution_count} playbook actions (out of {total_actions})...")
         if indices:
             log.info(f"Selected indices: {indices}")
-        
+
         # Capture initial baseline screenshot before any actions run
         if self.action_executor.debug_screenshots:
             try:
@@ -519,7 +529,7 @@ class PlaybookController:
         for i, action in enumerate(playbook.actions):
             # i is 0-based, so action index is i+1
             action_index = i + 1
-            
+
             # Skip if indices provided and this action is not selected
             if indices and action_index not in indices:
                 continue
@@ -533,7 +543,7 @@ class PlaybookController:
                 # Create a successful result to indicate the action was skipped
                 skipped_result = ActionResult(
                     success=True,
-                    message=f"Pause action skipped (not in test mode)",
+                    message="Pause action skipped (not in test mode)",
                     execution_time=0.0,
                     data={
                         'is_countable': self._is_countable_action(action),
@@ -549,13 +559,13 @@ class PlaybookController:
             execution_id = None
             if self.experiment_run_id and i in self.playbook_items_map:
                 execution_id = await self._create_database_execution_record(i)
-            
+
             # Resolve variables early for consistent display and execution
             resolved_action = self.variable_resolver.resolve_action_variables(action, self.execution_context)
-            
+
             # Create unique action ID for event tracking
             action_id = f"action_{i}_{action_name.lower()}_{int(time.time()*1000)}"
-            
+
             # Emit action start event for flow console display using resolved action
             if self.experiment_run_id:
                 try:
@@ -564,7 +574,7 @@ class PlaybookController:
                     log.info(f"Emitted start event for action {i}: {action_name}, ID: {action_id}")
                 except Exception as e:
                     log.error(f"Failed to emit start event for action {i}: {e}", exc_info=True)
-            
+
             # Build debug context for screenshot filenames
             debug_context = self._build_action_debug_context(action_index, action_name, resolved_action)
 
@@ -578,7 +588,7 @@ class PlaybookController:
                 action_context=debug_context
             )
             execution_time = time.time() - start_time
-            
+
             result.execution_time = execution_time
 
             # Add metadata to track if this action should be counted in statistics
@@ -590,7 +600,7 @@ class PlaybookController:
 
             self.action_results.append(result)
             self.action_timings[f"action_{i+1}_{action_name}"] = execution_time
-            
+
             # Emit action complete event for flow console display using resolved action
             if self.experiment_run_id:
                 try:
@@ -599,14 +609,14 @@ class PlaybookController:
                     log.info(f"Emitted complete event for action {i}: {action_name}, Success: {result.success}, ID: {action_id}")
                 except Exception as e:
                     log.error(f"Failed to emit complete event for action {i}: {e}", exc_info=True)
-            
+
             # Update database execution record
             if execution_id:
                 await self._update_database_execution_record(execution_id, result, execution_time)
 
             # Check for stop action signal
             if result.success and result.data and result.data.get('should_stop', False):
-                log.info(f"Stop action triggered - halting playbook execution")
+                log.info("Stop action triggered - halting playbook execution")
                 break
 
             if not result.success:
@@ -625,26 +635,26 @@ class PlaybookController:
 
                         # Check continue_on_test_failure setting
                         if playbook.settings.continue_on_test_failure:
-                            log.info(f"Test action failed but continuing due to continue_on_test_failure setting")
+                            log.info("Test action failed but continuing due to continue_on_test_failure setting")
                             should_continue = True
 
                 if not should_continue:
                     # Stop execution after failed action
                     break
-            
+
             # Apply global idle setting
             if hasattr(playbook, 'settings') and playbook.settings and playbook.settings.idle:
                 await self.client.idle(playbook.settings.idle)
-        
+
         successful = sum(1 for r in self.action_results if r.success)
         failed = len(self.action_results) - successful
-        
+
         # Count test statistics
         test_results = [r for r in self.action_results if self._is_test_action_result(r)]
         total_tests = len(test_results)
         successful_tests = sum(1 for r in test_results if r.success)
         failed_tests = total_tests - successful_tests
-        
+
         return PlaybookExecutionResult(
             success=failed == 0,
             total_actions=total_actions,
@@ -656,12 +666,12 @@ class PlaybookController:
             successful_tests=successful_tests,
             failed_tests=failed_tests
         )
-    
-    async def _create_database_execution_record(self, action_index: int) -> Optional[str]:
+
+    async def _create_database_execution_record(self, action_index: int) -> str | None:
         """Create database execution record for action tracking."""
         try:
             from adare.database.api.playbook import PlaybookApi
-            
+
             with PlaybookApi(self.project_dir) as playbook_api:
                 execution = playbook_api.create_action_execution(
                     playbook_item_id=self.playbook_items_map[action_index],
@@ -674,12 +684,12 @@ class PlaybookController:
         except Exception as e:
             log.warning(f"Failed to create execution record for action {action_index}: {e}")
             return None
-    
+
     async def _update_database_execution_record(self, execution_id: str, result: ActionResult, execution_time: float):
         """Update database execution record with results."""
         try:
             from adare.database.api.playbook import PlaybookApi
-            
+
             with PlaybookApi(self.project_dir) as playbook_api:
                 playbook_api.update_action_execution_complete(
                     execution_id=execution_id,
@@ -694,7 +704,7 @@ class PlaybookController:
                 log.debug(f"Updated execution record {execution_id}")
         except Exception as e:
             log.warning(f"Failed to update execution record {execution_id}: {e}")
-    
+
     def _is_test_action(self, action: ActionType) -> bool:
         """Check if an action is a test action."""
         return isinstance(action, ActionTestAction)
@@ -706,7 +716,7 @@ class PlaybookController:
     def _is_countable_action(self, action: ActionType) -> bool:
         """Check if an action should be counted in execution statistics."""
         return not self._is_utility_action(action)
-    
+
     def _is_test_action_result(self, action_result: ActionResult) -> bool:
         """Check if an action result corresponds to a test execution."""
         if action_result.data and isinstance(action_result.data, dict):

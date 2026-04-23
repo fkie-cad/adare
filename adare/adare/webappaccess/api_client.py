@@ -8,23 +8,20 @@ checking experiment/run existence, and retrieving run details from the server.
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Tuple
 
 import requests
-import aiohttp
-import asyncio
 
 import adare.config.server as config_server
+from adare.database.api.serialize import SerializeApi
 from adare.webappaccess.exceptions import (
-    NotLoggedInError,
-    ExperimentNotFoundError,
-    RunAlreadyExistsError,
-    PublishPermissionError,
-    ApiValidationError,
     ApiConnectionError,
+    ApiValidationError,
+    ExperimentNotFoundError,
+    NotLoggedInError,
+    PublishPermissionError,
+    RunAlreadyExistsError,
 )
 from adare.webappaccess.login import WebappLogin, is_logged_in
-from adare.database.api.serialize import SerializeApi
 
 log = logging.getLogger(__name__)
 
@@ -151,36 +148,35 @@ class ApiClient:
                 error_message,
                 possible_solutions=['Publish the experiment first', 'Verify experiment ULID']
             )
-        elif error_code == 'run_already_exists':
+        if error_code == 'run_already_exists':
             raise RunAlreadyExistsError(
                 log,
                 error_message,
                 possible_solutions=['Run already published, no action needed']
             )
-        elif error_code == 'experiment_not_published':
+        if error_code == 'experiment_not_published':
             raise ExperimentNotFoundError(
                 log,
                 error_message,
                 possible_solutions=['Publish the experiment before publishing runs']
             )
-        elif error_code in ('gitea_user_not_found', 'environment_not_found'):
+        if error_code in ('gitea_user_not_found', 'environment_not_found'):
             raise PublishPermissionError(
                 log,
                 error_message,
                 possible_solutions=['Contact administrator', 'Check your account setup']
             )
-        elif error_code in ('validation_error', 'event_validation_error', 'missing_field'):
+        if error_code in ('validation_error', 'event_validation_error', 'missing_field'):
             raise ApiValidationError(
                 log,
                 f'{error_message}\nDetails: {error_data.get("details", "N/A")}',
                 possible_solutions=['Check run data integrity', 'Report issue if persists']
             )
-        else:
-            raise ApiConnectionError(
-                log,
-                f'Publishing failed (status {response.status_code}): {error_message}',
-                possible_solutions=['Check server logs', 'Try again later']
-            )
+        raise ApiConnectionError(
+            log,
+            f'Publishing failed (status {response.status_code}): {error_message}',
+            possible_solutions=['Check server logs', 'Try again later']
+        )
 
     def check_experiment_exists(self, experiment_ulid: str) -> bool:
         """
@@ -217,9 +213,8 @@ class ApiClient:
             data = response.json()
             # Check if response contains a valid ULID and published status
             return bool(data.get('ulid')) and data.get('published', False)
-        else:
-            log.warning(f'Check experiment request failed with status {response.status_code}')
-            return False
+        log.warning(f'Check experiment request failed with status {response.status_code}')
+        return False
 
     def check_run_exists(self, run_ulid: str) -> bool:
         """
@@ -255,11 +250,10 @@ class ApiClient:
         if response.status_code == 200:
             data = response.json()
             return bool(data.get('ulid'))
-        else:
-            log.warning(f'Check run request failed with status {response.status_code}')
-            return False
+        log.warning(f'Check run request failed with status {response.status_code}')
+        return False
 
-    def get_run_details(self, run_ulid: str) -> Optional[dict]:
+    def get_run_details(self, run_ulid: str) -> dict | None:
         """
         Retrieve experiment run details from the server.
 
@@ -291,15 +285,14 @@ class ApiClient:
 
         if response.status_code == 200:
             return response.json()
-        elif response.status_code == 404:
+        if response.status_code == 404:
             log.warning(f'Run {run_ulid} not found on server')
             return None
-        else:
-            raise ApiConnectionError(
-                log,
-                f'Failed to retrieve run details (status {response.status_code})',
-                possible_solutions=['Check run ULID', 'Verify server is running']
-            )
+        raise ApiConnectionError(
+            log,
+            f'Failed to retrieve run details (status {response.status_code})',
+            possible_solutions=['Check run ULID', 'Verify server is running']
+        )
 
 
 # Convenience functions for backward compatibility and simple usage

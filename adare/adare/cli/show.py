@@ -1,10 +1,11 @@
 # internal imports
-from adare.api import AdareAPI
-from adare.console import print_success_message, print_error_message
-from adare.core.dto.show import RunListRequest, RunRemoveRequest
-
 # configure logging
 import logging
+
+from adare.api import AdareAPI
+from adare.console import print_error_message, print_success_message
+from adare.core.dto.show import RunListRequest, RunRemoveRequest
+
 log = logging.getLogger(__name__)
 
 
@@ -80,11 +81,12 @@ def _parse_filter(arguments) -> tuple:
 
 def exec_show_runs(arguments):
     """Show runs in the configured output format."""
-    from adare.run import get_formatter_from_context
+    import pandas as pd
+    from rich.layout import Layout
+
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.run_list import RunListPanel
-    from rich.layout import Layout
-    import pandas as pd
+    from adare.run import get_formatter_from_context
 
     api = AdareAPI()
     formatter, output_file, dual_output = get_formatter_from_context()
@@ -155,11 +157,12 @@ def exec_show_run(arguments):
 
 def exec_show_testfunctions(arguments):
     """Show testfunctions in the configured output format."""
-    from adare.run import get_formatter_from_context
+    import pandas as pd
+    from rich.layout import Layout
+
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.testfunction_list import TestfunctionTablePanel
-    from rich.layout import Layout
-    import pandas as pd
+    from adare.run import get_formatter_from_context
 
     api = AdareAPI()
     formatter, output_file, dual_output = get_formatter_from_context()
@@ -212,10 +215,10 @@ def exec_show_testfunction(arguments):
 
 def exec_show_experiment(arguments):
     """Get detailed information about a specific experiment."""
-    from adare.frontend.terminal.experiment import print_experiment
-    from adare.run import get_formatter_from_context
     from adare.backend.basics import determine_projectdirectory
+    from adare.frontend.terminal.experiment import print_experiment
     from adare.helperfunctions.path_resolution import resolve_experiment_path
+    from adare.run import get_formatter_from_context
 
     formatter, output_file, dual_output = get_formatter_from_context()
 
@@ -235,11 +238,12 @@ def exec_show_experiment(arguments):
 
 def exec_show_experiments(arguments):
     """Show experiments in the configured output format."""
-    from adare.run import get_formatter_from_context
+    import pandas as pd
+    from rich.layout import Layout
+
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.experiment_list import ExperimentTablePanel
-    from rich.layout import Layout
-    import pandas as pd
+    from adare.run import get_formatter_from_context
 
     api = AdareAPI()
     formatter, output_file, dual_output = get_formatter_from_context()
@@ -287,11 +291,12 @@ def exec_show_experiments(arguments):
 
 def exec_show_projects(arguments):
     """Show projects in the configured output format."""
-    from adare.run import get_formatter_from_context
+    import pandas as pd
+    from rich.layout import Layout
+
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.project_list import ProjectTablePanel
-    from rich.layout import Layout
-    import pandas as pd
+    from adare.run import get_formatter_from_context
 
     api = AdareAPI()
     formatter, output_file, dual_output = get_formatter_from_context()
@@ -330,11 +335,12 @@ def exec_show_projects(arguments):
 
 def exec_show_environments(arguments):
     """Show environments in the configured output format."""
-    from adare.run import get_formatter_from_context
+    import pandas as pd
+    from rich.layout import Layout
+
     from adare.frontend.terminal.console import DefaultConsole
     from adare.frontend.terminal.environment_list import EnvironmentTablePanel
-    from rich.layout import Layout
-    import pandas as pd
+    from adare.run import get_formatter_from_context
 
     api = AdareAPI()
     formatter, output_file, dual_output = get_formatter_from_context()

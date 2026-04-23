@@ -1,12 +1,12 @@
 # external imports
-import requests
-from pathlib import Path
-from tqdm import tqdm
-import aiohttp
-
-
 # configure logging
 import logging
+from pathlib import Path
+
+import aiohttp
+import requests
+from tqdm import tqdm
+
 log = logging.getLogger(__name__)
 
 
@@ -33,7 +33,7 @@ def download(url: str, path: Path, headers: dict = None, quiet: bool = False):
         log.debug(f'download of {path.as_posix()} start')
         print(f'\nDownload {url} -> {path.as_posix()}')
         with open(path.as_posix(), 'wb') as file, tqdm(
-            desc=f'',
+            desc='',
             total=total,
             unit='iB',
             unit_scale=True,
@@ -57,7 +57,7 @@ def download_from_session(url: str, path: Path, session: requests.Session):
     log.debug(f'download of {path.as_posix()} start')
     print(f'\nDownload {url} -> {path.as_posix()}')
     with open(path.as_posix(), 'wb') as file, tqdm(
-        desc=f'',
+        desc='',
         total=total,
         unit='iB',
         unit_scale=True,
@@ -83,7 +83,7 @@ async def download2(url: str, path: Path, session: aiohttp.ClientSession):
         log.debug(f'download of {path.as_posix()} start')
         print(f'\nDownload {url} -> {path.as_posix()}')
         with open(path.as_posix(), 'wb') as file, tqdm(
-            desc=f'',
+            desc='',
             total=total,
             unit='iB',
             unit_scale=True,

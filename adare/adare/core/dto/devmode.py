@@ -8,10 +8,9 @@ enabling consistent interfaces across CLI, REST API, and Web UI.
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Tuple
+from typing import Any
 
 from adare.backend.devmode.session import DevModeSnapshot
-
 
 # =============================================================================
 # Request DTOs
@@ -22,13 +21,13 @@ class DevSessionStartRequest:
     """Request to start a new dev mode session."""
     project_path: Path
     environment_name: str
-    gui_mode: Optional[str] = None
-    vm_memory: Optional[int] = None
-    vm_cpus: Optional[int] = None
+    gui_mode: str | None = None
+    vm_memory: int | None = None
+    vm_cpus: int | None = None
     debug_screenshots: bool = False
-    log_file: Optional[Path] = None
-    console_ulid: Optional[str] = None
-    shared_directories: Optional[Dict[str, Dict[str, Path]]] = None
+    log_file: Path | None = None
+    console_ulid: str | None = None
+    shared_directories: dict[str, dict[str, Path]] | None = None
 
 
 @dataclass
@@ -52,9 +51,9 @@ class DevPlaybookExecuteRequest:
     session_id: str
     playbook_source: str  # 'file', 'url', 'stdin'
     playbook_content: str  # path, URL, or stdin content
-    console_ulid: Optional[str] = None  # For flow console routing
+    console_ulid: str | None = None  # For flow console routing
     restore_initial: bool = False  # Restore to initial checkpoint before execution
-    indices: Optional[str] = None  # Index specification string (e.g., "1-3,S-5,7,23-E")
+    indices: str | None = None  # Index specification string (e.g., "1-3,S-5,7,23-E")
 
 
 @dataclass
@@ -95,7 +94,7 @@ class DevCheckpointDeleteRequest:
 @dataclass
 class DevSessionListRequest:
     """Request to list dev sessions."""
-    project_path: Optional[Path] = None
+    project_path: Path | None = None
 
 
 @dataclass
@@ -107,7 +106,7 @@ class DevSessionStateRequest:
 @dataclass
 class DevSessionCleanupRequest:
     """Request to cleanup stale sessions."""
-    project_path: Optional[Path] = None
+    project_path: Path | None = None
 
 
 @dataclass
@@ -127,8 +126,8 @@ class DevUpdateTestfunctionsRequest:
 class DevCVRestartRequest:
     """Request to restart the CV server."""
     session_id: str
-    debug: Optional[bool] = None
-    debug_output_dir: Optional[Path] = None
+    debug: bool | None = None
+    debug_output_dir: Path | None = None
 
 
 @dataclass
@@ -151,11 +150,11 @@ class DevSessionInfo:
     vm_running: bool
     actions_executed: int
     created_at: datetime
-    current_variables: Dict[str, Any]
-    available_snapshots: List[DevModeSnapshot]
-    experiment_name: Optional[str] = None
-    next_steps: List[str] = field(default_factory=list)
-    tip: Optional[str] = None
+    current_variables: dict[str, Any]
+    available_snapshots: list[DevModeSnapshot]
+    experiment_name: str | None = None
+    next_steps: list[str] = field(default_factory=list)
+    tip: str | None = None
 
 
 @dataclass
@@ -164,8 +163,8 @@ class DevActionResult:
     success: bool
     message: str
     execution_time: float
-    coordinates: Optional[Tuple[int, int]] = None
-    data: Optional[Any] = None
+    coordinates: tuple[int, int] | None = None
+    data: Any | None = None
 
 
 @dataclass
@@ -176,9 +175,9 @@ class DevPlaybookResult:
     successful_actions: int
     failed_actions: int
     execution_time: float
-    action_results: List[DevActionResult] = field(default_factory=list)
-    error_message: Optional[str] = None
-    test_stats: Optional[Dict[str, Any]] = None
+    action_results: list[DevActionResult] = field(default_factory=list)
+    error_message: str | None = None
+    test_stats: dict[str, Any] | None = None
 
 
 @dataclass
@@ -220,7 +219,7 @@ class DevResetResult:
 class DevCleanupResult:
     """Result of cleanup operation."""
     sessions_removed: int
-    removed_session_ids: List[str] = field(default_factory=list)
+    removed_session_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -235,7 +234,7 @@ class DevUpdateTestfunctionsResult:
 class DevPlaybookBatchExecuteRequest:
     """Request to execute multiple playbooks in batch."""
     session_id: str
-    playbook_patterns: List[str]
+    playbook_patterns: list[str]
     checkpoint_name: str = "batch_base"
     timeout: int = 120
-    console_ulid: Optional[str] = None
+    console_ulid: str | None = None

@@ -1,7 +1,7 @@
-import attrs
-from datetime import datetime, timezone
-import typing
+from datetime import UTC, datetime
 from typing import ClassVar
+
+import attrs
 import cattrs
 
 from adarelib.constants import StatusEnum
@@ -10,15 +10,15 @@ from adarelib.constants import StatusEnum
 # Stage Registry Infrastructure
 # -------------------------------
 
-_stage_registry: dict[str, typing.Type["Stage"]] = {}
+_stage_registry: dict[str, type["Stage"]] = {}
 
-def register_stage(cls: typing.Type["Stage"]) -> typing.Type["Stage"]:
+def register_stage(cls: type["Stage"]) -> type["Stage"]:
     instance = cls()
     if not hasattr(instance, "name"):
         raise ValueError(f"Cannot register stage without 'name': {cls}")
     _stage_registry[instance.name] = cls
     return cls
-def get_stage_class(name: str) -> typing.Optional[typing.Type["Stage"]]:
+def get_stage_class(name: str) -> type["Stage"] | None:
     return _stage_registry.get(name)
 
 # -------------------------------
@@ -45,13 +45,13 @@ class Stage:
     name: ClassVar[str] = 'stage'
     msg: ClassVar[str] = 'todo ...'
     description: ClassVar[str] = 'stage description'
-    parent: ClassVar[typing.Optional[str]] = None
+    parent: ClassVar[str | None] = None
     optional: ClassVar[bool] = False
     hidden: ClassVar[bool] = False  # Hide from console display (still recorded in database)
 
     # Runtime state (instance fields)
-    start_time: typing.Optional[datetime] = None
-    end_time: typing.Optional[datetime] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
     status: int = attrs.field(default=StatusEnum.NONE)
     sub_msg: str = ''
     result_status: int = attrs.field(default=StatusEnum.NONE)
@@ -60,10 +60,10 @@ class Stage:
         return f'{self.name}: {self.msg}'
 
     def start(self):
-        self.start_time = datetime.now(timezone.utc)
+        self.start_time = datetime.now(UTC)
 
     def end(self, status: int = StatusEnum.FINISHED):
-        self.end_time = datetime.now(timezone.utc)
+        self.end_time = datetime.now(UTC)
         if self.status == StatusEnum.NONE:
             self.status = status
 
@@ -520,7 +520,7 @@ class VMSnapshotRestoreStage(Stage):
     description: ClassVar[str] = 'Fast restore from base snapshot for quick setup'
     parent: ClassVar[str] = 'vm_setup'
 
-@register_stage  
+@register_stage
 @attrs.define
 class VMSnapshotCreateStage(Stage):
     name: ClassVar[str] = 'vm_snapshot_create'
@@ -531,7 +531,7 @@ class VMSnapshotCreateStage(Stage):
 @register_stage
 @attrs.define
 class VMExperimentSnapshotStage(Stage):
-    name: ClassVar[str] = 'vm_experiment_snapshot' 
+    name: ClassVar[str] = 'vm_experiment_snapshot'
     msg: ClassVar[str] = 'Creating experiment snapshot'
     description: ClassVar[str] = 'Creating snapshot for experiment recovery/debugging'
     parent: ClassVar[str] = 'cleanup_shutdown'
@@ -542,7 +542,7 @@ class VMTestSetupStage(Stage):
     name: ClassVar[str] = 'vm_test_setup'
     msg: ClassVar[str] = 'VM Compatibility Test Setup'
     description: ClassVar[str] = 'Setting up VM compatibility test environment'
-    parent: ClassVar[typing.Optional[str]] = None
+    parent: ClassVar[str | None] = None
 
 @register_stage
 @attrs.define
@@ -550,7 +550,7 @@ class VMCompatibilityTestStage(Stage):
     name: ClassVar[str] = 'vm_compatibility_test'
     msg: ClassVar[str] = 'VM Compatibility Testing'
     description: ClassVar[str] = 'Running ADARE compatibility tests on the VM'
-    parent: ClassVar[typing.Optional[str]] = None
+    parent: ClassVar[str | None] = None
 
 @register_stage
 @attrs.define
@@ -558,7 +558,7 @@ class VMTestCleanupStage(Stage):
     name: ClassVar[str] = 'vm_test_cleanup'
     msg: ClassVar[str] = 'VM Test Cleanup'
     description: ClassVar[str] = 'Cleaning up VM test resources'
-    parent: ClassVar[typing.Optional[str]] = None
+    parent: ClassVar[str | None] = None
 
 # VM Test Substages - Individual compatibility tests
 @register_stage

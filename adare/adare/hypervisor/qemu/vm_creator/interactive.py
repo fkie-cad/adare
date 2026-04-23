@@ -1,5 +1,6 @@
 """Post-install interactive session -- boots a finished VM disk for manual customization."""
 
+import logging
 import platform
 import subprocess
 import time
@@ -14,7 +15,6 @@ from adare.hypervisor.qemu.vm_creator.qmp_utils import (
     wait_for_input_or_exit,
 )
 
-import logging
 log = logging.getLogger(__name__)
 
 

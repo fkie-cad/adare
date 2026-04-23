@@ -5,7 +5,6 @@ Each hypervisor has its own validation strategy.
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List
 
 from adare.backend.vm.exceptions import VMValidationError
 from adare.helperfunctions.file.validation import validate_tarfile_with_progress
@@ -17,7 +16,7 @@ class VMFileValidator(ABC):
     """Abstract base class for hypervisor-specific VM file validators."""
 
     @abstractmethod
-    def get_supported_extensions(self) -> List[str]:
+    def get_supported_extensions(self) -> list[str]:
         """Return list of supported file extensions for this hypervisor."""
         pass
 
@@ -48,7 +47,7 @@ class VMFileValidator(ABC):
 class VirtualBoxValidator(VMFileValidator):
     """Validator for VirtualBox VMs (OVA format)."""
 
-    def get_supported_extensions(self) -> List[str]:
+    def get_supported_extensions(self) -> list[str]:
         return ['.ova']
 
     def validate_file(self, file_path: Path, name: str, quiet: bool = False) -> None:
@@ -72,7 +71,7 @@ class VirtualBoxValidator(VMFileValidator):
 class QEMUValidator(VMFileValidator):
     """Validator for QEMU VMs (qcow2, raw, vmdk, etc.)."""
 
-    def get_supported_extensions(self) -> List[str]:
+    def get_supported_extensions(self) -> list[str]:
         return ['.qcow2', '.img', '.raw', '.vmdk', '.vdi']
 
     def validate_file(self, file_path: Path, name: str, quiet: bool = False) -> None:
@@ -95,7 +94,7 @@ class QEMUValidator(VMFileValidator):
                         f"VM file {file_path} does not have valid qcow2 magic bytes "
                         f"(expected b'QFI\\xfb', got {magic!r}), but proceeding anyway"
                     )
-        except IOError as e:
+        except OSError as e:
             raise VMValidationError(log, f"Cannot read VM file {file_path}: {e}")
 
 

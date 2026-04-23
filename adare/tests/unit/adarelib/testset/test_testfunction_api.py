@@ -1,29 +1,23 @@
 """Tests for the @testfunction decorator, TestContext, and related API."""
 import ast
 import asyncio
-import tempfile
 from inspect import isclass
 from pathlib import Path
-from typing import ClassVar, Optional
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import attrs
 import cattrs
 import pytest
 
-from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
-from adarelib.testset.api import (
-    testfunction,
-    TestContext,
-    TestFailed,
-    TestError,
-    _build_type_annotation_map,
-    _make_parameter_class,
-    _make_test_class,
-)
-from adarelib.event.event import TestResult
 from adarelib.constants import StatusEnum
-
+from adarelib.event.event import TestResult
+from adarelib.testset.api import (
+    TestContext,
+    TestError,
+    TestFailed,
+    testfunction,
+)
+from adarelib.testset.basictest import BasicTest, HostModeCategory, Parameter
 
 # ---------------------------------------------------------------------------
 # Sample decorated test functions for testing

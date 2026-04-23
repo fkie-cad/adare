@@ -1,6 +1,7 @@
 """Ubuntu autoinstall user-data generation from Jinja2 templates."""
 
 import hashlib
+import logging
 import secrets
 from pathlib import Path
 
@@ -9,7 +10,6 @@ from jinja2 import Environment, FileSystemLoader
 from adare.config.configdirectory import VM_TEMPLATES_DIR
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition, SetupLevel
 
-import logging
 log = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent / 'templates'
@@ -57,7 +57,6 @@ def _sha512_crypt(password: str, salt: str) -> str:
 
     Generates a hash compatible with glibc's crypt() using $6$ prefix.
     """
-    import struct
 
     password_bytes = password.encode('utf-8')
     salt_bytes = salt[:16].encode('utf-8')

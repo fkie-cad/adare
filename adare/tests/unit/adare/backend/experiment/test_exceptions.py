@@ -1,37 +1,37 @@
 """Tests for the experiment exception hierarchy and factory methods."""
 
 import logging
+
 import pytest
 
-from adare.exceptions import LoggedException, LoggedErrorException
 from adare.backend.experiment.exceptions import (
-    # Root
-    ExperimentException,
-    # Filesystem group
-    ExperimentFileSystemError,
-    ExperimentFileCreationError,
-    ExperimentDirectoryCreationError,
-    ExperimentRemovalError,
-    ExperimentDirectoryAlreadyExistsError,
-    ExperimentDirectoryDoesNotExistError,
-    ExperimentFileMissingError,
-    # Integrity group
-    ExperimentIntegrityError,
+    AdareVMProcessDiedError,
     EnvironmentIntegrityError,
-    TestfunctionIntegrityError,
-    # Config group
-    ExperimentConfigError,
-    NoEnvironmentError,
-    MultipleEnvironmentsError,
     # Direct children
     ExperimentAlreadyExistsError,
     ExperimentCommandError,
-    VMSetupError,
-    AdareVMProcessDiedError,
+    # Config group
+    ExperimentConfigError,
+    ExperimentDirectoryAlreadyExistsError,
+    ExperimentDirectoryCreationError,
+    ExperimentDirectoryDoesNotExistError,
+    # Root
+    ExperimentException,
+    ExperimentFileCreationError,
+    ExperimentFileMissingError,
+    # Filesystem group
+    ExperimentFileSystemError,
+    # Integrity group
+    ExperimentIntegrityError,
     # Non-error
     ExperimentNotChanged,
+    ExperimentRemovalError,
+    MultipleEnvironmentsError,
+    NoEnvironmentError,
+    TestfunctionIntegrityError,
+    VMSetupError,
 )
-
+from adare.exceptions import LoggedErrorException, LoggedException
 
 LOG = logging.getLogger("test_exceptions")
 

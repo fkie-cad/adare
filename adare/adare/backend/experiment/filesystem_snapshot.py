@@ -5,12 +5,12 @@ Provides OS-specific commands to capture filesystem state (file paths + timestam
 and calculate differences between snapshots.
 """
 
-import logging
-import json
 import csv
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+import json
+import logging
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 class FilesystemSnapshot:
     """Represents a filesystem snapshot with file metadata."""
 
-    def __init__(self, files: Dict[str, Dict[str, Any]], timestamp: str, os_type: str):
+    def __init__(self, files: dict[str, dict[str, Any]], timestamp: str, os_type: str):
         """
         Initialize snapshot.
 
@@ -31,7 +31,7 @@ class FilesystemSnapshot:
         self.timestamp = timestamp
         self.os_type = os_type
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Serialize snapshot to dict."""
         return {
             'timestamp': self.timestamp,
@@ -41,7 +41,7 @@ class FilesystemSnapshot:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict) -> 'FilesystemSnapshot':
+    def from_dict(cls, data: dict) -> 'FilesystemSnapshot':
         """Deserialize snapshot from dict."""
         return cls(
             files=data['files'],
@@ -50,7 +50,7 @@ class FilesystemSnapshot:
         )
 
 
-def get_snapshot_command(os_type: str, root_path: Optional[str] = None) -> str:
+def get_snapshot_command(os_type: str, root_path: str | None = None) -> str:
     """
     Get OS-specific command to capture filesystem snapshot.
 
@@ -64,16 +64,16 @@ def get_snapshot_command(os_type: str, root_path: Optional[str] = None) -> str:
     if os_type == 'linux':
         # Linux: use LinuxFSSnapshot module (parallels Windows MFT approach)
         python_cmd = (
-            f"python -c \""
-            f"from adarevm.platforms.linux_fs_snapshot import LinuxFSSnapshot; "
-            f"import json; "
-            f"result = LinuxFSSnapshot.get_snapshot(); "
-            f"print(json.dumps(result, indent=None))"
-            f"\""
+            "python -c \""
+            "from adarevm.platforms.linux_fs_snapshot import LinuxFSSnapshot; "
+            "import json; "
+            "result = LinuxFSSnapshot.get_snapshot(); "
+            "print(json.dumps(result, indent=None))"
+            "\""
         )
         return python_cmd
 
-    elif os_type == 'windows':
+    if os_type == 'windows':
         # Windows: use MFT reader for efficient snapshot with all 4 NTFS timestamps
         scan_root = root_path or 'C:\\'
         # Escape single quotes for Python inline command
@@ -90,11 +90,10 @@ def get_snapshot_command(os_type: str, root_path: Optional[str] = None) -> str:
         )
         return python_cmd
 
-    else:
-        raise ValueError(f"Unsupported OS type: {os_type}")
+    raise ValueError(f"Unsupported OS type: {os_type}")
 
 
-def parse_snapshot_output(output: str, os_type: str) -> Dict[str, Dict[str, Any]]:
+def parse_snapshot_output(output: str, os_type: str) -> dict[str, dict[str, Any]]:
     """
     Parse command output into file metadata dict.
     Both Windows and Linux now return JSON in common format.
@@ -150,7 +149,7 @@ def parse_snapshot_output(output: str, os_type: str) -> Dict[str, Dict[str, Any]
         raise ValueError(f"Invalid JSON output from snapshot command: {e}")
 
 
-def _get_timestamp_fields(snapshot: FilesystemSnapshot) -> List[str]:
+def _get_timestamp_fields(snapshot: FilesystemSnapshot) -> list[str]:
     """Get the relevant timestamp field names based on OS type.
 
     Windows (NTFS/MFT): created, modified, accessed, mft_modified
@@ -158,11 +157,10 @@ def _get_timestamp_fields(snapshot: FilesystemSnapshot) -> List[str]:
     """
     if snapshot.os_type == 'Windows':
         return ['created', 'modified', 'accessed', 'mft_modified']
-    else:
-        return ['modified', 'accessed', 'changed']
+    return ['modified', 'accessed', 'changed']
 
 
-def _get_all_timestamps(file_meta: Dict[str, Any]) -> Dict[str, float]:
+def _get_all_timestamps(file_meta: dict[str, Any]) -> dict[str, float]:
     """Extract all timestamps from file metadata, checking nested 'timestamps' dict."""
     timestamps = {}
     ts_dict = file_meta.get('timestamps', {})
@@ -174,7 +172,7 @@ def _get_all_timestamps(file_meta: Dict[str, Any]) -> Dict[str, float]:
     return timestamps
 
 
-def calculate_diff(before: FilesystemSnapshot, after: FilesystemSnapshot) -> Dict[str, List[Dict]]:
+def calculate_diff(before: FilesystemSnapshot, after: FilesystemSnapshot) -> dict[str, list[dict]]:
     """
     Calculate differences between two snapshots.
 
@@ -264,7 +262,7 @@ def calculate_diff(before: FilesystemSnapshot, after: FilesystemSnapshot) -> Dic
     }
 
 
-def export_diff_json(diff: Dict, output_path: Path, metadata: Optional[Dict] = None):
+def export_diff_json(diff: dict, output_path: Path, metadata: dict | None = None):
     """
     Export diff to JSON file.
 
@@ -289,7 +287,7 @@ def export_diff_json(diff: Dict, output_path: Path, metadata: Optional[Dict] = N
     log.info(f"Exported filesystem diff JSON to {output_path}")
 
 
-def export_diff_csv(diff: Dict, output_path: Path):
+def export_diff_csv(diff: dict, output_path: Path):
     """
     Export diff to CSV file with all available timestamps.
 
@@ -311,7 +309,7 @@ def export_diff_csv(diff: Dict, output_path: Path):
         header.append('Changed Timestamps')
         writer.writerow(header)
 
-        def _ts_readable(epoch: Optional[float]) -> str:
+        def _ts_readable(epoch: float | None) -> str:
             if epoch is None or epoch == 0.0:
                 return ''
             return datetime.fromtimestamp(epoch).isoformat()
@@ -352,10 +350,10 @@ def export_diff_csv(diff: Dict, output_path: Path):
 
 
 def export_diff_bodyfile(
-    diff: Dict,
+    diff: dict,
     output_path: Path,
-    snapshot_before: Optional[FilesystemSnapshot] = None,
-    snapshot_after: Optional[FilesystemSnapshot] = None,
+    snapshot_before: FilesystemSnapshot | None = None,
+    snapshot_after: FilesystemSnapshot | None = None,
 ):
     """
     Export diff in mactime bodyfile format (pipe-delimited).
@@ -370,12 +368,12 @@ def export_diff_bodyfile(
         snapshot_after: Optional after-snapshot for metadata header
     """
 
-    def _epoch_int(ts_dict: Dict[str, float], key: str) -> int:
+    def _epoch_int(ts_dict: dict[str, float], key: str) -> int:
         """Get timestamp as integer epoch, defaulting to 0."""
         val = ts_dict.get(key, 0.0)
         return int(val) if val else 0
 
-    def _write_bodyfile_line(f, path: str, size: int, timestamps: Dict[str, float], os_type: str, comment: str = ''):
+    def _write_bodyfile_line(f, path: str, size: int, timestamps: dict[str, float], os_type: str, comment: str = ''):
         """Write a single bodyfile line.
 
         Mapping to bodyfile columns:

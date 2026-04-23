@@ -3,11 +3,8 @@ VirtualBox VM snapshot operations mixin.
 
 Implements AbstractSnapshotMixin for VirtualBox-specific snapshot operations.
 """
-import contextlib
 import logging
 from pathlib import Path
-from typing import Optional, List, Dict
-import threading
 
 from adare.hypervisor.base.mixins.snapshots import AbstractSnapshotMixin
 from adare.hypervisor.virtualbox.utils import run_subprocess
@@ -15,7 +12,7 @@ from adare.hypervisor.virtualbox.utils import run_subprocess
 log = logging.getLogger(__name__)
 
 
-def list_snapshots(vm_name: str, vboxmanage_exe: str = 'VBoxManage') -> List[Dict[str, str]]:
+def list_snapshots(vm_name: str, vboxmanage_exe: str = 'VBoxManage') -> list[dict[str, str]]:
     """
     List all snapshots for a given VM.
 
@@ -79,8 +76,8 @@ def list_snapshots(vm_name: str, vboxmanage_exe: str = 'VBoxManage') -> List[Dic
 
 class SnapshotMixin(AbstractSnapshotMixin):
     """Mixin class providing snapshot operations for VirtualBox VMs."""
-    
-    def create_snapshot(self, snapshot_name: str, description: str = "", ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False):
+
+    def create_snapshot(self, snapshot_name: str, description: str = "", ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False):
         """Create a snapshot of the VM."""
         def _create_snapshot():
             args = [
@@ -88,7 +85,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             ]
             if description:
                 args.extend(["--description", description])
-            
+
             return_value = self._execute_streaming_command(
                 args,
                 log_file=log_file,
@@ -98,14 +95,14 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 operation_name="snapshot creation",
                 timeout=240  # 4 minute timeout for snapshot creation
             )
-            
+
             if return_value == 0:
                 log.info(f"Snapshot '{snapshot_name}' created successfully for VM '{self.vm_name}'")
             else:
                 log.error(f"Failed to create snapshot '{snapshot_name}' for VM '{self.vm_name}': return code {return_value}")
-            
+
             return return_value
-        
+
         return self.manager.run(_create_snapshot)
 
     def snapshot_exists(self, snapshot_name: str) -> bool:
@@ -118,11 +115,11 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     log_prefix=f"snapshot_exists({snapshot_name}): ",
                     check=False
                 )
-                
+
                 if result.returncode != 0:
                     log.debug(f"Command failed with return code {result.returncode}. Assuming no snapshots exist.")
                     return False
-                
+
                 # Parse the output for snapshot names
                 for line in result.stdout.split('\n'):
                     if line.startswith('SnapshotName'):
@@ -130,16 +127,16 @@ class SnapshotMixin(AbstractSnapshotMixin):
                         if f'="{snapshot_name}"' in line:
                             log.debug(f"Found snapshot '{snapshot_name}' for VM '{self.vm_name}'.")
                             return True
-                
+
                 log.debug(f"Snapshot '{snapshot_name}' not found for VM '{self.vm_name}'.")
                 return False
             except Exception as e:
                 log.error(f"Error checking if snapshot '{snapshot_name}' exists for VM '{self.vm_name}': {e}")
                 return False
-        
+
         return self.manager.run(_snapshot_exists)
 
-    def restore_snapshot(self, snapshot_name: str, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False) -> bool:
+    def restore_snapshot(self, snapshot_name: str, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False) -> bool:
         """Restore a snapshot for the VM."""
         def _restore_snapshot():
             try:
@@ -154,20 +151,19 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     operation_name="snapshot restoration",
                     timeout=180  # 3 minute timeout for snapshot operations
                 )
-                
+
                 if return_value == 0:
                     log.info(f"VM '{self.vm_name}' successfully restored to snapshot '{snapshot_name}'.")
                     return True
-                else:
-                    log.error(f"Failed to restore VM '{self.vm_name}' to snapshot '{snapshot_name}': return code {return_value}")
-                    return False
+                log.error(f"Failed to restore VM '{self.vm_name}' to snapshot '{snapshot_name}': return code {return_value}")
+                return False
             except Exception as e:
                 log.error(f"Error restoring VM '{self.vm_name}' to snapshot '{snapshot_name}': {e}")
                 return False
-        
+
         return self.manager.run(_restore_snapshot)
 
-    def delete_snapshot(self, snapshot_name: str, ctx_manager=None, stop_event=None, log_file: Optional[Path] = None, silent: bool = False) -> bool:
+    def delete_snapshot(self, snapshot_name: str, ctx_manager=None, stop_event=None, log_file: Path | None = None, silent: bool = False) -> bool:
         """Delete a snapshot from the VM."""
         def _delete_snapshot():
             try:
@@ -181,17 +177,16 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     ctx_manager=ctx_manager,
                     operation_name="snapshot deletion"
                 )
-                
+
                 if return_value == 0:
                     log.info(f"Snapshot '{snapshot_name}' deleted successfully from VM '{self.vm_name}'.")
                     return True
-                else:
-                    log.error(f"Failed to delete snapshot '{snapshot_name}' from VM '{self.vm_name}': return code {return_value}")
-                    return False
+                log.error(f"Failed to delete snapshot '{snapshot_name}' from VM '{self.vm_name}': return code {return_value}")
+                return False
             except Exception as e:
                 log.error(f"Error deleting snapshot '{snapshot_name}' from VM '{self.vm_name}': {e}")
                 return False
-        
+
         return self.manager.run(_delete_snapshot)
 
     async def ensure_initial_snapshot(

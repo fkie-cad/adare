@@ -1,7 +1,7 @@
-import shutil
-from pathlib import Path
 import os
 import platform
+import shutil
+from pathlib import Path
 
 
 def __get_default_appdata_directory(create_if_missing: bool = False, program_name: str = 'adare') -> Path | None:

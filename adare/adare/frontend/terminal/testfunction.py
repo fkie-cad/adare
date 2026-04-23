@@ -1,5 +1,6 @@
 # external imports
-import datetime
+import logging
+
 import pandas as pd
 from rich.layout import Layout
 from rich.panel import Panel
@@ -10,8 +11,6 @@ from rich.text import Text
 from adare.database.api.frontend import DataRetrievalApi
 from adare.frontend.terminal.console import DefaultConsole
 
-
-import logging
 log = logging.getLogger(__name__)
 
 

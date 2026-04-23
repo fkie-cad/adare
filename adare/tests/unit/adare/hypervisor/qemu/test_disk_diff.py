@@ -1,8 +1,6 @@
 """Tests for DiskDiffComparator - disk image comparison."""
 
-import subprocess
-from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 

@@ -6,19 +6,21 @@ including loading, validation, and database operations.
 """
 
 # external imports
+# configure logging
+import logging
+from datetime import UTC
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
+
+from adare.config.configdirectory import VMS_DIR
 
 # internal imports
 from adare.database.api.base import GlobalDatabaseApi
-from adare.database.models.global_models import Vm, OsInfo
+from adare.database.models.global_models import OsInfo, Vm
 from adare.exceptions import LoggedErrorException
 from adare.helperfunctions.file.hash import file_sha256_with_progress
-from adare.config.configdirectory import VMS_DIR
 from adare.validators.vm_validators import VMValidatorFactory
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -54,12 +56,12 @@ class VmApi(GlobalDatabaseApi):
         super().__init__()
         self._start_session()
         # VM table is automatically created by GlobalDatabaseApi
-    
-    def create_osinfo(self, platform: str = '', os: str = '', distribution: str = '', 
+
+    def create_osinfo(self, platform: str = '', os: str = '', distribution: str = '',
                      version: str = '', language: str = '', architecture: str = 'x86_64') -> OsInfo:
         """
         Create a new OSInfo entry in the database.
-        
+
         Args:
             platform: OS platform (windows, linux, etc.)
             os: OS type
@@ -67,14 +69,13 @@ class VmApi(GlobalDatabaseApi):
             version: OS version
             language: OS language
             architecture: Architecture (default: x86_64)
-            
+
         Returns:
             Created OSInfo instance
-            
+
         Raises:
             VMLoadError: If OSInfo creation fails
         """
-        from sqlalchemy.exc import SQLAlchemyError
 
         osinfo = OsInfo(
             platform=platform,
@@ -94,7 +95,7 @@ class VmApi(GlobalDatabaseApi):
             self._session.expunge(osinfo)
             return osinfo
         # Context manager commits on successful exit
-    
+
     def create_vm(self, project_path: Path, name: str, file_path: Path, file_hash: str, description: str = '',
                   os_platform: str = '', os_type: str = '', os_distribution: str = '',
                   os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
@@ -142,9 +143,8 @@ class VmApi(GlobalDatabaseApi):
                     existing_vm_by_name.id, description, os_platform, os_type,
                     os_distribution, os_version, os_language, os_architecture, hypervisor
                 )
-            else:
-                log.info(f"VM '{name}' already exists with matching hash - returning existing VM")
-                return existing_vm_by_name
+            log.info(f"VM '{name}' already exists with matching hash - returning existing VM")
+            return existing_vm_by_name
 
         # Scenario 2: Name matches but hash differs (VM updated)
         if existing_vm_by_name and (not existing_vm_by_hash or existing_vm_by_name.id != existing_vm_by_hash.id):
@@ -155,18 +155,17 @@ class VmApi(GlobalDatabaseApi):
                     description, os_platform, os_type, os_distribution, os_version,
                     os_language, os_architecture, no_copy, silent, hypervisor, project_path
                 )
-            else:
-                raise VMNameConflictError(
-                    log,
-                    f"VM with name '{name}' already exists but has different hash.\n"
-                    f"Existing hash: {existing_vm_by_name.hash[:16]}...\n"
-                    f"New hash: {file_hash[:16]}...",
-                    possible_solutions=[
-                        "Use --force flag to update the existing VM to the new version",
-                        "Use a different VM name",
-                        "Delete the existing VM first"
-                    ]
-                )
+            raise VMNameConflictError(
+                log,
+                f"VM with name '{name}' already exists but has different hash.\n"
+                f"Existing hash: {existing_vm_by_name.hash[:16]}...\n"
+                f"New hash: {file_hash[:16]}...",
+                possible_solutions=[
+                    "Use --force flag to update the existing VM to the new version",
+                    "Use a different VM name",
+                    "Delete the existing VM first"
+                ]
+            )
 
         # Scenario 3: Hash matches but name differs (hash-based deduplication)
         if existing_vm_by_hash and (not existing_vm_by_name or existing_vm_by_hash.id != existing_vm_by_name.id):
@@ -180,11 +179,11 @@ class VmApi(GlobalDatabaseApi):
             target_file_path = file_path.resolve()  # Store absolute path
 
             # Don't attempt write-protection for external files
-            log.info(f"Skipping write-protection for external VM file (user-managed)")
+            log.info("Skipping write-protection for external VM file (user-managed)")
         else:
             # Copy VM file to storage location
             target_file_path = self._copy_vm_file(file_path, project_path, name, silent=silent)
-        
+
         # Create both OsInfo and VM in same transaction to prevent orphaned records
         try:
             with self:
@@ -219,17 +218,17 @@ class VmApi(GlobalDatabaseApi):
             return self.get_vm_by_name(name)
         except SQLAlchemyError as e:
             raise VMLoadError(log, f"Database error creating VM '{name}': {e}")
-        except (OSError, IOError) as e:
+        except OSError as e:
             raise VMLoadError(log, f"File system error creating VM '{name}': {e}")
-    
-    
-    def get_vm_by_name(self, name: str) -> Optional[Vm]:
+
+
+    def get_vm_by_name(self, name: str) -> Vm | None:
         """
         Get VM by name.
-        
+
         Args:
             name: VM name
-            
+
         Returns:
             VM instance or None if not found
         """
@@ -239,14 +238,14 @@ class VmApi(GlobalDatabaseApi):
             if vm:
                 self._session.expunge(vm)
             return vm
-    
-    def get_vm_by_hash(self, file_hash: str) -> Optional[Vm]:
+
+    def get_vm_by_hash(self, file_hash: str) -> Vm | None:
         """
         Get VM by file hash.
-        
+
         Args:
             file_hash: SHA256 hash of the VM file
-            
+
         Returns:
             VM instance if found, None otherwise
         """
@@ -256,8 +255,8 @@ class VmApi(GlobalDatabaseApi):
             if vm:
                 self._session.expunge(vm)
             return vm
-    
-    def get_vm_by_id(self, vm_id: str) -> Optional[Vm]:
+
+    def get_vm_by_id(self, vm_id: str) -> Vm | None:
         """Get VM by database ID."""
         from sqlalchemy.orm import joinedload
         with self:
@@ -269,11 +268,11 @@ class VmApi(GlobalDatabaseApi):
     def update_vm_name(self, vm_id: str, new_name: str) -> bool:
         """
         Update VM name in the database.
-        
+
         Args:
             vm_id: VM database ID
             new_name: New name for the VM
-            
+
         Returns:
             True if updated successfully
         """
@@ -282,14 +281,14 @@ class VmApi(GlobalDatabaseApi):
             if not vm:
                 log.error(f"VM with ID {vm_id} not found for name update")
                 return False
-            
+
             old_name = vm.name
             vm.name = new_name
-            
+
             self._session.commit()
             log.debug(f"Updated VM name from '{old_name}' to '{new_name}'")
             return True
-    
+
     def create_snapshot_record(self, vm_instance_id: str, snapshot_name: str, snapshot_type: str,
                               experiment_id: str = None, description: str = None) -> bool:
         """
@@ -314,8 +313,8 @@ class VmApi(GlobalDatabaseApi):
             experiment_id=experiment_id,
             description=description
         )
-    
-    def get_snapshots_for_vm(self, vm_id: str, snapshot_type: str = None) -> List:
+
+    def get_snapshots_for_vm(self, vm_id: str, snapshot_type: str = None) -> list:
         """
         DEPRECATED: This method gets snapshots for VM templates which is incorrect.
         Use get_snapshots_for_instance instead.
@@ -337,7 +336,7 @@ class VmApi(GlobalDatabaseApi):
             "get_snapshots_for_vm is deprecated - VMs (templates) don't have snapshots. "
             "Use get_snapshots_for_instance instead."
         )
-    
+
     def delete_snapshot_record(self, vm_id: str, snapshot_name: str) -> bool:
         """
         DEPRECATED: This method deletes snapshots from VM templates which is incorrect.
@@ -354,8 +353,8 @@ class VmApi(GlobalDatabaseApi):
             "delete_snapshot_record is deprecated - VMs (templates) don't have snapshots. "
             "Snapshots are managed per-instance. Use delete_instance_snapshot_record instead."
         )
-    
-    def get_all_vms(self) -> List[Vm]:
+
+    def get_all_vms(self) -> list[Vm]:
         """
         Get all VMs.
 
@@ -391,10 +390,10 @@ class VmApi(GlobalDatabaseApi):
         except ValueError:
             return True  # External
 
-    def get_available_vms(self) -> List[Vm]:
+    def get_available_vms(self) -> list[Vm]:
         """
         Get all VMs available for use.
-        
+
         Returns:
             List of available VM instances
         """
@@ -405,17 +404,17 @@ class VmApi(GlobalDatabaseApi):
             for vm in vms:
                 self._session.expunge(vm)
             return vms
-    
+
     def delete_vm(self, vm_id: str) -> bool:
         """
         Delete VM from database.
-        
+
         Args:
             vm_id: VM ID to delete
-            
+
         Returns:
             True if deleted successfully
-            
+
         Raises:
             VMNotFoundError: If VM not found
         """
@@ -423,13 +422,13 @@ class VmApi(GlobalDatabaseApi):
             vm = self._session.query(Vm).filter_by(id=vm_id).first()
             if not vm:
                 raise VMNotFoundError(log, f"VM with id {vm_id} not found")
-                
+
             self._session.delete(vm)
             self._session.commit()
             log.info(f"Successfully deleted VM '{vm.name}' (id: {vm_id})")
             return True
-    
-    
+
+
     def validate_vm_file(self, file_path: Path, name: str = None, quiet: bool = False, hypervisor: str = 'virtualbox') -> dict:
         """
         Validate VM file using hypervisor-specific validator.
@@ -465,15 +464,15 @@ class VmApi(GlobalDatabaseApi):
         validator.validate_file(file_path, name or file_path.stem, quiet=quiet)
 
         log.debug(f"Successfully validated {hypervisor} VM file: {file_path}")
-    
+
     def _calculate_file_hash(self, file_path: Path, quiet: bool = False) -> str:
         """
         Calculate SHA256 hash of file with progress indication.
-        
+
         Args:
             file_path: Path to file
             quiet: If True, suppress progress bar
-            
+
         Returns:
             SHA256 hash string
         """
@@ -482,8 +481,8 @@ class VmApi(GlobalDatabaseApi):
             description=f"Calculating hash for {file_path.name}",
             quiet=quiet
         )
-    
-    
+
+
     def _copy_vm_file(self, source_path: Path, project_path: Path, name: str, silent: bool = False) -> Path:
         """
         Copy VM file to global storage location.
@@ -504,20 +503,19 @@ class VmApi(GlobalDatabaseApi):
             # Use global VM directory instead of project-specific directory
             target_dir = VMS_DIR
             target_dir.mkdir(parents=True, exist_ok=True)
-            
+
             # Generate target filename with VM name
             target_filename = f"{name}{source_path.suffix}"
             target_path = target_dir / target_filename
-            
+
             # Check if target already exists
             if target_path.exists():
                 if target_path.samefile(source_path):
                     # Source and target are the same file, no need to copy
                     log.info(f"VM file already in target location: {target_path}")
                     return target_path
-                else:
-                    raise VMLoadError(log, f"Target VM file {target_path} already exists and is different from source {source_path}")
-            
+                raise VMLoadError(log, f"Target VM file {target_path} already exists and is different from source {source_path}")
+
             log.info(f"Copying VM file to {target_path}")
             from adare.helperfunctions.file.copy import copy
             copy(
@@ -526,12 +524,12 @@ class VmApi(GlobalDatabaseApi):
                 silent=silent
             )
             log.info(f"Successfully copied VM file to {target_path}")
-            
+
             return target_path
-            
+
         except VMLoadError:
             raise  # Don't re-wrap our own errors
-        except (OSError, IOError) as e:
+        except OSError as e:
             raise VMLoadError(log, f"Failed to copy VM file: {e}")
 
     def _is_file_managed(self, file_path: Path) -> bool:
@@ -718,30 +716,30 @@ class VmApi(GlobalDatabaseApi):
     def suggest_similar_vms(self, vm_name: str, max_suggestions: int = 5):
         """
         Get VM suggestions based on name similarity.
-        
+
         Args:
             vm_name: The VM name to find suggestions for
             max_suggestions: Maximum number of suggestions
-            
+
         Returns:
             List of VMSuggestion objects
         """
         from adare.helperfunctions.vm_suggestions import suggest_similar_vm_names
-        
+
         # Get all available VMs
         all_vms = self.get_all_vms()
         vm_names = [vm.name for vm in all_vms]
-        
+
         # Get name-based suggestions
         suggestions = suggest_similar_vm_names(vm_name, vm_names, max_suggestions)
-        
+
         # Fill in additional VM metadata for suggestions
         vm_lookup = {vm.name: vm for vm in all_vms}
         for suggestion in suggestions:
             if suggestion.name in vm_lookup:
                 vm_obj = vm_lookup[suggestion.name]
                 suggestion.description = vm_obj.description
-        
+
         return suggestions
 
     # VM Instance Management Methods
@@ -764,9 +762,11 @@ class VmApi(GlobalDatabaseApi):
         Raises:
             VMLoadError: If creation fails
         """
-        from adare.database.models.global_models import VmInstance
+        from datetime import datetime
+
         from sqlalchemy.exc import SQLAlchemyError
-        from datetime import datetime, timezone
+
+        from adare.database.models.global_models import VmInstance
 
         instance = VmInstance(
             vm_id=vm_id,
@@ -774,8 +774,8 @@ class VmApi(GlobalDatabaseApi):
             current_experiment_run_id=experiment_run_id,
             websocket_port=websocket_port,
             status=status,
-            created_at=datetime.now(timezone.utc),
-            last_used_at=datetime.now(timezone.utc)
+            created_at=datetime.now(UTC),
+            last_used_at=datetime.now(UTC)
         )
 
         try:
@@ -809,8 +809,9 @@ class VmApi(GlobalDatabaseApi):
         Returns:
             VmInstance or None if not found
         """
-        from adare.database.models.global_models import VmInstance
         from sqlalchemy.orm import joinedload
+
+        from adare.database.models.global_models import VmInstance
 
         with self:
             instance = self._session.query(VmInstance).options(
@@ -820,7 +821,7 @@ class VmApi(GlobalDatabaseApi):
                 self._session.expunge(instance)
             return instance
 
-    def get_vm_instances_for_vm(self, vm_id: str, status: str = None) -> List['VmInstance']:
+    def get_vm_instances_for_vm(self, vm_id: str, status: str = None) -> list['VmInstance']:
         """
         Get all VM instances for a source VM.
 
@@ -831,8 +832,9 @@ class VmApi(GlobalDatabaseApi):
         Returns:
             List of VmInstance objects
         """
-        from adare.database.models.global_models import VmInstance
         from sqlalchemy.orm import joinedload
+
+        from adare.database.models.global_models import VmInstance
 
         with self:
             query = self._session.query(VmInstance).options(
@@ -846,15 +848,16 @@ class VmApi(GlobalDatabaseApi):
                 self._session.expunge(instance)
             return instances
 
-    def get_all_vm_instances(self) -> List['VmInstance']:
+    def get_all_vm_instances(self) -> list['VmInstance']:
         """
         Get all VM instances.
 
         Returns:
             List of all VmInstance objects
         """
-        from adare.database.models.global_models import VmInstance
         from sqlalchemy.orm import joinedload
+
+        from adare.database.models.global_models import VmInstance
 
         with self:
             instances = self._session.query(VmInstance).options(
@@ -865,7 +868,7 @@ class VmApi(GlobalDatabaseApi):
                 self._session.expunge(instance)
             return instances
 
-    def get_old_vm_instances(self, cutoff_date, status: str = None) -> List['VmInstance']:
+    def get_old_vm_instances(self, cutoff_date, status: str = None) -> list['VmInstance']:
         """
         Get VM instances older than cutoff date.
 
@@ -876,8 +879,9 @@ class VmApi(GlobalDatabaseApi):
         Returns:
             List of old VmInstance objects
         """
-        from adare.database.models.global_models import VmInstance
         from sqlalchemy.orm import joinedload
+
+        from adare.database.models.global_models import VmInstance
 
         with self:
             query = self._session.query(VmInstance).options(
@@ -899,8 +903,9 @@ class VmApi(GlobalDatabaseApi):
             instance_id: VM instance ID
             **kwargs: Fields to update
         """
-        from adare.database.models.global_models import VmInstance
         from sqlalchemy.exc import SQLAlchemyError
+
+        from adare.database.models.global_models import VmInstance
 
         try:
             with self:
@@ -954,8 +959,9 @@ class VmApi(GlobalDatabaseApi):
         Returns:
             VmInstance or None if not found
         """
-        from adare.database.models.global_models import VmInstance
         from sqlalchemy.orm import joinedload
+
+        from adare.database.models.global_models import VmInstance
 
         with self:
             instance = self._session.query(VmInstance).options(
@@ -995,7 +1001,7 @@ class VmApi(GlobalDatabaseApi):
             log.debug(f"Created instance snapshot record '{snapshot_name}' (type: {snapshot_type}) for VM instance {vm_instance_id}")
             return True
 
-    def get_snapshots_for_instance(self, vm_instance_id: str, snapshot_type: str = None) -> List['VmSnapshot']:
+    def get_snapshots_for_instance(self, vm_instance_id: str, snapshot_type: str = None) -> list['VmSnapshot']:
         """
         Get all snapshots for a VM instance.
 
@@ -1046,7 +1052,7 @@ class VmApi(GlobalDatabaseApi):
 
             return True
 
-    def get_websocket_port_for_instance(self, instance_name: str) -> Optional[int]:
+    def get_websocket_port_for_instance(self, instance_name: str) -> int | None:
         """
         Get the WebSocket port for an active VM instance by name.
 
@@ -1081,7 +1087,7 @@ class VmApi(GlobalDatabaseApi):
 def ensure_vm_directories():
     """
     Ensure VM storage directories exist.
-    
+
     Creates the global VM directory if it doesn't exist.
     """
     VMS_DIR.mkdir(parents=True, exist_ok=True)

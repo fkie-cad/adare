@@ -6,7 +6,7 @@ Provides a registry pattern for VM discovery by UUID and name.
 import glob
 import json
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any
 
 
 class QEMUVMRegistry:
@@ -31,9 +31,9 @@ class QEMUVMRegistry:
             VMNotFoundException: If VM config not found
         """
         from adare.config import get_vm_credentials
+        from adare.hypervisor.exceptions import VMNotFoundException
         from adare.hypervisor.qemu.manager import QEMUManager
         from adare.hypervisor.qemu.vm import QEMUVM
-        from adare.hypervisor.exceptions import VMNotFoundException
 
         if manager is None:
             manager = QEMUManager()
@@ -46,7 +46,7 @@ class QEMUVMRegistry:
             raise VMNotFoundException(f"QEMU VM '{vm_name}' not found")
 
         # Load config
-        with open(config_path, 'r') as f:
+        with open(config_path) as f:
             data = json.load(f)
 
         guest_os = data.get('guest_os', 'linux')
@@ -70,7 +70,7 @@ class QEMUVMRegistry:
         return vm
 
     @staticmethod
-    def get_vm_info_by_uuid(uuid: str) -> Optional[Dict[str, Any]]:
+    def get_vm_info_by_uuid(uuid: str) -> dict[str, Any] | None:
         """
         Get VM information by UUID/identifier.
 
@@ -92,7 +92,7 @@ class QEMUVMRegistry:
         config_files = glob.glob(str(config_dir / "*.json"))
         for config_file in config_files:
             try:
-                with open(config_file, 'r') as f:
+                with open(config_file) as f:
                     data = json.load(f)
 
                 # Check if UUID matches
@@ -112,14 +112,14 @@ class QEMUVMRegistry:
                         'disk_path': data.get('disk_path'),
                         'config_path': config_file
                     }
-            except (json.JSONDecodeError, KeyError, IOError):
+            except (OSError, json.JSONDecodeError, KeyError):
                 # Skip invalid config files
                 continue
 
         return None
 
     @staticmethod
-    def get_vm_name_by_uuid(uuid: str) -> Optional[str]:
+    def get_vm_name_by_uuid(uuid: str) -> str | None:
         """
         Get VM name by UUID/identifier.
 
@@ -139,20 +139,20 @@ class QEMUVMRegistry:
         config_files = glob.glob(str(config_dir / "*.json"))
         for config_file in config_files:
             try:
-                with open(config_file, 'r') as f:
+                with open(config_file) as f:
                     data = json.load(f)
 
                 # Check if UUID matches
                 if data.get('uuid') == uuid:
                     return data.get('vm_name')
-            except (json.JSONDecodeError, KeyError, IOError):
+            except (OSError, json.JSONDecodeError, KeyError):
                 # Skip invalid config files
                 continue
 
         return None
 
     @staticmethod
-    def get_vm_uuid_by_name(vm_name: str) -> Optional[str]:
+    def get_vm_uuid_by_name(vm_name: str) -> str | None:
         """
         Get VM UUID/identifier by name.
 
@@ -172,10 +172,10 @@ class QEMUVMRegistry:
             return None
 
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path) as f:
                 data = json.load(f)
             return data.get('uuid')
-        except (json.JSONDecodeError, KeyError, IOError):
+        except (OSError, json.JSONDecodeError, KeyError):
             return None
 
     @staticmethod
@@ -199,13 +199,13 @@ class QEMUVMRegistry:
         config_files = glob.glob(str(config_dir / "*.json"))
         for config_file in config_files:
             try:
-                with open(config_file, 'r') as f:
+                with open(config_file) as f:
                     data = json.load(f)
 
                 # Check if UUID matches
                 if data.get('uuid') == uuid:
                     return True
-            except (json.JSONDecodeError, KeyError, IOError):
+            except (OSError, json.JSONDecodeError, KeyError):
                 # Skip invalid config files
                 continue
 

@@ -1,14 +1,15 @@
 # external imports
-from pathlib import Path
+# configure logging
+import logging
 import shutil
+from pathlib import Path
+
+from adare.backend.testfunction.exceptions import (
+    TestfunctionCreationError,
+)
 
 # internal imports
 from adare.config.configdirectory import TEMPLATES_DIR
-from adare.backend.testfunction.exceptions import TestfunctionDirectoryCreationError, TestfunctionCreationError, \
-    TestfunctionMissingFileError
-
-# configure logging
-import logging
 
 log = logging.getLogger(__name__)
 

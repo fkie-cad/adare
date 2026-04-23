@@ -1,5 +1,6 @@
 """CLI handlers for `adare manage os-profile` commands."""
 
+import logging
 import shutil
 from pathlib import Path
 
@@ -8,12 +9,11 @@ import yaml
 from adare.config.configdirectory import OS_PROFILES_DIR, VM_TEMPLATES_DIR
 from adare.console import print_error_message, print_success_message
 from adare.hypervisor.qemu.vm_creator.os_catalog import (
-    OS_CATALOG,
     _BUILTIN_CATALOG,
+    OS_CATALOG,
     reload_catalog,
 )
 
-import logging
 log = logging.getLogger(__name__)
 
 _REQUIRED_FIELDS = {'name', 'platform', 'distribution', 'version'}
@@ -84,8 +84,10 @@ def exec_os_profile_show(arguments):
 
 def _resolve_template_path(os_def) -> str:
     """Resolve which template file would be used for this OS definition."""
-    from adare.hypervisor.qemu.vm_creator.autoinstall import _TEMPLATE_MAP, TEMPLATES_DIR as LINUX_TEMPLATES_DIR
-    from adare.hypervisor.qemu.vm_creator.windows_creator import _AUTOUNATTEND_MAP, TEMPLATES_DIR as WIN_TEMPLATES_DIR
+    from adare.hypervisor.qemu.vm_creator.autoinstall import _TEMPLATE_MAP
+    from adare.hypervisor.qemu.vm_creator.autoinstall import TEMPLATES_DIR as LINUX_TEMPLATES_DIR
+    from adare.hypervisor.qemu.vm_creator.windows_creator import _AUTOUNATTEND_MAP
+    from adare.hypervisor.qemu.vm_creator.windows_creator import TEMPLATES_DIR as WIN_TEMPLATES_DIR
 
     if os_def.install_mode == 'manual':
         return '(manual install -- no template)'

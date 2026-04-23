@@ -1,12 +1,13 @@
 # external imports
+# configure logging
+import logging
 from pathlib import Path
+
+from adare.backend.experiment.directory import ExperimentRunDirectory
 
 # internal imports
 from adare.backend.script_creation.Script import Script
-from adare.backend.experiment.directory import ExperimentRunDirectory
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 

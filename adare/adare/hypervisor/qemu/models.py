@@ -5,13 +5,11 @@ Extends base hypervisor models with QEMU-specific format conversion.
 """
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List
+from typing import Any
 
-from adare.hypervisor.base.models import (
-    PortForwardingRule as BasePortForwardingRule,
-    SharedFolderConfig as BaseSharedFolderConfig,
-    CommandResult as BaseCommandResult
-)
+from adare.hypervisor.base.models import CommandResult as BaseCommandResult
+from adare.hypervisor.base.models import PortForwardingRule as BasePortForwardingRule
+from adare.hypervisor.base.models import SharedFolderConfig as BaseSharedFolderConfig
 
 log = logging.getLogger(__name__)
 
@@ -115,7 +113,7 @@ class QEMUVMConfig:
     drive_format: str = 'qcow2'
     boot_mode: str = 'bios'  # 'bios' or 'uefi'
     network: str = 'user'
-    port_forwarding_rules: Dict[str, Dict[str, Any]] = None  # Serialized port forwarding rules
+    port_forwarding_rules: dict[str, dict[str, Any]] = None  # Serialized port forwarding rules
     qmp_socket_path: str = ""  # Path to QMP monitor socket
     guest_agent_socket_path: str = ""  # Path to guest agent socket
     pid_file_path: str = ""  # Path to PID file for running VM
@@ -123,20 +121,20 @@ class QEMUVMConfig:
 
     # Display configuration (for libvirt integration)
     display_enabled: bool = False  # False = headless (virt-manager can still connect via VNC)
-    vnc_port: Optional[int] = None  # None = autoport, or specify explicit port
-    libvirt_domain_name: Optional[str] = None  # Track libvirt domain name
+    vnc_port: int | None = None  # None = autoport, or specify explicit port
+    libvirt_domain_name: str | None = None  # Track libvirt domain name
 
     # VM logging configuration (for experiment runs)
-    serial_console_log_path: Optional[str] = None  # Path to serial console log
-    qemu_debug_log_path: Optional[str] = None      # Path to QEMU debug log
+    serial_console_log_path: str | None = None  # Path to serial console log
+    qemu_debug_log_path: str | None = None      # Path to QEMU debug log
 
     # virtio-fs shared directory configuration
     # When enabled, uses virtio-fs instead of libguestfs for file transfer
     virtiofs_enabled: bool = True  # Default to virtio-fs mode
-    virtiofs_shares: List[Dict[str, Any]] = field(default_factory=list)  # List of share configs
+    virtiofs_shares: list[dict[str, Any]] = field(default_factory=list)  # List of share configs
 
     # SMB share path — ephemeral temp dir for QEMU SLIRP SMB sharing (macOS)
-    smb_share_path: Optional[str] = None
+    smb_share_path: str | None = None
 
     def __post_init__(self):
         """Initialize empty collections if None."""
@@ -146,7 +144,7 @@ class QEMUVMConfig:
         if self.virtiofs_shares is None:
             self.virtiofs_shares = []
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary for JSON serialization."""
         return {
             'vm_name': self.vm_name,
@@ -177,7 +175,7 @@ class QEMUVMConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'QEMUVMConfig':
+    def from_dict(cls, data: dict[str, Any]) -> 'QEMUVMConfig':
         """Create config from dictionary (JSON deserialization).
 
         Provides backward compatibility for VMs created before libvirt integration
@@ -206,7 +204,7 @@ class QEMUVMConfig:
                     'guest_mount': '/adare',
                     'readonly': False
                 }]
-                log.debug(f"Migrated old virtiofs_shared_dir to virtiofs_shares list")
+                log.debug("Migrated old virtiofs_shared_dir to virtiofs_shares list")
 
         data.setdefault('virtiofs_shares', [])
         data.setdefault('smb_share_path', None)

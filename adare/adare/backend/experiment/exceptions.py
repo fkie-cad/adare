@@ -1,7 +1,7 @@
 # internal imports
-from adare.exceptions import LoggedException, LoggedErrorException
 import logging
 
+from adare.exceptions import LoggedErrorException, LoggedException
 
 # ---------------------------------------------------------------------------
 # Root exception for all experiment errors
@@ -232,7 +232,7 @@ class AdareVMProcessDiedError(ExperimentException):
         elif app_log_fetch_error:
             msg_parts.extend([
                 f"Could not fetch application log: {app_log_fetch_error}",
-                f"Log location: /adare/run/logs/adarevm.log (Linux) or C:\\adare\\run\\logs\\adarevm.log (Windows)",
+                "Log location: /adare/run/logs/adarevm.log (Linux) or C:\\adare\\run\\logs\\adarevm.log (Windows)",
                 ""
             ])
 

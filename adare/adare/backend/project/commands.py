@@ -1,19 +1,20 @@
 # external imports
+# configure logging
+import logging
 from pathlib import Path
-import pandas as pd
 
 # internal imports
 import adare.backend.project.database as project_database
 from adare.backend.project.directory import ProjectDirectory
-from adare.helperfunctions.cli import print_df
-from adare.backend.project.exceptions import ProjectDirectoryCreationError, ProjectDirectoryRemovalError, \
-    ProjectDirectoryCopyError, ProjectDirectoryMissingError, ProjectMissingInDatabaseError, NoProjectsFoundMessage
-from adare.database.exceptions import DatabaseProjectCreationError
+from adare.backend.project.exceptions import (
+    NoProjectsFoundMessage,
+    ProjectDirectoryCopyError,
+    ProjectMissingInDatabaseError,
+)
 from adare.console import print_success_message
+from adare.database.exceptions import DatabaseProjectCreationError
 from adare.database.fixtures import fixture_stages, fixture_status
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -68,13 +69,13 @@ def project_create(path: Path, name: str, description: str = ''):
     log.debug('Skipping testfunction loading - testfunctions are global resources')
 
     log.info(f'project in path {path} created')
-    
+
     # Provide clear user feedback with loaded testfunction sets and next steps
     next_steps = [
-        f'Create an environment with: adare environment create <environment_name>',
-        f'Create an experiment with: adare experiment create <experiment_name>',
-        f'Use all available testfunction sets: files, json, csv, sqlite, linux, windows',
-        f'Run your first experiment with: adare experiment run <experiment> -e <environment>'
+        'Create an environment with: adare environment create <environment_name>',
+        'Create an experiment with: adare experiment create <experiment_name>',
+        'Use all available testfunction sets: files, json, csv, sqlite, linux, windows',
+        'Run your first experiment with: adare experiment run <experiment> -e <environment>'
     ]
 
     print_success_message(

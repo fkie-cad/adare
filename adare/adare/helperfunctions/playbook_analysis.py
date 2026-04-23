@@ -6,13 +6,13 @@ about file references, dependencies, and other metadata.
 """
 
 import logging
-from typing import List, Set
-from adare.types.playbook import Playbook, ActionType, PullAction, BlockAction
+
+from adare.types.playbook import ActionType, BlockAction, Playbook, PullAction
 
 log = logging.getLogger(__name__)
 
 
-def collect_pull_action_files(playbook: Playbook) -> List[str]:
+def collect_pull_action_files(playbook: Playbook) -> list[str]:
     """
     Extract all file paths from pull actions in a playbook.
 
@@ -39,7 +39,7 @@ def collect_pull_action_files(playbook: Playbook) -> List[str]:
     return unique_files
 
 
-def _extract_files_from_actions(actions: List[ActionType]) -> Set[str]:
+def _extract_files_from_actions(actions: list[ActionType]) -> set[str]:
     """
     Recursively extract file paths from a list of actions.
 

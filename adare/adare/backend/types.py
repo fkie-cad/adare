@@ -1,5 +1,7 @@
+from collections.abc import Callable
+
 import attrs
-from typing import Callable
+
 
 @attrs.define
 class Step:

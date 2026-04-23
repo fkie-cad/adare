@@ -1,14 +1,15 @@
-from pathlib import Path
-from tqdm import tqdm
-from typing import Union, Callable, Iterable, Optional
-import shutil
 import logging
+import shutil
+from collections.abc import Callable, Iterable
+from pathlib import Path
+
+from tqdm import tqdm
 
 log = logging.getLogger(__name__)
 
 BUFFER_SIZE = 1024 * 1024 # 1MB
 
-def __copy(src: Union[str, Path], dst: Union[str, Path], buffer_size: int = BUFFER_SIZE) -> None:
+def __copy(src: str | Path, dst: str | Path, buffer_size: int = BUFFER_SIZE) -> None:
     """Copy a file from src to dst without a progress bar."""
     src_path = Path(src)
     dst_path = Path(dst)
@@ -20,7 +21,7 @@ def __copy(src: Union[str, Path], dst: Union[str, Path], buffer_size: int = BUFF
             fdst.write(buf)
 
 
-def copy_with_progress(src: Union[str, Path], dst: Union[str, Path], buffer_size: int = BUFFER_SIZE) -> None:
+def copy_with_progress(src: str | Path, dst: str | Path, buffer_size: int = BUFFER_SIZE) -> None:
     """Copy a file from src to dst with a progress bar."""
     src_path = Path(src)
     dst_path = Path(dst)
@@ -36,7 +37,7 @@ def copy_with_progress(src: Union[str, Path], dst: Union[str, Path], buffer_size
             pbar.update(len(buf))
 
 
-def copy(src: Union[str, Path], dst: Union[str, Path], buffer_size: int = BUFFER_SIZE, silent: bool = False) -> None:
+def copy(src: str | Path, dst: str | Path, buffer_size: int = BUFFER_SIZE, silent: bool = False) -> None:
     """
     Copy a file from src to dst, with optional progress bar.
 
@@ -60,12 +61,12 @@ def copy(src: Union[str, Path], dst: Union[str, Path], buffer_size: int = BUFFER
 
 
 def copytree_with_progress(
-    src: Union[str, Path],
-    dst: Union[str, Path],
+    src: str | Path,
+    dst: str | Path,
     preserve_metadata: bool = False,
     buffer_size: int = 1024 * 1024,
     dirs_exist_ok: bool = False,
-    ignore: Optional[Callable[[str, Iterable[str]], Iterable[str]]] = None
+    ignore: Callable[[str, Iterable[str]], Iterable[str]] | None = None
 ) -> None:
     """
     Recursively copy a directory from src to dst with a progress bar.

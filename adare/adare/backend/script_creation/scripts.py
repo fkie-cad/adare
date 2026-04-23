@@ -1,11 +1,10 @@
 # external imports
+# configure logging
+import logging
 from pathlib import Path
 
 # internal imports
 from adare.backend.script_creation.Script import Script
-
-# configure logging
-import logging
 
 log = logging.getLogger(__name__)
 

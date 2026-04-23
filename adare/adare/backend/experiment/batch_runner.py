@@ -1,17 +1,17 @@
 # external imports
-import asyncio
 import fnmatch
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Set, Tuple
+from typing import Any
+
+from adare.console import console
 
 # internal imports
 from adare.database.api.experiment import ExperimentApi
 from adare.exceptions import LoggedErrorException
 from adarelib.constants import StatusEnum
-from adare.console import console
 
 # configure logging
 log = logging.getLogger(__name__)
@@ -27,10 +27,10 @@ class ExperimentResult:
     experiment: str
     status: StatusEnum
     duration: timedelta
-    error_message: Optional[str] = None
-    run_ulid: Optional[str] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    error_message: str | None = None
+    run_ulid: str | None = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
 
     def __post_init__(self) -> None:
         """Validate the result data after initialization."""
@@ -41,7 +41,7 @@ class ExperimentResult:
         if self.duration.total_seconds() < 0:
             raise ValueError("Duration cannot be negative")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'environment': self.environment,
@@ -61,7 +61,7 @@ class BatchRunSummary:
 
     This class provides statistics and reporting for batch execution results.
     """
-    results: List[ExperimentResult]
+    results: list[ExperimentResult]
     total_combinations: int
     total_duration: timedelta
 
@@ -123,10 +123,10 @@ class BatchRunSummary:
         """Get the display icon and style for a status."""
         if status == StatusEnum.SUCCESS:
             return "✓", "green"
-        elif status == StatusEnum.FAILED:
+        if status == StatusEnum.FAILED:
             return "✗", "red"
-        else:  # INTERRUPTED or other
-            return "⚠", "yellow"
+        # INTERRUPTED or other
+        return "⚠", "yellow"
 
     def print_summary(self) -> None:
         """Print a formatted summary table using Rich console."""
@@ -148,7 +148,7 @@ class BatchRunSummary:
                      f"Total time: {self.total_duration.total_seconds():.1f}s", style="bold")
         console.print()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'summary': {
@@ -171,7 +171,7 @@ class ExperimentEnvironmentMatcher:
     """
 
     # Glob pattern characters
-    _GLOB_CHARS: Set[str] = {'*', '?', '[', ']'}
+    _GLOB_CHARS: set[str] = {'*', '?', '[', ']'}
 
     def __init__(self, project_path: Path) -> None:
         """Initialize the matcher with a project path.
@@ -202,7 +202,7 @@ class ExperimentEnvironmentMatcher:
             return False
         return any(char in pattern for char in self._GLOB_CHARS)
 
-    def match_experiments(self, pattern: str) -> List[str]:
+    def match_experiments(self, pattern: str) -> list[str]:
         """Find all experiments matching the given pattern.
 
         Args:
@@ -225,14 +225,13 @@ class ExperimentEnvironmentMatcher:
                 if self.has_glob_pattern(pattern):
                     matched = [name for name in experiment_names if fnmatch.fnmatch(name, pattern)]
                     return sorted(matched)
-                else:
-                    return [pattern] if pattern in experiment_names else []
+                return [pattern] if pattern in experiment_names else []
 
         except Exception as e:
             log.error(f"Failed to match experiments with pattern '{pattern}': {e}")
             raise
 
-    def match_environments(self, pattern: str) -> List[str]:
+    def match_environments(self, pattern: str) -> list[str]:
         """Find all environments matching the given pattern.
 
         Args:
@@ -256,8 +255,7 @@ class ExperimentEnvironmentMatcher:
                 if self.has_glob_pattern(pattern):
                     matched = [name for name in environment_names if fnmatch.fnmatch(name, pattern)]
                     return sorted(matched)
-                else:
-                    return [pattern] if pattern in environment_names else []
+                return [pattern] if pattern in environment_names else []
 
         except Exception as e:
             log.error(f"Failed to match environments with pattern '{pattern}': {e}")
@@ -304,7 +302,7 @@ class ExperimentEnvironmentMatcher:
             log.warning(f"Failed to validate compatibility between '{experiment_name}' and '{environment_name}': {e}")
             return False
 
-    def get_valid_combinations(self, exp_pattern: str, env_pattern: str) -> Dict[str, List[str]]:
+    def get_valid_combinations(self, exp_pattern: str, env_pattern: str) -> dict[str, list[str]]:
         """Get all valid experiment-environment combinations.
 
         Args:
@@ -330,7 +328,7 @@ class ExperimentEnvironmentMatcher:
         return combinations
 
     def _validate_matches(self, exp_pattern: str, env_pattern: str,
-                         experiments: List[str], environments: List[str]) -> None:
+                         experiments: list[str], environments: list[str]) -> None:
         """Validate that we found matching experiments and environments."""
         if not experiments:
             raise LoggedErrorException(
@@ -354,7 +352,7 @@ class ExperimentEnvironmentMatcher:
                 ]
             )
 
-    def _build_combinations(self, experiments: List[str], environments: List[str]) -> Dict[str, List[str]]:
+    def _build_combinations(self, experiments: list[str], environments: list[str]) -> dict[str, list[str]]:
         """Build valid experiment-environment combinations."""
         combinations = {}
         valid_count = 0
@@ -376,8 +374,8 @@ class ExperimentEnvironmentMatcher:
         return combinations
 
     def _validate_combinations(self, exp_pattern: str, env_pattern: str,
-                              combinations: Dict[str, List[str]],
-                              experiments: List[str], environments: List[str]) -> None:
+                              combinations: dict[str, list[str]],
+                              experiments: list[str], environments: list[str]) -> None:
         """Validate that we found at least one valid combination."""
         if not combinations:
             raise LoggedErrorException(
@@ -401,10 +399,10 @@ class BatchExperimentRunner:
 
     def __init__(self) -> None:
         """Initialize the batch runner."""
-        self.matcher: Optional[ExperimentEnvironmentMatcher] = None
+        self.matcher: ExperimentEnvironmentMatcher | None = None
         self.interrupt_requested: bool = False
 
-    def _handle_interruption(self, remaining_combinations: List[Tuple[str, str]], current_env: str, current_exp: str) -> bool:
+    def _handle_interruption(self, remaining_combinations: list[tuple[str, str]], current_env: str, current_exp: str) -> bool:
         """Handle interruption and prompt user whether to continue with remaining combinations.
 
         Args:
@@ -437,11 +435,10 @@ class BatchExperimentRunner:
                 if choice in ['y', 'yes']:
                     console.print("[green]Continuing with next combination...[/green]\n")
                     return True
-                elif choice in ['n', 'no']:
+                if choice in ['n', 'no']:
                     console.print("[yellow]Terminating all remaining combinations...[/yellow]\n")
                     return False
-                else:
-                    console.print("[red]Please enter 'y' (yes) or 'n' (no)[/red]")
+                console.print("[red]Please enter 'y' (yes) or 'n' (no)[/red]")
             except (EOFError, KeyboardInterrupt):
                 console.print("\n[yellow]Terminating all remaining combinations...[/yellow]\n")
                 return False
@@ -472,7 +469,7 @@ class BatchExperimentRunner:
         if not project_path.exists():
             raise ValueError(f"Project path does not exist: {project_path}")
 
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         self.matcher = ExperimentEnvironmentMatcher(project_path)
 
         combinations = self.matcher.get_valid_combinations(exp_pattern, env_pattern)
@@ -485,7 +482,7 @@ class BatchExperimentRunner:
         results = await self._execute_all_combinations(combinations, total_combinations,
                                                       project_path, show_flow_console, **experiment_kwargs)
 
-        end_time = datetime.now(timezone.utc)
+        end_time = datetime.now(UTC)
         total_duration = end_time - start_time
 
         return BatchRunSummary(
@@ -496,12 +493,12 @@ class BatchExperimentRunner:
 
     async def _execute_all_combinations(
         self,
-        combinations: Dict[str, List[str]],
+        combinations: dict[str, list[str]],
         total_combinations: int,
         project_path: Path,
         show_flow_console: bool,
         **experiment_kwargs: Any
-    ) -> List[ExperimentResult]:
+    ) -> list[ExperimentResult]:
         """Execute all experiment-environment combinations."""
         results = []
         combination_count = 0
@@ -539,21 +536,20 @@ class BatchExperimentRunner:
                     # Ask user if they want to continue
                     if remaining and self._handle_interruption(remaining, env_name, exp_name):
                         continue  # Continue with next combination
-                    else:
-                        # Mark all remaining combinations as skipped
-                        from datetime import datetime, timezone, timedelta
-                        for rem_env, rem_exp in remaining:
-                            skipped_result = ExperimentResult(
-                                environment=rem_env,
-                                experiment=rem_exp,
-                                status=StatusEnum.INTERRUPTED,
-                                duration=timedelta(seconds=0),
-                                error_message="Skipped due to user termination",
-                                start_time=datetime.now(timezone.utc),
-                                end_time=datetime.now(timezone.utc)
-                            )
-                            results.append(skipped_result)
-                        break
+                    # Mark all remaining combinations as skipped
+                    from datetime import datetime, timedelta
+                    for rem_env, rem_exp in remaining:
+                        skipped_result = ExperimentResult(
+                            environment=rem_env,
+                            experiment=rem_exp,
+                            status=StatusEnum.INTERRUPTED,
+                            duration=timedelta(seconds=0),
+                            error_message="Skipped due to user termination",
+                            start_time=datetime.now(UTC),
+                            end_time=datetime.now(UTC)
+                        )
+                        results.append(skipped_result)
+                    break
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Batch execution interrupted by user[/yellow]")
@@ -588,7 +584,7 @@ class BatchExperimentRunner:
             error_color = "yellow" if result.status == StatusEnum.INTERRUPTED else "red"
             console.print(f"    [{error_color}]{result.error_message}[/{error_color}]")
 
-    def _print_execution_plan(self, combinations: Dict[str, List[str]]):
+    def _print_execution_plan(self, combinations: dict[str, list[str]]):
         """Print the execution plan before starting."""
         console.print("\n[bold]Execution Plan:[/bold]")
 
@@ -609,7 +605,7 @@ class BatchExperimentRunner:
         **kwargs
     ) -> ExperimentResult:
         """Execute a single experiment-environment combination."""
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
 
         try:
             # Import here to avoid circular imports
@@ -624,7 +620,7 @@ class BatchExperimentRunner:
                 **kwargs
             )
 
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             duration = end_time - start_time
 
             # Determine status based on experiment results
@@ -649,7 +645,7 @@ class BatchExperimentRunner:
             )
 
         except Exception as e:
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             duration = end_time - start_time
 
             # Determine status based on exception type

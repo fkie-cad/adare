@@ -1,5 +1,6 @@
 # configure logging
 import logging
+
 log = logging.getLogger(__name__)
 
 DTYPE_DEFAULTS = {
@@ -11,11 +12,10 @@ DTYPE_DEFAULTS = {
 
 
 def get_value_if_missing_key(dictionary: dict, key, dtype=str, default=None):
-    if key in dictionary.keys():
+    if key in dictionary:
         return dictionary[key]
-    else:
-        if default:
-            return default
-        if dtype in DTYPE_DEFAULTS.keys():
-            return DTYPE_DEFAULTS[dtype]
+    if default:
+        return default
+    if dtype in DTYPE_DEFAULTS:
+        return DTYPE_DEFAULTS[dtype]
     return None

@@ -6,7 +6,6 @@ to validate whether VMs are actually running before attempting session restorati
 """
 
 import logging
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -25,11 +24,10 @@ def is_vm_running(vm_name: str, hypervisor_type: str) -> bool:
     try:
         if hypervisor_type == 'qemu':
             return _check_qemu_vm(vm_name)
-        elif hypervisor_type == 'virtualbox':
+        if hypervisor_type == 'virtualbox':
             return _check_virtualbox_vm(vm_name)
-        else:
-            log.warning(f"Unknown hypervisor type: {hypervisor_type}")
-            return False
+        log.warning(f"Unknown hypervisor type: {hypervisor_type}")
+        return False
     except Exception as e:
         log.error(f"Error checking VM state for {vm_name}: {e}", exc_info=True)
         return False
@@ -50,11 +48,9 @@ def _check_qemu_vm(vm_name: str) -> bool:
     """
     try:
         import libvirt  # Import inside try block (codebase pattern)
+
         from adare.config import HYPERVISOR_CONFIGS
-        from adare.hypervisor.qemu.libvirt_stderr_redirect import (
-            LibvirtStderrRedirect,
-            get_experiment_log_file
-        )
+        from adare.hypervisor.qemu.libvirt_stderr_redirect import LibvirtStderrRedirect, get_experiment_log_file
 
         # Get libvirt connection using config pattern (not temp VM)
         qemu_config = HYPERVISOR_CONFIGS.get('qemu', {})
@@ -126,12 +122,11 @@ def _check_virtualbox_vm(vm_name: str) -> bool:
             if state == virtualbox.library.MachineState.running:
                 log.debug(f"VirtualBox VM '{vm_name}' is running")
                 return True
-            elif state == virtualbox.library.MachineState.paused:
+            if state == virtualbox.library.MachineState.paused:
                 log.debug(f"VirtualBox VM '{vm_name}' is paused (considered running)")
                 return True
-            else:
-                log.debug(f"VirtualBox VM '{vm_name}' is in state: {state}")
-                return False
+            log.debug(f"VirtualBox VM '{vm_name}' is in state: {state}")
+            return False
 
         except Exception as e:
             log.debug(f"VirtualBox VM '{vm_name}' not found or error: {e}")

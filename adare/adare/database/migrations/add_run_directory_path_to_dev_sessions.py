@@ -11,9 +11,9 @@ Run this script manually if you have an existing ADARE installation:
 For new installations, the column will be created automatically.
 """
 
-import sys
 import logging
-from pathlib import Path
+import sys
+
 from sqlalchemy import text
 
 log = logging.getLogger(__name__)

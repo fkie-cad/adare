@@ -1,43 +1,56 @@
 # external imports
-from pathlib import Path
-from datetime import datetime, timezone
-import threading
 import asyncio
-
-# internal imports
-from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
-import adare.backend.experiment.database as experiment_database
-import adare.backend.environment.database as environment_database
-from adare.exceptions import LoggedException
-from adare.backend.project.directory import ProjectDirectory
-from adare.backend.experiment.print import flowconsolemanager
-from adare.backend.experiment.step_runner import ExperimentStepRunner
-from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
-from adare.types.stages import (
-    # Top-level parent stages
-    ExperimentPreparationStage, VirtualMachineSetupStage, SoftwareInstallationStage,
-    ExperimentExecutionStage, CleanupShutdownStage,
-    # Sub-stages
-    SetupExperimentEnvironmentStage, ValidateIntegrityStage, PrepareRunEnvironmentStage, StartComputerVisionServerStage,
-    InstallAdareVMStage, ConnectToVMStage, InstallationsStage,
-    ExperimentRunStage, SystemInfoCollectionStage,
-    FinalizeStage, ShutdownComputerVisionServerStage, ShutdownWebSocketStage,
-)
-from adare.backend.experiment.stagectxmanager import StageCtxManager
-from adarelib.constants import StatusEnum
-from adare.config.configdirectory import ADAREVM_DIR, ADARELIB_DIR
-from adare.backend.experiment.runctx import ExperimentRunCtx, ExperimentConfig
-
-# Extracted modules
-from adare.backend.experiment.integrity_validator import IntegrityValidator
-from adare.backend.experiment.agent_lifecycle import install_and_run_adare_vm
-from adare.backend.experiment.event_listeners import (
-    start_event_listeners,
-    create_and_start_flow_console,
-)
 
 # configure logging
 import logging
+import threading
+from datetime import UTC, datetime
+from pathlib import Path
+
+import adare.backend.environment.database as environment_database
+import adare.backend.experiment.database as experiment_database
+from adare.backend.experiment.agent_lifecycle import install_and_run_adare_vm
+
+# internal imports
+from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
+from adare.backend.experiment.event_listeners import (
+    create_and_start_flow_console,
+    start_event_listeners,
+)
+
+# Extracted modules
+from adare.backend.experiment.integrity_validator import IntegrityValidator
+from adare.backend.experiment.print import flowconsolemanager
+from adare.backend.experiment.runctx import ExperimentConfig, ExperimentRunCtx
+from adare.backend.experiment.stagectxmanager import StageCtxManager
+from adare.backend.experiment.step_runner import ExperimentStepRunner
+from adare.backend.experiment.vm_lifecycle_manager import VMLifecycleManager
+from adare.backend.project.directory import ProjectDirectory
+from adare.config.configdirectory import ADARELIB_DIR, ADAREVM_DIR
+from adare.exceptions import LoggedException
+from adare.types.stages import (
+    CleanupShutdownStage,
+    ConnectToVMStage,
+    ExperimentExecutionStage,
+    # Top-level parent stages
+    ExperimentPreparationStage,
+    ExperimentRunStage,
+    FinalizeStage,
+    InstallAdareVMStage,
+    InstallationsStage,
+    PrepareRunEnvironmentStage,
+    # Sub-stages
+    SetupExperimentEnvironmentStage,
+    ShutdownComputerVisionServerStage,
+    ShutdownWebSocketStage,
+    SoftwareInstallationStage,
+    StartComputerVisionServerStage,
+    SystemInfoCollectionStage,
+    ValidateIntegrityStage,
+    VirtualMachineSetupStage,
+)
+from adarelib.constants import StatusEnum
+
 log = logging.getLogger(__name__)
 
 # Disable verbose MCP client logging to prevent base64 image flooding the log
@@ -58,9 +71,10 @@ def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDire
                       Set to False for dev mode/long-running processes to avoid copying history.
         file_log_level: Logging level for the file handler (default: logging.INFO).
     """
-    import shutil
     import logging
-    from adare.logger.logger import get_current_logfile, FileHandlerFormatter
+    import shutil
+
+    from adare.logger.logger import FileHandlerFormatter, get_current_logfile
 
     current_logfile = get_current_logfile()
     target_path = run_directory.log_directory / 'adare.log'
@@ -113,8 +127,8 @@ def step_initialize(context: ExperimentRunCtx, fake: bool = False, run_ulid: str
         fake,
         id=run_ulid
     )
-    context.timestamp_start = datetime.now(timezone.utc)
-    context.timestamp_before_vm_start = datetime.now(timezone.utc)
+    context.timestamp_start = datetime.now(UTC)
+    context.timestamp_before_vm_start = datetime.now(UTC)
     context.adarevm = ADAREVM_DIR
     context.adarelib = ADARELIB_DIR
     log.info(f'initialized experiment run {context.experiment_run_ulid}')
@@ -171,7 +185,6 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                     # Fallback to file parsing if database doesn't have the content
                     log.warning(f"Database playbook load failed: {e}, falling back to file parsing")
                     from adare.types.playbook import parse_playbook
-                    from adare.config import get_vm_credentials
                     playbook_path = context.experiment_directory.path / "playbook.yml"
                     if not playbook_path.exists():
                         log.warning("No playbook.yml found - experiment cannot run GUI actions (experiment may be incomplete)")
@@ -386,8 +399,8 @@ async def step_execute_experiment(context: ExperimentRunCtx):
     is_host_test_mode = context.test_execution_mode == 'host'
 
     # First, install testfunction dependencies in a separate stage
-    from adare.types.stages import TestfunctionDependenciesStage
     from adare.backend.experiment.test_loader import TestLoader
+    from adare.types.stages import TestfunctionDependenciesStage
 
     stage_deps = TestfunctionDependenciesStage()
     with StageCtxManager(stage_deps, context.experiment_run_ulid, event=context.user_interrupt_event):
@@ -479,10 +492,10 @@ def _setup_guest_to_host_test_executor(controller, context: ExperimentRunCtx, vm
     """Set up host-mode test execution on the PlaybookController."""
     from adare.backend.experiment.execution.base import TestExecutionMode
     from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
-    from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
     from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
-    from adarelib.testset.testfunction import import_basictest_subclasses
+    from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
     from adare.config.configdirectory import STATE_DIR
+    from adarelib.testset.testfunction import import_basictest_subclasses
 
     guest_os = vm_os or 'linux'
 
@@ -574,7 +587,7 @@ async def step_collect_system_info(context: ExperimentRunCtx):
 def step_finalize(context: ExperimentRunCtx, post_interrupt: bool = False):
     event = None if post_interrupt else context.user_interrupt_event
     with StageCtxManager(FinalizeStage(), context.experiment_run_ulid, event=event):
-        timestamp_end = datetime.now(timezone.utc)
+        timestamp_end = datetime.now(UTC)
         experiment_database.update_experiment_run_end(context.project_directory.path, context.experiment_run_ulid, timestamp_end)
         duration_total = timestamp_end - context.timestamp_start
         duration_vm = timestamp_end - context.timestamp_before_vm_start
@@ -603,7 +616,6 @@ def step_remove_fake_experiment_run(context: ExperimentRunCtx):
 
 async def experiment_run(project_path: Path, experiment_name: str, environment_name: str, disable_printing: bool = False, test: bool = True, debug_screenshots: bool = False, preserve_snapshot: bool = False, runlog: bool = True, vm_memory: int = None, vm_cpus: int = None, gui_mode: str = None, test_exec_mode: str = None, diff: bool = None, diff_mode: str = 'auto', file_log_level: int = logging.INFO):
     import signal
-    import asyncio
 
     log.info(f"Starting experiment run {experiment_name} in project {project_path}")
 
@@ -637,10 +649,10 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             if vm_memory is None:
                 if 'windows' in guest_platform.lower():
                     config.vm_memory = 8192  # 8GB for Windows
-                    log.info(f"Using Windows default VM memory: 8192MB")
+                    log.info("Using Windows default VM memory: 8192MB")
                 else:
                     config.vm_memory = 4096  # 4GB for Linux
-                    log.info(f"Using Linux default VM memory: 4096MB")
+                    log.info("Using Linux default VM memory: 4096MB")
             else:
                 config.vm_memory = vm_memory
                 log.info(f"Using custom VM memory: {vm_memory}MB")
@@ -888,7 +900,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             # Calculate total duration (shared by both branches)
             total_duration = None
             if hasattr(experiment_run_context, 'timestamp_start'):
-                total_duration = (datetime.now(timezone.utc) - experiment_run_context.timestamp_start).total_seconds()
+                total_duration = (datetime.now(UTC) - experiment_run_context.timestamp_start).total_seconds()
 
             if execution_result:
                 flow_console.log_experiment_summary(
@@ -988,7 +1000,6 @@ def experiment_test(project_path: Path, experiment_name: str, environment_name: 
         experiment_name: Name of the experiment to test
         environment_name: Name of the environment to use
     """
-    import asyncio
 
     log.info(f'Starting experiment test: {experiment_name} in environment {environment_name}')
 

@@ -4,7 +4,6 @@ Hypervisor-agnostic data models.
 These models represent common abstractions used across all hypervisor implementations.
 """
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -74,4 +73,4 @@ class CommandResult:
     returncode: int
     stdout: str
     stderr: str
-    duration: Optional[int] = None  # Duration in seconds
+    duration: int | None = None  # Duration in seconds

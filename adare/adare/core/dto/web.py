@@ -6,8 +6,6 @@ enabling consistent interfaces across CLI, REST API, and Web UI.
 """
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
 
 # =============================================================================
 # Authentication DTOs
@@ -17,7 +15,7 @@ from typing import Optional
 class WebLoginResult:
     """Result of web login operation."""
     logged_in: bool
-    username: Optional[str] = None
+    username: str | None = None
     message: str = ""
 
 
@@ -32,7 +30,7 @@ class WebLogoutResult:
 class WebStatusResult:
     """Result of web status check."""
     logged_in: bool
-    username: Optional[str] = None
+    username: str | None = None
 
 
 # =============================================================================
@@ -58,7 +56,7 @@ class DownloadTestfunctionRequest:
     """Request to download a testfunction."""
     project_path: Path
     testfunction_name: str
-    version: Optional[int] = None
+    version: int | None = None
 
 
 @dataclass
@@ -66,7 +64,7 @@ class DownloadResult:
     """Result of download operation."""
     downloaded: bool
     message: str = ""
-    location: Optional[Path] = None
+    location: Path | None = None
 
 
 # =============================================================================
@@ -76,7 +74,7 @@ class DownloadResult:
 @dataclass
 class SyncRequest:
     """Request to sync with web app."""
-    project_path: Optional[Path] = None
+    project_path: Path | None = None
 
 
 @dataclass

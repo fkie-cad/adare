@@ -3,12 +3,13 @@ Consistent error handling utilities for database operations.
 
 Provides standardized error handling patterns to improve code consistency.
 """
-from typing import Any, Optional, Type, TypeVar, Union
-from sqlalchemy.orm import Query
-from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
-
 # configure logging
 import logging
+from typing import Any, TypeVar
+
+from sqlalchemy.orm import Query
+from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
+
 log = logging.getLogger(__name__)
 
 T = TypeVar('T')
@@ -29,7 +30,7 @@ class MultipleObjectsFoundError(DataRetrievalError):
     pass
 
 
-def safe_query_one(query: Query, error_class: Type[Exception] = ObjectNotFoundError,
+def safe_query_one(query: Query, error_class: type[Exception] = ObjectNotFoundError,
                    error_message: str = "Object not found") -> Any:
     """
     Safely execute a query that should return exactly one result.
@@ -77,7 +78,7 @@ def safe_query_first(query: Query, default: Any = None) -> Any:
         return default
 
 
-def safe_query_all(query: Query, default: Optional[list] = None) -> list:
+def safe_query_all(query: Query, default: list | None = None) -> list:
     """
     Safely execute a query that returns multiple results.
 
@@ -99,7 +100,7 @@ def safe_query_all(query: Query, default: Optional[list] = None) -> list:
 
 
 def safe_get_attribute(obj: Any, attribute: str, default: Any = None,
-                      nested: Optional[str] = None) -> Any:
+                      nested: str | None = None) -> Any:
     """
     Safely get an attribute from an object with optional nested access.
 

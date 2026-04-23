@@ -1,28 +1,27 @@
 # external imports
+# configure logging
+import logging
 from pathlib import Path
 
-# pandas import removed - not used
+from adare.database.api.environment import EnvironmentDbApi
 
+# pandas import removed - not used
 # internal imports
 from adare.database.api.project import ProjectDbApi
 from adare.database.api.testfunction import TestfunctionDbApi
-from adare.database.api.environment import EnvironmentDbApi
 
-
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
 def get_project_by_path(project_path: Path, fields: list[str] = None) -> str | dict | None:
     """
     Get project by path.
-    
+
     Args:
         project_path: Path to the project
         fields: Optional list of fields to extract. If None, returns only ID.
                 Available fields: 'id', 'name', 'path', 'description'
-    
+
     Returns:
         str: Project ID if fields=None
         dict: Project data if fields specified
@@ -33,10 +32,10 @@ def get_project_by_path(project_path: Path, fields: list[str] = None) -> str | d
         if project is None:
             log.error(f'project {project_path} not found')
             return None
-        
+
         if fields is None:
             return project.id
-        
+
         # Extract requested fields
         result = {}
         for field in fields:
@@ -50,18 +49,18 @@ def get_project_by_path(project_path: Path, fields: list[str] = None) -> str | d
                 result['description'] = project.description
             else:
                 log.warning(f'Unknown field requested: {field}. Available: id, name, path, description')
-        
+
         return result
 
 
 def get_project_by_name(project_name: str, fields: list[str] = None) -> str | dict | None:
     """
     Get project by name.
-    
+
     Args:
         project_name: Name of the project
         fields: Optional list of fields to extract. If None, returns only ID.
-    
+
     Returns:
         str: Project ID if fields=None
         dict: Project data if fields specified
@@ -72,10 +71,10 @@ def get_project_by_name(project_name: str, fields: list[str] = None) -> str | di
         if project is None:
             log.error(f'project {project_name} not found')
             return None
-        
+
         if fields is None:
             return project.id
-        
+
         # Extract requested fields
         result = {}
         for field in fields:
@@ -89,7 +88,7 @@ def get_project_by_name(project_name: str, fields: list[str] = None) -> str | di
                 result['description'] = project.description
             else:
                 log.warning(f'Unknown field requested: {field}. Available: id, name, path, description')
-        
+
         return result
 
 

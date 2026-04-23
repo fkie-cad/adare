@@ -1,11 +1,11 @@
 """Process manager for VirtualSpice backend."""
 
-import subprocess
+import logging
+import os
 import shutil
 import signal
+import subprocess
 import time
-import os
-import logging
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -117,8 +117,8 @@ class VirtualSpiceManager:
 
     def health_check(self) -> bool:
         """Check if VirtualSpice is responding."""
-        import urllib.request
         import urllib.error
+        import urllib.request
 
         try:
             req = urllib.request.urlopen(

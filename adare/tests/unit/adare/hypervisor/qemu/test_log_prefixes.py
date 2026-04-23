@@ -10,4 +10,4 @@ def test_no_claude_log_prefixes():
         for i, line in enumerate(content.splitlines(), 1):
             if 'CLAUDE:' in line and not line.strip().startswith('#'):
                 violations.append(f"{py_file.relative_to(hypervisor_dir)}:{i}: {line.strip()}")
-    assert not violations, f"Found CLAUDE: prefixes:\n" + "\n".join(violations)
+    assert not violations, "Found CLAUDE: prefixes:\n" + "\n".join(violations)

@@ -1,21 +1,22 @@
 # internal imports
-from adare.backend.basics import determine_projectdirectory
-from adare.exceptions import NoProjectFoundError
-from adare.helperfunctions.path_resolution import resolve_experiment_path, resolve_environment_path
-from adare.api import AdareAPI
-from adare.core.dto.experiment import (
-    ExperimentCreateRequest,
-    ExperimentCloneRequest,
-    ExperimentRemoveRequest,
-    ExperimentEnvModifyRequest,
-    ExperimentLoadRequest,
-    ExperimentValidateRequest,
-)
-from adare.console import print_success_message, print_error_message
-
-
 # configure logging
 import logging
+from datetime import UTC
+
+from adare.api import AdareAPI
+from adare.backend.basics import determine_projectdirectory
+from adare.console import print_error_message, print_success_message
+from adare.core.dto.experiment import (
+    ExperimentCloneRequest,
+    ExperimentCreateRequest,
+    ExperimentEnvModifyRequest,
+    ExperimentLoadRequest,
+    ExperimentRemoveRequest,
+    ExperimentValidateRequest,
+)
+from adare.exceptions import NoProjectFoundError
+from adare.helperfunctions.path_resolution import resolve_environment_path, resolve_experiment_path
+
 log = logging.getLogger(__name__)
 
 
@@ -45,9 +46,10 @@ def _get_project_path(arguments):
 
 def exec_experiment_load(arguments):
     """Load an experiment from files into the database using AdareAPI."""
-    from adare.backend.project.directory import ProjectDirectory
     import shutil
     from pathlib import Path
+
+    from adare.backend.project.directory import ProjectDirectory
 
     project_directory = _get_project_path(arguments)
     original_input = arguments.experiment
@@ -121,7 +123,7 @@ def exec_experiment_load(arguments):
         else:
             _handle_api_error(result)
 
-    except Exception as e:
+    except Exception:
         # Only cleanup if we actually copied during this run
         if copy_was_performed and potential_copied_name:
             copied_experiment_path = project_dir_obj.experiments / potential_copied_name
@@ -192,7 +194,7 @@ def _handle_environment_interruption(environments, current_index, results):
         if choice in ['y', 'yes']:
             print("Continuing with next environment...\n")
             return True
-        elif choice in ['n', 'no']:
+        if choice in ['n', 'no']:
             print("Terminating all remaining environments...\n")
             # Mark remaining environments as skipped
             for remaining_env in remaining_envs:
@@ -203,17 +205,17 @@ def _handle_environment_interruption(environments, current_index, results):
                     'error': 'Skipped due to user termination'
                 })
             return False
-        else:
-            print("Please enter 'y' (yes) or 'n' (no)")
+        print("Please enter 'y' (yes) or 'n' (no)")
 
 
 async def exec_experiment_run_all_environments(project_directory, arguments, disable_printing):
     """Run experiment across all environments supported by the experiment and provide a summary."""
+    from datetime import datetime
+
     from adare.backend.experiment.commands import experiment_load
     from adare.backend.experiment.run import experiment_run
     from adare.database.api.experiment import ExperimentApi
     from adare.exceptions import LoggedErrorException
-    from datetime import datetime, timezone
 
     # Resolve experiment path to name
     experiment_name = resolve_experiment_path(arguments.experiment, project_directory)
@@ -239,7 +241,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
             'The experiment metadata.yml has no environments specified.',
             possible_solutions=[
                 f'Add environments to experiment with: adare experiment add-env {experiment_name} <env_name>',
-                f'Edit the experiment metadata.yml file to specify environments',
+                'Edit the experiment metadata.yml file to specify environments',
                 'Check if the experiment was loaded correctly'
             ]
         )
@@ -270,14 +272,14 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
 
     # Track results
     results = []
-    start_time = datetime.now(timezone.utc)
+    start_time = datetime.now(UTC)
 
     # Run experiment on each environment
     for i, environment in enumerate(environments, 1):
         env_name = environment.name
         print(f"[{i}/{len(environments)}] Running on environment: {env_name}")
 
-        env_start_time = datetime.now(timezone.utc)
+        env_start_time = datetime.now(UTC)
 
         try:
             env_run_kwargs = dict(
@@ -302,7 +304,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                 **env_run_kwargs
             )
 
-            env_end_time = datetime.now(timezone.utc)
+            env_end_time = datetime.now(UTC)
             duration = (env_end_time - env_start_time).total_seconds()
 
             if was_interrupted:
@@ -336,7 +338,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                 print(f"❌ Environment '{env_name}' failed - tests did not pass ({duration:.1f}s)")
 
         except KeyboardInterrupt:
-            env_end_time = datetime.now(timezone.utc)
+            env_end_time = datetime.now(UTC)
             duration = (env_end_time - env_start_time).total_seconds()
 
             results.append({
@@ -353,7 +355,7 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
                 break  # Exit the main environment loop
 
         except Exception as e:
-            env_end_time = datetime.now(timezone.utc)
+            env_end_time = datetime.now(UTC)
             duration = (env_end_time - env_start_time).total_seconds()
             error_msg = str(e)
             log.error(f"Environment '{env_name}' failed with unexpected error: {e}", exc_info=True)
@@ -370,13 +372,14 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
         print()  # Add spacing between environments
 
     # Print summary
-    end_time = datetime.now(timezone.utc)
+    end_time = datetime.now(UTC)
     total_duration = (end_time - start_time).total_seconds()
 
 
     # Create and use flow console for beautiful summary
-    from adare.backend.experiment.print import ExperimentFlowConsole
     import time
+
+    from adare.backend.experiment.print import ExperimentFlowConsole
 
     # Create a flow console just for summary display
     summary_console = ExperimentFlowConsole(disable=False)
@@ -402,10 +405,11 @@ async def exec_experiment_run_all_environments(project_directory, arguments, dis
 
 
 def exec_experiment_run(arguments):
-    from adare.backend.experiment.run import experiment_run
-    from adare.backend.experiment.commands import experiment_load
-    from adare.exceptions import LoggedException, LoggedErrorException
     import sys
+
+    from adare.backend.experiment.commands import experiment_load
+    from adare.backend.experiment.run import experiment_run
+    from adare.exceptions import LoggedErrorException, LoggedException
 
     disable_printing = False
     if arguments.verbose or arguments.very_verbose:
@@ -532,7 +536,7 @@ def exec_experiment_run(arguments):
 
                     # Environment is unlisted - print warning but continue
                     log.warning(f'WARNING: environment "{environment_name}" is not listed in {experiment_name}/metadata.yml')
-                    log.warning(f'         Running experiment anyway as explicitly requested via -e flag')
+                    log.warning('         Running experiment anyway as explicitly requested via -e flag')
 
             # Build kwargs, including file_log_level if specified
             run_kwargs = dict(
@@ -555,9 +559,10 @@ def exec_experiment_run(arguments):
             was_interrupted, was_successful = asyncio.run(experiment_run(project_directory, experiment_name, environment_name, **run_kwargs))
 
             # Handle output formatting for single runs
+            from datetime import timedelta
+
+            from adare.backend.experiment.batch_runner import BatchRunSummary, ExperimentResult
             from adare.run import get_formatter_from_context
-            from adare.backend.experiment.batch_runner import ExperimentResult, BatchRunSummary
-            from datetime import datetime, timedelta
             from adarelib.constants import StatusEnum
 
             formatter, output_file, dual_output = get_formatter_from_context()

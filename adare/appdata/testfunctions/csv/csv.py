@@ -59,14 +59,14 @@ def _row_matches_pattern(test_instance, row, entry_pattern):
     return is_match, failed_columns, column_count_match
 
 
-def _extract_columns(row: List[str], columns: Optional[List[int]]) -> List[str]:
+def _extract_columns(row: list[str], columns: list[int] | None) -> list[str]:
     """Extract selected columns from row, or return all if columns is None."""
     if columns is None:
         return row
     return [row[i] for i in columns if i < len(row)]
 
 
-def _row_to_comparable(test_instance, row: List[str], columns: Optional[List[int]]) -> Tuple[bool, List[str], str]:
+def _row_to_comparable(test_instance, row: list[str], columns: list[int] | None) -> tuple[bool, list[str], str]:
     """
     Convert row to comparable form, handling placeholders.
 
@@ -90,9 +90,9 @@ def _row_to_comparable(test_instance, row: List[str], columns: Optional[List[int
 
 def _compare_row_sets(
     test_instance,
-    actual_rows: List[List[str]],
-    reference_rows: List[List[str]],
-    columns: Optional[List[int]],
+    actual_rows: list[list[str]],
+    reference_rows: list[list[str]],
+    columns: list[int] | None,
     allow_extra: bool,
     allow_missing: bool
 ) -> TestResult:
@@ -165,9 +165,9 @@ def _compare_row_sets(
 
 def _compare_row_sequences(
     test_instance,
-    actual_rows: List[List[str]],
-    reference_rows: List[List[str]],
-    columns: Optional[List[int]],
+    actual_rows: list[list[str]],
+    reference_rows: list[list[str]],
+    columns: list[int] | None,
     allow_extra: bool,
     allow_missing: bool
 ) -> TestResult:
@@ -256,13 +256,13 @@ def _compare_row_sequences(
 
 
 def _format_diff_report(
-    missing_rows: List[Tuple[int, List[str]]],
-    extra_rows: List[Tuple[int, List[str]]],
-    mismatched_rows: List[Tuple[int, List[str], List[str], List[str]]],
+    missing_rows: list[tuple[int, list[str]]],
+    extra_rows: list[tuple[int, list[str]]],
+    mismatched_rows: list[tuple[int, list[str], list[str], list[str]]],
     actual_count: int,
     reference_count: int,
-    columns: Optional[List[int]]
-) -> List[str]:
+    columns: list[int] | None
+) -> list[str]:
     """
     Format detailed comparison report for test failure.
 
@@ -354,7 +354,7 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
                 # Fallback for systems where maxsize is too large
                 csv.field_size_limit(10485760)  # 10MB
 
-            with open(dst_resolved, 'r') as f:
+            with open(dst_resolved) as f:
                 reader = csv.reader(f)
                 rows = list(reader)
 
@@ -399,11 +399,10 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
                     failure_details.append(f'      failures: {", ".join(match["failed_columns"])}')
 
                 return TestResult.failed(failure_details)
-            else:
-                return TestResult.failed([
-                    f'no matching row found for pattern: {entry_pattern}',
-                    'no rows found in CSV file to analyze'
-                ])
+            return TestResult.failed([
+                f'no matching row found for pattern: {entry_pattern}',
+                'no rows found in CSV file to analyze'
+            ])
         except FileNotFoundError:
             return TestResult.failed([f'file with path {dst} does not exist'])
         except (PermissionError, OSError) as e:
@@ -421,7 +420,7 @@ def contains_line(ctx: TestContext, dst: str, entry: list = None):
     description='compares all rows in CSV against embedded reference data',
     category=HostModeCategory.FILE_CONTENT,
 )
-def compare_rows(ctx: TestContext, dst: str, reference_rows: List[List[str]] = None, columns: List[int] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False):
+def compare_rows(ctx: TestContext, dst: str, reference_rows: list[list[str]] = None, columns: list[int] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False):
     try:
         # Resolve file path
         dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -456,7 +455,7 @@ def compare_rows(ctx: TestContext, dst: str, reference_rows: List[List[str]] = N
                 csv.field_size_limit(10485760)  # 10MB
 
             # Read actual CSV
-            with open(dst_resolved, 'r') as f:
+            with open(dst_resolved) as f:
                 reader = csv.reader(f)
                 actual_rows = list(reader)
 
@@ -474,15 +473,14 @@ def compare_rows(ctx: TestContext, dst: str, reference_rows: List[List[str]] = N
                     allow_extra=allow_extra_rows,
                     allow_missing=allow_missing_rows
                 )
-            else:
-                return _compare_row_sequences(
-                    test_instance=ctx,
-                    actual_rows=actual_rows,
-                    reference_rows=reference_rows,
-                    columns=columns,
-                    allow_extra=allow_extra_rows,
-                    allow_missing=allow_missing_rows
-                )
+            return _compare_row_sequences(
+                test_instance=ctx,
+                actual_rows=actual_rows,
+                reference_rows=reference_rows,
+                columns=columns,
+                allow_extra=allow_extra_rows,
+                allow_missing=allow_missing_rows
+            )
 
         except FileNotFoundError:
             return TestResult.failed([f'file with path {dst} does not exist'])
@@ -501,7 +499,7 @@ def compare_rows(ctx: TestContext, dst: str, reference_rows: List[List[str]] = N
     description='compares two CSV files with full diff reporting',
     category=HostModeCategory.FILE_CONTENT,
 )
-def compare_files(ctx: TestContext, actual: str = '', reference: str = '', columns: List[int] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False):
+def compare_files(ctx: TestContext, actual: str = '', reference: str = '', columns: list[int] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False):
     try:
         # Resolve actual file path
         actual_path, actual_status = ctx.resolve_globfilepath(actual)
@@ -537,12 +535,12 @@ def compare_files(ctx: TestContext, actual: str = '', reference: str = '', colum
                 csv.field_size_limit(10485760)  # 10MB
 
             # Read actual CSV
-            with open(actual_path, 'r') as f:
+            with open(actual_path) as f:
                 reader = csv.reader(f)
                 actual_rows = list(reader)
 
             # Read reference CSV
-            with open(reference_path, 'r') as f:
+            with open(reference_path) as f:
                 reader = csv.reader(f)
                 reference_rows = list(reader)
 
@@ -560,23 +558,21 @@ def compare_files(ctx: TestContext, actual: str = '', reference: str = '', colum
                     allow_extra=allow_extra_rows,
                     allow_missing=allow_missing_rows
                 )
-            else:
-                return _compare_row_sequences(
-                    test_instance=ctx,
-                    actual_rows=actual_rows,
-                    reference_rows=reference_rows,
-                    columns=columns,
-                    allow_extra=allow_extra_rows,
-                    allow_missing=allow_missing_rows
-                )
+            return _compare_row_sequences(
+                test_instance=ctx,
+                actual_rows=actual_rows,
+                reference_rows=reference_rows,
+                columns=columns,
+                allow_extra=allow_extra_rows,
+                allow_missing=allow_missing_rows
+            )
 
         except FileNotFoundError as e:
             if str(e).find(actual_path) >= 0 or str(e).find(actual) >= 0:
                 return TestResult.failed([f'actual file with path {actual} does not exist'])
-            else:
-                return TestResult.failed([f'reference file with path {reference} does not exist'])
+            return TestResult.failed([f'reference file with path {reference} does not exist'])
         except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read CSV files")
+            return TestResult.execution_error(e, "Cannot read CSV files")
         except csv.Error as e:
             return TestResult.failed([f"CSV parsing error: {e}"])
 

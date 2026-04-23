@@ -1,5 +1,6 @@
 """Shared disk image helpers for VM creators."""
 
+import logging
 import subprocess
 from pathlib import Path
 
@@ -7,7 +8,6 @@ from adare.config import HYPERVISOR_CONFIGS
 from adare.console import print_step
 from adare.hypervisor.exceptions import HypervisorException
 
-import logging
 log = logging.getLogger(__name__)
 
 

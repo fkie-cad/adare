@@ -1,15 +1,14 @@
 from __future__ import annotations
-from typing import Any, Dict
 
-from rich.text import Text
 from rich.spinner import SPINNERS
-from textual.app import App, ComposeResult, RenderResult
-from textual.widget import Widget
+from rich.text import Text
+from textual.app import ComposeResult
 from textual.containers import VerticalScroll
-from textual.widgets import Static
 from textual.reactive import reactive
-from adarelib.constants import StatusEnum
+from textual.widgets import Static
+
 from adare.backend.experiment.console_state import ConsoleState
+from adarelib.constants import StatusEnum
 
 
 class ExperimentRunFlowConsoleWidget(VerticalScroll):
@@ -18,11 +17,11 @@ class ExperimentRunFlowConsoleWidget(VerticalScroll):
     Uses ConsoleState for thread-safe message storage.
     """
     state: ConsoleState
-    
+
     # A reactive tick counter (used to cycle spinner frames)
     tick: reactive[int] = reactive(0)
     ticks_per_second: int = 12
-    _widgets_map: Dict[str, Static]
+    _widgets_map: dict[str, Static]
 
     def __init__(self):
         super().__init__()
@@ -47,14 +46,14 @@ class ExperimentRunFlowConsoleWidget(VerticalScroll):
         """
         snapshot = self.state.get_snapshot()
         should_scroll = False
-        
+
         # We need to handle identifiers that might have been removed (unlikely in this append-only log, but good practice)
         # For now, we assume append-only or simple updates.
-        
+
         for identifier, message_object in snapshot.items():
             text_content = self._generate_message(identifier, message_object, self.tick)
             rich_text = Text.from_markup(text_content)
-            
+
             if identifier in self._widgets_map:
                 # Update existing widget
                 self._widgets_map[identifier].update(rich_text)
@@ -64,7 +63,7 @@ class ExperimentRunFlowConsoleWidget(VerticalScroll):
                 self.mount(new_widget)
                 self._widgets_map[identifier] = new_widget
                 should_scroll = True
-        
+
         if should_scroll:
             # Schedule scroll_end after the refresh so layout is updated and virtual size is correct
             self.call_after_refresh(self.scroll_end, animate=False)
@@ -72,11 +71,11 @@ class ExperimentRunFlowConsoleWidget(VerticalScroll):
     def _generate_message(self, identifier: str, message_object: dict, spinner_position: int = 0) -> str:
         # NOTE: message_object comes from snapshot
         message = message_object['message']
-        
+
         # Start with an icon based on status.
         icon = StatusEnum.get_icon(message_object.get("status"), color=True)
         message = f"{icon} {message}"
-        
+
         # If a spinner is defined, get the appropriate frame.
         spinner_key = message_object.get("spinner")
         if spinner_key:
@@ -87,20 +86,20 @@ class ExperimentRunFlowConsoleWidget(VerticalScroll):
                 message = f"[{style}]{frames[spinner_position]}[/{style}] {message}"
             else:
                 message = f"{frames[spinner_position]} {message}"
-        
+
         # Add indentation based on level.
         level = message_object.get("level", 0)
         if level > 0:
             message = ("  " * level) + message
-            
+
         # Append result-status icon if available.
         if message_object.get("result_status"):
             message = f"{message} {StatusEnum.get_icon(message_object['result_status'], color=True)}"
-            
+
         # We could also add duration here if we want parity with Rich console
         if message_object.get('duration'):
              message = f"{message} ({message_object['duration']:.2f}s)"
-             
+
         return message
 
     def compose(self) -> ComposeResult:
@@ -124,13 +123,13 @@ class ExperimentRunFlowConsoleWidget(VerticalScroll):
     # or Textual handles it (Textual methods are generally not thread safe).
     # Since existing code had `self.refresh()` we'll keep it, but we should be careful.
     # Ideally: self.app.call_from_thread(self.refresh, recompose=True) if we possess 'app'.
-    
+
     def _trigger_refresh(self):
         # Safely trigger UI update from any thread
         try:
             # self.app raises NoActiveAppError/LookupError if not mounted or no active app
             app = self.app
-        except (Exception, LookupError): 
+        except (Exception, LookupError):
             app = None
 
         if app:

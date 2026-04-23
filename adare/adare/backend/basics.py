@@ -1,8 +1,8 @@
 # external imports
-from pathlib import Path
-
 # configure logging
 import logging
+from pathlib import Path
+
 log = logging.getLogger(__name__)
 
 
@@ -53,9 +53,8 @@ def determine_projectdirectory_for_removal(project_name: str) -> Path | None:
         with ProjectDbApi() as db:
             if project := db.get_project(project_name):
                 return Path(project.path)
-            else:
-                log.error(f"project {project_name} does not exist in database")
-                return None
+            log.error(f"project {project_name} does not exist in database")
+            return None
 
     # For removal, we still check current directory exists since it's being passed implicitly
     project_directory = Path.cwd()

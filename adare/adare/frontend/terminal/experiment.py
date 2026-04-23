@@ -1,17 +1,16 @@
 # external imports
-import datetime
+import logging
+
 import pandas as pd
 from rich.layout import Layout
-from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 from rich.rule import Rule
+from rich.table import Table
 
 # internal imports
 from adare.database.api.frontend import DataRetrievalApi
-from adare.frontend.terminal.console import pad_string_to_length, DefaultConsole, TagsText
+from adare.frontend.terminal.console import DefaultConsole, TagsText, pad_string_to_length
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -69,7 +68,7 @@ class InfoPanel:
             f'{pad_string_to_length("environments", 8)}: {self.experiment["environments"].values[0] or "None"}',
         )
 
-        title = f'[b medium_turquoise]info[/b medium_turquoise]'
+        title = '[b medium_turquoise]info[/b medium_turquoise]'
         return Panel(grid, title=title, border_style="blue", title_align="left")
 
 

@@ -4,13 +4,13 @@ Abstract Hypervisor Manager for thread-safe VM operations.
 All hypervisor implementations must provide a manager that implements
 thread-safe queued operations for VM management.
 """
-import asyncio
 import logging
 import queue
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ class AbstractHypervisorManager(ABC):
         self,
         vm_file_path: Path,
         vm_name: str,
-        environment_ulid: Optional[str] = None
+        environment_ulid: str | None = None
     ):
         """
         Import a VM from OVF/OVA file asynchronously.

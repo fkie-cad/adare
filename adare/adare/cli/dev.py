@@ -13,29 +13,27 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import Optional, List
 
-from adare.backend.basics import determine_projectdirectory
-from adare.exceptions import NoProjectFoundError
-from adare.helperfunctions.path_resolution import resolve_experiment_path
 from adare.api import AdareAPI
+from adare.backend.basics import determine_projectdirectory
+from adare.console import print_error_message, print_success_message
 from adare.core.dto.devmode import (
-    DevSessionStartRequest,
-    DevSessionStopRequest,
     DevActionExecuteRequest,
-    DevPlaybookExecuteRequest,
-    DevResetRequest,
     DevCheckpointCreateRequest,
-    DevCheckpointRestoreRequest,
     DevCheckpointListRequest,
-    DevSessionListRequest,
-    DevSessionStateRequest,
-    DevSessionCleanupRequest,
-    DevSessionRecordRequest,
+    DevCheckpointRestoreRequest,
     DevCVRestartRequest,
     DevCVStopRequest,
+    DevPlaybookExecuteRequest,
+    DevResetRequest,
+    DevSessionCleanupRequest,
+    DevSessionListRequest,
+    DevSessionRecordRequest,
+    DevSessionStartRequest,
+    DevSessionStateRequest,
+    DevSessionStopRequest,
 )
-from adare.console import print_success_message, print_error_message
+from adare.exceptions import NoProjectFoundError
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +62,7 @@ def _get_project_path(arguments):
     return project_directory
 
 
-def _resolve_session_id(session_id: Optional[str], project_directory: Optional[Path] = None) -> str:
+def _resolve_session_id(session_id: str | None, project_directory: Path | None = None) -> str:
     """
     Resolve session ID: use provided ID or auto-detect if only one session running.
 
@@ -121,8 +119,8 @@ def _resolve_session_id(session_id: Optional[str], project_directory: Optional[P
 
 def _start_event_listeners(console_ulid: str) -> None:
     """Start event coordinator and CLI listener for flow console integration."""
-    from adare.backend.events.listener import event_listener_cli
     from adare.backend.events.coordinator import start_stage_coordinator
+    from adare.backend.events.listener import event_listener_cli
 
     # Start coordinator
     start_stage_coordinator()
@@ -160,29 +158,31 @@ def _stop_event_listeners() -> None:
 
 def exec_dev_start(arguments):
     """Start dev session with flow console UI."""
-    import ulid
-    from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
     from pathlib import Path
+
+    import ulid
+
+    from adare.backend.experiment.print import ExperimentFlowConsole, flowconsolemanager
 
     # Setup
     project_directory = _get_project_path(arguments)
     log_file = Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
-    
+
     # Process shared directories
     # Format: host_path:vm_path
     shared_directories = {}
     raw_shared_dirs = getattr(arguments, 'shared_dir', None)
-    
+
     if raw_shared_dirs:
         for idx, dir_spec in enumerate(raw_shared_dirs):
             try:
                 host_path_str, vm_path_str = dir_spec.split(':', 1)
-                
+
                 # Setup structure expected by ExperimentConfig:
                 # Dict[str, Dict[str, Path]] = {name: {'host': Path, 'vm': Path}}
                 # Auto-generate name since user only provides paths
                 share_name = f"dev_shared_{idx+1}"
-                
+
 
                 host_path = Path(host_path_str).resolve()
                 if not host_path.exists():
@@ -236,7 +236,7 @@ def exec_dev_start(arguments):
                 next_steps=result.data.next_steps,
                 tip=result.data.tip
             )
-            
+
             if shared_directories:
                 print("\nShared Directories:")
                 for name, paths in shared_directories.items():
@@ -265,7 +265,8 @@ def exec_dev_start(arguments):
 def exec_dev_resume(arguments):
     """Resume a stopped dev mode session."""
     import ulid
-    from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
+
+    from adare.backend.experiment.print import ExperimentFlowConsole, flowconsolemanager
 
     # Setup
     project_directory = _get_project_path(arguments)
@@ -383,10 +384,11 @@ def exec_dev_list(arguments):
             print("\nStart a new session with: adare dev start <experiment> -e <environment>")
         else:
             # Use Rich table panel for display
-            from adare.frontend.terminal.dev_session_list import DevSessionTablePanel
-            from adare.frontend.terminal.console import DefaultConsole
-            from rich.layout import Layout
             import pandas as pd
+            from rich.layout import Layout
+
+            from adare.frontend.terminal.console import DefaultConsole
+            from adare.frontend.terminal.dev_session_list import DevSessionTablePanel
 
             # Convert to DataFrame
             data = []
@@ -400,16 +402,16 @@ def exec_dev_list(arguments):
                     'created_at': session.created_at,
                     'status': session.status,
                 })
-            
+
             df = pd.DataFrame(data)
-            
+
             # Print table
             console = DefaultConsole()
             layout = Layout(name="root")
             panel = DevSessionTablePanel(df)
             layout.update(panel)
             console.print(layout)
-            
+
             # Show action hint as footer if there are stopped sessions
             has_stopped = any(s.status == 'stopped' for s in result.data)
             if has_stopped:
@@ -510,7 +512,7 @@ def exec_dev_action(arguments):
     if result.success:
         action_result = result.data
         print_success_message(
-            title=f'Action executed successfully'
+            title='Action executed successfully'
         )
         print(f"\nSuccess: {action_result.success}")
         print(f"Message: {action_result.message}")
@@ -523,7 +525,7 @@ def exec_dev_action(arguments):
         _handle_api_error(result)
 
 
-def parse_indices_with_bounds(indices_str: str, total_actions: int) -> List[int]:
+def parse_indices_with_bounds(indices_str: str, total_actions: int) -> list[int]:
     """
     Parse indices string into a list of integers with S/E support.
 
@@ -577,7 +579,7 @@ def parse_indices_with_bounds(indices_str: str, total_actions: int) -> List[int]
     return sorted(list(indices))
 
 
-def _parse_indices(indices_str: Optional[str], total_actions: int) -> Optional[List[int]]:
+def _parse_indices(indices_str: str | None, total_actions: int) -> list[int] | None:
     """
     CLI wrapper for parse_indices_with_bounds.
     Returns None if indices_str is None, exits on error.
@@ -601,7 +603,8 @@ def _parse_indices(indices_str: Optional[str], total_actions: int) -> Optional[L
 def exec_dev_playbook(arguments):
     """Execute a playbook with flow console UI."""
     import ulid
-    from adare.backend.experiment.print import flowconsolemanager, ExperimentFlowConsole
+
+    from adare.backend.experiment.print import ExperimentFlowConsole, flowconsolemanager
 
     # AUTO-DETECT SESSION ID
     session_id = _resolve_session_id(arguments.session_id)
@@ -809,10 +812,11 @@ def exec_dev_checkpoint_list(arguments):
             print(f"\nCreate a checkpoint with: adare dev checkpoint-create -s {session_id} <name>")
         else:
             # Use Rich table panel for display
-            from adare.frontend.terminal.dev_session_list import DevCheckpointTablePanel
-            from adare.frontend.terminal.console import DefaultConsole
-            from rich.layout import Layout
             import pandas as pd
+            from rich.layout import Layout
+
+            from adare.frontend.terminal.console import DefaultConsole
+            from adare.frontend.terminal.dev_session_list import DevCheckpointTablePanel
 
             # Convert to DataFrame
             data = []
@@ -825,9 +829,9 @@ def exec_dev_checkpoint_list(arguments):
                     'file_size_mb': checkpoint.file_size_mb,
                     'checkpoint_id': checkpoint.checkpoint_id,
                 })
-            
+
             df = pd.DataFrame(data)
-            
+
             # Print table
             console = DefaultConsole()
             layout = Layout(name="root")
@@ -863,38 +867,38 @@ def exec_dev_checkpoint_delete(arguments):
 def exec_dev_record(arguments):
     """
     Record user interactions in a dev session.
-    
+
     Args:
         arguments: Parsed arguments
     """
     project_directory = _get_project_path(arguments)
     session_id = _resolve_session_id(getattr(arguments, 'session_id', None), project_directory)
     output_file = Path(getattr(arguments, 'output', 'playbook.yml')).resolve()
-    
+
     log.info(f"Recording session {session_id} to {output_file}")
     print(f"Starting recording for session {session_id}...")
     print(f"Output will be saved to: {output_file}")
     print("Press Ctrl+C to stop recording.")
-    
+
     api = AdareAPI()
-    
+
     try:
         # Start recording
         result = api.devmode.record_session(DevSessionRecordRequest(
             session_id=session_id,
             output_file=output_file
         ))
-        
+
         if not result.success:
             _handle_api_error(result)
-            
+
         # Loop until interrupted
         try:
             while True:
                 time.sleep(0.5)
         except KeyboardInterrupt:
             print("\nStopping recording...")
-            
+
             # Stop recording
             stop_result = api.devmode.stop_recording_session(session_id)
             if stop_result.success:
@@ -905,7 +909,7 @@ def exec_dev_record(arguments):
                 )
             else:
                 _handle_api_error(stop_result)
-                
+
     except Exception as e:
         print_error_message(title="Recording failed", next_steps=[str(e)])
         exit(1)
@@ -914,21 +918,21 @@ def exec_dev_record(arguments):
 def exec_dev_update_testfunctions(arguments):
     """
     Update test functions in the VM.
-    
+
     Args:
         arguments: Parsed arguments
     """
     project_directory = _get_project_path(arguments)
     session_id = _resolve_session_id(getattr(arguments, 'session_id', None), project_directory)
-    
+
     api = AdareAPI()
-    
+
     from adare.core.dto.devmode import DevUpdateTestfunctionsRequest
-    
+
     result = api.devmode.update_testfunctions(DevUpdateTestfunctionsRequest(
         session_id=session_id
     ))
-    
+
     if result.success:
         print_success_message(
             title="Test functions updated successfully",
@@ -944,26 +948,26 @@ def exec_dev_cv_start(arguments):
     """Start/Response CV server with new options."""
     # AUTO-DETECT SESSION ID
     session_id = _resolve_session_id(arguments.session_id)
-    
+
     # Parse debug flag
     debug = None
     if arguments.debug:
         debug = True
     elif arguments.no_debug:
         debug = False
-        
+
     # debug_output_dir
     debug_output_dir = None
     if arguments.debug_output:
         debug_output_dir = Path(arguments.debug_output)
-        
+
     api = AdareAPI()
     result = api.devmode.restart_cv_server(DevCVRestartRequest(
         session_id=session_id,
         debug=debug,
         debug_output_dir=debug_output_dir
     ))
-    
+
     if result.success:
         print_success_message(
             title=f'CV Server started/restarted for session {session_id}',
@@ -997,6 +1001,7 @@ def exec_dev_cv_stop(arguments):
 def exec_dev_playbook_batch(arguments):
     """Execute multiple playbooks with checkpoint restoration."""
     import ulid
+
     from adare.console.flow import ExperimentFlowConsole
     from adare.core.dto.devmode import DevPlaybookBatchExecuteRequest
 

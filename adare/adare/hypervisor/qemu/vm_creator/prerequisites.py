@@ -1,13 +1,13 @@
 """Prerequisite checks for VM creation."""
 
-import shutil
+import logging
 import platform
+import shutil
 from pathlib import Path
 
-from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 from adare.hypervisor.exceptions import HypervisorException
+from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -127,8 +127,9 @@ def check_prerequisites(os_def: OsDefinition, iso_path: Path | None = None) -> N
 
 def _check_disk_space(os_def: OsDefinition, missing: list[str]) -> None:
     """Check approximate free disk space for VM creation."""
-    from adare.config.configdirectory import APPDATA_DIR
     import shutil as _shutil
+
+    from adare.config.configdirectory import APPDATA_DIR
 
     try:
         usage = _shutil.disk_usage(APPDATA_DIR)

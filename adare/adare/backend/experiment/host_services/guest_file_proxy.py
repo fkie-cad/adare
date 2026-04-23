@@ -6,11 +6,10 @@ with caching to avoid re-downloading the same file multiple times.
 """
 
 import logging
-import tempfile
 import shutil
-from dataclasses import dataclass, field
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from .vm_operation_proxy import VMOperationProxy
 
@@ -20,13 +19,13 @@ log = logging.getLogger(__name__)
 @dataclass
 class FileMetadata:
     """Metadata collected from guest file via QGA stat."""
-    permissions: Optional[str] = None  # e.g. '0644'
-    owner: Optional[str] = None
-    group: Optional[str] = None
-    size: Optional[int] = None
-    mtime: Optional[float] = None  # modification time (epoch)
-    atime: Optional[float] = None  # access time (epoch)
-    ctime: Optional[float] = None  # change time (epoch)
+    permissions: str | None = None  # e.g. '0644'
+    owner: str | None = None
+    group: str | None = None
+    size: int | None = None
+    mtime: float | None = None  # modification time (epoch)
+    atime: float | None = None  # access time (epoch)
+    ctime: float | None = None  # change time (epoch)
 
 
 class GuestFileProxy(VMOperationProxy):
@@ -48,8 +47,8 @@ class GuestFileProxy(VMOperationProxy):
         """
         super().__init__(vm, guest_os)
         self._temp_root = Path(tempfile.mkdtemp(prefix='adare_host_test_'))
-        self._cache: Dict[str, Path] = {}  # guest_path → local_path
-        self._metadata_cache: Dict[str, FileMetadata] = {}
+        self._cache: dict[str, Path] = {}  # guest_path → local_path
+        self._metadata_cache: dict[str, FileMetadata] = {}
         log.debug(f"GuestFileProxy: temp root at {self._temp_root}")
 
     def _guest_path_to_local(self, guest_path: str) -> Path:
@@ -133,7 +132,7 @@ class GuestFileProxy(VMOperationProxy):
         log.debug(f"GuestFileProxy: pulled directory {guest_path} → {local_path}")
         return local_path
 
-    async def resolve_guest_glob(self, pattern: str) -> List[str]:
+    async def resolve_guest_glob(self, pattern: str) -> list[str]:
         """Resolve a glob/wildcard pattern on the guest side.
 
         Args:
@@ -272,7 +271,7 @@ class GuestFileProxy(VMOperationProxy):
         transfer = QGAFileTransfer(self.vm)
         return await transfer.file_exists(guest_path)
 
-    def get_cached_path(self, guest_path: str) -> Optional[Path]:
+    def get_cached_path(self, guest_path: str) -> Path | None:
         """Get the local cached path for a guest file, if already pulled.
 
         Args:

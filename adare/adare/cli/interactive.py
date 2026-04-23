@@ -1,10 +1,6 @@
 """CLI commands for interactive experiment development."""
 
 import logging
-from pathlib import Path
-
-from adare.backend.basics import determine_projectdirectory
-from adare.exceptions import NoProjectFoundError
 
 log = logging.getLogger(__name__)
 

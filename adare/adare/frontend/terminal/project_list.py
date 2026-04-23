@@ -1,16 +1,15 @@
 # external imports
+import logging
+
 import pandas as pd
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 
-# internal imports
-from adare.helperfunctions.cli import print_df, print_dict
-from adare.database.api.frontend import DataRetrievalApi
 from adare.frontend.terminal.console import DefaultConsole
-from adare.types.output_models import ProjectInfo
 
-import logging
+# internal imports
+
 log = logging.getLogger(__name__)
 
 
@@ -35,9 +34,10 @@ def print_project_list(formatter=None, output_file=None, dual_output=False):
     """Print project list in the configured output format."""
 
     # Get data from database - use global API directly for projects
+    import pandas as pd
+
     from adare.database.api.base import GlobalDatabaseApi
     from adare.database.models.global_models import Project
-    import pandas as pd
     with GlobalDatabaseApi() as db:
         projects = pd.read_sql(db._session.query(Project).statement, db._session.bind).map(str)
 

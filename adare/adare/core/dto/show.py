@@ -5,10 +5,9 @@ These DTOs provide type-safe request/response objects for show operations,
 enabling consistent interfaces across CLI, REST API, and Web UI.
 """
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import List, Optional, Dict, Any
 from datetime import datetime
-
+from pathlib import Path
+from typing import Any
 
 # =============================================================================
 # Request DTOs
@@ -17,16 +16,16 @@ from datetime import datetime
 @dataclass
 class RunListRequest:
     """Request for listing runs with filters."""
-    project: Optional[str] = None
-    environment: Optional[str] = None
-    experiment: Optional[str] = None
+    project: str | None = None
+    environment: str | None = None
+    experiment: str | None = None
 
 
 @dataclass
 class RunRemoveRequest:
     """Request to remove a run."""
     ulid: str
-    project_path: Optional[Path] = None
+    project_path: Path | None = None
 
 
 # =============================================================================
@@ -42,15 +41,15 @@ class RunListItem:
     environment_name: str
     environment_ulid: str
     project_name: str
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
     duration_seconds: float = 0.0
     status: str = ""
     result_status: str = ""
     published: bool = False
     fake: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'ulid': self.ulid,
@@ -86,8 +85,8 @@ class RunDetail:
     environment_name: str
     environment_ulid: str
     project_name: str
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
     duration_seconds: float = 0.0
     status: str = ""
     result_status: str = ""
@@ -95,7 +94,7 @@ class RunDetail:
     fake: bool = False
     os_info: str = ""
     vm_box: str = ""
-    test_results: List[Dict[str, Any]] = field(default_factory=list)
+    test_results: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -111,11 +110,11 @@ class ProjectListItem:
     """Single project item in list."""
     name: str
     description: str = ""
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
     experiment_count: int = 0
     environment_count: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'name': self.name,
@@ -144,10 +143,10 @@ class EnvironmentListItem:
     osinfo_language: str = ""
     published: bool = False
     in_request: bool = False
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
     file: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'ulid': self.ulid,
@@ -196,7 +195,7 @@ class EnvironmentDetail:
     osinfo_language: str = ""
     published: bool = False
     in_request: bool = False
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
     file: str = ""
     experiment_count: int = 0
 
@@ -210,16 +209,16 @@ class ExperimentListItem:
     dotnotation: str
     project: str
     environment: str
-    environments: List[str] = field(default_factory=list)
+    environments: list[str] = field(default_factory=list)
     description: str = ""
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     published: bool = False
     in_request: bool = False
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
     run_count: int = 0
-    last_run: Optional[datetime] = None
+    last_run: datetime | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'ulid': self.ulid,
@@ -252,15 +251,15 @@ class ExperimentDetail:
     dotnotation: str
     project: str
     environment: str
-    environments: List[str] = field(default_factory=list)
+    environments: list[str] = field(default_factory=list)
     description: str = ""
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     published: bool = False
     in_request: bool = False
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
     run_count: int = 0
-    last_run: Optional[datetime] = None
-    playbook_items: List[Dict[str, Any]] = field(default_factory=list)
+    last_run: datetime | None = None
+    playbook_items: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -272,7 +271,7 @@ class TestfunctionListItem:
     display_name: str
     description: str = ""
     parameter_count: int = 0
-    parameters: List[Dict[str, Any]] = field(default_factory=list)
+    parameters: list[dict[str, Any]] = field(default_factory=list)
     file_id: str = ""
     file_name: str = ""
     file_path: str = ""
@@ -280,7 +279,7 @@ class TestfunctionListItem:
     file_sha256: str = ""
     file_description: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON/YAML serialization."""
         return {
             'id': self.id,
@@ -310,7 +309,7 @@ class TestfunctionDetail:
     display_name: str
     description: str = ""
     parameter_count: int = 0
-    parameters: List[Dict[str, Any]] = field(default_factory=list)
+    parameters: list[dict[str, Any]] = field(default_factory=list)
     file_id: str = ""
     file_name: str = ""
     file_path: str = ""

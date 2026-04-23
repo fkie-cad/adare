@@ -1,4 +1,6 @@
 # external imports
+import logging
+
 import pandas as pd
 from rich.layout import Layout
 from rich.panel import Panel
@@ -6,11 +8,9 @@ from rich.table import Table
 
 # internal imports
 from adare.database.api.base import GlobalDatabaseApi
-from adare.database.models.global_models import Environment, Vm, OsInfo
+from adare.database.models.global_models import Environment, OsInfo, Vm
 from adare.frontend.terminal.console import DefaultConsole
-from adare.types.output_models import EnvironmentInfo
 
-import logging
 log = logging.getLogger(__name__)
 
 

@@ -1,13 +1,12 @@
 """Tests for BaseVMCreator abstract base class and Template Method pattern."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import patch
 
 import pytest
 
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
-
 
 # --- Helpers ---
 

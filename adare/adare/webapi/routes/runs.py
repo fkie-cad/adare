@@ -1,6 +1,5 @@
 """Run management endpoints."""
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Query
 
@@ -22,9 +21,9 @@ def _api():
 
 @router.get("")
 async def list_runs(
-    project: Optional[str] = Query(None),
-    environment: Optional[str] = Query(None),
-    experiment: Optional[str] = Query(None),
+    project: str | None = Query(None),
+    environment: str | None = Query(None),
+    experiment: str | None = Query(None),
 ):
     """List all runs with optional filters."""
     from adare.core.dto.show import RunListRequest
@@ -46,9 +45,10 @@ async def get_run(ulid: str):
 
 
 @router.delete("/{ulid}")
-async def remove_run(ulid: str, project_path: Optional[str] = Query(None)):
+async def remove_run(ulid: str, project_path: str | None = Query(None)):
     """Remove a run by ULID."""
     from pathlib import Path
+
     from adare.core.dto.show import RunRemoveRequest
 
     dto = RunRemoveRequest(

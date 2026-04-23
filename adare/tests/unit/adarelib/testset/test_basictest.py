@@ -1,11 +1,8 @@
 """Tests for BasicTest, resolve_var_in_match, and resolve_yamlobj_in_dict."""
 
 import re
-from typing import Optional
-from unittest.mock import MagicMock
 
 import attrs
-import pytest
 
 from adarelib.testset.basictest import (
     BasicTest,
@@ -14,7 +11,6 @@ from adarelib.testset.basictest import (
     resolve_yamlobj_in_dict,
 )
 from adarelib.testset.yaml.customtags import YamlString
-
 
 # ---------------------------------------------------------------------------
 # Helpers

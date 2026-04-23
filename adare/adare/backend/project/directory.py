@@ -1,16 +1,26 @@
 # external imports
-from pathlib import Path
-import shutil
-
-# internal imports
-from adare.config.configdirectory import ADARE_DIR, APPDATA_DIR, ADAREVM_DIR, ADARELIB_DIR, VMS_DIR, ENVIRONMENTS_DIR, STATE_DIR
-from adare.helperfunctions.web.download import download
-from adare.backend.project.exceptions import ProjectDirectoryCreationError, ProjectDirectoryRemovalError, ProjectDirectoryCopyError
-from adare.backend.directory import Directory
-from adare.helperfunctions.hash import hash_file_sha256, combine_hashes
-
 # configure logging
 import logging
+import shutil
+from pathlib import Path
+
+from adare.backend.directory import Directory
+from adare.backend.project.exceptions import (
+    ProjectDirectoryCopyError,
+    ProjectDirectoryCreationError,
+    ProjectDirectoryRemovalError,
+)
+
+# internal imports
+from adare.config.configdirectory import (
+    ADARELIB_DIR,
+    ADAREVM_DIR,
+    ENVIRONMENTS_DIR,
+    VMS_DIR,
+)
+from adare.helperfunctions.hash import combine_hashes, hash_file_sha256
+from adare.helperfunctions.web.download import download
+
 log = logging.getLogger(__name__)
 
 

@@ -16,10 +16,10 @@ import subprocess
 from typing import Optional
 
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
-from adare.hypervisor.qemu.file_transfer.virtiofs_strategy import VirtioFSStrategy
 from adare.hypervisor.qemu.file_transfer.libguestfs_strategy import LibguestfsStrategy
 from adare.hypervisor.qemu.file_transfer.qga_strategy import QGAStrategy
 from adare.hypervisor.qemu.file_transfer.smb_strategy import SMBStrategy
+from adare.hypervisor.qemu.file_transfer.virtiofs_strategy import VirtioFSStrategy
 
 log = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def _guestfish_appliance_available() -> bool:
     return False
 
 
-def _get_qemu_expected_smbd_path() -> Optional[str]:
+def _get_qemu_expected_smbd_path() -> str | None:
     """Extract the smbd path that QEMU was compiled to use.
 
     QEMU hardcodes the smbd path at compile time (e.g. /opt/local/sbin/smbd
@@ -113,7 +113,7 @@ def _get_qemu_expected_smbd_path() -> Optional[str]:
     return None
 
 
-def _find_real_samba_smbd() -> Optional[str]:
+def _find_real_samba_smbd() -> str | None:
     """Locate the real Samba smbd binary (not Apple's built-in)."""
     candidates = [
         '/opt/homebrew/opt/samba/sbin/samba-dot-org-smbd',
@@ -246,9 +246,8 @@ def get_file_transfer_strategy(
 
     if mode == 'virtiofs':
         return VirtioFSStrategy()
-    elif mode == 'smb':
+    if mode == 'smb':
         return SMBStrategy()
-    elif mode == 'qga':
+    if mode == 'qga':
         return QGAStrategy()
-    else:
-        return LibguestfsStrategy(guestfish_client)
+    return LibguestfsStrategy(guestfish_client)

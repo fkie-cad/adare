@@ -1,32 +1,30 @@
 # external imports
-from typing import List, Optional
-import pandas as pd
-from pathlib import Path
-from sqlalchemy.orm import joinedload, selectinload
-
-# internal imports
-from adare.database.models.global_models import (
-    Project, Environment, TestFunction, TestParameter, TestFunctionFile, Vm, OsInfo
-)
-from adare.database.models.project_models import (
-    Experiment, ExperimentRun, 
-)
-from adare.database.api.database import DatabaseApi
-import adare.config.database as config_database
-from adare.types.output_models import (
-    ProjectInfo, EnvironmentInfo, ExperimentInfo, TestFunctionInfo, RunInfo
-)
-from adare.database.utils.display_helpers import (
-    get_smart_display_name, safe_get_sync_status, safe_get_os_info,
-    safe_get_vm_info, safe_get_tags, get_current_project_name
-)
-from adare.database.utils.error_handling import (
-    safe_query_first, safe_query_all, safe_count, validate_ulid,
-    ObjectNotFoundError, DataRetrievalError
-)
-
 # configure logging
 import logging
+from pathlib import Path
+
+from sqlalchemy.orm import joinedload, selectinload
+
+import adare.config.database as config_database
+from adare.database.api.database import DatabaseApi
+
+# internal imports
+from adare.database.models.global_models import Environment, Project, TestFunction, TestFunctionFile, Vm
+from adare.database.models.project_models import (
+    Experiment,
+    ExperimentRun,
+)
+from adare.database.utils.display_helpers import (
+    get_current_project_name,
+    get_smart_display_name,
+    safe_get_os_info,
+    safe_get_sync_status,
+    safe_get_tags,
+    safe_get_vm_info,
+)
+from adare.database.utils.error_handling import DataRetrievalError, safe_query_all, safe_query_first
+from adare.types.output_models import EnvironmentInfo, ExperimentInfo, ProjectInfo, RunInfo, TestFunctionInfo
+
 log = logging.getLogger(__name__)
 
 
@@ -41,7 +39,7 @@ class StructuredDataApi(DatabaseApi):
     def __init__(self, db_path: Path = config_database.get_database_location()):
         super().__init__(db_path)
 
-    def get_projects_structured(self) -> List[ProjectInfo]:
+    def get_projects_structured(self) -> list[ProjectInfo]:
         """Get all projects as structured ProjectInfo objects."""
         projects = safe_query_all(self._session.query(Project))
         result = []
@@ -56,7 +54,7 @@ class StructuredDataApi(DatabaseApi):
 
         return result
 
-    def get_environments_structured(self) -> List[EnvironmentInfo]:
+    def get_environments_structured(self) -> list[EnvironmentInfo]:
         """Get all environments as structured EnvironmentInfo objects."""
         # Use eager loading to prevent N+1 queries
         environments = safe_query_all(self._session.query(Environment).options(
@@ -96,7 +94,7 @@ class StructuredDataApi(DatabaseApi):
 
         return result
 
-    def get_experiments_structured(self, project_name: str = None) -> List[ExperimentInfo]:
+    def get_experiments_structured(self, project_name: str = None) -> list[ExperimentInfo]:
         """Get all experiments as structured ExperimentInfo objects."""
         # Use eager loading to prevent N+1 queries
         experiments = safe_query_all(self._session.query(Experiment).options(
@@ -135,7 +133,7 @@ class StructuredDataApi(DatabaseApi):
 
         return result
 
-    def get_testfunctions_structured(self, include_parameters: bool = True, testfunction_file: str = None) -> List[TestFunctionInfo]:
+    def get_testfunctions_structured(self, include_parameters: bool = True, testfunction_file: str = None) -> list[TestFunctionInfo]:
         """Get all testfunctions as structured TestFunctionInfo objects."""
         # Validate testfunction_file parameter if provided
         if testfunction_file and not isinstance(testfunction_file, str):
@@ -218,7 +216,7 @@ class StructuredDataApi(DatabaseApi):
 
         return result
 
-    def get_runs_structured(self, project_name: str = None, environment_name: str = None, experiment_name: str = None) -> List[RunInfo]:
+    def get_runs_structured(self, project_name: str = None, environment_name: str = None, experiment_name: str = None) -> list[RunInfo]:
         """Get runs as structured RunInfo objects with optional filtering."""
         # Validate input parameters
         for param_name, param_value in [('project_name', project_name), ('environment_name', environment_name), ('experiment_name', experiment_name)]:

@@ -6,10 +6,9 @@ common system-state queries used by testfunctions.
 """
 
 import logging
-from dataclasses import dataclass
-from typing import Optional
 
 from adare.hypervisor.base.models import CommandResult
+
 from .vm_operation_proxy import VMOperationProxy
 
 log = logging.getLogger(__name__)
@@ -35,7 +34,7 @@ class GuestCommandProxy(VMOperationProxy):
         super().__init__(vm, guest_os)
 
     async def run(self, command: str, silent: bool = False, admin: bool = False,
-                  cwd: Optional[str] = None) -> CommandResult:
+                  cwd: str | None = None) -> CommandResult:
         """Execute a command on the guest via QGA.
 
         Args:
@@ -88,10 +87,9 @@ class GuestCommandProxy(VMOperationProxy):
             cmd = f'(Get-Service -Name "{service_name}" -ErrorAction SilentlyContinue).Status'
             result = await self.run(cmd, silent=True)
             return result.stdout.strip().lower() if result.returncode == 0 else 'unknown'
-        else:
-            cmd = f"systemctl is-active '{service_name}' 2>/dev/null || echo unknown"
-            result = await self.run(cmd, silent=True)
-            return result.stdout.strip()
+        cmd = f"systemctl is-active '{service_name}' 2>/dev/null || echo unknown"
+        result = await self.run(cmd, silent=True)
+        return result.stdout.strip()
 
     async def user_exists(self, username: str) -> bool:
         """Check if a user account exists on the guest.
@@ -215,7 +213,7 @@ class GuestCommandProxy(VMOperationProxy):
         result = await self.run(cmd, silent=True)
         return 'EXISTS' in result.stdout
 
-    async def registry_value_get(self, key_path: str, value_name: str) -> tuple[bool, Optional[str], Optional[str]]:
+    async def registry_value_get(self, key_path: str, value_name: str) -> tuple[bool, str | None, str | None]:
         """Get a Windows registry value.
 
         Args:

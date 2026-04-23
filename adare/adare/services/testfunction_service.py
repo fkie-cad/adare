@@ -4,30 +4,31 @@ Testfunction Service - Business logic for testfunction operations.
 This service handles testfunction-related operations and returns Result[T] objects
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
-from pathlib import Path
-from typing import List, Optional
 
 import logging
 
+from adare.backend.testfunction import database as testfunction_database
 from adare.backend.testfunction.commands import (
     testfunction_create as backend_testfunction_create,
+)
+from adare.backend.testfunction.commands import (
     testfunction_load_global as backend_testfunction_load_global,
+)
+from adare.backend.testfunction.commands import (
     testfunction_remove as backend_testfunction_remove,
 )
-from adare.backend.testfunction import database as testfunction_database
 from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
-from adare.database.api.testfunction import TestfunctionDbApi
-from adare.core.result import Result
 from adare.core.dto.testfunction import (
     TestfunctionCreateRequest,
-    TestfunctionLoadRequest,
-    TestfunctionRemoveRequest,
+    TestfunctionExistsResult,
     TestfunctionInfo,
     TestfunctionListItem,
-    TestfunctionUsage,
+    TestfunctionLoadRequest,
     TestfunctionRemoveResult,
-    TestfunctionExistsResult,
+    TestfunctionUsage,
 )
+from adare.core.result import Result
+from adare.database.api.testfunction import TestfunctionDbApi
 
 log = logging.getLogger(__name__)
 
@@ -54,8 +55,8 @@ class TestfunctionService:
             backend_testfunction_create(request.project_path, request.name)
 
             next_steps = [
-                f'Edit the testfunction Python file to define your test logic',
-                f'Add dependencies to requirements.txt if needed',
+                'Edit the testfunction Python file to define your test logic',
+                'Add dependencies to requirements.txt if needed',
                 f'Load the testfunction with: adare testfunction load {request.name}',
             ]
 
@@ -95,7 +96,7 @@ class TestfunctionService:
 
             next_steps = [
                 f'Testfunction "{name}" is now available for experiments',
-                f'Reference it in your experiment playbook tests section',
+                'Reference it in your experiment playbook tests section',
             ]
 
             return Result.ok(TestfunctionInfo(
@@ -162,7 +163,7 @@ class TestfunctionService:
         except TestfunctionMissingFileError as e:
             return Result.from_exception(e)
 
-    def list_all(self) -> Result[List[TestfunctionListItem]]:
+    def list_all(self) -> Result[list[TestfunctionListItem]]:
         """
         List all testfunctions in the system.
 

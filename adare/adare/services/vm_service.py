@@ -4,43 +4,39 @@ VM Service - Business logic for VM operations.
 This service handles all VM-related operations and returns Result[T] objects
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
-from pathlib import Path
-from typing import List, Optional
 
 import logging
 
-from adare.backend.vm import database as vm_database
 from adare.backend.vm.commands import (
-    load_vm as backend_load_vm,
-    list_all_vms as backend_list_all_vms,
-    get_vm_info as backend_get_vm_info,
     clear_all_vms as backend_clear_all_vms,
+)
+from adare.backend.vm.commands import (
     clear_vms_by_environment as backend_clear_vms_by_environment,
 )
-from adare.backend.vm.exceptions import VMError
-from adare.database.api.vm import (
-    VmApi,
-    VMNotFoundError,
-    VMValidationError,
-    VMLoadError,
-    VMNameConflictError,
+from adare.backend.vm.commands import (
+    load_vm as backend_load_vm,
 )
-from adare.core.result import Result
+from adare.backend.vm.exceptions import VMError
 from adare.core.dto.vm import (
-    VmLoadRequest,
-    VmDeleteRequest,
+    VmClearResult,
     VmInfo,
-    VmListItem,
-    VmInstanceRemoveRequest,
+    VmInstanceCleanupResult,
     VmInstanceInfo,
     VmInstanceListItem,
     VmInstanceUsage,
+    VmListItem,
+    VmLoadRequest,
     VmSnapshotInfo,
-    VmSnapshotDeleteRequest,
-    VmClearResult,
-    VmInstanceCleanupResult,
     VmTestRequest,
     VmTestResult,
+)
+from adare.core.result import Result
+from adare.database.api.vm import (
+    VmApi,
+    VMLoadError,
+    VMNameConflictError,
+    VMNotFoundError,
+    VMValidationError,
 )
 
 log = logging.getLogger(__name__)
@@ -88,7 +84,7 @@ class VMService:
             if vm_info.success:
                 # Add next steps
                 vm_info.data.next_steps = [
-                    f'Create an environment that uses this VM',
+                    'Create an environment that uses this VM',
                     f'View VM details with: adare vm info {vm_info.data.name}',
                 ]
                 vm_info.data.tip = f'VM "{vm_info.data.name}" is ready for use in environments'
@@ -104,7 +100,7 @@ class VMService:
         except VMError as e:
             return Result.from_exception(e)
 
-    def list_all(self) -> Result[List[VmListItem]]:
+    def list_all(self) -> Result[list[VmListItem]]:
         """
         List all VMs in the system.
 
@@ -329,7 +325,7 @@ class VMService:
     # VM Instance Management
     # =========================================================================
 
-    def list_instances(self, vm_id: Optional[str] = None) -> Result[List[VmInstanceListItem]]:
+    def list_instances(self, vm_id: str | None = None) -> Result[list[VmInstanceListItem]]:
         """
         List all VM instances, optionally filtered by VM.
 
@@ -490,7 +486,7 @@ class VMService:
     # VM Snapshot Management
     # =========================================================================
 
-    def list_snapshots(self, instance_id: Optional[str] = None) -> Result[List[VmSnapshotInfo]]:
+    def list_snapshots(self, instance_id: str | None = None) -> Result[list[VmSnapshotInfo]]:
         """
         List all snapshots, optionally filtered by VM instance.
 
@@ -572,15 +568,14 @@ class VMService:
 
             if success:
                 return Result.ok(None)
-            else:
-                return Result.fail(
-                    code="SnapshotDeleteError",
-                    message=f'Failed to delete snapshot "{snapshot_name}": {msg}',
-                    solutions=[
-                        'Check if the snapshot exists',
-                        'Ensure the VM is not running',
-                    ]
-                )
+            return Result.fail(
+                code="SnapshotDeleteError",
+                message=f'Failed to delete snapshot "{snapshot_name}": {msg}',
+                solutions=[
+                    'Check if the snapshot exists',
+                    'Ensure the VM is not running',
+                ]
+            )
 
         except VMNotFoundError as e:
             return Result.from_exception(e)
@@ -618,13 +613,12 @@ class VMService:
                     guest_platform=request.guest_platform,
                     message='VM test completed successfully! OVA file is compatible with ADARE.'
                 ))
-            else:
-                return Result.ok(VmTestResult(
-                    success=False,
-                    ova_file=str(request.ova_file_path),
-                    guest_platform=request.guest_platform,
-                    message='VM test failed! OVA file may not be compatible with ADARE.'
-                ))
+            return Result.ok(VmTestResult(
+                success=False,
+                ova_file=str(request.ova_file_path),
+                guest_platform=request.guest_platform,
+                message='VM test failed! OVA file may not be compatible with ADARE.'
+            ))
 
         except VMError as e:
             return Result.from_exception(e)

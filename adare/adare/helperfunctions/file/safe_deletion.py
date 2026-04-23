@@ -1,10 +1,11 @@
 # external imports
-import shutil
-from retry import retry
-from pathlib import Path
-
 # configure logging
 import logging
+import shutil
+from pathlib import Path
+
+from retry import retry
+
 log = logging.getLogger(__name__)
 
 

@@ -4,29 +4,26 @@ Project Service - Business logic for project operations.
 This service handles all project-related operations and returns Result[T] objects
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
-from pathlib import Path
-from typing import List
-
 import logging
+from pathlib import Path
 
 import adare.backend.project.database as project_database
 from adare.backend.project.directory import ProjectDirectory
 from adare.backend.project.exceptions import (
+    ProjectDirectoryCopyError,
     ProjectDirectoryCreationError,
     ProjectDirectoryRemovalError,
-    ProjectDirectoryCopyError,
-    ProjectMissingInDatabaseError,
 )
-from adare.database.exceptions import DatabaseProjectCreationError
-from adare.database.init import ensure_project_database_exists, DatabaseInitializationError
-from adare.database.fixtures import fixture_stages, fixture_status
-from adare.core.result import Result
 from adare.core.dto.project import (
     ProjectCreateRequest,
     ProjectInfo,
     ProjectListItem,
     ProjectRemoveRequest,
 )
+from adare.core.result import Result
+from adare.database.exceptions import DatabaseProjectCreationError
+from adare.database.fixtures import fixture_stages, fixture_status
+from adare.database.init import DatabaseInitializationError, ensure_project_database_exists
 
 log = logging.getLogger(__name__)
 
@@ -100,10 +97,10 @@ class ProjectService:
 
         # Build next steps - data only, no presentation
         next_steps = [
-            f'Create an environment with: adare environment create <environment_name>',
-            f'Create an experiment with: adare experiment create <experiment_name>',
-            f'Use all available testfunction sets: files, json, csv, sqlite, linux, windows',
-            f'Run your first experiment with: adare experiment run <experiment> -e <environment>'
+            'Create an environment with: adare environment create <environment_name>',
+            'Create an experiment with: adare experiment create <experiment_name>',
+            'Use all available testfunction sets: files, json, csv, sqlite, linux, windows',
+            'Run your first experiment with: adare experiment run <experiment> -e <environment>'
         ]
 
         return Result.ok(ProjectInfo(
@@ -158,7 +155,7 @@ class ProjectService:
 
         return Result.ok(None)
 
-    def list_all(self) -> Result[List[ProjectListItem]]:
+    def list_all(self) -> Result[list[ProjectListItem]]:
         """
         List all projects.
 

@@ -6,7 +6,7 @@ abstracting away the WebSocket client details for host-side tests.
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class ScreenshotService:
         """
         self.client = websocket_client
 
-    async def take(self, window: Optional[str] = None) -> Dict[str, Any]:
+    async def take(self, window: str | None = None) -> dict[str, Any]:
         """
         Take screenshot from VM.
 
@@ -60,11 +60,10 @@ class ScreenshotService:
                 screenshot = screenshots[0]
                 log.debug(f"Screenshot Service: Captured window '{window}' at offset ({screenshot.get('offset', {}).get('x', 0)}, {screenshot.get('offset', {}).get('y', 0)})")
                 return screenshot
-            else:
-                log.debug("Screenshot Service: Capturing full screen")
-                screenshot = await self.client.take_screenshot()
-                log.debug("Screenshot Service: Full screen captured")
-                return screenshot
+            log.debug("Screenshot Service: Capturing full screen")
+            screenshot = await self.client.take_screenshot()
+            log.debug("Screenshot Service: Full screen captured")
+            return screenshot
 
         except ValueError:
             # Re-raise ValueError as-is (window not found)
@@ -79,7 +78,7 @@ class ScreenshotService:
         y: int,
         width: int,
         height: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Take screenshot of specific screen region.
 
@@ -121,7 +120,7 @@ class ScreenshotService:
             log.error(f"Screenshot Service: Region capture failed: {e}", exc_info=True)
             raise RuntimeError(f"Region screenshot capture failed: {e}")
 
-    async def take_all_windows(self, window_pattern: str) -> List[Dict[str, Any]]:
+    async def take_all_windows(self, window_pattern: str) -> list[dict[str, Any]]:
         """
         Take screenshots of all windows matching a pattern.
 

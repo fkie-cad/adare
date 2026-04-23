@@ -1,16 +1,15 @@
 """Tests for GuestToHostTestExecutor refactored to use HostModeCategory ClassVar."""
 
+from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
-from typing import ClassVar, Optional
 
 import attrs
 import pytest
 
-from adarelib.testset.basictest import BasicTest, Parameter, HostModeCategory
-from adarelib.event.event import TestResult
-from adarelib.constants import StatusEnum
 from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
-
+from adarelib.constants import StatusEnum
+from adarelib.event.event import TestResult
+from adarelib.testset.basictest import BasicTest, HostModeCategory, Parameter
 
 # ============================================================================
 # Test fixtures: minimal attrs-based test classes
@@ -30,8 +29,8 @@ class FileBasedTest(BasicTest):
 
     name: str = 'test_file_exists'
     parameter: DummyParam = attrs.Factory(DummyParam)
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
+    description: str | None = ''
+    variable_metadata: dict | None = None
 
 
 @attrs.define
@@ -43,8 +42,8 @@ class FileContentTest(BasicTest):
 
     name: str = 'test_contains_key'
     parameter: DummyParam = attrs.Factory(DummyParam)
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
+    description: str | None = ''
+    variable_metadata: dict | None = None
 
 
 @attrs.define
@@ -61,8 +60,8 @@ class QGAProbeTest(BasicTest):
 
     name: str = 'test_process_running'
     parameter: QGAProbeParam = attrs.Factory(QGAProbeParam)
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
+    description: str | None = ''
+    variable_metadata: dict | None = None
 
 
 @attrs.define
@@ -75,8 +74,8 @@ class HostNativeTest(BasicTest):
 
     name: str = 'test_visual'
     parameter: DummyParam = attrs.Factory(DummyParam)
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
+    description: str | None = ''
+    variable_metadata: dict | None = None
 
 
 @attrs.define
@@ -87,8 +86,8 @@ class AgentOnlyTest(BasicTest):
 
     name: str = 'test_agent_only'
     parameter: DummyParam = attrs.Factory(DummyParam)
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
+    description: str | None = ''
+    variable_metadata: dict | None = None
 
 
 @attrs.define
@@ -99,8 +98,8 @@ class NoCategoryTest(BasicTest):
 
     name: str = 'test_no_category'
     parameter: DummyParam = attrs.Factory(DummyParam)
-    description: Optional[str] = ''
-    variable_metadata: Optional[dict] = None
+    description: str | None = ''
+    variable_metadata: dict | None = None
 
 
 # ============================================================================

@@ -1,13 +1,15 @@
 # external imports
-from typing import Literal, Optional
-import attrs
+# configure logging
+import logging
 from pathlib import Path
+from typing import Literal
+
+import attrs
 import cattrs
+
 from adare.exceptions import DataStructuringError
 from adarelib.helper.yaml import yaml_to_dict
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -18,8 +20,8 @@ class PostsetupInstallations:
     """
     name: str
     command: str
-    description: Optional[str] = ''
-    cwd: Optional[str] = ''
+    description: str | None = ''
+    cwd: str | None = ''
     shell: bool = attrs.field(default=False)
 
 
@@ -65,7 +67,7 @@ class EnvironmentMetadata:
     vm: str
     os: OsInfo
 
-    name: Optional[str] = None
+    name: str | None = None
     postsetupinstallations: list[PostsetupInstallations] = attrs.Factory(list)
     tags: list[str] = attrs.Factory(list)
     description: str = attrs.Factory(str)
@@ -77,18 +79,18 @@ class EnvironmentMetadata:
     hypervisor_config: dict = attrs.Factory(dict)  # Hypervisor-specific configuration
 
     # Legacy Vagrant-based environment fields (for backward compatibility)
-    vagrantbox: Optional[str] = None
+    vagrantbox: str | None = None
 
     def __attrs_post_init__(self):
         """Validate that either vm or vagrantbox is specified."""
         if not self.vm and not self.vagrantbox:
             raise ValueError("Either 'vm' or 'vagrantbox' must be specified")
-    
+
     @property
     def is_vagrant_environment(self) -> bool:
         """Check if this is a legacy Vagrant-based environment."""
         return self.vagrantbox is not None
-    
+
     @property
     def is_vm_environment(self) -> bool:
         """Check if this is a modern VM-based environment."""

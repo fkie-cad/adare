@@ -11,8 +11,7 @@ Windows guests mount via `virtiofs.exe -t {tag} -m C:\\adare\\{name}`.
 import json
 import logging
 import shutil
-from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
@@ -156,7 +155,7 @@ class VirtioFSStrategy(FileTransferStrategy):
         context: Any,
         is_windows: bool,
         base_mount: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Build the list of virtio-fs share specifications.
 
         Delegates to the shared build_share_list() utility.

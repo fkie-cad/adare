@@ -8,14 +8,14 @@ Moved from adare.types.backend to consolidate application-specific types.
 """
 
 # external imports
+# configure logging
+import logging
 from abc import abstractmethod
-from typing import Union, Literal, Optional
+
 import attrs
 
 import adare.config as config
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -25,11 +25,11 @@ class UsbDevice:
     Class to store information about a USB device.
     """
     name: str
-    VendorId: Union[str, None] = None
-    ProductId: Union[str, None] = None
-    Manufacturer: Union[str, None] = None
-    Product: Union[str, None] = None
-    SerialNumber: Union[str, None] = None
+    VendorId: str | None = None
+    ProductId: str | None = None
+    Manufacturer: str | None = None
+    Product: str | None = None
+    SerialNumber: str | None = None
 
 
 # PostsetupInstallations and OsInfo are imported from environment.py when needed
@@ -284,7 +284,7 @@ class SMBConfiguration:
             log.error(
                 f'user {user.name} does already exist in the SMB configuration and could therefore not be added to the SMB configuration')
 
-    def get_user_by_name(self, name: str) -> Optional[SMBUser]:
+    def get_user_by_name(self, name: str) -> SMBUser | None:
         for u in self.users:
             if u.name == name:
                 return u

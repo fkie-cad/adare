@@ -9,24 +9,19 @@ This module provides a robust foundation for database operations with:
 - Standardized query patterns
 """
 
-import logging
 import functools
-from typing import Optional, Type, TypeVar, Dict, Any, List, Union
-from pathlib import Path
+import logging
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, TypeVar
 
 import sqlalchemy
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 import ulid
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import sessionmaker
 
 import adare.config.database as config_database
-from adare.database.exceptions import (
-    DatabaseError,
-    EntityNotFoundError,
-    ValidationError,
-    DatabaseConnectionError
-)
+from adare.database.exceptions import DatabaseConnectionError, DatabaseError, EntityNotFoundError, ValidationError
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +61,7 @@ def handle_db_errors(func):
 class EnhancedDatabaseApi:
     """
     Enhanced base database API with improved patterns and error handling.
-    
+
     Features:
     - ULID-based entity management
     - Comprehensive error handling
@@ -74,14 +69,14 @@ class EnhancedDatabaseApi:
     - Input validation
     - Query optimization helpers
     """
-    
-    def __init__(self, db_path: Optional[Path] = None):
+
+    def __init__(self, db_path: Path | None = None):
         self.db_path = db_path or config_database.get_database_location()
         self._engine = None
         self._session = None
         self._session_factory = None
         self._setup_database()
-    
+
     def _setup_database(self):
         """Initialize database connection and session factory."""
         try:
@@ -96,21 +91,21 @@ class EnhancedDatabaseApi:
                 autocommit=False,
                 expire_on_commit=False
             )
-        except (SQLAlchemyError, OSError, IOError, PermissionError) as e:
+        except (SQLAlchemyError, OSError, PermissionError) as e:
             log.error(f"Failed to setup database: {e}")
             raise DatabaseConnectionError(log, f"Cannot connect to database: {e}")
         # Remove generic Exception - let unexpected errors propagate naturally
-    
+
     @property
     def engine(self) -> sqlalchemy.Engine:
         """Get the database engine."""
         return self._engine
-    
+
     def __enter__(self):
         """Context manager entry - start session."""
         self._start_session()
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - handle session cleanup."""
         if self._session:
@@ -126,25 +121,25 @@ class EnhancedDatabaseApi:
             finally:
                 self._session.close()
                 self._session = None
-    
+
     def _start_session(self):
         """Start a new database session."""
         if self._session:
             log.debug("Session already active, reusing existing session")
             return
-        
+
         try:
             self._session = self._session_factory()
         except Exception as e:
             log.error(f"Failed to start session: {e}")
             raise DatabaseConnectionError(log, f"Cannot start database session: {e}")
-    
+
     @contextmanager
     def transaction(self):
         """Context manager for explicit transaction control."""
         if not self._session:
             raise DatabaseError(log, "No active session for transaction")
-        
+
         try:
             yield self._session
             self._session.commit()
@@ -152,48 +147,48 @@ class EnhancedDatabaseApi:
             self._session.rollback()
             log.error(f"Transaction rolled back: {e}")
             raise
-    
+
     @validate_input
     @handle_db_errors
-    def get_by_ulid(self, model: Type[T], ulid_str: str) -> Optional[T]:
+    def get_by_ulid(self, model: type[T], ulid_str: str) -> T | None:
         """
         Get entity by ULID with validation.
-        
+
         Args:
             model: SQLAlchemy model class
             ulid_str: ULID string
-            
+
         Returns:
             Entity instance or None if not found
-            
+
         Raises:
             ValidationError: If ULID format is invalid
             DatabaseError: If database operation fails
         """
         if not self._session:
             raise DatabaseError(log, "No active session")
-        
+
         # Validate ULID format
         try:
             ulid.ULID.from_str(ulid_str)
         except ValueError:
             raise ValidationError(log, f"Invalid ULID format: {ulid_str}")
-        
+
         return self._session.query(model).filter(model.id == ulid_str).first()
-    
+
     @validate_input
     @handle_db_errors
-    def get_by_ulid_or_404(self, model: Type[T], ulid_str: str) -> T:
+    def get_by_ulid_or_404(self, model: type[T], ulid_str: str) -> T:
         """
         Get entity by ULID or raise EntityNotFoundError.
-        
+
         Args:
             model: SQLAlchemy model class
             ulid_str: ULID string
-            
+
         Returns:
             Entity instance
-            
+
         Raises:
             EntityNotFoundError: If entity not found
             ValidationError: If ULID format is invalid
@@ -203,31 +198,31 @@ class EnhancedDatabaseApi:
         if not entity:
             raise EntityNotFoundError(log, f"{model.__name__} with ULID {ulid_str} not found")
         return entity
-    
+
     @validate_input
     @handle_db_errors
-    def create_entity(self, model: Type[T], **kwargs) -> T:
+    def create_entity(self, model: type[T], **kwargs) -> T:
         """
         Create new entity with ULID generation.
-        
+
         Args:
             model: SQLAlchemy model class
             **kwargs: Entity attributes
-            
+
         Returns:
             Created entity instance
-            
+
         Raises:
             ValidationError: If input validation fails
             DatabaseError: If database operation fails
         """
         if not self._session:
             raise DatabaseError(log, "No active session")
-        
+
         # Generate ULID if not provided and model has id field
         if hasattr(model, 'id') and 'id' not in kwargs:
             kwargs['id'] = str(ulid.ULID())
-        
+
         try:
             entity = model(**kwargs)
             self._session.add(entity)
@@ -236,200 +231,200 @@ class EnhancedDatabaseApi:
         except Exception as e:
             log.error(f"Failed to create {model.__name__}: {e}")
             raise
-    
+
     @validate_input
     @handle_db_errors
     def update_entity(self, entity: T, **kwargs) -> T:
         """
         Update entity attributes.
-        
+
         Args:
             entity: Entity instance to update
             **kwargs: Attributes to update
-            
+
         Returns:
             Updated entity instance
-            
+
         Raises:
             ValidationError: If input validation fails
             DatabaseError: If database operation fails
         """
         if not self._session:
             raise DatabaseError(log, "No active session")
-        
+
         for key, value in kwargs.items():
             if hasattr(entity, key):
                 setattr(entity, key, value)
             else:
                 log.warning(f"Ignoring unknown attribute {key} for {type(entity).__name__}")
-        
+
         self._session.flush()
         return entity
-    
+
     @validate_input
     @handle_db_errors
     def delete_entity(self, entity: T) -> None:
         """
         Delete entity from database.
-        
+
         Args:
             entity: Entity instance to delete
-            
+
         Raises:
             DatabaseError: If database operation fails
         """
         if not self._session:
             raise DatabaseError(log, "No active session")
-        
+
         self._session.delete(entity)
         self._session.flush()
-    
+
     @validate_input
     @handle_db_errors
-    def get_or_create(self, model: Type[T], defaults: Optional[Dict[str, Any]] = None, **kwargs) -> tuple[T, bool]:
+    def get_or_create(self, model: type[T], defaults: dict[str, Any] | None = None, **kwargs) -> tuple[T, bool]:
         """
         Get existing entity or create new one.
-        
+
         Args:
             model: SQLAlchemy model class
             defaults: Default values for creation
             **kwargs: Filter criteria and creation values
-            
+
         Returns:
             Tuple of (entity, created_flag)
-            
+
         Raises:
             DatabaseError: If database operation fails
         """
         if not self._session:
             raise DatabaseError(log, "No active session")
-        
+
         # Try to get existing
         entity = self._session.query(model).filter_by(**kwargs).first()
         if entity:
             return entity, False
-        
+
         # Create new
         create_kwargs = kwargs.copy()
         if defaults:
             create_kwargs.update(defaults)
-        
+
         return self.create_entity(model, **create_kwargs), True
-    
+
     @validate_input
     @handle_db_errors
-    def list_entities(self, model: Type[T], 
-                     filters: Optional[Dict[str, Any]] = None,
-                     order_by: Optional[str] = None,
-                     limit: Optional[int] = None,
-                     offset: Optional[int] = None) -> List[T]:
+    def list_entities(self, model: type[T],
+                     filters: dict[str, Any] | None = None,
+                     order_by: str | None = None,
+                     limit: int | None = None,
+                     offset: int | None = None) -> list[T]:
         """
         List entities with optional filtering and pagination.
-        
+
         Args:
             model: SQLAlchemy model class
             filters: Filter criteria
             order_by: Order by field name
             limit: Maximum number of results
             offset: Results offset
-            
+
         Returns:
             List of entity instances
-            
+
         Raises:
             DatabaseError: If database operation fails
         """
         if not self._session:
             raise DatabaseError(log, "No active session")
-        
+
         query = self._session.query(model)
-        
+
         # Apply filters
         if filters:
             query = query.filter_by(**filters)
-        
+
         # Apply ordering
         if order_by:
             if hasattr(model, order_by):
                 query = query.order_by(getattr(model, order_by))
             else:
                 log.warning(f"Unknown order_by field {order_by} for {model.__name__}")
-        
+
         # Apply pagination
         if offset:
             query = query.offset(offset)
         if limit:
             query = query.limit(limit)
-        
+
         return query.all()
-    
+
     @validate_input
     @handle_db_errors
-    def count_entities(self, model: Type[T], filters: Optional[Dict[str, Any]] = None) -> int:
+    def count_entities(self, model: type[T], filters: dict[str, Any] | None = None) -> int:
         """
         Count entities with optional filtering.
-        
+
         Args:
             model: SQLAlchemy model class
             filters: Filter criteria
-            
+
         Returns:
             Count of matching entities
-            
+
         Raises:
             DatabaseError: If database operation fails
         """
         if not self._session:
             raise DatabaseError(log, "No active session")
-        
+
         query = self._session.query(model)
         if filters:
             query = query.filter_by(**filters)
-        
+
         return query.count()
-    
+
     def expunge(self, entity: T) -> T:
         """Remove entity from session."""
         if self._session:
             self._session.expunge(entity)
         return entity
-    
+
     def expunge_all(self):
         """Remove all entities from session."""
         if self._session:
             self._session.expunge_all()
-    
+
     def refresh(self, entity: T) -> T:
         """Refresh entity from database."""
         if self._session:
             self._session.refresh(entity)
         return entity
-    
+
     def commit(self):
         """Explicitly commit current transaction."""
         if self._session:
             self._session.commit()
-    
+
     def rollback(self):
         """Explicitly rollback current transaction."""
         if self._session:
             self._session.rollback()
-    
+
     def flush(self):
         """Flush pending changes without committing."""
         if self._session:
             self._session.flush()
-    
+
     def make_transient(self, entity):
         """
         Make an entity transient (detached from session) while preserving its data.
-        
+
         This helps avoid DetachedInstanceError by allowing the entity to be used
         outside of the session context.
         """
         if self._session:
             self._session.expunge(entity)
-    
+
     def extract_id(self, entity):
         """
         Safely extract the ID from an entity while session is active.
@@ -438,15 +433,14 @@ class EnhancedDatabaseApi:
         """
         if hasattr(entity, 'id'):
             return entity.id
-        elif hasattr(entity, 'ulid'):
+        if hasattr(entity, 'ulid'):
             return entity.ulid
-        else:
-            return str(entity)
+        return str(entity)
 
     @validate_input
     @handle_db_errors
-    def bulk_create_entities(self, model: Type[T], items: List[Dict[str, Any]],
-                            return_objects: bool = False) -> List[T]:
+    def bulk_create_entities(self, model: type[T], items: list[dict[str, Any]],
+                            return_objects: bool = False) -> list[T]:
         """
         Bulk create multiple entities efficiently.
 
@@ -494,7 +488,7 @@ class EnhancedDatabaseApi:
 
     @validate_input
     @handle_db_errors
-    def bulk_update_entities(self, model: Type[T], items: List[Dict[str, Any]]) -> None:
+    def bulk_update_entities(self, model: type[T], items: list[dict[str, Any]]) -> None:
         """
         Bulk update multiple entities efficiently.
 

@@ -4,14 +4,14 @@ Utility functions for extracting fields from database models.
 This module provides reusable utilities to extract specific fields from
 database objects, reducing code duplication across the codebase.
 """
-from typing import Any, Dict, List, Optional
 import logging
+from typing import Any
 
 log = logging.getLogger(__name__)
 
 
-def extract_fields(obj: Any, fields: Optional[List[str]] = None,
-                  field_map: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+def extract_fields(obj: Any, fields: list[str] | None = None,
+                  field_map: dict[str, str] | None = None) -> dict[str, Any]:
     """
     Extract specified fields from a database object.
 

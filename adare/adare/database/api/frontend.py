@@ -1,19 +1,33 @@
 # external imports
-import attrs
-import sqlalchemy
-import pandas as pd
-from pathlib import Path
-from sqlalchemy.orm import joinedload
-
-# internal imports
-from adare.database.models.project_models import Experiment, ExperimentRun, StageInRun, Stage, Event, Status, AbstractTest
-from adare.database.models.global_models import Vm, Project, Environment, OsInfo, TestFunction, TestFunctionFile, TestParameter
-from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
-import adare.config.database as config_database
-from adare.exceptions import EnvironmentNotFoundError, ProjectNotFoundError, ExperimentNotFoundError, TestFunctionNotFoundError, ArgumentsError
-
 # configure logging
 import logging
+from pathlib import Path
+
+import pandas as pd
+import sqlalchemy
+from sqlalchemy.orm import joinedload
+
+from adare.database.api.base import GlobalDatabaseApi, ProjectDatabaseApi
+from adare.database.models.global_models import (
+    Environment,
+    OsInfo,
+    Project,
+    TestFunction,
+    TestFunctionFile,
+    TestParameter,
+    Vm,
+)
+
+# internal imports
+from adare.database.models.project_models import Event, Experiment, ExperimentRun, Stage, StageInRun, Status
+from adare.exceptions import (
+    ArgumentsError,
+    EnvironmentNotFoundError,
+    ExperimentNotFoundError,
+    ProjectNotFoundError,
+    TestFunctionNotFoundError,
+)
+
 log = logging.getLogger(__name__)
 
 
@@ -124,9 +138,8 @@ class DataRetrievalApi:
         parent = self._project_api._session.query(Event).filter_by(id=event.parent_event_id).first()
         if parent:
             return self._compute_display_level(parent) + 1
-        else:
-            # If parent not found, assume next level
-            return 1
+        # If parent not found, assume next level
+        return 1
 
     def _get_smart_display_name(self, obj, obj_type: str, current_project_name: str = None):
         """
@@ -159,21 +172,19 @@ class DataRetrievalApi:
             # Environments are now global, just return the name
             return obj.name
 
-        elif obj_type == 'experiment':
+        if obj_type == 'experiment':
             # For experiments, check if we're in the same project context
             if current_project_name and full_dotnotation.startswith(f'{current_project_name}.'):
                 return obj.name  # Return just the experiment name
-            else:
-                return full_dotnotation  # Return full project.name format
+            return full_dotnotation  # Return full project.name format
 
-        elif obj_type == 'testfunction':
+        if obj_type == 'testfunction':
             # For testfunctions, dotnotation is file.function_name
             # We could add more sophisticated logic here if needed
             return full_dotnotation
 
-        else:
-            # Fallback to full dotnotation for unknown types
-            return full_dotnotation
+        # Fallback to full dotnotation for unknown types
+        return full_dotnotation
 
     def __enrich_project_data(self, data: pd.DataFrame) -> pd.DataFrame:
         # data['object'] = [self._session.query(Project).filter_by(id=id).one() for id in data['id']]
@@ -260,7 +271,7 @@ class DataRetrievalApi:
         else:
             raise ArgumentsError(log, 'Either ulid or project_name and environment_name must be provided')
         return environment_df
-    
+
     def get_environment_by_name(self, environment_name: str) -> pd.DataFrame:
         """Get environment by name (environments are now global)."""
         if not self._global_api._session.query(Environment).filter_by(name=environment_name).count():
@@ -322,23 +333,23 @@ class DataRetrievalApi:
         """Get experiment by name within the current project (names are unique per project)."""
         from adare.backend.basics import determine_projectdirectory
         from adare.exceptions import NoProjectFoundError
-        
+
         # Determine current project
         project_path = determine_projectdirectory(None)
         if not project_path:
             raise NoProjectFoundError(log, message='No project directory found. Please run from within a project directory or provide full dotnotation.')
-        
+
         project_name = project_path.name
         self.__check_project_exists(project_name)
-        
+
         # Find the experiment by name within this project database
         experiment_query = self._project_api._session.query(Experiment).filter(
             Experiment.name == experiment_name)
-        
+
         if not experiment_query.count():
             from adare.exceptions import ExperimentNotFoundError
             raise ExperimentNotFoundError(log, f'Experiment "{experiment_name}" not found in project "{project_name}"')
-        
+
         experiment_df = pd.read_sql(experiment_query.statement, self._project_api._session.bind)
         experiment_df = experiment_df.map(str)
         experiment_df = self.__enrich_experiment_data(experiment_df)
@@ -457,20 +468,20 @@ class DataRetrievalApi:
                 project_name = project_path.name
             else:
                 raise NoProjectFoundError(log, message='no project directory found and no project specified')
-        
+
         self.__check_project_exists(project_name)
-        
+
         # Query the latest run ordered by timestamp
         # Note: Project-based filtering removed since environments are now global
         # and experiments are stored per-project
         query = self._project_api._session.query(ExperimentRun).order_by(ExperimentRun.start_time.desc()).limit(1)
 
         data = pd.read_sql(query.statement, self._project_api._session.bind).map(str)
-        
+
         if data.empty:
             from adare.exceptions import RunNotFoundError
             raise RunNotFoundError(log, f'No runs found in project "{project_name}"')
-            
+
         data = self.__enrich_run_data(data)
         return data
 
@@ -495,8 +506,7 @@ class DataRetrievalApi:
                 status_obj = self._project_api._session.query(Status).filter_by(id=status_id).first()
                 if status_obj:
                     return StatusEnum.from_string(status_obj.name)
-                else:
-                    return StatusEnum.PENDING
+                return StatusEnum.PENDING
             except Exception:
                 return StatusEnum.PENDING
 
@@ -507,19 +517,19 @@ class DataRetrievalApi:
 
     def get_run_actions(self, run_ulid: str) -> pd.DataFrame:
         """Get all action events for a specific run, including tests.
-        
+
         Returns a DataFrame with comprehensive event information including:
         - success: Boolean indicating if the event execution succeeded (for green/red dots)
         - error: Error message if execution failed
         - result_status: For test events only - the actual test result (StatusEnum)
         """
         from adare.database.models.project_models import ActionEvent, TestEvent
-        
+
         # Query action events (non-test actions)
         action_events = self._project_api._session.query(ActionEvent).filter_by(experiment_run_id=run_ulid).filter(
             ActionEvent.category.in_(['action', 'command'])  # Exclude test category from ActionEvent
         ).all()
-        
+
         # Query test events separately (they are stored in TestEvent model)
         # Include relationships to get hierarchy and result information
         from sqlalchemy.orm import joinedload
@@ -527,7 +537,7 @@ class DataRetrievalApi:
             joinedload(TestEvent.result),
             joinedload(TestEvent.abstract_test)
         ).filter_by(experiment_run_id=run_ulid).all()
-        
+
         def extract_event_data(event, is_test_event=False):
             """Extract data from either ActionEvent or TestEvent"""
             # Extract basic event data and deserialize action_data if available
@@ -538,32 +548,32 @@ class DataRetrievalApi:
                     action_data = json.loads(event.action_data)
                 except (json.JSONDecodeError, TypeError):
                     action_data = {}
-            
+
             # For test events, we need to map their fields to action-like fields
             if is_test_event:
                 # Compute display level from parent relationship
                 display_level = self._compute_display_level(event)
-                
+
                 # Get execution success from the event itself (now all events have success field)
                 execution_success = getattr(event, 'success', None)
-                
+
                 # Get test result status and details
                 result_status = None
                 result_details = None
                 if hasattr(event, 'result') and event.result:
                     result_status = event.result.status if event.result else None
                     result_details = event.result.details if event.result else None
-                
+
                 # Add test result information to action_data
                 if not action_data:
                     action_data = {}
                 if result_details:
                     action_data['test_result_details'] = result_details
-                
+
                 # Also add test name if available
                 if hasattr(event, 'abstract_test') and event.abstract_test:
                     action_data['test_name'] = event.abstract_test.name
-                
+
                 base_data = {
                     'id': event.id,
                     'event_type': 'test_complete',  # Tests are typically stored as complete events
@@ -579,7 +589,7 @@ class DataRetrievalApi:
                     'parent_event_id': event.parent_event_id,
                     'data': action_data
                 }
-                
+
                 # Add test result status for test events
                 if result_status is not None:
                     from adarelib.constants import StatusEnum
@@ -588,47 +598,46 @@ class DataRetrievalApi:
                         base_data['result_status'] = int(status_enum)
                     else:
                         base_data['result_status'] = int(result_status)
-                
+
                 return base_data
-            else:
-                # For action events, get success from the event's success field
-                execution_success = getattr(event, 'success', None)
-                
-                return {
-                    'id': event.id,
-                    'event_type': event.event_type or 'unknown',
-                    'category': event.category,
-                    'success': execution_success,  # Boolean for execution success (dot color)
-                    'timestamp': event.timestamp,
-                    'error': event.error,
-                    'action_type': getattr(event, 'action_type', None),
-                    'action_id': getattr(event, 'action_id', None),
-                    'event_group_id': getattr(event, 'event_group_id', None),  # Universal grouping field
-                    'event_type_specific': getattr(event, 'event_type_specific', None),
-                    'display_level': self._compute_display_level(event),
-                    'parent_event_id': event.parent_event_id,
-                    'data': action_data
-                }
+            # For action events, get success from the event's success field
+            execution_success = getattr(event, 'success', None)
+
+            return {
+                'id': event.id,
+                'event_type': event.event_type or 'unknown',
+                'category': event.category,
+                'success': execution_success,  # Boolean for execution success (dot color)
+                'timestamp': event.timestamp,
+                'error': event.error,
+                'action_type': getattr(event, 'action_type', None),
+                'action_id': getattr(event, 'action_id', None),
+                'event_group_id': getattr(event, 'event_group_id', None),  # Universal grouping field
+                'event_type_specific': getattr(event, 'event_type_specific', None),
+                'display_level': self._compute_display_level(event),
+                'parent_event_id': event.parent_event_id,
+                'data': action_data
+            }
 
         actions_data = []
-        
+
         # Process regular action events
         for event in action_events:
             actions_data.append(extract_event_data(event, is_test_event=False))
-        
-        # Process test events  
+
+        # Process test events
         for event in test_events:
             actions_data.append(extract_event_data(event, is_test_event=True))
-        
+
         if not actions_data:
             # Return empty DataFrame with proper structure
             return pd.DataFrame(columns=['id', 'event_type', 'category', 'success', 'timestamp', 'error', 'action_type', 'action_id', 'event_group_id', 'event_type_specific', 'display_level', 'data', 'result_status'])
-        
+
         # Create DataFrame and sort by timestamp to ensure proper chronological order
         df = pd.DataFrame(actions_data)
         if 'timestamp' in df.columns:
             df = df.sort_values('timestamp')
-        
+
         return df
 
     def get_tests(self, run_ulid: str) -> dict:
@@ -744,7 +753,6 @@ class DataRetrievalApi:
         except sqlalchemy.orm.exc.NoResultFound:
             if project_name:
                 raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found in project "{project_name}"')
-            else:
-                raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found')
+            raise TestFunctionNotFoundError(log, f'Testfunction with dotnotation "{dotnotation}" not found')
         return testfunction.id
 

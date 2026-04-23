@@ -39,7 +39,7 @@ def _normalize_cell_value(value) -> str:
     return str(value)
 
 
-def _get_sheet_names(filepath: str) -> List[str]:
+def _get_sheet_names(filepath: str) -> list[str]:
     """Get list of all sheet names in Excel file."""
     try:
         excel_file = pd.ExcelFile(filepath, engine='openpyxl')
@@ -53,7 +53,7 @@ def _get_sheet_names(filepath: str) -> List[str]:
         raise
 
 
-def _resolve_sheet_identifier(filepath: str, sheet: Union[str, int]) -> str:
+def _resolve_sheet_identifier(filepath: str, sheet: str | int) -> str:
     """
     Resolve sheet identifier (name or index) to sheet name.
 
@@ -74,18 +74,17 @@ def _resolve_sheet_identifier(filepath: str, sheet: Union[str, int]) -> str:
         if sheet < 0 or sheet >= len(sheet_names):
             raise ValueError(f"Sheet index {sheet} out of range (file has {len(sheet_names)} sheets: {sheet_names})")
         return sheet_names[sheet]
-    else:
-        # Resolve by name
-        if sheet not in sheet_names:
-            raise ValueError(f"Sheet '{sheet}' not found (available sheets: {sheet_names})")
-        return sheet
+    # Resolve by name
+    if sheet not in sheet_names:
+        raise ValueError(f"Sheet '{sheet}' not found (available sheets: {sheet_names})")
+    return sheet
 
 
 def _read_excel_sheet(
     filepath: str,
-    sheet: Union[str, int] = 0,
-    header_row: Optional[int] = None
-) -> List[List[str]]:
+    sheet: str | int = 0,
+    header_row: int | None = None
+) -> list[list[str]]:
     """
     Read Excel sheet and return as list of string lists.
 
@@ -121,7 +120,7 @@ def _read_excel_sheet(
     return rows
 
 
-def _extract_columns(row: List[str], columns: Optional[List[int]]) -> List[str]:
+def _extract_columns(row: list[str], columns: list[int] | None) -> list[str]:
     """Extract selected columns from row, or return all if columns is None."""
     if columns is None:
         return row
@@ -176,9 +175,9 @@ def _row_matches_pattern(test_instance, row, entry_pattern):
 
 def _compare_row_sets(
     test_instance,
-    actual_rows: List[List[str]],
-    reference_rows: List[List[str]],
-    columns: Optional[List[int]],
+    actual_rows: list[list[str]],
+    reference_rows: list[list[str]],
+    columns: list[int] | None,
     allow_extra: bool,
     allow_missing: bool
 ) -> TestResult:
@@ -251,9 +250,9 @@ def _compare_row_sets(
 
 def _compare_row_sequences(
     test_instance,
-    actual_rows: List[List[str]],
-    reference_rows: List[List[str]],
-    columns: Optional[List[int]],
+    actual_rows: list[list[str]],
+    reference_rows: list[list[str]],
+    columns: list[int] | None,
     allow_extra: bool,
     allow_missing: bool
 ) -> TestResult:
@@ -342,13 +341,13 @@ def _compare_row_sequences(
 
 
 def _format_diff_report(
-    missing_rows: List[Tuple[int, List[str]]],
-    extra_rows: List[Tuple[int, List[str]]],
-    mismatched_rows: List[Tuple[int, List[str], List[str], List[str]]],
+    missing_rows: list[tuple[int, list[str]]],
+    extra_rows: list[tuple[int, list[str]]],
+    mismatched_rows: list[tuple[int, list[str], list[str], list[str]]],
     actual_count: int,
     reference_count: int,
-    columns: Optional[List[int]]
-) -> List[str]:
+    columns: list[int] | None
+) -> list[str]:
     """
     Format detailed comparison report for test failure.
 
@@ -409,11 +408,11 @@ def _format_diff_report(
 
 
 def _match_sheets(
-    actual_sheets: List[str],
-    reference_sheets: List[str],
+    actual_sheets: list[str],
+    reference_sheets: list[str],
     mode: str,
-    specific_sheets: Optional[List[str]] = None
-) -> List[Tuple[str, str]]:
+    specific_sheets: list[str] | None = None
+) -> list[tuple[str, str]]:
     """
     Match sheets between actual and reference files based on mode.
 
@@ -434,14 +433,14 @@ def _match_sheets(
                 matches.append((sheet_name, sheet_name))
         return matches
 
-    elif mode == "by_index":
+    if mode == "by_index":
         # Match sheets by position
         matches = []
         for i in range(min(len(actual_sheets), len(reference_sheets))):
             matches.append((actual_sheets[i], reference_sheets[i]))
         return matches
 
-    elif mode == "specific":
+    if mode == "specific":
         # Match only specified sheets
         if not specific_sheets:
             return []
@@ -451,14 +450,13 @@ def _match_sheets(
                 matches.append((sheet_name, sheet_name))
         return matches
 
-    else:
-        raise ValueError(f"Invalid sheet_mode '{mode}'. Must be 'by_name', 'by_index', or 'specific'")
+    raise ValueError(f"Invalid sheet_mode '{mode}'. Must be 'by_name', 'by_index', or 'specific'")
 
 
 def _format_sheet_diff_report(
     sheet_name: str,
-    row_comparison_details: List[str]
-) -> List[str]:
+    row_comparison_details: list[str]
+) -> list[str]:
     """Format sheet comparison report with sheet name prefix."""
     details = [f"Sheet '{sheet_name}':"]
     for line in row_comparison_details:
@@ -467,12 +465,12 @@ def _format_sheet_diff_report(
 
 
 def _validate_columns(
-    actual_columns: List[str],
-    expected_columns: List[str],
+    actual_columns: list[str],
+    expected_columns: list[str],
     allow_extra: bool,
     allow_missing: bool,
     ignore_order: bool
-) -> Tuple[bool, List[str]]:
+) -> tuple[bool, list[str]]:
     """
     Validate column headers.
 
@@ -594,20 +592,17 @@ def sheet_exists(ctx: TestContext, dst: str = '', sheet_name: str = '', regex_ma
 
                 if matching_sheets:
                     return TestResult.success()
-                else:
-                    return TestResult.failed([
-                        f'no sheet matches regex pattern: {sheet_name}',
-                        f'available sheets: {sheet_names}'
-                    ])
-            else:
-                # Exact name matching
-                if sheet_name in sheet_names:
-                    return TestResult.success()
-                else:
-                    return TestResult.failed([
-                        f'sheet "{sheet_name}" not found',
-                        f'available sheets: {sheet_names}'
-                    ])
+                return TestResult.failed([
+                    f'no sheet matches regex pattern: {sheet_name}',
+                    f'available sheets: {sheet_names}'
+                ])
+            # Exact name matching
+            if sheet_name in sheet_names:
+                return TestResult.success()
+            return TestResult.failed([
+                f'sheet "{sheet_name}" not found',
+                f'available sheets: {sheet_names}'
+            ])
 
         except FileNotFoundError:
             return TestResult.failed([f'file with path {dst} does not exist'])
@@ -630,7 +625,7 @@ def sheet_exists(ctx: TestContext, dst: str = '', sheet_name: str = '', regex_ma
     description='validates specific cell value with placeholder support',
     category=HostModeCategory.FILE_CONTENT,
 )
-def cell_value_matches(ctx: TestContext, dst: str = '', row: int = 0, column: int = 0, expected_value: Union[str, int, float, bool, None] = None, sheet: Union[str, int] = 0, regex_match: bool = False):
+def cell_value_matches(ctx: TestContext, dst: str = '', row: int = 0, column: int = 0, expected_value: str | int | float | bool | None = None, sheet: str | int = 0, regex_match: bool = False):
     try:
         # Resolve file path
         dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -677,38 +672,33 @@ def cell_value_matches(ctx: TestContext, dst: str = '', row: int = 0, column: in
                     success, message = ctx.compare_with_placeholder(placeholder_name, actual_value)
                     if success:
                         return TestResult.success()
-                    else:
-                        return TestResult.failed([
-                            f'cell value mismatch at row {row}, column {column}',
-                            f'actual: "{actual_value}"',
-                            f'placeholder: {{{{{placeholder_name}}}}}',
-                            f'comparison: {message}'
-                        ])
-                else:
-                    return TestResult.failed([f'expected exactly one placeholder in expected_value, got {len(placeholder_names)}'])
-
-            # Regex matching
-            elif regex_match:
-                pattern = re.compile(expected_str)
-                if pattern.match(actual_value):
-                    return TestResult.success()
-                else:
-                    return TestResult.failed([
-                        f'cell value does not match regex at row {row}, column {column}',
-                        f'actual: "{actual_value}"',
-                        f'regex: {expected_str}'
-                    ])
-
-            # Exact string comparison
-            else:
-                if actual_value == expected_str:
-                    return TestResult.success()
-                else:
                     return TestResult.failed([
                         f'cell value mismatch at row {row}, column {column}',
                         f'actual: "{actual_value}"',
-                        f'expected: "{expected_str}"'
+                        f'placeholder: {{{{{placeholder_name}}}}}',
+                        f'comparison: {message}'
                     ])
+                return TestResult.failed([f'expected exactly one placeholder in expected_value, got {len(placeholder_names)}'])
+
+            # Regex matching
+            if regex_match:
+                pattern = re.compile(expected_str)
+                if pattern.match(actual_value):
+                    return TestResult.success()
+                return TestResult.failed([
+                    f'cell value does not match regex at row {row}, column {column}',
+                    f'actual: "{actual_value}"',
+                    f'regex: {expected_str}'
+                ])
+
+            # Exact string comparison
+            if actual_value == expected_str:
+                return TestResult.success()
+            return TestResult.failed([
+                f'cell value mismatch at row {row}, column {column}',
+                f'actual: "{actual_value}"',
+                f'expected: "{expected_str}"'
+            ])
 
         except FileNotFoundError:
             return TestResult.failed([f'file with path {dst} does not exist'])
@@ -734,7 +724,7 @@ def cell_value_matches(ctx: TestContext, dst: str = '', row: int = 0, column: in
     description='finds row matching pattern in Excel sheet',
     category=HostModeCategory.FILE_CONTENT,
 )
-def contains_row(ctx: TestContext, dst: str = '', entry: List[str] = None, sheet: Union[str, int] = 0, header_row: Optional[int] = None):
+def contains_row(ctx: TestContext, dst: str = '', entry: list[str] = None, sheet: str | int = 0, header_row: int | None = None):
     try:
         # Resolve file path
         dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -772,7 +762,7 @@ def contains_row(ctx: TestContext, dst: str = '', entry: List[str] = None, sheet
                 })
 
             # Log sheet contents for debugging when test fails
-            log.info(f"Excel sheet contents for failed test contains_row:")
+            log.info("Excel sheet contents for failed test contains_row:")
             for i, row_item in enumerate(rows):
                 log.info(f"  Row {i}: {row_item}")
             log.info(f"Expected entry pattern: {entry}")
@@ -795,11 +785,10 @@ def contains_row(ctx: TestContext, dst: str = '', entry: List[str] = None, sheet
                     failure_details.append(f'      failures: {", ".join(match["failed_columns"])}')
 
                 return TestResult.failed(failure_details)
-            else:
-                return TestResult.failed([
-                    f'no matching row found for pattern: {entry}',
-                    'no rows found in Excel sheet to analyze'
-                ])
+            return TestResult.failed([
+                f'no matching row found for pattern: {entry}',
+                'no rows found in Excel sheet to analyze'
+            ])
 
         except FileNotFoundError:
             return TestResult.failed([f'file with path {dst} does not exist'])
@@ -825,7 +814,7 @@ def contains_row(ctx: TestContext, dst: str = '', entry: List[str] = None, sheet
     description='validates column headers in Excel sheet',
     category=HostModeCategory.FILE_CONTENT,
 )
-def validate_columns(ctx: TestContext, dst: str = '', expected_columns: List[str] = None, sheet: Union[str, int] = 0, column_row: int = 0, allow_extra_columns: bool = False, allow_missing_columns: bool = False, ignore_order: bool = False):
+def validate_columns(ctx: TestContext, dst: str = '', expected_columns: list[str] = None, sheet: str | int = 0, column_row: int = 0, allow_extra_columns: bool = False, allow_missing_columns: bool = False, ignore_order: bool = False):
     try:
         # Resolve file path
         dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -880,8 +869,7 @@ def validate_columns(ctx: TestContext, dst: str = '', expected_columns: List[str
 
             if success:
                 return TestResult.success()
-            else:
-                return TestResult.failed(error_details)
+            return TestResult.failed(error_details)
 
         except FileNotFoundError:
             return TestResult.failed([f'file with path {dst} does not exist'])
@@ -907,7 +895,7 @@ def validate_columns(ctx: TestContext, dst: str = '', expected_columns: List[str
     description='compares sheet rows against reference data (embedded or external file)',
     category=HostModeCategory.FILE_CONTENT,
 )
-def compare_rows(ctx: TestContext, dst: str = '', reference_rows: Optional[List[List[str]]] = None, reference_file: Optional[str] = None, reference_sheet: Union[str, int] = 0, reference_header_row: Optional[int] = None, sheet: Union[str, int] = 0, columns: Optional[List[int]] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False, header_row: Optional[int] = None):
+def compare_rows(ctx: TestContext, dst: str = '', reference_rows: list[list[str]] | None = None, reference_file: str | None = None, reference_sheet: str | int = 0, reference_header_row: int | None = None, sheet: str | int = 0, columns: list[int] | None = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False, header_row: int | None = None):
     try:
         # Resolve file path
         dst_resolved, status = ctx.resolve_globfilepath(dst)
@@ -983,15 +971,14 @@ def compare_rows(ctx: TestContext, dst: str = '', reference_rows: Optional[List[
                     allow_extra=allow_extra_rows,
                     allow_missing=allow_missing_rows
                 )
-            else:
-                return _compare_row_sequences(
-                    test_instance=ctx,
-                    actual_rows=actual_rows,
-                    reference_rows=ref_rows,
-                    columns=columns,
-                    allow_extra=allow_extra_rows,
-                    allow_missing=allow_missing_rows
-                )
+            return _compare_row_sequences(
+                test_instance=ctx,
+                actual_rows=actual_rows,
+                reference_rows=ref_rows,
+                columns=columns,
+                allow_extra=allow_extra_rows,
+                allow_missing=allow_missing_rows
+            )
 
         except FileNotFoundError:
             return TestResult.failed([f'file with path {dst} does not exist'])
@@ -1017,7 +1004,7 @@ def compare_rows(ctx: TestContext, dst: str = '', reference_rows: Optional[List[
     description='compares two sheets from same or different files',
     category=HostModeCategory.FILE_CONTENT,
 )
-def compare_sheets(ctx: TestContext, actual: str = '', reference: str = '', actual_sheet: Union[str, int] = 0, reference_sheet: Union[str, int] = 0, columns: Optional[List[int]] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False, header_row: Optional[int] = None):
+def compare_sheets(ctx: TestContext, actual: str = '', reference: str = '', actual_sheet: str | int = 0, reference_sheet: str | int = 0, columns: list[int] | None = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False, header_row: int | None = None):
     try:
         # Resolve actual file path
         actual_path, actual_status = ctx.resolve_globfilepath(actual)
@@ -1064,27 +1051,25 @@ def compare_sheets(ctx: TestContext, actual: str = '', reference: str = '', actu
                     allow_extra=allow_extra_rows,
                     allow_missing=allow_missing_rows
                 )
-            else:
-                return _compare_row_sequences(
-                    test_instance=ctx,
-                    actual_rows=actual_rows,
-                    reference_rows=reference_rows,
-                    columns=columns,
-                    allow_extra=allow_extra_rows,
-                    allow_missing=allow_missing_rows
-                )
+            return _compare_row_sequences(
+                test_instance=ctx,
+                actual_rows=actual_rows,
+                reference_rows=reference_rows,
+                columns=columns,
+                allow_extra=allow_extra_rows,
+                allow_missing=allow_missing_rows
+            )
 
         except FileNotFoundError as e:
             error_str = str(e)
             if actual_path in error_str or actual in error_str:
                 return TestResult.failed([f'actual file with path {actual} does not exist'])
-            else:
-                return TestResult.failed([f'reference file with path {reference} does not exist'])
+            return TestResult.failed([f'reference file with path {reference} does not exist'])
         except ValueError as e:
             # Sheet resolution errors
             return TestResult.failed([str(e)])
         except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read Excel files")
+            return TestResult.execution_error(e, "Cannot read Excel files")
         except Exception as e:
             return TestResult.failed([f"Error reading Excel files: {e}"])
 
@@ -1102,7 +1087,7 @@ def compare_sheets(ctx: TestContext, actual: str = '', reference: str = '', actu
     description='compares entire Excel files with multi-sheet awareness',
     category=HostModeCategory.FILE_CONTENT,
 )
-def compare_files(ctx: TestContext, actual: str = '', reference: str = '', sheet_mode: str = "by_name", specific_sheets: Optional[List[str]] = None, columns: Optional[List[int]] = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False, allow_extra_sheets: bool = False, allow_missing_sheets: bool = False, header_row: Optional[int] = None):
+def compare_files(ctx: TestContext, actual: str = '', reference: str = '', sheet_mode: str = "by_name", specific_sheets: list[str] | None = None, columns: list[int] | None = None, ignore_order: bool = False, allow_extra_rows: bool = False, allow_missing_rows: bool = False, allow_extra_sheets: bool = False, allow_missing_sheets: bool = False, header_row: int | None = None):
     try:
         # Resolve actual file path
         actual_path, actual_status = ctx.resolve_globfilepath(actual)
@@ -1264,10 +1249,9 @@ def compare_files(ctx: TestContext, actual: str = '', reference: str = '', sheet
             error_str = str(e)
             if actual_path in error_str or actual in error_str:
                 return TestResult.failed([f'actual file with path {actual} does not exist'])
-            else:
-                return TestResult.failed([f'reference file with path {reference} does not exist'])
+            return TestResult.failed([f'reference file with path {reference} does not exist'])
         except (PermissionError, OSError) as e:
-            return TestResult.execution_error(e, f"Cannot read Excel files")
+            return TestResult.execution_error(e, "Cannot read Excel files")
         except Exception as e:
             return TestResult.failed([f"Error reading Excel files: {e}"])
 

@@ -3,16 +3,15 @@ Shared utility functions for data display logic.
 
 These functions help reduce code duplication across database API classes.
 """
-from typing import Optional, Tuple
-from functools import lru_cache
-
 # configure logging
 import logging
+from functools import lru_cache
+
 log = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
-def get_current_project_name() -> Optional[str]:
+def get_current_project_name() -> str | None:
     """
     Get current project name with caching to avoid repeated filesystem access.
 
@@ -56,30 +55,27 @@ def get_smart_display_name(obj, obj_type: str, current_project_name: str = None)
         # Return just the environment name (simpler for global resources)
         return obj.name
 
-    elif obj_type == 'experiment':
+    if obj_type == 'experiment':
         # For experiments in the current project context, return just the name
         # Otherwise return the full dotnotation
         if current_project_name:
             return obj.name  # Return just the experiment name
-        else:
-            return full_dotnotation  # Return full project.name format
+        return full_dotnotation  # Return full project.name format
 
-    elif obj_type == 'testfunction':
+    if obj_type == 'testfunction':
         # For testfunctions, check if from current project context
         if current_project_name and '.' in full_dotnotation:
             tf_project = full_dotnotation.split('.', 1)[0]
             if tf_project == current_project_name:
                 return full_dotnotation.split('.', 1)[1] if '.' in full_dotnotation else obj.name
-            else:
-                return full_dotnotation
-        else:
-            return obj.name
+            return full_dotnotation
+        return obj.name
 
     # Default fallback
     return obj.name
 
 
-def safe_get_sync_status(obj) -> Tuple[bool, bool]:
+def safe_get_sync_status(obj) -> tuple[bool, bool]:
     """
     Safely get sync status from an object.
 
@@ -100,7 +96,7 @@ def safe_get_sync_status(obj) -> Tuple[bool, bool]:
     return False, False
 
 
-def safe_get_os_info(vm) -> Tuple[str, str, str, str, str]:
+def safe_get_os_info(vm) -> tuple[str, str, str, str, str]:
     """
     Safely extract OS information from VM object.
 
@@ -129,7 +125,7 @@ def safe_get_os_info(vm) -> Tuple[str, str, str, str, str]:
     return "Unknown", "", "", "", ""
 
 
-def safe_get_vm_info(env) -> Tuple[str, str]:
+def safe_get_vm_info(env) -> tuple[str, str]:
     """
     Safely extract VM information from environment.
 

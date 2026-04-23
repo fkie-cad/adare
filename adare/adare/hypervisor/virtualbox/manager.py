@@ -3,12 +3,11 @@ VirtualBox Manager for handling VirtualBox operations in a thread-safe manner.
 
 Implements AbstractHypervisorManager for VirtualBox-specific operations.
 """
-import asyncio
 import logging
 import queue
-import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 from adare.hypervisor.base.manager import AbstractHypervisorManager
 
@@ -70,7 +69,7 @@ class VirtualBoxManager(AbstractHypervisorManager):
             log.error(f"Error running async function {func.__name__}: {e}")
             raise e
 
-    async def import_vm_async(self, vm_file_path: Path, vm_name: str, environment_ulid: Optional[str] = None):
+    async def import_vm_async(self, vm_file_path: Path, vm_name: str, environment_ulid: str | None = None):
         """
         Import a VM from OVF/OVA file asynchronously.
 
@@ -86,8 +85,8 @@ class VirtualBoxManager(AbstractHypervisorManager):
             VMImportException: If import fails
         """
         # Import here to avoid circular dependency
-        from adare.hypervisor.virtualbox.vm import VirtualBoxVM
         from adare.config import get_vm_credentials
+        from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 
         log.info(f"Importing VM '{vm_name}' from '{vm_file_path}' (environment: {environment_ulid})")
 

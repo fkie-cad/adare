@@ -8,7 +8,7 @@ Uses Unit of Work pattern for atomic port reservation within database transactio
 """
 
 import logging
-from typing import Optional
+
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from adare.hypervisor.exceptions import PortAllocationException
@@ -20,7 +20,7 @@ PORT_RANGE_START = 18765
 PORT_RANGE_END = 18799
 
 
-def find_available_port() -> Optional[int]:
+def find_available_port() -> int | None:
     """
     Find the next available websocket port by querying the database.
 
@@ -55,7 +55,7 @@ def find_available_port() -> Optional[int]:
         return None
 
 
-def reserve_port_atomically(api_session, vm_id: str, instance_name: str, experiment_run_id: str) -> Optional[int]:
+def reserve_port_atomically(api_session, vm_id: str, instance_name: str, experiment_run_id: str) -> int | None:
     """
     Atomically reserve a websocket port within an existing database transaction.
 
@@ -184,7 +184,7 @@ def get_port_usage_stats() -> dict:
 
 
 # Backward compatibility functions (now just call the simple database functions)
-def allocate_websocket_port() -> Optional[int]:
+def allocate_websocket_port() -> int | None:
     """
     Allocate a websocket port for a new experiment.
 
@@ -278,8 +278,9 @@ def detect_port_conflicts() -> dict:
     Raises:
         OperationalError: If database query fails
     """
-    from adare.database.api.vm import VmApi
     from collections import defaultdict
+
+    from adare.database.api.vm import VmApi
 
     conflicts = defaultdict(list)
     with VmApi() as api:

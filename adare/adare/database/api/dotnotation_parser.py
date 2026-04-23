@@ -1,9 +1,10 @@
 # internal imports
+# configure logging
+import logging
+
 from adare.backend.basics import determine_projectdirectory
 from adare.exceptions import ArgumentsError, NoProjectFoundError
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -31,7 +32,7 @@ class DotNotationParser:
                 'experiment_name': experiment_name,
                 'environment_name': None
             }
-        elif len(dotparts) == 3:
+        if len(dotparts) == 3:
             # project.environment.experiment format
             project_name, environment_name, experiment_name = dotparts
             return {
@@ -39,7 +40,7 @@ class DotNotationParser:
                 'environment_name': environment_name,
                 'experiment_name': experiment_name
             }
-        elif len(dotparts) == 1:
+        if len(dotparts) == 1:
             # experiment only - use current project
             experiment_name = dotparts[0]
             current_project_name = self._get_current_project_name()
@@ -48,10 +49,9 @@ class DotNotationParser:
                 'experiment_name': experiment_name,
                 'environment_name': None
             }
-        else:
-            raise ArgumentsError(log,
-                f'Invalid experiment dotnotation "{dotnotation}". '
-                'Expected format: experiment, project.experiment, or project.environment.experiment')
+        raise ArgumentsError(log,
+            f'Invalid experiment dotnotation "{dotnotation}". '
+            'Expected format: experiment, project.experiment, or project.environment.experiment')
 
     def parse_environment_dotnotation(self, dotnotation: str) -> dict:
         """
@@ -74,17 +74,16 @@ class DotNotationParser:
                 'project_name': current_project_name,
                 'environment_name': environment_name
             }
-        elif len(dotparts) == 2:
+        if len(dotparts) == 2:
             # project.environment format
             project_name, environment_name = dotparts
             return {
                 'project_name': project_name,
                 'environment_name': environment_name
             }
-        else:
-            raise ArgumentsError(log,
-                f'Invalid environment dotnotation "{dotnotation}". '
-                'Expected format: environment or project.environment')
+        raise ArgumentsError(log,
+            f'Invalid environment dotnotation "{dotnotation}". '
+            'Expected format: environment or project.environment')
 
     def parse_testfunction_dotnotation(self, dotnotation: str) -> dict:
         """
@@ -107,7 +106,7 @@ class DotNotationParser:
                 'file_name': file_name,
                 'function_name': function_name
             }
-        elif len(dotparts) == 3:
+        if len(dotparts) == 3:
             # project.file.function format (cross-project)
             project_name, file_name, function_name = dotparts
             return {
@@ -115,15 +114,13 @@ class DotNotationParser:
                 'file_name': file_name,
                 'function_name': function_name
             }
-        else:
-            raise ArgumentsError(log,
-                f'Invalid testfunction dotnotation "{dotnotation}". '
-                'Expected format: file.function or project.file.function')
+        raise ArgumentsError(log,
+            f'Invalid testfunction dotnotation "{dotnotation}". '
+            'Expected format: file.function or project.file.function')
 
     def _get_current_project_name(self) -> str:
         """Get current project name or raise error if not in project directory."""
         if project_path := determine_projectdirectory(None, silent=True):
             return project_path.name
-        else:
-            raise NoProjectFoundError(log,
-                message='No project directory found. Either provide full dotnotation or run from a project directory')
+        raise NoProjectFoundError(log,
+            message='No project directory found. Either provide full dotnotation or run from a project directory')

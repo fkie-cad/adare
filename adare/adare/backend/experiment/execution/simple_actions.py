@@ -13,12 +13,11 @@ The actual action methods are organized into mixins:
 import logging
 import re
 from pathlib import Path
-from typing import Optional
 
 from .base import ActionResult  # noqa: F401 - re-exported for backward compatibility
-from .gui_actions import GUIActionsMixin
 from .data_actions import DataActionsMixin
 from .filesystem_actions import FilesystemActionsMixin
+from .gui_actions import GUIActionsMixin
 
 log = logging.getLogger(__name__)
 
@@ -48,9 +47,9 @@ def sanitize_filename(name: str) -> str:
 class SimpleActionsExecutor(GUIActionsMixin, DataActionsMixin, FilesystemActionsMixin):
     """Handles execution of simple playbook actions (GUI and system operations)."""
 
-    def __init__(self, websocket_client, target_resolution_executor, experiment_run_id: Optional[str] = None,
+    def __init__(self, websocket_client, target_resolution_executor, experiment_run_id: str | None = None,
                  playbook = None, execution_context: dict = None, vm = None,
-                 experiment_run_directory: Optional[Path] = None):
+                 experiment_run_directory: Path | None = None):
         """
         Initialize simple actions executor.
 
@@ -74,7 +73,7 @@ class SimpleActionsExecutor(GUIActionsMixin, DataActionsMixin, FilesystemActions
         self.custom_screenshot_counters = {}  # Track counters for custom screenshot names
 
         # Initialize GUI executor based on VM type and playbook settings
-        from .gui_executor_factory import resolve_gui_execution_mode, create_gui_executor
+        from .gui_executor_factory import create_gui_executor, resolve_gui_execution_mode
         playbook_settings = playbook.settings if playbook and hasattr(playbook, 'settings') else None
         # Get CLI override from config if available
         cli_override = None
@@ -131,7 +130,6 @@ class SimpleActionsExecutor(GUIActionsMixin, DataActionsMixin, FilesystemActions
         Raises:
             ValueError: If capture processing fails
         """
-        from adare.types.playbook import CaptureSpec
 
         # Extract the output based on source
         if capture_spec.source == 'stdout':

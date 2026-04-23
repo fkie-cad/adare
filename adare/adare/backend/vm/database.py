@@ -5,20 +5,18 @@ Thin layer over the database API for VM-related operations.
 Keeps database logic separate from file management logic.
 """
 
-from pathlib import Path
-from typing import Optional
 import logging
+from pathlib import Path
 
 from adare.database.api.vm import VmApi
 from adare.database.models.global_models import Vm
-from adare.backend.vm.exceptions import VMNotFoundError
 
 log = logging.getLogger(__name__)
 
 
 
 
-def _get_vm(lookup_fn_name: str, lookup_value, fields: list[str] = None) -> Optional[Vm] | dict | None:
+def _get_vm(lookup_fn_name: str, lookup_value, fields: list[str] = None) -> Vm | None | dict | None:
     """
     Internal helper: lookup a VM by any criterion and optionally extract fields.
 
@@ -32,7 +30,7 @@ def _get_vm(lookup_fn_name: str, lookup_value, fields: list[str] = None) -> Opti
         dict: VM data if fields specified
         None: If VM not found
     """
-    from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
+    from adare.database.utils.field_extractor import VM_FIELD_MAP, extract_fields
 
     with VmApi() as api:
         fn = getattr(api, lookup_fn_name)
@@ -42,7 +40,7 @@ def _get_vm(lookup_fn_name: str, lookup_value, fields: list[str] = None) -> Opti
         return extract_fields(vm, fields, VM_FIELD_MAP)
 
 
-def get_vm_by_hash(file_hash: str, fields: list[str] = None) -> Optional[Vm] | dict | None:
+def get_vm_by_hash(file_hash: str, fields: list[str] = None) -> Vm | None | dict | None:
     """
     Get VM by file hash from global database.
 
@@ -59,7 +57,7 @@ def get_vm_by_hash(file_hash: str, fields: list[str] = None) -> Optional[Vm] | d
     return _get_vm('get_vm_by_hash', file_hash, fields)
 
 
-def get_vm_by_name(name: str, fields: list[str] = None) -> Optional[Vm] | dict | None:
+def get_vm_by_name(name: str, fields: list[str] = None) -> Vm | None | dict | None:
     """
     Get VM by name from global database.
 
@@ -128,49 +126,48 @@ def create_vm(project_path: Path, name: str, file_path: Path, file_hash: str, de
 
 
         # Use field extraction utility
-        from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
+        from adare.database.utils.field_extractor import VM_FIELD_MAP, extract_fields
         return extract_fields(vm, fields, VM_FIELD_MAP)
 
 
 
 
-def create_vm_with_uuid_capture(project_path: Path, name: str, file_path: Path, file_hash: str, 
-                                description: str = '', os_platform: str = '', os_type: str = '', 
-                                os_distribution: str = '', os_version: str = '', os_language: str = '', 
-                                os_architecture: str = 'x86_64', silent: bool = False, 
+def create_vm_with_uuid_capture(project_path: Path, name: str, file_path: Path, file_hash: str,
+                                description: str = '', os_platform: str = '', os_type: str = '',
+                                os_distribution: str = '', os_version: str = '', os_language: str = '',
+                                os_architecture: str = 'x86_64', silent: bool = False,
                                 capture_uuid_after_import: bool = True, fields: list[str] = None) -> Vm | dict:
     """
     Create a new VM entry with UUID capture after VirtualBox import - ENHANCED for snapshot workflow.
-    
+
     Args:
         All standard create_vm args plus:
         capture_uuid_after_import: If True, attempt to capture VBox UUID after import
-        
+
     Returns:
         VM with UUID captured if successful
     """
-    from adare.hypervisor.virtualbox.vm import VirtualBoxVM
-    
+
     # Create VM using standard method
     vm = create_vm(
         project_path=project_path, name=name, file_path=file_path, file_hash=file_hash,
-        description=description, os_platform=os_platform, os_type=os_type, 
+        description=description, os_platform=os_platform, os_type=os_type,
         os_distribution=os_distribution, os_version=os_version, os_language=os_language,
         os_architecture=os_architecture, silent=silent
     )
-    
+
     # Note: UUID capture is now handled at VmInstance level, not Vm level
     # VmInstances are created when experiments run and track actual VirtualBox VMs
     # Return according to fields parameter
     if fields is None:
         return vm
-    
+
     # Extract requested fields from updated VM
     updated_vm = get_vm_by_name(name, fields=fields)
     return updated_vm if updated_vm else vm
 
 
-def get_vm_by_id(vm_id: str, fields: list[str] = None) -> Optional[Vm] | dict | None:
+def get_vm_by_id(vm_id: str, fields: list[str] = None) -> Vm | None | dict | None:
     """
     Get VM by database ID.
 
@@ -190,55 +187,54 @@ def get_vm_data(vm_id: str = None, name: str = None, file_hash: str = None) -> d
     """Get full VM data - convenience function for common case."""
     if vm_id:
         return get_vm_by_id(vm_id, fields=['id', 'name', 'file', 'hash', 'description', 'osinfo'])
-    elif name:
+    if name:
         return get_vm_by_name(name, fields=['id', 'name', 'file', 'hash', 'description', 'osinfo'])
-    elif file_hash:
+    if file_hash:
         return get_vm_by_hash(file_hash, fields=['id', 'name', 'file', 'hash', 'description', 'osinfo'])
-    else:
-        log.error("Must provide vm_id, name, or file_hash")
-        return None
+    log.error("Must provide vm_id, name, or file_hash")
+    return None
 
 
 async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True, environment_ulid: str = None) -> Vm:
     """
     Import existing VM record to VirtualBox.
-    
+
     Args:
         vm: VM database record
         capture_uuid_after_import: If True, capture VBox UUID after import
-        
+
     Returns:
         Updated VM record with UUID
     """
-    import asyncio
     from pathlib import Path
-    from adare.hypervisor.virtualbox.vm import VirtualBoxVM
+
     from adare.database.api.vm import VmApi
-    
+    from adare.hypervisor.virtualbox.vm import VirtualBoxVM
+
     # Check if a VM with the same name already exists in VirtualBox
     original_vm_name = vm.name
     vbox_vm_name = vm.name  # This will be the name used in VirtualBox
-    
+
     try:
         existing_uuid = VirtualBoxVM.get_vm_uuid_by_name(vbox_vm_name)
         if existing_uuid:
             # Generate unique VM name for VirtualBox to avoid conflicts
-            import time
             import random
+            import time
             timestamp = int(time.time())
             unique_suffix = f"_{timestamp}_{random.randint(1000, 9999)}"
             vbox_vm_name = f"{original_vm_name}{unique_suffix}"
 
             log.info(f"VM '{original_vm_name}' already exists in VirtualBox, creating new VM with unique name: '{vbox_vm_name}'")
-                
+
     except Exception as e:
         log.debug(f"VM '{vbox_vm_name}' not found in VirtualBox, proceeding with import: {e}")
-    
+
     # Actually import the VM to VirtualBox
     try:
         log.info(f"Importing VM '{vbox_vm_name}' to VirtualBox from file: {vm.file}")
         vm_file = Path(vm.file)
-        
+
         # Get OS info from environment if available
         guest_os = "Other"
         if environment_ulid:
@@ -247,11 +243,11 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
                 guest_os = env_db.get_environment_os(environment_ulid) or "Other"
             except (ImportError, ValueError, KeyError):
                 log.debug(f"Could not get OS info from environment {environment_ulid}, using default")
-        
+
         # Create VirtualBoxVM instance and import using the unique name
-        from adare.hypervisor.virtualbox.manager import VirtualBoxManager
-        from adare.config import get_vm_credentials
         from adare.backend.vm.exceptions import VMImportError
+        from adare.config import get_vm_credentials
+        from adare.hypervisor.virtualbox.manager import VirtualBoxManager
         manager = VirtualBoxManager()
         username, password = get_vm_credentials(guest_os)
         vbox_vm = VirtualBoxVM(vbox_vm_name, guest_os, manager, username, password, manager.executables)
@@ -269,7 +265,7 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
             # Include actual VirtualBox error output in the error message
             vbox_error = vbox_output.strip() if vbox_output and vbox_output.strip() else "No error details available"
             raise VMImportError(log, f"VirtualBox import failed with return code {import_result}. VirtualBox error: {vbox_error}")
-        
+
         # Disable time synchronization to prevent VM from syncing with host time
         # await vbox_vm.disable_time_sync(silent=True)  # Commented out - makes clock weird
 
@@ -282,11 +278,11 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
             vm = get_vm_by_id(vm.id)  # Refresh with updated data
 
         log.info(f"Successfully imported VM '{vbox_vm_name}' to VirtualBox")
-        
+
     except Exception as e:
         log.error(f"Failed to import VM '{vbox_vm_name}' to VirtualBox: {e}", exc_info=True)
         raise
-    
+
     return vm
 
 
@@ -295,30 +291,29 @@ def get_vm_summary(vm_id: str = None, name: str = None, file_hash: str = None) -
     if vm_id:
         log.warning("get_vm_summary by ID not implemented - use name or hash")
         return None
-    elif name:
+    if name:
         return get_vm_by_name(name, fields=['id', 'name', 'description'])
-    elif file_hash:
+    if file_hash:
         return get_vm_by_hash(file_hash, fields=['id', 'name', 'description'])
-    else:
-        log.error("Must provide vm_id, name, or file_hash")
-        return None
+    log.error("Must provide vm_id, name, or file_hash")
+    return None
 
 
 def delete_vm(vm_id: str) -> bool:
     """
     Delete a VM from the database.
-    
+
     Args:
         vm_id: VM database ID
-        
+
     Returns:
         True if successfully deleted
-        
+
     Raises:
         VMError: If deletion fails
     """
     from adare.backend.vm.exceptions import VMError
-    
+
     try:
         with VmApi() as api:
             return api.delete_vm(vm_id)
@@ -330,14 +325,14 @@ def delete_vm(vm_id: str) -> bool:
 def get_all_vms(fields: list[str] = None) -> list:
     """
     Get all VMs from the database.
-    
+
     Args:
         fields: Optional list of fields to extract. If None, returns full objects.
-        
+
     Returns:
         List of VM objects or dictionaries (if fields specified)
     """
-    from adare.database.utils.field_extractor import extract_fields, VM_FIELD_MAP
+    from adare.database.utils.field_extractor import VM_FIELD_MAP, extract_fields
 
     with VmApi() as api:
         vms = api.get_all_vms()
@@ -360,10 +355,11 @@ def get_vms_by_environment(environment_ulid: str) -> list:
     Returns:
         List of VM objects associated with the environment
     """
-    from adare.backend.environment import database as env_database
-    from adare.database.models.global_models import Vm
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import joinedload
+
+    from adare.backend.environment import database as env_database
+    from adare.database.models.global_models import Vm
 
     try:
         # Get VMs used by this environment
@@ -389,7 +385,7 @@ def get_vms_by_environment(environment_ulid: str) -> list:
     except SQLAlchemyError as e:
         log.error(f"Database error getting VMs for environment {environment_ulid}: {e}", exc_info=True)
         return []
-    except (OSError, IOError) as e:
+    except OSError as e:
         log.error(f"File system error getting VMs for environment {environment_ulid}: {e}", exc_info=True)
         return []
 
@@ -397,16 +393,15 @@ def get_vms_by_environment(environment_ulid: str) -> list:
 def delete_all_vms(force: bool = False) -> dict:
     """
     Delete all VMs from the database and VirtualBox.
-    
+
     Args:
         force: If True, force deletion even if VMs are in use
-        
+
     Returns:
         Dictionary with deletion results
     """
-    from adare.hypervisor.virtualbox.vm import VirtualBoxVM
     from adare.backend.vm.snapshot_manager import SnapshotManager
-    
+
     results = {
         'deleted_count': 0,
         'failed_count': 0,
@@ -415,13 +410,13 @@ def delete_all_vms(force: bool = False) -> dict:
         'failed_vms': [],
         'skipped_vms': []
     }
-    
+
     try:
         all_vms = get_all_vms()
         log.info(f"Found {len(all_vms)} VMs to delete")
-        
+
         snapshot_manager = SnapshotManager()
-        
+
         for vm in all_vms:
             try:
                 # Delete associated VmInstance records - they will handle VirtualBox cleanup
@@ -444,15 +439,15 @@ def delete_all_vms(force: bool = False) -> dict:
                 results['deleted_count'] += 1
                 results['deleted_vms'].append(vm.name)
                 log.info(f"Successfully deleted VM: {vm.name}")
-                
+
             except Exception as e:
                 results['failed_count'] += 1
                 results['failed_vms'].append(f"{vm.name}: {str(e)}")
                 log.error(f"Failed to delete VM '{vm.name}': {e}")
-        
+
         log.info(f"VM cleanup completed - deleted: {results['deleted_count']}, failed: {results['failed_count']}")
         return results
-        
+
     except Exception as e:
         log.error(f"Error during VM cleanup: {e}")
         results['failed_count'] += len(results.get('deleted_vms', [])) + len(results.get('failed_vms', []))
@@ -462,11 +457,11 @@ def delete_all_vms(force: bool = False) -> dict:
 def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dict:
     """
     Delete all VMs associated with a specific environment.
-    
+
     Args:
         environment_ulid: Environment ULID
         force: If True, force deletion even if VMs are in use
-        
+
     Returns:
         Dictionary with deletion results
     """
@@ -478,17 +473,16 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
         'failed_vms': [],
         'skipped_vms': []
     }
-    
+
     try:
         vms = get_vms_by_environment(environment_ulid)
         if not vms:
             log.info(f"No VMs found for environment {environment_ulid}")
             return results
-        
+
         log.info(f"Found {len(vms)} VMs for environment {environment_ulid}")
-        
-        from adare.hypervisor.virtualbox.vm import VirtualBoxVM
-        
+
+
         for vm in vms:
             try:
                 # Delete associated VmInstance records - they will handle VirtualBox cleanup
@@ -510,29 +504,29 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
                 results['deleted_count'] += 1
                 results['deleted_vms'].append(vm.name)
                 log.info(f"Successfully deleted VM: {vm.name}")
-                
+
             except Exception as e:
                 results['failed_count'] += 1
                 results['failed_vms'].append(f"{vm.name}: {str(e)}")
                 log.error(f"Failed to delete VM '{vm.name}': {e}")
-        
+
         log.info(f"Environment VM cleanup completed - deleted: {results['deleted_count']}, failed: {results['failed_count']}")
         return results
-        
+
     except Exception as e:
         log.error(f"Error during environment VM cleanup: {e}")
         return results
 
 
 def load_vm_from_file(file_path: Path, name: str = None, description: str = '',
-                     os_platform: str = '', os_type: str = '', os_distribution: str = '', 
+                     os_platform: str = '', os_type: str = '', os_distribution: str = '',
                      os_version: str = '', os_language: str = '', os_architecture: str = 'x86_64',
                      quiet: bool = False) -> Vm:
     """
     Load a VM from file into the database.
-    
+
     This is a convenience function that delegates to the database API.
-    
+
     Args:
         file_path: Path to VM file
         name: VM name (defaults to filename without extension)
@@ -544,7 +538,7 @@ def load_vm_from_file(file_path: Path, name: str = None, description: str = '',
         os_language: OS language
         os_architecture: Architecture (default: x86_64)
         quiet: If True, suppress progress bars
-        
+
     Returns:
         Created VM instance
     """

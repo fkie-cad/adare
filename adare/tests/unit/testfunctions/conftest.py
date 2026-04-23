@@ -1,13 +1,13 @@
 """Fixtures for testfunction unit tests."""
 
-import pytest
-from pathlib import Path
-from unittest.mock import MagicMock, patch, AsyncMock
 import csv
 import json
 import sqlite3
-import pandas as pd
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pandas as pd
+import pytest
 
 # === Path Fixtures ===
 

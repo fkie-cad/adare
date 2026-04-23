@@ -1,6 +1,7 @@
 """Shared QEMU utilities -- architecture params, QMP shutdown, and input/exit waiting."""
 
 import json
+import logging
 import platform
 import socket
 import subprocess
@@ -13,7 +14,6 @@ from adare.config import HYPERVISOR_CONFIGS
 from adare.console import console, print_step
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -34,14 +34,14 @@ def qemu_params_for_arch(os_def: OsDefinition) -> dict:
             # Note: virtio-gpu-PCI causes BSOD — must use virtio-gpu-device (MMIO variant).
             'vga_args': ['-device', 'ramfb', '-device', 'virtio-gpu-device'],
         }
-    else:  # x86_64
-        accel = HYPERVISOR_CONFIGS['qemu']['default_accel']
-        return {
-            'exe': HYPERVISOR_CONFIGS['qemu']['qemu_system_exe'],
-            'machine': f'type=q35,accel={accel}',
-            'cpu': 'max',
-            'vga_args': ['-vga', 'std'],
-        }
+    # x86_64
+    accel = HYPERVISOR_CONFIGS['qemu']['default_accel']
+    return {
+        'exe': HYPERVISOR_CONFIGS['qemu']['qemu_system_exe'],
+        'machine': f'type=q35,accel={accel}',
+        'cpu': 'max',
+        'vga_args': ['-vga', 'std'],
+    }
 
 
 def wait_for_input_or_exit(process: subprocess.Popen, qmp_sock: Path) -> None:

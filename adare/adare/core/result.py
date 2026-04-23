@@ -5,7 +5,7 @@ Provides a standardized way to return success/failure from service operations,
 enabling any frontend (CLI, Web, REST API) to handle results consistently.
 """
 from dataclasses import dataclass, field
-from typing import TypeVar, Generic, Optional, List, Dict, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 if TYPE_CHECKING:
     from adare.exceptions import LoggedErrorException
@@ -26,10 +26,10 @@ class ErrorInfo:
     """
     code: str
     message: str
-    solutions: Optional[List[str]] = None
-    context: Optional[Dict[str, Any]] = None
+    solutions: list[str] | None = None
+    context: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         result = {
             'code': self.code,
@@ -68,12 +68,12 @@ class Result(Generic[T]):
             print(f"Error {result.error.code}: {result.error.message}")
     """
     success: bool
-    data: Optional[T] = None
-    error: Optional[ErrorInfo] = None
-    warnings: List[str] = field(default_factory=list)
+    data: T | None = None
+    error: ErrorInfo | None = None
+    warnings: list[str] = field(default_factory=list)
 
     @classmethod
-    def ok(cls, data: T, warnings: Optional[List[str]] = None) -> "Result[T]":
+    def ok(cls, data: T, warnings: list[str] | None = None) -> "Result[T]":
         """Create a successful result with data."""
         return cls(success=True, data=data, warnings=warnings or [])
 
@@ -82,8 +82,8 @@ class Result(Generic[T]):
         cls,
         code: str,
         message: str,
-        solutions: Optional[List[str]] = None,
-        context: Optional[Dict[str, Any]] = None
+        solutions: list[str] | None = None,
+        context: dict[str, Any] | None = None
     ) -> "Result[T]":
         """Create a failure result with error information."""
         return cls(
@@ -113,9 +113,9 @@ class Result(Generic[T]):
             )
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        result: Dict[str, Any] = {'success': self.success}
+        result: dict[str, Any] = {'success': self.success}
         if self.success and self.data is not None:
             # If data has to_dict method, use it; otherwise try __dict__ or str
             if hasattr(self.data, 'to_dict'):

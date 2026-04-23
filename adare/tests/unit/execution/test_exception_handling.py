@@ -18,7 +18,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. Path.stem exception specificity
 #    Pattern from: simple_actions.py:228, target_resolution.py:133

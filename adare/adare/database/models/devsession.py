@@ -5,10 +5,9 @@ This module defines the DevSession model for tracking persistent dev mode sessio
 across CLI invocations. Sessions are stored globally in the database.
 """
 
-from sqlalchemy import Column, String, DateTime, func, CHAR
-from sqlalchemy.orm import declarative_base
-from sqlalchemy_serializer import SerializerMixin
 import ulid
+from sqlalchemy import CHAR, Column, DateTime, String, func
+from sqlalchemy_serializer import SerializerMixin
 
 # Use GlobalBase for global models (shared across projects)
 from adare.database.models.global_models import GlobalBase

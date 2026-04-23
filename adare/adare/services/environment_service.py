@@ -4,34 +4,35 @@ Environment Service - Business logic for environment operations.
 This service handles all environment-related operations and returns Result[T] objects
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
-from pathlib import Path
-from typing import List
-
 import logging
+from pathlib import Path
 
 import adare.backend.environment.database as environment_database
 from adare.backend.environment.commands import (
-    environment_load as backend_environment_load,
     environment_create as backend_environment_create,
+)
+from adare.backend.environment.commands import (
     environment_delete as backend_environment_delete,
 )
+from adare.backend.environment.commands import (
+    environment_load as backend_environment_load,
+)
 from adare.backend.environment.exceptions import (
-    EnvironmentLoadFailed,
-    EnvironmentFileAlreadyExists,
-    EnvironmentDoesNotExistInDatabase,
-    EnvironmentDeletionError,
     EnvironmentAlreadyExists,
+    EnvironmentDeletionError,
+    EnvironmentDoesNotExistInDatabase,
+    EnvironmentFileAlreadyExists,
+    EnvironmentLoadFailed,
     EnvironmentUpdateError,
 )
-from adare.database.api.environment import EnvironmentDbApi
-from adare.core.result import Result
 from adare.core.dto.environment import (
-    EnvironmentLoadRequest,
     EnvironmentCreateRequest,
-    EnvironmentDeleteRequest,
     EnvironmentInfo,
     EnvironmentListItem,
+    EnvironmentLoadRequest,
 )
+from adare.core.result import Result
+from adare.database.api.environment import EnvironmentDbApi
 
 log = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ class EnvironmentService:
                 if env_data:
                     next_steps = [
                         f'Run experiments in this environment with: adare experiment run <experiment> -e {env_name}',
-                        f'List available environments with: adare environment list',
+                        'List available environments with: adare environment list',
                         f'View environment details with: adare environment show {env_name}'
                     ]
 
@@ -136,7 +137,7 @@ class EnvironmentService:
             )
 
             next_steps = [
-                f'Edit the environment file to configure VM and OS settings',
+                'Edit the environment file to configure VM and OS settings',
                 f'Load the environment with: adare environment load {request.name}',
             ]
 
@@ -149,7 +150,7 @@ class EnvironmentService:
                 os_platform=None,
                 file_path=request.project_path / 'environments' / f'{request.name}.yml',
                 next_steps=next_steps,
-                tip=f'Environment template created. Edit the file and load it to register.',
+                tip='Environment template created. Edit the file and load it to register.',
             ))
 
         except EnvironmentFileAlreadyExists as e:
@@ -180,7 +181,7 @@ class EnvironmentService:
         except EnvironmentDeletionError as e:
             return Result.from_exception(e)
 
-    def list_all(self) -> Result[List[EnvironmentListItem]]:
+    def list_all(self) -> Result[list[EnvironmentListItem]]:
         """
         List all environments.
 

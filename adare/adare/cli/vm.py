@@ -1,10 +1,10 @@
 # internal imports
-from adare.api import AdareAPI
-from adare.console import print_success_message, print_error_message
-
-
 # configure logging
 import logging
+
+from adare.api import AdareAPI
+from adare.console import print_error_message, print_success_message
+
 log = logging.getLogger(__name__)
 
 
@@ -65,9 +65,7 @@ def exec_vm_delete_snapshot(arguments):
 
 def exec_vm_clear_all(arguments):
     """Clear all VMs from the system using AdareAPI."""
-    from adare.frontend.terminal.vm_cleanup import (
-        print_vm_clear_all_confirmation, print_vm_clear_all_results
-    )
+    from adare.frontend.terminal.vm_cleanup import print_vm_clear_all_confirmation, print_vm_clear_all_results
 
     if not arguments.force:
         print_vm_clear_all_confirmation()
@@ -92,7 +90,8 @@ def exec_vm_clear_all(arguments):
 def exec_vm_clear_by_environment(arguments):
     """Clear VMs associated with a specific environment using AdareAPI."""
     from adare.frontend.terminal.vm_cleanup import (
-        print_vm_clear_environment_confirmation, print_vm_clear_environment_results
+        print_vm_clear_environment_confirmation,
+        print_vm_clear_environment_results,
     )
 
     if not arguments.force:
@@ -117,9 +116,10 @@ def exec_vm_clear_by_environment(arguments):
 
 async def exec_vm_test(arguments):
     """Test OVA file compatibility with ADARE using AdareAPI."""
-    from adare.core.dto.vm import VmTestRequest
-    from pathlib import Path
     import sys
+    from pathlib import Path
+
+    from adare.core.dto.vm import VmTestRequest
 
     ova_path = Path(arguments.ova_file).resolve()
 

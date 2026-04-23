@@ -4,28 +4,26 @@ Manage Service - Business logic for database and system management operations.
 This service handles database management operations and returns Result[T] objects
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
-from pathlib import Path
-from typing import Optional
-
 import logging
+from pathlib import Path
 
 from adare.config.database import get_global_database_location
-from adare.database.init import (
-    initialize_database_system,
-    validate_database_integrity,
-    repair_database_system,
-    clean_install_database_system,
-)
-from adare.core.result import Result
 from adare.core.dto.manage import (
-    DbStatusResult,
+    DbCleanInstallResult,
     DbInitResult,
     DbRepairResult,
-    DbCleanInstallResult,
     DbResetResult,
+    DbStatusResult,
     VmResetResult,
-    VmRuntimeRefreshResult,
     VmRuntimeBuildResult,
+    VmRuntimeRefreshResult,
+)
+from adare.core.result import Result
+from adare.database.init import (
+    clean_install_database_system,
+    initialize_database_system,
+    repair_database_system,
+    validate_database_integrity,
 )
 
 log = logging.getLogger(__name__)
@@ -172,11 +170,10 @@ class ManageService:
                     was_reset=True,
                     location=database_location,
                 ))
-            else:
-                return Result.ok(DbResetResult(
-                    was_reset=False,
-                    location=database_location,
-                ))
+            return Result.ok(DbResetResult(
+                was_reset=False,
+                location=database_location,
+            ))
 
         except Exception as e:
             log.error(f"Failed to reset database: {e}")
@@ -200,7 +197,7 @@ class ManageService:
         Returns:
             Result[VmResetResult] with reset results.
         """
-        from adare.backend.vm.commands import clear_all_vms, list_all_vms
+        from adare.backend.vm.commands import clear_all_vms
 
         if not force:
             return Result.fail(
@@ -227,7 +224,7 @@ class ManageService:
                 solutions=['Check if VMs are in use', 'Try stopping running VMs first']
             )
 
-    def refresh_vm_runtime(self, project_path: Optional[Path] = None) -> Result[VmRuntimeRefreshResult]:
+    def refresh_vm_runtime(self, project_path: Path | None = None) -> Result[VmRuntimeRefreshResult]:
         """
         Refresh VM runtime files in a project.
 
@@ -238,6 +235,7 @@ class ManageService:
             Result[VmRuntimeRefreshResult] with refresh results.
         """
         import shutil
+
         from adare.backend.basics import determine_projectdirectory
         from adare.backend.project.directory import ProjectDirectory
         from adare.exceptions import NoProjectFoundError
@@ -282,7 +280,7 @@ class ManageService:
                 solutions=['Check project directory permissions']
             )
 
-    def build_vm_runtime_wheels(self, project_path: Optional[Path] = None) -> Result[VmRuntimeBuildResult]:
+    def build_vm_runtime_wheels(self, project_path: Path | None = None) -> Result[VmRuntimeBuildResult]:
         """
         Build fresh wheels for VM runtime in a project.
 
@@ -297,8 +295,9 @@ class ManageService:
         Returns:
             Result[VmRuntimeBuildResult] with build results.
         """
-        import subprocess
         import re
+        import subprocess
+
         from adare.backend.basics import determine_projectdirectory
         from adare.backend.project.directory import ProjectDirectory
         from adare.exceptions import NoProjectFoundError

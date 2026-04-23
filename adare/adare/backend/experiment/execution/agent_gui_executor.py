@@ -5,7 +5,7 @@ This executor delegates GUI actions to the adarevm agent running in the VM.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 
 from .gui_executor_interface import AbstractGUIExecutor
 
@@ -26,7 +26,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
         self.client = websocket_client
         log.debug("Initialized AgentGUIExecutor (WebSocket-based)")
 
-    async def screenshot(self, region: Optional[dict] = None) -> Dict[str, Any]:
+    async def screenshot(self, region: dict | None = None) -> dict[str, Any]:
         """
         Capture screenshot via WebSocket.
 
@@ -49,7 +49,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
             log.error(f"Agent screenshot failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
-    async def click(self, x: int, y: int, button_type: str = 'left') -> Dict[str, Any]:
+    async def click(self, x: int, y: int, button_type: str = 'left') -> dict[str, Any]:
         """
         Execute mouse click via WebSocket.
 
@@ -73,7 +73,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
             log.error(f"Agent click failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
-    async def drag(self, x1: int, y1: int, x2: int, y2: int) -> Dict[str, Any]:
+    async def drag(self, x1: int, y1: int, x2: int, y2: int) -> dict[str, Any]:
         """
         Execute drag operation via WebSocket.
 
@@ -93,7 +93,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
             log.error(f"Agent drag failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
-    async def keyboard(self, action_type: str, value: str) -> Dict[str, Any]:
+    async def keyboard(self, action_type: str, value: str) -> dict[str, Any]:
         """
         Execute keyboard action via WebSocket.
 
@@ -111,7 +111,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
             log.error(f"Agent keyboard failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
-    async def scroll(self, direction: str, amount: int) -> Dict[str, Any]:
+    async def scroll(self, direction: str, amount: int) -> dict[str, Any]:
         """
         Execute scroll action via WebSocket.
 

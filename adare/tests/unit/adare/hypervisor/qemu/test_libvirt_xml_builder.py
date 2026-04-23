@@ -2,17 +2,16 @@
 
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List
+from typing import Any
 from unittest.mock import patch
 
 import pytest
 
-from adare.hypervisor.qemu.libvirt_xml_builder import (
-    PCIBusAllocator,
-    DomainXMLBuilder,
-)
 from adare.hypervisor.qemu.libvirt_xml import generate_domain_xml
-
+from adare.hypervisor.qemu.libvirt_xml_builder import (
+    DomainXMLBuilder,
+    PCIBusAllocator,
+)
 
 # --- Test fixtures ---
 
@@ -32,18 +31,18 @@ class MockVMConfig:
     drive_format: str = 'qcow2'
     boot_mode: str = 'bios'
     network: str = 'user'
-    port_forwarding_rules: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    port_forwarding_rules: dict[str, dict[str, Any]] = field(default_factory=dict)
     qmp_socket_path: str = '/tmp/test-qmp.sock'
     guest_agent_socket_path: str = '/tmp/test-ga.sock'
     pid_file_path: str = '/tmp/test.pid'
     is_external: bool = False
     display_enabled: bool = False
-    vnc_port: Optional[int] = None
-    libvirt_domain_name: Optional[str] = None
-    serial_console_log_path: Optional[str] = None
-    qemu_debug_log_path: Optional[str] = None
+    vnc_port: int | None = None
+    libvirt_domain_name: str | None = None
+    serial_console_log_path: str | None = None
+    qemu_debug_log_path: str | None = None
     virtiofs_enabled: bool = True
-    virtiofs_shares: Optional[List[Dict[str, Any]]] = field(default_factory=list)
+    virtiofs_shares: list[dict[str, Any]] | None = field(default_factory=list)
 
 
 def make_linux_pc_config(**overrides) -> MockVMConfig:
@@ -546,7 +545,7 @@ class TestDomainXMLBuilderQemuCommandline:
 
         assert '-qmp' in arg_values
         qmp_idx = arg_values.index('-qmp')
-        assert 'unix:/tmp/test-qmp.sock,server=on,wait=off' == arg_values[qmp_idx + 1]
+        assert arg_values[qmp_idx + 1] == 'unix:/tmp/test-qmp.sock,server=on,wait=off'
 
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.shutil.which', return_value='/opt/homebrew/bin/qemu-system-x86_64')
     @patch('adare.hypervisor.qemu.libvirt_xml_builder.platform.system', return_value='Darwin')
@@ -584,11 +583,11 @@ class TestDomainXMLBuilderQemuCommandline:
 
         assert '-netdev' in arg_values
         netdev_idx = arg_values.index('-netdev')
-        assert 'user,id=net0,hostfwd=tcp::2222-:22' == arg_values[netdev_idx + 1]
+        assert arg_values[netdev_idx + 1] == 'user,id=net0,hostfwd=tcp::2222-:22'
 
         assert '-device' in arg_values
         device_idx = arg_values.index('-device')
-        assert 'virtio-net-pci,netdev=net0' == arg_values[device_idx + 1]
+        assert arg_values[device_idx + 1] == 'virtio-net-pci,netdev=net0'
 
 
 class TestDomainXMLBuilderVirtioFS:

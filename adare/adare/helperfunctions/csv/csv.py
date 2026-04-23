@@ -1,13 +1,13 @@
 import csv
+import logging
 from pathlib import Path
 
-import logging
 log = logging.getLogger(__name__)
 
 
 def csv_to_dict(path: Path, delimiter=',', newline='\n', quotechar='"'):
     data = dict()
-    with open(path.as_posix(), mode='r', newline=newline) as f:
+    with open(path.as_posix(), newline=newline) as f:
         reader = csv.reader(f, delimiter=delimiter, quotechar=quotechar)
         for row in reader:
             if len(row) != 2:

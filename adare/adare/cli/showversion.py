@@ -1,8 +1,9 @@
 # internal imports
-from adare.config import VERSION
-
 # configure logging
 import logging
+
+from adare.config import VERSION
+
 log = logging.getLogger(__name__)
 
 

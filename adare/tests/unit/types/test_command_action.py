@@ -1,17 +1,19 @@
 
 import pytest
+
 from adare.types.playbook import CommandAction
+
 
 class TestCommandAction:
 
     def test_raw_string_parsing_r_double_quote(self):
         """Test parsing of r"..." raw string format."""
         # The input value simulates what the YAML loader might pass if it parses 'command: r"..."' as a string
-        # BUT wait, YAML loader usually handles quotes. 
+        # BUT wait, YAML loader usually handles quotes.
         # If the user writes:
         # command: r"something"
         # The YAML loader parses this as the string 'r"something"'.
-        
+
         action = CommandAction(command='r"C:\\Windows\\System32"')
         assert action.command == 'C:\\Windows\\System32'
 

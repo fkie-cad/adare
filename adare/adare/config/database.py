@@ -1,10 +1,11 @@
 # internal imports
-from .configdirectory import APPDATA_DIR, STATE_DIR
-from .exceptions import ConfigDirectoryError
-from pathlib import Path
-
 # configure logging
 import logging
+from pathlib import Path
+
+from .configdirectory import APPDATA_DIR, STATE_DIR
+from .exceptions import ConfigDirectoryError
+
 log = logging.getLogger(__name__)
 
 

@@ -55,10 +55,9 @@ def _get_nested_value(data, key_path):
     # If we have multiple values, it was a wildcard match
     if len(current_values) > 1:
         return current_values, True
-    elif len(current_values) == 1:
+    if len(current_values) == 1:
         return current_values[0], True
-    else:
-        return None, False
+    return None, False
 
 
 def _compare_values(ctx, actual_value, expected_value, regex_match=False):
@@ -72,8 +71,7 @@ def _compare_values(ctx, actual_value, expected_value, regex_match=False):
                 pattern = re.compile(expected_value.string)
                 if pattern.match(str(actual_value)):
                     return True, f'value "{actual_value}" matches regex "{expected_value.string}"'
-                else:
-                    return False, f'value "{actual_value}" does not match regex "{expected_value.string}"'
+                return False, f'value "{actual_value}" does not match regex "{expected_value.string}"'
             except re.error as e:
                 return False, f'Invalid regex pattern: {expected_value.string} - {e}'
     except ImportError:
@@ -89,16 +87,14 @@ def _compare_values(ctx, actual_value, expected_value, regex_match=False):
                 pattern = re.compile(expected_value)
                 if pattern.search(str(actual_value)):
                     return True, f'value "{actual_value}" matches regex "{expected_value}"'
-                else:
-                    return False, f'value "{actual_value}" does not match regex "{expected_value}"'
+                return False, f'value "{actual_value}" does not match regex "{expected_value}"'
             except re.error as e:
                 return False, f'Invalid regex pattern: {expected_value} - {e}'
         else:
             # Direct value comparison
             if actual_value == expected_value:
                 return True, f'value matches expected: {actual_value}'
-            else:
-                return False, f'expected "{expected_value}", got "{actual_value}"'
+            return False, f'expected "{expected_value}", got "{actual_value}"'
     else:
         # Has placeholders - use placeholder system (handles regex and timestamp with tolerance)
         placeholder_names = ctx.get_placeholders(expected_str)
@@ -142,27 +138,25 @@ def _handle_wildcard_matching(ctx, values, expected_value, wildcard_mode, key_pa
                 f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: any)',
                 f'matching values: {", ".join(match_details)}'
             ])
-        else:
-            return TestResult.failed([
-                f'wildcard path "{key_path}" matched 0/{len(values)} values (mode: any)',
-                f'expected: "{expected_value}"',
-                f'got values: {[val for _, val, _ in non_matches[:5]]}'  # Show first 5 non-matches
-            ])
-    else:  # wildcard_mode == 'all'
-        if not non_matches:
-            return TestResult.success([
-                f'wildcard path "{key_path}" matched all {len(values)} values (mode: all)',
-                f'all values equal: "{expected_value}"'
-            ])
-        else:
-            non_match_details = [f"element[{i}]: {val}" for i, val, _ in non_matches[:3]]  # Show first 3 non-matches
-            if len(non_matches) > 3:
-                non_match_details.append(f"... and {len(non_matches) - 3} more non-matches")
-            return TestResult.failed([
-                f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: all)',
-                f'expected: "{expected_value}"',
-                f'non-matching values: {", ".join(non_match_details)}'
-            ])
+        return TestResult.failed([
+            f'wildcard path "{key_path}" matched 0/{len(values)} values (mode: any)',
+            f'expected: "{expected_value}"',
+            f'got values: {[val for _, val, _ in non_matches[:5]]}'  # Show first 5 non-matches
+        ])
+    # wildcard_mode == 'all'
+    if not non_matches:
+        return TestResult.success([
+            f'wildcard path "{key_path}" matched all {len(values)} values (mode: all)',
+            f'all values equal: "{expected_value}"'
+        ])
+    non_match_details = [f"element[{i}]: {val}" for i, val, _ in non_matches[:3]]  # Show first 3 non-matches
+    if len(non_matches) > 3:
+        non_match_details.append(f"... and {len(non_matches) - 3} more non-matches")
+    return TestResult.failed([
+        f'wildcard path "{key_path}" matched {len(matches)}/{len(values)} values (mode: all)',
+        f'expected: "{expected_value}"',
+        f'non-matching values: {", ".join(non_match_details)}'
+    ])
 
 
 @testfunction(
@@ -179,15 +173,14 @@ def contains_key(ctx, dst: str, key_path: str):
         log.debug(f'dst file {dst_path} will be used for test contains_key')
 
         try:
-            with open(dst_path, 'r') as f:
+            with open(dst_path) as f:
                 data = json.load(f)
 
             value, exists = _get_nested_value(data, key_path)
 
             if exists:
                 return TestResult.success([f'key path "{key_path}" exists with value: {value}'])
-            else:
-                return TestResult.failed([f'key path "{key_path}" does not exist'])
+            return TestResult.failed([f'key path "{key_path}" does not exist'])
 
         except json.JSONDecodeError as e:
             return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])
@@ -206,7 +199,7 @@ def contains_key(ctx, dst: str, key_path: str):
     description='tests if JSON value at key path matches expected value using placeholders (supports wildcards [*] and * with any/all modes)',
     category=HostModeCategory.FILE_CONTENT,
 )
-def value_matches(ctx, dst: str, key_path: str, expected_value: Union[str, int, float, bool, None] = None, regex_match: bool = False, wildcard_mode: str = "any"):
+def value_matches(ctx, dst: str, key_path: str, expected_value: str | int | float | bool | None = None, regex_match: bool = False, wildcard_mode: str = "any"):
     try:
         dst_path, status = ctx.resolve_globfilepath(dst)
         if not dst_path:
@@ -215,7 +208,7 @@ def value_matches(ctx, dst: str, key_path: str, expected_value: Union[str, int, 
         log.debug(f'dst file {dst_path} will be used for test value_matches')
 
         try:
-            with open(dst_path, 'r') as f:
+            with open(dst_path) as f:
                 data = json.load(f)
 
             value, exists = _get_nested_value(data, key_path)
@@ -227,7 +220,7 @@ def value_matches(ctx, dst: str, key_path: str, expected_value: Union[str, int, 
             if isinstance(value, list) and len(value) > 1:
                 # Multiple values from wildcard matching
                 return _handle_wildcard_matching(ctx, value, expected_value, wildcard_mode, key_path, regex_match=regex_match)
-            elif isinstance(value, list) and len(value) == 1:
+            if isinstance(value, list) and len(value) == 1:
                 # Single value from wildcard (treat as regular match)
                 value = value[0]
 
@@ -235,8 +228,7 @@ def value_matches(ctx, dst: str, key_path: str, expected_value: Union[str, int, 
             is_match, message = _compare_values(ctx, value, expected_value, regex_match=regex_match)
             if is_match:
                 return TestResult.success([message])
-            else:
-                return TestResult.failed([message])
+            return TestResult.failed([message])
 
         except json.JSONDecodeError as e:
             return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])
@@ -255,7 +247,7 @@ def value_matches(ctx, dst: str, key_path: str, expected_value: Union[str, int, 
     description='tests if JSON array at specified path contains expected element',
     category=HostModeCategory.FILE_CONTENT,
 )
-def array_contains(ctx, dst: str, array_path: str, expected_element: Union[str, int, float, bool, dict, list] = None):
+def array_contains(ctx, dst: str, array_path: str, expected_element: str | int | float | bool | dict | list = None):
     try:
         dst_path, status = ctx.resolve_globfilepath(dst)
         if not dst_path:
@@ -264,7 +256,7 @@ def array_contains(ctx, dst: str, array_path: str, expected_element: Union[str, 
         log.debug(f'dst file {dst_path} will be used for test array_contains')
 
         try:
-            with open(dst_path, 'r') as f:
+            with open(dst_path) as f:
                 data = json.load(f)
 
             array, exists = _get_nested_value(data, array_path)
@@ -287,17 +279,14 @@ def array_contains(ctx, dst: str, array_path: str, expected_element: Union[str, 
                             success, message = ctx.compare_with_placeholder(placeholder_name, str(element))
                             if success:
                                 return TestResult.success([f'array element [{i}] matches placeholder: {message}'])
-                        except Exception as e:
+                        except Exception:
                             continue  # Try next element
                     return TestResult.failed([f'no array element matches placeholder "{placeholder_name}"'])
-                else:
-                    return TestResult.failed([f'expected 1 placeholder for array comparison, got {len(placeholder_names)}'])
-            else:
-                # Regular direct comparison
-                if expected_element in array:
-                    return TestResult.success([f'array contains expected element: {expected_element}'])
-                else:
-                    return TestResult.failed([f'array does not contain expected element: {expected_element}'])
+                return TestResult.failed([f'expected 1 placeholder for array comparison, got {len(placeholder_names)}'])
+            # Regular direct comparison
+            if expected_element in array:
+                return TestResult.success([f'array contains expected element: {expected_element}'])
+            return TestResult.failed([f'array does not contain expected element: {expected_element}'])
 
         except json.JSONDecodeError as e:
             return TestResult.failed([f"Invalid JSON in file {dst_path}: {e}"])

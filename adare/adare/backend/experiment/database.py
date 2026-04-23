@@ -1,21 +1,20 @@
 # external imports
-from pathlib import Path
+# configure logging
+import logging
 from datetime import datetime
+from pathlib import Path
+
+from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
+from adare.backend.experiment.exceptions import MultipleEnvironmentsError, NoEnvironmentError
+from adare.database.api.environment import EnvironmentDbApi
+from adare.database.api.experiment import ExperimentApi
+from adare.database.api.stage import StageDbApi
 
 # internal imports
 from adare.database.models.project_models import Experiment
-from adare.database.api.experiment import ExperimentApi
-from adare.database.api.environment import EnvironmentDbApi
-from adare.database.reference_manager import reference_manager
-from adare.database.api.stage import StageDbApi
-from adare.backend.experiment.directory import ExperimentDirectory, ExperimentRunDirectory
-from adare.backend.experiment.exceptions import NoEnvironmentError, MultipleEnvironmentsError
-from adare.exceptions import EnvironmentNotFoundError
 from adare.types.stages import Stage
 from adarelib.constants import StatusEnum
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -46,7 +45,7 @@ def get_experiment_by_ulid(project_path: Path, experiment_ulid: str, fields: lis
         dict: Experiment data if fields specified
         None: If experiment not found
     """
-    from sqlalchemy.orm import joinedload, selectinload
+    from sqlalchemy.orm import selectinload
 
     # Define which fields require which relationships
     RELATIONSHIP_REQUIREMENTS = {
@@ -67,10 +66,10 @@ def get_experiment_by_ulid(project_path: Path, experiment_ulid: str, fields: lis
             for field in fields:
                 if field in RELATIONSHIP_REQUIREMENTS:
                     needed_relationships.add(RELATIONSHIP_REQUIREMENTS[field])
-            
+
             # Start with base query
             query = api._session.query(Experiment).filter_by(id=experiment_ulid)
-            
+
             # Apply eager loading selectively
             if 'environments' in needed_relationships:
                 query = query.options(selectinload(Experiment.environments))
@@ -80,19 +79,19 @@ def get_experiment_by_ulid(project_path: Path, experiment_ulid: str, fields: lis
                 query = query.options(selectinload(Experiment.tags))
             if 'abstract_tests' in needed_relationships:
                 query = query.options(selectinload(Experiment.abstract_tests))
-            
+
             experiment = query.first()
         else:
             # Simple query for backward compatibility
             experiment = api.get_experiment_by_ulid(experiment_ulid)
-        
+
         if not experiment:
             return None
-        
+
         # Return full object for backward compatibility
         if fields is None:
             return experiment
-        
+
         # Extract requested fields safely
         result = {}
         for field in fields:
@@ -135,7 +134,7 @@ def get_experiment_by_ulid(project_path: Path, experiment_ulid: str, fields: lis
             except AttributeError as e:
                 log.warning(f"Could not access field '{field}': {e}")
                 result[field] = None
-        
+
         return result
 
 
@@ -307,7 +306,7 @@ def get_experiment_environment(project_path: Path, environment_name: str,  exper
                 log,
                 f'experiment {experiment} has no environment',
             )
-        elif len(experiment.environments) > 1:
+        if len(experiment.environments) > 1:
             raise MultipleEnvironmentsError(
                 log,
                 f'experiment {experiment} has multiple environments',

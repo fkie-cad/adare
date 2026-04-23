@@ -4,15 +4,15 @@ Batch playbook execution runner for dev mode.
 Executes multiple playbooks sequentially with checkpoint restoration.
 """
 
-import logging
 import glob
+import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any
 
-from adarelib.constants import StatusEnum
 from adare.console import console
+from adarelib.constants import StatusEnum
 
 log = logging.getLogger(__name__)
 
@@ -30,11 +30,11 @@ class PlaybookBatchResult:
     total_tests: int
     successful_tests: int
     failed_tests: int
-    error_message: Optional[str]
+    error_message: str | None
     start_time: datetime
     end_time: datetime
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             'playbook_path': self.playbook_path,
@@ -58,7 +58,7 @@ class PlaybookBatchSummary:
 
     def __init__(
         self,
-        results: List[PlaybookBatchResult],
+        results: list[PlaybookBatchResult],
         total_playbooks: int,
         checkpoint_name: str
     ):
@@ -94,10 +94,9 @@ class PlaybookBatchSummary:
         """Get display icon and style for a status."""
         if status == StatusEnum.SUCCESS:
             return "✓", "green"
-        elif status == StatusEnum.FAILED:
+        if status == StatusEnum.FAILED:
             return "✗", "red"
-        else:
-            return "⚠", "yellow"
+        return "⚠", "yellow"
 
     def print_summary(self) -> None:
         """Print formatted summary table using Rich console."""
@@ -105,7 +104,7 @@ class PlaybookBatchSummary:
 
         console.print()
         console.print("Batch Execution Summary", style="bold underline")
-        console.print(f"══════════════════════════════════════════════════════", style="bold")
+        console.print("══════════════════════════════════════════════════════", style="bold")
         console.print()
         console.print(f"Checkpoint: [cyan]{self.checkpoint_name}[/cyan] (created, preserved for reuse)")
         console.print()
@@ -162,7 +161,7 @@ class PlaybookBatchSummary:
         console.print(f"[dim]     Delete with: adare dev checkpoint-delete {self.checkpoint_name}[/dim]")
         console.print()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             'summary': {
@@ -189,7 +188,7 @@ class PlaybookBatchRunner:
         """
         self.session = session
 
-    def _resolve_playbook_paths(self, patterns: List[str]) -> List[Path]:
+    def _resolve_playbook_paths(self, patterns: list[str]) -> list[Path]:
         """
         Resolve glob patterns to concrete playbook paths.
 
@@ -225,10 +224,10 @@ class PlaybookBatchRunner:
 
     async def execute_batch(
         self,
-        playbook_patterns: List[str],
+        playbook_patterns: list[str],
         checkpoint_name: str,
         timeout: int,
-        console_ulid: Optional[str]
+        console_ulid: str | None
     ) -> PlaybookBatchSummary:
         """
         Execute batch of playbooks with checkpoint restoration.
@@ -245,7 +244,7 @@ class PlaybookBatchRunner:
         Raises:
             RuntimeError: If critical errors occur (checkpoint creation/restore failure)
         """
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
 
         # 1. Resolve playbook paths
         playbook_paths = self._resolve_playbook_paths(playbook_patterns)
@@ -343,14 +342,14 @@ class PlaybookBatchRunner:
             checkpoint_name=checkpoint_name
         )
 
-        end_time = datetime.now(timezone.utc)
+        end_time = datetime.now(UTC)
         log.info(f"Batch execution completed in {(end_time - start_time).total_seconds():.1f}s")
 
         return summary
 
     async def _execute_single_playbook(self, playbook_path: Path) -> PlaybookBatchResult:
         """Execute a single playbook and return result."""
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
 
         try:
             # Parse playbook
@@ -363,7 +362,7 @@ class PlaybookBatchRunner:
                 experiment_dir=playbook_path.parent
             )
 
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             execution_time = (end_time - start_time).total_seconds()
 
             # Determine status
@@ -391,7 +390,7 @@ class PlaybookBatchRunner:
             )
 
         except Exception as e:
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             execution_time = (end_time - start_time).total_seconds()
 
             log.error(f"Failed to execute playbook {playbook_path}: {e}", exc_info=True)
@@ -416,7 +415,6 @@ class PlaybookBatchRunner:
         """Get display icon and style for a status."""
         if status == StatusEnum.SUCCESS:
             return "✓", "green"
-        elif status == StatusEnum.FAILED:
+        if status == StatusEnum.FAILED:
             return "✗", "red"
-        else:
-            return "⚠", "yellow"
+        return "⚠", "yellow"

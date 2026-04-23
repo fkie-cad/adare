@@ -1,20 +1,26 @@
 # external imports
+# configure logging
+import logging
+from datetime import UTC
 from pathlib import Path
+
+import adare.backend.experiment.database as experiment_database
 
 # internal imports
 from adare.backend.experiment.directory import ExperimentDirectory
-import adare.backend.experiment.database as experiment_database
-from adare.backend.experiment.exceptions import ExperimentDirectoryAlreadyExistsError, \
-    ExperimentDirectoryDoesNotExistError, ExperimentIntegrityError, ExperimentAlreadyExistsError, ExperimentNotChanged
-from adare.exceptions import LoggedException
+from adare.backend.experiment.exceptions import (
+    ExperimentAlreadyExistsError,
+    ExperimentDirectoryAlreadyExistsError,
+    ExperimentDirectoryDoesNotExistError,
+    ExperimentIntegrityError,
+    ExperimentNotChanged,
+)
 from adare.backend.project.directory import ProjectDirectory
-from adarelib.constants import StatusEnum
+from adare.exceptions import LoggedException, NotLoggedInError
 from adare.webappaccess.download import download_experiment, sync
 from adare.webappaccess.login import is_logged_in
-from adare.exceptions import NotLoggedInError
+from adarelib.constants import StatusEnum
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -38,10 +44,10 @@ def _get_testfunction_data_from_database():
 
 class StageCtxManagerLite:
     """Lightweight StageCtxManager for VM tests - calls flow console directly (no database/events)."""
-    
+
     # Class-level registry to track active parent stages for hierarchy validation
     _active_stages = {}  # stage_name -> stage_instance
-    
+
     def __init__(self, stage, flow_console, level=0):
         self.stage = stage  # Reuse existing Stage classes
         self.flow_console = flow_console  # Direct flow console access
@@ -49,23 +55,23 @@ class StageCtxManagerLite:
         self.stage_id = f"{stage.name}_{int(__import__('time').time())}"
         self.start_time = None
         self.end_time = None
-        
+
     async def __aenter__(self):
-        from datetime import datetime, timezone
-        
+        from datetime import datetime
+
         # Validate parent stage hierarchy (like original StageCtxManager)
         if hasattr(self.stage, 'parent') and self.stage.parent:
             if self.stage.parent not in self._active_stages:
                 # For VM tests, be more lenient - just log a warning instead of raising error
                 log.warning(f"VM Test Stage '{self.stage.name}' expects parent '{self.stage.parent}' but no parent stage is active. Continuing anyway for VM tests.")
-        
+
         # Add this stage to active stages registry
         self._active_stages[self.stage.name] = self.stage
-        
+
         # Set stage start time (reuse Stage lifecycle logic)
-        self.start_time = datetime.now(timezone.utc)
+        self.start_time = datetime.now(UTC)
         self.stage.start_time = self.start_time
-        
+
         # Call flow console directly (no events needed)
         self.flow_console.log_spinner(
             identifier=self.stage_id,
@@ -73,21 +79,21 @@ class StageCtxManagerLite:
             level=self.level,
             start_time=self.start_time
         )
-        
+
         log.debug(f"Started VM test stage: {self.stage.name} - {self.stage.msg}")
         return self
-        
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        from datetime import datetime, timezone
-        
+        from datetime import datetime
+
         # Remove this stage from active stages registry
         self._active_stages.pop(self.stage.name, None)
-        
+
         # Set stage end time and calculate duration
-        self.end_time = datetime.now(timezone.utc)
+        self.end_time = datetime.now(UTC)
         self.stage.end_time = self.end_time
         duration = (self.end_time - self.start_time).total_seconds()
-        
+
         # Determine status based on exception
         if exc_type:
             status = StatusEnum.FAILED
@@ -95,27 +101,27 @@ class StageCtxManagerLite:
         else:
             status = StatusEnum.SUCCESS
             message = self.stage.msg
-        
+
         # Update stage status
         self.stage.status = status
-        
-        # Call flow console directly (no events needed)  
+
+        # Call flow console directly (no events needed)
         self.flow_console.log_spinner_done(
             identifier=self.stage_id,
             status=status,
             message=message,
             duration=duration
         )
-        
+
         log.debug(f"Completed VM test stage: {self.stage.name} - Status: {status.name}, Duration: {duration:.2f}s")
-        
+
         # Don't suppress exceptions
         return False
 
 
 def experiment_sync(project_path: Path, experiment_ulid: str):
     if not is_logged_in():
-        log.info(f'sync is not possible because user is not logged in')
+        log.info('sync is not possible because user is not logged in')
         return
     # get experiment from database
     sha256 = experiment_database.get_experiment_hash(project_path, experiment_ulid)
@@ -168,8 +174,9 @@ def experiment_clone(project_path: Path, source_experiment: str, target_experime
         target_experiment: Name for the cloned experiment
         environments: Optional list of environments to override in the clone
     """
-    from adare.console import print_success_message
     import shutil
+
+    from adare.console import print_success_message
 
     source_dir = ExperimentDirectory(project_path, source_experiment)
     target_dir = ExperimentDirectory(project_path, target_experiment)
@@ -189,7 +196,7 @@ def experiment_clone(project_path: Path, source_experiment: str, target_experime
             log,
             f'target experiment directory [b]{target_dir.path}[/b] already exists',
             possible_solutions=[
-                f'choose a different name for the cloned experiment',
+                'choose a different name for the cloned experiment',
                 f'remove existing experiment with: rm -rf {target_dir.path}'
             ]
         )
@@ -301,7 +308,7 @@ def __experiment_update(project_path: Path, experiment_ulid, experiment_name, ex
     if env_changes_detected:
         log.info(f'Experiment {experiment_name} (ulid: {ulid}) was loaded successfully')
         if added_envs or removed_envs:
-            log.info(f'  Environment changes detected:')
+            log.info('  Environment changes detected:')
             if added_envs:
                 log.info(f'    + Added: {", ".join(added_envs)}')
             if removed_envs:
@@ -329,7 +336,7 @@ def __validate_testset_compatibility(experiment_directory: ExperimentDirectory):
     log.debug(f"Using global testfunctions directory: {testfunctions_dir}")
 
     try:
-        from adarelib.testset.testfunction import import_basictest_subclasses, get_missing_testfunctions
+        from adarelib.testset.testfunction import get_missing_testfunctions, import_basictest_subclasses
 
         log.info("Validating testset compatibility with available testfunctions...")
 
@@ -368,7 +375,7 @@ def __validate_testset_compatibility(experiment_directory: ExperimentDirectory):
             )
 
         log.info(f"Testset validation passed - all {len(testsetfile.tests)} tests have valid testfunctions")
-        
+
     except ImportError as e:
         log.warning(f"Could not import testset validation modules: {e}")
         log.warning("Skipping testset validation - validation will occur at runtime")
@@ -387,7 +394,7 @@ def __validate_testset_compatibility(experiment_directory: ExperimentDirectory):
 
 def experiment_load(project_path: Path, experiment_name: str, force: bool = False, silent: bool = False):
     from adare.console import print_success_message
-    
+
     # todo: fix bug that we can have two identical experiments
     experiment_directory = ExperimentDirectory(project_path, experiment_name)
     if not experiment_directory.exists():
@@ -402,7 +409,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
 
     # Validate testset compatibility with available testfunctions
     __validate_testset_compatibility(experiment_directory)
-    
+
     was_updated = False
     if experiment_ulid := experiment_database.get_experiment_by_project_and_name(
             project_path, experiment_name, trigger_error=False
@@ -412,7 +419,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
                 project_path, experiment_ulid, experiment_name, experiment_directory, force
             )
             was_updated = True
-        except ExperimentNotChanged as e:
+        except ExperimentNotChanged:
             experiment_sync(project_path, experiment_ulid)
     else:
         # Create experiment atomically (playbook population is now part of the transaction)
@@ -424,7 +431,7 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
         log.info(f'experiment {experiment_name} created')
 
     experiment_sync(project_path, experiment_ulid)
-    
+
     # Protect experiment files after loading
     from adare.helperfunctions.integrity import protect_loaded_files
     experiment_files = [experiment_directory.playbookfile]
@@ -432,14 +439,14 @@ def experiment_load(project_path: Path, experiment_name: str, force: bool = Fals
         experiment_files.append(experiment_directory.metadatafile)
     protected_files = protect_loaded_files(experiment_files)
     log.info(f'Protected {len(protected_files)} experiment files')
-    
+
     # Provide clear user feedback only if not in silent mode
     if not silent:
         action = "updated" if was_updated else "loaded"
         next_steps = [
             f'Run the experiment with: adare experiment run {experiment_name} -e <environment>',
         ]
-        
+
         print_success_message(
             title=f'Experiment "{experiment_name}" {action} successfully!',
             location=str(experiment_directory.path),
@@ -469,8 +476,9 @@ def experiment_validate(project_path: Path, experiment_name: str, environment_na
     Returns:
         list of ValidationCheckResult DTOs
     """
-    import yaml
     import cattrs
+    import yaml
+
     from adare.core.dto.experiment import ValidationCheckResult
     from adare.parsers import parse_metadata_file
 
@@ -547,11 +555,11 @@ def experiment_validate(project_path: Path, experiment_name: str, environment_na
     if playbook is not None:
         try:
             from adare.types.playbook_validators import (
-                VariableUsageValidator,
                 DuplicateVariableValidator,
-                VariableDefinitionValidator,
                 FilterValidator,
                 ValidationResult,
+                VariableDefinitionValidator,
+                VariableUsageValidator,
             )
             usage_validator = VariableUsageValidator()
             duplicate_validator = DuplicateVariableValidator()
@@ -814,10 +822,11 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
         force: Force removal even if experiment has productive runs
         keep_files: Keep experiment directory on filesystem (only remove from database)
     """
-    from adare.console import print_success_message, print_error_message
+    import shutil
+
+    from adare.console import print_success_message
     from adare.database.api.experiment import ExperimentApi
     from adare.exceptions import LoggedErrorException
-    import shutil
 
     log.info(f'Removing experiment: {experiment_name}')
 
@@ -958,15 +967,15 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
 async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = False, vm_cleanup_mode: str = 'prompt') -> bool:
     """
     Test OVA file compatibility with ADARE.
-    
+
     This function has been moved to vm_test.py for better code organization.
-    
+
     Args:
         ova_file_path: Path to the .ova file to test
         guest_platform: Platform type ('windows' or 'linux') - required
         verbose: Enable verbose logging
         vm_cleanup_mode: VM cleanup mode ('keep' or 'prompt')
-        
+
     Returns:
         True if VM is compatible with ADARE, False otherwise
     """
@@ -977,8 +986,9 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
 
 def experiment_remove_environments(project_path: Path, experiment_pattern: str, environment_names: list[str], force: bool = False):
     """Remove environments from experiments matching the pattern."""
-    from adare.console import print_success_message
     import glob
+
+    from adare.console import print_success_message
 
     # Find matching experiments using glob
     project_directory = ProjectDirectory(project_path)
@@ -1040,8 +1050,7 @@ def experiment_remove_environments(project_path: Path, experiment_pattern: str, 
                     log.warning(f"Cannot remove all environments from experiment '{exp_name}' without --force flag")
                     failed_experiments.append(exp_name)
                     continue
-                else:
-                    log.warning(f"Removing ALL environments from experiment '{exp_name}' due to --force flag")
+                log.warning(f"Removing ALL environments from experiment '{exp_name}' due to --force flag")
 
             # Update metadata
             metadata.environments = sorted(list(updated_envs))
@@ -1081,8 +1090,9 @@ def experiment_remove_environments(project_path: Path, experiment_pattern: str, 
 
 def experiment_add_environments(project_path: Path, experiment_pattern: str, environment_names: list[str], force: bool = False):
     """Add environments to experiments matching the pattern."""
-    from adare.console import print_success_message
     import glob
+
+    from adare.console import print_success_message
 
     # Find matching experiments using glob
     project_directory = ProjectDirectory(project_path)
@@ -1188,7 +1198,7 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
         print_success_message(
             title=f"Successfully added environments to {len(updated_experiments)} experiment(s)",
             next_steps=[
-                f"Run experiment in new environments with: adare experiment run <name> -e <environment>",
+                "Run experiment in new environments with: adare experiment run <name> -e <environment>",
             ]
         )
 
@@ -1226,7 +1236,7 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
     elif updated_experiments or skipped_experiments:
         log.info(f"\nSummary: {len(updated_experiments)} updated, {len(skipped_experiments)} already had environments, {len(environment_missing_experiments)} missing environments, {len(failed_experiments)} failed.")
     else:
-        log.info(f"\nNo experiments were successfully updated. See error details above.")
+        log.info("\nNo experiments were successfully updated. See error details above.")
 
 
 def publish_run_command(project_directory: Path, run_ulid: str):
@@ -1240,16 +1250,17 @@ def publish_run_command(project_directory: Path, run_ulid: str):
     Raises:
         Various exceptions from webappaccess.exceptions for different error conditions
     """
+    from rich.console import Console
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
+
     from adare.database.api.experiment import ExperimentApi
     from adare.webappaccess.api_client import ApiClient
     from adare.webappaccess.exceptions import (
-        NotLoggedInError,
-        ExperimentNotFoundError,
-        RunAlreadyExistsError,
         ApiConnectionError,
+        ExperimentNotFoundError,
+        NotLoggedInError,
+        RunAlreadyExistsError,
     )
-    from rich.console import Console
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
     console = Console()
 
@@ -1304,7 +1315,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
                     possible_solutions=['Publish the experiment first with: adare web publish <experiment>']
                 )
             progress.update(task1, completed=1, description=f"[green]Experiment {experiment.name} verified on server")
-        except ApiConnectionError as e:
+        except ApiConnectionError:
             progress.update(task1, completed=1)
             raise
 
@@ -1317,7 +1328,7 @@ def publish_run_command(project_directory: Path, run_ulid: str):
                 console.print(f"[yellow]Run {run_ulid} already published to server. No action needed.[/yellow]")
                 return
             progress.update(task2, completed=1, description="[green]Run not yet published")
-        except ApiConnectionError as e:
+        except ApiConnectionError:
             progress.update(task2, completed=1)
             raise
 

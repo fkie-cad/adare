@@ -7,14 +7,13 @@ import asyncio
 import base64
 import logging
 import os
-import platform
 import queue
 import signal
 import subprocess
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, List, Optional
 
 from adare.hypervisor.base.mixins.commands import AbstractCommandMixin
 
@@ -23,8 +22,8 @@ log = logging.getLogger(__name__)
 
 class CommandExecutionMixin(AbstractCommandMixin):
     """Mixin class providing command execution operations for VirtualBox VMs."""
-    
-    def _stream_vboxmanage_command(self, args: List[str], stop_event: Optional[threading.Event] = None) -> Iterator[str]:
+
+    def _stream_vboxmanage_command(self, args: list[str], stop_event: threading.Event | None = None) -> Iterator[str]:
         """Stream output from a VBoxManage command."""
         command = [self.vboxmanage_exe] + args
         sp_args = {
@@ -134,11 +133,11 @@ class CommandExecutionMixin(AbstractCommandMixin):
                     proc.wait()
                 raise e
 
-    async def _stream_vboxmanage_command_async(self, args: List[str], stop_event: Optional[threading.Event] = None):
+    async def _stream_vboxmanage_command_async(self, args: list[str], stop_event: threading.Event | None = None):
         """Async version of _stream_vboxmanage_command with responsive stop_event handling."""
         command = [self.vboxmanage_exe] + args
         lines = []
-        
+
         # Create process with proper signal handling
         proc = await asyncio.create_subprocess_exec(
             *command,
@@ -162,7 +161,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                         proc.terminate()
                     try:
                         await asyncio.wait_for(proc.wait(), timeout=5)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         log.info("VBoxManage process did not exit in time; killing it.")
                         if os.name != 'windows':
                             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
@@ -174,7 +173,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 try:
                     # Key improvement: timeout on read for responsive stop_event handling
                     byte = await asyncio.wait_for(proc.stdout.read(1), timeout=0.1)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # No output for 0.1 seconds, check stop_event again
                     now = time.time()
                     # Still flush buffer if needed during timeout
@@ -213,7 +212,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                 lines.append(buffer.decode('utf-8', errors='replace'))
 
             await proc.wait()
-            
+
             # Return lines regardless of return code - let caller handle the error
             # This ensures we don't lose captured output when commands fail
             return lines, proc.returncode
@@ -229,9 +228,9 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
     def _execute_streaming_command(
         self,
-        command_args: List[str],
-        log_file: Optional[Path] = None,
-        stop_event: Optional[threading.Event] = None,
+        command_args: list[str],
+        log_file: Path | None = None,
+        stop_event: threading.Event | None = None,
         silent: bool = False,
         ctx_manager=None,
         operation_name: str = "VBoxManage operation",
@@ -311,14 +310,14 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         # Wait for stream thread to complete
         stream_thread.join()
-        
+
         return return_value
 
     async def _execute_streaming_command_async(
-        self, 
-        command_args: List[str], 
-        log_file: Optional[Path] = None,
-        stop_event: Optional[threading.Event] = None,
+        self,
+        command_args: list[str],
+        log_file: Path | None = None,
+        stop_event: threading.Event | None = None,
         silent: bool = False,
         ctx_manager=None,
         operation_name: str = "VBoxManage operation"
@@ -327,7 +326,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         log.info(f"Executing {operation_name} for VM '{self.vm_name}' with async streaming output")
         return_value = 0
         captured_output = []
-        
+
         # Update context manager to running status
         if ctx_manager:
             from adarelib.constants import StatusEnum
@@ -336,7 +335,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         try:
             lines, return_code = await self._stream_vboxmanage_command_async(command_args, stop_event=stop_event)
             return_value = return_code
-            
+
             # Process output
             try:
                 with open(log_file, 'w', encoding='utf-8') if log_file else open(os.devnull, 'w') as f:
@@ -350,7 +349,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                         captured_output.append(line)
                         if not silent and line.strip():
                             log.info(f"[{self.vm_name}] {line.rstrip()}")
-                        
+
                         if log_file:
                             f.write(line + '\n')
                             f.flush()
@@ -366,7 +365,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         stdout = ''.join(captured_output)
         return return_value, stdout, ""
 
-    def _detect_xauthority(self) -> Optional[str]:
+    def _detect_xauthority(self) -> str | None:
         """Detect XAUTHORITY file location in Linux guest VM."""
         detect_cmd = r'''
             shopt -s nullglob
@@ -415,7 +414,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         )
         return None   # better than returning a hardcoded, possibly wrong path
 
-    async def _discover_guest_path(self) -> Optional[str]:
+    async def _discover_guest_path(self) -> str | None:
         """
         Stub for guest PATH discovery.
 
@@ -430,7 +429,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         self,
         command: str,
         background: bool = False,
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
         admin: bool = False,
         # VirtualBox-specific (implemented)
         win_noprofile: bool = True,
@@ -441,7 +440,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
         redirect_stderr: str = "",
         redirect_stdout: str = "",
         hidden_window: bool = True,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Build VBoxManage guestcontrol command arguments for running guest commands.
 
@@ -581,18 +580,18 @@ class CommandExecutionMixin(AbstractCommandMixin):
             args.insert(3, self.username)
             args.insert(4, "--password")
             args.insert(5, self.password)
-        
+
         return args
 
     async def copy_from_guest(self, guest_path: str, host_path: str, recursive: bool = True) -> bool:
         """
         Copy files/directories from guest to host using VBoxManage guestcontrol copyfrom.
-        
+
         Args:
             guest_path: Path on the guest VM to copy from
             host_path: Path on the host to copy to
             recursive: Whether to copy directories recursively
-            
+
         Returns:
             True if copy was successful
         """
@@ -601,21 +600,20 @@ class CommandExecutionMixin(AbstractCommandMixin):
             "--username", self.username,
             "--password", self.password
         ]
-        
+
         if recursive:
             args.append("--recursive")
-            
+
         args.extend([guest_path, host_path])
-        
+
         try:
             lines, return_code = await self._stream_vboxmanage_command_async(args)
             if return_code == 0:
                 log.info(f"Successfully copied {guest_path} from guest to {host_path}")
                 return True
-            else:
-                error_output = '\n'.join(lines) if lines else "No error output"
-                log.error(f"Failed to copy {guest_path} from guest (return code {return_code}): {error_output}")
-                return False
+            error_output = '\n'.join(lines) if lines else "No error output"
+            log.error(f"Failed to copy {guest_path} from guest (return code {return_code}): {error_output}")
+            return False
         except Exception as e:
             log.error(f"Exception during copy from guest {guest_path}: {e}")
             return False

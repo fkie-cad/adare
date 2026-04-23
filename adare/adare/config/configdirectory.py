@@ -1,13 +1,12 @@
 # external imports
-from pathlib import Path
-import platform
-import os
-
-# internal imports
-from . import NAME
-
 # configure logging
 import logging
+import os
+import platform
+from pathlib import Path
+
+# internal imports
+
 log = logging.getLogger(__name__)
 
 

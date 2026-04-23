@@ -1,9 +1,10 @@
 # internal imports
-from adare.api import AdareAPI
-from adare.console import print_success_message, print_error_message
-
 # configure logging
 import logging
+
+from adare.api import AdareAPI
+from adare.console import print_error_message, print_success_message
+
 log = logging.getLogger(__name__)
 
 

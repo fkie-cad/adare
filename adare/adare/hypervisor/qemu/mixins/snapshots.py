@@ -12,11 +12,10 @@ External snapshot approach:
 """
 import json
 import logging
-import subprocess
 import os
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Optional, Tuple
 
 try:
     import libvirt
@@ -79,8 +78,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     snapshot_dir.rmdir()
                     log.info(f"Removed empty snapshot directory: {snapshot_dir}")
                     return True
-                else:
-                    log.debug(f"Snapshot directory not empty: {snapshot_dir}")
+                log.debug(f"Snapshot directory not empty: {snapshot_dir}")
             return False
         except OSError as e:
             log.warning(f"Failed to remove snapshot directory: {e}")
@@ -124,7 +122,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             # Get current domain XML
             xml_desc = domain.XMLDesc(0)
             root = ET.fromstring(xml_desc)
-            
+
             # Find all filesystem devices with type='virtiofs' (driver type)
             # XPath: ./devices/filesystem/driver[@type='virtiofs']/..
             devices = root.find('devices')
@@ -135,10 +133,10 @@ class SnapshotMixin(AbstractSnapshotMixin):
                         # Convert element back to string
                         payload = ET.tostring(fs, encoding='unicode')
                         payloads.append(payload)
-                        
+
             log.debug(f"Found {len(payloads)} attached virtiofs devices")
             return payloads
-            
+
         except (libvirt.libvirtError, ET.ParseError) as e:
             log.error(f"Failed to get attached virtiofs devices: {e}")
             return []
@@ -179,20 +177,20 @@ class SnapshotMixin(AbstractSnapshotMixin):
         # Max wait 10 seconds (usually takes < 1s)
         timeout = 10
         start_time = time.time()
-        
+
         while time.time() - start_time < timeout:
             remaining = self._get_attached_virtiofs_payloads()
             if not remaining:
                 log.info("All virtiofs devices successfully detached")
                 return True
-            
+
             # Log progress if waiting
             elapsed = time.time() - start_time
             if elapsed > 1.0:
                  log.debug(f"Waiting for detachment... ({len(remaining)} remaining)")
-            
+
             time.sleep(0.5)
-            
+
         log.error(f"Timeout waiting for virtiofs detachment. {len(remaining)} devices remaining.")
         return False
 
@@ -225,13 +223,13 @@ class SnapshotMixin(AbstractSnapshotMixin):
             except libvirt.libvirtError as e:
                 log.error(f"Failed to attach virtiofs device {i+1}: {e}")
                 success = False
-                
+
         return success
 
     def _prepare_guest_for_snapshot(self) -> None:
         """
         Prepare guest OS for snapshot by releasing shared folder handles.
-        
+
         This prevents "Invalid Handle" errors and ensures a clean state for restoration.
         """
         if not self.config.virtiofs_enabled or not self.config.virtiofs_shares:
@@ -244,10 +242,10 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 return
 
             log.info("Preparing guest for snapshot (releasing shared folders)...")
-            
+
             # Detect OS
             is_windows = 'windows' in self.guest_os.lower()
-            
+
             if is_windows:
                 # Kill virtiofs.exe processes to release handles
                 # /F = force, /IM = image name
@@ -286,18 +284,18 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 return
 
             log.info("Refreshing guest mounts...")
-            
+
             is_windows = 'windows' in self.guest_os.lower()
-            
+
             if is_windows:
                 # Re-run virtiofs.exe for each share using Scheduled Task for Session 0 isolation escape
                 # This ensures the mount is visible to the user session
                 virtiofs_exe = r"C:\Program Files\VirtIO-Win\VioFS\virtiofs.exe"
-                
+
                 for share in self.config.virtiofs_shares:
                     tag = share['tag']
                     mount_point = str(share['guest_mount']).replace('/', '\\')
-                    
+
                     # Force remove the directory first (virtiofs fails if it exists)
                     # Then run the mount command
                     # Note: We must escape the double quotes for the PS string
@@ -305,7 +303,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                         f'if (Test-Path "{mount_point}") {{ Remove-Item "{mount_point}" -Force -Recurse -ErrorAction SilentlyContinue }}; '
                         f'& "{virtiofs_exe}" -t {tag} -m "{mount_point}"'
                     )
-                    
+
                     try:
                         self._run_as_user_windows_sync(mount_cmd)
                         log.debug(f"Restarted virtiofs for {tag} (user session)")
@@ -332,49 +330,48 @@ class SnapshotMixin(AbstractSnapshotMixin):
         Replicates logic from mixins/commands.py _build_guest_command_args.
         Synchronous version for snapshot operations.
         """
-        import time
         import base64
         import uuid
-        
+
         # Parameters
         user = self.username
         pw = self.password
-        
+
         # Use UUID to ensure uniqueness for rapid consecutive calls (looping through shares)
         unique_id = str(uuid.uuid4())[:8]
         task_name = f"adare_snap_{unique_id}"
         script_path = f"C:\\Windows\\Temp\\adare_{unique_id}.ps1"
         rl = "LIMITED" # or HIGHEST if admin needed, default to LIMITED for regular user
-        
+
         # Construct the complex PowerShell script
         # Note: We need to escape internal quotes carefully
-        ps_command = (                                                                                                                                 
-            f"& {{ "                                                                                                                                       
-            f"$u = '{user}'; $p = '{pw}'; $t = '{task_name}'; "                                                                                 
-            f"$script = '{script_path}'; "                                                                                                                 
-            f"$st = (Get-Date).AddMinutes(2).ToString('HH:mm'); "                                                                                                                                                                                                 
-            f"'{command}' | Out-File -FilePath $script -Encoding ascii; "                                                                                  
-            f"$c = \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script\"; "                                                                  
-            f"schtasks /Create /TN $t /TR \"$c\" /SC ONCE /ST $st /RU $u /RP $p /RL {rl} /F; "                                                          
-            f"schtasks /Run /TN $t; "                                                                                                                      
-            f"Start-Sleep -Seconds 15; "                                                                                                                    
+        ps_command = (
+            f"& {{ "
+            f"$u = '{user}'; $p = '{pw}'; $t = '{task_name}'; "
+            f"$script = '{script_path}'; "
+            f"$st = (Get-Date).AddMinutes(2).ToString('HH:mm'); "
+            f"'{command}' | Out-File -FilePath $script -Encoding ascii; "
+            f"$c = \"powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script\"; "
+            f"schtasks /Create /TN $t /TR \"$c\" /SC ONCE /ST $st /RU $u /RP $p /RL {rl} /F; "
+            f"schtasks /Run /TN $t; "
+            f"Start-Sleep -Seconds 15; "
             f"if (Test-Path $script) {{ Remove-Item $script -Force }}; "
             # Try to delete task as well (might fail if running, but good hygiene)
-            f"schtasks /Delete /TN $t /F | Out-Null; "                                                                                   
-            f"}} "                                                                                                                                         
+            f"schtasks /Delete /TN $t /F | Out-Null; "
+            f"}} "
         )
-        
+
         # Base64 encode for -EncodedCommand
         command_base64 = base64.b64encode(ps_command.encode('utf-16le')).decode('utf-8')
-        
+
         # Call via QGA using powershell.exe
         # qemu-agent-command takes arguments, but here we just pass the full string to our helper
         # which wraps it in cmd.exe /c
-        
+
         # Helper expects the raw command string, it wraps it in 'cmd /c'
         # But we need to run 'powershell -EncodedCommand ...'
         full_cmd = f"powershell.exe -EncodedCommand {command_base64}"
-        
+
         self._run_guest_agent_command_sync(full_cmd)
 
     def _run_guest_agent_command_sync(self, cmd_str: str) -> None:
@@ -401,13 +398,13 @@ class SnapshotMixin(AbstractSnapshotMixin):
                         "capture-output": True
                     }
                 }
-            
+
             cmd_json = json.dumps(qmp_cmd)
             subprocess.run(
                 ['virsh', 'qemu-agent-command', self.vm_name, cmd_json],
                 check=False, capture_output=True
             )
-            
+
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
             log.warning(f"Failed to run sync guest command: {e}")
 
@@ -427,11 +424,11 @@ class SnapshotMixin(AbstractSnapshotMixin):
             else:
                 # Linux
                 self._run_guest_agent_command_sync("sync")
-            
+
             # Wait a bit to ensure flush completes
             import time
             time.sleep(2)
-            
+
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
             log.warning(f"Failed to sync guest filesystem: {e}")
 
@@ -444,22 +441,22 @@ class SnapshotMixin(AbstractSnapshotMixin):
     ) -> bool:
         """
         Create a consistent live checkpoint using 'virsh snapshot-create'.
-        
+
         Saves RAM and creates a disk snapshot atomically.
-        
+
         Strategy:
         1. Quiesce the Guest (Optional).
         2. Detach VirtioFS devices (hot-unplug) - REQUIRED for atomic snapshotting.
         3. Generates XML for external snapshot (disk + memory).
         4. Create atomic snapshot: `virsh snapshot-create --atomic --live`
         5. Re-attach VirtioFS devices (hot-plug).
-        
+
         Args:
             snapshot_name: Libvirt snapshot name
             memory_path: Path for external memory save file
             disk_path: Path for external disk overlay file
             use_quiesce: Whether to use guest agent to quiesce filesystem (default True)
-            
+
         Returns:
             True if snapshot created successfully, False otherwise
         """
@@ -473,7 +470,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
         # Ensure snapshot directory exists
         snapshot_dir = Path(memory_path).parent
         self._ensure_snapshot_dir(snapshot_dir)
-        
+
         snapshot_success = False
         virtiofs_payloads = []
         import tempfile
@@ -487,7 +484,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
             if self.config.virtiofs_enabled and self.config.virtiofs_shares:
                 self._prepare_guest_for_snapshot()
                 virtiofs_payloads = self._get_attached_virtiofs_payloads()
-            
+
             if virtiofs_payloads:
                 if not self._detach_virtiofs_shares(virtiofs_payloads):
                     log.warning("Failed to detach some virtiofs devices, snapshot might fail")
@@ -531,14 +528,14 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=True) as tmp_xml:
                     tmp_xml.write(snapshot_xml)
                     tmp_xml.flush()
-                    
+
                     cmd = [
                         'virsh', 'snapshot-create', self.vm_name, tmp_xml.name,
                         '--live',
                         '--atomic',
                         '--no-metadata' # Important: We manage snapshot files ourselves
                     ]
-                    
+
                     # Quiesce logic:
                     # If we suspended, we don't need --quiesce (agent command).
                     # 'virsh snapshot-create --live' on a paused domain effectively snapshots the state.
@@ -546,14 +543,14 @@ class SnapshotMixin(AbstractSnapshotMixin):
                          # Disk-only snapshot usually needs quiesce if running
                          if not vm_was_suspended:
                             cmd.append('--quiesce')
-                    
-                    log.info(f"Executing atomic snapshot creation...")
+
+                    log.info("Executing atomic snapshot creation...")
                     subprocess.run(
                         cmd,
                         check=True, capture_output=True
                     )
 
-                log.info(f"Checkpoint created successfully.")
+                log.info("Checkpoint created successfully.")
                 snapshot_success = True
 
             finally:
@@ -580,7 +577,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
                     stderr_out = str(e.stderr)
             log.error(f"Stderr: {stderr_out}")
             snapshot_success = False
-            
+
             # Attempt recovery of detached devices
             if virtiofs_payloads and self.get_state() == "running":
                 try:
@@ -657,38 +654,38 @@ class SnapshotMixin(AbstractSnapshotMixin):
             # We do this by deleting the overlay and re-creating it, backed by the same backing file.
             try:
                 log.info("Resetting disk overlay to ensure clean state...")
-                
+
                 # Get backing file info
                 info_cmd = ['qemu-img', 'info', '--output=json', disk_path]
                 info_res = subprocess.run(info_cmd, capture_output=True, text=True, check=True)
                 disk_info = json.loads(info_res.stdout)
-                
+
                 backing_file = disk_info.get('backing-filename')
                 if not backing_file:
                     log.error(f"Snapshot disk {disk_path} has no backing file! Cannot reset overlay safely.")
                     return False
-                    
-                # Ideally get backing format too, but it's optional (qemu-img can probe). 
+
+                # Ideally get backing format too, but it's optional (qemu-img can probe).
                 # Should be qcow2 usually.
                 backing_fmt = disk_info.get('backing-filename-format', 'qcow2')
-                
+
                 log.debug(f"Found backing file: {backing_file} (fmt: {backing_fmt})")
-                
+
                 # Delete current dirty overlay
                 os.remove(disk_path)
                 log.debug(f"Deleted dirty overlay: {disk_path}")
-                
+
                 # Re-create fresh overlay
                 create_cmd = [
-                    'qemu-img', 'create', 
-                    '-f', 'qcow2', 
-                    '-b', backing_file, 
-                    '-F', backing_fmt, 
+                    'qemu-img', 'create',
+                    '-f', 'qcow2',
+                    '-b', backing_file,
+                    '-F', backing_fmt,
                     disk_path
                 ]
                 subprocess.run(create_cmd, check=True, capture_output=True)
                 log.info(f"Re-created fresh overlay: {disk_path}")
-                
+
             except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as e:
                 log.error(f"Failed to reset disk overlay: {e}")
                 return False
@@ -733,12 +730,12 @@ class SnapshotMixin(AbstractSnapshotMixin):
 
             # Step 3: Restore memory state (VM will resume immediately)
             log.debug("Restoring memory state")
-            
+
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=True) as tmp_xml:
                 tmp_xml.write(updated_xml)
                 tmp_xml.flush()
-                
+
                 restore_result = subprocess.run(
                     ['virsh', 'restore', memory_path, '--xml', tmp_xml.name],
                     capture_output=True,
@@ -790,24 +787,23 @@ class SnapshotMixin(AbstractSnapshotMixin):
                         is_q35 = 'q35' in self.machine or (self.config.boot_mode == 'uefi')
                         base_bus = 6
                         base_slot = 7
-                        
+
                         payloads = []
                         for idx, share in enumerate(self.config.virtiofs_shares):
                             elem = generate_virtiofs_xml_element(share, is_q35, idx, base_bus, base_slot)
                             payloads.append(ET.tostring(elem, encoding='unicode'))
-                            
+
                         self._attach_virtiofs_shares(payloads)
-                        
+
                         # NEW: Refresh guest mounts
                         self._refresh_guest_mounts()
-                            
+
                     except (libvirt.libvirtError, ImportError, OSError) as e:
                         log.error(f"Failed to re-attach virtiofs shares after restore: {e}")
 
                 return True
-            else:
-                log.error(f"Failed to restore memory state: {restore_result.stderr}")
-                return False
+            log.error(f"Failed to restore memory state: {restore_result.stderr}")
+            return False
 
         except FileNotFoundError as e:
             log.error(f"Required command not found (virsh or virt-xml): {e}")
@@ -917,9 +913,8 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 # Parse snapshot names from output (one per line)
                 snapshots = [line.strip() for line in result.stdout.splitlines() if line.strip()]
                 return snapshots
-            else:
-                log.warning(f"Failed to list snapshots: {result.stderr}")
-                return []
+            log.warning(f"Failed to list snapshots: {result.stderr}")
+            return []
 
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             log.error(f"Error listing snapshots: {e}")

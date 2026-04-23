@@ -32,8 +32,7 @@ def _find_elements(root, xpath, namespaces=None):
         # Use lxml's xpath() method for full XPath support
         if namespaces:
             return root.xpath(xpath, namespaces=namespaces)
-        else:
-            return root.xpath(xpath)
+        return root.xpath(xpath)
     except (AttributeError, SyntaxError, ET.XPathEvalError) as e:
         raise ValueError(f"Invalid XPath expression '{xpath}': {e}")
 
@@ -51,8 +50,7 @@ def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sen
                 pattern = re.compile(expected_text, flags)
                 if pattern.search(actual_text):
                     return True, f'text "{actual_text}" matches regex "{expected_text}"'
-                else:
-                    return False, f'text "{actual_text}" does not match regex "{expected_text}"'
+                return False, f'text "{actual_text}" does not match regex "{expected_text}"'
             except re.error as e:
                 return False, f'Invalid regex pattern: {expected_text} - {e}'
         else:
@@ -64,8 +62,7 @@ def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sen
 
             if success:
                 return True, f'text matches expected: {actual_text}'
-            else:
-                return False, f'expected "{expected_text}", got "{actual_text}"'
+            return False, f'expected "{expected_text}", got "{actual_text}"'
     else:
         # Has placeholders - use placeholder system (handles regex and timestamp with tolerance)
         placeholder_names = ctx.get_placeholders(expected_str)
@@ -110,43 +107,40 @@ def _handle_wildcard_matching(ctx, elements, expected_text, wildcard_mode, xpath
                 f'XPath "{xpath}" matched {len(matches)}/{len(elements)} elements (mode: any)',
                 f'matching text: {", ".join(match_details)}'
             ])
-        else:
-            return TestResult.failed([
-                f'XPath "{xpath}" matched 0/{len(elements)} elements (mode: any)',
-                f'expected: "{expected_text}"',
-                f'got texts: {[text for _, text, _ in non_matches[:5]]}'
-            ])
-    else:  # wildcard_mode == 'all'
-        if not non_matches:
-            return TestResult.success([
-                f'XPath "{xpath}" matched all {len(elements)} elements (mode: all)',
-                f'all elements have text: "{expected_text}"'
-            ])
-        else:
-            non_match_details = [f"element[{i}]: '{text}'" for i, text, _ in non_matches[:3]]
-            if len(non_matches) > 3:
-                non_match_details.append(f"... and {len(non_matches) - 3} more non-matches")
-            return TestResult.failed([
-                f'XPath "{xpath}" matched {len(matches)}/{len(elements)} elements (mode: all)',
-                f'expected: "{expected_text}"',
-                f'non-matching texts: {", ".join(non_match_details)}'
-            ])
+        return TestResult.failed([
+            f'XPath "{xpath}" matched 0/{len(elements)} elements (mode: any)',
+            f'expected: "{expected_text}"',
+            f'got texts: {[text for _, text, _ in non_matches[:5]]}'
+        ])
+    # wildcard_mode == 'all'
+    if not non_matches:
+        return TestResult.success([
+            f'XPath "{xpath}" matched all {len(elements)} elements (mode: all)',
+            f'all elements have text: "{expected_text}"'
+        ])
+    non_match_details = [f"element[{i}]: '{text}'" for i, text, _ in non_matches[:3]]
+    if len(non_matches) > 3:
+        non_match_details.append(f"... and {len(non_matches) - 3} more non-matches")
+    return TestResult.failed([
+        f'XPath "{xpath}" matched {len(matches)}/{len(elements)} elements (mode: all)',
+        f'expected: "{expected_text}"',
+        f'non-matching texts: {", ".join(non_match_details)}'
+    ])
 
 
 def _compare_count(actual_count, expected_count, comparison_type):
     """Compare counts based on comparison type"""
     if comparison_type == 'equals':
         return actual_count == expected_count, f"count is {actual_count}, expected {expected_count}"
-    elif comparison_type == 'greater':
+    if comparison_type == 'greater':
         return actual_count > expected_count, f"count is {actual_count}, expected > {expected_count}"
-    elif comparison_type == 'less':
+    if comparison_type == 'less':
         return actual_count < expected_count, f"count is {actual_count}, expected < {expected_count}"
-    elif comparison_type == 'greater_equal':
+    if comparison_type == 'greater_equal':
         return actual_count >= expected_count, f"count is {actual_count}, expected >= {expected_count}"
-    elif comparison_type == 'less_equal':
+    if comparison_type == 'less_equal':
         return actual_count <= expected_count, f"count is {actual_count}, expected <= {expected_count}"
-    else:
-        raise ValueError(f"Invalid comparison type: {comparison_type}")
+    raise ValueError(f"Invalid comparison type: {comparison_type}")
 
 
 def _evaluate_xpath(root, xpath, result_type, namespaces=None):
@@ -157,20 +151,17 @@ def _evaluate_xpath(root, xpath, result_type, namespaces=None):
             elements = root.xpath(xpath, namespaces=namespaces or {})
             if elements:
                 return elements[0].text or ""
-            else:
-                return ""
-        elif result_type == 'number':
+            return ""
+        if result_type == 'number':
             elements = root.xpath(xpath, namespaces=namespaces or {})
             if elements:
                 text = elements[0].text or "0"
                 return float(text)
-            else:
-                return 0.0
-        elif result_type == 'boolean':
+            return 0.0
+        if result_type == 'boolean':
             elements = root.xpath(xpath, namespaces=namespaces or {})
             return len(elements) > 0
-        else:
-            raise ValueError(f"Unsupported result type: {result_type}")
+        raise ValueError(f"Unsupported result type: {result_type}")
 
     except (AttributeError, SyntaxError, ValueError, ET.XPathEvalError) as e:
         raise ValueError(f"XPath evaluation error '{xpath}': {e}")
@@ -215,7 +206,7 @@ def _parse_xml_with_namespaces(filepath):
     description='tests if XML element exists at specified XPath',
     category=HostModeCategory.FILE_CONTENT,
 )
-def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: Dict[str, str] = None):
+def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: dict[str, str] = None):
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -229,11 +220,10 @@ def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: Dict[str,
 
             if elements:
                 return TestResult.success([f'element found at XPath "{xpath}" ({len(elements)} matches)'])
-            else:
-                return TestResult.failed([f'no element found at XPath "{xpath}"'])
+            return TestResult.failed([f'no element found at XPath "{xpath}"'])
 
         except ValueError as e:
-            return TestResult.execution_error(e, f"XML processing error")
+            return TestResult.execution_error(e, "XML processing error")
         except FileNotFoundError:
             return TestResult.failed([f'XML file {dst_resolved} does not exist'])
         except (PermissionError, OSError) as e:
@@ -249,7 +239,7 @@ def element_exists(ctx: TestContext, dst: str, xpath: str, namespaces: Dict[str,
     description='tests if XML element text content matches expected value with placeholder support for regex and timestamp tolerance',
     category=HostModeCategory.FILE_CONTENT,
 )
-def element_text_matches(ctx: TestContext, dst: str, xpath: str, expected_text: str = '', regex_match: bool = False, case_sensitive: bool = True, wildcard_mode: str = "any", namespaces: Dict[str, str] = None):
+def element_text_matches(ctx: TestContext, dst: str, xpath: str, expected_text: str = '', regex_match: bool = False, case_sensitive: bool = True, wildcard_mode: str = "any", namespaces: dict[str, str] = None):
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -267,17 +257,15 @@ def element_text_matches(ctx: TestContext, dst: str, xpath: str, expected_text: 
             # Handle multiple elements based on wildcard mode
             if len(elements) > 1:
                 return _handle_wildcard_matching(ctx, elements, expected_text, wildcard_mode, xpath, regex_match, case_sensitive)
-            else:
-                # Single element matching
-                element_text = elements[0].text or ""
-                is_match, message = _compare_values(ctx, element_text, expected_text, regex_match, case_sensitive)
-                if is_match:
-                    return TestResult.success([message])
-                else:
-                    return TestResult.failed([message])
+            # Single element matching
+            element_text = elements[0].text or ""
+            is_match, message = _compare_values(ctx, element_text, expected_text, regex_match, case_sensitive)
+            if is_match:
+                return TestResult.success([message])
+            return TestResult.failed([message])
 
         except ValueError as e:
-            return TestResult.execution_error(e, f"XML processing error")
+            return TestResult.execution_error(e, "XML processing error")
         except FileNotFoundError:
             return TestResult.failed([f'XML file {dst_resolved} does not exist'])
         except (PermissionError, OSError) as e:
@@ -293,7 +281,7 @@ def element_text_matches(ctx: TestContext, dst: str, xpath: str, expected_text: 
     description='tests if XML element attribute matches expected value with regex and timestamp tolerance support',
     category=HostModeCategory.FILE_CONTENT,
 )
-def attribute_matches(ctx: TestContext, dst: str, xpath: str, attribute: str, expected_value: str, regex_match: bool = False, case_sensitive: bool = True, namespaces: Dict[str, str] = None):
+def attribute_matches(ctx: TestContext, dst: str, xpath: str, attribute: str, expected_value: str, regex_match: bool = False, case_sensitive: bool = True, namespaces: dict[str, str] = None):
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -357,11 +345,10 @@ def attribute_matches(ctx: TestContext, dst: str, xpath: str, attribute: str, ex
 
             if is_match:
                 return TestResult.success([message])
-            else:
-                return TestResult.failed([message])
+            return TestResult.failed([message])
 
         except ValueError as e:
-            return TestResult.execution_error(e, f"XML processing error")
+            return TestResult.execution_error(e, "XML processing error")
         except FileNotFoundError:
             return TestResult.failed([f'XML file {dst_resolved} does not exist'])
         except (PermissionError, OSError) as e:
@@ -376,7 +363,7 @@ def attribute_matches(ctx: TestContext, dst: str, xpath: str, attribute: str, ex
     description='tests the number of XML elements matching XPath expression',
     category=HostModeCategory.FILE_CONTENT,
 )
-def element_count(ctx: TestContext, dst: str, xpath: str, expected_count: int = 0, comparison_type: str = 'equals', namespaces: Dict[str, str] = None):
+def element_count(ctx: TestContext, dst: str, xpath: str, expected_count: int = 0, comparison_type: str = 'equals', namespaces: dict[str, str] = None):
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -393,11 +380,10 @@ def element_count(ctx: TestContext, dst: str, xpath: str, expected_count: int = 
 
             if success:
                 return TestResult.success([f'element count matches: {message}'])
-            else:
-                return TestResult.failed([f'element count mismatch: {message}'])
+            return TestResult.failed([f'element count mismatch: {message}'])
 
         except ValueError as e:
-            return TestResult.execution_error(e, f"XML processing error")
+            return TestResult.execution_error(e, "XML processing error")
         except FileNotFoundError:
             return TestResult.failed([f'XML file {dst_resolved} does not exist'])
         except (PermissionError, OSError) as e:
@@ -412,7 +398,7 @@ def element_count(ctx: TestContext, dst: str, xpath: str, expected_count: int = 
     description='tests if XPath expression result matches expected value (text, number, or boolean)',
     category=HostModeCategory.FILE_CONTENT,
 )
-def xpath_result_matches(ctx: TestContext, dst: str, xpath: str, expected_result: Union[str, int, float, bool] = '', result_type: str = 'text', namespaces: Dict[str, str] = None):
+def xpath_result_matches(ctx: TestContext, dst: str, xpath: str, expected_result: str | int | float | bool = '', result_type: str = 'text', namespaces: dict[str, str] = None):
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -434,11 +420,10 @@ def xpath_result_matches(ctx: TestContext, dst: str, xpath: str, expected_result
 
             if actual_result == expected_result:
                 return TestResult.success([f'XPath result matches: {actual_result}'])
-            else:
-                return TestResult.failed([f'XPath result mismatch. Expected: {expected_result}, Got: {actual_result}'])
+            return TestResult.failed([f'XPath result mismatch. Expected: {expected_result}, Got: {actual_result}'])
 
         except ValueError as e:
-            return TestResult.execution_error(e, f"XML/XPath processing error")
+            return TestResult.execution_error(e, "XML/XPath processing error")
         except FileNotFoundError:
             return TestResult.failed([f'XML file {dst_resolved} does not exist'])
         except (PermissionError, OSError) as e:
@@ -453,7 +438,7 @@ def xpath_result_matches(ctx: TestContext, dst: str, xpath: str, expected_result
     description='tests if XML namespace declarations match expected namespaces',
     category=HostModeCategory.FILE_CONTENT,
 )
-def namespace_matches(ctx: TestContext, dst: str, expected_namespaces: Dict[str, str] = None, check_mode: str = 'contains'):
+def namespace_matches(ctx: TestContext, dst: str, expected_namespaces: dict[str, str] = None, check_mode: str = 'contains'):
     try:
         dst_resolved, status = ctx.resolve_globfilepath(dst)
         if not dst_resolved:
@@ -467,17 +452,16 @@ def namespace_matches(ctx: TestContext, dst: str, expected_namespaces: Dict[str,
             if check_mode == 'exact':
                 if actual_namespaces == expected_namespaces:
                     return TestResult.success([f'namespaces match exactly: {actual_namespaces}'])
-                else:
-                    missing = set(expected_namespaces.items()) - set(actual_namespaces.items())
-                    extra = set(actual_namespaces.items()) - set(expected_namespaces.items())
-                    details = []
-                    if missing:
-                        details.append(f'missing: {dict(missing)}')
-                    if extra:
-                        details.append(f'extra: {dict(extra)}')
-                    return TestResult.failed([f'namespace mismatch: {", ".join(details)}'])
+                missing = set(expected_namespaces.items()) - set(actual_namespaces.items())
+                extra = set(actual_namespaces.items()) - set(expected_namespaces.items())
+                details = []
+                if missing:
+                    details.append(f'missing: {dict(missing)}')
+                if extra:
+                    details.append(f'extra: {dict(extra)}')
+                return TestResult.failed([f'namespace mismatch: {", ".join(details)}'])
 
-            elif check_mode == 'contains':
+            if check_mode == 'contains':
                 missing = []
                 for prefix, uri in expected_namespaces.items():
                     if prefix not in actual_namespaces:
@@ -487,14 +471,12 @@ def namespace_matches(ctx: TestContext, dst: str, expected_namespaces: Dict[str,
 
                 if not missing:
                     return TestResult.success([f'all expected namespaces found: {expected_namespaces}'])
-                else:
-                    return TestResult.failed([f'missing/incorrect namespaces: {missing}'])
+                return TestResult.failed([f'missing/incorrect namespaces: {missing}'])
 
-            else:
-                return TestResult.execution_error(None, f"Invalid check_mode: {check_mode}")
+            return TestResult.execution_error(None, f"Invalid check_mode: {check_mode}")
 
         except ValueError as e:
-            return TestResult.execution_error(e, f"XML processing error")
+            return TestResult.execution_error(e, "XML processing error")
         except FileNotFoundError:
             return TestResult.failed([f'XML file {dst_resolved} does not exist'])
         except (PermissionError, OSError) as e:

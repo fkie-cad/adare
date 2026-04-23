@@ -1,12 +1,12 @@
 # external imports
 import ast
-from typing import Union, Optional
+
+# configure logging
+import logging
 
 # internal imports
 from adare.helperfunctions.pyfileanalyze.pyclassattributeanalyzer import PyClassAttributeAnalyzer
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -20,15 +20,15 @@ class PyClassAnalyzer:
         self.name = class_def_node.name
         self.parent_classes = class_def_node.bases
 
-    def get_attribute(self, attr_name: str) -> Optional[PyClassAttributeAnalyzer]:
+    def get_attribute(self, attr_name: str) -> PyClassAttributeAnalyzer | None:
         for attr in self.root.body:
             if type(attr) in [ast.Assign, ast.AnnAssign]:
-                attr: Union[ast.Assign, ast.AnnAssign]
+                attr: ast.Assign | ast.AnnAssign
                 if PyClassAttributeAnalyzer(attr).get_attribute_as_dict()['name'] == attr_name:
                     return PyClassAttributeAnalyzer(attr)
         return None
-        
-    def get_method(self, method_name: str) -> Optional[ast.FunctionDef]:
+
+    def get_method(self, method_name: str) -> ast.FunctionDef | None:
         return next(
             (
                 method
@@ -48,7 +48,7 @@ class PyClassAnalyzer:
         attributes = []
         for attr in self.root.body:
             if type(attr) in [ast.Assign, ast.AnnAssign]:
-                attr: Union[ast.Assign, ast.AnnAssign]
+                attr: ast.Assign | ast.AnnAssign
                 attributes.append(PyClassAttributeAnalyzer(attr))
         return attributes
 

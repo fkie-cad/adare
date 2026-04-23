@@ -1,21 +1,22 @@
-import hashlib
-from pathlib import Path
-from typing import Optional
-import threading
 import asyncio
-from tqdm import tqdm
+import hashlib
 
 # configure logging
 import logging
+import threading
+from pathlib import Path
+
+from tqdm import tqdm
+
 log = logging.getLogger(__name__)
 
 
 
 def file_sha256_with_progress(
     file_path: Path,
-    description: Optional[str] = None,
+    description: str | None = None,
     silent: bool = False,
-    interrupt_event: Optional[threading.Event] = None
+    interrupt_event: threading.Event | None = None
 ) -> str:
     """
     Calculate SHA256 hash of file with progress bar.
@@ -43,13 +44,13 @@ def file_sha256_with_progress(
         result = hash_sha256.hexdigest()
         log.debug(f'Hash calculation completed for {file_path}')
         return result
-    
+
     # Get file size for progress bar
     file_size = file_path.stat().st_size
-    
+
     desc = description or f"Calculating hash for {file_path.name}"
     log.debug(f'Calculating hash for {file_path} with progress bar')
-    
+
     hash_sha256 = hashlib.sha256()
     with open(file_path, "rb") as f, tqdm(
         desc=desc,
@@ -67,7 +68,7 @@ def file_sha256_with_progress(
                 break
             hash_sha256.update(chunk)
             bar.update(len(chunk))
-    
+
     result = hash_sha256.hexdigest()
     log.debug(f'Hash calculation completed for {file_path}')
     return result
@@ -75,9 +76,9 @@ def file_sha256_with_progress(
 
 async def file_sha256_with_progress_async(
     file_path: Path,
-    description: Optional[str] = None,
+    description: str | None = None,
     silent: bool = False,
-    interrupt_event: Optional[threading.Event] = None
+    interrupt_event: threading.Event | None = None
 ) -> str:
     """
     Calculate SHA256 hash of file with progress bar (async version).

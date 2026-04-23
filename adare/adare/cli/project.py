@@ -1,14 +1,15 @@
 # external imports
+# configure logging
+import logging
 from pathlib import Path
+
+from adare.api import AdareAPI
 
 # internal imports
 from adare.backend.basics import determine_projectdirectory_for_removal
-from adare.api import AdareAPI
+from adare.console import print_error_message, print_success_message
 from adare.core.dto.project import ProjectCreateRequest, ProjectRemoveRequest
-from adare.console import print_success_message, print_error_message
 
-# configure logging
-import logging
 log = logging.getLogger(__name__)
 
 

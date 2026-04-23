@@ -10,8 +10,8 @@ This module provides the backward-compatible public API.
 """
 import logging
 import os
-from typing import Optional, Dict, Any, List
 import xml.etree.ElementTree as ET
+from typing import Any
 
 from .libvirt_xml_builder import DomainXMLBuilder
 
@@ -21,8 +21,8 @@ log = logging.getLogger(__name__)
 def generate_domain_xml(
     vm_config,  # QEMUVMConfig instance
     display_enabled: bool = False,
-    vnc_port: Optional[int] = None,
-    virtiofs_shares: Optional[List[Dict[str, Any]]] = None
+    vnc_port: int | None = None,
+    virtiofs_shares: list[dict[str, Any]] | None = None
 ) -> str:
     """
     Generate libvirt XML domain definition from QEMU VM config.
@@ -57,7 +57,7 @@ def generate_domain_xml(
 
 
 def generate_virtiofs_xml_element(
-    share: Dict[str, Any],
+    share: dict[str, Any],
     is_q35: bool,
     index: int,
     base_bus: int = 6,

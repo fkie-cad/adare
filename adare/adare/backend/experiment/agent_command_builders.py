@@ -12,14 +12,14 @@ For QEMU hypervisor:
 """
 
 # external imports
+import json
 import logging
 import os
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple, Optional, Any
-import threading
-import json
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -41,9 +41,9 @@ class EnvironmentInfo:
     """Information about the detected Python environment in the VM."""
     use_conda: bool
     conda_env_exists: bool
-    miniforge_path: Optional[str]
+    miniforge_path: str | None
     platform: str  # 'windows' or 'linux'
-    python_exe_path: Optional[str] = None  # Full path to python.exe (Windows non-conda)
+    python_exe_path: str | None = None  # Full path to python.exe (Windows non-conda)
 
 
 @dataclass
@@ -56,10 +56,10 @@ class SetupCommand:
 @dataclass
 class CommandSet:
     """Collection of commands needed to set up and run adarevm."""
-    setup_commands: List[SetupCommand]  # Setup commands with admin flags
+    setup_commands: list[SetupCommand]  # Setup commands with admin flags
     install_command: str
     run_command: str
-    run_cwd: Optional[str]
+    run_cwd: str | None
     skip_installation: bool
 
 
@@ -84,7 +84,7 @@ class AgentCommandBuilder(ABC):
         self.wheels_available = wheels_dir.exists() and bool(list(wheels_dir.glob('*.whl')))
 
     @abstractmethod
-    async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> List[SetupCommand]:
+    async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> list[SetupCommand]:
         """Build platform-specific setup commands with admin requirements."""
         pass
 
@@ -94,10 +94,10 @@ class AgentCommandBuilder(ABC):
         pass
 
     @abstractmethod
-    def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> Tuple[str, Optional[str]]:
+    def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> tuple[str, str | None]:
         """Build run command and optional cwd. Returns (command, cwd)."""
         pass
-        
+
     def _build_config_file_payload(self) -> str:
         """Build JSON content for config.json.
 
@@ -116,7 +116,7 @@ class AgentCommandBuilder(ABC):
                 experiment_data = r'C:/adare/shared/data'
                 log_path = r'C:/adare/run/logs/adarevm.log'
             else:
-                # VirtualBox - use C:\adare (via Z: mount) or similar logic if needed, 
+                # VirtualBox - use C:\adare (via Z: mount) or similar logic if needed,
                 # but for simplicity we keep it consistent where possible.
                 # Note: VirtualBox usually mounts to Z: then we might want C:\adare mapped?
                 # Actually legacy logic for VBox used C:\adare as well in config.
@@ -180,7 +180,7 @@ class AgentCommandBuilder(ABC):
 class WindowsAgentCommandBuilder(AgentCommandBuilder):
     """Windows-specific command builder."""
 
-    async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> List[SetupCommand]:
+    async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> list[SetupCommand]:
         """Build Windows setup commands with per-command admin requirements."""
         commands = []
         base_path = r'C:\adare'
@@ -241,9 +241,8 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         """Build Windows installation command."""
         if env_info.use_conda and env_info.conda_env_exists:
             return self._build_conda_install_command()
-        else:
-            return self._build_uv_install_command(env_info, vm)
-            
+        return self._build_uv_install_command(env_info, vm)
+
     def _resolve_python_path(self, vm: Any) -> str:
         """Resolve absolute path to python executable from discovered guest PATH.
 
@@ -322,9 +321,8 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             # before pip sees the arguments. PowerShell doesn't expand wildcards in
             # base64-encoded commands, so we must explicitly use Get-ChildItem.
             return rf'C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install --force-reinstall @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
-        else:
-            # Editable install from shared folder source
-            return rf'cd {adarelib_path}; C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd {adarevm_path}; C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
+        # Editable install from shared folder source
+        return rf'cd {adarelib_path}; C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install .; cd {adarevm_path}; C:\Users\adare\.miniforge3\Scripts\conda.exe run -n pyadare pip install .'
 
     def _build_uv_install_command(self, env_info: EnvironmentInfo, vm: Any = None) -> str:
         """Build pip installation command (pip is in PATH via user's PATH discovery)."""
@@ -343,14 +341,13 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             log.info(f"Using executed python command: {python_cmd}")
 
             return rf'{python_cmd} -m pip install --force-reinstall @(Get-ChildItem {wheels_path} | Select-Object -ExpandProperty FullName)'
-        else:
-            # Editable install via uv
-            return rf'cd {adarevm_path}; uv sync'
+        # Editable install via uv
+        return rf'cd {adarevm_path}; uv sync'
 
-    def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> tuple[str, Optional[str]]:
+    def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> tuple[str, str | None]:
         """Build Windows run command."""
         base_path = r'C:\adare'
-        
+
         # Determine base path based on hypervisor and mode
         # QEMU always uses C:\adare (virtiofs mounts there, or files copied there)
         # Tools/data paths use the base path
@@ -376,24 +373,21 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
             if self.wheels_available:
                 # Wheel: call directly from conda env (no UNC path navigation)
                 return (rf'{conda_exe} run -n pyadare adarevm {cli_args}', None)
-            else:
-                # Editable: cd to source directory for uv context
-                return (rf'cd {adarevm_path}; {conda_exe} run -n pyadare adarevm {cli_args}', None)
-        else:
-            if self.wheels_available:
-                # Wheel: run via python absolute path (reliable)
-                # python_cmd = self._resolve_python_path(vm) # Using resolved path
-                # Just use 'adarevm' if in path, or python -m adarevm
-                return (rf'adarevm {cli_args}', None)
-            else:
-                # Editable: uv run from source directory
-                return (rf'cd {adarevm_path}; uv run adarevm {cli_args}', None)
+            # Editable: cd to source directory for uv context
+            return (rf'cd {adarevm_path}; {conda_exe} run -n pyadare adarevm {cli_args}', None)
+        if self.wheels_available:
+            # Wheel: run via python absolute path (reliable)
+            # python_cmd = self._resolve_python_path(vm) # Using resolved path
+            # Just use 'adarevm' if in path, or python -m adarevm
+            return (rf'adarevm {cli_args}', None)
+        # Editable: uv run from source directory
+        return (rf'cd {adarevm_path}; uv run adarevm {cli_args}', None)
 
 
 class LinuxAgentCommandBuilder(AgentCommandBuilder):
     """Linux-specific command builder."""
 
-    async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> List[SetupCommand]:
+    async def build_setup_commands(self, env_info: EnvironmentInfo, vm: Any = None) -> list[SetupCommand]:
         """Build Linux setup commands with per-command admin requirements."""
         commands = [
             # Add project-wide tools to PATH (user bashrc, no admin needed)
@@ -420,15 +414,14 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
                 command=f"mkdir -p /adare/run && echo '{self._build_config_file_payload()}' > /adare/run/config.json",
                 requires_admin=False
             ))
-            
+
         return commands
 
     def build_install_command(self, env_info: EnvironmentInfo, vm: Any = None) -> str:
         """Build Linux install command."""
         if env_info.use_conda:
             return self._build_conda_install_command()
-        else:
-            return self._build_uv_install_command()
+        return self._build_uv_install_command()
 
     def _build_conda_install_command(self) -> str:
         """Build Conda installation command."""
@@ -438,12 +431,11 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
-        else:
-            # Editable install from mounted source
-            cmd = 'cd /adare/vm/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/vm/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install .'
-            if not self.skip_xhost:
-                cmd += ' && xhost +SI:localuser:root'
-            return cmd
+        # Editable install from mounted source
+        cmd = 'cd /adare/vm/adarelib && /home/adare/.miniforge3/bin/conda run -n pyadare pip install . && cd /adare/vm/adarevm && /home/adare/.miniforge3/bin/conda run -n pyadare pip install .'
+        if not self.skip_xhost:
+            cmd += ' && xhost +SI:localuser:root'
+        return cmd
 
     def _build_uv_install_command(self) -> str:
         """Build uv installation command."""
@@ -454,14 +446,13 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
             if not self.skip_xhost:
                 cmd += ' && xhost +SI:localuser:root'
             return cmd
-        else:
-            # Editable install via uv
-            cmd = 'cd /adare/vm/adarevm && uv sync'
-            if not self.skip_xhost:
-                cmd += ' && xhost +SI:localuser:root'
-            return cmd
+        # Editable install via uv
+        cmd = 'cd /adare/vm/adarevm && uv sync'
+        if not self.skip_xhost:
+            cmd += ' && xhost +SI:localuser:root'
+        return cmd
 
-    def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> tuple[str, Optional[str]]:
+    def build_run_command(self, env_info: EnvironmentInfo, vm: Any = None) -> tuple[str, str | None]:
         """Build Linux run command."""
         # Minimal CLI args - relying on default /adare/run and config.json
         cli_args = ""
@@ -469,19 +460,17 @@ class LinuxAgentCommandBuilder(AgentCommandBuilder):
         if env_info.use_conda:
             # Conda: wrapper handles both wheels and editable
             return (f'/home/adare/.miniforge3/bin/conda run -n pyadare adarevm {cli_args}', None)
-        else:
-            # Non-conda: check installation method
-            if self.wheels_available:
-                # Wheels: installed in PATH via pip3, run directly
-                return (f'adarevm {cli_args}', None)
-            else:
-                # Editable: uv run from source directory
-                return (f'uv run adarevm {cli_args}', '/adare/vm/adarevm')
+        # Non-conda: check installation method
+        if self.wheels_available:
+            # Wheels: installed in PATH via pip3, run directly
+            return (f'adarevm {cli_args}', None)
+        # Editable: uv run from source directory
+        return (f'uv run adarevm {cli_args}', '/adare/vm/adarevm')
 
 
 # Environment Detection Helpers
 
-def _extract_python_path_from_cached_path(cached_path: Optional[str]) -> Optional[str]:
+def _extract_python_path_from_cached_path(cached_path: str | None) -> str | None:
     """Extract Python executable path from cached guest PATH.
 
     Parses PATH entries to find Python installation directory
@@ -513,8 +502,7 @@ async def detect_environment(vm, platform: str, stop_event: threading.Event) -> 
     """Detect which Python environment is available in the VM."""
     if platform == 'windows':
         return await _detect_windows_environment(vm, stop_event)
-    else:
-        return await _detect_linux_environment(vm, stop_event)
+    return await _detect_linux_environment(vm, stop_event)
 
 
 async def _detect_windows_environment(vm, stop_event: threading.Event) -> EnvironmentInfo:
@@ -540,29 +528,27 @@ async def _detect_windows_environment(vm, stop_event: threading.Event) -> Enviro
                 miniforge_path=miniforge_path,
                 platform='windows'
             )
-        else:
-            # Attempt to create pyadare env as recovery
-            python_version = '3.11' if getattr(vm, 'architecture', None) == 'aarch64' else '3.10'
-            log.warning(
-                f"Miniforge found but 'pyadare' environment missing for VM '{vm.vm_name}'. "
-                f"Attempting to create it with Python {python_version}..."
-            )
-            create_env_cmd = rf'& "{miniforge_path}\Scripts\conda.exe" create -n pyadare python={python_version} -y'
-            create_result = await vm.run_command(create_env_cmd, stop_event=stop_event, timeout=300)
+        # Attempt to create pyadare env as recovery
+        python_version = '3.11' if getattr(vm, 'architecture', None) == 'aarch64' else '3.10'
+        log.warning(
+            f"Miniforge found but 'pyadare' environment missing for VM '{vm.vm_name}'. "
+            f"Attempting to create it with Python {python_version}..."
+        )
+        create_env_cmd = rf'& "{miniforge_path}\Scripts\conda.exe" create -n pyadare python={python_version} -y'
+        create_result = await vm.run_command(create_env_cmd, stop_event=stop_event, timeout=300)
 
-            if create_result.returncode == 0:
-                log.info(f"Successfully created 'pyadare' conda environment for VM '{vm.vm_name}'")
-                return EnvironmentInfo(
-                    use_conda=True,
-                    conda_env_exists=True,
-                    miniforge_path=miniforge_path,
-                    platform='windows'
-                )
-            else:
-                log.error(
-                    f"Failed to create 'pyadare' conda environment for VM '{vm.vm_name}': "
-                    f"{create_result.stderr}"
-                )
+        if create_result.returncode == 0:
+            log.info(f"Successfully created 'pyadare' conda environment for VM '{vm.vm_name}'")
+            return EnvironmentInfo(
+                use_conda=True,
+                conda_env_exists=True,
+                miniforge_path=miniforge_path,
+                platform='windows'
+            )
+        log.error(
+            f"Failed to create 'pyadare' conda environment for VM '{vm.vm_name}': "
+            f"{create_result.stderr}"
+        )
 
     # Fallback to system Python (non-conda) - pip/py must be in PATH
     # No pre-check needed - if pip isn't available, install will fail with clear error
@@ -595,8 +581,7 @@ async def _detect_linux_environment(vm, stop_event: threading.Event) -> Environm
                 miniforge_path='/home/adare/.miniforge3',
                 platform='linux'
             )
-        else:
-            log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to system Python")
+        log.warning(f"Miniforge found but 'pyadare' environment does not exist for VM '{vm.vm_name}', falling back to system Python")
 
     # Fallback to system Python (non-conda)
     log.info(f"Using system Python (non-conda) for VM '{vm.vm_name}'")

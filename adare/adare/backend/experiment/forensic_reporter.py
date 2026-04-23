@@ -6,16 +6,16 @@ the database for all ActionEvent and TestEvent records. The forensic logs
 provide a complete audit trail of GUI automation steps in YAML format.
 """
 
-import logging
-import yaml
-from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Any, Optional
 import json
+import logging
+from pathlib import Path
+from typing import Any
 
+import yaml
 from sqlalchemy.orm import Session
-from adare.database.models.project_models import ExperimentRun, ActionEvent, TestEvent, Event
+
 from adare.database.api.experiment import ExperimentApi
+from adare.database.models.project_models import ActionEvent, Event, ExperimentRun, TestEvent
 from adarelib.constants import StatusEnum
 
 log = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ class ForensicReporter:
             log.error(f"Failed to generate forensic report for run {experiment_run_id}: {e}")
             return False
 
-    def _build_forensic_data(self, session: Session, experiment_run: ExperimentRun) -> Dict[str, Any]:
+    def _build_forensic_data(self, session: Session, experiment_run: ExperimentRun) -> dict[str, Any]:
         """Build the forensic data structure from database records."""
 
         # Query all events for this run, ordered by timestamp
@@ -101,7 +101,7 @@ class ForensicReporter:
             'actions': actions
         }
 
-    def _process_event_to_action(self, event: Event, sequence: int) -> Optional[Dict[str, Any]]:
+    def _process_event_to_action(self, event: Event, sequence: int) -> dict[str, Any] | None:
         """Convert a database event record to forensic action entry."""
 
         try:
@@ -141,12 +141,11 @@ class ForensicReporter:
         """Determine the action type from event data."""
         if isinstance(event, TestEvent):
             return 'test'
-        elif isinstance(event, ActionEvent):
+        if isinstance(event, ActionEvent):
             return event.action_type or 'action'
-        else:
-            return event.event_type or 'event'
+        return event.event_type or 'event'
 
-    def _extract_result_details(self, event: Event) -> Dict[str, Any]:
+    def _extract_result_details(self, event: Event) -> dict[str, Any]:
         """Extract result details from event."""
         result_details = {}
 
@@ -218,7 +217,7 @@ class ForensicReporter:
 
         return result_details
 
-    def _extract_target_info(self, event: Event) -> Optional[Dict[str, Any]]:
+    def _extract_target_info(self, event: Event) -> dict[str, Any] | None:
         """Extract target information from event as YAML structure."""
         if isinstance(event, ActionEvent) and hasattr(event, 'action_data') and event.action_data:
             try:
@@ -250,7 +249,7 @@ class ForensicReporter:
 
         return None
 
-    def _extract_screenshot_path_from_database(self, event: Event) -> Optional[str]:
+    def _extract_screenshot_path_from_database(self, event: Event) -> str | None:
         """Extract screenshot file path from database action data."""
         if isinstance(event, ActionEvent) and hasattr(event, 'action_data') and event.action_data:
             try:
@@ -271,14 +270,13 @@ class ForensicReporter:
             status_enum = StatusEnum(int(status_id))
             if status_enum == StatusEnum.SUCCESS:
                 return 'PASSED'
-            elif status_enum == StatusEnum.FAILED:
+            if status_enum == StatusEnum.FAILED:
                 return 'FAILED'
-            elif status_enum == StatusEnum.ERROR:
+            if status_enum == StatusEnum.ERROR:
                 return 'ERROR'
-            elif status_enum == StatusEnum.WARNING:
+            if status_enum == StatusEnum.WARNING:
                 return 'WARNING'
-            else:
-                return 'UNKNOWN'
+            return 'UNKNOWN'
         except (ValueError, TypeError):
             return 'UNKNOWN'
 

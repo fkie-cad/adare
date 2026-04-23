@@ -4,9 +4,9 @@ Abstract interface for GUI automation execution.
 Defines the contract for GUI executors (agent-based and host-based).
 """
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
 import logging
+from abc import ABC, abstractmethod
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ class AbstractGUIExecutor(ABC):
     """Abstract interface for GUI automation execution."""
 
     @abstractmethod
-    async def screenshot(self, region: Optional[dict] = None) -> Dict[str, Any]:
+    async def screenshot(self, region: dict | None = None) -> dict[str, Any]:
         """
         Capture screenshot.
 
@@ -28,7 +28,7 @@ class AbstractGUIExecutor(ABC):
         pass
 
     @abstractmethod
-    async def click(self, x: int, y: int, button_type: str = 'left') -> Dict[str, Any]:
+    async def click(self, x: int, y: int, button_type: str = 'left') -> dict[str, Any]:
         """
         Execute mouse click.
 
@@ -43,7 +43,7 @@ class AbstractGUIExecutor(ABC):
         pass
 
     @abstractmethod
-    async def drag(self, x1: int, y1: int, x2: int, y2: int) -> Dict[str, Any]:
+    async def drag(self, x1: int, y1: int, x2: int, y2: int) -> dict[str, Any]:
         """
         Execute drag operation.
 
@@ -59,7 +59,7 @@ class AbstractGUIExecutor(ABC):
         pass
 
     @abstractmethod
-    async def keyboard(self, action_type: str, value: str) -> Dict[str, Any]:
+    async def keyboard(self, action_type: str, value: str) -> dict[str, Any]:
         """
         Execute keyboard action.
 
@@ -73,7 +73,7 @@ class AbstractGUIExecutor(ABC):
         pass
 
     @abstractmethod
-    async def scroll(self, direction: str, amount: int) -> Dict[str, Any]:
+    async def scroll(self, direction: str, amount: int) -> dict[str, Any]:
         """
         Execute scroll action.
 

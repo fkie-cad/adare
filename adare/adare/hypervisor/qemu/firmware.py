@@ -1,13 +1,12 @@
 """OVMF firmware detection for QEMU UEFI boot support."""
 
+import logging
 import os
 import struct
 from pathlib import Path
-from typing import Tuple
 
 from adare.hypervisor.exceptions import HypervisorException
 
-import logging
 log = logging.getLogger(__name__)
 
 
@@ -72,7 +71,7 @@ AARCH64_OVMF_SEARCH_PATHS = [
 ]
 
 
-def find_ovmf_firmware(architecture: str = 'x86_64') -> Tuple[str, str]:
+def find_ovmf_firmware(architecture: str = 'x86_64') -> tuple[str, str]:
     """Find OVMF CODE and VARS files on the system.
 
     Searches common installation paths for OVMF firmware across different

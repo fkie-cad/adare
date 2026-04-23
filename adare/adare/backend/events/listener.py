@@ -1,15 +1,14 @@
-from adare.backend.events.pubsub import subscribe_cli, subscribe_db
-from adare.backend.experiment.print import flowconsolemanager
-from adarelib.constants import StatusEnum
-from adare.types.stages import Stage, _stage_registry
-from adare.types.event_types import event_type_resolver, EventType, ActionType
-
 import logging
-import asyncio
-import threading
 import queue
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+
+from adare.backend.events.pubsub import subscribe_cli, subscribe_db
+from adare.backend.experiment.print import flowconsolemanager
+from adare.types.event_types import event_type_resolver
+from adare.types.stages import Stage, _stage_registry
+from adarelib.constants import StatusEnum
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +32,11 @@ _MIN_SPINNER_DISPLAY_TIME = 0.05  # Minimum 50ms spinner display (reduced from 1
 _stage_tracking_lock = threading.Lock()
 
 # Import shared action display logic
-from adare.frontend.terminal.action_display import get_action_display_info, determine_action_status, format_action_message
+from adare.frontend.terminal.action_display import (
+    determine_action_status,
+    format_action_message,
+    get_action_display_info,
+)
 
 
 def _schedule_delayed_completion(stage_id: str, console, completion_callback, delay_ms: float = 100):
@@ -64,7 +67,7 @@ def _schedule_delayed_completion(stage_id: str, console, completion_callback, de
             log.debug(f"[EventListener CLI] Timer already running for {stage_id}, skipping duplicate")
             return
 
-        timer = threading.Thread(target=delayed_complete, daemon=True, name=f"delayed_complete")
+        timer = threading.Thread(target=delayed_complete, daemon=True, name="delayed_complete")
         _spinner_timers[stage_id] = timer
         timer.start()
 
@@ -240,22 +243,21 @@ def _compute_display_level(action_data):
     """
     Compute display level based on parent relationships.
     Root level events have display_level = 2 (main playbook actions), each nested level adds 1.
-    
+
     This handles the common cases:
     - Level 2: Main playbook actions (no parent_event_id)
     - Level 3: Sub-actions like block actions, find/execute substages (has parent_event_id)
-    
+
     For deeper nesting (parent->parent->parent chains), a per-experiment session cache
     or database traversal would be needed, but the current pattern handles the main use cases.
     """
     base_level = 2  # Flow console expects main playbook actions at level 2
-    
+
     if not action_data.get('parent_event_id'):
         return base_level  # Main playbook actions (level 2)
-    else:
-        # For sub-actions (with parent), add 1 to base level  
-        # This covers block sub-actions, find/execute substages, etc.
-        return base_level + 1  # Sub-actions (level 3)
+    # For sub-actions (with parent), add 1 to base level
+    # This covers block sub-actions, find/execute substages, etc.
+    return base_level + 1  # Sub-actions (level 3)
 
 def event_listener_cli(ulid):
     console = flowconsolemanager.get_handler(ulid)
@@ -267,10 +269,10 @@ def event_listener_cli(ulid):
     for event in subscribe_cli(ulid):
         try:
             log.info(f"[EventListener CLI] Processing event for {ulid}: {event}")
-            
+
             # Determine event type (stage or action)
             event_type = event.get("type", "stage")  # Default to stage for backward compatibility
-            
+
             if event_type == "stage":
                 _handle_stage_event(event, console, ulid)
             elif event_type == "action":
@@ -311,7 +313,7 @@ def _handle_stage_event(event, console, ulid):
 
     # Calculate display level using cached hierarchy lookup
     level = _get_stage_level(stage.name)
-    
+
     if stage.sub_msg:
         message = f"{stage.msg}: {stage.sub_msg}"
     else:
@@ -387,31 +389,31 @@ def _handle_action_event(event, console, ulid):
     """Handle action events using the new event type system."""
     action_data = event.get("data", {})
     action_id = event.get("action_id")
-    
+
     if not action_data:
         log.warning(f"[EventListener CLI] No action data found in event: {event}")
         return
-    
+
     try:
         # Use the event type resolver to determine event type
         event_type = event_type_resolver.resolve_event_type(action_data)
         action_type = event_type_resolver.get_action_type(event_type, action_data)
-        
+
         # Debug logging with proper type information
         log.debug(f"[EventListener CLI] Processing action event: type={event_type.value}, action={action_type.value}, id={action_id}")
-        
+
         # Determine if this is a start or complete event
         is_start_event = event_type_resolver.is_start_event(event_type)
         is_complete_event = event_type_resolver.is_complete_event(event_type)
-        
+
         # Compute display level from parent relationships
         level = _compute_display_level(action_data)
-        
+
         if is_start_event:
             # Show spinner for action in progress with type-specific data
             display_info = get_action_display_info(action_type, action_data, is_complete=False)
             message = format_action_message(action_type, display_info)
-            
+
             # Extract start time from action data for live duration tracking
             from datetime import datetime
             start_time = None
@@ -422,40 +424,38 @@ def _handle_action_event(event, console, ulid):
                     start_time = datetime.now(timezone.utc)
             else:
                 start_time = datetime.now(timezone.utc)
-            
-            console.log_spinner(identifier=action_id, message=message, level=level, 
+
+            console.log_spinner(identifier=action_id, message=message, level=level,
                               spinner='dots', spinner_style='bold blue', start_time=start_time)
             log.info(f"[EventListener CLI] Action started: {action_type.value} with ID {action_id}")
-            
+
         elif is_complete_event:
             # Update spinner with completion status and type-specific data
             display_info = get_action_display_info(action_type, action_data, is_complete=True)
             error_message = action_data.get('error_message') or action_data.get('error')
             message = format_action_message(action_type, display_info, error_message)
-            
+
             # Determine status using shared logic
             status, result_status = determine_action_status(action_type, action_data)
             execution_time = action_data.get('execution_time')
-            
+
             # Update the console
             if console.exists(action_id):
-                console.log_spinner_done(identifier=action_id, status=status, 
+                console.log_spinner_done(identifier=action_id, status=status,
                                        message=message, result_status=result_status, duration=execution_time)
             else:
                 # Direct log if spinner doesn't exist
                 if status == StatusEnum.SUCCESS:
                     console.log_success(identifier=action_id, message=message, level=level, duration=execution_time)
-                elif status == StatusEnum.TEST_FAILED:
+                elif status == StatusEnum.TEST_FAILED or status == StatusEnum.FAILED:
                     console.log_failed(identifier=action_id, message=message, level=level, duration=execution_time)
-                elif status == StatusEnum.FAILED:
-                    console.log_failed(identifier=action_id, message=message, level=level, duration=execution_time)
-            
+
             success = action_data.get('success', False)
             log.info(f"[EventListener CLI] Action completed: {action_type.value} with ID {action_id}, Success: {success}")
-            
+
         else:
             log.warning(f"[EventListener CLI] Unknown action event type: {event_type.value}")
-            
+
     except Exception as e:
         log.error(f"[EventListener CLI] Error processing action event: {e}", exc_info=True)
 

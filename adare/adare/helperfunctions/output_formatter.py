@@ -4,20 +4,21 @@ Output formatting system for ADARE CLI.
 Provides consistent JSON/YAML output generation with shared data preparation logic.
 """
 import json
-import re
-import yaml
-from datetime import datetime, timedelta
-from enum import Enum
-from typing import Any, Dict, Union
-from pathlib import Path
-
-import attrs
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
 
 # setup logging
 import logging
+import re
+from datetime import datetime, timedelta
+from enum import Enum
+from pathlib import Path
+from typing import Any
+
+import attrs
+import yaml
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+
 log = logging.getLogger(__name__)
 
 
@@ -45,36 +46,35 @@ class StructuredOutputFormatter:
         """
         if data is None:
             return None
-        elif isinstance(data, (str, int, float, bool)):
+        if isinstance(data, (str, int, float, bool)):
             # Clean Rich markup from strings
             if isinstance(data, str):
                 return self._strip_rich_markup(data)
             return data
-        elif isinstance(data, datetime):
+        if isinstance(data, datetime):
             return data.isoformat()
-        elif isinstance(data, timedelta):
+        if isinstance(data, timedelta):
             return data.total_seconds()
-        elif isinstance(data, Path):
+        if isinstance(data, Path):
             return str(data)
-        elif hasattr(data, '__attrs_attrs__'):
+        if hasattr(data, '__attrs_attrs__'):
             # Handle attrs/dataclass objects
             return self._attrs_to_dict(data)
-        elif hasattr(data, '__dataclass_fields__'):
+        if hasattr(data, '__dataclass_fields__'):
             # Handle dataclass objects
             return self._dataclass_to_dict(data)
-        elif hasattr(data, 'to_dict'):
+        if hasattr(data, 'to_dict'):
             # Handle objects with explicit to_dict method
             return self.prepare_data(data.to_dict())
-        elif isinstance(data, dict):
+        if isinstance(data, dict):
             return {key: self.prepare_data(value) for key, value in data.items()}
-        elif isinstance(data, (list, tuple)):
+        if isinstance(data, (list, tuple)):
             return [self.prepare_data(item) for item in data]
-        elif isinstance(data, (Table, Panel)):
+        if isinstance(data, (Table, Panel)):
             # Convert Rich objects to basic representations
             return self._rich_object_to_dict(data)
-        else:
-            # Fallback: convert to string and clean markup
-            return self._strip_rich_markup(str(data))
+        # Fallback: convert to string and clean markup
+        return self._strip_rich_markup(str(data))
 
     def _strip_rich_markup(self, text: str) -> str:
         """Remove Rich markup from text."""
@@ -84,7 +84,7 @@ class StructuredOutputFormatter:
         clean_text = re.sub(r':[a-zA-Z_]+:', '', clean_text)
         return clean_text.strip()
 
-    def _attrs_to_dict(self, obj) -> Dict[str, Any]:
+    def _attrs_to_dict(self, obj) -> dict[str, Any]:
         """Convert attrs object to dictionary."""
         result = {}
         for field in attrs.fields(obj.__class__):
@@ -92,7 +92,7 @@ class StructuredOutputFormatter:
             result[field.name] = self.prepare_data(value)
         return result
 
-    def _dataclass_to_dict(self, obj) -> Dict[str, Any]:
+    def _dataclass_to_dict(self, obj) -> dict[str, Any]:
         """Convert dataclass object to dictionary."""
         result = {}
         for field_name in obj.__dataclass_fields__:
@@ -100,16 +100,15 @@ class StructuredOutputFormatter:
             result[field_name] = self.prepare_data(value)
         return result
 
-    def _rich_object_to_dict(self, obj) -> Dict[str, Any]:
+    def _rich_object_to_dict(self, obj) -> dict[str, Any]:
         """Convert Rich objects to basic dictionary representation."""
         if isinstance(obj, Table):
             return self._table_to_dict(obj)
-        elif isinstance(obj, Panel):
+        if isinstance(obj, Panel):
             return self._panel_to_dict(obj)
-        else:
-            return {"type": obj.__class__.__name__, "content": str(obj)}
+        return {"type": obj.__class__.__name__, "content": str(obj)}
 
-    def _table_to_dict(self, table: Table) -> Dict[str, Any]:
+    def _table_to_dict(self, table: Table) -> dict[str, Any]:
         """Convert Rich Table to dictionary."""
         # Note: This is a simplified conversion
         # Full table structure extraction would require more complex logic
@@ -120,7 +119,7 @@ class StructuredOutputFormatter:
             "note": "Rich table content - use rich format for full display"
         }
 
-    def _panel_to_dict(self, panel: Panel) -> Dict[str, Any]:
+    def _panel_to_dict(self, panel: Panel) -> dict[str, Any]:
         """Convert Rich Panel to dictionary."""
         return {
             "type": "panel",
@@ -169,12 +168,11 @@ class StructuredOutputFormatter:
         """Convert any remaining non-serializable objects to strings."""
         if isinstance(data, dict):
             return {key: self._make_json_safe(value) for key, value in data.items()}
-        elif isinstance(data, (list, tuple)):
+        if isinstance(data, (list, tuple)):
             return [self._make_json_safe(item) for item in data]
-        elif isinstance(data, (str, int, float, bool, type(None))):
+        if isinstance(data, (str, int, float, bool, type(None))):
             return data
-        else:
-            return str(data)
+        return str(data)
 
 
 class OutputFormatter:
@@ -195,16 +193,14 @@ class OutputFormatter:
         """
         if self.format_type == OutputFormat.RICH:
             return self._format_rich(data)
-        else:
-            # Prepare data for structured formats
-            clean_data = self.structured_formatter.prepare_data(data)
+        # Prepare data for structured formats
+        clean_data = self.structured_formatter.prepare_data(data)
 
-            if self.format_type == OutputFormat.JSON:
-                return self.structured_formatter.serialize_json(clean_data)
-            elif self.format_type == OutputFormat.YAML:
-                return self.structured_formatter.serialize_yaml(clean_data)
-            else:
-                raise ValueError(f"Unsupported output format: {self.format_type}")
+        if self.format_type == OutputFormat.JSON:
+            return self.structured_formatter.serialize_json(clean_data)
+        if self.format_type == OutputFormat.YAML:
+            return self.structured_formatter.serialize_yaml(clean_data)
+        raise ValueError(f"Unsupported output format: {self.format_type}")
 
     def _format_rich(self, data: Any) -> str:
         """
@@ -269,7 +265,7 @@ class OutputFormatter:
                 print(formatted_output)
 
 
-def get_formatter(format_type: Union[OutputFormat, str] = OutputFormat.RICH) -> OutputFormatter:
+def get_formatter(format_type: OutputFormat | str = OutputFormat.RICH) -> OutputFormatter:
     """
     Factory function to create an OutputFormatter.
 

@@ -57,10 +57,9 @@ def _get_nested_value(data, key_path):
     # If we have multiple values, it was a wildcard match
     if len(current_values) > 1:
         return current_values, True
-    elif len(current_values) == 1:
+    if len(current_values) == 1:
         return current_values[0], True
-    else:
-        return None, False
+    return None, False
 
 
 def _compare_values(test_instance, actual_value, expected_value, regex_match=False):
@@ -74,8 +73,7 @@ def _compare_values(test_instance, actual_value, expected_value, regex_match=Fal
                 pattern = re.compile(expected_value.string)
                 if pattern.match(str(actual_value)):
                     return True, f'value "{actual_value}" matches regex "{expected_value.string}"'
-                else:
-                    return False, f'value "{actual_value}" does not match regex "{expected_value.string}"'
+                return False, f'value "{actual_value}" does not match regex "{expected_value.string}"'
             except re.error as e:
                 return False, f'Invalid regex pattern: {expected_value.string} - {e}'
     except ImportError:
@@ -95,16 +93,14 @@ def _compare_values(test_instance, actual_value, expected_value, regex_match=Fal
                 pattern = re.compile(expected_value)
                 if pattern.search(str(actual_value)):
                     return True, f'value "{actual_value}" matches regex "{expected_value}"'
-                else:
-                    return False, f'value "{actual_value}" does not match regex "{expected_value}"'
+                return False, f'value "{actual_value}" does not match regex "{expected_value}"'
             except re.error as e:
                 return False, f'Invalid regex pattern: {expected_value} - {e}'
         else:
             # Direct value comparison
             if actual_value == expected_value:
                 return True, f'value matches expected: {actual_value}'
-            else:
-                return False, f'expected "{expected_value}", got "{actual_value}"'
+            return False, f'expected "{expected_value}", got "{actual_value}"'
     else:
         # Has placeholders - use placeholder system
         placeholder_names = test_instance.get_placeholders(expected_str)
@@ -123,7 +119,7 @@ def _compare_values(test_instance, actual_value, expected_value, regex_match=Fal
     description='tests if lines in JSONL file match specified conditions (supports any/all modes)',
     category=HostModeCategory.FILE_CONTENT,
 )
-def line_matches(ctx: TestContext, dst: str = '', conditions: Dict[str, Union[str, int, float, bool, None]] = None, match_mode: str = "any", regex_match: bool = False, skip_malformed: bool = True):
+def line_matches(ctx: TestContext, dst: str = '', conditions: dict[str, str | int | float | bool | None] = None, match_mode: str = "any", regex_match: bool = False, skip_malformed: bool = True):
     try:
         dst_param = dst
         dst, status = ctx.resolve_globfilepath(dst)
@@ -147,7 +143,7 @@ def line_matches(ctx: TestContext, dst: str = '', conditions: Dict[str, Union[st
             malformed_lines = []
             line_num = 0
 
-            with open(dst, 'r') as f:
+            with open(dst) as f:
                 for line in f:
                     line_num += 1
                     line = line.strip()
@@ -218,37 +214,35 @@ def line_matches(ctx: TestContext, dst: str = '', conditions: Dict[str, Union[st
                     if len(matching_lines) > 1:
                         messages.append(f'Additional matches on lines: {[ln for ln, _ in matching_lines[1:4]]}')
                     return TestResult.success(messages)
-                else:
-                    messages = [
-                        f'No lines matched all conditions (mode: any)',
-                        f'Analyzed {line_num} lines',
-                        f'Conditions: {conditions}'
-                    ]
-                    if non_matching_lines[:3]:
-                        messages.append('Sample non-matching lines:')
-                        for ln, data, failed in non_matching_lines[:3]:
-                            messages.append(f'  Line {ln}: failed {failed}')
-                    return TestResult.failed(messages)
-            else:  # match_mode == "all"
-                total_valid_lines = len(matching_lines) + len(non_matching_lines)
-                if total_valid_lines == 0:
-                    return TestResult.failed(['No valid JSON lines found in file'])
+                messages = [
+                    'No lines matched all conditions (mode: any)',
+                    f'Analyzed {line_num} lines',
+                    f'Conditions: {conditions}'
+                ]
+                if non_matching_lines[:3]:
+                    messages.append('Sample non-matching lines:')
+                    for ln, data, failed in non_matching_lines[:3]:
+                        messages.append(f'  Line {ln}: failed {failed}')
+                return TestResult.failed(messages)
+            # match_mode == "all"
+            total_valid_lines = len(matching_lines) + len(non_matching_lines)
+            if total_valid_lines == 0:
+                return TestResult.failed(['No valid JSON lines found in file'])
 
-                if len(matching_lines) == total_valid_lines:
-                    return TestResult.success([
-                        f'All {total_valid_lines} lines matched conditions (mode: all)',
-                        f'Conditions: {conditions}'
-                    ])
-                else:
-                    messages = [
-                        f'Only {len(matching_lines)}/{total_valid_lines} lines matched (mode: all)',
-                        f'Conditions: {conditions}'
-                    ]
-                    if non_matching_lines[:3]:
-                        messages.append('Sample non-matching lines:')
-                        for ln, data, failed in non_matching_lines[:3]:
-                            messages.append(f'  Line {ln}: failed {failed}')
-                    return TestResult.failed(messages)
+            if len(matching_lines) == total_valid_lines:
+                return TestResult.success([
+                    f'All {total_valid_lines} lines matched conditions (mode: all)',
+                    f'Conditions: {conditions}'
+                ])
+            messages = [
+                f'Only {len(matching_lines)}/{total_valid_lines} lines matched (mode: all)',
+                f'Conditions: {conditions}'
+            ]
+            if non_matching_lines[:3]:
+                messages.append('Sample non-matching lines:')
+                for ln, data, failed in non_matching_lines[:3]:
+                    messages.append(f'  Line {ln}: failed {failed}')
+            return TestResult.failed(messages)
 
         except FileNotFoundError:
             return TestResult.failed([f'JSONL file {dst} does not exist'])
@@ -265,7 +259,7 @@ def line_matches(ctx: TestContext, dst: str = '', conditions: Dict[str, Union[st
     description='counts lines in JSONL file matching conditions and validates against expected count (if None, requires at least 1 match)',
     category=HostModeCategory.FILE_CONTENT,
 )
-def line_count(ctx: TestContext, dst: str = '', conditions: Optional[Dict[str, Union[str, int, float, bool, None]]] = None, expected_count: Optional[Union[int, Dict[str, int]]] = None, regex_match: bool = False, skip_malformed: bool = True):
+def line_count(ctx: TestContext, dst: str = '', conditions: dict[str, str | int | float | bool | None] | None = None, expected_count: int | dict[str, int] | None = None, regex_match: bool = False, skip_malformed: bool = True):
     try:
         dst_param = dst
         dst, status = ctx.resolve_globfilepath(dst)
@@ -298,7 +292,7 @@ def line_count(ctx: TestContext, dst: str = '', conditions: Optional[Dict[str, U
             total_lines = 0
             malformed_count = 0
 
-            with open(dst, 'r') as f:
+            with open(dst) as f:
                 for line_num, line in enumerate(f, 1):
                     line = line.strip()
 
@@ -363,7 +357,7 @@ def line_count(ctx: TestContext, dst: str = '', conditions: Optional[Dict[str, U
             if min_count <= matching_count <= max_count:
                 messages = [f'Found {matching_count} matching lines']
                 if expected_count is None:
-                    messages[0] += f' (expected at least 1)'
+                    messages[0] += ' (expected at least 1)'
                 elif min_count == max_count:
                     messages[0] += f' (expected exactly {min_count})'
                 else:
@@ -372,20 +366,19 @@ def line_count(ctx: TestContext, dst: str = '', conditions: Optional[Dict[str, U
                 if conditions:
                     messages.append(f'Conditions: {conditions}')
                 return TestResult.success(messages)
+            messages = [
+                f'Found {matching_count} matching lines',
+            ]
+            if expected_count is None:
+                messages.append('Expected: at least 1')
+            elif min_count == max_count:
+                messages.append(f'Expected: {min_count}')
             else:
-                messages = [
-                    f'Found {matching_count} matching lines',
-                ]
-                if expected_count is None:
-                    messages.append(f'Expected: at least 1')
-                elif min_count == max_count:
-                    messages.append(f'Expected: {min_count}')
-                else:
-                    messages.append(f'Expected: {min_count}-{max_count if max_count != float("inf") else "∞"}')
-                messages.append(f'Total valid lines: {total_lines - malformed_count}')
-                if conditions:
-                    messages.append(f'Conditions: {conditions}')
-                return TestResult.failed(messages)
+                messages.append(f'Expected: {min_count}-{max_count if max_count != float("inf") else "∞"}')
+            messages.append(f'Total valid lines: {total_lines - malformed_count}')
+            if conditions:
+                messages.append(f'Conditions: {conditions}')
+            return TestResult.failed(messages)
 
         except FileNotFoundError:
             return TestResult.failed([f'JSONL file {dst} does not exist'])
@@ -402,7 +395,7 @@ def line_count(ctx: TestContext, dst: str = '', conditions: Optional[Dict[str, U
     description='tests if specified key path with expected value exists in any line of JSONL file',
     category=HostModeCategory.FILE_CONTENT,
 )
-def value_in_any_line(ctx: TestContext, dst: str = '', key_path: str = '', expected_value: Union[str, int, float, bool, None] = None, regex_match: bool = False, skip_malformed: bool = True):
+def value_in_any_line(ctx: TestContext, dst: str = '', key_path: str = '', expected_value: str | int | float | bool | None = None, regex_match: bool = False, skip_malformed: bool = True):
     try:
         dst_param = dst
         dst, status = ctx.resolve_globfilepath(dst)
@@ -422,7 +415,7 @@ def value_in_any_line(ctx: TestContext, dst: str = '', key_path: str = '', expec
             malformed_count = 0
             lines_with_key = 0
 
-            with open(dst, 'r') as f:
+            with open(dst) as f:
                 for line_num, line in enumerate(f, 1):
                     line = line.strip()
 
@@ -477,16 +470,15 @@ def value_in_any_line(ctx: TestContext, dst: str = '', key_path: str = '', expec
                 if len(matching_lines) > 1:
                     messages.append(f'Additional matches on lines: {[ln for ln, _, _ in matching_lines[1:4]]}')
                 return TestResult.success(messages)
+            messages = [
+                f'No lines found with key path "{key_path}" matching expected value "{expected_value}"',
+                f'Analyzed {total_lines - malformed_count} valid JSON lines'
+            ]
+            if lines_with_key > 0:
+                messages.append(f'Found {lines_with_key} lines with key "{key_path}" but none matched the expected value')
             else:
-                messages = [
-                    f'No lines found with key path "{key_path}" matching expected value "{expected_value}"',
-                    f'Analyzed {total_lines - malformed_count} valid JSON lines'
-                ]
-                if lines_with_key > 0:
-                    messages.append(f'Found {lines_with_key} lines with key "{key_path}" but none matched the expected value')
-                else:
-                    messages.append(f'Key path "{key_path}" not found in any line')
-                return TestResult.failed(messages)
+                messages.append(f'Key path "{key_path}" not found in any line')
+            return TestResult.failed(messages)
 
         except FileNotFoundError:
             return TestResult.failed([f'JSONL file {dst} does not exist'])

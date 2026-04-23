@@ -5,16 +5,16 @@ This module provides the service container (context) that is passed to
 host-side tests, enabling clean dependency injection and modular test design.
 """
 
-import attrs
 from pathlib import Path
-from typing import Optional
+
+import attrs
 
 from adare.backend.experiment.host_services import (
     CVService,
+    GuestCommandProxy,
+    GuestFileProxy,
     ScreenshotService,
     VMFileService,
-    GuestFileProxy,
-    GuestCommandProxy,
 )
 
 
@@ -49,8 +49,8 @@ class HostTestContext:
     vm_file: VMFileService
 
     # Host-mode QGA services (optional - only set in host test mode)
-    guest_file: Optional[GuestFileProxy] = None
-    guest_command: Optional[GuestCommandProxy] = None
+    guest_file: GuestFileProxy | None = None
+    guest_command: GuestCommandProxy | None = None
 
     # Context paths
     playbook_dir: Path = attrs.field(default=Path('.'))
@@ -117,8 +117,8 @@ class HostTestContext:
         Returns:
             HostTestContext with QGA-based services
         """
-        from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
         from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
+        from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
 
         guest_file = GuestFileProxy(vm=vm, guest_os=guest_os)
         guest_command = GuestCommandProxy(vm=vm, guest_os=guest_os)

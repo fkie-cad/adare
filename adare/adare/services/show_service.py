@@ -4,27 +4,26 @@ Show Service - Business logic for data display operations.
 This service handles data retrieval operations for display and returns Result[T] objects
 that can be consumed by any frontend (CLI, Web UI, REST API).
 """
-from pathlib import Path
-from typing import List, Optional, Callable
-
 import logging
+from collections.abc import Callable
+from pathlib import Path
 
-from adare.core.result import Result
+from adare.config.database import get_project_database_location
 from adare.core.dto.show import (
+    EnvironmentDetail,
+    EnvironmentListItem,
+    ExperimentDetail,
+    ExperimentListItem,
+    ProjectListItem,
+    RunDetail,
+    RunListItem,
     RunListRequest,
     RunRemoveRequest,
-    RunListItem,
-    RunDetail,
     RunRemoveResult,
-    ProjectListItem,
-    EnvironmentListItem,
-    EnvironmentDetail,
-    ExperimentListItem,
-    ExperimentDetail,
-    TestfunctionListItem,
     TestfunctionDetail,
+    TestfunctionListItem,
 )
-from adare.config.database import get_project_database_location
+from adare.core.result import Result
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ class ShowService:
     across different frontends.
     """
 
-    def _query_across_projects(self, query_fn: Callable) -> List:
+    def _query_across_projects(self, query_fn: Callable) -> list:
         """Run a StructuredDataApi query across all project databases, aggregating results."""
         from adare.database.api.structured_data import StructuredDataApi
 
@@ -66,7 +65,7 @@ class ShowService:
     # Run Operations
     # =========================================================================
 
-    def list_runs(self, request: RunListRequest = None) -> Result[List[RunListItem]]:
+    def list_runs(self, request: RunListRequest = None) -> Result[list[RunListItem]]:
         """
         List runs with optional filtering.
 
@@ -219,7 +218,7 @@ class ShowService:
         from adare.backend.basics import determine_projectdirectory
         from adare.database.api.experiment import ExperimentApi
         from adare.database.models.project_models import ExperimentRun
-        from adare.exceptions import NoProjectFoundError, ArgumentsError
+        from adare.exceptions import ArgumentsError, NoProjectFoundError
 
         try:
             if not request.ulid:
@@ -276,7 +275,7 @@ class ShowService:
     # Project Operations
     # =========================================================================
 
-    def list_projects(self) -> Result[List[ProjectListItem]]:
+    def list_projects(self) -> Result[list[ProjectListItem]]:
         """
         List all projects.
 
@@ -314,7 +313,7 @@ class ShowService:
     # Environment Operations
     # =========================================================================
 
-    def list_environments(self) -> Result[List[EnvironmentListItem]]:
+    def list_environments(self) -> Result[list[EnvironmentListItem]]:
         """
         List all environments.
 
@@ -419,7 +418,7 @@ class ShowService:
     # Experiment Operations
     # =========================================================================
 
-    def list_experiments(self, tags: Optional[List[str]] = None) -> Result[List[ExperimentListItem]]:
+    def list_experiments(self, tags: list[str] | None = None) -> Result[list[ExperimentListItem]]:
         """
         List all experiments, optionally filtered by tags.
 
@@ -558,7 +557,7 @@ class ShowService:
     # Testfunction Operations
     # =========================================================================
 
-    def list_testfunctions(self, file_name: str = None) -> Result[List[TestfunctionListItem]]:
+    def list_testfunctions(self, file_name: str = None) -> Result[list[TestfunctionListItem]]:
         """
         List all testfunctions, optionally filtered by file.
 

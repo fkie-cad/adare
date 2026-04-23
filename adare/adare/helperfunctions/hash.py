@@ -1,6 +1,8 @@
 import hashlib
 from pathlib import Path
+
 import yaml
+
 
 def hash_file_sha256(filepath: Path):
     h = hashlib.sha256()

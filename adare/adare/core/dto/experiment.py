@@ -7,8 +7,6 @@ enabling consistent interfaces across CLI, REST API, and Web UI.
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
-
 
 # =============================================================================
 # Experiment Request DTOs
@@ -39,8 +37,8 @@ class ExperimentRunRequest:
     test_mode: bool = True
     debug_screenshots: bool = False
     preserve_snapshot: bool = False
-    vm_memory: Optional[int] = None
-    vm_cpus: Optional[int] = None
+    vm_memory: int | None = None
+    vm_cpus: int | None = None
     gui_mode: bool = False
 
 
@@ -50,7 +48,7 @@ class ExperimentCloneRequest:
     project_path: Path
     source_experiment: str
     target_experiment: str
-    environments: Optional[List[str]] = None
+    environments: list[str] | None = None
 
 
 @dataclass
@@ -67,7 +65,7 @@ class ExperimentEnvModifyRequest:
     """Request to add or remove environments from experiments."""
     project_path: Path
     experiment_pattern: str
-    environments: List[str]
+    environments: list[str]
     force: bool = False
 
 
@@ -76,7 +74,7 @@ class ExperimentValidateRequest:
     """Request to validate an experiment configuration and integrity."""
     project_path: Path
     name: str
-    environment: Optional[str] = None
+    environment: str | None = None
 
 
 # =============================================================================
@@ -91,12 +89,12 @@ class ExperimentInfo:
     description: str
     file_path: Path
     sha256: str
-    environment_names: List[str]
+    environment_names: list[str]
     run_count: int = 0
     productive_run_count: int = 0
     is_loaded: bool = False
-    next_steps: List[str] = field(default_factory=list)
-    tip: Optional[str] = None
+    next_steps: list[str] = field(default_factory=list)
+    tip: str | None = None
 
 
 @dataclass
@@ -119,9 +117,9 @@ class ExperimentRunInfo:
     environment_name: str
     status: str  # PENDING, RUNNING, SUCCESS, FAILED, INTERRUPTED
     is_test: bool
-    start_time: Optional[datetime]
-    end_time: Optional[datetime]
-    duration: Optional[timedelta]
+    start_time: datetime | None
+    end_time: datetime | None
+    duration: timedelta | None
 
 
 @dataclass
@@ -129,8 +127,8 @@ class ExperimentRunResult:
     """Result of an experiment run."""
     was_interrupted: bool
     was_successful: bool
-    run_info: Optional[ExperimentRunInfo] = None
-    error_message: Optional[str] = None
+    run_info: ExperimentRunInfo | None = None
+    error_message: str | None = None
 
 
 @dataclass
@@ -151,8 +149,8 @@ class ExperimentRemoveResult:
 @dataclass
 class ExperimentEnvModifyResult:
     """Result of adding/removing environments from experiments."""
-    affected_experiments: List[str]
-    environments_changed: List[str]
+    affected_experiments: list[str]
+    environments_changed: list[str]
     operation: str  # 'add' or 'remove'
 
 
@@ -169,8 +167,8 @@ class BatchRunRequest:
     test_mode: bool = True
     debug_screenshots: bool = False
     preserve_snapshot: bool = False
-    vm_memory: Optional[int] = None
-    vm_cpus: Optional[int] = None
+    vm_memory: int | None = None
+    vm_cpus: int | None = None
     gui_mode: bool = False
 
 
@@ -181,8 +179,8 @@ class BatchRunResultItem:
     experiment_name: str
     status: str  # SUCCESS, FAILED, INTERRUPTED, SKIPPED
     duration: timedelta
-    error_message: Optional[str] = None
-    run_id: Optional[str] = None
+    error_message: str | None = None
+    run_id: str | None = None
 
 
 @dataclass
@@ -198,7 +196,7 @@ class ValidationCheckResult:
 class ExperimentValidateResult:
     """Result of validating an experiment."""
     name: str
-    checks: List[ValidationCheckResult] = field(default_factory=list)
+    checks: list[ValidationCheckResult] = field(default_factory=list)
 
     @property
     def passed_count(self) -> int:
@@ -220,7 +218,7 @@ class ExperimentValidateResult:
 @dataclass
 class BatchRunSummary:
     """Summary of a batch run."""
-    results: List[BatchRunResultItem]
+    results: list[BatchRunResultItem]
     total_combinations: int
     successful_runs: int
     failed_runs: int

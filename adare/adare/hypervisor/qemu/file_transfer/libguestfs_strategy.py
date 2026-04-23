@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
@@ -47,7 +47,7 @@ class LibguestfsStrategy(FileTransferStrategy):
     def has_post_boot_transfer(self) -> bool:
         return False
 
-    def __init__(self, guestfish_client: Optional[GuestfishClient] = None):
+    def __init__(self, guestfish_client: GuestfishClient | None = None):
         self.guestfish = guestfish_client or GuestfishClient()
 
     async def setup(self, context: Any) -> None:
@@ -311,7 +311,7 @@ class LibguestfsStrategy(FileTransferStrategy):
     def _copy_files_to_disk(
         self,
         disk_path: str,
-        files_to_copy: List[Dict[str, str]],
+        files_to_copy: list[dict[str, str]],
         target_base_dir: str = "/adare",
     ) -> None:
         """Copy files to guest disk using guestfish CLI.
@@ -341,7 +341,7 @@ class LibguestfsStrategy(FileTransferStrategy):
             f"Mounting guest disk {disk_path} via guestfish for file transfer"
         )
 
-        commands: List[str] = []
+        commands: list[str] = []
 
         # Create base and runtime directories
         commands.extend(['mkdir-p', target_base_dir, ':'])
@@ -355,7 +355,7 @@ class LibguestfsStrategy(FileTransferStrategy):
         def resolve_guest_dest(dest: str) -> str:
             if re.match(r'^[a-zA-Z]:[\\/]', dest):
                 return dest[2:].replace('\\', '/')
-            elif dest.startswith('/'):
+            if dest.startswith('/'):
                 return dest
             return f"{target_base_dir}/{dest}"
 
@@ -410,8 +410,8 @@ class LibguestfsStrategy(FileTransferStrategy):
     def _batch_retrieve_files_from_disk(
         self,
         disk_path: str,
-        retrieval_specs: List[Dict[str, Any]],
-    ) -> Dict[str, List[str]]:
+        retrieval_specs: list[dict[str, Any]],
+    ) -> dict[str, list[str]]:
         """Retrieve multiple files/directories in a single guestfish session.
 
         Args:
@@ -499,14 +499,13 @@ class LibguestfsStrategy(FileTransferStrategy):
                         f"Failed to mount guest disk via guestfish: "
                         f"{result.stderr}"
                     )
-                else:
-                    log.debug(
-                        f"Guestfish completed with returncode "
-                        f"{result.returncode}: {result.stderr}"
-                    )
+                log.debug(
+                    f"Guestfish completed with returncode "
+                    f"{result.returncode}: {result.stderr}"
+                )
 
             # Analyse which files were actually created
-            results: Dict[str, List[str]] = {'retrieved': [], 'missing': []}
+            results: dict[str, list[str]] = {'retrieved': [], 'missing': []}
 
             for spec in retrieval_specs:
                 host_path = spec['host_path']
@@ -571,7 +570,7 @@ class LibguestfsStrategy(FileTransferStrategy):
     def _generate_retrieval_script(
         self,
         root_device: str,
-        retrieval_specs: List[Dict[str, Any]],
+        retrieval_specs: list[dict[str, Any]],
     ) -> str:
         """Generate guestfish script for batched file retrieval.
 
@@ -606,7 +605,7 @@ class LibguestfsStrategy(FileTransferStrategy):
         return '\n'.join(script_lines)
 
 
-def _build_file_transfer_manifest(context: Any) -> List[Dict[str, str]]:
+def _build_file_transfer_manifest(context: Any) -> list[dict[str, str]]:
     """Build list of {source, dest} dicts for file transfer.
 
     Used by both libguestfs and QGA strategies to determine which files
@@ -623,7 +622,7 @@ def _build_file_transfer_manifest(context: Any) -> List[Dict[str, str]]:
     adarevm_wheels = list(wheels_dir.glob('adarevm-*.whl'))
     wheels_available = bool(adarelib_wheels and adarevm_wheels)
 
-    files_to_copy: List[Dict[str, str]] = []
+    files_to_copy: list[dict[str, str]] = []
 
     if context.experiment_directory:
         files_to_copy.append({

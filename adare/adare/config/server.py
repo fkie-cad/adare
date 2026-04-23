@@ -1,7 +1,8 @@
+import logging
+
 from .configdirectory import APPDATA_DIR
 from .exceptions import ConfigDirectoryError
 
-import logging
 log = logging.getLogger(__name__)
 
 

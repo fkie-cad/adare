@@ -4,31 +4,29 @@ Web Service - Business logic for web operations.
 This service handles web-related operations (login, sync, download, upload)
 and returns Result[T] objects that can be consumed by any frontend (CLI, Web UI, REST API).
 """
-from pathlib import Path
-from typing import Optional
 
 import logging
 
-from adare.core.result import Result
 from adare.core.dto.web import (
-    WebLoginResult,
-    WebLogoutResult,
-    WebStatusResult,
-    DownloadEnvironmentRequest,
-    DownloadExperimentRequest,
-    DownloadTestfunctionRequest,
-    DownloadBundleRequest,
-    DownloadResult,
-    SyncRequest,
-    SyncResult,
-    UploadRunRequest,
-    PublishRunRequest,
-    PublishResult,
     CheckExperimentRequest,
     CheckExperimentResult,
     CheckRunRequest,
     CheckRunResult,
+    DownloadBundleRequest,
+    DownloadEnvironmentRequest,
+    DownloadExperimentRequest,
+    DownloadResult,
+    DownloadTestfunctionRequest,
+    PublishResult,
+    PublishRunRequest,
+    SyncRequest,
+    SyncResult,
+    UploadRunRequest,
+    WebLoginResult,
+    WebLogoutResult,
+    WebStatusResult,
 )
+from adare.core.result import Result
 
 log = logging.getLogger(__name__)
 
@@ -164,8 +162,10 @@ class WebService:
         """
         from adare.backend.experiment.commands import experiment_download
         from adare.webappaccess.exceptions import (
-            NotLoggedInError, DownloadError, MissingDataError,
+            DownloadError,
             ExperimentWithNameAlreadyExistsError,
+            MissingDataError,
+            NotLoggedInError,
         )
 
         try:
@@ -195,10 +195,12 @@ class WebService:
             Result[DownloadResult] with download status.
         """
         from adare.backend.testfunction.commands import testfunction_download
-        from adare.webappaccess.exceptions import (
-            NotLoggedInError, DownloadError, MissingDataError,
-        )
         from adare.backend.testfunction.exceptions import TestfunctionMissingFileError
+        from adare.webappaccess.exceptions import (
+            DownloadError,
+            MissingDataError,
+            NotLoggedInError,
+        )
 
         try:
             testfunction_download(request.project_path, request.testfunction_name, version=request.version)
@@ -226,16 +228,19 @@ class WebService:
         Returns:
             Result[DownloadResult] with download status.
         """
-        from adare.webappaccess.download import download_experiment, download_testfunction, download_environment
-        from adare.webappaccess.login import WebappLogin
-        from adare.webappaccess.exceptions import (
-            NotLoggedInError, DownloadError, MissingDataError,
-            ExperimentWithNameAlreadyExistsError,
-        )
+        import requests
+
+        import adare.config.server as config_server
         from adare.backend.project.directory import ProjectDirectory
         from adare.config.configdirectory import ENVIRONMENTS_DIR
-        import adare.config.server as config_server
-        import requests
+        from adare.webappaccess.download import download_environment, download_experiment, download_testfunction
+        from adare.webappaccess.exceptions import (
+            DownloadError,
+            ExperimentWithNameAlreadyExistsError,
+            MissingDataError,
+            NotLoggedInError,
+        )
+        from adare.webappaccess.login import WebappLogin
 
         try:
             webapp = WebappLogin()

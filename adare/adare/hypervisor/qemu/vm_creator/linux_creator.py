@@ -1,5 +1,6 @@
 """Linux VM creation orchestrator - Ubuntu autoinstall via QEMU direct kernel boot."""
 
+import logging
 import platform
 import subprocess
 import tempfile
@@ -24,7 +25,6 @@ from adare.hypervisor.qemu.vm_creator.progress import (
 )
 from adare.hypervisor.qemu.vm_creator.qmp_utils import qemu_params_for_arch
 
-import logging
 log = logging.getLogger(__name__)
 
 
