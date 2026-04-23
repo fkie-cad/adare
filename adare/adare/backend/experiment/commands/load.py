@@ -69,7 +69,7 @@ def __experiment_update(project_path: Path, experiment_ulid, experiment_name, ex
                     log.info(f'  + Added: {", ".join(added_envs)}')
                 if removed_envs:
                     log.info(f'  - Removed: {", ".join(removed_envs)}')
-    except Exception as e:
+    except (ValueError, KeyError, OSError) as e:
         log.warning(f'Failed to detect environment changes: {e}')
 
     if not force and not experiment_database.check_for_experiment_change(project_path, experiment_ulid, experiment_directory.sha256):

@@ -136,7 +136,7 @@ def resolve_vm_from_url(url: str) -> Path:
         log.info(f"Successfully downloaded VM to: {cached_file_path}")
         return cached_file_path
 
-    except Exception as e:
+    except (OSError, ConnectionError, TimeoutError, ValueError) as e:
         # Clean up failed download
         if cached_file_path.exists():
             cached_file_path.unlink()
@@ -234,7 +234,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
         try:
             environment_database.delete_environment(existing_ulid, force=True, cleanup_vm=False)
             log.info(f"Successfully deleted previous version of '{environment_name}'")
-        except Exception as e:
+        except (ValueError, KeyError, OSError) as e:
             log.warning(f"Failed to delete existing environment '{environment_name}': {e}")
                 # We continue anyway, as the DB update might surely fail later, but maybe we cleared enough
 
@@ -311,7 +311,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 try:
                     vm_path = resolve_vm_from_url(environment_metadata.vm)
                     log.info(f'VM downloaded from URL and cached: {vm_path}')
-                except Exception as e:
+                except (OSError, ConnectionError, TimeoutError, ValueError, EnvironmentLoadFailed) as e:
                     log.error(f'Failed to download VM from URL {environment_metadata.vm}: {e}')
                     raise
             else:
@@ -391,7 +391,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
             log.error('environment update failed')
             raise EnvironmentLoadFailed(log, 'Failed to create environment in database')
 
-    except Exception as e:
+    except (OSError, ValueError, EnvironmentLoadFailed, EnvironmentAlreadyExists) as e:
         # If environment creation failed and we created a new VM, clean it up
         if created_vm_id:
             log.warning(f'Environment creation failed, cleaning up newly created VM {created_vm_id}')
@@ -399,7 +399,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
                 import adare.backend.vm.database as vm_database
                 vm_database.delete_vm(created_vm_id)
                 log.info(f'Successfully cleaned up VM {created_vm_id}')
-            except Exception as cleanup_error:
+            except (OSError, ValueError, KeyError) as cleanup_error:
                 log.error(f'Failed to cleanup VM {created_vm_id}: {cleanup_error}')
 
         # Re-raise the original exception
@@ -513,7 +513,7 @@ def environment_create(project: Path, environment: str, vm_path: Path = None):
             # Use the VM name in the template instead of placeholder
             template_vars['vm_name'] = vm_name
 
-        except Exception as e:
+        except (OSError, ValueError, KeyError) as e:
             log.error(f'Failed to load VM {vm_name}: {e}')
             rprint(f"[red]Failed to load VM {vm_name}: {e}[/red]")
             # Continue with placeholder if VM loading fails
