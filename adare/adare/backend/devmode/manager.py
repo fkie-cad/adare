@@ -347,7 +347,7 @@ class DevModeSessionManager:
 
                     except RuntimeError:
                         raise  # Re-raise VM not running error
-                    except Exception as e:
+                    except (OSError, AttributeError, ConnectionError) as e:
                         log.debug(f"Could not verify VM status: {e} - proceeding with reconnection attempt")
 
                     # Query actual forwarded port from VM port forwarding rules

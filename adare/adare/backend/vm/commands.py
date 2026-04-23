@@ -562,7 +562,7 @@ async def ensure_vm_ready_for_experiment(vm_id: str, experiment_id: str, environ
             identifier = strategy.get_identifier(vm_instance)
             if identifier and strategy.verify_exists(identifier):
                 is_reused = True
-        except Exception as e:
+        except (VMError, OSError, ImportError) as e:
             log.warning(f"Failed to verify QEMU instance existence: {e}")
 
     if is_reused:

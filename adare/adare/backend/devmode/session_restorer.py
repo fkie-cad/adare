@@ -282,7 +282,7 @@ async def restore_application_context(
             await step_start_mcp_server(session.experiment_ctx)
             log.debug("MCP server started successfully")
 
-        except Exception as e:
+        except (ImportError, OSError, RuntimeError, ConnectionError) as e:
             log.warning(
                 f"Failed to start MCP server: {e}. "
                 f"Target resolution will not be available, but session can still be used."

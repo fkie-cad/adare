@@ -435,7 +435,7 @@ def delete_all_vms(force: bool = False) -> dict:
                             try:
                                 delete_vm_instance(instance.id, force=True)
                                 log.info(f"Deleted VM instance: {instance.instance_name}")
-                            except Exception as inst_error:  # Intentionally broad: best-effort per-instance cleanup in batch deletion
+                            except Exception as inst_error:  # noqa: BLE001 - best-effort per-instance cleanup in batch deletion
                                 log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
 
                 # Delete from database (cascade will remove instances)
@@ -444,7 +444,7 @@ def delete_all_vms(force: bool = False) -> dict:
                 results['deleted_vms'].append(vm.name)
                 log.info(f"Successfully deleted VM: {vm.name}")
 
-            except Exception as e:  # Intentionally broad: per-VM cleanup must not abort remaining VMs
+            except Exception as e:  # noqa: BLE001 - per-VM cleanup must not abort remaining VMs
                 results['failed_count'] += 1
                 results['failed_vms'].append(f"{vm.name}: {str(e)}")
                 log.error(f"Failed to delete VM '{vm.name}': {e}")
@@ -500,7 +500,7 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
                             try:
                                 delete_vm_instance(instance.id, force=True)
                                 log.info(f"Deleted VM instance: {instance.instance_name}")
-                            except Exception as inst_error:  # Intentionally broad: best-effort per-instance cleanup in batch deletion
+                            except Exception as inst_error:  # noqa: BLE001 - best-effort per-instance cleanup in batch deletion
                                 log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
 
                 # Delete from database
@@ -509,7 +509,7 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
                 results['deleted_vms'].append(vm.name)
                 log.info(f"Successfully deleted VM: {vm.name}")
 
-            except Exception as e:  # Intentionally broad: per-VM cleanup must not abort remaining VMs
+            except Exception as e:  # noqa: BLE001 - per-VM cleanup must not abort remaining VMs
                 results['failed_count'] += 1
                 results['failed_vms'].append(f"{vm.name}: {str(e)}")
                 log.error(f"Failed to delete VM '{vm.name}': {e}")
