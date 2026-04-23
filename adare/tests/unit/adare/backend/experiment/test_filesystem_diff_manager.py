@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.backend.experiment.filesystem_diff_manager import FilesystemDiffManager
 
 # ---------------------------------------------------------------------------

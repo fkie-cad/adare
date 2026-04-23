@@ -5,6 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.backend.experiment.host_services.guest_command_proxy import GuestCommandProxy
 from adare.backend.experiment.host_services.guest_file_proxy import GuestFileProxy
 from adare.backend.experiment.host_services.vm_operation_proxy import VMOperationProxy

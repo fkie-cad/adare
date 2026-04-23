@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 # Add paths for imports
 # Current file is in tests/unit/types/test_playbook_parsing.py
 # PROJECT_ROOT is adare/adare

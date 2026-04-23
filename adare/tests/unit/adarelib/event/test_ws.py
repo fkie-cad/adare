@@ -2,6 +2,8 @@
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adarelib.event.ws import (
     BREAKPOINT,
     BREAKPOINTRESOLVE,

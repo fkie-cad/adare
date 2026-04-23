@@ -3,6 +3,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.backend.experiment.execution.simple_actions import SimpleActionsExecutor
 from adare.types.playbook import CommandAction
 

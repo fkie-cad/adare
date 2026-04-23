@@ -4,6 +4,8 @@ import pytest
 import sys
 from pathlib import Path
 
+pytestmark = pytest.mark.unit
+
 # Add paths for imports
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 ADARELIB_ROOT = PROJECT_ROOT.parent / "adarelib"

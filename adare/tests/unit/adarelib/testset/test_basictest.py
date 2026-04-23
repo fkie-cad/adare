@@ -1,5 +1,9 @@
 """Tests for BasicTest, resolve_var_in_match, and resolve_yamlobj_in_dict."""
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 import re
 
 import attrs

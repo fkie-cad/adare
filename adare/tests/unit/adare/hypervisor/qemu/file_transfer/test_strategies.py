@@ -8,6 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.hypervisor.qemu.file_transfer.base import FileTransferStrategy
 from adare.hypervisor.qemu.file_transfer.libguestfs_strategy import LibguestfsStrategy
 from adare.hypervisor.qemu.file_transfer.qga_strategy import QGAStrategy

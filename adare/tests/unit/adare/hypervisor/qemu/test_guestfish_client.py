@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.hypervisor.exceptions import HypervisorException
 from adare.hypervisor.qemu.guestfish_client import GuestfishClient
 

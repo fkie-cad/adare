@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.hypervisor.qemu.libvirt_xml import generate_domain_xml
 from adare.hypervisor.qemu.libvirt_xml_builder import (
     DomainXMLBuilder,

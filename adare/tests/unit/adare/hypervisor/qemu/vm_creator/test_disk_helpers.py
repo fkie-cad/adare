@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.hypervisor.qemu.vm_creator.disk_helpers import (
     DiskCreationError,
     create_qcow2_disk,

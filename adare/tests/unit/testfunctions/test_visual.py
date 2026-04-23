@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from unittest.mock import AsyncMock
 
+pytestmark = pytest.mark.unit
+
 # Add paths for imports
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 ADARELIB_ROOT = PROJECT_ROOT.parent / "adarelib"

@@ -2,6 +2,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.backend.experiment.execution.target_resolution import TargetResolutionExecutor
 from adare.types.playbook import BestConfidenceStrategy, Target
 

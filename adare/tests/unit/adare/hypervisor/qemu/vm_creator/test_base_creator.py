@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.hypervisor.qemu.vm_creator.base_creator import BaseVMCreator, VMCreationError
 from adare.hypervisor.qemu.vm_creator.os_catalog import OsDefinition
 

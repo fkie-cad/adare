@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 # We patch VmApi and field_extractor at the module level where they're imported
 MODULE = "adare.backend.vm.database"
 
