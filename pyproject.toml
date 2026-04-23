@@ -117,6 +117,18 @@ known-first-party = ["adare", "adarelib", "adarevm"]
 "**/testfunctions/test_*.py" = ["S", "F401", "E402", "I"]
 "**/appdata/testfunctions/**/*.py" = ["I", "F401", "E402"]
 
+[tool.mypy]
+python_version = "3.13"
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["adare.core.*", "adare.services.*"]
+disallow_untyped_defs = true
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
