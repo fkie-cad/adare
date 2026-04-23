@@ -114,7 +114,7 @@ def _extract_file(iso, mode: str, iso_file_path: str, output_path: Path) -> None
     try:
         iso.get_record(**kwargs)
     except pycdlib.PyCdlibException:
-        raise FileNotFoundError(f'{iso_file_path} not found via {mode}')
+        raise FileNotFoundError(f'{iso_file_path} not found via {mode}') from None
 
     with open(output_path, 'wb') as f:
         iso.get_file_from_iso_fp(f, **kwargs)

@@ -71,7 +71,7 @@ class SnapshotManager:
                     raise VMError(log, f"VM '{vm_record.name}' has no VirtualBox UUID and could not be found in VirtualBox")
             except Exception as e:
                 log.error(f"Failed to recover UUID for VM '{vm_record.name}': {e}")
-                raise VMError(log, f"VM '{vm_record.name}' has no VirtualBox UUID and recovery failed: {e}")
+                raise VMError(log, f"VM '{vm_record.name}' has no VirtualBox UUID and recovery failed: {e}") from e
 
         # Generate snapshot name if not provided
         if not snapshot_name:
@@ -435,7 +435,7 @@ class SnapshotManager:
                     manager=QEMUManager()
                 )
             except VMNotFoundException as e:
-                raise VMError(log, f"QEMU VM instance '{vm_instance.instance_name}' not found: {e}")
+                raise VMError(log, f"QEMU VM instance '{vm_instance.instance_name}' not found: {e}") from e
 
         else:
             raise VMError(log, f"Unsupported hypervisor: {hypervisor}")

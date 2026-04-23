@@ -179,7 +179,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                     log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
 
         except (ValueError, KeyError, OSError, TypeError) as e:
-            raise LoggedException(log, f"Playbook loading failed: {str(e)}")
+            raise LoggedException(log, f"Playbook loading failed: {str(e)}") from e
 
         # Verify integrity of testfunctions used in playbook
         # TODO: Re-enable this for production use - currently disabled for testing

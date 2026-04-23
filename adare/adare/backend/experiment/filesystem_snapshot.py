@@ -144,7 +144,7 @@ def parse_snapshot_output(output: str, os_type: str) -> dict[str, dict[str, Any]
 
     except json.JSONDecodeError as e:
         log.error(f"Failed to parse JSON output: {e}")
-        raise ValueError(f"Invalid JSON output from snapshot command: {e}")
+        raise ValueError(f"Invalid JSON output from snapshot command: {e}") from e
 
 
 def _get_timestamp_fields(snapshot: FilesystemSnapshot) -> list[str]:

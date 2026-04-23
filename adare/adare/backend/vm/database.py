@@ -258,7 +258,7 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
         except Exception as e:
             # If the import method itself raised an exception, extract the error details
             error_msg = str(e)
-            raise VMImportError(log, f"VirtualBox import failed: {error_msg}")
+            raise VMImportError(log, f"VirtualBox import failed: {error_msg}") from e
 
         # Check if import was successful
         if import_result != 0:
@@ -319,7 +319,7 @@ def delete_vm(vm_id: str) -> bool:
             return api.delete_vm(vm_id)
     except Exception as e:
         log.error(f"Failed to delete VM {vm_id}: {e}", exc_info=True)
-        raise VMError(log, f"Failed to delete VM {vm_id}: {e}")
+        raise VMError(log, f"Failed to delete VM {vm_id}: {e}") from e
 
 
 def get_all_vms(fields: list[str] = None) -> list:

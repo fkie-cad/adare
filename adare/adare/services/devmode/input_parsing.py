@@ -57,9 +57,9 @@ def fetch_playbook_from_url(url: str):
 
         return playbook
     except ImportError:
-        raise RuntimeError("httpx package required for URL fetching. Install with: pip install httpx")
+        raise RuntimeError("httpx package required for URL fetching. Install with: pip install httpx") from None
     except (OSError, yaml.YAMLError, ValueError) as e:
-        raise RuntimeError(f"Failed to fetch playbook from URL: {str(e)}")
+        raise RuntimeError(f"Failed to fetch playbook from URL: {str(e)}") from e
 
 
 def parse_playbook_from_stdin():

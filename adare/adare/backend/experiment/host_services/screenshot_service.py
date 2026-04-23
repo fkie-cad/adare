@@ -70,7 +70,7 @@ class ScreenshotService:
             raise
         except Exception as e:
             log.error(f"Screenshot Service: Capture failed: {e}", exc_info=True)
-            raise RuntimeError(f"Screenshot capture failed: {e}")
+            raise RuntimeError(f"Screenshot capture failed: {e}") from e
 
     async def take_region(
         self,
@@ -118,7 +118,7 @@ class ScreenshotService:
 
         except Exception as e:
             log.error(f"Screenshot Service: Region capture failed: {e}", exc_info=True)
-            raise RuntimeError(f"Region screenshot capture failed: {e}")
+            raise RuntimeError(f"Region screenshot capture failed: {e}") from e
 
     async def take_all_windows(self, window_pattern: str) -> list[dict[str, Any]]:
         """
@@ -146,4 +146,4 @@ class ScreenshotService:
 
         except Exception as e:
             log.error(f"Screenshot Service: Window capture failed: {e}", exc_info=True)
-            raise RuntimeError(f"Window screenshot capture failed: {e}")
+            raise RuntimeError(f"Window screenshot capture failed: {e}") from e

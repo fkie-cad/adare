@@ -108,7 +108,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         except (OSError, subprocess.SubprocessError) as e:
             log.error(f"Error executing {operation_name}: {e}")
-            raise HypervisorException(f"Command execution failed: {e}")
+            raise HypervisorException(f"Command execution failed: {e}") from e
 
     def _execute_streaming_command(
         self,
@@ -177,7 +177,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         except (OSError, subprocess.SubprocessError) as e:
             log.error(f"Error executing {operation_name}: {e}")
-            raise HypervisorException(f"Command execution failed: {e}")
+            raise HypervisorException(f"Command execution failed: {e}") from e
 
 
     def _build_guest_command_args(

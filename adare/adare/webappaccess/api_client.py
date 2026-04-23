@@ -119,13 +119,13 @@ class ApiClient:
                 log,
                 f'Request to {url} timed out',
                 possible_solutions=['Check your network connection', 'Try again later']
-            )
+            ) from None
         except requests.exceptions.ConnectionError as e:
             raise ApiConnectionError(
                 log,
                 f'Failed to connect to server: {str(e)}',
                 possible_solutions=['Check server URL in config', 'Verify server is running']
-            )
+            ) from e
 
         # Handle response
         if response.status_code == 201:
@@ -201,13 +201,13 @@ class ApiClient:
                 log,
                 f'Request to {url} timed out',
                 possible_solutions=['Check your network connection', 'Try again later']
-            )
+            ) from None
         except requests.exceptions.ConnectionError as e:
             raise ApiConnectionError(
                 log,
                 f'Failed to connect to server: {str(e)}',
                 possible_solutions=['Check server URL in config', 'Verify server is running']
-            )
+            ) from e
 
         if response.status_code == 200:
             data = response.json()
@@ -239,13 +239,13 @@ class ApiClient:
                 log,
                 f'Request to {url} timed out',
                 possible_solutions=['Check your network connection', 'Try again later']
-            )
+            ) from None
         except requests.exceptions.ConnectionError as e:
             raise ApiConnectionError(
                 log,
                 f'Failed to connect to server: {str(e)}',
                 possible_solutions=['Check server URL in config', 'Verify server is running']
-            )
+            ) from e
 
         if response.status_code == 200:
             data = response.json()
@@ -275,13 +275,13 @@ class ApiClient:
                 log,
                 f'Request to {url} timed out',
                 possible_solutions=['Check your network connection', 'Try again later']
-            )
+            ) from None
         except requests.exceptions.ConnectionError as e:
             raise ApiConnectionError(
                 log,
                 f'Failed to connect to server: {str(e)}',
                 possible_solutions=['Check server URL in config', 'Verify server is running']
-            )
+            ) from e
 
         if response.status_code == 200:
             return response.json()

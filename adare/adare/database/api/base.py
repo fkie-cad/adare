@@ -36,7 +36,7 @@ def validate_input(func):
         try:
             return func(self, *args, **kwargs)
         except (ValueError, TypeError) as e:
-            raise ValidationError(log, f"Invalid input for {func.__name__}: {e}")
+            raise ValidationError(log, f"Invalid input for {func.__name__}: {e}") from e
     return wrapper
 
 
@@ -48,10 +48,10 @@ def handle_db_errors(func):
             return func(self, *args, **kwargs)
         except IntegrityError as e:
             log.error(f"Database integrity error in {func.__name__}: {e}")
-            raise DatabaseError(log, f"Data integrity violation: {e.orig}")
+            raise DatabaseError(log, f"Data integrity violation: {e.orig}") from e
         except SQLAlchemyError as e:
             log.error(f"Database error in {func.__name__}: {e}")
-            raise DatabaseError(log, f"Database operation failed: {e}")
+            raise DatabaseError(log, f"Database operation failed: {e}") from e
         except Exception as e:
             log.error(f"Unexpected error in {func.__name__}: {e}", exc_info=True)
             raise
@@ -93,7 +93,7 @@ class EnhancedDatabaseApi:
             )
         except (SQLAlchemyError, OSError, PermissionError) as e:
             log.error(f"Failed to setup database: {e}")
-            raise DatabaseConnectionError(log, f"Cannot connect to database: {e}")
+            raise DatabaseConnectionError(log, f"Cannot connect to database: {e}") from e
         # Remove generic Exception - let unexpected errors propagate naturally
 
     @property
@@ -132,7 +132,7 @@ class EnhancedDatabaseApi:
             self._session = self._session_factory()
         except SQLAlchemyError as e:
             log.error(f"Failed to start session: {e}")
-            raise DatabaseConnectionError(log, f"Cannot start database session: {e}")
+            raise DatabaseConnectionError(log, f"Cannot start database session: {e}") from e
 
     @contextmanager
     def transaction(self):
@@ -172,7 +172,7 @@ class EnhancedDatabaseApi:
         try:
             ulid.ULID.from_str(ulid_str)
         except ValueError:
-            raise ValidationError(log, f"Invalid ULID format: {ulid_str}")
+            raise ValidationError(log, f"Invalid ULID format: {ulid_str}") from None
 
         return self._session.query(model).filter(model.id == ulid_str).first()
 
@@ -540,7 +540,7 @@ class GlobalDatabaseApi(EnhancedDatabaseApi):
             log.debug("Global database schema ensured")
         except (SQLAlchemyError, ImportError) as e:
             log.error(f"Failed to create global database schema: {e}")
-            raise DatabaseError(log, f"Cannot initialize global database: {e}")
+            raise DatabaseError(log, f"Cannot initialize global database: {e}") from e
 
 
 class ProjectDatabaseApi(EnhancedDatabaseApi):
@@ -573,7 +573,7 @@ class ProjectDatabaseApi(EnhancedDatabaseApi):
             log.debug(f"Project database schema ensured for {self.project_path}")
         except (SQLAlchemyError, ImportError) as e:
             log.error(f"Failed to create project database schema: {e}")
-            raise DatabaseError(log, f"Cannot initialize project database: {e}")
+            raise DatabaseError(log, f"Cannot initialize project database: {e}") from e
 
 
 # Legacy alias for backward compatibility

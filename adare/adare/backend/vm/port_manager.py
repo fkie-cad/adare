@@ -114,7 +114,7 @@ def reserve_port_atomically(api_session, vm_id: str, instance_name: str, experim
                 raise PortAllocationException(
                     f"Database error during port reservation: {db_error}",
                     port_range=(PORT_RANGE_START, PORT_RANGE_END)
-                )
+                ) from db_error
 
     log.error(f"No available ports in range {PORT_RANGE_START}-{PORT_RANGE_END}")
     return None

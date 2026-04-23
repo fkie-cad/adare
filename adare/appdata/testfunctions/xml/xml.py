@@ -23,7 +23,7 @@ def _parse_xml(filepath):
         tree = ET.parse(filepath)
         return tree.getroot()
     except ET.XMLSyntaxError as e:
-        raise ValueError(f"Invalid XML format: {e}")
+        raise ValueError(f"Invalid XML format: {e}") from e
 
 
 def _find_elements(root, xpath, namespaces=None):
@@ -34,7 +34,7 @@ def _find_elements(root, xpath, namespaces=None):
             return root.xpath(xpath, namespaces=namespaces)
         return root.xpath(xpath)
     except (AttributeError, SyntaxError, ET.XPathEvalError) as e:
-        raise ValueError(f"Invalid XPath expression '{xpath}': {e}")
+        raise ValueError(f"Invalid XPath expression '{xpath}': {e}") from e
 
 
 def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sensitive=True):
@@ -161,7 +161,7 @@ def _evaluate_xpath(root, xpath, result_type, namespaces=None):
         raise ValueError(f"Unsupported result type: {result_type}")
 
     except (AttributeError, SyntaxError, ValueError, ET.XPathEvalError) as e:
-        raise ValueError(f"XPath evaluation error '{xpath}': {e}")
+        raise ValueError(f"XPath evaluation error '{xpath}': {e}") from e
 
 
 def _parse_xml_with_namespaces(filepath):
@@ -191,7 +191,7 @@ def _parse_xml_with_namespaces(filepath):
 
         return root, namespaces
     except ET.XMLSyntaxError as e:
-        raise ValueError(f"Invalid XML format: {e}")
+        raise ValueError(f"Invalid XML format: {e}") from e
 
 
 # =============================================================================

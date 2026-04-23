@@ -85,7 +85,7 @@ class PortForwardingRule(BasePortForwardingRule):
                 guest_port=guest_port
             )
         except (ValueError, IndexError) as e:
-            raise ValueError(f"Invalid QEMU hostfwd format '{hostfwd_string}': {e}")
+            raise ValueError(f"Invalid QEMU hostfwd format '{hostfwd_string}': {e}") from e
 
 
 # SharedFolderConfig and CommandResult can use base implementations directly

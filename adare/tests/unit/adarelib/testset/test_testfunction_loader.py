@@ -249,7 +249,7 @@ class TestLoaderThreadSafety:
             try:
                 r = loader.import_basictest_subclasses(source=[src])
                 results.append(r)
-            except BaseException as exc:  # noqa: broad but needed for thread-safety test
+            except BaseException as exc:  # noqa: BLE001 - broad but needed for thread-safety test
                 errors.append(exc)
 
         threads = [threading.Thread(target=_load, args=(m,)) for m in modules]

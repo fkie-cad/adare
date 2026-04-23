@@ -73,10 +73,10 @@ class CVService:
             return locations
 
         except KeyError as e:
-            raise ValueError(f"Screenshot data missing required field: {e}")
+            raise ValueError(f"Screenshot data missing required field: {e}") from e
         except Exception as e:
             log.error(f"CV Service: find_text failed: {e}", exc_info=True)
-            raise RuntimeError(f"CV server text search failed: {e}")
+            raise RuntimeError(f"CV server text search failed: {e}") from e
 
     async def find_icon(
         self,
@@ -131,12 +131,12 @@ class CVService:
             return locations
 
         except OSError as e:
-            raise FileNotFoundError(f"Failed to read icon file {icon_path}: {e}")
+            raise FileNotFoundError(f"Failed to read icon file {icon_path}: {e}") from e
         except KeyError as e:
-            raise ValueError(f"Screenshot data missing required field: {e}")
+            raise ValueError(f"Screenshot data missing required field: {e}") from e
         except Exception as e:
             log.error(f"CV Service: find_icon failed: {e}", exc_info=True)
-            raise RuntimeError(f"CV server icon search failed: {e}")
+            raise RuntimeError(f"CV server icon search failed: {e}") from e
 
     async def get_all_text(
         self,
@@ -177,7 +177,7 @@ class CVService:
             return all_text
 
         except KeyError as e:
-            raise ValueError(f"Screenshot data missing required field: {e}")
+            raise ValueError(f"Screenshot data missing required field: {e}") from e
         except Exception as e:
             log.error(f"CV Service: get_all_text failed: {e}", exc_info=True)
-            raise RuntimeError(f"CV server text extraction failed: {e}")
+            raise RuntimeError(f"CV server text extraction failed: {e}") from e

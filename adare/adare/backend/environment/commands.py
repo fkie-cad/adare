@@ -80,7 +80,7 @@ def _copy_environment_file(source_path: Path, environment_name: str, file_hash: 
                 'Ensure sufficient disk space',
                 'Verify the source file is accessible'
             ]
-        )
+        ) from e
 
 
 def resolve_vm_from_url(url: str) -> Path:

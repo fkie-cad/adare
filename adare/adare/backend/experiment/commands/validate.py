@@ -103,8 +103,8 @@ def __validate_testset_compatibility(experiment_directory: ExperimentDirectory):
                 "Check testset.yml syntax and structure",
                 "Verify testfunctions directory structure",
                 "Ensure all required testfunction dependencies are available"
-            ]
-        )
+            ],
+        ) from e
 
 
 def experiment_validate(project_path: Path, experiment_name: str, environment_name: str = None):

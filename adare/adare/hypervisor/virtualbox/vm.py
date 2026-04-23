@@ -678,7 +678,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                     return return_value, stdout
                 except Exception as e:
                     log.error(f"Error importing VM '{self.vm_name}' from '{file_path}': {e}")
-                    raise VMImportException(self.vm_name, f"Failed to import VM '{self.vm_name}' from '{file_path}': {e}")
+                    raise VMImportException(self.vm_name, f"Failed to import VM '{self.vm_name}' from '{file_path}': {e}") from e
 
         return await self.manager.run_async(_import_async)
 

@@ -526,7 +526,7 @@ class PlaybookApi(ProjectDatabaseApi):
                 log.info("Successfully parsed JSON string to dict")
             except json.JSONDecodeError as e:
                 log.error(f"Failed to parse parameters JSON: {e}")
-                raise ValueError(f"Invalid JSON in {action_type} action parameters: {params[:200]}")
+                raise ValueError(f"Invalid JSON in {action_type} action parameters: {params[:200]}") from e
 
         if action_type == 'click':
             return ClickAction(

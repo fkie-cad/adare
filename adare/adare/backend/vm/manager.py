@@ -185,7 +185,7 @@ class VMFileManager:
             return target_path
 
         except OSError as e:
-            raise VMCopyError(log, f"Failed to copy VM file: {e}")
+            raise VMCopyError(log, f"Failed to copy VM file: {e}") from e
 
     def ensure_vm_available(self, vm_path: Path, name: str, scope: str,
                            project_path: Path = None, silent: bool = False) -> tuple[Path, dict]:

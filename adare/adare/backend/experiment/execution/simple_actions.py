@@ -201,8 +201,8 @@ class SimpleActionsExecutor(GUIActionsMixin, DataActionsMixin, FilesystemActions
             log.debug(f"Parser evaluation successful: '{parser_expr}' -> {result}")
             return result
         except SyntaxError as e:
-            raise ValueError(f"Parser syntax error: {e}")
+            raise ValueError(f"Parser syntax error: {e}") from e
         except NameError as e:
-            raise ValueError(f"Parser references undefined name: {e}")
+            raise ValueError(f"Parser references undefined name: {e}") from e
         except Exception as e:
-            raise ValueError(f"Parser evaluation failed: {e}")
+            raise ValueError(f"Parser evaluation failed: {e}") from e

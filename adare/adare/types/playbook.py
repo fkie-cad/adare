@@ -650,7 +650,7 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
                 try:
                     return float(obj)
                 except ValueError:
-                    raise ValueError(f"Cannot convert '{obj}' to numeric value")
+                    raise ValueError(f"Cannot convert '{obj}' to numeric value") from None
         return obj
 
     converter.register_structure_hook(
@@ -858,7 +858,7 @@ def _register_strict_hooks(converter):
                         try:
                             return float(obj)
                         except ValueError:
-                            raise ValueError(f"Cannot convert '{obj}' to numeric value")
+                            raise ValueError(f"Cannot convert '{obj}' to numeric value") from None
                 return obj
             fresh_converter.register_structure_hook(
                 Optional[int | float],

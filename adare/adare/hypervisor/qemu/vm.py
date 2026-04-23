@@ -134,7 +134,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         except libvirt.libvirtError as e:
             raise HypervisorException(
                 f"Cannot look up domain '{self.vm_name}': {e}"
-            )
+            ) from e
 
         return self._libvirt_domain
 
@@ -305,7 +305,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         except libvirt.libvirtError as e:
             raise HypervisorException(
                 f"Failed to define libvirt domain '{self.vm_name}': {e}"
-            )
+            ) from e
 
     def _build_qemu_command(self) -> list[str]:
         """
@@ -476,9 +476,9 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             except HypervisorException:
                 raise  # Re-raise specific hypervisor exceptions
             except libvirt.libvirtError as e:
-                raise VMStartException(self.vm_name, f"Failed to define libvirt domain: {e}")
+                raise VMStartException(self.vm_name, f"Failed to define libvirt domain: {e}") from e
             except OSError as e:
-                raise VMStartException(self.vm_name, f"OS error defining libvirt domain: {e}")
+                raise VMStartException(self.vm_name, f"OS error defining libvirt domain: {e}") from e
 
             # Check current state
             try:
@@ -529,7 +529,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                     raise VMStartException(
                         self.vm_name,
                         f"Cannot verify VM state after start attempt: {e}"
-                    )
+                    ) from e
 
                 if not silent:
                     log.info(f"VM '{self.vm_name}' started successfully")
@@ -549,13 +549,13 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
                 if "already running" in str(e).lower():
                     message = f"VM '{self.vm_name}' is already running."
                     if raise_if_running:
-                        raise VMAlreadyRunningException(message)
+                        raise VMAlreadyRunningException(message) from e
                     if not silent:
                         log.debug(f"{message}")
                     return 0
-                raise VMStartException(self.vm_name, f"Failed to start VM via libvirt: {e}")
+                raise VMStartException(self.vm_name, f"Failed to start VM via libvirt: {e}") from e
             except OSError as e:
-                raise VMStartException(self.vm_name, f"OS error during VM start: {e}")
+                raise VMStartException(self.vm_name, f"OS error during VM start: {e}") from e
 
         return await self.manager.run_async(_start_async)
 

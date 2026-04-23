@@ -126,10 +126,10 @@ def experiment_clean(project_path: Path, experiment_name: str):
 
     except ValueError as e:
         from adare.exceptions import LoggedException
-        raise LoggedException(log, str(e))
+        raise LoggedException(log, str(e)) from e
     except (OSError, KeyError) as e:
         from adare.exceptions import LoggedException
-        raise LoggedException(log, f'Failed to clean experiment "{experiment_name}": {str(e)}')
+        raise LoggedException(log, f'Failed to clean experiment "{experiment_name}": {str(e)}') from e
 
 
 def experiment_remove(project_path: Path, experiment_name: str, force: bool = False, keep_files: bool = False):
@@ -206,7 +206,7 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
                                 'check file permissions',
                                 f'manually delete directory: rm -rf {experiment_directory.path}'
                             ]
-                        )
+                        ) from e
                 else:
                     raise LoggedErrorException(
                         log,
@@ -272,7 +272,7 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
     except LoggedErrorException:
         raise
     except ValueError as e:
-        raise LoggedErrorException(log, str(e))
+        raise LoggedErrorException(log, str(e)) from e
     except (OSError, KeyError) as e:
         log.error(f'Failed to remove experiment "{experiment_name}": {e}', exc_info=True)
         raise LoggedErrorException(
@@ -283,7 +283,7 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
                 'ensure you have write permissions',
                 'check the log output for specific error details'
             ]
-        )
+        ) from e
 
 
 async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = False, vm_cleanup_mode: str = 'prompt') -> bool:

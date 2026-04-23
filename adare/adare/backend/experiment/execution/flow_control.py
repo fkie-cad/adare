@@ -720,7 +720,7 @@ class FlowControlExecutor:
             raise ValueError("No operator specified in VariableCondition")
 
         except (ValueError, TypeError) as e:
-            raise ValueError(f"Failed to evaluate condition: {e}")
+            raise ValueError(f"Failed to evaluate condition: {e}") from e
 
     async def execute_stop(self, action: StopAction, parent_event_id: str = None,
                           event_emitter = None) -> ActionResult:

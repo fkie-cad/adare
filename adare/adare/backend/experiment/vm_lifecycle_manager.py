@@ -409,7 +409,7 @@ class VMLifecycleManager:
                             log.info(f"Successfully imported and prepared new VM instance: {vm_instance.instance_name}")
                 except Exception as e:
                     log.error(f"VM instance verification failed: {e}")
-                    raise LoggedException(log, f"VM instance verification failed: {e}")
+                    raise LoggedException(log, f"VM instance verification failed: {e}") from e
 
                 # Final verification that VM instance exists in VirtualBox
                 if not vm_instance.vbox_uuid or not VirtualBoxVM.verify_vm_exists_by_uuid(vm_instance.vbox_uuid):

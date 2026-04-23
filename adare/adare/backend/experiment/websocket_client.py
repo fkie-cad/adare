@@ -364,7 +364,7 @@ class AdareVMClient:
             log.error(f"[{call_msg.id[:8]}] Tool call '{tool_name}' timed out after {timeout}s (actual: {execution_time:.2f}s)")
             # Clean up pending call
             self.pending_calls.pop(call_msg.id, None)
-            raise WebSocketTimeoutError(f"Tool call '{tool_name}' timed out after {timeout} seconds")
+            raise WebSocketTimeoutError(f"Tool call '{tool_name}' timed out after {timeout} seconds") from None
         except Exception as e:
             execution_time = time.time() - start_time
             log.error(f"[{call_msg.id[:8]}] Tool call error after {execution_time:.2f}s: {e}")

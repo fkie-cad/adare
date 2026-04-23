@@ -45,7 +45,7 @@ def ensure_global_directories_exist() -> bool:
         return True
     except Exception as e:
         log.error(f"Failed to create global directories: {e}")
-        raise DatabaseInitializationError(log, f"Cannot create global directories: {e}")
+        raise DatabaseInitializationError(log, f"Cannot create global directories: {e}") from e
 
 
 def ensure_global_database_exists() -> bool:
@@ -65,7 +65,7 @@ def ensure_global_database_exists() -> bool:
             return True
     except Exception as e:
         log.error(f"Failed to initialize global database: {e}")
-        raise DatabaseInitializationError(log, f"Cannot initialize global database: {e}")
+        raise DatabaseInitializationError(log, f"Cannot initialize global database: {e}") from e
 
 
 def ensure_project_database_exists(project_path: Path) -> bool:
@@ -94,7 +94,7 @@ def ensure_project_database_exists(project_path: Path) -> bool:
             return True
     except Exception as e:
         log.error(f"Failed to initialize project database for {project_path}: {e}")
-        raise DatabaseInitializationError(log, f"Cannot initialize project database: {e}")
+        raise DatabaseInitializationError(log, f"Cannot initialize project database: {e}") from e
 
 
 def initialize_database_system() -> dict[str, Any]:
