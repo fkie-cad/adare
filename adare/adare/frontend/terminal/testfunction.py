@@ -25,7 +25,7 @@ class ParameterPanel:
         table = Table(expand=True, header_style="bold")
         table.add_column("name", style="")
         table.add_column("datatype", style="")
-        for index, row in self.parameters.iterrows():
+        for _index, row in self.parameters.iterrows():
             table.add_row(row['name'], row['dtype'])
 
         return Panel(table, title=title, border_style="blue", title_align='left')
@@ -73,10 +73,7 @@ def print_testfunction(dotnotation: str = None, testfunction_id: str = None, for
         formatter, output_file, dual_output = get_formatter_from_context()
 
     with DataRetrievalApi() as api:
-        if dotnotation:
-            testfunction_id = api.testfunction_dotnotation_to_id(dotnotation)
-        else:
-            testfunction_id = int(testfunction_id)
+        testfunction_id = api.testfunction_dotnotation_to_id(dotnotation) if dotnotation else int(testfunction_id)
         testfunction, parameters = api.get_testfunction(testfunction_id)
 
         # Check if structured output is needed

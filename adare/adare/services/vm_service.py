@@ -337,10 +337,7 @@ class VMService:
         """
         try:
             with VmApi() as api:
-                if vm_id:
-                    instances = api.get_vm_instances_for_vm(vm_id)
-                else:
-                    instances = api.get_all_vm_instances()
+                instances = api.get_vm_instances_for_vm(vm_id) if vm_id else api.get_all_vm_instances()
 
                 items = []
                 for instance in instances:

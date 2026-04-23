@@ -1,12 +1,18 @@
-import pytest
 from datetime import datetime
 from pathlib import Path
+
+import pytest
 
 pytestmark = pytest.mark.unit
 
 from adare.core.dto.vm import (
-    VmLoadRequest, VmInfo, VmInstanceInfo, VmInstanceUsage,
-    VmClearResult, VmTestRequest, VmTestResult,
+    VmClearResult,
+    VmInfo,
+    VmInstanceInfo,
+    VmInstanceUsage,
+    VmLoadRequest,
+    VmTestRequest,
+    VmTestResult,
 )
 
 

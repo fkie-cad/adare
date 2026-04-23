@@ -23,7 +23,7 @@ class DevSessionTablePanel:
         table.add_column("actions", style="magenta", no_wrap=True)
         table.add_column("created", style="blue", no_wrap=True)
 
-        for i, row in self.sessions.iterrows():
+        for _i, row in self.sessions.iterrows():
             # Status formatting
             status = row.get('status', 'unknown')
             if status == 'running':
@@ -65,13 +65,10 @@ class DevCheckpointTablePanel:
         table.add_column("size", style="cyan", no_wrap=True)
         table.add_column("id", style="dim", no_wrap=True)
 
-        for i, row in self.checkpoints.iterrows():
+        for _i, row in self.checkpoints.iterrows():
             # Size formatting
             size_mb = row.get('file_size_mb', 0)
-            if size_mb > 0:
-                size_display = f"{size_mb:.1f} MB"
-            else:
-                size_display = "-"
+            size_display = f"{size_mb:.1f} MB" if size_mb > 0 else "-"
 
             table.add_row(
                 str(row.get('name', 'N/A')),

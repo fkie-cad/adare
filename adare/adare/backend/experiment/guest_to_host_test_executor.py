@@ -80,7 +80,6 @@ class GuestToHostTestExecutor:
                 collection, func_name = func_name_full.split('.', 1)
             else:
                 func_name = func_name_full
-                collection = ''
 
             # Look up test class in testfunction_collection
             test_cls = None

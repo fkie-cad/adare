@@ -1,7 +1,7 @@
 """Tests for WebService — web authentication and data transfer operations."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -49,8 +49,8 @@ class TestWebServiceLogin:
 
     @patch("adare.services.web_service.WebService.login")
     def test_login_success(self, mock_login):
-        from adare.core.result import Result
         from adare.core.dto.web import WebLoginResult
+        from adare.core.result import Result
         mock_login.return_value = Result.ok(WebLoginResult(logged_in=True, message="Login successful"))
 
         result = mock_login()
@@ -89,8 +89,8 @@ class TestWebServiceGetStatus:
 
     @patch("adare.services.web_service.WebService.get_status")
     def test_get_status_logged_in(self, mock_status):
-        from adare.core.result import Result
         from adare.core.dto.web import WebStatusResult
+        from adare.core.result import Result
         mock_status.return_value = Result.ok(WebStatusResult(logged_in=True, username="alice"))
 
         result = mock_status()
@@ -101,8 +101,8 @@ class TestWebServiceGetStatus:
 
     @patch("adare.services.web_service.WebService.get_status")
     def test_get_status_not_logged_in(self, mock_status):
-        from adare.core.result import Result
         from adare.core.dto.web import WebStatusResult
+        from adare.core.result import Result
         mock_status.return_value = Result.ok(WebStatusResult(logged_in=False))
 
         result = mock_status()

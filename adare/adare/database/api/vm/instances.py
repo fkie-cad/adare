@@ -7,7 +7,6 @@ or previously-run copies of VM templates.
 
 import logging
 from datetime import UTC, datetime
-from typing import Optional
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -70,7 +69,7 @@ class VmInstanceMixin:
             self._session.rollback()
             raise VMLoadError(log, f"Database error while creating VM instance: {e}")
 
-    def get_vm_instance_by_id(self, instance_id: str) -> Optional[VmInstance]:
+    def get_vm_instance_by_id(self, instance_id: str) -> VmInstance | None:
         """
         Get a VM instance by ID.
 
@@ -198,7 +197,7 @@ class VmInstanceMixin:
             log.info(f"Successfully deleted VM instance '{instance_name}' (ID: {instance_id})")
             return True
 
-    def get_vm_instance_by_name(self, instance_name: str) -> Optional[VmInstance]:
+    def get_vm_instance_by_name(self, instance_name: str) -> VmInstance | None:
         """
         Get a VM instance by name.
 

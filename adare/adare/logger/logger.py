@@ -94,7 +94,7 @@ def setup_logger(loglevel_console: int | None = logging.DEBUG,
 
     Args:
         loglevel_console: Console logging level (defaults to DEBUG)
-        loglevel_file: File logging level (defaults to DEBUG) 
+        loglevel_file: File logging level (defaults to DEBUG)
         logfile: Path to log file (None disables file logging)
         console: Whether to enable console logging (defaults to True)
     """

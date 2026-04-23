@@ -159,7 +159,7 @@ class ExperimentRunFlowPanel:
         grid = Table.grid(expand=True)
         grid.add_column(justify="left", ratio=1)
         # iterate over the rows of the stages dataframe
-        for index, row in self.stages.iterrows():
+        for _index, row in self.stages.iterrows():
             grid.add_row(
                 self.__generate_line(row)
             )
@@ -252,10 +252,7 @@ class ExperimentRunActionsPanel:
         """Group actions by action_id and organize hierarchically by parent relationships."""
 
         # Sort by timestamp to ensure proper ordering
-        if 'timestamp' in self.actions.columns:
-            sorted_actions = self.actions.sort_values('timestamp')
-        else:
-            sorted_actions = self.actions
+        sorted_actions = self.actions.sort_values('timestamp') if 'timestamp' in self.actions.columns else self.actions
 
         grouped = {}
 

@@ -809,7 +809,7 @@ class PlaybookController:
                 resolved_path = self.variable_resolver.replace_variables(file_path, self.execution_context)
 
                 # Create a programmatic pull action
-                auto_pull_action = PullAction(
+                PullAction(
                     src=resolved_path,
                     description=f"Auto-pull on test failure: {resolved_path}"
                 )

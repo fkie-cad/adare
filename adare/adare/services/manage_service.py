@@ -339,7 +339,7 @@ class ManageService:
 
             # Build adarelib wheel first (it has no path dependencies)
             log.info("Building adarelib wheel...")
-            result = subprocess.run(
+            subprocess.run(
                 ["uv", "build", "--wheel", "--out-dir", str(wheels_dir)],
                 cwd=adarelib_target,
                 check=True,

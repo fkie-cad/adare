@@ -52,7 +52,7 @@ class RunQueryMixin:
         object_runs = []
         object_environments = []
 
-        for index, row in data.iterrows():
+        for _index, row in data.iterrows():
             experiment = experiments_dict.get(row['experiment_id'])
             environment = environments_dict.get(row['environment_id'])
             run = runs_dict.get(row['id'])
@@ -85,8 +85,7 @@ class RunQueryMixin:
         # Add fake field
         data['fake'] = data['object_run'].apply(lambda obj: getattr(obj, 'fake', False) if obj else False)
         # remove object_run column
-        data = data.drop(columns=['object_run', 'object_environment'])
-        return data
+        return data.drop(columns=['object_run', 'object_environment'])
 
     def get_runs(self, experiment_ulid: str = None, project_name: str = None, environment_name: str = None, experiment_name: str = None) -> pd.DataFrame:
         if experiment_ulid:
@@ -107,13 +106,11 @@ class RunQueryMixin:
 
         # execute query and return result as pandas dataframe excluding the id column
         data = pd.read_sql(query.statement, self._project_api._session.bind).map(str)
-        data = self._enrich_run_data(data)
-        return data
+        return self._enrich_run_data(data)
 
     def get_run(self, run_ulid: str) -> pd.DataFrame:
         data = pd.read_sql(self._project_api._session.query(ExperimentRun).filter_by(id=run_ulid).statement, self._project_api._session.bind).map(str)
-        data = self._enrich_run_data(data)
-        return data
+        return self._enrich_run_data(data)
 
     def get_latest_run_in_project(self, project_name: str = None) -> pd.DataFrame:
         """Get the latest run in the current project or specified project."""
@@ -138,8 +135,7 @@ class RunQueryMixin:
             from adare.exceptions import RunNotFoundError
             raise RunNotFoundError(log, f'No runs found in project "{project_name}"')
 
-        data = self._enrich_run_data(data)
-        return data
+        return self._enrich_run_data(data)
 
     def get_run_stages(self, run_ulid: str) -> pd.DataFrame:
         # execute query and return result as pandas dataframe excluding the id column

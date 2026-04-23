@@ -386,8 +386,7 @@ class QEMUHostGUIExecutor(AbstractGUIExecutor):
                 png_bytes = png_buffer.getvalue()
 
                 # Base64 encode
-                png_base64 = base64.b64encode(png_bytes).decode('utf-8')
-                return png_base64
+                return base64.b64encode(png_bytes).decode('utf-8')
 
             except Exception as e:
                 log.error(f"PPM to PNG conversion failed: {e}", exc_info=True)

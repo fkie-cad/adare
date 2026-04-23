@@ -77,10 +77,7 @@ class LibvirtStderrRedirect(contextlib.AbstractContextManager):
             self._saved_stderr_fd = os.dup(2)  # fd 2 = stderr
 
             # Determine redirect target
-            if self.log_file and Path(self.log_file).exists():
-                redirect_target = self.log_file
-            else:
-                redirect_target = "/dev/null"
+            redirect_target = self.log_file if self.log_file and Path(self.log_file).exists() else "/dev/null"
 
             # Open redirect target for appending
             self._redirect_file = open(redirect_target, 'a', encoding='utf-8')

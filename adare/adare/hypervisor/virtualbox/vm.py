@@ -718,7 +718,7 @@ class VirtualBoxVM(CommandExecutionMixin, SnapshotMixin, NetworkingMixin, Abstra
                 if not file_hash:
                     return False
 
-                result = run_subprocess(
+                run_subprocess(
                     [self.vboxmanage_exe, "setextradata", self.vm_name, "ovf_hash", file_hash],
                     log_prefix=f"store_ovf_hash({ovf_path}): "
                 )

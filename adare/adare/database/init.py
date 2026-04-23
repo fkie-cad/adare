@@ -60,7 +60,7 @@ def ensure_global_database_exists() -> bool:
     """
     try:
         # Create global database API (which auto-initializes schema)
-        with GlobalDatabaseApi() as api:
+        with GlobalDatabaseApi():
             log.info("Global database initialized successfully")
             return True
     except Exception as e:

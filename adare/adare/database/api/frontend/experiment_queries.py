@@ -36,13 +36,11 @@ class ExperimentQueryMixin:
         data['published'] = [str(obj.sync_metadata.is_synced) if hasattr(obj, 'sync_metadata') and obj.sync_metadata else 'False' for obj in data['object']]
         data['in_request'] = [str(obj.sync_metadata.needs_sync) if hasattr(obj, 'sync_metadata') and obj.sync_metadata else 'False' for obj in data['object']]
         # remove object column
-        data = data.drop(columns=['object'])
-        return data
+        return data.drop(columns=['object'])
 
     def get_experiments(self):
         data = pd.read_sql(self._project_api._session.query(Experiment).statement, self._project_api._session.bind).map(str)
-        data = self._enrich_experiment_data(data)
-        return data
+        return self._enrich_experiment_data(data)
 
     def get_experiment(self, project_name: str = None, environment_name: str = None, experiment_name: str = None, ulid: str = None) -> pd.DataFrame:
         if ulid:
@@ -88,8 +86,7 @@ class ExperimentQueryMixin:
 
         experiment_df = pd.read_sql(experiment_query.statement, self._project_api._session.bind)
         experiment_df = experiment_df.map(str)
-        experiment_df = self._enrich_experiment_data(experiment_df)
-        return experiment_df
+        return self._enrich_experiment_data(experiment_df)
 
     def get_experiment_details_by_ulid(self, experiment_ulid: str):
         self._check_experiment_exists_by_ulid(experiment_ulid)

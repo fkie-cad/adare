@@ -145,10 +145,7 @@ def exec_check_testfunction_exists(arguments):
     from pathlib import Path
 
     # Extract testfunction name from path if it's a directory
-    if Path(arguments.name).is_dir():
-        testfunction_name = Path(arguments.name).name
-    else:
-        testfunction_name = arguments.name
+    testfunction_name = Path(arguments.name).name if Path(arguments.name).is_dir() else arguments.name
 
     api = AdareAPI()
     result = api.testfunction.exists(testfunction_name)

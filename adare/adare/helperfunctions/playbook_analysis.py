@@ -64,8 +64,7 @@ def _extract_files_from_actions(actions: list[ActionType]) -> set[str]:
                 else:
                     file_paths.add(action.src)
                     log.debug(f"Found pull action file: {action.src}")
-        elif isinstance(action, BlockAction):
-            if action.actions:
-                file_paths.update(_extract_files_from_actions(action.actions))
+        elif isinstance(action, BlockAction) and action.actions:
+            file_paths.update(_extract_files_from_actions(action.actions))
 
     return file_paths

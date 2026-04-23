@@ -124,8 +124,7 @@ class EnvironmentDbApi(GlobalDatabaseApi):
     def get_environments(self, project_path: Path = None) -> list[Environment]:
         # retrieve all environments and expunge them from the session
         # Since environments are now global, we return all environments regardless of project_path
-        environments = self._session.query(Environment).all()
-        return environments
+        return self._session.query(Environment).all()
 
 
 
@@ -213,5 +212,5 @@ class EnvironmentDbApi(GlobalDatabaseApi):
         environment.remote_ulid = remote_ulid
         environment.remote_url = remote_url
         environment.published = is_published
-        environment.in_request = True if not is_published else False
+        environment.in_request = bool(not is_published)
         self._session.commit()

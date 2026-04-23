@@ -27,9 +27,9 @@ class EnvironmentTablePanel:
         table.add_column("os", style="cyan", no_wrap=True)
         table.add_column("web status", style="cyan", no_wrap=True)
 
-        for i, row in self.environments.iterrows():
-            published = True if row['published'] == 'True' else False
-            in_request = True if row['in_request'] == 'True' else False
+        for _i, row in self.environments.iterrows():
+            published = row['published'] == 'True'
+            in_request = row['in_request'] == 'True'
             web_status = 'NOT published'
             if published:
                 web_status = 'published'

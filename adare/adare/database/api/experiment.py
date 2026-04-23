@@ -123,8 +123,7 @@ class ExperimentApi(ProjectDatabaseApi):
 
         try:
             with GlobalDatabaseApi() as global_api:
-                environment = global_api._session.query(Environment).filter_by(name=environment_name).first()
-                return environment
+                return global_api._session.query(Environment).filter_by(name=environment_name).first()
         except SQLAlchemyError as e:
             log.error(f"Database error querying global environment '{environment_name}': {e}")
             return None
@@ -282,10 +281,7 @@ class ExperimentApi(ProjectDatabaseApi):
         return experiment_run
 
     def initialize_experiment_run(self, fake: bool = False, id: str = None) -> ExperimentRun:
-        if id:
-             experiment_run = ExperimentRun(id=id, fake=fake)
-        else:
-            experiment_run = ExperimentRun(fake=fake)
+        experiment_run = ExperimentRun(id=id, fake=fake) if id else ExperimentRun(fake=fake)
         self._session.add(experiment_run)
         self._session.commit()
         return experiment_run
@@ -331,7 +327,7 @@ class ExperimentApi(ProjectDatabaseApi):
         self._session.delete(experiment)
 
     def remove_fake_experiment_run(self, experiment_run_ulid: str):
-        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_ulid, ExperimentRun.fake == True).first()
+        experiment_run = self._session.query(ExperimentRun).filter(ExperimentRun.id == experiment_run_ulid, ExperimentRun.fake).first()
         if experiment_run:
             # Query already filtered for fake == True, so if it exists, it's guaranteed to be fake
             self._session.delete(experiment_run)
@@ -505,7 +501,7 @@ class ExperimentApi(ProjectDatabaseApi):
         # Find all fake runs for this experiment
         fake_runs = self._session.query(ExperimentRun).filter(
             ExperimentRun.experiment_id == experiment.id,
-            ExperimentRun.fake == True
+            ExperimentRun.fake
         ).all()
 
         # Count and delete them

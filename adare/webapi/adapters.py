@@ -37,7 +37,7 @@ def serialize_value(value: Any) -> Any:
     return value
 
 
-def result_to_response(result: Result[T]) -> dict[str, Any]:
+def result_to_response[T](result: Result[T]) -> dict[str, Any]:
     """
     Convert a Result[T] to a FastAPI response dict.
 

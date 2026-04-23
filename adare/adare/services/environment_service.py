@@ -69,10 +69,7 @@ class EnvironmentService:
             # Get the loaded environment info
             # The environment name is derived from the filename
             env_path = Path(request.environment)
-            if env_path.suffix in ['.yml', '.yaml']:
-                env_name = env_path.stem
-            else:
-                env_name = request.environment
+            env_name = env_path.stem if env_path.suffix in ['.yml', '.yaml'] else request.environment
 
             # Try to get the environment from database
             try:

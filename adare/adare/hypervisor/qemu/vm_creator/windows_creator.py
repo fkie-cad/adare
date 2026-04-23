@@ -346,9 +346,7 @@ def _needs_lfn(filename: str) -> bool:
     # LFN needed if name > 8 chars, ext > 3 chars, or has mixed case
     if len(name) > 8 or len(ext) > 3:
         return True
-    if name != name.upper() or ext != ext.upper():
-        return True
-    return False
+    return bool(name != name.upper() or ext != ext.upper())
 
 
 def _make_short_name(filename: str, index: int = 1) -> bytes:

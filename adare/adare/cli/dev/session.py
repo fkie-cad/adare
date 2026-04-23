@@ -39,7 +39,7 @@ def exec_dev_start(arguments):
 
     # Setup
     project_directory = get_project_path(arguments)
-    log_file = Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
+    Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
 
     # Process shared directories
     # Format: host_path:vm_path
@@ -143,7 +143,7 @@ def exec_dev_resume(arguments):
 
     # Setup
     project_directory = get_project_path(arguments)
-    log_file = Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
+    Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
 
     # Create flow console
     user_interrupt_event = threading.Event()

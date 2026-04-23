@@ -87,8 +87,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
             Dict with 'status', optional 'message'
         """
         try:
-            result = await self.client.drag(x1, y1, x2, y2)
-            return result
+            return await self.client.drag(x1, y1, x2, y2)
         except Exception as e:
             log.error(f"Agent drag failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
@@ -105,8 +104,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
             Dict with 'status', optional 'message'
         """
         try:
-            result = await self.client.keyboard(action_type, value)
-            return result
+            return await self.client.keyboard(action_type, value)
         except Exception as e:
             log.error(f"Agent keyboard failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}
@@ -123,8 +121,7 @@ class AgentGUIExecutor(AbstractGUIExecutor):
             Dict with 'status', optional 'message'
         """
         try:
-            result = await self.client.scroll(direction, amount)
-            return result
+            return await self.client.scroll(direction, amount)
         except Exception as e:
             log.error(f"Agent scroll failed: {e}", exc_info=True)
             return {'status': 'error', 'message': str(e)}

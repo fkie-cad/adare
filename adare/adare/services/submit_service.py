@@ -148,10 +148,9 @@ class SubmitService:
             if not success:
                 raise RuntimeError(f'Failed to upload {filepath}')
 
-        pr = client.create_pull_request(
+        return client.create_pull_request(
             owner, repo,
             title=f'[{entity_type} create] {name}',
             head=branch_name,
             body=f'Automated submission of {entity_type} `{name}` via ADARE CLI.',
         )
-        return pr

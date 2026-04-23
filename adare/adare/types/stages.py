@@ -74,9 +74,7 @@ class Stage:
         """Check if stage should be hidden from console display."""
         if self.hidden:
             return True
-        if self.sub_msg and "SKIPPED" in self.sub_msg:
-            return True
-        return False
+        return bool(self.sub_msg and "SKIPPED" in self.sub_msg)
 
     def to_dict(self) -> dict:
         data = converter.unstructure(self)

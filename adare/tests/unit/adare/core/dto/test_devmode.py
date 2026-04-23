@@ -1,14 +1,20 @@
-import pytest
 from pathlib import Path
+
+import pytest
 
 pytestmark = pytest.mark.unit
 
-from adare.core.dto.devmode import (
-    DevSessionStartRequest, DevSessionStopRequest,
-    DevActionResult, DevPlaybookResult, DevCheckpointInfo,
-    DevResetResult, DevCleanupResult,
-)
 from datetime import datetime
+
+from adare.core.dto.devmode import (
+    DevActionResult,
+    DevCheckpointInfo,
+    DevCleanupResult,
+    DevPlaybookResult,
+    DevResetResult,
+    DevSessionStartRequest,
+    DevSessionStopRequest,
+)
 
 
 class TestDevSessionStartRequest:

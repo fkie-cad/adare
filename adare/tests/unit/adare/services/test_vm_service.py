@@ -16,6 +16,7 @@ def service():
 @pytest.fixture
 def load_request():
     from pathlib import Path
+
     from adare.core.dto.vm import VmLoadRequest
     return VmLoadRequest(file_path=Path("/tmp/test.ova"), name="test-vm")
 

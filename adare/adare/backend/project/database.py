@@ -123,7 +123,7 @@ def get_global_testfunction_hashes() -> list:
     with TestfunctionDbApi() as api:
         # Get all global test function files since they are no longer project-specific
         testfunction_files = api.get_testfunction_files()
-        hashes = [
+        return [
             {
                 "hash": testfunction_file.sha256hash,
                 "file": testfunction_file.path,
@@ -131,7 +131,6 @@ def get_global_testfunction_hashes() -> list:
             }
             for testfunction_file in testfunction_files
         ]
-        return hashes
 
 
 def get_project_data(project_path: Path) -> dict | None:
@@ -148,10 +147,9 @@ def get_global_environment_hashes() -> dict:
     with EnvironmentDbApi() as api:
         # Get all global environments since they are no longer project-specific
         environments = api.get_environments()
-        hashes = {
+        return {
             environment.file: environment.sha256hash
             for environment in environments
             if environment.file and environment.sha256hash  # Only include environments with file and hash
         }
-        return hashes
 

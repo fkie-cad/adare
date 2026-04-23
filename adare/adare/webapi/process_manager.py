@@ -54,8 +54,7 @@ class VirtualSpiceManager:
                 return str(path)
 
         # Try PATH
-        found = shutil.which("virtualspice")
-        return found
+        return shutil.which("virtualspice")
 
     @property
     def available(self) -> bool:

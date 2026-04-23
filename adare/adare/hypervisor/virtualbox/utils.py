@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 
 def run_subprocess(cmd, *, check=True, capture_output=True, text=True, log_prefix="", timeout=30):
     try:
-        result = subprocess.run(
+        return subprocess.run(
             cmd,
             check=check,
             stdout=subprocess.PIPE if capture_output else None,
@@ -18,7 +18,6 @@ def run_subprocess(cmd, *, check=True, capture_output=True, text=True, log_prefi
             text=text,
             timeout=timeout
         )
-        return result
     except subprocess.CalledProcessError as e:
         log.error(f"{log_prefix}Subprocess failed: {e}")
         if capture_output:

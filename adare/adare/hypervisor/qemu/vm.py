@@ -22,6 +22,8 @@ try:
 except ImportError:
     libvirt = None
 
+import contextlib
+
 from adare.hypervisor.base.vm import AbstractVM
 from adare.hypervisor.exceptions import (
     HypervisorException,
@@ -396,7 +398,7 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
         netdev_args = "user,id=net0"
 
         # Add port forwarding rules
-        for name, rule in self.config.port_forwarding_rules.items():
+        for _name, rule in self.config.port_forwarding_rules.items():
             protocol = rule['protocol']
             host_port = rule['host_port']
             guest_port = rule['guest_port']
@@ -803,10 +805,8 @@ class QEMUVM(RegistryMixin, ConfigurationMixin, DiskManagementMixin, CommandExec
             # Clean up sockets
             for socket_path in [self.config.qmp_socket_path, self.config.guest_agent_socket_path]:
                 if os.path.exists(socket_path):
-                    try:
+                    with contextlib.suppress(OSError):
                         os.remove(socket_path)
-                    except OSError:
-                        pass
 
             # Post-removal verification
             # Verify domain is undefined

@@ -842,10 +842,7 @@ class VariableResolver:
             return True
 
         # Check for r'...' prefix/suffix
-        if text.startswith("r'") and text.endswith("'") and len(text) >= 3:
-            return True
-
-        return False
+        return bool(text.startswith("r'") and text.endswith("'") and len(text) >= 3)
 
     def replace_variables(self, text: str, execution_context: dict[str, Any]) -> str:
         """Replace Jinja2 template variables in text with values or metadata placeholders.

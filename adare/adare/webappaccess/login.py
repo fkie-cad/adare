@@ -50,7 +50,7 @@ class WebappLogin:
 
     def get_user_session(self, username=None):
         self.__remove_expired_sessions()
-        log.debug(f"Check if user {'' if not username else username} is logged in")
+        log.debug(f"Check if user {username if username else ''} is logged in")
         with UserSessionApi() as user_session_api:
             if not username:
                 # if no username is given check for the first user in database
@@ -122,11 +122,10 @@ class WebappLogin:
         user_session = self.get_user_session()
         if not user_session:
             raise NotLoggedInError(log, message='user is not logged in')
-        header = {
+        return {
             'Referer': config_server.WEBSERVER_URL,
             'Authorization': f'Token {user_session["django_token"]}'
         }
-        return header
 
     def get_gitea_authenticated_request_header(self):
         user_session = self.get_user_session()
@@ -135,11 +134,10 @@ class WebappLogin:
         user_session_token = user_session['gitea_token']
         if not user_session_token:
             return None
-        header = {
+        return {
             'Referer': config_server.WEBSERVER_URL,
             'Authorization': f'token {user_session_token}'
         }
-        return header
 
     def get_django_session(self):
         header = self.get_django_authenticated_request_header()

@@ -269,8 +269,7 @@ class TestfunctionDbApi(GlobalDatabaseApi):
 
     def get_testfunction_file_hash(self, testfunction_id: int):
         testfunction_file = self.get_testfunction_file(testfunction_id)
-        sha256 = testfunction_file.sha256hash
-        return sha256
+        return testfunction_file.sha256hash
 
     def sync_testfunction_file(self, testfunction_id: int, remote_id: int, remote_url: str, is_published: bool):
         testfunction_obj = self.get_testfunction_file(testfunction_id)

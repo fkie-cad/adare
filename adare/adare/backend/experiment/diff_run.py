@@ -14,6 +14,7 @@ Features:
 """
 
 import asyncio
+import contextlib
 import logging
 import signal
 import threading
@@ -311,7 +312,7 @@ async def experiment_diff_run(
             external_stop_event=ctx.user_interrupt_event
         )
         # Start event listeners AFTER flow console
-        cli_thread = __start_event_listeners(ctx.experiment_run_ulid)
+        __start_event_listeners(ctx.experiment_run_ulid)
 
         try:
             # 5. Start MCP server for target resolution
@@ -522,10 +523,8 @@ async def experiment_diff_run(
                     pass
                 # Ensure flow console is stopped
                 if flow_console:
-                    try:
+                    with contextlib.suppress(RuntimeError, ValueError):
                         flow_console.stop()
-                    except (RuntimeError, ValueError):
-                        pass
 
         execution_time = time.time() - start_time
 

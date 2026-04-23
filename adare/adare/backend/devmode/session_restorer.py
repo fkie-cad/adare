@@ -412,10 +412,7 @@ async def restore_context(
         return False
 
     # 2. Restore application (playbook, websocket, logic)
-    if not await restore_application_context(session, console_ulid, should_start_vm):
-        return False
-
-    return True
+    return await restore_application_context(session, console_ulid, should_start_vm)
 
 
 async def _restore_snapshots(session: DevModeSession) -> None:

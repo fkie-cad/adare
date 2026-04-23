@@ -151,12 +151,7 @@ class QGAStrategy(FileTransferStrategy):
             source = Path(item['source'])
             dest_relative = item['dest']
 
-            if is_windows:
-                guest_dest = (
-                    f"{base}\\{dest_relative.replace('/', '\\')}"
-                )
-            else:
-                guest_dest = f"{base}/{dest_relative}"
+            guest_dest = f"{base}\\{dest_relative.replace('/', '\\')}" if is_windows else f"{base}/{dest_relative}"
 
             if source.is_dir():
                 log.info(

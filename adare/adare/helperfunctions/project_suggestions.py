@@ -31,7 +31,7 @@ def detect_potential_project_directories(search_path: Path = None, max_depth: in
 
     try:
         # Look for ADARE project indicators
-        for root, dirs, files in os.walk(search_path):
+        for root, dirs, _files in os.walk(search_path):
             current_path = Path(root)
             depth = len(current_path.parts) - len(search_path.parts)
 
@@ -181,7 +181,7 @@ def generate_no_project_error_message(
             ])
 
         # Suggest creating a new project
-        suggested_location = suggest_project_creation_location(current_path)
+        suggest_project_creation_location(current_path)
         solutions.extend([
             "Create a new project: 'adare project create <name>'",
             "Initialize project in current directory"

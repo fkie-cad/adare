@@ -248,10 +248,7 @@ class ExperimentFlowConsole:
             message_width = self.console.measure(message_obj).maximum
 
             padding = terminal_width - message_width - duration_width
-            if padding > 1:
-                message = f"{message}{' ' * (padding - 1)} {duration_text}"
-            else:
-                message = f"{message} {duration_text}"
+            message = f"{message}{' ' * (padding - 1)} {duration_text}" if padding > 1 else f"{message} {duration_text}"
 
         return message
 

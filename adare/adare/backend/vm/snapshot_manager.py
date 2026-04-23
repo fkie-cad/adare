@@ -46,7 +46,7 @@ class SnapshotManager:
         log.error("Use create_base_snapshot_for_instance() for VmInstance records instead")
         return False
 
-        if False and not vm_record.vbox_uuid:
+        if False:
             # Attempt to recover the UUID by looking it up in VirtualBox
             log.warning(f"VM '{vm_record.name}' has no VirtualBox UUID - attempting to retrieve it")
             try:
@@ -151,7 +151,7 @@ class SnapshotManager:
         return False
 
 
-        if False and not vm_record.base_snapshot_name:
+        if False:
             raise VMError(log, f"VM '{vm_record.name}' has no base snapshot configured")
 
         # Check for interruption before starting
@@ -286,7 +286,7 @@ class SnapshotManager:
         log.error("check_base_snapshot_exists is deprecated - Vm records don't track VirtualBox state")
         return False
 
-        if False and (not vm_record.base_snapshot_name or not vm_record.vbox_uuid):
+        if False:
             return False
 
         # Get VirtualBox VM instance
@@ -430,11 +430,10 @@ class SnapshotManager:
         if hypervisor == 'qemu':
             # QEMU: use instance_name to load VM config
             try:
-                qemu_vm = QEMUVMRegistry.get_vm_by_name(
+                return QEMUVMRegistry.get_vm_by_name(
                     vm_name=vm_instance.instance_name,
                     manager=QEMUManager()
                 )
-                return qemu_vm
             except VMNotFoundException as e:
                 raise VMError(log, f"QEMU VM instance '{vm_instance.instance_name}' not found: {e}")
 

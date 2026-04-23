@@ -88,10 +88,7 @@ class Script:
         render the script
         """
         destination_directory = destination_directory
-        if name:
-            destination_script_path = destination_directory / name
-        else:
-            destination_script_path = destination_directory / self.name
+        destination_script_path = destination_directory / name if name else destination_directory / self.name
 
         if not self.only_copy:
             jinja_env = jinjafeatures.init_jinja_environment(self.directory)
@@ -122,10 +119,7 @@ class Script:
         copy the script
         """
         source_script_path = self.directory / self.name
-        if name:
-            destination_script_path = destination_directory / name
-        else:
-            destination_script_path = destination_directory / self.name
+        destination_script_path = destination_directory / name if name else destination_directory / self.name
         shutil.copy(source_script_path, destination_script_path)
         log.info(f'script file {source_script_path} got copied successfully to {self.destination_script_path}')
 

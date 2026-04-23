@@ -322,7 +322,7 @@ def exec_dev_playbook_batch(arguments):
 
     # Create flow console for progress tracking
     console_ulid = str(ulid.ULID())
-    flow_console = ExperimentFlowConsole(
+    ExperimentFlowConsole(
         run_ulid=console_ulid,
         total_action_count=0,  # Will be updated during execution
         show_substages=True

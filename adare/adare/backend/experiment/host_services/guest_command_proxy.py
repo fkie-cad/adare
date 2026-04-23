@@ -5,6 +5,7 @@ Wraps vm.run_command() (QGA guest-exec) with convenience methods for
 common system-state queries used by testfunctions.
 """
 
+import contextlib
 import logging
 
 from adare.hypervisor.base.models import CommandResult
@@ -151,25 +152,17 @@ class GuestCommandProxy(VMOperationProxy):
             elif key == 'group':
                 stat_info['group'] = value
             elif key == 'size':
-                try:
+                with contextlib.suppress(ValueError):
                     stat_info['size'] = int(value)
-                except ValueError:
-                    pass
             elif key == 'mtime':
-                try:
+                with contextlib.suppress(ValueError):
                     stat_info['mtime'] = float(value)
-                except ValueError:
-                    pass
             elif key == 'atime':
-                try:
+                with contextlib.suppress(ValueError):
                     stat_info['atime'] = float(value)
-                except ValueError:
-                    pass
             elif key == 'ctime':
-                try:
+                with contextlib.suppress(ValueError):
                     stat_info['ctime'] = float(value)
-                except ValueError:
-                    pass
 
         return stat_info
 
@@ -318,10 +311,8 @@ class GuestCommandProxy(VMOperationProxy):
             key, _, value = part.partition(':')
             key = key.lower()
             if key in ('mtime', 'atime', 'ctime'):
-                try:
+                with contextlib.suppress(ValueError):
                     timestamps[key] = float(value)
-                except ValueError:
-                    pass
 
         return timestamps
 

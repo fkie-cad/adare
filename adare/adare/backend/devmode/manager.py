@@ -481,7 +481,7 @@ class DevModeSessionManager:
                 environment_ulid = environment_database.resolve_environment_identifier(
                     db_session.environment_name
                 )
-                hypervisor_type = environment_database.get_environment_hypervisor(environment_ulid)
+                environment_database.get_environment_hypervisor(environment_ulid)
             except Exception as e:
                 log.error(f"Failed to resolve environment: {e}")
                 return None
@@ -660,12 +660,11 @@ class DevModeSessionManager:
             # Only restore 'running' sessions automatically
             # Stopped sessions must be explicitly resumed via restore_and_restart_session()
             if db_session.status == 'running':
-                restored = await self.restore_session(
+                return await self.restore_session(
                     session_id,
                     console_ulid=console_ulid,
                     connect_websocket=connect_websocket
                 )
-                return restored
             if db_session.status == 'stopped':
                 log.info(
                     f"Session {session_id} is stopped. "

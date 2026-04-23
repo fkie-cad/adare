@@ -204,8 +204,7 @@ class CheckpointManagementMixin:
             )
 
         # Create checkpoint (in same event loop!)
-        result = await session.create_checkpoint(request.name, request.description)
-        return result
+        return await session.create_checkpoint(request.name, request.description)
 
     def create_checkpoint(self, request: DevCheckpointCreateRequest) -> Result[bool]:
         """
@@ -271,8 +270,7 @@ class CheckpointManagementMixin:
             )
 
         # Restore checkpoint (in same event loop!)
-        result = await session.restore_checkpoint(request.name)
-        return result
+        return await session.restore_checkpoint(request.name)
 
     def restore_checkpoint(self, request: DevCheckpointRestoreRequest) -> Result[bool]:
         """

@@ -338,7 +338,7 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
             commands.run_command,
             background=True,
             stop_event=stop_event,
-            admin=True if env_info.use_conda else False,
+            admin=bool(env_info.use_conda),
             cwd=commands.run_cwd,
         )
     else:
@@ -409,12 +409,11 @@ async def install_and_run_adare_vm(context, stop_event: threading.Event):
     # Cache the start command
     if not cached_command_str and context.experiment_run_ulid:
         command_to_cache = commands.run_command
-        if commands.run_cwd:
-            if "cd " not in command_to_cache:
-                if context.guest_platform == 'windows':
-                    command_to_cache = f"cd /d {commands.run_cwd} & {command_to_cache}"
-                else:
-                    command_to_cache = f"cd {commands.run_cwd} && {command_to_cache}"
+        if commands.run_cwd and "cd " not in command_to_cache:
+            if context.guest_platform == 'windows':
+                command_to_cache = f"cd /d {commands.run_cwd} & {command_to_cache}"
+            else:
+                command_to_cache = f"cd {commands.run_cwd} && {command_to_cache}"
 
         try:
             with DevModeApi() as api:

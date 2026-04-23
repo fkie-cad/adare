@@ -534,7 +534,7 @@ class ClassBased(BasicTest):
     execute_on_host=True,
 )
 async def async_test(ctx, text: str = None):
-    screenshot = await ctx.host.screenshot.take()
+    await ctx.host.screenshot.take()
     return f'found: {text}'
 
 

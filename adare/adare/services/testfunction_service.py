@@ -91,10 +91,7 @@ class TestfunctionService:
             )
 
             # Get testfunction name from path
-            if request.path.is_file():
-                name = request.path.stem
-            else:
-                name = request.path.name
+            name = request.path.stem if request.path.is_file() else request.path.name
 
             next_steps = [
                 f'Testfunction "{name}" is now available for experiments',

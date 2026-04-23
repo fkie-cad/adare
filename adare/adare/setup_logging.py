@@ -22,7 +22,7 @@ def setup_logging(arguments: Any, commandline: list[str]) -> None:
     Args:
         arguments: Parsed command line arguments containing:
             - verbose: Enable INFO level console logging
-            - very_verbose: Enable DEBUG level console logging  
+            - very_verbose: Enable DEBUG level console logging
             - log_level: File logging level (debug/info/warning/error/critical)
             - logfile: Optional path to log file
         commandline: List of command line arguments for logging
@@ -126,7 +126,7 @@ def _configure_root_logger(console_level: int) -> None:
 def set_console_log_level(level: int) -> None:
     """Dynamically change the console logging level.
 
-    This is useful for suppressing console logs when the experiment flow 
+    This is useful for suppressing console logs when the experiment flow
     console is active, to avoid interfering with the rich display.
 
     Args:

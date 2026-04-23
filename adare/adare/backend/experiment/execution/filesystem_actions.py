@@ -277,13 +277,12 @@ class FilesystemActionsMixin:
                 )
 
             # Call batch pull method
-            result = await self.client.pull_multiple_files_chunked(
+            return await self.client.pull_multiple_files_chunked(
                 guest_paths=file_paths,
                 host_dest_dir=dest_dir,
                 progress_callback=progress_callback
             )
 
-            return result
 
         except Exception as e:
             log.error(f"WebSocket batch pull failed: {e}")

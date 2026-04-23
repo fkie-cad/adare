@@ -73,10 +73,7 @@ class PCIBusAllocator:
             slot = self._PC_VIRTIOFS_BASE_SLOT + index
             return self._make_address(0, slot)
 
-        if self.is_q35:
-            assignments = self._Q35_ASSIGNMENTS
-        else:
-            assignments = self._PC_ASSIGNMENTS
+        assignments = self._Q35_ASSIGNMENTS if self.is_q35 else self._PC_ASSIGNMENTS
 
         if device not in assignments:
             raise KeyError(f"Unknown device type '{device}' for {'q35' if self.is_q35 else 'pc'} machine")
@@ -142,10 +139,7 @@ class DomainXMLBuilder:
         """Build and return the complete domain XML string."""
         log.debug(f"Generating libvirt XML for VM: {self._config.vm_name}")
 
-        if self._is_darwin:
-            domain_type = 'hvf'
-        else:
-            domain_type = 'kvm'
+        domain_type = 'hvf' if self._is_darwin else 'kvm'
         self._domain = ET.Element('domain', type=domain_type)
         self._domain.set('xmlns:qemu', QEMU_NAMESPACE)
 
@@ -638,7 +632,7 @@ class DomainXMLBuilder:
             netdev_args += f',smb={smb_path}'
 
         # Port forwarding (can coexist with SMB on same netdev)
-        for name, rule in self._config.port_forwarding_rules.items():
+        for _name, rule in self._config.port_forwarding_rules.items():
             protocol = rule['protocol']
             host_port = rule['host_port']
             guest_port = rule['guest_port']

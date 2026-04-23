@@ -6,6 +6,7 @@ Files are copied before boot and artifacts retrieved after shutdown.
 This is the fallback mode when virtiofsd is unavailable on Linux,
 or when explicitly requested via QEMU_LIBGUESTFS=true.
 """
+import contextlib
 import json as json_module
 import logging
 import os
@@ -555,10 +556,8 @@ class LibguestfsStrategy(FileTransferStrategy):
 
         finally:
             if script_fd is not None:
-                try:
+                with contextlib.suppress(OSError):
                     os.close(script_fd)
-                except OSError:
-                    pass
             if script_path and Path(script_path).exists():
                 try:
                     Path(script_path).unlink()
@@ -697,7 +696,7 @@ def _build_file_transfer_manifest(context: Any) -> list[dict[str, str]]:
         hasattr(context.config, 'shared_directories')
         and context.config.shared_directories
     ):
-        for name, details in context.config.shared_directories.items():
+        for _name, details in context.config.shared_directories.items():
             host_path = details.get('host')
             vm_path = details.get('vm')
             if host_path and vm_path:

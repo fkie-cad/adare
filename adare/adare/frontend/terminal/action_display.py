@@ -220,7 +220,7 @@ def get_action_display_info(action_type: ActionType, action_data: dict, is_compl
         # Show stop condition result
         if is_complete:
             should_stop = action_data.get('should_stop', False)
-            condition_met = action_data.get('condition_met')
+            action_data.get('condition_met')
             variable = action_data.get('variable')
 
             if should_stop:
@@ -237,7 +237,7 @@ def get_action_display_info(action_type: ActionType, action_data: dict, is_compl
         # Show continue condition result
         if is_complete:
             should_continue = action_data.get('should_continue', False)
-            condition_met = action_data.get('condition_met')
+            action_data.get('condition_met')
             variable = action_data.get('variable')
 
             if should_continue:
@@ -281,7 +281,7 @@ def determine_action_status(action_type: ActionType, action_data: dict):
     Returns: (status, result_status) tuple
     """
     success = action_data.get('success', False)
-    error_message = action_data.get('error_message') or action_data.get('error')
+    action_data.get('error_message') or action_data.get('error')
 
     if success:
         # Check if it's a test action for special handling

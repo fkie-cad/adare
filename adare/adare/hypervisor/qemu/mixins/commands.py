@@ -226,10 +226,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         # Add cwd support
         if cwd:
-            if 'windows' in self.guest_os.lower():
-                command = f'cd {cwd}; {command}'
-            else:
-                command = f'cd {cwd} && {command}'
+            command = f'cd {cwd}; {command}' if 'windows' in self.guest_os.lower() else f'cd {cwd} && {command}'
 
         if 'windows' in self.guest_os.lower():
             if run_as_user:
@@ -1149,8 +1146,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
                         0   # flags
                     )
 
-                response = json.loads(result)
-                return response
+                return json.loads(result)
 
             except libvirt.libvirtError as e:
                 log.error(f"Libvirt error sending QGA command: {e}")

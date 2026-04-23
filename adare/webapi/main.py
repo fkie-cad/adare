@@ -407,10 +407,7 @@ async def reset_session(
 
     dto = DevResetRequest(session_id=session_id, reset_type=reset_type)
 
-    if reset_type == "soft":
-        result = api.devmode.reset_soft(dto)
-    else:
-        result = api.devmode.reset_hard(dto)
+    result = api.devmode.reset_soft(dto) if reset_type == "soft" else api.devmode.reset_hard(dto)
 
     return result_to_response(result)
 
