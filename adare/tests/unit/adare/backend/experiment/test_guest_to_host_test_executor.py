@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import attrs
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.backend.experiment.guest_to_host_test_executor import GuestToHostTestExecutor
 from adarelib.constants import StatusEnum
 from adarelib.event.event import TestResult

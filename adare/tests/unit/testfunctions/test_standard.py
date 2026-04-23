@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from datetime import datetime, timedelta
 
+pytestmark = pytest.mark.unit
+
 # Add paths for imports
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent

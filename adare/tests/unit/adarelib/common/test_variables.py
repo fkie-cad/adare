@@ -2,6 +2,8 @@
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adarelib.common.variables import (
     TimestampMetadata,
     ValidationError,

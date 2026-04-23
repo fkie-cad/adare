@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.backend.experiment.agent_lifecycle import _run_command_with_retry
 from adare.backend.experiment.exceptions import VMSetupError
 

@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adarelib.testset import testfunction as testfunction_module
 from adarelib.testset.testfunction import (
     ModuleLoadFailure,

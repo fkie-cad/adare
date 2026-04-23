@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.backend.devmode.session import DevModeSession
 from adare.backend.experiment.mcp_server_manager import MCPServerManager
 from adare.backend.experiment.runctx import ExperimentRunCtx

@@ -6,6 +6,10 @@ use more specific Exception that are expected instead'.
 This test scans all Python files under hypervisor/qemu/ and asserts that
 only intentionally marked exemptions use 'except Exception'.
 """
+import pytest
+
+pytestmark = pytest.mark.unit
+
 import re
 from pathlib import Path
 

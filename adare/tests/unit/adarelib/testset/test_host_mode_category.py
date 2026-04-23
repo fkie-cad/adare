@@ -1,5 +1,9 @@
 """Tests for HostModeCategory enum and BasicTest ClassVar integration."""
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from typing import ClassVar
 
 import attrs

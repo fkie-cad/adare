@@ -8,6 +8,8 @@ import ulid
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+pytestmark = pytest.mark.unit
+
 from adare.database.api.structured_data import StructuredDataApi
 from adare.database.models.global_models import (
     Environment,

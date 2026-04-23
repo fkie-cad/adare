@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+pytestmark = pytest.mark.unit
+
 # Add paths for imports
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 ADARELIB_ROOT = PROJECT_ROOT.parent / "adarelib"

@@ -9,6 +9,8 @@ import attrs
 import cattrs
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adarelib.constants import StatusEnum
 from adarelib.event.event import TestResult
 from adarelib.testset.api import (

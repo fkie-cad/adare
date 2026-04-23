@@ -1,6 +1,8 @@
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.types.playbook import CommandAction
 
 

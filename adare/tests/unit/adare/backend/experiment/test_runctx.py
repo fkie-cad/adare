@@ -1,5 +1,9 @@
 """Tests for ExperimentRunCtx convenience properties."""
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from pathlib import Path
 
 from adare.backend.experiment.runctx import ExperimentConfig, ExperimentRunCtx

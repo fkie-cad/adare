@@ -4,6 +4,8 @@ import logging
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.backend.experiment.exceptions import (
     AdareVMProcessDiedError,
     EnvironmentIntegrityError,

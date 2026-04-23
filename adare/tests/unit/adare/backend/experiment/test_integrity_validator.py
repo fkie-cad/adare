@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from adare.backend.experiment.exceptions import ExperimentIntegrityError
 from adare.backend.experiment.integrity_validator import IntegrityValidator
 

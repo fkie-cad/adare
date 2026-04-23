@@ -1,5 +1,9 @@
 """Tests for PlaybookControllerConfig dataclass."""
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from dataclasses import fields
 from pathlib import Path
 

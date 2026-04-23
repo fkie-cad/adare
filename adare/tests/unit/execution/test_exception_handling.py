@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 # ---------------------------------------------------------------------------
 # 1. Path.stem exception specificity
 #    Pattern from: simple_actions.py:228, target_resolution.py:133

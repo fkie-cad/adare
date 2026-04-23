@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from adare.config.configdirectory import (
     ADARE_DIR,
     ADAREVM_DIR,
