@@ -13,6 +13,7 @@ QGA Protocol Commands Used:
 """
 import asyncio
 import base64
+import contextlib
 import logging
 import tarfile
 import tempfile
@@ -216,10 +217,8 @@ class QGAFileTransfer:
                 )
                 # Try to close the broken handle (best-effort)
                 if handle is not None:
-                    try:
+                    with contextlib.suppress(HypervisorException):
                         await self._guest_file_close(handle)
-                    except HypervisorException:
-                        pass
 
                 if attempt < QGA_MAX_RETRIES:
                     backoff = QGA_INITIAL_BACKOFF * (QGA_BACKOFF_MULTIPLIER ** (attempt - 1))
@@ -256,10 +255,7 @@ class QGAFileTransfer:
                 await self.mkdir_p(dest)
             elif item.is_file():
                 # Ensure parent exists
-                if self.is_windows:
-                    parent = str(PureWindowsPath(dest).parent)
-                else:
-                    parent = str(PurePosixPath(dest).parent)
+                parent = str(PureWindowsPath(dest).parent) if self.is_windows else str(PurePosixPath(dest).parent)
                 await self.mkdir_p(parent)
                 await self.upload_file(item, dest)
 
@@ -322,10 +318,7 @@ class QGAFileTransfer:
             if not relative_path:
                 continue
 
-            if self.is_windows:
-                guest_file = f"{guest_path}\\{relative_path}"
-            else:
-                guest_file = f"{guest_path}/{relative_path}"
+            guest_file = f"{guest_path}\\{relative_path}" if self.is_windows else f"{guest_path}/{relative_path}"
 
             host_file = host_path / relative_path.replace('\\', '/')
             host_file.parent.mkdir(parents=True, exist_ok=True)
@@ -340,10 +333,7 @@ class QGAFileTransfer:
         if self._tar_available is not None:
             return self._tar_available
 
-        if self.is_windows:
-            cmd = 'where tar.exe'
-        else:
-            cmd = 'which tar'
+        cmd = 'where tar.exe' if self.is_windows else 'which tar'
 
         result = await self.vm.run_command(cmd, silent=True)
         self._tar_available = result.returncode == 0
@@ -365,10 +355,7 @@ class QGAFileTransfer:
             tarfile.TarError: If tar creation fails on host
             OSError: If temp file operations fail on host
         """
-        if self.is_windows:
-            guest_tar = 'C:\\Windows\\Temp\\adare_transfer.tar.gz'
-        else:
-            guest_tar = '/tmp/adare_transfer.tar.gz'
+        guest_tar = 'C:\\Windows\\Temp\\adare_transfer.tar.gz' if self.is_windows else '/tmp/adare_transfer.tar.gz'
 
         tmp_tar_path = None
         try:

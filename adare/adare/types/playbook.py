@@ -168,18 +168,16 @@ class TextMatchConfig:
             )
 
         # Validate min_similarity range
-        if self.min_similarity is not None:
-            if not (0.0 <= self.min_similarity <= 1.0):
-                raise ValueError(
-                    f"TextMatchConfig.min_similarity must be between 0.0 and 1.0, got {self.min_similarity}"
-                )
+        if self.min_similarity is not None and not (0.0 <= self.min_similarity <= 1.0):
+            raise ValueError(
+                f"TextMatchConfig.min_similarity must be between 0.0 and 1.0, got {self.min_similarity}"
+            )
 
         # Validate max_missing
-        if self.max_missing is not None:
-            if self.max_missing < 0:
-                raise ValueError(
-                    f"TextMatchConfig.max_missing must be >= 0, got {self.max_missing}"
-                )
+        if self.max_missing is not None and self.max_missing < 0:
+            raise ValueError(
+                f"TextMatchConfig.max_missing must be >= 0, got {self.max_missing}"
+            )
 
         # Fuzzy mode requires either allow_missing_chars or min_similarity
         if self.mode in ('fuzzy', 'regex_fuzzy'):
@@ -563,7 +561,7 @@ class Playbook:
 
 def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
     import logging
-    log = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     yaml_path = Path(yaml_path)  # Ensure it's a Path object
 

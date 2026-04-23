@@ -1,10 +1,11 @@
 """Unit tests for adare.cli.manage handler functions."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
-from adare.core.dto.manage import DbResetResult, DbInitResult, VmRuntimeRefreshResult
+import pytest
+
+from adare.core.dto.manage import DbInitResult, DbResetResult, VmRuntimeRefreshResult
 from adare.core.result import Result
 
 pytestmark = pytest.mark.unit

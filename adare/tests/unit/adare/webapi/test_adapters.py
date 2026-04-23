@@ -1,7 +1,8 @@
-import pytest
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 pytestmark = pytest.mark.unit
 
@@ -52,7 +53,7 @@ class TestSerializeValueDatetime:
         assert serialize_value(dt) == "2025-01-15T10:30:00"
 
     def test_aware_datetime(self):
-        dt = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        dt = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
         result = serialize_value(dt)
         assert result == "2025-06-01T12:00:00+00:00"
 

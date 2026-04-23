@@ -1,13 +1,19 @@
-import pytest
 from pathlib import Path
+
+import pytest
 
 pytestmark = pytest.mark.unit
 
 from adare.core.dto.web import (
-    WebLoginResult, WebLogoutResult, WebStatusResult,
-    DownloadEnvironmentRequest, DownloadResult,
-    SyncResult, PublishResult, CheckExperimentResult,
+    CheckExperimentResult,
+    DownloadEnvironmentRequest,
+    DownloadResult,
+    PublishResult,
     SubmitResult,
+    SyncResult,
+    WebLoginResult,
+    WebLogoutResult,
+    WebStatusResult,
 )
 
 

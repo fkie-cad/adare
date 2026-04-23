@@ -474,10 +474,7 @@ class CommandExecutionMixin(AbstractCommandMixin):
 
         # Handle working directory change
         if cwd:
-            if 'windows' in self.guest_os.lower():
-                cmd_to_run = f'cd {cwd}; {command}'
-            else:
-                cmd_to_run = f'cd {cwd} && {command}'
+            cmd_to_run = f'cd {cwd}; {command}' if 'windows' in self.guest_os.lower() else f'cd {cwd} && {command}'
 
         if 'windows' in self.guest_os.lower():
             command_exe = r"C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe"

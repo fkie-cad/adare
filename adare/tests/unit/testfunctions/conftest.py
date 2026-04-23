@@ -88,10 +88,7 @@ def create_excel_file(tmp_path):
         filepath = tmp_path / filename
         with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
             for sheet_name, rows in sheets_data.items():
-                if rows:
-                    df = pd.DataFrame(rows)
-                else:
-                    df = pd.DataFrame()
+                df = pd.DataFrame(rows) if rows else pd.DataFrame()
                 df.to_excel(writer, sheet_name=sheet_name, index=False, header=False)
         return filepath
     return _create

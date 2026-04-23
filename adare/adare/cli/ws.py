@@ -169,7 +169,7 @@ async def execute_single_action(client: AdareVMClient, action: dict[str, Any],
             )
 
         elif action_type == 'screenshot':
-            params = action_data if isinstance(action_data, dict) else {}
+            action_data if isinstance(action_data, dict) else {}
             result = await client.screenshot()
 
         elif action_type == 'click':
@@ -188,10 +188,7 @@ async def execute_single_action(client: AdareVMClient, action: dict[str, Any],
                 if 'combination' in action_data:
                     # Handle key combinations
                     combination = action_data['combination']
-                    if isinstance(combination, list):
-                        key = '+'.join(combination)
-                    else:
-                        key = str(combination)
+                    key = '+'.join(combination) if isinstance(combination, list) else str(combination)
                     result = await client.keyboard('hotkey', key)
                 elif 'key' in action_data:
                     key_type = action_data.get('type', 'type')

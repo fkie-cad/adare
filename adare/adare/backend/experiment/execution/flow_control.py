@@ -693,20 +693,14 @@ class FlowControlExecutor:
 
             if condition.greater_than is not None:
                 # Numeric comparison (convert to number)
-                if isinstance(value, (int, float)):
-                    num_value = value
-                else:
-                    num_value = float(value)
+                num_value = value if isinstance(value, (int, float)) else float(value)
                 result = num_value > condition.greater_than
                 log.debug(f"Greater than check: {num_value} > {condition.greater_than} -> {result}")
                 return result
 
             if condition.less_than is not None:
                 # Numeric comparison (convert to number)
-                if isinstance(value, (int, float)):
-                    num_value = value
-                else:
-                    num_value = float(value)
+                num_value = value if isinstance(value, (int, float)) else float(value)
                 result = num_value < condition.less_than
                 log.debug(f"Less than check: {num_value} < {condition.less_than} -> {result}")
                 return result

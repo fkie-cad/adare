@@ -21,11 +21,10 @@ class SerializeApi(DatabaseApi):
     def serialize_result(self, result: Result) -> dict:
         if not result:
             return {}
-        result_dict = {
+        return {
             'status': result.status,
             'details': result.details,
         }
-        return result_dict
 
     def serialize_event(self, event: Event) -> dict:
         event_type = event.event_type

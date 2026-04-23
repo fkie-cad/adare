@@ -17,17 +17,16 @@ Usage:
 """
 
 import logging
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 from adare.database.api.base import EnhancedDatabaseApi
-from adare.database.exceptions import EntityNotFoundError
 
 log = logging.getLogger(__name__)
 
 T = TypeVar('T')
 
 
-class Repository(EnhancedDatabaseApi, Generic[T]):
+class Repository[T](EnhancedDatabaseApi):
     """
     Generic repository providing type-safe CRUD operations for a specific model.
 

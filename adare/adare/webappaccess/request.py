@@ -28,8 +28,7 @@ async def check_request(request_ulid: str):
     try:
         async with aiohttp_session.get(config_server.CHECK_REQUEST_URL + f"?ulid={request_ulid}", timeout=config_server.TIMEOUT_SECONDS) as response:
             if response.status == 200:
-                response_json = await response.json()
-                return response_json
+                return await response.json()
             log.error(f'request error ({response.status}, {await response.text()})')
             return None
     except asyncio.exceptions.TimeoutError:

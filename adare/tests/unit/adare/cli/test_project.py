@@ -1,10 +1,11 @@
 """Unit tests for adare.cli.project handler functions."""
 
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from adare.core.dto.project import ProjectCreateRequest, ProjectInfo, ProjectListItem
+import pytest
+
+from adare.core.dto.project import ProjectInfo
 from adare.core.result import Result
 
 pytestmark = pytest.mark.unit

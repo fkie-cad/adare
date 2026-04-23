@@ -109,7 +109,7 @@ class ReferenceManager:
                 log.debug("Cleared all cache entries")
             else:
                 # Clear matching pattern
-                keys_to_remove = [k for k in self._cache.keys() if pattern in k]
+                keys_to_remove = [k for k in self._cache if pattern in k]
                 for key in keys_to_remove:
                     del self._cache[key]
                     del self._cache_timestamps[key]

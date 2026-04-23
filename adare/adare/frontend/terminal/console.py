@@ -64,10 +64,7 @@ class TwoTitleRule(Rule):
             yield self._rule_line(chars_len, width)
             return
 
-        if isinstance(self.title, Text):
-            title_text = self.title
-        else:
-            title_text = console.render_str(self.title, style="rule.text")
+        title_text = self.title if isinstance(self.title, Text) else console.render_str(self.title, style="rule.text")
 
         if isinstance(self.title_right, Text):
             title_right_text = self.title_right

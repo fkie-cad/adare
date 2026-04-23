@@ -40,9 +40,8 @@ def query_result(ctx: TestContext, dst: str, query: str, expected_rows: int = No
             conn.close()
 
             # Check expected row count
-            if expected_rows is not None:
-                if len(result) != expected_rows:
-                    return TestResult.failed([f'expected {expected_rows} rows, got {len(result)}'])
+            if expected_rows is not None and len(result) != expected_rows:
+                return TestResult.failed([f'expected {expected_rows} rows, got {len(result)}'])
 
             # Check expected result content
             if expected_result is not None:

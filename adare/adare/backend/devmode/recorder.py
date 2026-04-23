@@ -1,5 +1,6 @@
 
 import asyncio
+import contextlib
 import logging
 import re
 import time
@@ -89,10 +90,8 @@ class SessionRecorder:
         # Cancel task
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
 
         # Disable Tracing
         await self.vm.disable_input_tracing()
@@ -108,7 +107,7 @@ class SessionRecorder:
 
     def _save_playbook(self):
         """Compile actions and save to YAML."""
-        playbook = Playbook(
+        Playbook(
             actions=self._actions,
             settings=Settings(
                 idle=0.5,
@@ -291,7 +290,7 @@ class SessionRecorder:
             await self._handle_key_event(event_name, args_str)
 
     def _handle_abs_event(self, args: str):
-        """Handle mouse move. 
+        """Handle mouse move.
         Args: "con 0 axis 0 (x) value 16383"
         """
         try:

@@ -65,9 +65,8 @@ def calculate_pixel_change(img1_base64: str, img2_base64: str) -> float:
         total_pixels = thresh.size
         changed_pixels = np.count_nonzero(thresh)
 
-        change_percentage = (changed_pixels / total_pixels) * 100
+        return (changed_pixels / total_pixels) * 100
 
-        return change_percentage
 
     except Exception as e:
         log.error(f"Error calculating pixel change: {e}")

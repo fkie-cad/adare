@@ -177,7 +177,7 @@ def web_services(port, spice_port):
 
     # Check FastAPI
     try:
-        req = urllib.request.urlopen(
+        urllib.request.urlopen(
             f"http://127.0.0.1:{port}/api/health", timeout=2
         )
         table.add_row("FastAPI", "[green]Running[/green]", f"Port {port}")

@@ -142,7 +142,7 @@ def _row_matches_pattern(test_instance, row, entry_pattern):
     failed_columns = []
 
     # Check each column individually
-    for i, (actual_value, expected_pattern) in enumerate(zip(row, entry_pattern)):
+    for i, (actual_value, expected_pattern) in enumerate(zip(row, entry_pattern, strict=False)):
         expected_str = str(expected_pattern)
 
         if test_instance.has_placeholders(expected_str):

@@ -63,7 +63,7 @@ def get_snapshot_command(os_type: str, root_path: str | None = None) -> str:
     """
     if os_type == 'linux':
         # Linux: use LinuxFSSnapshot module (parallels Windows MFT approach)
-        python_cmd = (
+        return (
             "python -c \""
             "from adarevm.platforms.linux_fs_snapshot import LinuxFSSnapshot; "
             "import json; "
@@ -71,7 +71,6 @@ def get_snapshot_command(os_type: str, root_path: str | None = None) -> str:
             "print(json.dumps(result, indent=None))"
             "\""
         )
-        return python_cmd
 
     if os_type == 'windows':
         # Windows: use MFT reader for efficient snapshot with all 4 NTFS timestamps
@@ -80,7 +79,7 @@ def get_snapshot_command(os_type: str, root_path: str | None = None) -> str:
         scan_root_escaped = scan_root.replace("'", "\\'")
 
         # Python command to run MFT reader
-        python_cmd = (
+        return (
             f"python -c \""
             f"from adarevm.platforms.mft_reader import MFTReader; "
             f"import json; "
@@ -88,7 +87,6 @@ def get_snapshot_command(os_type: str, root_path: str | None = None) -> str:
             f"print(json.dumps(result, indent=None))"
             f"\""
         )
-        return python_cmd
 
     raise ValueError(f"Unsupported OS type: {os_type}")
 

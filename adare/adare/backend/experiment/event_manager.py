@@ -87,7 +87,7 @@ class EventManager:
     """
     Manages creation and emission of action events for flow console display.
 
-    This class handles all event creation logic that was previously in 
+    This class handles all event creation logic that was previously in
     PlaybookController, providing clean separation of event handling concerns.
     """
 
@@ -104,7 +104,7 @@ class EventManager:
 
     def create_action_start_event(self, action: ActionType, action_index: int, action_id: str, parent_event_id: str = None):
         """Create appropriate start event for the given action type."""
-        action_type = type(action).__name__
+        type(action).__name__
         description = getattr(action, 'description', '')
 
         # Generate better description for CommandActions (always override for clean display)
@@ -242,7 +242,7 @@ class EventManager:
 
     def create_action_complete_event(self, action: ActionType, action_index: int, action_id: str, result, parent_event_id: str = None):
         """Create appropriate complete event for the given action type and result."""
-        action_type = type(action).__name__
+        type(action).__name__
         description = getattr(action, 'description', '')
 
         # Generate better description for CommandActions (always override for clean display)

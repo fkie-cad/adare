@@ -79,7 +79,7 @@ class MCPServerManager:
     async def _is_server_running(self):
         """Check if the MCP server is running."""
         try:
-            async with Client(self.server_url) as client:
+            async with Client(self.server_url):
                 # Try to list tools to verify server is responding
                 return True
         except OSError:

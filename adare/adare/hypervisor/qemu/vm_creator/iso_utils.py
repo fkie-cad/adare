@@ -131,10 +131,7 @@ def _to_iso9660_path(path: str) -> str:
     iso_parts = []
     for part in parts:
         upper = part.upper()
-        if '.' not in upper:
-            upper = upper + '.;1'
-        else:
-            upper = upper + ';1'
+        upper = upper + '.;1' if '.' not in upper else upper + ';1'
         iso_parts.append(upper)
     return '/' + '/'.join(iso_parts)
 

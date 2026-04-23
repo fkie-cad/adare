@@ -624,7 +624,7 @@ class VmInstanceManager:
             # Sort by disk usage for top consumers
             instance_details.sort(key=lambda x: x['disk_gb'], reverse=True)
 
-            stats = {
+            return {
                 'total_instances': len(all_instances),
                 'running_instances': running_count,
                 'stopped_instances': stopped_count,
@@ -632,7 +632,6 @@ class VmInstanceManager:
                 'top_disk_consumers': instance_details[:10]  # Top 10 consumers
             }
 
-            return stats
 
     def _get_hypervisor_vm_state(self, instance: VmInstance) -> str:
         """

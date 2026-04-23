@@ -22,7 +22,7 @@ class ProjectTablePanel:
         table.add_column("name", style="cyan", no_wrap=True)
         table.add_column("path", style="cyan", no_wrap=True)
 
-        for i, row in self.projects.iterrows():
+        for _i, row in self.projects.iterrows():
             table.add_row(
                 row['name'],
                 row['path'],

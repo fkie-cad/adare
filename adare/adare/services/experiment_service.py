@@ -8,6 +8,7 @@ Note: Some complex operations (like experiment_run with async and interactive fl
 are kept in the CLI/backend for now due to their complexity. This service focuses
 on simpler CRUD operations that benefit from the API pattern.
 """
+import contextlib
 import logging
 from pathlib import Path
 
@@ -423,10 +424,8 @@ class ExperimentService:
 
                     # Count runs
                     run_count = 0
-                    try:
+                    with contextlib.suppress(SQLAlchemyError, ValueError):
                         run_count = experiment_database.get_experiment_run_count(exp.id, exclude_fake=False)
-                    except (SQLAlchemyError, ValueError):
-                        pass
 
                     items.append(ExperimentListItem(
                         id=exp.id,

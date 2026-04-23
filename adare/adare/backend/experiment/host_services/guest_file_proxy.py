@@ -5,6 +5,7 @@ Wraps QGAFileTransfer to pull files from guest VM to a local temp directory,
 with caching to avoid re-downloading the same file multiple times.
 """
 
+import contextlib
 import logging
 import shutil
 import tempfile
@@ -202,25 +203,17 @@ class GuestFileProxy(VMOperationProxy):
                 if line.startswith('OWNER:'):
                     metadata.owner = line[6:]
                 elif line.startswith('SIZE:'):
-                    try:
+                    with contextlib.suppress(ValueError):
                         metadata.size = int(line[5:])
-                    except ValueError:
-                        pass
                 elif line.startswith('MTIME:'):
-                    try:
+                    with contextlib.suppress(ValueError):
                         metadata.mtime = float(line[6:])
-                    except ValueError:
-                        pass
                 elif line.startswith('ATIME:'):
-                    try:
+                    with contextlib.suppress(ValueError):
                         metadata.atime = float(line[6:])
-                    except ValueError:
-                        pass
                 elif line.startswith('CTIME:'):
-                    try:
+                    with contextlib.suppress(ValueError):
                         metadata.ctime = float(line[6:])
-                    except ValueError:
-                        pass
         else:
             # Parse: PERM:644 OWNER:root GROUP:root SIZE:1234 MTIME:... ATIME:... CTIME:...
             for part in output.split():
@@ -234,25 +227,17 @@ class GuestFileProxy(VMOperationProxy):
                 elif key == 'GROUP':
                     metadata.group = value
                 elif key == 'SIZE':
-                    try:
+                    with contextlib.suppress(ValueError):
                         metadata.size = int(value)
-                    except ValueError:
-                        pass
                 elif key == 'MTIME':
-                    try:
+                    with contextlib.suppress(ValueError):
                         metadata.mtime = float(value)
-                    except ValueError:
-                        pass
                 elif key == 'ATIME':
-                    try:
+                    with contextlib.suppress(ValueError):
                         metadata.atime = float(value)
-                    except ValueError:
-                        pass
                 elif key == 'CTIME':
-                    try:
+                    with contextlib.suppress(ValueError):
                         metadata.ctime = float(value)
-                    except ValueError:
-                        pass
 
         self._metadata_cache[guest_path] = metadata
         log.debug(f"GuestFileProxy: collected metadata for {guest_path}: {metadata}")

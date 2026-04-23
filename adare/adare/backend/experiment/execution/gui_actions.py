@@ -203,10 +203,7 @@ class GUIActionsMixin:
             if result and 'image' in result:
                 try:
                     # Extract base64 data from result
-                    if 'data' in result['image']:
-                        screenshot_base64 = result['image']['data']
-                    else:
-                        screenshot_base64 = result['image']
+                    screenshot_base64 = result['image']['data'] if 'data' in result['image'] else result['image']
 
                     # Save screenshot with custom naming logic
                     screenshot_path = await self._save_explicit_screenshot(screenshot_base64, action.name)
@@ -282,8 +279,7 @@ class GUIActionsMixin:
             log.info(f"Explicit screenshot saved: {filepath}")
 
             # Return relative path (relative to run directory)
-            relative_path = f"reporting/screenshots/{filename}"
-            return relative_path
+            return f"reporting/screenshots/{filename}"
 
         except Exception as e:
             log.error(f"Failed to save explicit screenshot: {e}")

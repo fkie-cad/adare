@@ -198,9 +198,8 @@ def login():
 def is_logged_in(username: str = None, silent:bool = False):
     with UserSessionApi() as db:
         db.remove_expired_user_sessions()
-        if not username:
-            if user_session := db.get_first_user_session():
-                username = user_session.username
+        if not username and (user_session := db.get_first_user_session()):
+            username = user_session.username
         if not username:
             if not silent:
                 log_print(log, "No user is currently logged in")
@@ -213,9 +212,8 @@ def is_logged_in(username: str = None, silent:bool = False):
 
 def logout(username: str = None):
     with UserSessionApi() as db:
-        if not username:
-            if user_session := db.get_first_user_session():
-                username = user_session.username
+        if not username and (user_session := db.get_first_user_session()):
+            username = user_session.username
         if not username:
             raise NoUserLoggedIn(log, "No user is currently logged in")
         db.remove_user_session(username)

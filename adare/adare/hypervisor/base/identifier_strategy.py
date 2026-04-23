@@ -195,8 +195,7 @@ class QEMUIdentifierStrategy(HypervisorIdentifierStrategy):
                 return "not_found"
 
             # Get libvirt domain state
-            state = vm.get_state()
-            return state
+            return vm.get_state()
 
         except ImportError:
             log.warning("QEMU hypervisor module not available")

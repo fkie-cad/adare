@@ -84,13 +84,11 @@ class TestQueryMixin:
         data['file_sha256'] = [obj.sha256hash for obj in data['testfunction_file']]
         data['file_description'] = [obj.description for obj in data['testfunction_file']]
         # remove object and testfunction_file columns
-        data = data.drop(columns=['object', 'testfunction_file'])
-        return data
+        return data.drop(columns=['object', 'testfunction_file'])
 
     def get_testfunction_list(self) -> pd.DataFrame:
         data = pd.read_sql(self._global_api._session.query(TestFunction).statement, self._global_api._session.bind).map(str)
-        data = self._enrich_testfunction_data(data)
-        return data
+        return self._enrich_testfunction_data(data)
 
     def get_testfunction(self, testfunction_id: int) -> tuple[pd.DataFrame, pd.DataFrame]:
         try:

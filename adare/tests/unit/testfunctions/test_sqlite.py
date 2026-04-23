@@ -742,12 +742,12 @@ class TestQueryResult:
     def test_query_result_error_ambiguous_glob_pattern(self, create_sqlite_db, tmp_path):
         """Test error when glob pattern matches multiple files in single mode."""
         # Create multiple database files
-        db_file1 = create_sqlite_db(
+        create_sqlite_db(
             "test1.db",
             "CREATE TABLE test_table (id INTEGER)",
             [(1,)]
         )
-        db_file2 = create_sqlite_db(
+        create_sqlite_db(
             "test2.db",
             "CREATE TABLE test_table (id INTEGER)",
             [(2,)]

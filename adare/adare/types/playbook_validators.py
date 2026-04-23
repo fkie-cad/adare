@@ -205,7 +205,6 @@ class VariableUsageValidator(PlaybookValidator):
         # Check block actions recursively
         if isinstance(action, BlockAction):
             for nested_idx, nested_action in enumerate(action.actions):
-                nested_type = nested_action.__class__.__name__
                 nested_refs = self._extract_from_action(
                     nested_action, action_index, f"{action_type}.block[{nested_idx}]"
                 )
@@ -512,7 +511,7 @@ class DuplicateVariableValidator(PlaybookValidator):
         # Check variables section (note: YAML will already merge duplicates,
         # but we can detect if someone redefines a variable)
         if playbook.variables:
-            for var_name in playbook.variables.variables.keys():
+            for var_name in playbook.variables.variables:
                 if var_name not in variable_sources:
                     variable_sources[var_name] = []
                 variable_sources[var_name].append(('variables_section', None, None))

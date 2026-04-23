@@ -14,5 +14,4 @@ def load_as_ast_module(path: Path) -> ast.Module:
     """
     log.debug(f'loading python file {path} with ast')
     with open(path.as_posix()) as f:
-        module_node = ast.parse(f.read())
-    return module_node
+        return ast.parse(f.read())

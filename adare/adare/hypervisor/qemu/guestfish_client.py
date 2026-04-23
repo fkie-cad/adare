@@ -11,6 +11,7 @@ a clean interface for:
 Extracted from QEMULifecycleStrategy to separate concerns and enable testing.
 """
 
+import contextlib
 import logging
 import os
 import subprocess
@@ -354,10 +355,7 @@ class GuestfishClient:
         ):
             return True
 
-        if 'true' in stdout.lower():
-            return True
-
-        return False
+        return 'true' in stdout.lower()
 
     def remove_ntfs_hibernation(
         self, disk_path: str, device: str
@@ -489,12 +487,8 @@ class GuestfishClient:
 
         finally:
             if script_fd is not None:
-                try:
+                with contextlib.suppress(OSError):
                     os.close(script_fd)
-                except OSError:
-                    pass
             if script_path and Path(script_path).exists():
-                try:
+                with contextlib.suppress(OSError):
                     Path(script_path).unlink()
-                except OSError:
-                    pass

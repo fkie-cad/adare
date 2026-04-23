@@ -136,8 +136,7 @@ class QEMUManager(AbstractHypervisorManager):
     async def run_async(self, func: Callable, *args, **kwargs) -> Any:
         """Run an async function directly without the worker thread."""
         try:
-            result = await func(*args, **kwargs)
-            return result
+            return await func(*args, **kwargs)
         except Exception as e:
             # Intentional: async executor must catch all exceptions to log and relay to caller
             log.error(f"Error running async function {func.__name__}: {e}")

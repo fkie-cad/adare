@@ -53,7 +53,7 @@ class QEMUVMRegistry:
         username, password = get_vm_credentials(guest_os)
 
         # Create VM instance
-        vm = QEMUVM(
+        return QEMUVM(
             vm_name=vm_name,
             guest_os=guest_os,
             manager=manager,
@@ -67,7 +67,6 @@ class QEMUVMRegistry:
             drive_format=data.get('drive_format', 'qcow2')
         )
 
-        return vm
 
     @staticmethod
     def get_vm_info_by_uuid(uuid: str) -> dict[str, Any] | None:

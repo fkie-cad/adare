@@ -47,8 +47,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
         vm_name = disk_path.stem  # Get filename without extension
         parent_dir = disk_path.parent
 
-        snapshot_dir = parent_dir / vm_name / "snapshots"
-        return snapshot_dir
+        return parent_dir / vm_name / "snapshots"
 
     def _ensure_snapshot_dir(self, dir_path: Path) -> None:
         """
@@ -485,14 +484,13 @@ class SnapshotMixin(AbstractSnapshotMixin):
                 self._prepare_guest_for_snapshot()
                 virtiofs_payloads = self._get_attached_virtiofs_payloads()
 
-            if virtiofs_payloads:
-                if not self._detach_virtiofs_shares(virtiofs_payloads):
-                    log.warning("Failed to detach some virtiofs devices, snapshot might fail")
-                    # Abort if detach fails to avoid potential state corruption
-                    log.error("Aborting snapshot due to detach failure")
-                    self._attach_virtiofs_shares(virtiofs_payloads)
-                    self._refresh_guest_mounts()
-                    return False
+            if virtiofs_payloads and not self._detach_virtiofs_shares(virtiofs_payloads):
+                log.warning("Failed to detach some virtiofs devices, snapshot might fail")
+                # Abort if detach fails to avoid potential state corruption
+                log.error("Aborting snapshot due to detach failure")
+                self._attach_virtiofs_shares(virtiofs_payloads)
+                self._refresh_guest_mounts()
+                return False
 
             # 3. Prepare Snapshot XML
             # Use vda as the default disk target, matching previous assumption
@@ -911,8 +909,7 @@ class SnapshotMixin(AbstractSnapshotMixin):
 
             if result.returncode == 0:
                 # Parse snapshot names from output (one per line)
-                snapshots = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-                return snapshots
+                return [line.strip() for line in result.stdout.splitlines() if line.strip()]
             log.warning(f"Failed to list snapshots: {result.stderr}")
             return []
 

@@ -55,10 +55,7 @@ def _compare_values(ctx, actual_text, expected_text, regex_match=False, case_sen
                 return False, f'Invalid regex pattern: {expected_text} - {e}'
         else:
             # Direct text comparison
-            if case_sensitive:
-                success = actual_text == expected_text
-            else:
-                success = actual_text.lower() == expected_text.lower()
+            success = actual_text == expected_text if case_sensitive else actual_text.lower() == expected_text.lower()
 
             if success:
                 return True, f'text matches expected: {actual_text}'

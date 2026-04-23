@@ -16,9 +16,8 @@ def __download_json(session: requests.Session, download_url: str, not_found_igno
     with session.get(download_url) as response:
         if response.status_code == 200:
             return response.json()
-        if response.status_code == 404:
-            if not_found_ignore:
-                return dict()
+        if response.status_code == 404 and not_found_ignore:
+            return dict()
     raise DownloadError(log, f"Error downloading {download_url} ({response.status_code}, {response.text})")
 
 

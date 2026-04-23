@@ -314,10 +314,7 @@ def _handle_stage_event(event, console, ulid):
     # Calculate display level using cached hierarchy lookup
     level = _get_stage_level(stage.name)
 
-    if stage.sub_msg:
-        message = f"{stage.msg}: {stage.sub_msg}"
-    else:
-        message = stage.msg
+    message = f"{stage.msg}: {stage.sub_msg}" if stage.sub_msg else stage.msg
 
     if finished:
         # Calculate stage duration if both start and end times are available

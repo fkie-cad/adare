@@ -165,7 +165,7 @@ class EventTypeResolver:
         # Check for success field to determine start vs complete
         has_success = "success" in event_data
         is_complete = has_success or "Complete" in class_name or class_name.endswith("Complete")
-        is_start = "Start" in class_name or class_name.endswith("Start") or not is_complete
+        "Start" in class_name or class_name.endswith("Start") or not is_complete
 
         # Extract action type from class name
         action_type_raw = class_name.replace("Event", "").replace("Action", "").replace("Start", "").replace("Complete", "").lower()

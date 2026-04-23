@@ -353,8 +353,6 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         # Tools/data paths use the base path
         project_tools = f'{base_path}\\project_shared\\tools'
         experiment_tools = f'{base_path}\\shared\\tools'
-        project_data = f'{base_path}\\project_shared\\data'
-        experiment_data = f'{base_path}\\shared\\data'
 
         # adarevm source path differs between hypervisors
         if self.hypervisor_type == 'qemu':
@@ -492,8 +490,7 @@ def _extract_python_path_from_cached_path(cached_path: str | None) -> str | None
         entry = entry.strip().rstrip('\\')
         # Match patterns like: ...Python\Python312 or ...Python312 (not Scripts)
         if re.search(r'Python\d+$', entry, re.IGNORECASE):
-            python_exe = f"{entry}\\python.exe"
-            return python_exe
+            return f"{entry}\\python.exe"
 
     return None
 

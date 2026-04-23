@@ -61,7 +61,7 @@ class PyClassAnalyzer:
 
     def has_attribute(self, attr_name: str) -> bool:
         attribute_found = False
-        for key in self.get_attributes_as_dict().keys():
+        for key in self.get_attributes_as_dict():
             if key == attr_name:
                 attribute_found = True
         return attribute_found

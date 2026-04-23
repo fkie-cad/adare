@@ -587,7 +587,7 @@ class NetworkingMixin(AbstractNetworkingMixin):
                     return 0
 
                 total_return_value = 0
-                for folder_name in shared_folders.keys():
+                for folder_name in shared_folders:
                     return_value = await self.remove_shared_folder(
                         folder_name,
                         ctx_manager=ctx_manager,

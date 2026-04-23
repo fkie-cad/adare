@@ -1,9 +1,10 @@
-import pytest
 from pathlib import Path
+
+import pytest
 
 pytestmark = pytest.mark.unit
 
-from adare.core.dto.manage import DbStatusResult, DbInitResult, DbRepairResult, VmResetResult
+from adare.core.dto.manage import DbInitResult, DbRepairResult, DbStatusResult, VmResetResult
 
 
 class TestDbStatusResult:

@@ -1,12 +1,16 @@
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
 
 pytestmark = pytest.mark.unit
 
 from adare.core.dto.environment import (
-    EnvironmentCreateRequest, EnvironmentDeleteRequest, EnvironmentInfo,
-    EnvironmentListItem, EnvironmentLoadRequest,
+    EnvironmentCreateRequest,
+    EnvironmentDeleteRequest,
+    EnvironmentInfo,
+    EnvironmentListItem,
+    EnvironmentLoadRequest,
 )
 
 

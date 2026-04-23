@@ -5,7 +5,7 @@ Provides a standardized way to return success/failure from service operations,
 enabling any frontend (CLI, Web, REST API) to handle results consistently.
 """
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from adare.exceptions import LoggedErrorException
@@ -43,7 +43,7 @@ class ErrorInfo:
 
 
 @dataclass
-class Result(Generic[T]):
+class Result[T]:
     """
     Standardized result container for all API operations.
 

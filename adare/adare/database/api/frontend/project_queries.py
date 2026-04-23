@@ -26,8 +26,7 @@ class ProjectQueryMixin:
 
     def get_projects(self) -> pd.DataFrame:
         data = pd.read_sql(self._global_api._session.query(Project).statement, self._global_api._session.bind).map(str)
-        data = self._enrich_project_data(data)
-        return data
+        return self._enrich_project_data(data)
 
     def get_project_details(self, project_name: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         from adare.database.models.project_models import Experiment
@@ -78,13 +77,11 @@ class ProjectQueryMixin:
         data['published'] = [str(obj.sync_metadata.is_synced) if hasattr(obj, 'sync_metadata') and obj.sync_metadata else 'False' for obj in data['object']]
         data['in_request'] = [str(obj.sync_metadata.needs_sync) if hasattr(obj, 'sync_metadata') and obj.sync_metadata else 'False' for obj in data['object']]
         # remove object column
-        data = data.drop(columns=['object'])
-        return data
+        return data.drop(columns=['object'])
 
     def get_environments(self) -> pd.DataFrame:
         data = pd.read_sql(self._global_api._session.query(Environment).statement, self._global_api._session.bind).map(str)
-        data = self._enrich_environment_data(data)
-        return data
+        return self._enrich_environment_data(data)
 
     def get_environment(self, project_name: str = None, environment_name: str = None, ulid: str = None) -> pd.DataFrame:
         if ulid:
@@ -113,5 +110,4 @@ class ProjectQueryMixin:
         environment_df = pd.read_sql(self._global_api._session.query(Environment).filter(
             Environment.name == environment_name).statement, self._global_api._session.bind)
         environment_df = environment_df.map(str)
-        environment_df = self._enrich_environment_data(environment_df)
-        return environment_df
+        return self._enrich_environment_data(environment_df)

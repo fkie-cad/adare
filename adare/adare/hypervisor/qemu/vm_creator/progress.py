@@ -1,5 +1,6 @@
 """HTTP server for autoinstall config and QEMU process monitoring."""
 
+import contextlib
 import logging
 import socket
 import subprocess
@@ -117,10 +118,8 @@ def wait_for_qemu_exit(
             # Capture stderr for diagnostics (non-blocking read of piped output)
             stderr_output = ''
             if process.stderr:
-                try:
+                with contextlib.suppress(OSError, ValueError):
                     stderr_output = process.stderr.read().decode(errors='replace').strip()
-                except (OSError, ValueError):
-                    pass
                 if stderr_output:
                     log.info(f'{label} QEMU stderr: {stderr_output[:2000]}')
 

@@ -1,10 +1,8 @@
 """Tests for EnhancedDatabaseApi — the base database API layer."""
 
-import logging
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-import sqlalchemy
 import ulid
 from sqlalchemy import CHAR, Column, String, create_engine
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -18,7 +16,6 @@ from adare.database.api.base import (
     validate_input,
 )
 from adare.database.exceptions import (
-    DatabaseConnectionError,
     DatabaseError,
     EntityNotFoundError,
     ValidationError,
@@ -444,19 +441,17 @@ class TestTransaction:
         assert found[0].name == "txn_ok"
 
     def test_rolls_back_on_error(self, api):
-        with pytest.raises(ValueError):
-            with api.transaction():
-                api._session.add(Item(id=_ulid(), name="txn_fail"))
-                api._session.flush()
-                raise ValueError("forced error")
+        with pytest.raises(ValueError), api.transaction():
+            api._session.add(Item(id=_ulid(), name="txn_fail"))
+            api._session.flush()
+            raise ValueError("forced error")
         # After rollback the row must be gone.
         result = api.list_entities(Item)
         assert result == []
 
     def test_raises_without_session(self, api_no_session):
-        with pytest.raises(DatabaseError):
-            with api_no_session.transaction():
-                pass
+        with pytest.raises(DatabaseError), api_no_session.transaction():
+            pass
 
 
 # ===================================================================

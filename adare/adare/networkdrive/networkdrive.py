@@ -155,6 +155,7 @@ class NetworkDrive:
             log.error(e)
             return -1
         log.info(f'smb.conf was created successfully in network drive directory ({self.vg_directory})')
+        return None
 
     def __write_nfs_files(self):
         """
@@ -171,6 +172,7 @@ class NetworkDrive:
             log.error(e)
             return -1
         log.info(f'setup_nfs.sh was created successfully in network drive directory ({self.vg_directory})')
+        return None
 
     def get_vg_machine(self) -> VagrantMachine:
         """

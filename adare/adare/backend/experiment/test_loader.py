@@ -566,9 +566,8 @@ class TestLoader:
 
             # Get test class from collection
             from adarelib.testset.testfunction import get_testclass_from_testfunction
-            test_class = get_testclass_from_testfunction(test_function, testfunction_collection)
+            return get_testclass_from_testfunction(test_function, testfunction_collection)
 
-            return test_class
 
         except (OSError, yaml.YAMLError) as e:
             log.error(f"Failed to load test class for '{test_name}': {e}")

@@ -446,6 +446,7 @@ def environment_load(environment: str, force: bool = False, no_copy: bool = Fals
         next_steps=next_steps,
         tip=tip
     )
+    return None
 
 
 def environment_create(project: Path, environment: str, vm_path: Path = None):

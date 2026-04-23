@@ -419,10 +419,7 @@ class TargetResolutionExecutor:
 
             if result and 'image' in result:
                 # Extract base64 data from result
-                if 'data' in result['image']:
-                    screenshot_base64 = result['image']['data']
-                else:
-                    screenshot_base64 = result['image']
+                screenshot_base64 = result['image']['data'] if 'data' in result['image'] else result['image']
 
                 # Save screenshot to disk if debug mode is enabled
                 screenshot_path = await self._save_debug_screenshot(screenshot_base64, action_context)
@@ -487,8 +484,7 @@ class TargetResolutionExecutor:
             self._append_manifest_row(filename, action_context)
 
             # Return relative path (relative to run directory)
-            relative_path = f"reporting/screenshots/{filename}"
-            return relative_path
+            return f"reporting/screenshots/{filename}"
 
         except Exception as e:
             log.error(f"Failed to save debug screenshot: {e}")

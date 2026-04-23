@@ -7,6 +7,7 @@ using WebSocket protocol for real-time GUI automation and test execution.
 
 import asyncio
 import base64
+import contextlib
 import io
 import json
 import logging
@@ -137,10 +138,8 @@ class AdareVMClient:
                         if current_loop == task_loop:
                             # Same loop - safe to cancel
                             self.message_handler_task.cancel()
-                            try:
+                            with contextlib.suppress(asyncio.CancelledError):
                                 await self.message_handler_task
-                            except asyncio.CancelledError:
-                                pass
                         else:
                             # Different loop - task is already dead, just clear reference
                             log.debug("Message handler task is from different event loop (already destroyed)")
@@ -272,10 +271,8 @@ class AdareVMClient:
     def remove_event_handler(self, event_type: str, handler: Callable):
         """Remove an event handler."""
         if event_type in self.event_handlers:
-            try:
+            with contextlib.suppress(ValueError):
                 self.event_handlers[event_type].remove(handler)
-            except ValueError:
-                pass
 
     async def _ensure_message_handler_running(self):
         """

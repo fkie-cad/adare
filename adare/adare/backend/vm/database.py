@@ -341,8 +341,7 @@ def get_all_vms(fields: list[str] = None) -> list:
             return vms
 
         # Use field extraction utility for each VM
-        results = [extract_fields(vm, fields, VM_FIELD_MAP) for vm in vms]
-        return results
+        return [extract_fields(vm, fields, VM_FIELD_MAP) for vm in vms]
 
 
 def get_vms_by_environment(environment_ulid: str) -> list:
@@ -415,7 +414,7 @@ def delete_all_vms(force: bool = False) -> dict:
         all_vms = get_all_vms()
         log.info(f"Found {len(all_vms)} VMs to delete")
 
-        snapshot_manager = SnapshotManager()
+        SnapshotManager()
 
         for vm in all_vms:
             try:

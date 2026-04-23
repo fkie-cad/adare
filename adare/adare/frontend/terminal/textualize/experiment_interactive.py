@@ -284,7 +284,7 @@ class ExperimentApp(App):
             for index in range(0, self.last_executed_index + 1):
                 self.__update_step_panel(index, 'done', disabled=True)
 
-            for step, step_index in zip(steps_to_run, indices_to_run):
+            for step, step_index in zip(steps_to_run, indices_to_run, strict=False):
                 self.__update_step_panel(step_index, 'running', disabled=True)
                 await self.run_step(step)
                 if step.repeatable and step_index == target_index:
