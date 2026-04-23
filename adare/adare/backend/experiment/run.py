@@ -267,6 +267,8 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
         # Re-raise to be handled by exec_with_error_printing
         raise
     except Exception as e:
+        # Intentionally broad: top-level experiment runner must catch any unexpected
+        # exception to update DB status and trigger cleanup before re-raising.
         log.error(f"An unexpected error occurred: {e}", exc_info=True)
         experiment_run_context.stop_event.set()
         log.info("exception: send stop events")
@@ -372,12 +374,15 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             flow_console.stop()
             flow_console.print_final_output()  # Flush all messages to terminal for review
         except Exception as e:
+            # Intentionally broad: shutdown must not crash — any failure here
+            # is logged and swallowed so the experiment still exits cleanly.
             log.error(f"Error during shutdown: {e}", exc_info=True)
             # Ensure coordinator is stopped even if cleanup fails
             try:
                 from adare.backend.events.coordinator import stop_stage_coordinator
                 stop_stage_coordinator()
             except Exception as cleanup_error:
+                # Intentionally broad: last-resort cleanup must not raise.
                 log.error(f"Error stopping stage coordinator during error cleanup: {cleanup_error}", exc_info=True)
 
     # Query the database to get the actual experiment success status
@@ -390,7 +395,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
             if experiment_run:
                 # Use the result_status property to determine actual success
                 experiment_success = experiment_run.result_status == StatusEnum.SUCCESS
-    except Exception as e:
+    except (ValueError, KeyError, OSError) as e:
         log.error(f"Error checking experiment run status: {e}")
         experiment_success = False
 
@@ -419,7 +424,7 @@ async def experiment_run(project_path: Path, experiment_name: str, environment_n
                 log.info(f"Forensic report generated: {forensic_log_path}")
             else:
                 log.warning(f"Failed to generate forensic report for run {experiment_run_context.experiment_run_ulid}")
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         log.error(f"Error generating forensic report: {e}", exc_info=True)
 
     # Return both interruption status and actual success status

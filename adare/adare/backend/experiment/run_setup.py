@@ -67,7 +67,7 @@ def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDire
         try:
             shutil.copy2(current_logfile, target_path)
             log.info(f'Copied adare log to {target_path}')
-        except Exception as e:
+        except OSError as e:
             log.warning(f'Failed to copy adare log to run directory: {e}')
     elif not copy_existing:
         log.info('Skipping copy of existing log file (requested)')
@@ -96,7 +96,7 @@ def _ensure_and_copy_adare_log_to_run_directory(run_directory: ExperimentRunDire
             f'(root level: {logging.getLevelName(previous_level)} -> {logging.getLevelName(root_logger.level)}, '
             f'handlers: {len(root_logger.handlers)})'
         )
-    except Exception as e:
+    except (OSError, ValueError) as e:
         log.warning(f'Failed to configure logging to run directory: {e}')
 
 
@@ -178,7 +178,7 @@ def step_setup_experiment_environment(context: ExperimentRunCtx):
                     context.playbook = parse_playbook(playbook_path)
                     log.info(f"Playbook validation successful - {len(context.playbook.actions)} actions found")
 
-        except Exception as e:
+        except (ValueError, KeyError, OSError, TypeError) as e:
             raise LoggedException(log, f"Playbook loading failed: {str(e)}")
 
         # Verify integrity of testfunctions used in playbook
@@ -429,7 +429,7 @@ async def step_execute_experiment(context: ExperimentRunCtx):
                 log.debug(f"Found experiment {experiment_id} for execution tracking")
             else:
                 log.warning("No experiment ID found - execution tracking will be disabled")
-        except Exception as e:
+        except (ValueError, KeyError, OSError) as e:
             log.warning(f"Failed to get experiment ID for execution tracking: {e}")
 
         # Get VM credentials for automatic variables

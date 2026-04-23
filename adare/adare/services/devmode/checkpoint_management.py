@@ -172,7 +172,7 @@ class CheckpointManagementMixin:
                     "VM may not be running - check with hypervisor tools"
                 ]
             )
-        except Exception as e:
+        except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error during hard reset: {e}", exc_info=True)
             return Result.fail(
                 "RESET_ERROR",
@@ -242,7 +242,7 @@ class CheckpointManagementMixin:
                     "VM may not be running - check with hypervisor tools"
                 ]
             )
-        except Exception as e:
+        except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error creating checkpoint: {e}", exc_info=True)
             return Result.fail(
                 "CHECKPOINT_ERROR",
@@ -311,7 +311,7 @@ class CheckpointManagementMixin:
                     "VM may not be running - check with hypervisor tools"
                 ]
             )
-        except Exception as e:
+        except (OSError, SQLAlchemyError, asyncio.CancelledError) as e:
             log.error(f"Error restoring checkpoint: {e}", exc_info=True)
             return Result.fail(
                 "CHECKPOINT_ERROR",
@@ -366,7 +366,7 @@ class CheckpointManagementMixin:
 
             return Result.ok(checkpoints)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Error listing checkpoints: {e}", exc_info=True)
             return Result.fail(
                 "CHECKPOINT_ERROR",
@@ -440,7 +440,7 @@ class CheckpointManagementMixin:
             log.info(f"Checkpoint '{request.name}' deleted successfully")
             return Result.ok(True)
 
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, OSError) as e:
             log.error(f"Error deleting checkpoint: {e}", exc_info=True)
             return Result.fail(
                 "CHECKPOINT_DELETE_ERROR",
@@ -494,7 +494,7 @@ class CheckpointManagementMixin:
 
             return Result.ok(True)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError, ValueError) as e:
             log.error(f"Error validating VM resources: {e}", exc_info=True)
             return Result.fail(
                 "VALIDATION_ERROR",
