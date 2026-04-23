@@ -16,6 +16,7 @@ from pathlib import Path
 
 from adare.api import AdareAPI
 from adare.backend.basics import determine_projectdirectory
+from adare.cli.utils import get_project_path, handle_api_error
 from adare.console import print_error_message, print_success_message
 from adare.core.dto.devmode import (
     DevActionExecuteRequest,
@@ -33,33 +34,8 @@ from adare.core.dto.devmode import (
     DevSessionStateRequest,
     DevSessionStopRequest,
 )
-from adare.exceptions import NoProjectFoundError
 
 log = logging.getLogger(__name__)
-
-
-def _handle_api_error(result) -> None:
-    """
-    Handle an API error result by printing formatted error message and exiting.
-
-    Args:
-        result: Result object with error information
-    """
-    error = result.error
-    print_error_message(
-        title=f'{error.code}: {error.message}',
-        next_steps=error.solutions
-    )
-    exit(1)
-
-
-def _get_project_path(arguments):
-    """Get project path from arguments or current directory."""
-    project = getattr(arguments, 'project', None)
-    project_directory = determine_projectdirectory(project)
-    if not project_directory:
-        raise NoProjectFoundError(log, message='no project directory found')
-    return project_directory
 
 
 def _resolve_session_id(session_id: str | None, project_directory: Path | None = None) -> str:
@@ -165,7 +141,7 @@ def exec_dev_start(arguments):
     from adare.backend.experiment.print import ExperimentFlowConsole, flowconsolemanager
 
     # Setup
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     log_file = Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
 
     # Process shared directories
@@ -243,7 +219,7 @@ def exec_dev_start(arguments):
                     print(f"  - {paths['host']} -> {paths['vm']} ({name})")
         else:
             flow_console.stop()
-            _handle_api_error(result)
+            handle_api_error(result)
 
     except KeyboardInterrupt:
         user_interrupt_event.set()
@@ -269,7 +245,7 @@ def exec_dev_resume(arguments):
     from adare.backend.experiment.print import ExperimentFlowConsole, flowconsolemanager
 
     # Setup
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     log_file = Path(arguments.log) if hasattr(arguments, 'log') and arguments.log else None
 
     # Create flow console
@@ -311,7 +287,7 @@ def exec_dev_resume(arguments):
             print(f"  VM Running: {result.data.vm_running}")
         else:
             flow_console.stop()
-            _handle_api_error(result)
+            handle_api_error(result)
 
     except KeyboardInterrupt:
         user_interrupt_event.set()
@@ -364,7 +340,7 @@ def exec_dev_stop(arguments):
                 ]
             )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_dev_list(arguments):
@@ -417,7 +393,7 @@ def exec_dev_list(arguments):
             if has_stopped:
                 print("\nResume a session with: adare dev resume <session_id>")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_dev_state(arguments):
@@ -447,7 +423,7 @@ def exec_dev_state(arguments):
             checkpoint_name = snapshot.snapshot_name.split('_')[-1]
             print(f"    {checkpoint_name}: {snapshot.description} ({snapshot.created_at})")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_dev_cleanup(arguments):
@@ -471,7 +447,7 @@ def exec_dev_cleanup(arguments):
             for session_id in result.data.removed_session_ids:
                 print(f"  Removed: {session_id}")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 # =============================================================================
@@ -522,7 +498,7 @@ def exec_dev_action(arguments):
         if action_result.data:
             print(f"Data: {action_result.data}")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def parse_indices_with_bounds(indices_str: str, total_actions: int) -> list[int]:
@@ -690,7 +666,7 @@ def exec_dev_playbook(arguments):
                 next_steps=['Check the summary above for details']
             )
         elif not result.success:
-            _handle_api_error(result)
+            handle_api_error(result)
 
     except KeyboardInterrupt:
         user_interrupt_event.set()
@@ -726,7 +702,7 @@ def exec_dev_reset_soft(arguments):
         print(f"\n{reset_result.message}")
         print(f"Execution Time: {reset_result.execution_time:.2f}s")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_dev_reset_hard(arguments):
@@ -750,7 +726,7 @@ def exec_dev_reset_hard(arguments):
         print("\nVM has been restored to initial snapshot")
         print("All variables have been reset")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 # =============================================================================
@@ -774,7 +750,7 @@ def exec_dev_checkpoint_create(arguments):
             title=f'Checkpoint "{arguments.name}" created'
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_dev_checkpoint_restore(arguments):
@@ -793,7 +769,7 @@ def exec_dev_checkpoint_restore(arguments):
             title=f'Checkpoint "{arguments.name}" restored'
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_dev_checkpoint_list(arguments):
@@ -839,7 +815,7 @@ def exec_dev_checkpoint_list(arguments):
             layout.update(panel)
             console.print(layout)
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_dev_checkpoint_delete(arguments):
@@ -861,7 +837,7 @@ def exec_dev_checkpoint_delete(arguments):
         )
         print("\nCheckpoint and associated snapshot files have been removed")
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_dev_record(arguments):
@@ -871,7 +847,7 @@ def exec_dev_record(arguments):
     Args:
         arguments: Parsed arguments
     """
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     session_id = _resolve_session_id(getattr(arguments, 'session_id', None), project_directory)
     output_file = Path(getattr(arguments, 'output', 'playbook.yml')).resolve()
 
@@ -890,7 +866,7 @@ def exec_dev_record(arguments):
         ))
 
         if not result.success:
-            _handle_api_error(result)
+            handle_api_error(result)
 
         # Loop until interrupted
         try:
@@ -908,7 +884,7 @@ def exec_dev_record(arguments):
                     tip=f"Run with: adare dev playbook {session_id} -f {output_file}"
                 )
             else:
-                _handle_api_error(stop_result)
+                handle_api_error(stop_result)
 
     except Exception as e:
         print_error_message(title="Recording failed", next_steps=[str(e)])
@@ -922,7 +898,7 @@ def exec_dev_update_testfunctions(arguments):
     Args:
         arguments: Parsed arguments
     """
-    project_directory = _get_project_path(arguments)
+    project_directory = get_project_path(arguments)
     session_id = _resolve_session_id(getattr(arguments, 'session_id', None), project_directory)
 
     api = AdareAPI()
@@ -942,7 +918,7 @@ def exec_dev_update_testfunctions(arguments):
             ]
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 def exec_dev_cv_start(arguments):
     """Start/Response CV server with new options."""
@@ -977,7 +953,7 @@ def exec_dev_cv_start(arguments):
             ]
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_dev_cv_stop(arguments):
@@ -995,7 +971,7 @@ def exec_dev_cv_stop(arguments):
             title=f'CV Server stopped for session {session_id}'
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_dev_playbook_batch(arguments):
@@ -1030,4 +1006,4 @@ def exec_dev_playbook_batch(arguments):
     if result.success:
         result.data.print_summary()
     else:
-        _handle_api_error(result)
+        handle_api_error(result)

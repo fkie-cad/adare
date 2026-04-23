@@ -3,25 +3,11 @@
 import logging
 
 from adare.api import AdareAPI
-from adare.console import print_error_message, print_success_message
+from adare.cli.utils import handle_api_error
+from adare.console import print_success_message
 from adare.core.dto.show import RunListRequest, RunRemoveRequest
 
 log = logging.getLogger(__name__)
-
-
-def _handle_api_error(result) -> None:
-    """
-    Handle an API error result by printing formatted error message and exiting.
-
-    Args:
-        result: Result object with error information
-    """
-    error = result.error
-    print_error_message(
-        title=f'{error.code}: {error.message}',
-        next_steps=error.solutions
-    )
-    exit(1)
 
 
 def _parse_filter(arguments) -> tuple:
@@ -102,7 +88,7 @@ def exec_show_runs(arguments):
     ))
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
         return
 
     runs = result.data
@@ -149,7 +135,7 @@ def exec_show_run(arguments):
         # Get the latest run in the current project via API
         result = api.show.get_run(latest_in_project=True)
         if not result.success:
-            _handle_api_error(result)
+            handle_api_error(result)
             return
         # Use frontend function for display
         print_run(result.data.ulid, formatter, output_file, dual_output)
@@ -172,7 +158,7 @@ def exec_show_testfunctions(arguments):
     result = api.show.list_testfunctions(file_name=file_name)
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
         return
 
     testfunctions = result.data
@@ -257,7 +243,7 @@ def exec_show_experiments(arguments):
     result = api.show.list_experiments(tags=tag_list)
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
         return
 
     experiments = result.data
@@ -305,7 +291,7 @@ def exec_show_projects(arguments):
     result = api.show.list_projects()
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
         return
 
     projects = result.data
@@ -349,7 +335,7 @@ def exec_show_environments(arguments):
     result = api.show.list_environments()
 
     if not result.success:
-        _handle_api_error(result)
+        handle_api_error(result)
         return
 
     environments = result.data
@@ -400,7 +386,7 @@ def exec_remove_run(arguments):
             next_steps=["Run 'adare show runs' to see remaining runs"]
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_show_environment(arguments):

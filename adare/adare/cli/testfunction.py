@@ -4,27 +4,13 @@ import logging
 
 from adare.api import AdareAPI
 from adare.backend.basics import determine_projectdirectory
-from adare.console import print_error_message, print_success_message
+from adare.cli.utils import handle_api_error
+from adare.console import print_success_message
 from adare.core.dto.testfunction import TestfunctionCreateRequest, TestfunctionLoadRequest
 from adare.exceptions import NoProjectFoundError, TestFunctionNotFoundError
 from adare.helperfunctions.path_resolution import resolve_testfunction_path
 
 log = logging.getLogger(__name__)
-
-
-def _handle_api_error(result) -> None:
-    """
-    Handle an API error result by printing formatted error message and exiting.
-
-    Args:
-        result: Result object with error information
-    """
-    error = result.error
-    print_error_message(
-        title=f'{error.code}: {error.message}',
-        next_steps=error.solutions
-    )
-    exit(1)
 
 
 def exec_create_testfunction(arguments):
@@ -46,7 +32,7 @@ def exec_create_testfunction(arguments):
                 tip=result.data.tip
             )
         else:
-            _handle_api_error(result)
+            handle_api_error(result)
     else:
         raise NoProjectFoundError(log, message='no project directory found')
 
@@ -65,7 +51,7 @@ def exec_remove_testfunction(arguments):
             title=f'Testfunction "{result.data.name}" removed successfully!'
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_load_testfunction(arguments):
@@ -130,7 +116,7 @@ def exec_load_testfunction(arguments):
             tip=result.data.tip
         )
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
 
 
 def exec_list_testfunctions(arguments):
@@ -175,4 +161,4 @@ def exec_check_testfunction_exists(arguments):
             print("not_found")
             exit(1)
     else:
-        _handle_api_error(result)
+        handle_api_error(result)
