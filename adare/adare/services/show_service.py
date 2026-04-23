@@ -8,6 +8,8 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from adare.config.database import get_project_database_location
 from adare.core.dto.show import (
     EnvironmentDetail,
@@ -263,7 +265,7 @@ class ShowService:
             return Result.from_exception(e)
         except ArgumentsError as e:
             return Result.from_exception(e)
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to remove run {request.ulid}: {e}")
             return Result.fail(
                 code="RunRemovalError",
@@ -301,7 +303,7 @@ class ShowService:
 
             return Result.ok(items)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to list projects: {e}")
             return Result.fail(
                 code="ProjectListError",
@@ -351,7 +353,7 @@ class ShowService:
 
             return Result.ok(items)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to list environments: {e}")
             return Result.fail(
                 code="EnvironmentListError",
@@ -406,7 +408,7 @@ class ShowService:
 
             return Result.ok(detail)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to get environment {name}: {e}")
             return Result.fail(
                 code="EnvironmentRetrievalError",
@@ -597,7 +599,7 @@ class ShowService:
 
             return Result.ok(items)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to list testfunctions: {e}")
             return Result.fail(
                 code="TestfunctionListError",
@@ -648,7 +650,7 @@ class ShowService:
 
             return Result.ok(detail)
 
-        except Exception as e:
+        except (SQLAlchemyError, OSError) as e:
             log.error(f"Failed to get testfunction {dotnotation}: {e}")
             return Result.fail(
                 code="TestfunctionRetrievalError",

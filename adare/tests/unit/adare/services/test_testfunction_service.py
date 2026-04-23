@@ -207,7 +207,7 @@ class TestTestfunctionServiceListAll:
 
     @patch("adare.services.testfunction_service.TestfunctionDbApi")
     def test_list_all_db_error(self, mock_api_cls, service):
-        mock_api_cls.side_effect = RuntimeError("db down")
+        mock_api_cls.side_effect = OSError("db down")
 
         result = service.list_all()
 
@@ -238,7 +238,7 @@ class TestTestfunctionServiceGetUsage:
 
     @patch("adare.services.testfunction_service.testfunction_database")
     def test_get_usage_db_error(self, mock_db, service):
-        mock_db.get_testfunction_usage.side_effect = RuntimeError("db down")
+        mock_db.get_testfunction_usage.side_effect = OSError("db down")
 
         result = service.get_usage("check_file")
 
@@ -272,7 +272,7 @@ class TestTestfunctionServiceExists:
 
     @patch("adare.services.testfunction_service.testfunction_database")
     def test_exists_db_error(self, mock_db, service):
-        mock_db.testfunction_exists.side_effect = RuntimeError("db down")
+        mock_db.testfunction_exists.side_effect = OSError("db down")
 
         result = service.exists("check_file")
 

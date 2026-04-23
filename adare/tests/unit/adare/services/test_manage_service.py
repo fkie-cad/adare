@@ -36,7 +36,7 @@ class TestManageServiceGetDbStatus:
 
     @patch("adare.services.manage_service.validate_database_integrity")
     def test_get_db_status_exception(self, mock_validate, service):
-        mock_validate.side_effect = RuntimeError("db locked")
+        mock_validate.side_effect = OSError("db locked")
 
         result = service.get_db_status()
 
@@ -123,7 +123,7 @@ class TestManageServiceCleanInstallDb:
 
     @patch("adare.services.manage_service.clean_install_database_system")
     def test_clean_install_db_exception(self, mock_clean, service):
-        mock_clean.side_effect = RuntimeError("in use")
+        mock_clean.side_effect = OSError("in use")
 
         result = service.clean_install_db(force=True)
 

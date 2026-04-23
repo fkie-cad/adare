@@ -107,7 +107,8 @@ class TestShowServiceListProjects:
 
     @patch(_SDA)
     def test_exception(self, mock_cls, service):
-        mock_cls.return_value.__enter__ = MagicMock(side_effect=RuntimeError("err"))
+        from sqlalchemy.exc import SQLAlchemyError
+        mock_cls.return_value.__enter__ = MagicMock(side_effect=SQLAlchemyError("err"))
         mock_cls.return_value.__exit__ = MagicMock(return_value=False)
         result = service.list_projects()
         assert result.success is False and result.error.code == "ProjectListError"

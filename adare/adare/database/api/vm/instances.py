@@ -243,6 +243,6 @@ class VmInstanceMixin:
             log.info(f"Found WebSocket port {instance.websocket_port} for instance '{instance_name}'")
             return instance.websocket_port
 
-        except Exception as e:
+        except SQLAlchemyError as e:
             log.error(f"Error looking up WebSocket port for instance '{instance_name}': {e}")
             return None
