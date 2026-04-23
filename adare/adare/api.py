@@ -23,8 +23,8 @@ class DevModeAPI:
 
     def __init__(self):
         # Lazy import to avoid circular dependencies
-        from adare.services import devmode_service
-        self._service = devmode_service.DevModeService()
+        from adare.services.devmode import DevModeService
+        self._service = DevModeService()
 
     def start_session(self, request):
         """Start a new dev mode session."""

@@ -24,7 +24,7 @@ for _mod_name in [
         _mocked_modules[_mod_name] = MagicMock()
         sys.modules[_mod_name] = _mocked_modules[_mod_name]
 
-from adare.services.devmode_service import DevModeService  # noqa: E402
+from adare.services.devmode import DevModeService  # noqa: E402
 
 
 @pytest.fixture
@@ -69,7 +69,7 @@ def action_request():
 class TestDevModeServiceStartSession:
     """Tests for DevModeService.start_session()."""
 
-    @patch("adare.services.devmode_service.environment_database")
+    @patch("adare.services.devmode.session_management.environment_database")
     def test_start_session_env_not_found(self, mock_env_db, service, start_request):
         from adare.backend.environment.exceptions import EnvironmentDoesNotExistInDatabase
         mock_env_db.resolve_environment_identifier.side_effect = EnvironmentDoesNotExistInDatabase(
@@ -81,7 +81,7 @@ class TestDevModeServiceStartSession:
         assert result.success is False
         assert result.error.code == "ENVIRONMENT_NOT_FOUND"
 
-    @patch("adare.services.devmode_service.environment_database")
+    @patch("adare.services.devmode.session_management.environment_database")
     def test_start_session_runtime_error(self, mock_env_db, service, start_request):
         mock_env_db.resolve_environment_identifier.return_value = "env-ulid"
         mock_env_db.get_environment_hypervisor.return_value = "qemu"
@@ -92,7 +92,7 @@ class TestDevModeServiceStartSession:
         assert result.success is False
         assert result.error.code == "SESSION_START_FAILED"
 
-    @patch("adare.services.devmode_service.environment_database")
+    @patch("adare.services.devmode.session_management.environment_database")
     def test_start_session_virtualbox_not_implemented(self, mock_env_db, service, start_request):
         mock_env_db.resolve_environment_identifier.return_value = "env-ulid"
         mock_env_db.get_environment_hypervisor.return_value = "virtualbox"
