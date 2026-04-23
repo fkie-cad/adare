@@ -227,7 +227,7 @@ class MCPTargetResolver:
                 await client.list_tools()
                 self._connection_available = True
                 log.info(f"MCP GUI server connection successful at {self.mcp_gui_url}")
-        except Exception as e:
+        except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
             self._connection_available = False
             log.warning(f"MCP GUI server not available at {self.mcp_gui_url}: {e}")
             log.warning("Target resolution will fail for image/text targets. Consider:")
@@ -333,7 +333,7 @@ class MCPTargetResolver:
                         except FileNotFoundError:
                             log.error(f"Icon file not found: {image_path}")
                             raise
-                        except Exception as e:
+                        except OSError as e:
                             log.error(f"Failed to read icon file: {e}")
                             return None
 
@@ -532,9 +532,9 @@ class MCPTargetResolver:
                             # Mark substage as failed when no matches found
                             return None
 
-            except Exception as mcp_error:
-                if isinstance(mcp_error, FileNotFoundError):
-                    raise
+            except FileNotFoundError:
+                raise
+            except (OSError, ConnectionError, TimeoutError, RuntimeError, json.JSONDecodeError, ValueError, KeyError) as mcp_error:
                 log.error(f"MCP connection failed: {mcp_error}", exc_info=True)
                 log.error(f"Ensure MCP GUI server is running at {self.mcp_gui_url}")
                 return None
@@ -542,9 +542,9 @@ class MCPTargetResolver:
             log.warning(f"Target has no valid resolution method: {target}")
             return None
 
-        except Exception as e:
-            if isinstance(e, FileNotFoundError):
-                raise
+        except FileNotFoundError:
+            raise
+        except (OSError, ConnectionError, TimeoutError, RuntimeError, json.JSONDecodeError, ValueError, KeyError) as e:
             log.error(f"Error resolving target via MCP: {e}")
             return None
 
@@ -607,7 +607,7 @@ class MCPTargetResolver:
 
             return cropped_base64, new_offset_x, new_offset_y
 
-        except Exception as e:
+        except (ValueError, TypeError, OSError, cv2.error) as e:
             log.warning(f"Screenshot cropping failed: {e}, using full screenshot")
             return screenshot_base64, offset_x, offset_y
 

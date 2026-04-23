@@ -195,7 +195,7 @@ class SessionRecorder:
 
                     # log.debug(f"Read line: {line.strip()}")
                     await self._process_log_line(line)
-        except Exception as e:
+        except OSError as e:
             log.error(f"Error in record loop: {e}", exc_info=True)
             # Re-raise or keep going? If loop breaks, recording stops effectively
 

@@ -141,7 +141,7 @@ async def check_installed_version(
         log.debug(f"Could not parse version from pip show output for {package_name}")
         return None
 
-    except Exception as e:
+    except (OSError, TimeoutError, RuntimeError, ValueError) as e:
         log.debug(f"Error checking {package_name} version: {e}")
         return None
 

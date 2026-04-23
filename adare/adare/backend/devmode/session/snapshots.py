@@ -263,7 +263,7 @@ class DevModeSnapshotsMixin:
                         if is_ready:
                             log.info(f"VM ready after {elapsed:.1f}s")
                             return
-                    except Exception:
+                    except (HypervisorException, OSError, TimeoutError):
                         pass
 
                     await asyncio.sleep(2)
@@ -272,7 +272,7 @@ class DevModeSnapshotsMixin:
                 # Timeout - but don't fail, just warn
                 log.warning(f"Guest agent not ready after {timeout}s, continuing anyway")
 
-            except Exception as e:
+            except (HypervisorException, OSError, TimeoutError) as e:
                 log.warning(f"Could not check guest agent readiness: {e}")
         else:
             # Fallback: simple sleep to give VM time to stabilize
@@ -663,7 +663,7 @@ class DevModeSnapshotsMixin:
                     else:
                         log.warning(f"Failed to delete external snapshot: {checkpoint.snapshot_name}")
 
-                except Exception as e:
+                except (HypervisorException, SnapshotOperationException, OSError) as e:
                     log.warning(f"Error deleting external snapshot {checkpoint.snapshot_name}: {e}")
 
         elif self.experiment_ctx.hypervisor_type == 'virtualbox':
@@ -674,7 +674,7 @@ class DevModeSnapshotsMixin:
                     success = vm.delete_snapshot(checkpoint.snapshot_name, silent=True)
                     if success:
                         log.debug(f"Deleted VirtualBox snapshot: {checkpoint.snapshot_name}")
-                except Exception as e:
+                except (HypervisorException, SnapshotOperationException, OSError) as e:
                     log.warning(f"Failed to delete VirtualBox snapshot {checkpoint.snapshot_name}: {e}")
 
         # Delete all checkpoints from database
@@ -695,5 +695,5 @@ class DevModeSnapshotsMixin:
                         log.info(f"Removed empty snapshot directory: {snapshot_dir}")
                     else:
                         log.warning(f"Snapshot directory not empty after cleanup: {snapshot_dir}")
-            except Exception as e:
+            except OSError as e:
                 log.warning(f"Failed to remove snapshot directory: {e}")

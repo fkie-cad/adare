@@ -68,7 +68,7 @@ class TestLoader:
                 log.error(f"Dependencies affected: {dependencies}")
                 log.warning("Experiment will continue, but tests requiring these dependencies will fail")
                 # Continue anyway - some tests might still work
-            except Exception as e:
+            except (RuntimeError, TimeoutError) as e:
                 log.error(f"Unexpected error installing testfunction dependencies: {e}", exc_info=True)
                 log.error(f"Dependencies affected: {dependencies}")
                 log.warning("Experiment will continue, but tests requiring these dependencies will fail")
@@ -169,7 +169,7 @@ class TestLoader:
             log.error(f"Failed to collect testfunction dependencies: {e}")
             # Fallback to collecting all dependencies if there's an error
             return self._collect_all_testfunction_dependencies()
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError, KeyError, TypeError, AttributeError) as e:
             log.error(f"Unexpected error collecting testfunction dependencies: {e}", exc_info=True)
             # Fallback to collecting all dependencies if there's an error
             return self._collect_all_testfunction_dependencies()
@@ -257,7 +257,7 @@ class TestLoader:
         except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError) as e:
             log.error(f"Failed to resolve test '{test_name}' locally: {e}")
             return None
-        except Exception as e:
+        except (OSError, yaml.YAMLError, ValueError, TypeError, KeyError, jinja2.TemplateError) as e:
             log.error(f"Unexpected error resolving test '{test_name}' locally: {e}", exc_info=True)
             return None
 
@@ -314,7 +314,7 @@ class TestLoader:
         except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError) as e:
             log.error(f"Failed to resolve test '{test_name}' with runtime context: {e}")
             return None
-        except Exception as e:
+        except (OSError, yaml.YAMLError, ValueError, TypeError, KeyError, jinja2.TemplateError) as e:
             log.error(f"Unexpected error resolving test '{test_name}' with runtime context: {e}", exc_info=True)
             return None
 
@@ -505,7 +505,7 @@ class TestLoader:
         except (ValueError, TypeError, KeyError) as e:
             log.warning(f"Failed to replace variables in test text '{text}': {e}")
             return text
-        except Exception as e:
+        except (jinja2.TemplateError, AttributeError) as e:
             log.warning(f"Unexpected error replacing variables in test text '{text}': {e}", exc_info=True)
             return text
 
@@ -572,7 +572,7 @@ class TestLoader:
         except (OSError, yaml.YAMLError) as e:
             log.error(f"Failed to load test class for '{test_name}': {e}")
             return None
-        except Exception as e:
+        except (ImportError, ModuleNotFoundError, AttributeError, ValueError, TypeError, KeyError) as e:
             log.error(f"Unexpected error loading test class for '{test_name}': {e}", exc_info=True)
             return None
 
@@ -609,6 +609,6 @@ class TestLoader:
         except cattrs.errors.ClassValidationError as e:
             log.error(f"Test Loader: Validation error structuring test '{test_name}': {e}")
             raise ValueError(f"Invalid test parameters: {e.message}") from e
-        except Exception as e:
+        except (TypeError, KeyError, AttributeError) as e:
             log.error(f"Test Loader: Failed to structure test '{test_name}': {e}", exc_info=True)
             raise ValueError(f"Failed to structure test: {e}") from e

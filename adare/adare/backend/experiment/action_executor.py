@@ -262,13 +262,13 @@ class ActionExecutor:
                         # Capture and save post-execution screenshot
                         # This reuses the existing screenshot infrastructure in target_resolution
                         await self.target_resolution.get_current_screenshot_with_path(action_context=action_context)
-                    except Exception as screenshot_error:
+                    except (OSError, ConnectionError, TimeoutError, RuntimeError) as screenshot_error:
                         # Don't fail the action if screenshot capture fails
                         log.warning(f"Failed to capture post-execution debug screenshot: {screenshot_error}")
 
             return result
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 -- top-level action handler; must convert any failure to ActionResult
             log.error(f"Error executing action: {e}", exc_info=True)
             return ActionResult(
                 success=False,

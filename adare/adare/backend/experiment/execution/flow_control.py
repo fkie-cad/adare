@@ -75,7 +75,7 @@ class FlowControlExecutor:
                         message="Block conditions not met, skipping",
                         data=data if data else None
                     )
-            except Exception as e:
+            except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
                 log.error(f"Error checking block conditions: {e}")
                 return ActionResult(
                     success=False,
@@ -96,7 +96,7 @@ class FlowControlExecutor:
                 try:
                     sub_start_event = event_emitter.create_action_start_event(block_action, i, sub_action_id, parent_event_id=block_parent_event_id)
                     emit_action(self.experiment_run_id, sub_start_event, sub_action_id)
-                except Exception as e:
+                except (RuntimeError, AttributeError, TypeError) as e:
                     log.error(f"Failed to emit sub-action start event: {e}")
 
             # Execute the sub-action with variable resolution
@@ -110,7 +110,7 @@ class FlowControlExecutor:
                 try:
                     sub_complete_event = event_emitter.create_action_complete_event(block_action, i, sub_action_id, result, parent_event_id=block_parent_event_id)
                     emit_action(self.experiment_run_id, sub_complete_event, sub_action_id)
-                except Exception as e:
+                except (RuntimeError, AttributeError, TypeError) as e:
                     log.error(f"Failed to emit sub-action complete event: {e}")
 
             results.append(result)
@@ -245,7 +245,7 @@ class FlowControlExecutor:
                                     resolved_loop_action, j, sub_action_id, parent_event_id=parent_event_id
                                 )
                                 emit_action(self.experiment_run_id, sub_start_event, sub_action_id)
-                            except Exception as e:
+                            except (RuntimeError, AttributeError, TypeError) as e:
                                 log.error(f"Failed to emit loop sub-action start event: {e}")
 
                         # Execute the sub-action
@@ -267,7 +267,7 @@ class FlowControlExecutor:
                                     parent_event_id=parent_event_id
                                 )
                                 emit_action(self.experiment_run_id, sub_complete_event, sub_action_id)
-                            except Exception as e:
+                            except (RuntimeError, AttributeError, TypeError) as e:
                                 log.error(f"Failed to emit loop sub-action complete event: {e}")
 
                         results.append(result)
@@ -421,7 +421,7 @@ class FlowControlExecutor:
                                     continue
 
 
-                    except Exception as e:
+                    except (ImportError, ValueError) as e:
                         # If optimization fails, fallback to normal check (fail open)
                         log.warning(f"Failed to calculate pixel change: {e}. Proceeding with standard check.")
 
@@ -633,14 +633,14 @@ class FlowControlExecutor:
                         message="Pause action interrupted by user",
                         data={"user_input": "interrupted"}
                     )
-                except Exception as e:
+                except (OSError, RuntimeError) as e:
                     log.error(f"Error during pause input: {e}")
                     return ActionResult(
                         success=False,
                         message=f"Pause action failed: {str(e)}"
                     )
 
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
             log.error(f"Error in pause action: {e}")
             return ActionResult(
                 success=False,

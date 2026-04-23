@@ -69,7 +69,7 @@ class SnapshotManager:
                         raise VMError(log, f"VM '{vm_record.name}' has no VirtualBox UUID and recovery failed")
                 else:
                     raise VMError(log, f"VM '{vm_record.name}' has no VirtualBox UUID and could not be found in VirtualBox")
-            except Exception as e:
+            except (VMError, VMNotFoundException, OSError) as e:
                 log.error(f"Failed to recover UUID for VM '{vm_record.name}': {e}")
                 raise VMError(log, f"VM '{vm_record.name}' has no VirtualBox UUID and recovery failed: {e}") from e
 
@@ -126,7 +126,7 @@ class SnapshotManager:
             log.error(f"Failed to create base snapshot '{snapshot_name}' for VM '{vm_record.name}'")
             return False
 
-        except Exception as e:
+        except (VMNotFoundException, OSError) as e:
             log.error(f"Error creating base snapshot for VM '{vm_record.name}': {e}")
             return False
 
@@ -203,7 +203,7 @@ class SnapshotManager:
         except InterruptedError:
             log.info(f"Snapshot restore operation interrupted for VM '{vm_record.name}'")
             return False
-        except Exception as e:
+        except (VMNotFoundException, OSError, TimeoutError) as e:
             # Provide more specific error information
             if "timeout" in str(e).lower():
                 log.error(f"Snapshot restore timed out after {timeout}s for VM '{vm_record.name}': {e}")
@@ -310,7 +310,7 @@ class SnapshotManager:
 
         try:
             return vbox_vm.snapshot_exists(vm_record.base_snapshot_name)
-        except Exception as e:
+        except (VMNotFoundException, OSError) as e:
             log.debug(f"Error checking base snapshot for VM '{vm_record.name}': {e}")
             return False
 
@@ -785,7 +785,7 @@ def check_snapshot_exists_by_uuid(vbox_uuid: str, snapshot_name: str) -> bool:
 
     try:
         return vbox_vm.snapshot_exists(snapshot_name)
-    except Exception as e:
+    except (VMNotFoundException, OSError) as e:
         log.debug(f"Error checking snapshot '{snapshot_name}' for UUID {vbox_uuid}: {e}")
         return False
 

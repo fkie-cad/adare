@@ -6,10 +6,13 @@ Keeps database logic separate from file management logic.
 """
 
 import logging
+import subprocess
 from pathlib import Path
 
 from adare.database.api.vm import VmApi
+from adare.database.exceptions import DatabaseError
 from adare.database.models.global_models import Vm
+from adare.hypervisor.exceptions import HypervisorException
 
 log = logging.getLogger(__name__)
 
@@ -227,7 +230,7 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
 
             log.info(f"VM '{original_vm_name}' already exists in VirtualBox, creating new VM with unique name: '{vbox_vm_name}'")
 
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
         log.debug(f"VM '{vbox_vm_name}' not found in VirtualBox, proceeding with import: {e}")
 
     # Actually import the VM to VirtualBox
@@ -255,7 +258,7 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
         # Import VM and capture detailed error output
         try:
             import_result, vbox_output = await vbox_vm.create_from_ovf_or_ova(vm_file, silent=True)
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, HypervisorException) as e:
             # If the import method itself raised an exception, extract the error details
             error_msg = str(e)
             raise VMImportError(log, f"VirtualBox import failed: {error_msg}") from e
@@ -279,7 +282,9 @@ async def import_vm_to_virtualbox(vm: Vm, capture_uuid_after_import: bool = True
 
         log.info(f"Successfully imported VM '{vbox_vm_name}' to VirtualBox")
 
-    except Exception as e:
+    except (VMImportError, HypervisorException):
+        raise
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError) as e:
         log.error(f"Failed to import VM '{vbox_vm_name}' to VirtualBox: {e}", exc_info=True)
         raise
 
@@ -317,7 +322,7 @@ def delete_vm(vm_id: str) -> bool:
     try:
         with VmApi() as api:
             return api.delete_vm(vm_id)
-    except Exception as e:
+    except (OSError, DatabaseError) as e:
         log.error(f"Failed to delete VM {vm_id}: {e}", exc_info=True)
         raise VMError(log, f"Failed to delete VM {vm_id}: {e}") from e
 
@@ -430,7 +435,7 @@ def delete_all_vms(force: bool = False) -> dict:
                             try:
                                 delete_vm_instance(instance.id, force=True)
                                 log.info(f"Deleted VM instance: {instance.instance_name}")
-                            except Exception as inst_error:
+                            except Exception as inst_error:  # Intentionally broad: best-effort per-instance cleanup in batch deletion
                                 log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
 
                 # Delete from database (cascade will remove instances)
@@ -439,7 +444,7 @@ def delete_all_vms(force: bool = False) -> dict:
                 results['deleted_vms'].append(vm.name)
                 log.info(f"Successfully deleted VM: {vm.name}")
 
-            except Exception as e:
+            except Exception as e:  # Intentionally broad: per-VM cleanup must not abort remaining VMs
                 results['failed_count'] += 1
                 results['failed_vms'].append(f"{vm.name}: {str(e)}")
                 log.error(f"Failed to delete VM '{vm.name}': {e}")
@@ -447,7 +452,7 @@ def delete_all_vms(force: bool = False) -> dict:
         log.info(f"VM cleanup completed - deleted: {results['deleted_count']}, failed: {results['failed_count']}")
         return results
 
-    except Exception as e:
+    except (OSError, DatabaseError) as e:
         log.error(f"Error during VM cleanup: {e}")
         results['failed_count'] += len(results.get('deleted_vms', [])) + len(results.get('failed_vms', []))
         return results
@@ -495,7 +500,7 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
                             try:
                                 delete_vm_instance(instance.id, force=True)
                                 log.info(f"Deleted VM instance: {instance.instance_name}")
-                            except Exception as inst_error:
+                            except Exception as inst_error:  # Intentionally broad: best-effort per-instance cleanup in batch deletion
                                 log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
 
                 # Delete from database
@@ -504,7 +509,7 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
                 results['deleted_vms'].append(vm.name)
                 log.info(f"Successfully deleted VM: {vm.name}")
 
-            except Exception as e:
+            except Exception as e:  # Intentionally broad: per-VM cleanup must not abort remaining VMs
                 results['failed_count'] += 1
                 results['failed_vms'].append(f"{vm.name}: {str(e)}")
                 log.error(f"Failed to delete VM '{vm.name}': {e}")
@@ -512,7 +517,7 @@ def delete_vms_by_environment(environment_ulid: str, force: bool = False) -> dic
         log.info(f"Environment VM cleanup completed - deleted: {results['deleted_count']}, failed: {results['failed_count']}")
         return results
 
-    except Exception as e:
+    except (OSError, DatabaseError) as e:
         log.error(f"Error during environment VM cleanup: {e}")
         return results
 

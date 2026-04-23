@@ -5,6 +5,7 @@ Includes: snapshot_filesystem, pull_changed_files, and related helpers.
 """
 
 import logging
+import subprocess
 import time
 from datetime import UTC
 from pathlib import Path
@@ -111,7 +112,7 @@ class FilesystemActionsMixin:
                 }
             )
 
-        except Exception as e:
+        except (RuntimeError, OSError, KeyError, ValueError, TypeError) as e:
             log.error(f"Error executing snapshot_filesystem action: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
@@ -254,7 +255,7 @@ class FilesystemActionsMixin:
                 }
             )
 
-        except Exception as e:
+        except (RuntimeError, OSError, KeyError, ValueError, TypeError) as e:
             log.error(f"Error executing pull_changed_files action: {e}", exc_info=True)
             return ActionResult(success=False, message=str(e))
 
@@ -284,7 +285,7 @@ class FilesystemActionsMixin:
             )
 
 
-        except Exception as e:
+        except (RuntimeError, OSError, KeyError, ValueError) as e:
             log.error(f"WebSocket batch pull failed: {e}")
             return {
                 'success_count': 0,
@@ -353,7 +354,7 @@ class FilesystemActionsMixin:
                     failures.append({'path': guest_path, 'error': error_msg})
                     file_results.append({'path': guest_path, 'success': False, 'error': error_msg})
 
-            except Exception as e:
+            except (RuntimeError, OSError, subprocess.SubprocessError) as e:
                 failed_count += 1
                 error_msg = str(e)
                 log.error(f"Hypervisor pull failed for {guest_path}: {error_msg}")

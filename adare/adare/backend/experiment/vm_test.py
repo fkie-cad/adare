@@ -196,7 +196,7 @@ async def test_adarevm_server_start(context):
         log.warning(f"Failed to start adarevm server. Exit code: {start_result.returncode}")
         return False
 
-    except Exception as e:
+    except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.warning(f"Exception starting adarevm server: {e}")
         return False
 
@@ -218,7 +218,7 @@ async def test_websocket_connection(context):
         log.warning("Could not establish WebSocket connection")
         return False
 
-    except Exception as e:
+    except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.warning(f"WebSocket test error: {e}")
         return False
 
@@ -232,7 +232,7 @@ async def test_screenshot_command(context):
             return True
         log.warning(f"Screenshot command failed: {result}")
         return False
-    except Exception as e:
+    except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.warning(f"Screenshot command error: {e}")
         return False
 
@@ -249,7 +249,7 @@ async def test_click_command(context):
             return True
         log.warning(f"Click command failed: {result}")
         return False
-    except Exception as e:
+    except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.warning(f"Click command error: {e}")
         return False
 
@@ -316,7 +316,7 @@ async def test_vm_compatibility(context, flow_console):
             async with StageCtxManagerLite(VMClickTestStage(), flow_console, level=2):
                 compatibility_results['click_command'] = await test_click_command(context)
 
-    except Exception as e:
+    except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
         log.error(f"Compatibility test error: {e}")
 
     # Summary
@@ -360,7 +360,8 @@ async def cleanup_test_vm(context, keep_vm: bool = False):
                 await context.vm.remove()
                 log.info("Test VM removed successfully")
 
-    except Exception as e:
+    except (OSError, ConnectionError, TimeoutError, RuntimeError) as e:
+        # Cleanup must not crash -- log and continue
         log.error(f"Error during cleanup: {e}")
 
     log.info("Cleanup completed")
@@ -445,7 +446,7 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
         flow_console.finish_experiment_timer(success=True)
         return True
 
-    except Exception as e:
+    except (OSError, ConnectionError, TimeoutError, RuntimeError, ValueError) as e:
         log.error(f"OVA test failed with unexpected error: {e}")
         # Always show traceback for debugging VM test failures
         import traceback
@@ -467,7 +468,8 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
                         log.info("Removing VM automatically (default behavior)")
 
                 await cleanup_test_vm(context, keep_vm=keep_vm)
-        except Exception as cleanup_error:
+        except (OSError, ConnectionError, TimeoutError, RuntimeError) as cleanup_error:
+            # Cleanup in finally must not mask the original error
             log.error(f"Error during cleanup: {cleanup_error}")
 
         # Stop the flow console
@@ -475,5 +477,6 @@ async def ova_test(ova_file_path: Path, guest_platform: str, verbose: bool = Fal
             from adare.backend.events.coordinator import stop_stage_coordinator
             stop_stage_coordinator()
             flow_console.stop()
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
+            # Cleanup in finally must not mask the original error
             log.error(f"Error stopping flow console: {e}")

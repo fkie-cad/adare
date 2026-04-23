@@ -5,6 +5,7 @@ Handles finding targets on screen using image/text matching and screenshot manag
 """
 
 import base64
+import binascii
 import csv
 import logging
 import re
@@ -429,7 +430,7 @@ class TargetResolutionExecutor:
             log.error("Screenshot result missing image data")
             return None, None
 
-        except Exception as e:
+        except (RuntimeError, OSError, KeyError) as e:
             log.error(f"Failed to capture screenshot: {e}")
             return None, None
 
@@ -486,7 +487,7 @@ class TargetResolutionExecutor:
             # Return relative path (relative to run directory)
             return f"reporting/screenshots/{filename}"
 
-        except Exception as e:
+        except (OSError, ValueError, binascii.Error) as e:
             log.error(f"Failed to save debug screenshot: {e}")
             return None
 
@@ -567,5 +568,5 @@ class TargetResolutionExecutor:
                 writer = csv.writer(f)
                 writer.writerow([counter, filename, action_index, action_type, detail, phase, f"{time.time():.3f}"])
 
-        except Exception as e:
+        except OSError as e:
             log.warning(f"Failed to write manifest row: {e}")

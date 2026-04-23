@@ -12,6 +12,7 @@ from adare.backend.experiment.stagectxmanager import StageCtxManager
 from adare.backend.vm import database as vm_database
 from adare.backend.vm.exceptions import VMError
 from adare.backend.vm.manager import VMFileManager
+from adare.database.exceptions import DatabaseError
 from adare.hypervisor.virtualbox.vm import VirtualBoxVM
 from adare.types.environment import EnvironmentMetadata
 from adare.types.stages import (
@@ -339,7 +340,7 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
                     try:
                         await delete_vm_instance(instance.id, force=force)
                         log.info(f"Deleted VM instance: {instance.instance_name}")
-                    except Exception as inst_error:
+                    except (VMError, OSError) as inst_error:
                         log.warning(f"Failed to delete instance {instance.instance_name}: {inst_error}")
                         if not force:
                             raise VMError(log, f"Failed to delete VM instance: {inst_error}") from inst_error
@@ -347,7 +348,7 @@ async def delete_vm(vm_id: str, force: bool = False) -> bool:
         # Delete from database (cascade will remove instances)
         return vm_database.delete_vm(vm_id)
 
-    except Exception as e:
+    except (VMError, OSError, DatabaseError) as e:
         if not force:
             raise VMError(log, f"Failed to delete VM {vm_id}: {e}") from e
         log.warning(f"Failed to delete VM {vm_id}: {e} (continuing due to force=True)")
@@ -454,7 +455,7 @@ def verify_and_cleanup_vm_instance_for_experiment(vm_instance_id: str, experimen
                 api.delete_vm_instance(vm_instance_id)
             log.info(f"Successfully cleaned up missing VM instance '{vm_instance.instance_name}' from database")
             return False  # VM instance was missing and cleaned up
-        except Exception as e:
+        except (OSError, DatabaseError) as e:
             log.error(f"Failed to cleanup missing VM instance '{vm_instance.instance_name}': {e}")
             raise VMError(log, f"Failed to cleanup missing VM instance: {e}") from e
 
@@ -884,7 +885,7 @@ def get_vm_info(vm_id: str) -> dict:
         from adare.backend.vm.snapshot_manager import SnapshotManager
         manager = SnapshotManager()
         snapshot_info = manager.get_snapshot_info(vm)
-    except Exception as e:
+    except (VMError, OSError, ImportError) as e:
         log.debug(f"Could not get snapshot info for VM {vm_id}: {e}")
 
     return {

@@ -12,6 +12,7 @@ from adare.backend.environment.exceptions import (
     EnvironmentUpdateError,
 )
 from adare.database.api.environment import EnvironmentDbApi
+from adare.database.exceptions import DatabaseError
 from adare.database.models.global_models import Environment
 
 # internal imports
@@ -156,7 +157,7 @@ def get_environment_os(environment_ulid: str) -> str:
                 platform = env_metadata.os.platform
                 log.info(f"Retrieved OS platform from environment file: {platform} (env={env.name})")
                 return platform
-            except Exception as e:
+            except (OSError, ValueError, KeyError, AttributeError) as e:
                 log.warning(f"Failed to parse environment file for OS info: {e}")
 
         log.warning(f"Could not determine OS for environment {environment_ulid}")
@@ -359,7 +360,7 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
                             if exp.environment_ids and environment_ulid in exp.environment_ids:
                                 if len(exp.environment_ids) == 1:
                                     orphaned_experiments.append(f"{exp.name} (project: {project_path.name})")
-                except Exception as e:
+                except (OSError, DatabaseError) as e:
                     log.warning(f"Error checking project {project_path}: {e}")
 
             # Check for orphaned experiments
@@ -396,7 +397,7 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
                                 project_api._session.delete(run)
                                 log.info(f'deleted run {run.id} from project {project_path.name}')
                             project_api._session.commit()
-                    except Exception as e:
+                    except (OSError, DatabaseError) as e:
                         log.error(f"Error deleting runs from project {project_path}: {e}")
 
         db.delete_environment(environment)
@@ -465,7 +466,7 @@ def delete_environment(environment_ulid: str, force: bool = False, cleanup_vm: b
                          log.info(f'Skipping deletion of external VM file (path error): {vm_file_path}')
             else:
                 log.info(f'VM {vm_id} is still used by other environments, skipping cleanup')
-        except Exception as e:
+        except (OSError, DatabaseError, ValueError) as e:
             log.warning(f'Failed to cleanup VM {vm_id}: {e}')
 
 
@@ -730,7 +731,7 @@ def get_environment_vm_ids(environment_ulid: str) -> list:
             if not environment or not environment.vm_id:
                 return []
             return [environment.vm_id]
-    except Exception as e:
+    except (OSError, DatabaseError) as e:
         log.error(f"Failed to get VM IDs for environment {environment_ulid}: {e}")
         return []
 

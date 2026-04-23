@@ -172,7 +172,7 @@ class AgentCommandBuilder(ABC):
                 platform=env_info.platform,
                 stop_event=stop_event
             )
-        except Exception as e:
+        except (OSError, TimeoutError, RuntimeError, ValueError) as e:
             log.warning(f"Version check failed: {e}, proceeding with installation")
             return False
 

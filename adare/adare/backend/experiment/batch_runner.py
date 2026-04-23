@@ -298,7 +298,7 @@ class ExperimentEnvironmentMatcher:
 
                 return False
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             log.warning(f"Failed to validate compatibility between '{experiment_name}' and '{environment_name}': {e}")
             return False
 
@@ -644,7 +644,7 @@ class BatchExperimentRunner:
                 end_time=end_time
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 -- top-level batch handler; must record any failure as a result
             end_time = datetime.now(UTC)
             duration = end_time - start_time
 

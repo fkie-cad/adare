@@ -341,7 +341,7 @@ def _find_project_path_by_run_ulid(experiment_run_ulid: str) -> Path | None:
                 if run:
                     log.info(f"Found experiment run {experiment_run_ulid} in project {project_path}")
                     return project_path
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             # Continue searching if there's an error accessing this project database
             log.warning(f"Error accessing project {project_dict.get('path', 'unknown')}: {e}")
             continue

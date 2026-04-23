@@ -158,7 +158,7 @@ class AdareVMClient:
 
                 log.info("Disconnected from adarevm server")
 
-            except Exception as e:
+            except (OSError, ConnectionError, RuntimeError, websockets.exceptions.WebSocketException) as e:
                 log.error(f"Unexpected error during disconnect: {e}", exc_info=True)
 
     async def reconnect(self, retries: int = 3, base_delay: float = 2.0) -> bool:
@@ -195,7 +195,7 @@ class AdareVMClient:
                     return True
                 log.warning(f"Reconnection attempt {attempt + 1} failed")
 
-            except Exception as e:
+            except (OSError, ConnectionError, TimeoutError, websockets.exceptions.WebSocketException) as e:
                 log.error(f"Reconnection attempt {attempt + 1} failed with error: {e}")
 
         log.error(f"Failed to reconnect after {retries} attempts")
@@ -253,7 +253,7 @@ class AdareVMClient:
                     await handler(event_type, message.data)
                 else:
                     handler(event_type, message.data)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 -- must not let user-registered event handlers crash the message loop
                 log.error(f"Error in event handler: {e}", exc_info=True)
 
     def add_event_handler(self, event_type: str, handler: Callable):
@@ -365,12 +365,12 @@ class AdareVMClient:
             # Clean up pending call
             self.pending_calls.pop(call_msg.id, None)
             raise WebSocketTimeoutError(f"Tool call '{tool_name}' timed out after {timeout} seconds") from None
-        except Exception as e:
+        except (OSError, ConnectionError, RuntimeError, websockets.exceptions.WebSocketException) as e:
             execution_time = time.time() - start_time
             log.error(f"[{call_msg.id[:8]}] Tool call error after {execution_time:.2f}s: {e}")
             # Clean up pending call
             self.pending_calls.pop(call_msg.id, None)
-            raise e
+            raise
 
     # GUI Action Methods
 
@@ -717,7 +717,7 @@ class AdareVMClient:
                 "destination": str(host_path)
             }
 
-        except Exception as e:
+        except (OSError, ConnectionError, RuntimeError, TimeoutError, WebSocketTimeoutError) as e:
             # Clean up temp file on failure
             if temp_path.exists():
                 temp_path.unlink()
@@ -801,7 +801,7 @@ class AdareVMClient:
 
                 log.info(f"Successfully pulled {guest_path} ({result['file_size']} bytes)")
 
-            except Exception as e:
+            except (OSError, ConnectionError, RuntimeError, TimeoutError, WebSocketTimeoutError) as e:
                 # Log and track failure, but continue with remaining files
                 failed_count += 1
                 error_msg = str(e)
