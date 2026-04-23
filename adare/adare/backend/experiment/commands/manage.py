@@ -127,7 +127,7 @@ def experiment_clean(project_path: Path, experiment_name: str):
     except ValueError as e:
         from adare.exceptions import LoggedException
         raise LoggedException(log, str(e))
-    except Exception as e:
+    except (OSError, KeyError) as e:
         from adare.exceptions import LoggedException
         raise LoggedException(log, f'Failed to clean experiment "{experiment_name}": {str(e)}')
 
@@ -273,7 +273,7 @@ def experiment_remove(project_path: Path, experiment_name: str, force: bool = Fa
         raise
     except ValueError as e:
         raise LoggedErrorException(log, str(e))
-    except Exception as e:
+    except (OSError, KeyError) as e:
         log.error(f'Failed to remove experiment "{experiment_name}": {e}', exc_info=True)
         raise LoggedErrorException(
             log,

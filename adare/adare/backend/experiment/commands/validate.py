@@ -27,7 +27,7 @@ def _get_testfunction_data_from_database():
         with TestfunctionDbApi() as api:
             testfunction_files = api.get_testfunction_files()
             return [(tf_file.name, tf_file.path) for tf_file in testfunction_files]
-    except Exception as e:
+    except (ValueError, KeyError, OSError) as e:
         log.warning(f"Failed to query testfunction files from database: {e}")
         return []
 
@@ -66,7 +66,7 @@ def __validate_testset_compatibility(experiment_directory: ExperimentDirectory):
             if testfunction_source:
                 log.debug("Using database-driven testfunction loading")
                 supported_tests = import_basictest_subclasses(source=testfunction_source)
-        except Exception as e:
+        except (ImportError, OSError, KeyError, ValueError) as e:
             log.warning(f"Database-driven testfunction loading failed: {e}")
 
         # Fallback to directory scanning if database approach failed
@@ -94,7 +94,7 @@ def __validate_testset_compatibility(experiment_directory: ExperimentDirectory):
     except ImportError as e:
         log.warning(f"Could not import testset validation modules: {e}")
         log.warning("Skipping testset validation - validation will occur at runtime")
-    except Exception as e:
+    except (ValueError, KeyError, OSError, TypeError) as e:
         log.error(f"Testset validation error: {e}", exc_info=True)
         raise ExperimentIntegrityError(
             log,

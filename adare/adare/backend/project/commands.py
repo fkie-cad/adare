@@ -48,7 +48,7 @@ def project_create(path: Path, name: str, description: str = ''):
             fixture_status(project_api._session)
             fixture_stages(project_api._session)
         log.info(f'project fixtures loaded for {path}')
-    except Exception as e:
+    except (OSError, ValueError) as e:
         project_directory.remove()
         project_database.remove_project(path)
         log.error(f'project directory {path} removed, since project fixtures could not be loaded: {e}')

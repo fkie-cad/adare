@@ -6,6 +6,7 @@ from pathlib import Path
 from adare.backend.experiment.commands.load import experiment_load
 from adare.backend.experiment.directory import ExperimentDirectory
 from adare.backend.project.directory import ProjectDirectory
+from adare.database.exceptions import EnvironmentMissingError
 
 log = logging.getLogger(__name__)
 
@@ -94,7 +95,7 @@ def experiment_remove_environments(project_path: Path, experiment_pattern: str, 
 
             updated_experiments.append(exp_name)
 
-        except Exception as e:
+        except (OSError, ValueError, KeyError) as e:
             log.error(f"Failed to update experiment '{exp_name}': {e}")
             failed_experiments.append(exp_name)
 
@@ -208,14 +209,12 @@ def experiment_add_environments(project_path: Path, experiment_pattern: str, env
 
             updated_experiments.append(exp_name)
 
-        except Exception as e:
-            from adare.database.exceptions import EnvironmentMissingError
-            if isinstance(e, EnvironmentMissingError):
-                log.error(f"Environment(s) not found in global database for experiment '{exp_name}': {', '.join(environment_names)}")
-                environment_missing_experiments.append(exp_name)
-            else:
-                log.error(f"Failed to update experiment '{exp_name}': {e}")
-                failed_experiments.append(exp_name)
+        except EnvironmentMissingError:
+            log.error(f"Environment(s) not found in global database for experiment '{exp_name}': {', '.join(environment_names)}")
+            environment_missing_experiments.append(exp_name)
+        except (OSError, ValueError, KeyError) as e:
+            log.error(f"Failed to update experiment '{exp_name}': {e}")
+            failed_experiments.append(exp_name)
 
     # Print comprehensive summary
     total_processed = len(updated_experiments) + len(skipped_experiments) + len(failed_experiments) + len(environment_missing_experiments)

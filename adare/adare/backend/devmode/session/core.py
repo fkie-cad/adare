@@ -179,7 +179,7 @@ class DevModeSessionCore:
 
             yield
 
-        except Exception as e:
+        except OSError as e:
             log.warning(f"Failed to setup command logger: {e}")
             yield
         finally:
@@ -231,7 +231,7 @@ class DevModeSessionCore:
                 self.session_log_handler.close()
                 self.session_log_handler = None
                 log.info("Dev session logging cleaned up")
-            except Exception as e:
+            except OSError as e:
                 log.warning(f"Error cleaning up session log handler: {e}")
 
     @staticmethod

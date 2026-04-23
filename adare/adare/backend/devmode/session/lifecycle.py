@@ -323,7 +323,7 @@ class DevModeLifecycleMixin:
                         try:
                             await step_shutdown_ws(self.experiment_ctx, post_interrupt=True)
                             log.debug("WebSocket shut down")
-                        except Exception as e:
+                        except (ConnectionError, OSError, TimeoutError) as e:
                             log.warning(f"Failed to shutdown WebSocket: {e}")
 
                     # 2. Shutdown MCP server (only if no other sessions are using it)
@@ -344,7 +344,7 @@ class DevModeLifecycleMixin:
                             else:
                                 await step_shutdown_mcp_server(self.experiment_ctx, post_interrupt=True, force=True)
                                 log.debug("MCP server shut down (last session)")
-                        except Exception as e:
+                        except (ConnectionError, OSError, TimeoutError, ValueError) as e:
                             log.warning(f"Failed to shutdown MCP server: {e}")
 
                     # 3. Stop VM (graceful shutdown, keep disk and snapshots)
@@ -352,7 +352,7 @@ class DevModeLifecycleMixin:
                         try:
                             await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True)
                             log.debug("VM stopped")
-                        except Exception as e:
+                        except (HypervisorException, OSError, TimeoutError) as e:
                             log.warning(f"Failed to stop VM: {e}")
 
                     # 4. Release VM instance for reuse
@@ -361,7 +361,7 @@ class DevModeLifecycleMixin:
                             from adare.backend.vm.commands import release_vm_instance_for_experiment
                             await release_vm_instance_for_experiment(self.vm_instance_id)
                             log.info(f"Released VM instance {self.vm_instance_id} for reuse")
-                        except Exception as e:
+                        except (ValueError, OSError) as e:
                             log.error(f"Failed to release VM instance: {e}")
 
             # Clean up session logging
@@ -371,6 +371,8 @@ class DevModeLifecycleMixin:
             log.info(f"Session {self.session_id} shut down (resources preserved)")
 
         except Exception as e:
+            # Intentionally broad: top-level shutdown must not crash — any failure
+            # is logged so the session can still be marked as not running.
             log.error(f"Error during session shutdown: {e}", exc_info=True)
             self.is_running = False
 
@@ -410,7 +412,7 @@ class DevModeLifecycleMixin:
                         try:
                             await step_shutdown_ws(self.experiment_ctx, post_interrupt=True)
                             log.debug("WebSocket shut down")
-                        except Exception as e:
+                        except (ConnectionError, OSError, TimeoutError) as e:
                             log.warning(f"Failed to shutdown WebSocket: {e}")
 
                     # 2. Shutdown MCP server (only if no other sessions are using it)
@@ -431,7 +433,7 @@ class DevModeLifecycleMixin:
                             else:
                                 await step_shutdown_mcp_server(self.experiment_ctx, post_interrupt=True, force=True)
                                 log.debug("MCP server shut down (last session)")
-                        except Exception as e:
+                        except (ConnectionError, OSError, TimeoutError, ValueError) as e:
                             log.warning(f"Failed to shutdown MCP server: {e}")
 
                     # 3. Stop VM first (required before snapshot deletion)
@@ -442,7 +444,7 @@ class DevModeLifecycleMixin:
                         try:
                             await self.vm_manager.stop_vm(self.experiment_ctx, post_interrupt=True, force=True)
                             log.debug("VM stopped")
-                        except Exception as e:
+                        except (HypervisorException, OSError, TimeoutError) as e:
                             log.warning(f"Failed to stop VM: {e}")
                             # Continue anyway - destroy will try again
 
@@ -450,7 +452,7 @@ class DevModeLifecycleMixin:
                     try:
                         await self._cleanup_snapshots()
                         log.debug("Checkpoints cleaned up")
-                    except Exception as e:
+                    except (HypervisorException, OSError) as e:
                         error_msg = f"Failed to cleanup checkpoints: {e}"
                         log.error(error_msg)
                         cleanup_failures.append(error_msg)
@@ -466,7 +468,7 @@ class DevModeLifecycleMixin:
                                 cleanup_failures.append(error_msg)
                             else:
                                 log.info(f"VM '{vm.vm_name}' destroyed")
-                        except Exception as e:
+                        except (HypervisorException, OSError) as e:
                             error_msg = f"VM destroy failed: {e}"
                             log.error(error_msg)
                             cleanup_failures.append(error_msg)
@@ -477,7 +479,7 @@ class DevModeLifecycleMixin:
                             from adare.backend.vm.commands import release_vm_instance_for_experiment
                             await release_vm_instance_for_experiment(self.vm_instance_id)
                             log.info(f"Released VM instance {self.vm_instance_id}")
-                        except Exception as e:
+                        except (ValueError, OSError) as e:
                             error_msg = f"Failed to release VM instance: {e}"
                             log.error(error_msg)
                             cleanup_failures.append(error_msg)
@@ -489,14 +491,14 @@ class DevModeLifecycleMixin:
                         if run_dir.exists():
                             shutil.rmtree(run_dir)
                             log.info(f"Deleted experiment run directory: {run_dir}")
-                    except Exception as e:
+                    except OSError as e:
                         log.warning(f"Failed to delete run directory: {e}")
 
                     # 8. Remove fake experiment run from database
                     try:
                         step_remove_fake_experiment_run(self.experiment_ctx)
                         log.debug("Fake experiment run removed")
-                    except Exception as e:
+                    except (ValueError, KeyError, OSError) as e:
                         log.warning(f"Failed to remove fake experiment run: {e}")
 
             # Clean up session logging
@@ -511,6 +513,8 @@ class DevModeLifecycleMixin:
                 log.info(f"Session {self.session_id} completely removed")
 
         except Exception as e:
+            # Intentionally broad: top-level removal must not crash — any failure
+            # is logged so the session can still be marked as not running.
             log.error(f"Error during session removal: {e}", exc_info=True)
             self.is_running = False
 
