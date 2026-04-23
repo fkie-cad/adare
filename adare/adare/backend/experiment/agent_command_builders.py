@@ -355,12 +355,8 @@ class WindowsAgentCommandBuilder(AgentCommandBuilder):
         experiment_tools = f'{base_path}\\shared\\tools'
 
         # adarevm source path differs between hypervisors
-        if self.hypervisor_type == 'qemu':
-             # Unified path for QEMU
-            adarevm_path = r'C:\adare\vm\adarevm'
-        else:
-            # VirtualBox uses UNC path for source code access
-            adarevm_path = r'\\vboxsvr\adare\adarevm'
+        # QEMU: unified path; VirtualBox: UNC path for source code access
+        adarevm_path = r'C:\adare\vm\adarevm' if self.hypervisor_type == 'qemu' else r'\\vboxsvr\adare\adarevm'
 
         # Pass tools_paths as CLI args so adarevm has them even if config.json
         # can't be read (e.g. SMB junction not ready at startup)

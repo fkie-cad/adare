@@ -3,7 +3,7 @@ from pathlib import Path
 import json
 import re
 import os
-from typing import Optional, Union, Dict
+from typing import Optional
 
 # internal imports
 from adarelib.testset.api import testfunction, TestContext
@@ -221,7 +221,7 @@ def line_matches(ctx: TestContext, dst: str = '', conditions: dict[str, str | in
                 ]
                 if non_matching_lines[:3]:
                     messages.append('Sample non-matching lines:')
-                    for ln, data, failed in non_matching_lines[:3]:
+                    for ln, _data, failed in non_matching_lines[:3]:
                         messages.append(f'  Line {ln}: failed {failed}')
                 return TestResult.failed(messages)
             # match_mode == "all"
@@ -240,7 +240,7 @@ def line_matches(ctx: TestContext, dst: str = '', conditions: dict[str, str | in
             ]
             if non_matching_lines[:3]:
                 messages.append('Sample non-matching lines:')
-                for ln, data, failed in non_matching_lines[:3]:
+                for ln, _data, failed in non_matching_lines[:3]:
                     messages.append(f'  Line {ln}: failed {failed}')
             return TestResult.failed(messages)
 

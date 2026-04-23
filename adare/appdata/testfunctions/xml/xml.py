@@ -1,7 +1,7 @@
 # external imports
 from lxml import etree as ET
 import re
-from typing import Optional, Union, Dict
+from typing import Optional
 
 # internal imports
 from adarelib.testset.api import testfunction, TestContext

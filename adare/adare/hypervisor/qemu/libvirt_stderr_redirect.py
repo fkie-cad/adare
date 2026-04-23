@@ -143,18 +143,14 @@ class LibvirtStderrRedirect(contextlib.AbstractContextManager):
         try:
             # Close saved stderr file descriptor
             if self._saved_stderr_fd is not None:
-                try:
+                with contextlib.suppress(OSError):
                     os.close(self._saved_stderr_fd)
-                except OSError:
-                    pass  # Already closed
                 self._saved_stderr_fd = None
 
             # Close redirect file
             if self._redirect_file and not self._redirect_file.closed:
-                try:
+                with contextlib.suppress(OSError):
                     self._redirect_file.close()
-                except OSError:
-                    pass  # Already closed
                 self._redirect_file = None
         finally:
             # Always release lock

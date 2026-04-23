@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import attrs
 import cattrs
@@ -103,17 +103,17 @@ class SmallestStrategy:
     """Select match with smallest bounding box area."""
     pass
 
-TargetStrategyType = Union[
-    SweepStrategy,
-    BestConfidenceStrategy,
-    ClosestToStrategy,
-    TopLeftStrategy,
-    TopRightStrategy,
-    BottomLeftStrategy,
-    BottomRightStrategy,
-    LargestStrategy,
-    SmallestStrategy
-]
+TargetStrategyType = (
+    SweepStrategy
+    | BestConfidenceStrategy
+    | ClosestToStrategy
+    | TopLeftStrategy
+    | TopRightStrategy
+    | BottomLeftStrategy
+    | BottomRightStrategy
+    | LargestStrategy
+    | SmallestStrategy
+)
 
 @attrs.define
 class Settings:
@@ -544,13 +544,13 @@ class LoopAction:
             raise ValueError(f"Loop times must be >= 1, got {self.times}")
 
 # Now define ActionType after all classes
-ActionType = Union[
-    ClickAction, DragAction,
-    KeyboardAction, IdleAction, ScrollAction, GotoAction, ActionTestAction,
-    CommandAction, ScreenshotAction, BlockAction, SaveTimestampAction, SaveVariableAction,
-    PullAction, PauseAction, WaitUntilAction, LoopAction, StopAction, ContinueAction,
-    SnapshotFilesystemAction, PullChangedFilesAction
-]
+ActionType = (
+    ClickAction | DragAction
+    | KeyboardAction | IdleAction | ScrollAction | GotoAction | ActionTestAction
+    | CommandAction | ScreenshotAction | BlockAction | SaveTimestampAction | SaveVariableAction
+    | PullAction | PauseAction | WaitUntilAction | LoopAction | StopAction | ContinueAction
+    | SnapshotFilesystemAction | PullChangedFilesAction
+)
 
 @attrs.define
 class Playbook:
@@ -590,7 +590,7 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
         lambda obj, _: _structure_action(obj, converter)
     )
     converter.register_structure_hook(
-        Union[ExistsCondition, NotExistsCondition],
+        ExistsCondition | NotExistsCondition,
         lambda obj, _: _structure_condition(obj, converter)
     )
     converter.register_structure_hook(
@@ -608,9 +608,9 @@ def parse_playbook(yaml_path: str | Path) -> Playbook:  # Accept Path or str
         lambda obj, _: obj if obj is None or isinstance(obj, VariableRegistry) else VariableRegistry.from_dict(obj)
     )
 
-    # Register structure hook for Union[str, List[str]] in PullAction.src
+    # Register structure hook for str | list[str] in PullAction.src
     converter.register_structure_hook(
-        Union[str, list[str]],
+        str | list[str],
         lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj)
     )
 
@@ -818,7 +818,7 @@ def _register_strict_hooks(converter):
                 lambda obj, _: _structure_action(obj, fresh_converter)
             )
             fresh_converter.register_structure_hook(
-                Union[ExistsCondition, NotExistsCondition],
+                ExistsCondition | NotExistsCondition,
                 lambda obj, _: _structure_condition(obj, fresh_converter)
             )
             fresh_converter.register_structure_hook(
@@ -864,9 +864,9 @@ def _register_strict_hooks(converter):
                 int | float | None,
                 structure_optional_numeric
             )
-            # Register structure hook for Union[str, List[str]] in PullAction.src
+            # Register structure hook for str | list[str] in PullAction.src
             fresh_converter.register_structure_hook(
-                Union[str, list[str]],
+                str | list[str],
                 lambda obj, _: obj if isinstance(obj, (str, list)) else str(obj)
             )
             # Register structure hook for SkipOptions

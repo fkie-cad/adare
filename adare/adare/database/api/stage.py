@@ -16,10 +16,28 @@ log = logging.getLogger(__name__)
 
 
 class StageDbApi(ProjectDatabaseApi):
+    """Database API for managing experiment run stages in a project database."""
+
     def __init__(self, project_path: Path):
         super().__init__(project_path)
 
     def update_stage_in_run(self, stage: Stage, run_id: str, stage_id: str) -> int:
+        """Update or create a stage record within an experiment run.
+
+        If a matching StageInRun already exists it is updated with the
+        provided timing and status data; otherwise a new record is created.
+
+        Args:
+            stage: Stage object containing name, timing, and status data.
+            run_id: ULID of the experiment run.
+            stage_id: Identifier for this stage-in-run record.
+
+        Returns:
+            The database ID of the updated or created StageInRun.
+
+        Raises:
+            NoResultFound: If the stage name does not exist in the database.
+        """
         if not (stage_db := self._session.query(StageModel).filter(StageModel.name == stage.name).first()):
             raise sqlalchemy.orm.exc.NoResultFound(f"Stage '{stage.name}' not found in database")
 
@@ -70,6 +88,7 @@ class StageDbApi(ProjectDatabaseApi):
         return stage_in_run.id
 
     def get_stages(self) -> list[StageModel]:
+        """Get all stage definitions from the database."""
         stages = self._session.query(StageModel).all()
         self._expunge_multiple(stages)
         return stages

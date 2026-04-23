@@ -115,12 +115,8 @@ def _resolve_relative_path(relative_path: str, project_dir: Path, resource_type:
         # Convert to Path object and resolve
         input_path = Path(relative_path)
 
-        # Handle relative paths starting with ./
-        if input_path.is_absolute():
-            resolved_path = input_path
-        else:
-            # Resolve relative to current working directory (should be project dir)
-            resolved_path = (Path.cwd() / input_path).resolve()
+        # Absolute paths used as-is; relative paths resolved from cwd (project dir)
+        resolved_path = input_path if input_path.is_absolute() else (Path.cwd() / input_path).resolve()
 
         # For environments, allow external files; for others, check within resource directory
         if resource_type == 'environments':

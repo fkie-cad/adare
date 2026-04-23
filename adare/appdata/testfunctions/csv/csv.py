@@ -2,7 +2,7 @@
 from pathlib import Path
 import csv
 import sys
-from typing import Optional, List, Tuple
+from typing import Optional
 
 # internal imports
 from adarelib.testset.api import testfunction, TestContext

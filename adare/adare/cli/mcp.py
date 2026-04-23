@@ -260,10 +260,7 @@ async def exec_mcp_test_icon(args):
                                         return "purple"  # Default color for unknown similarity
 
                                     # Scale similarity to 0-1 range based on actual min/max
-                                    if sim_range > 0:
-                                        normalized_sim = (float_sim - min_sim) / sim_range
-                                    else:
-                                        normalized_sim = 0.5  # If all similarities are the same
+                                    normalized_sim = (float_sim - min_sim) / sim_range if sim_range > 0 else 0.5
 
                                     # Clamp to 0-1 range
                                     normalized_sim = max(0.0, min(1.0, normalized_sim))

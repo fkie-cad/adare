@@ -15,12 +15,14 @@ log = logging.getLogger(__name__)
 
 
 class UserSessionApi(DatabaseApi):
+    """Database API for managing authenticated user sessions and their tokens."""
 
     def __init__(self, db_path: Path = config_database.get_database_location()):
         super().__init__(db_path)
         BaseLogin.metadata.create_all(self.engine)
 
     def add_user_session(self, username: str, gitea_token: str, gitea_token_expiration: datetime, gitea_refresh_token: str, django_token: str, django_token_expiration: datetime):
+        """Create a new user session, replacing any existing session for the user."""
         if self.get_user_session(username):
             self.remove_user_session(username)
 
@@ -38,6 +40,7 @@ class UserSessionApi(DatabaseApi):
         log.debug(f'added user session for user {username}')
 
     def remove_user_session(self, username: str):
+        """Remove a user session and its associated tokens."""
         if (
             user_session := self._session.query(UserSession)
             .filter_by(username=username)
@@ -54,6 +57,7 @@ class UserSessionApi(DatabaseApi):
             log.debug(f'removed user session for user {username}')
 
     def remove_expired_user_sessions(self):
+        """Remove all user sessions whose Gitea or Django tokens have expired."""
         for user_session in self._session.query(UserSession).all():
             gitea_token_expiration = user_session.gitea_token.expiration.replace(tzinfo=UTC)
             if gitea_token_expiration <= datetime.now(UTC):
@@ -66,6 +70,11 @@ class UserSessionApi(DatabaseApi):
         self._session.commit()
 
     def get_user_session(self, username: str):
+        """Get an active user session by username after pruning expired sessions.
+
+        Raises:
+            TokenExpired: If the session exists but a required token is missing.
+        """
         self.remove_expired_user_sessions()
         user_session = self._session.query(UserSession).filter_by(username=username).first()
         if not user_session:
@@ -75,6 +84,11 @@ class UserSessionApi(DatabaseApi):
         return user_session
 
     def get_first_user_session(self):
+        """Get the first available active user session after pruning expired sessions.
+
+        Raises:
+            TokenExpired: If the session exists but a required token is missing.
+        """
         self.remove_expired_user_sessions()
         user_session = self._session.query(UserSession).first()
         if not user_session:
