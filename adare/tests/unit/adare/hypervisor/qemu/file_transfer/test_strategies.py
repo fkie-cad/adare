@@ -230,6 +230,7 @@ class TestQGAStrategy:
             context.project_directory.shared = Path(tmpdir) / 'project_shared'
 
             context.config.shared_directories = None
+            context.config.installation_mode = 'wheel'
 
             # Mock VM config
             context.vm.config = MagicMock()
