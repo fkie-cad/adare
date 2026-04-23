@@ -348,7 +348,7 @@ class PlaybookController:
 
                 log.debug(f"Initialized playbook items mapping: {len(self.playbook_items_map)} items")
 
-        except Exception as e:
+        except (ValueError, KeyError, OSError) as e:
             log.error(f"Failed to initialize playbook items mapping: {e}")
 
     async def execute_experiment(self, experiment_dir: Path) -> PlaybookExecutionResult:
@@ -523,7 +523,7 @@ class PlaybookController:
                 await self.action_executor.target_resolution.get_current_screenshot_with_path(
                     action_context="a00_initial"
                 )
-            except Exception as e:
+            except (OSError, ConnectionError, TimeoutError, ValueError) as e:
                 log.warning(f"Failed to capture initial debug screenshot: {e}")
 
         for i, action in enumerate(playbook.actions):
@@ -572,7 +572,7 @@ class PlaybookController:
                     start_event = self.event_manager.create_action_start_event(resolved_action, i, action_id)
                     emit_action(self.experiment_run_id, start_event, action_id)
                     log.info(f"Emitted start event for action {i}: {action_name}, ID: {action_id}")
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     log.error(f"Failed to emit start event for action {i}: {e}", exc_info=True)
 
             # Build debug context for screenshot filenames
@@ -607,7 +607,7 @@ class PlaybookController:
                     complete_event = self.event_manager.create_action_complete_event(resolved_action, i, action_id, result)
                     emit_action(self.experiment_run_id, complete_event, action_id)
                     log.info(f"Emitted complete event for action {i}: {action_name}, Success: {result.success}, ID: {action_id}")
-                except Exception as e:
+                except (ValueError, KeyError, TypeError) as e:
                     log.error(f"Failed to emit complete event for action {i}: {e}", exc_info=True)
 
             # Update database execution record
@@ -681,7 +681,7 @@ class PlaybookController:
                 playbook_api.update_action_execution_start(execution.id)
                 log.debug(f"Created execution record {execution.id} for action {action_index}")
                 return execution.id
-        except Exception as e:
+        except (ValueError, KeyError, OSError) as e:
             log.warning(f"Failed to create execution record for action {action_index}: {e}")
             return None
 
@@ -702,7 +702,7 @@ class PlaybookController:
                     error_message=result.message if not result.success else None
                 )
                 log.debug(f"Updated execution record {execution_id}")
-        except Exception as e:
+        except (ValueError, KeyError, OSError) as e:
             log.warning(f"Failed to update execution record {execution_id}: {e}")
 
     def _is_test_action(self, action: ActionType) -> bool:
@@ -827,7 +827,7 @@ class PlaybookController:
                 else:
                     log.warning(f"Failed to auto-pull {resolved_path}: {result.message}")
 
-            except Exception as e:
+            except (OSError, ConnectionError, ValueError, TimeoutError) as e:
                 log.error(f"Error during auto-pull of {file_path}: {e}", exc_info=True)
 
 

@@ -35,7 +35,7 @@ def project_create(path: Path, name: str, description: str = ''):
         from adare.database.init import ensure_project_database_exists
         ensure_project_database_exists(path)
         log.info(f'project database initialized for {path}')
-    except Exception as e:
+    except (OSError, ValueError) as e:
         project_directory.remove()
         project_database.remove_project(path)
         log.error(f'project directory {path} removed, since project database could not be initialized: {e}')
